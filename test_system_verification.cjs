@@ -10,11 +10,40 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const crypto = require('crypto');
+const AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+
+function generateTestToken(user) {
+  const payload = {
+    userId: user.userId || "",
+    email: (user.email || "").toLowerCase().trim(),
+    role: user.role || "user",
+    username: user.username || "",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 86400,
+  };
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", AUTH_SECRET)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+}
+
+const masterAdminTestToken = generateTestToken({
+  userId: "user_master_admin",
+  email: "breakingnewswala.com@gmail.com",
+  role: "superadmin",
+  username: "breakingnewswala",
+});
+
 function request(method, path, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, BASE_URL);
     const reqHeaders = {
-      'x-admin-email': 'breakingnewswala.com@gmail.com',
+      'Authorization': `Bearer ${masterAdminTestToken}`,
       ...headers,
     };
     let bodyData = null;
@@ -51,21 +80,35 @@ function request(method, path, body = null, headers = {}) {
 
 async function runTests() {
   console.log(`Starting background test server on port ${TEST_PORT}...`);
+  let accessToken = process.env.FIRESTORE_ACCESS_TOKEN;
+  if (!accessToken) {
+    try {
+      const adapter = require('./server_firestore_adapter.cjs');
+      accessToken = await adapter.getMetadataAccessToken();
+    } catch {}
+  }
+
   const serverProcess = spawn('node', ['dev.cjs'], {
-    env: { ...process.env, PORT: String(TEST_PORT), DEFAULT_APP_PORT: String(TEST_PORT), NODE_ENV: 'production' },
+    env: {
+      ...process.env,
+      PORT: String(TEST_PORT),
+      DEFAULT_APP_PORT: String(TEST_PORT),
+      NODE_ENV: 'production',
+      FIRESTORE_ACCESS_TOKEN: accessToken || '',
+    },
     stdio: 'pipe',
   });
 
   serverProcess.stdout.on('data', (data) => {
-    // console.log(`[SERVER]: ${data}`);
+    process.stdout.write(`[SERVER]: ${data}`);
   });
   serverProcess.stderr.on('data', (data) => {
-    console.error(`[SERVER ERR]: ${data}`);
+    process.stderr.write(`[SERVER ERR]: ${data}`);
   });
 
-  // Wait for server to boot
+  // Wait for server to boot (up to 25 seconds for Firestore cache warm-up)
   let ready = false;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 50; i++) {
     await sleep(500);
     try {
       const res = await request('GET', '/api/categories');
@@ -77,7 +120,7 @@ async function runTests() {
   }
 
   if (!ready) {
-    console.error('Failed to connect to test server within 10 seconds.');
+    console.error('Failed to connect to test server within 25 seconds.');
     serverProcess.kill();
     process.exit(1);
   }

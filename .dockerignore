@@ -18,6 +18,9 @@ build/
 .DS_Store
 Thumbs.db
 backup_pre_repair/
+backups/
+*.bak
+*.tmp
 local.properties
 captures/
 .externalNativeBuild/

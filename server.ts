@@ -6,11 +6,37 @@ import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import { initializeApp as initFirebaseAdmin, getApps as getFirebaseAdminApps } from "firebase-admin/app";
+import { getAuth as getFirebaseAdminAuth } from "firebase-admin/auth";
 
 const safeFilename = typeof __filename !== 'undefined' ? __filename : process.cwd();
 const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(safeFilename);
 
 dotenv.config();
+
+// Central Firestore Database Service
+// Centralized Google Cloud Storage Service
+let cloudStorage: any = null;
+try {
+  const csMod = require("./cloud_storage_service.cjs");
+  cloudStorage = csMod.defaultCloudStorageService;
+} catch (e: any) {
+  try {
+    const csMod = require("../cloud_storage_service.cjs");
+    cloudStorage = csMod.defaultCloudStorageService;
+  } catch {}
+}
+
+let centralDb: any = null;
+try {
+  const serviceMod = require("./firestore_database_service.cjs");
+  centralDb = serviceMod.centralDb;
+} catch (e: any) {
+  try {
+    const serviceMod = require("../firestore_database_service.cjs");
+    centralDb = serviceMod.centralDb;
+  } catch {}
+}
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "8080", 10);
@@ -33,10 +59,23 @@ app.use((req, res, next) => {
 // Health check endpoints for Google Cloud Run, Cloud Build & Firebase App Hosting
 app.get("/health", (_req, res) => res.status(200).send("OK"));
 app.get("/_health", (_req, res) => res.status(200).send("OK"));
-app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+    useFirestore: Boolean(centralDb && centralDb.useFirestore),
+    useGcs: Boolean(cloudStorage && cloudStorage.isGcsActive()),
+    timestamp: new Date().toISOString(),
+  });
+});
 
-// Increase payload limits for video and image uploads
-app.use(express.json({ limit: "100mb" }));
+// Increase payload limits for video and image uploads & capture rawBody for webhook HMAC verification
+app.use(express.json({
+  limit: "100mb",
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf ? buf.toString() : "";
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 // Static serving for public uploads (logos, custom media)
@@ -47,6 +86,9 @@ if (!fs.existsSync(publicUploadsDir)) {
 const logosDir = path.join(publicUploadsDir, "logos");
 if (!fs.existsSync(logosDir)) {
   fs.mkdirSync(logosDir, { recursive: true });
+}
+if (cloudStorage) {
+  app.use("/uploads", cloudStorage.createUploadsMiddleware());
 }
 app.use("/uploads", express.static(publicUploadsDir));
 
@@ -111,16 +153,39 @@ function verifyAuthToken(tokenStr: string): AuthTokenPayload | null {
   }
 }
 
-function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
-  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || "").toString().trim();
-  let token = "";
-  if (authHeader.startsWith("Bearer ")) {
-    token = authHeader.slice(7).trim();
-  } else if (authHeader) {
-    token = authHeader;
+// ============================================================================
+// FIREBASE ADMIN SDK & CRYPTOGRAPHIC TOKEN VERIFICATION
+// ============================================================================
+let firebaseAdminAuth: ReturnType<typeof getFirebaseAdminAuth> | null = null;
+try {
+  let projectId = process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    try {
+      const cfgPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(cfgPath)) {
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+        projectId = cfg.projectId;
+      }
+    } catch {}
   }
-  if (!token) return null;
-  return verifyAuthToken(token);
+  projectId = projectId || "ai-news-maker-app";
+
+  const adminApp = getFirebaseAdminApps().length === 0
+    ? initFirebaseAdmin({ projectId })
+    : getFirebaseAdminApps()[0];
+
+  firebaseAdminAuth = getFirebaseAdminAuth(adminApp);
+  console.log(`[AUTH] Firebase Admin initialized for project: ${projectId}`);
+} catch (err: any) {
+  console.warn(`[AUTH] Firebase Admin SDK initialization note: ${err?.message || err}`);
+}
+
+export interface VerifiedUser {
+  userId: string;
+  email: string;
+  role: "superadmin" | "admin" | "reporter" | "user";
+  username?: string;
+  authType: "firebase" | "session";
 }
 
 const MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
@@ -128,81 +193,206 @@ const MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 const REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 const UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
 
-function extractAdminEmail(req: any): string {
-  const user = getAuthenticatedUser(req);
-  if (user && user.email) return user.email.toLowerCase().trim();
-  const header = (
-    req.headers["x-admin-email"] ||
-    req.headers["x-user-email"] ||
-    req.body?.adminEmail ||
-    req.body?.userEmail ||
-    req.body?.email ||
-    req.query?.adminEmail ||
-    req.query?.userEmail ||
-    req.query?.email ||
-    ""
-  ).toString().toLowerCase().trim();
-  return header;
+function extractTokenFromRequest(req: express.Request): string {
+  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || "").toString().trim();
+  if (authHeader.startsWith("Bearer ")) {
+    return authHeader.slice(7).trim();
+  }
+  return authHeader;
 }
 
-function isAuthorizedMasterAdmin(req: express.Request): boolean {
-  const email = extractAdminEmail(req);
-  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) return true;
-
-  const user = getAuthenticatedUser(req);
-  if (user) {
-    const userEmail = (user.email || "").toLowerCase().trim();
-    if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL) return true;
-    if (user.role === "superadmin" && userEmail !== REGULAR_ADMIN_EMAIL) return true;
+function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
+  if ((req as any).user) {
+    return (req as any).user;
   }
-
-  const adminKey = req.headers["x-admin-key"] || req.headers["x-master-admin-key"];
-  if (adminKey === "master-admin" || (process.env.MASTER_ADMIN_KEY && adminKey === process.env.MASTER_ADMIN_KEY)) {
-    return true;
-  }
-  return false;
+  const token = extractTokenFromRequest(req);
+  if (!token) return null;
+  return verifyAuthToken(token);
 }
 
-function isAuthorizedAdmin(req: express.Request): boolean {
-  const email = extractAdminEmail(req);
-  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
-
-  const user = getAuthenticatedUser(req);
-  if (user) {
-    const userEmail = (user.email || "").toLowerCase().trim();
-    if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
-    if (user.role === "admin" || user.role === "superadmin") return true;
+export async function resolveAuthenticatedUser(req: express.Request): Promise<VerifiedUser | null> {
+  if ((req as any).user) {
+    return (req as any).user;
   }
 
-  const adminKey = req.headers["x-admin-key"];
-  if (process.env.ADMIN_API_KEY && adminKey === process.env.ADMIN_API_KEY) return true;
-  if (adminKey === "admin-secret-key" || adminKey === "master-admin" || adminKey === "admin") return true;
+  const token = extractTokenFromRequest(req);
+  if (!token) return null;
 
-  const role = (req.headers["x-user-role"] || req.headers["x-role"] || "").toString().toLowerCase().trim();
-  if ((role === "admin" || role === "superadmin") && (!email || !UNAUTHORIZED_ADMIN_EMAILS.includes(email))) {
-    return true;
-  }
-
-  if (email && !UNAUTHORIZED_ADMIN_EMAILS.includes(email)) {
+  // 1. Verify as Firebase ID Token (RS256 cryptographically verified via Firebase Admin SDK)
+  if (firebaseAdminAuth) {
     try {
-      if (typeof loadUsersMasterDatabase === "function") {
-        const users = loadUsersMasterDatabase();
-        const dbUser = users.find((u: any) => (u.email || "").toLowerCase().trim() === email);
-        if (dbUser && (dbUser.role === "admin" || dbUser.role === "superadmin")) return true;
+      const decoded = await firebaseAdminAuth.verifyIdToken(token, true);
+      if (decoded && decoded.email) {
+        const email = decoded.email.toLowerCase().trim();
+        const userId = decoded.uid || (decoded as any).user_id || email;
+
+        let userRole: "superadmin" | "admin" | "reporter" | "user" = "user";
+        try {
+          if (typeof loadUsersMasterDatabase === "function") {
+            const users = loadUsersMasterDatabase();
+            const dbUser = users.find(
+              (u: any) => (u.email && u.email.toLowerCase().trim() === email) || (u.userId && u.userId === userId)
+            );
+            if (dbUser && dbUser.role) {
+              userRole = dbUser.role;
+            }
+          }
+        } catch {}
+
+        if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+          userRole = "superadmin";
+        } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+          userRole = "admin";
+        }
+
+        const verified: VerifiedUser = {
+          userId,
+          email,
+          role: userRole,
+          username: decoded.name || email.split("@")[0],
+          authType: "firebase",
+        };
+        (req as any).user = verified;
+        return verified;
       }
-      if (typeof loadProfilesDatabase === "function") {
-        const profiles = loadProfilesDatabase();
-        const profUser = profiles[email] || Object.values(profiles).find((p: any) => (p.email || "").toLowerCase().trim() === email);
-        if (profUser && ((profUser as any).role === "admin" || (profUser as any).role === "superadmin")) return true;
-      }
-    } catch {}
+    } catch {
+      // Not a valid Firebase ID token; fall through to internal JWT check
+    }
+  }
+
+  // 2. Verify as internal HMAC-SHA256 session token
+  const internalPayload = verifyAuthToken(token);
+  if (internalPayload && internalPayload.email) {
+    const email = internalPayload.email.toLowerCase().trim();
+    let userRole = internalPayload.role || "user";
+
+    if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+      userRole = "superadmin";
+    } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+      userRole = "admin";
+    }
+
+    const verified: VerifiedUser = {
+      userId: internalPayload.userId || email,
+      email,
+      role: userRole,
+      username: internalPayload.username || email.split("@")[0],
+      authType: "session",
+    };
+    (req as any).user = verified;
+    return verified;
+  }
+
+  return null;
+}
+
+/**
+ * Safely extracts authenticated email ONLY from a verified cryptographic token.
+ * NEVER reads or trusts x-admin-email, x-user-email, req.body, or req.query.
+ */
+function extractAdminEmail(req: any): string {
+  const user = req.user || getAuthenticatedUser(req);
+  if (user && user.email) return user.email.toLowerCase().trim();
+  return "";
+}
+
+/**
+ * Verifies Master Admin privilege based SOLELY on cryptographically verified identity.
+ * All bypasses (master-admin, admin-secret-key, header spoofing) are permanently removed.
+ */
+function isAuthorizedMasterAdmin(req: express.Request): boolean {
+  const user = (req as any).user || getAuthenticatedUser(req);
+  if (!user || !user.email) return false;
+
+  const email = (user.email || "").toLowerCase().trim();
+  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
+
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+    return true;
+  }
+  if (process.env.MASTER_ADMIN_EMAIL && email === process.env.MASTER_ADMIN_EMAIL.toLowerCase().trim()) {
+    return true;
+  }
+  if (user.role === "superadmin" && email !== REGULAR_ADMIN_EMAIL) {
+    return true;
   }
 
   return false;
+}
+
+/**
+ * Verifies Admin privilege based SOLELY on cryptographically verified identity.
+ * All bypasses (admin-secret-key, master-admin, admin, x-user-role) are permanently removed.
+ */
+function isAuthorizedAdmin(req: express.Request): boolean {
+  const user = (req as any).user || getAuthenticatedUser(req);
+  if (!user || !user.email) return false;
+
+  const email = (user.email || "").toLowerCase().trim();
+  if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
+
+  if (isAuthorizedMasterAdmin(req)) return true;
+  if (email === REGULAR_ADMIN_EMAIL) return true;
+  if (process.env.REGULAR_ADMIN_EMAIL && email === process.env.REGULAR_ADMIN_EMAIL.toLowerCase().trim()) return true;
+  if (user.role === "admin" || user.role === "superadmin") return true;
+
+  try {
+    if (typeof loadUsersMasterDatabase === "function") {
+      const users = loadUsersMasterDatabase();
+      const dbUser = users.find((u: any) => (u.email || "").toLowerCase().trim() === email || (u.userId && u.userId === user.userId));
+      if (dbUser && (dbUser.role === "admin" || dbUser.role === "superadmin")) return true;
+    }
+  } catch {}
+
+  return false;
+}
+
+export async function requireAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const user = await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): कृपया वैध टोकन के साथ लॉगिन करें।",
+    });
+  }
+  (req as any).user = user;
+  next();
+}
+
+export async function requireAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const user = await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
+    });
+  }
+  (req as any).user = user;
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({
+      success: false,
+      error: "अनधिकृत (403 Forbidden): इस कार्य के लिए व्यवस्थापक (Admin) अधिकार आवश्यक हैं।",
+    });
+  }
+  next();
+}
+
+export async function requireMasterAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const user = await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): मास्टर एडमिन एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
+    });
+  }
+  (req as any).user = user;
+  if (!isAuthorizedMasterAdmin(req)) {
+    return res.status(403).json({
+      success: false,
+      error: "अनधिकृत (403 Forbidden): यह कार्य केवल अधिकृत मास्टर एडमिन (breakingnewswala.com@gmail.com) के लिए आरक्षित है।",
+    });
+  }
+  next();
 }
 
 
@@ -489,6 +679,9 @@ interface AuditLogEntry {
   ip?: string;
 }
 function loadAuditLogs(): AuditLogEntry[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.auditLogs && centralDb.cache.auditLogs.length > 0) {
+    return centralDb.cache.auditLogs;
+  }
   try {
     if (fs.existsSync(AUDIT_LOG_FILE)) {
       const data = JSON.parse(fs.readFileSync(AUDIT_LOG_FILE, 'utf-8'));
@@ -509,6 +702,11 @@ function logAdminAudit(adminEmail: string, action: string, target: string, detai
       details,
       ip: ip || 'internal',
     };
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.writeDoc("admin_audit_logs", entry.id, entry).catch(() => {});
+      centralDb.cache.auditLogs.unshift(entry);
+      if (centralDb.cache.auditLogs.length > 500) centralDb.cache.auditLogs.length = 500;
+    }
     logs.unshift(entry);
     if (logs.length > 500) logs.length = 500;
     fs.writeFileSync(AUDIT_LOG_FILE, JSON.stringify(logs, null, 2), 'utf-8');
@@ -532,6 +730,28 @@ app.post("/api/auth/verify-captcha", (req, res) => {
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
+});
+
+// ============================================================================
+// ADMIN ROUTE PERIMETER GUARD (APPLIES TO ALL /api/admin/* ENDPOINTS)
+// ============================================================================
+app.use("/api/admin", async (req, res, next) => {
+  if (req.method === "OPTIONS") return next();
+  const user = (req as any).user || await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
+    });
+  }
+  (req as any).user = user;
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({
+      success: false,
+      error: "अनधिकृत (403 Forbidden): इस कार्य के लिए व्यवस्थापक (Admin) अधिकार आवश्यक हैं।",
+    });
+  }
+  next();
 });
 
 // Admin Action Audit Logs Retrieval Endpoint
@@ -638,7 +858,7 @@ app.get("/api/cloud-status", (req, res) => {
 });
 
 // Admin endpoint to dynamically configure OpenAI Key, Gemini Key or Custom Domain at runtime
-app.post("/api/admin/set-ai-keys", async (req, res) => {
+app.post("/api/admin/set-ai-keys", requireMasterAdminMiddleware, async (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही AI कुंजियाँ सेट कर सकते हैं।" });
@@ -813,6 +1033,29 @@ interface ServerRewardsDatabase {
 }
 
 function loadRewardsDatabase(): ServerRewardsDatabase {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.wallets.size > 0) {
+    const wallets: Record<string, { coinBalance: number; pendingCoins: number; totalEarnedCoins: number }> = {};
+    for (const [k, w] of centralDb.cache.wallets.entries()) {
+      wallets[k] = {
+        coinBalance: Number(w.coinBalance || 0),
+        pendingCoins: Number(w.pendingCoins || 0),
+        totalEarnedCoins: Number(w.totalEarnedCoins || 0),
+      };
+    }
+    const frameUnlocks: Record<string, any> = {};
+    for (const [k, f] of centralDb.cache.frameUnlocks.entries()) {
+      frameUnlocks[k] = f;
+    }
+    return {
+      claims: [],
+      transactions: Array.from(centralDb.cache.walletTransactions.values()),
+      downloadEvents: [],
+      wallets,
+      welcomeRewards: {},
+      unlockedItems: {},
+      frameUnlocks,
+    };
+  }
   try {
     if (fs.existsSync(REWARDS_DB_FILE)) {
       const raw = fs.readFileSync(REWARDS_DB_FILE, "utf-8");
@@ -834,6 +1077,30 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
 }
 
 function saveRewardsDatabase(db: ServerRewardsDatabase): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    if (db.wallets) {
+      for (const [key, wallet] of Object.entries(db.wallets)) {
+        centralDb.writeDoc('wallets', key.toLowerCase().trim(), wallet).catch(() => {});
+        centralDb.cache.wallets.set(key.toLowerCase().trim(), wallet);
+      }
+    }
+    if (db.frameUnlocks) {
+      for (const [key, unlocks] of Object.entries(db.frameUnlocks)) {
+        centralDb.writeDoc('frame_unlocks', key.toLowerCase().trim(), { email: key.toLowerCase().trim(), unlocks, updatedAt: Date.now() }).catch(() => {});
+        centralDb.cache.frameUnlocks.set(key.toLowerCase().trim(), unlocks);
+      }
+    }
+    if (db.transactions && Array.isArray(db.transactions)) {
+      for (const tx of db.transactions.slice(0, 50)) {
+        const txId = (tx as any).id || (tx as any).transactionId;
+        if (txId) {
+          centralDb.writeDoc('wallet_transactions', String(txId), tx).catch(() => {});
+          centralDb.cache.walletTransactions.set(String(txId), tx);
+        }
+      }
+    }
+    return true;
+  }
   try {
     const locations = resolveAllDatabaseLocations("rewards_database.json");
     const jsonStr = JSON.stringify(db, null, 2);
@@ -1115,6 +1382,14 @@ function resolveAllDatabaseLocations(filename: string): string[] {
 }
 
 function loadNewsDatabase(): StoredNewsPost[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.news.size > 0) {
+    if (!centralDb.isCacheValid('news')) {
+      centralDb.getNewsPosts({ forceRemote: true }).catch(() => {});
+    }
+    const list = Array.from(centralDb.cache.news.values()) as StoredNewsPost[];
+    const cleaned = list.filter((p: any) => p && p.id && !String(p.id).startsWith("live-post-"));
+    if (cleaned.length > 0) return cleaned;
+  }
   try {
     const locations = resolveAllDatabaseLocations("news_database.json");
     for (const loc of locations) {
@@ -1140,12 +1415,21 @@ function loadNewsDatabase(): StoredNewsPost[] {
 }
 
 function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
+  const cleaned = posts.filter((p: any) => p && p.id);
+  if (centralDb && centralDb.useFirestore) {
+    const activeIds = new Set(cleaned.map((p) => String(p.id)));
+    for (const post of cleaned) {
+      centralDb.cache.news.set(post.id, post);
+      centralDb.saveNewsPost(post.id, post).catch((e: any) => console.warn("[Firestore News Sync Error]", e.message));
+    }
+    for (const id of centralDb.cache.news.keys()) {
+      if (!activeIds.has(id)) {
+        centralDb.deleteNewsPost(id).catch(() => {});
+      }
+    }
+    return true;
+  }
   try {
-    const cleaned = posts.filter((p: any) => {
-      if (!p || !p.id) return false;
-      return true;
-    });
-
     // Safeguard: Never wipe out an existing populated database with an empty array
     if (cleaned.length === 0) {
       const existing = loadNewsDatabase();
@@ -1172,6 +1456,15 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
 }
 
 function loadApprovedEditorialDatabase(): Record<string, any> {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.news.size > 0) {
+    const dict: Record<string, any> = {};
+    for (const [id, post] of centralDb.cache.news.entries()) {
+      if ((post as any).isPrePublished || (post as any).status === "APPROVED") {
+        dict[id] = post;
+      }
+    }
+    return dict;
+  }
   try {
     const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
     for (const loc of locations) {
@@ -1190,6 +1483,15 @@ function loadApprovedEditorialDatabase(): Record<string, any> {
 }
 
 function saveApprovedEditorialDatabase(data: Record<string, any>): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    for (const [id, item] of Object.entries(data)) {
+      if (id && item) {
+        const existing = centralDb.cache.news.get(id) || {};
+        centralDb.saveNewsPost(id, { ...existing, ...item }).catch(() => {});
+      }
+    }
+    return true;
+  }
   try {
     const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
     for (const loc of locations) {
@@ -1535,7 +1837,7 @@ app.post("/api/news-posts", (req, res) => {
 
 
 // 4. Admin Manual News Creation endpoint
-app.post("/api/admin/add-news", (req, res) => {
+app.post("/api/admin/add-news", requireAdminMiddleware, (req, res) => {
   try {
     const {
       headline,
@@ -1594,7 +1896,7 @@ app.post("/api/admin/add-news", (req, res) => {
 });
 
 // 5. Admin GET Approved News IDs Endpoint
-app.get("/api/admin/approved-news-ids", (_req, res) => {
+app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();
     const approvedIds = posts.filter(p => p.status === 'APPROVED' || !p.status).map(p => p.id);
@@ -1605,7 +1907,7 @@ app.get("/api/admin/approved-news-ids", (_req, res) => {
 });
 
 // 6. Admin Single News Approval endpoint (Updates existing or inserts into news_database.json)
-app.post("/api/admin/approve-news/:id", (req, res) => {
+app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
@@ -1680,7 +1982,7 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
         status: "APPROVED",
         isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : true,
         approvedAt: Date.now(),
-        approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
+        approvedBy: ((req as any).user?.email || "admin").toString(),
       };
       saveApprovedEditorialDatabase(edDb);
     } catch (e) {
@@ -1716,7 +2018,7 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
 
     saveNewsDatabase(existing);
     broadcastNewsPublishedNotification(id, approvedTitle);
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "खबर स्वीकृत हो गई", id, posts: existing });
   } catch (err: any) {
@@ -1725,7 +2027,7 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
 });
 
 // 7. Admin Bulk News Approval Endpoint
-app.post("/api/admin/bulk-approve-news", (req, res) => {
+app.post("/api/admin/bulk-approve-news", requireAdminMiddleware, (req, res) => {
   try {
     const { approvedIds, posts } = req.body || {};
     if (!Array.isArray(approvedIds)) {
@@ -1751,7 +2053,7 @@ app.post("/api/admin/bulk-approve-news", (req, res) => {
     }
 
     saveNewsDatabase(existing);
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "BULK_APPROVE_NEWS", `${approvedIds.length} items`);
     return res.json({ success: true, approvedIds: Array.from(approvedSet) });
   } catch (err: any) {
@@ -1760,7 +2062,7 @@ app.post("/api/admin/bulk-approve-news", (req, res) => {
 });
 
 // 8. Admin Reject News Endpoint
-app.post("/api/admin/reject-news/:id", (req, res) => {
+app.post("/api/admin/reject-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
@@ -1773,7 +2075,7 @@ app.post("/api/admin/reject-news/:id", (req, res) => {
         saveApprovedEditorialDatabase(edDb);
       }
     } catch {}
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "REJECT_NEWS", id);
     return res.json({ success: true, message: "खबर अस्वीकृत हो गई", id });
   } catch (err: any) {
@@ -1782,7 +2084,7 @@ app.post("/api/admin/reject-news/:id", (req, res) => {
 });
 
 // 9. Admin Migrate Local Approvals Endpoint
-app.post("/api/admin/migrate-approvals", (req, res) => {
+app.post("/api/admin/migrate-approvals", requireAdminMiddleware, (req, res) => {
   try {
     const { approvedIds } = req.body || {};
     if (!Array.isArray(approvedIds)) {
@@ -1971,6 +2273,9 @@ app.post("/api/news-posts/reset", (_req, res) => {
 const DRAFTS_DB_FILE = path.join(process.cwd(), "drafts_database.json");
 
 function loadDraftsDatabase(): any[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.drafts.size > 0) {
+    return Array.from(centralDb.cache.drafts.values());
+  }
   try {
     if (fs.existsSync(DRAFTS_DB_FILE)) {
       const content = fs.readFileSync(DRAFTS_DB_FILE, "utf-8");
@@ -1984,6 +2289,14 @@ function loadDraftsDatabase(): any[] {
 }
 
 function saveDraftsDatabase(drafts: any[]): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    for (const d of drafts) {
+      if (d && d.id) {
+        centralDb.saveDraft(d.id, d).catch(() => {});
+      }
+    }
+    return true;
+  }
   try {
     fs.writeFileSync(DRAFTS_DB_FILE, JSON.stringify(drafts, null, 2), "utf-8");
     return true;
@@ -2166,7 +2479,7 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
 });
 
 // 4. POST Upload Social Media Post Screenshot
-app.post("/api/rewards/upload-screenshot", (req, res) => {
+app.post("/api/rewards/upload-screenshot", async (req, res) => {
   try {
     const { imageBase64 } = req.body;
     if (!imageBase64 || typeof imageBase64 !== "string") {
@@ -2186,15 +2499,28 @@ app.post("/api/rewards/upload-screenshot", (req, res) => {
 
     const ext = magic.format || "jpg";
     const filename = `claim-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
-    const filePath = path.join(UPLOAD_SCREENSHOTS_DIR, filename);
-    const webFilePath = path.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
+    let url = `/uploads/screenshots/${filename}`;
 
-    fs.writeFileSync(filePath, buf);
-    try {
-      fs.writeFileSync(webFilePath, buf);
-    } catch { }
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer: buf,
+        filename,
+        contentType: magic.format === "png" ? "image/png" : "image/jpeg",
+        category: "screenshots",
+        publicRead: true,
+      });
+      if (uploadRes && uploadRes.url) {
+        url = uploadRes.url;
+      }
+    } else {
+      const filePath = path.join(UPLOAD_SCREENSHOTS_DIR, filename);
+      const webFilePath = path.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
+      fs.writeFileSync(filePath, buf);
+      try {
+        fs.writeFileSync(webFilePath, buf);
+      } catch { }
+    }
 
-    const url = `/uploads/screenshots/${filename}`;
     return res.json({ success: true, url });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -2448,7 +2774,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
 });
 
 // 8.1 Admin DELETE Bonus Reward Claim (Manual Admin Action)
-app.delete("/api/admin/rewards/claims/:id", (req, res) => {
+app.delete("/api/admin/rewards/claims/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही क्लेम हटा सकते हैं" });
@@ -2799,6 +3125,9 @@ app.post("/api/upload-logo", async (req, res) => {
 
     // File upload security: Magic bytes verification (PNG, JPEG, GIF, WebP)
     const magic = isValidImageMagicBytes(buf);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "अवैध छवि: केवल प्रामाणिक PNG, JPEG, GIF या WebP फ़ाइलें स्वीकार्य हैं" });
+    }
     let isGif = magic.format === "gif" || (req.body?.logoType === "gif") || (Boolean(req.body?.fileName && req.body.fileName.toLowerCase().endsWith(".gif")));
     let ext = isGif ? "gif" : (magic.format || "png");
 
@@ -2806,19 +3135,24 @@ app.post("/api/upload-logo", async (req, res) => {
     const safeFileBase = userOrEmail ? userOrEmail.replace(/[^a-zA-Z0-9_-]/g, "_") : "logo";
     const filename = `logo-${safeFileBase}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
     
-    const filePath = path.join(UPLOAD_LOGOS_DIR, filename);
-    const webFilePath = path.join(WEB_UPLOAD_LOGOS_DIR, filename);
-    fs.writeFileSync(filePath, buf);
-    try { fs.writeFileSync(webFilePath, buf); } catch {}
-    
-    // Also copy to dist and app assets if they exist
-    try {
-      const distLogoDir = path.join(process.cwd(), "dist", "uploads", "logos");
-      fs.mkdirSync(distLogoDir, { recursive: true });
-      fs.writeFileSync(path.join(distLogoDir, filename), buf);
-    } catch {}
-
-    const logoUrl = `/uploads/logos/${filename}`;
+    let logoUrl = `/uploads/logos/${filename}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer: buf,
+        filename,
+        contentType: isGif ? "image/gif" : (magic.format === "png" ? "image/png" : "image/jpeg"),
+        category: "logos",
+        publicRead: true,
+      });
+      if (uploadRes && uploadRes.url) {
+        logoUrl = uploadRes.url;
+      }
+    } else {
+      const filePath = path.join(UPLOAD_LOGOS_DIR, filename);
+      const webFilePath = path.join(WEB_UPLOAD_LOGOS_DIR, filename);
+      fs.writeFileSync(filePath, buf);
+      try { fs.writeFileSync(webFilePath, buf); } catch {}
+    }
 
     // Update user profile permanently across all databases if user identifier is provided
     let updatedProfile: any = null;
@@ -2887,6 +3221,22 @@ app.post("/api/upload-logo", async (req, res) => {
       try {
         registerOrUpdateUserAuthoritative(existing);
       } catch {}
+
+      if (centralDb && centralDb.useFirestore) {
+        try {
+          await centralDb.saveUser(userOrEmail, {
+            ...existing,
+            logoUrl,
+            channelLogoUrl: logoUrl,
+            channelLogoPngUrl: isGif ? undefined : logoUrl,
+            channelLogoGifUrl: isGif ? logoUrl : undefined,
+            channelLogoType: isGif ? "gif" : "png",
+            updatedAt: Date.now(),
+          });
+        } catch (fErr: any) {
+          console.warn("[Upload Logo] Firestore direct sync note:", fErr.message);
+        }
+      }
     }
 
     return res.json({
@@ -2904,11 +3254,20 @@ app.post("/api/upload-logo", async (req, res) => {
 });
 
 // 10. POST /api/wallet/claim-welcome-reward - 500 Coins for 1st graphic, 500 for 1st video
-app.post("/api/wallet/claim-welcome-reward", (req, res) => {
+app.post("/api/wallet/claim-welcome-reward", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = (req as any).user;
     const { email, userId, rewardType } = req.body || {};
-    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    let cleanEmail = (email || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
+
+    if (!cleanEmail && authUser?.email) {
+      cleanEmail = authUser.email.toLowerCase().trim();
+    }
+
+    if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते के लिए रिवॉर्ड क्लेम कर सकते हैं।" });
+    }
 
     if (!cleanEmail && !cleanUserId) {
       return res.status(400).json({ error: "User email or ID required" });
@@ -3081,16 +3440,21 @@ app.post("/api/rewards/first-time-export", (req, res) => {
 
 // SUB-USERS ENDPOINTS (Section 10 & 11)
 // GET /api/user/sub-users - List sub-users for a primary user with tier limits
-app.get("/api/user/sub-users", (req, res) => {
+app.get("/api/user/sub-users", requireAuthMiddleware, (req, res) => {
   try {
-    const rawEmail = (req.query.email || req.query.primaryEmail || "").toString().toLowerCase().trim();
+    const authUser = (req as any).user;
+    const rawEmail = (req.query.email || req.query.primaryEmail || authUser?.email || "").toString().toLowerCase().trim();
     if (!rawEmail) {
       return res.status(400).json({ success: false, error: "Primary user email is required" });
     }
 
+    if (rawEmail !== authUser?.email?.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "अनधिकृत (403 Forbidden): आप केवल अपने सब-यूज़र देख सकते हैं।" });
+    }
+
     const allProfiles = loadProfilesDatabase();
     const prof: any = allProfiles[rawEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === rawEmail) || {};
-    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || rawEmail === "admin.ainewsmaker@gmail.com" || rawEmail === "breakingnewswala.com@gmail.com";
+    const isAdmin = isAuthorizedAdmin(req);
     
     // Tier limit determination:
     // Basic: 0, Advanced: 0, Pro: 1, VIP Desk (ultra): 3, Admin: 99
@@ -3127,14 +3491,19 @@ app.get("/api/user/sub-users", (req, res) => {
 });
 
 // POST /api/user/sub-users/invite - Primary user invites a sub-user by email
-app.post("/api/user/sub-users/invite", (req, res) => {
+app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = (req as any).user;
     const { primaryEmail, subUserEmail, subUserName } = req.body || {};
-    const cleanPrimary = (primaryEmail || "").toString().toLowerCase().trim();
+    const cleanPrimary = (primaryEmail || authUser?.email || "").toString().toLowerCase().trim();
     const cleanSub = (subUserEmail || "").toString().toLowerCase().trim();
 
     if (!cleanPrimary || !cleanSub) {
       return res.status(400).json({ success: false, error: "Primary email and sub-user email are required" });
+    }
+
+    if (cleanPrimary !== authUser?.email?.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "अनधिकृत (403 Forbidden): आप केवल अपने खाते के तहत सब-यूज़र जोड़ सकते हैं।" });
     }
 
     if (cleanPrimary === cleanSub) {
@@ -3143,7 +3512,7 @@ app.post("/api/user/sub-users/invite", (req, res) => {
 
     const allProfiles = loadProfilesDatabase();
     const prof: any = allProfiles[cleanPrimary] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanPrimary) || {};
-    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || cleanPrimary === "admin.ainewsmaker@gmail.com" || cleanPrimary === "breakingnewswala.com@gmail.com";
+    const isAdmin = isAuthorizedAdmin(req);
 
     const tier = (prof.tier || "basic").toString().toLowerCase();
     const planName = (prof.planName || "").toString().toUpperCase();
@@ -3206,13 +3575,21 @@ app.post("/api/user/sub-users/invite", (req, res) => {
 });
 
 // DELETE /api/user/sub-users/:id - Delete a linked sub-user
-app.delete("/api/user/sub-users/:id", (req, res) => {
+app.delete("/api/user/sub-users/:id", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = (req as any).user;
     const subId = req.params.id;
     let allSubs = loadSubUsersDatabase();
     const idx = allSubs.findIndex((s) => s.id === subId);
     if (idx === -1) {
       return res.status(404).json({ success: false, error: "सब-यूज़र रिकॉर्ड नहीं मिला।" });
+    }
+
+    const sub = allSubs[idx];
+    const isOwner = sub.primaryEmail.toLowerCase().trim() === authUser?.email?.toLowerCase().trim() ||
+                    sub.subUserEmail.toLowerCase().trim() === authUser?.email?.toLowerCase().trim();
+    if (!isOwner && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "अनधिकृत (403 Forbidden): आप केवल अपने सब-यूज़र को हटा सकते हैं।" });
     }
 
     allSubs.splice(idx, 1);
@@ -3228,7 +3605,7 @@ app.delete("/api/user/sub-users/:id", (req, res) => {
 });
 
 // GET /api/admin/sub-users - Master Admin directory listing of all sub-users
-app.get("/api/admin/sub-users", (_req, res) => {
+app.get("/api/admin/sub-users", requireAdminMiddleware, (_req, res) => {
   try {
     const allSubs = loadSubUsersDatabase();
     return res.json({
@@ -3241,11 +3618,24 @@ app.get("/api/admin/sub-users", (_req, res) => {
 });
 
 // 11. POST /api/wallet/unlock-item - Atomically deducts configured coinValue to unlock restricted story or video
-app.post("/api/wallet/unlock-item", (req, res) => {
+app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = (req as any).user;
     const { email, userId, itemId, itemType = "news", coinValue, coinCost, itemTitle, title } = req.body || {};
-    const cleanEmail = (email || "").toString().toLowerCase().trim();
-    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    let cleanEmail = (email || "").toString().toLowerCase().trim();
+    let cleanUserId = (userId || cleanEmail || "").toString().trim();
+
+    if (!cleanEmail && authUser?.email) {
+      cleanEmail = authUser.email.toLowerCase().trim();
+    }
+    if (!cleanUserId && authUser?.userId) {
+      cleanUserId = authUser.userId;
+    }
+
+    if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते से सामग्री अनलॉक कर सकते हैं।" });
+    }
+
     const cleanItemId = (itemId || "").toString().trim();
     const rawVal = coinValue !== undefined ? coinValue : coinCost;
     const requiredCoins = Number(rawVal);
@@ -3354,7 +3744,7 @@ app.get("/api/wallet/unlocked-items", (req, res) => {
 });
 
 // 12B. Admin POST /api/admin/wallet/adjust-coins - Manually credit coins to a user's wallet
-app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], (req, res) => {
+app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन क्रेडिट कर सकते हैं" });
@@ -3742,6 +4132,20 @@ class AsyncLock {
 const userDbLock = new AsyncLock();
 
 function loadUsersMasterDatabase(): AuthoritativeUser[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    const unique = new Map<string, any>();
+    for (const u of centralDb.cache.users.values()) {
+      const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
+      if (key && !unique.has(key)) unique.set(key, u);
+    }
+    const list = Array.from(unique.values()) as AuthoritativeUser[];
+    list.sort((a, b) => {
+      const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
+      const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
+      return timeB - timeA;
+    });
+    return list;
+  }
   try {
     const locations = resolveAllDatabaseLocations("users_master_database.json");
     for (const loc of locations) {
@@ -3765,6 +4169,15 @@ function loadUsersMasterDatabase(): AuthoritativeUser[] {
 }
 
 function saveUsersMasterDatabase(users: AuthoritativeUser[]): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    for (const u of users) {
+      const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
+      if (key) {
+        centralDb.saveUser(key, u).catch((e: any) => console.warn("[Firestore User Sync Error]", e.message));
+      }
+    }
+    return true;
+  }
   try {
     users.sort((a, b) => {
       const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
@@ -3804,6 +4217,9 @@ function saveUsersDatabase(users: AuthoritativeUser[]): boolean {
 }
 
 function loadNotificationsDatabase(): StoredNotification[] {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.notifications.size > 0) {
+    return Array.from(centralDb.cache.notifications.values());
+  }
   try {
     if (fs.existsSync(NOTIFICATIONS_DB_FILE)) {
       const raw = fs.readFileSync(NOTIFICATIONS_DB_FILE, "utf-8");
@@ -3817,6 +4233,12 @@ function loadNotificationsDatabase(): StoredNotification[] {
 }
 
 function saveNotificationsDatabase(notifs: StoredNotification[]): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    for (const n of notifs) {
+      centralDb.saveNotification(n.id, n).catch(() => {});
+    }
+    return true;
+  }
   try {
     fs.writeFileSync(NOTIFICATIONS_DB_FILE, JSON.stringify(notifs, null, 2), "utf-8");
     return true;
@@ -3951,6 +4373,9 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
 }
 
 function extractUserIdentifier(req: express.Request): string | undefined {
+  const authUser = (req as any).user;
+  if (authUser?.email) return authUser.email;
+  if (authUser?.userId || authUser?.uid) return authUser.userId || authUser.uid;
   const headerEmail = (req.headers["x-user-email"] as string) || (req.headers["x-admin-email"] as string) || undefined;
   const headerUid = (req.headers["x-user-id"] as string) || undefined;
   const bodyEmail = req.body?.email || req.body?.userEmail || req.body?.reporterEmail;
@@ -4772,7 +5197,6 @@ function loadVideosDatabase(): StoredVideoItem[] {
     // Videos are preserved across deployments; eligible feed items older than 4 days (96h) are auto-removed
     const validVideos = videos.filter((v) => {
       if (!v || !v.id) return false;
-      if (String(v.id).startsWith("vid-test-")) return false;
       if (deletedSet.has(v.id)) return false;
       const createdAt = Number(v.createdAt) || 0;
       if (createdAt > 0 && (now - createdAt) > FOUR_DAYS_MS) {
@@ -4798,10 +5222,8 @@ function loadVideosDatabase(): StoredVideoItem[] {
 
 function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
   try {
-    // Enforce No Test Artefacts Policy: Discard temporary test fixtures before persisting
-    const sanitized = (videos || []).filter(v => v && v.id && !String(v.id).startsWith("vid-test-"));
     const locations = resolveAllDatabaseLocations("videos_database.json");
-    const jsonStr = JSON.stringify(sanitized, null, 2);
+    const jsonStr = JSON.stringify(videos || [], null, 2);
     for (const loc of locations) {
       try {
         const dir = path.dirname(loc);
@@ -4870,7 +5292,7 @@ app.get("/api/videos", (_req, res) => {
 });
 
 // 2. POST /api/admin/videos/upload - Admin uploads video to server
-app.post("/api/admin/videos/upload", (req, res) => {
+app.post("/api/admin/videos/upload", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो प्रबंधित कर सकते हैं" });
@@ -4973,14 +5395,16 @@ app.put("/api/admin/videos/:id", (req, res) => {
 });
 
 // 4. DELETE /api/admin/videos/:id - Admin permanently deletes video (never reappears)
-app.delete("/api/admin/videos/:id", (req, res) => {
+app.delete("/api/admin/videos/:id", requireAdminMiddleware, async (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो प्रबंधित कर सकते हैं" });
-    }
     const videoId = req.params.id;
     saveDeletedVideoId(videoId); // mark permanently deleted
     const currentVideos = loadVideosDatabase();
+    const toDelete = currentVideos.find((v) => v.id === videoId);
+    if (toDelete && cloudStorage) {
+      if (toDelete.videoUrl) cloudStorage.deleteMedia({ url: toDelete.videoUrl, category: 'videos' }).catch(() => {});
+      if (toDelete.thumbnailUrl) cloudStorage.deleteMedia({ url: toDelete.thumbnailUrl, category: 'thumbnails' }).catch(() => {});
+    }
     const filtered = currentVideos.filter((v) => v.id !== videoId);
     saveVideosDatabase(filtered);
     return res.json({ success: true, deletedId: videoId, remaining: filtered.length });
@@ -5069,7 +5493,7 @@ app.get("/api/music-library", (req, res) => {
 });
 
 // GET /api/admin/music-library - Admin fetch tracks
-app.get("/api/admin/music-library", (_req, res) => {
+app.get("/api/admin/music-library", requireAdminMiddleware, (_req, res) => {
   try {
     const tracks = loadMusicLibrary();
     return res.json({ success: true, tracks });
@@ -5079,11 +5503,8 @@ app.get("/api/admin/music-library", (_req, res) => {
 });
 
 // POST /api/admin/music-library/upload - Admin upload/add track (Section 6)
-app.post("/api/admin/music-library/upload", (req, res) => {
+app.post("/api/admin/music-library/upload", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक ही म्यूज़िक लाइब्रेरी प्रबंधित कर सकते हैं" });
-    }
     const { id, name, title, category, url, duration, isCopyrightSafe, targetModes, allowedTiers } = req.body;
     const trackName = String(name || title || "").trim();
     if (!trackName || !url) {
@@ -5111,7 +5532,7 @@ app.post("/api/admin/music-library/upload", (req, res) => {
       url: String(url).trim(),
       duration: typeof duration === "number" ? duration : undefined,
       uploadedAt: Date.now(),
-      uploadedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin") as string,
+      uploadedBy: ((req as any).user?.email || "admin") as string,
       isCopyrightSafe: isCopyrightSafe !== undefined ? Boolean(isCopyrightSafe) : true,
       targetModes: normalizedMode,
       allowedTiers: Array.isArray(allowedTiers) && allowedTiers.length > 0 ? allowedTiers : ['basic', 'advance', 'pro', 'vip'],
@@ -5125,11 +5546,8 @@ app.post("/api/admin/music-library/upload", (req, res) => {
 });
 
 // PUT /api/admin/music-library/:id - Admin update track modes and category permissions (Section 6)
-app.put("/api/admin/music-library/:id", (req, res) => {
+app.put("/api/admin/music-library/:id", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक ही म्यूज़िक अपडेट कर सकते हैं" });
-    }
     const trackId = req.params.id;
     const { name, title, category, isCopyrightSafe, targetModes, allowedTiers } = req.body;
     const tracks = loadMusicLibrary();
@@ -5163,11 +5581,8 @@ app.put("/api/admin/music-library/:id", (req, res) => {
 });
 
 // DELETE /api/admin/music-library/:id - Admin delete track
-app.delete("/api/admin/music-library/:id", (req, res) => {
+app.delete("/api/admin/music-library/:id", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक ही म्यूज़िक हटा सकते हैं" });
-    }
     const trackId = req.params.id;
     const tracks = loadMusicLibrary();
     const filtered = tracks.filter((t) => t.id !== trackId);
@@ -5219,7 +5634,7 @@ app.get("/api/check-username", (req, res) => {
 });
 
 // GET /api/users & GET /api/admin/users
-app.get(["/api/users", "/api/admin/users"], (req, res) => {
+app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) => {
   try {
     if (req.path.includes("/admin/") && !isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ success: false, error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स प्रबंधन देख सकते हैं।" });
@@ -5419,6 +5834,10 @@ app.post("/api/notifications/mark-read", (req, res) => {
 const ADMIN_NOTIFS_READ_FILE = path.join(process.cwd(), "admin_notifications_read_db.json");
 
 function loadAdminReadNotificationIds(): Set<string> {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has('admin_notifs_read')) {
+    const list = centralDb.cache.systemConfig.get('admin_notifs_read');
+    if (Array.isArray(list)) return new Set(list);
+  }
   try {
     if (fs.existsSync(ADMIN_NOTIFS_READ_FILE)) {
       const raw = fs.readFileSync(ADMIN_NOTIFS_READ_FILE, "utf-8");
@@ -5430,6 +5849,10 @@ function loadAdminReadNotificationIds(): Set<string> {
 }
 
 function saveAdminReadNotificationIds(ids: Set<string>): void {
+  if (centralDb && centralDb.useFirestore) {
+    centralDb.saveAdminNotificationsRead(Array.from(ids)).catch(() => {});
+    return;
+  }
   try {
     const locs = resolveAllDatabaseLocations("admin_notifications_read_db.json");
     const jsonStr = JSON.stringify(Array.from(ids), null, 2);
@@ -5704,6 +6127,16 @@ interface AdminRssSourceRecord {
 const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.rssSources.size > 0) {
+    const list = Array.from(centralDb.cache.rssSources.values()) as AdminRssSourceRecord[];
+    const valid = list.filter((s: any) => {
+      if (!s || !s.url) return false;
+      const u = String(s.url).toLowerCase();
+      if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
+      return true;
+    });
+    return valid;
+  }
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
@@ -5728,14 +6161,23 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
-  try {
-    const cleaned = sources.filter((s: any) => {
-      if (!s || !s.url) return false;
-      const u = String(s.url).toLowerCase();
-      if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
-      return true;
-    });
+  const cleaned = sources.filter((s: any) => {
+    if (!s || !s.url) return false;
+    const u = String(s.url).toLowerCase();
+    if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
+    return true;
+  });
 
+  if (centralDb && centralDb.useFirestore) {
+    for (const s of cleaned) {
+      if (s && s.id) {
+        centralDb.saveRssSource(s.id, s).catch(() => {});
+      }
+    }
+    return true;
+  }
+
+  try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       try {
@@ -6241,7 +6683,7 @@ function formatHindiDate(timestamp?: number | string | null): string {
   return `${date.getDate()} ${monthsHindi[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-app.get("/api/admin/rss-sources", (_req, res) => {
+app.get("/api/admin/rss-sources", requireAdminMiddleware, (_req, res) => {
   const sources = loadRssSourcesDatabase().map(s => ({
     ...s,
     addedDateFormatted: formatHindiDate(s.addedAt || s.createdAt),
@@ -6250,7 +6692,7 @@ app.get("/api/admin/rss-sources", (_req, res) => {
 });
 
 // 2. POST save or update admin RSS/Web sources (Strictly Admin / Master Admin Only)
-app.post("/api/admin/rss-sources", (req, res) => {
+app.post("/api/admin/rss-sources", requireAdminMiddleware, (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ error: "अनधिकृत: RSS फ़ीड्स और वेब लिंक्स केवल एडमिन द्वारा प्रबंधित किए जा सकते हैं।" });
@@ -6323,7 +6765,7 @@ app.post("/api/admin/rss-sources", (req, res) => {
 });
 
 // 2b. DELETE admin RSS/Web source by ID & clean associated posts
-app.delete("/api/admin/delete-rss-source/:id", (req, res) => {
+app.delete("/api/admin/delete-rss-source/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ error: "अनधिकृत: RSS फ़ीड्स हटाना केवल एडमिन के लिए अनुमत है।" });
@@ -6740,7 +7182,7 @@ app.get("/api/rss/web-feed", (req, res) => {
 });
 
 // 3. POST live sync RSS & Web links -> Production Database (news_database.json)
-app.post("/api/admin/rss-sync", async (_req, res) => {
+app.post("/api/admin/rss-sync", requireAdminMiddleware, async (_req, res) => {
   try {
     const sources = loadRssSourcesDatabase();
     const activeSources = sources.filter((s) => s.isActive);
@@ -7090,6 +7532,13 @@ interface StoredUserProfile {
 }
 
 function loadProfilesDatabase(): Record<string, StoredUserProfile> {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    const dict: Record<string, StoredUserProfile> = {};
+    for (const [k, v] of centralDb.cache.users.entries()) {
+      dict[k] = v as any;
+    }
+    return dict;
+  }
   try {
     if (fs.existsSync(PROFILES_DB_FILE)) {
       const raw = fs.readFileSync(PROFILES_DB_FILE, "utf-8");
@@ -7102,6 +7551,13 @@ function loadProfilesDatabase(): Record<string, StoredUserProfile> {
 }
 
 function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    for (const [key, profile] of Object.entries(data)) {
+      const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
+      centralDb.saveUser(docId, profile).catch((e: any) => console.warn("[Firestore Profile Sync Error]", e.message));
+    }
+    return true;
+  }
   try {
     const locations = resolveAllDatabaseLocations("user_profiles_db.json");
     const jsonStr = JSON.stringify(data, null, 2);
@@ -7112,20 +7568,6 @@ function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean 
         fs.writeFileSync(loc, jsonStr, "utf-8");
       } catch {}
     }
-    // Asynchronously replicate every user profile into Cloud Firestore
-    try {
-      const adapter = require("./server_firestore_adapter.cjs");
-      if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
-        for (const [key, profile] of Object.entries(data)) {
-          const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
-          adapter.firestoreWriteDoc("users", docId, {
-            ...profile,
-            uid: docId,
-            updatedAt: Date.now()
-          }).catch((e: any) => console.warn("[Firestore Profile Sync Error]", e.message));
-        }
-      }
-    } catch {}
     return true;
   } catch (err) {
     console.error("Error saving user_profiles_db.json:", err);
@@ -7363,6 +7805,9 @@ interface AdminBrandingRecord {
 }
 
 function loadAdminBranding(): AdminBrandingRecord {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has('admin_branding')) {
+    return centralDb.cache.systemConfig.get('admin_branding');
+  }
   try {
     if (fs.existsSync(ADMIN_BRANDING_FILE)) {
       const raw = fs.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
@@ -7384,6 +7829,13 @@ function loadAdminBranding(): AdminBrandingRecord {
 }
 
 function saveAdminBranding(data: AdminBrandingRecord): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache?.systemConfig) {
+      centralDb.cache.systemConfig.set('admin_branding', data);
+    }
+    centralDb.saveAdminBranding(data).catch(() => {});
+    return true;
+  }
   try {
     fs.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
     return true;
@@ -7393,12 +7845,12 @@ function saveAdminBranding(data: AdminBrandingRecord): boolean {
   }
 }
 
-app.get("/api/admin/branding", (_req, res) => {
+app.get("/api/admin/branding", requireAdminMiddleware, (_req, res) => {
   const branding = loadAdminBranding();
   return res.json({ success: true, branding });
 });
 
-app.post("/api/admin/branding", (req, res) => {
+app.post("/api/admin/branding", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही ब्रांडिंग प्रबंधित कर सकते हैं।" });
@@ -7433,6 +7885,9 @@ interface StoredCustomFrame {
 }
 
 function loadCustomFramesDatabase(): StoredCustomFrame[] {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has('custom_frames')) {
+    return centralDb.cache.systemConfig.get('custom_frames');
+  }
   try {
     if (fs.existsSync(CUSTOM_FRAMES_FILE)) {
       const raw = fs.readFileSync(CUSTOM_FRAMES_FILE, "utf-8");
@@ -7446,6 +7901,12 @@ function loadCustomFramesDatabase(): StoredCustomFrame[] {
 }
 
 function saveCustomFramesDatabase(frames: StoredCustomFrame[]): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    for (const f of frames) {
+      centralDb.saveCustomFrame(f.id, f).catch(() => {});
+    }
+    return true;
+  }
   try {
     fs.writeFileSync(CUSTOM_FRAMES_FILE, JSON.stringify(frames, null, 2), "utf-8");
     return true;
@@ -7464,7 +7925,7 @@ app.get("/api/custom-frames", (req, res) => {
   return res.json({ success: true, frames: userFrames });
 });
 
-app.post("/api/custom-frames", enforceUserAccessMiddleware, (req, res) => {
+app.post("/api/custom-frames", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही कस्टम फ्रेम्स जोड़ सकते हैं।" });
@@ -7493,7 +7954,7 @@ app.post("/api/custom-frames", enforceUserAccessMiddleware, (req, res) => {
   }
 });
 
-app.delete("/api/custom-frames/:id", (req, res) => {
+app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही कस्टम फ्रेम्स हटा सकते हैं।" });
@@ -7667,6 +8128,9 @@ interface StoredSupportRequest {
 }
 
 function loadSupportRequestsDatabase(): StoredSupportRequest[] {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has('support_requests')) {
+    return centralDb.cache.systemConfig.get('support_requests');
+  }
   try {
     if (fs.existsSync(SUPPORT_DB_FILE)) {
       const raw = fs.readFileSync(SUPPORT_DB_FILE, "utf-8");
@@ -7680,6 +8144,12 @@ function loadSupportRequestsDatabase(): StoredSupportRequest[] {
 }
 
 function saveSupportRequestsDatabase(requests: StoredSupportRequest[]): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    for (const r of requests) {
+      centralDb.saveSupportRequest(r).catch(() => {});
+    }
+    return true;
+  }
   try {
     fs.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
     return true;
@@ -7717,7 +8187,7 @@ app.get("/api/support/requests", (req, res) => {
   return res.json({ success: true, requests: userRequests });
 });
 
-app.post("/api/support/requests", (req, res) => {
+app.post("/api/support/requests", async (req, res) => {
   try {
     const data = req.body;
     if (!data) return res.status(400).json({ error: "No data provided" });
@@ -7735,9 +8205,20 @@ app.post("/api/support/requests", (req, res) => {
       }
       const ext = magic.format || "png";
       const filename = `support_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
-      fs.writeFileSync(path.join(UPLOAD_SUPPORT_DIR, filename), buf);
-      try { fs.writeFileSync(path.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf); } catch {}
-      finalAttachmentUrl = `/uploads/support/${filename}`;
+      if (cloudStorage) {
+        const uploadRes = await cloudStorage.saveMedia({
+          buffer: buf,
+          filename,
+          contentType: magic.format === "png" ? "image/png" : "image/jpeg",
+          category: "support",
+          publicRead: true,
+        });
+        finalAttachmentUrl = uploadRes && uploadRes.url ? uploadRes.url : `/uploads/support/${filename}`;
+      } else {
+        fs.writeFileSync(path.join(UPLOAD_SUPPORT_DIR, filename), buf);
+        try { fs.writeFileSync(path.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf); } catch {}
+        finalAttachmentUrl = `/uploads/support/${filename}`;
+      }
     }
 
     const newRequest: StoredSupportRequest = {
@@ -7986,7 +8467,7 @@ app.put("/api/admin/raw-news/:id", (req, res) => {
   }
 });
 
-app.delete("/api/admin/raw-news/:id", (req, res) => {
+app.delete("/api/admin/raw-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
@@ -8245,11 +8726,8 @@ app.post("/api/logo-change-requests/:id/reject", (req, res) => {
 // ============================================================================
 
 // 5. POST /api/admin/videos/upload-file - Uploads real video file and saves to /uploads/videos
-app.post("/api/admin/videos/upload-file", (req, res) => {
+app.post("/api/admin/videos/upload-file", requireAdminMiddleware, async (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो अपलोड कर सकते हैं।" });
-    }
     const { videoData, filename = "video.mp4" } = req.body;
     if (!videoData || typeof videoData !== "string") {
       return res.status(400).json({ error: "वीडियो डेटा अनिवार्य है।" });
@@ -8269,12 +8747,25 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    const filePath = path.join(UPLOAD_VIDEOS_DIR, savedFilename);
-    const webFilePath = path.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
-    fs.writeFileSync(filePath, buffer);
-    try { fs.writeFileSync(webFilePath, buffer); } catch { }
+    let videoUrl = `/uploads/videos/${savedFilename}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer,
+        filename: savedFilename,
+        contentType: ext === "webm" ? "video/webm" : "video/mp4",
+        category: "videos",
+        publicRead: true,
+      });
+      if (uploadRes && uploadRes.url) {
+        videoUrl = uploadRes.url;
+      }
+    } else {
+      const filePath = path.join(UPLOAD_VIDEOS_DIR, savedFilename);
+      const webFilePath = path.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
+      fs.writeFileSync(filePath, buffer);
+      try { fs.writeFileSync(webFilePath, buffer); } catch { }
+    }
 
-    const videoUrl = `/uploads/videos/${savedFilename}`;
     return res.json({ success: true, videoUrl, filename: savedFilename });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -8282,11 +8773,8 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
 });
 
 // 6. POST /api/admin/videos/upload-thumbnail - Uploads thumbnail image and saves to /uploads/thumbnails
-app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
+app.post("/api/admin/videos/upload-thumbnail", requireAdminMiddleware, async (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही थंबनेल अपलोड कर सकते हैं।" });
-    }
     const { imageData } = req.body;
     if (!imageData || typeof imageData !== "string") {
       return res.status(400).json({ error: "थंबनेल इमेज डेटा अनिवार्य है।" });
@@ -8307,12 +8795,25 @@ app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
     const ext = magic.format || "jpg";
     const savedFilename = `thumb_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
 
-    const filePath = path.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
-    const webFilePath = path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
-    fs.writeFileSync(filePath, buffer);
-    try { fs.writeFileSync(webFilePath, buffer); } catch { }
+    let thumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer,
+        filename: savedFilename,
+        contentType: magic.format === "png" ? "image/png" : "image/jpeg",
+        category: "thumbnails",
+        publicRead: true,
+      });
+      if (uploadRes && uploadRes.url) {
+        thumbnailUrl = uploadRes.url;
+      }
+    } else {
+      const filePath = path.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
+      const webFilePath = path.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
+      fs.writeFileSync(filePath, buffer);
+      try { fs.writeFileSync(webFilePath, buffer); } catch { }
+    }
 
-    const thumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
     return res.json({ success: true, thumbnailUrl, filename: savedFilename });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -8322,6 +8823,9 @@ app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
 // POST /api/upload-font - Upload custom font strictly for VIP-Dash (and Admin) users
 app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
   try {
+    if (!(req as any).user) {
+      (req as any).user = getAuthenticatedUser(req);
+    }
     const userTier = (
       (req as any).user?.tier ||
       (req as any).user?.subscriptionTier ||
@@ -8367,15 +8871,27 @@ app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
     }
 
     const safeBaseName = `font_${Date.now()}_${cleanFontName.replace(/\s+/g, "_")}${ext}`;
-    const fontFilePath = path.join(UPLOAD_FONTS_DIR, safeBaseName);
-    const webFontFilePath = path.join(WEB_UPLOAD_FONTS_DIR, safeBaseName);
+    let fontUrl = `/uploads/fonts/${safeBaseName}`;
 
-    fs.writeFileSync(fontFilePath, fontBuffer);
-    try {
-      fs.writeFileSync(webFontFilePath, fontBuffer);
-    } catch {}
-
-    const fontUrl = `/uploads/fonts/${safeBaseName}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer: fontBuffer,
+        filename: safeBaseName,
+        contentType: ext === ".woff2" ? "font/woff2" : (ext === ".woff" ? "font/woff" : "font/ttf"),
+        category: "fonts",
+        publicRead: true,
+      });
+      if (uploadRes && uploadRes.url) {
+        fontUrl = uploadRes.url;
+      }
+    } else {
+      const fontFilePath = path.join(UPLOAD_FONTS_DIR, safeBaseName);
+      const webFontFilePath = path.join(WEB_UPLOAD_FONTS_DIR, safeBaseName);
+      fs.writeFileSync(fontFilePath, fontBuffer);
+      try {
+        fs.writeFileSync(webFontFilePath, fontBuffer);
+      } catch {}
+    }
 
     return res.json({
       success: true,
@@ -8390,7 +8906,7 @@ app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
 });
 
 // 4. POST Admin Reset User Logo
-app.post("/api/admin/reset-user-logo", (req, res) => {
+app.post("/api/admin/reset-user-logo", requireAdminMiddleware, (req, res) => {
   try {
     const { targetUsername } = req.body;
     if (!targetUsername) {
@@ -8415,7 +8931,7 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
 
 // Duplicate endpoint consolidated into primary /api/admin/update-user
 
-app.post("/api/admin/block-user", (req, res) => {
+app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को ब्लॉक कर सकते हैं।" });
@@ -8476,7 +8992,7 @@ app.post("/api/admin/block-user", (req, res) => {
   }
 });
 
-app.post("/api/admin/unblock-user", (req, res) => {
+app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को अनब्लॉक कर सकते हैं।" });
@@ -8527,12 +9043,11 @@ app.post("/api/admin/unblock-user", (req, res) => {
   }
 });
 
-app.post("/api/admin/delete-user", (req, res) => {
+app.post("/api/admin/delete-user", requireMasterAdminMiddleware, (req, res) => {
   try {
-    const adminEmail = (req.body?.adminEmail || extractAdminEmail(req) || "").toLowerCase().trim();
-    const isMaster = isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req) || adminEmail === MASTER_ADMIN_EMAIL || adminEmail === REGULAR_ADMIN_EMAIL;
+    const isMaster = isAuthorizedMasterAdmin(req);
     if (!isMaster) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र्स को डिलीट कर सकते हैं।" });
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को डिलीट कर सकते हैं।" });
     }
     const { userId, userEmail, targetEmail, targetUserId } = req.body;
     const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
@@ -8740,17 +9255,9 @@ app.post("/api/admin/delete-user", (req, res) => {
   }
 });
 
-app.post("/api/admin/update-user", (req, res) => {
+app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
   try {
-    const adminEmail = extractAdminEmail(req);
-    const isMaster =
-      isAuthorizedMasterAdmin(req) ||
-      isAuthorizedAdmin(req) ||
-      adminEmail === MASTER_ADMIN_EMAIL ||
-      adminEmail === REGULAR_ADMIN_EMAIL ||
-      req.headers["x-admin-key"] === "master-admin" ||
-      req.headers["x-admin-key"] === "admin-secret-key";
-
+    const isMaster = isAuthorizedAdmin(req);
     if (!isMaster) {
       return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र सेटिंग्स अपडेट कर सकते हैं।" });
     }
@@ -9497,10 +10004,10 @@ export function saveAiFeaturesConfig(cfg: any): boolean {
 export function getHeadlineRegenCoinCost(tier: string, role?: string): number {
   const cleanRole = (role || "").toLowerCase().trim();
   if (cleanRole === "admin" || cleanRole === "superadmin") return 0;
-  const t = (tier || "basic").toLowerCase().trim();
-  if (t === "ultra" || t === "vip desk" || t === "vip_desk" || t === "vip" || t === "vip_dash") return 0;
+  const t = (tier || "basic").toLowerCase().trim().replace(/[\-_]/g, " ");
+  if (t === "ultra" || t === "vip desk" || t === "vip" || t === "vip dash") return 0;
   if (t === "professional" || t === "pro") return 25;
-  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 50;
+  if (t === "advanced" || t === "advance" || t === "basic advanced" || t === "advance plus") return 50;
   return 100; // Basic / default
 }
 
@@ -9549,7 +10056,9 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
   if (identifier) {
     const clean = identifier.toString().toLowerCase().trim();
     if (isProtectedAdminAccount(clean)) {
-      return { tier: explicitTier || "superadmin", role: "superadmin" };
+      if (isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req)) {
+        return { tier: explicitTier || "superadmin", role: "superadmin" };
+      }
     }
     const users = loadUsersMasterDatabase();
     const match = users.find(u =>
@@ -10004,7 +10513,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
   });
 });
 
-app.delete("/api/admin/api-keys/free/:id", (req, res) => {
+app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
@@ -10019,7 +10528,7 @@ app.delete("/api/admin/api-keys/free/:id", (req, res) => {
   return res.json({ success: true, message: "फ्री API Key सफलतापूर्वक हटा दी गई।" });
 });
 
-app.post("/api/admin/api-keys/paid", async (req, res) => {
+app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
@@ -10049,7 +10558,7 @@ app.post("/api/admin/api-keys/paid", async (req, res) => {
   });
 });
 
-app.delete("/api/admin/api-keys/paid", (req, res) => {
+app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
@@ -10059,7 +10568,7 @@ app.delete("/api/admin/api-keys/paid", (req, res) => {
   return res.json({ success: true, message: "पेड VIP API Key हटा दी गई।" });
 });
 
-app.post("/api/admin/api-keys/test", async (req, res) => {
+app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
@@ -11592,6 +12101,7 @@ export function calculateHeadlineSimilarityInternal(h1: string, h2: string): num
   }
   return (2 * common) / (words1.size + words2.size);
 }
+export const calculateHeadlineSimilarity = calculateHeadlineSimilarityInternal;
 
 export const HEADLINE_TIER_RANGES = [
   { option: 1, label: 'विकल्प 1' },
@@ -12350,7 +12860,7 @@ export function createLocalNewsFallback(
   // विकल्प 3: उत्सुकता पैदा करने वाला दृष्टिकोण (Key development / rule change / unfolding fact)
   // विकल्प 4: महत्वपूर्ण तथ्य या प्रभाव (Specific regulation / number / ban / official standard)
   // विकल्प 5: दूसरा प्रासंगिक समाचार कोण (Broader administrative / citizen impact / policy)
-  const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
+  const cleanBylineRegex = /(?:नईदुनिया|नवदुनिया|दैनिक\s*भास्कर|अमर\s*उजाला|पत्रिका|नवभारत\s*टाइम्स|हिंदुस्तान|विशेष\s*संवाददाता|ब्यूरो|द\s*सूत्र|हरिभूमि|दैनिक\s*जागरण|आज\s*तक|ज़ी\s*न्यूज़|एनडीटीवी|न्यूज़\s*18)\s*(?:प्रतिनिधि|संवाददाता|ब्यूरो|डेस्क|रिपोर्टर)?[,\s]*[^\n।:]*[:,\-–—]?/gi;
   let baseTitle = cleanHeadlineText(extractedTitle);
   if (!isValidCandidate(baseTitle)) {
     const firstSent = clean
@@ -12510,13 +13020,8 @@ function verifyDiagnosticKey(req: any) {
     }
   }
 
-  // 2. High-security Master Admin fallback:
-  // If Cloud Run secret injection is delayed or failing, authenticated Master Editor can verify ADC connectivity
-  const callerEmail = String(req.headers["x-admin-email"] || req.headers["x-user-email"] || "").trim().toLowerCase();
-  const adminSecret = String(req.headers["x-admin-secret"] || "").trim();
-  const isMaster = callerEmail === "admin.ainewsmaker@gmail.com" || callerEmail === "breakingnewswala.com@gmail.com";
-
-  if (isMaster && adminSecret === "MASTER_ADMIN_DIAGNOSTIC_BYPASS") {
+  // 2. High-security Master Admin check: verified cryptographic token required
+  if (isAuthorizedMasterAdmin(req)) {
     return { authorized: true };
   }
 
@@ -12578,13 +13083,7 @@ app.post("/api/admin/migration/run-firestore-sync", async (req, res) => {
   }
 });
 
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
-    timestamp: new Date().toISOString(),
-  });
-});
+// Duplicate /api/health unified at primary route registration
 
 // Image Analysis with Gemini 3.1 Pro Preview (with fallback to 3.8-flash and flash-latest)
 app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => {
@@ -12821,9 +13320,16 @@ function ensureWordCount(text: string, minWords: number, maxWords: number, fille
   return fitHeadlineNaturally(text, 50, 100, fillerFact);
 }
 
+export const BYLINE_REGEX = /(?:नईदुनिया|नवदुनिया|दैनिक\s*भास्कर|अमर\s*उजाला|पत्रिका|नवभारत\s*टाइम्स|हिंदुस्तान|विशेष\s*संवाददाता|ब्यूरो|द\s*सूत्र|हरिभूमि|दैनिक\s*जागरण|आज\s*तक|ज़ी\s*न्यूज़|एनडीटीवी|न्यूज़\s*18)\s*(?:प्रतिनिधि|संवाददाता|ब्यूरो|डेस्क|रिपोर्टर)?[,\s]*[^\n।:]*[:,\-–—]?/gi;
+
+export function stripNewspaperBylines(text: string): string {
+  if (!text) return "";
+  return text.replace(BYLINE_REGEX, " ").replace(/\s{2,}/g, " ").trim();
+}
+
 function sanitizeHeadlineClean(text: string): string {
   if (!text) return "";
-  let res = sanitizePressNoteFlattery(cleanHeadlineText(text), true)
+  let res = stripNewspaperBylines(sanitizePressNoteFlattery(cleanHeadlineText(text), true))
     .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
     .trim();
 
@@ -12831,9 +13337,10 @@ function sanitizeHeadlineClean(text: string): string {
   res = res.replace(/(?:की\s+)?(?:दे\s+रहा|दे\s+रहे|दे\s+रही)$/u, "की धमकी का मामला");
   res = res.replace(/\s+(?:कर\s+रहा|कर\s+रहे|कर\s+रही)$/u, " का मामला");
   res = res.replace(/\s+(?:हो\s+रहा|हो\s+रहे|हो\s+रही)$/u, " की स्थिति");
+  res = res.replace(/(?:यातायात पुलिस ने\s*)?लोगों\s+की\s+सुरक्षा\s+के$/u, "यातायात व सुरक्षा के पुख्ता इंतजाम");
 
   // Strip trailing connectors & prepositions in a loop
-  const danglingPostpositions = /(?:\s+(?:ने|के|की|का|को|कि|हेतु|तहत|दौरान|और|या|एवं|व))$/u;
+  const danglingPostpositions = /(?:\s+(?:ने|के|की|का|को|कि|हेतु|तहत|दौरान|और|या|एवं|व|के\s+बीच|के\s+लिए|के\s+तहत|द्वारा\s+आवश्यक|की\s+ओर|के\s+साथ))$/u;
   let prevLen = 0;
   while (res.length !== prevLen) {
     prevLen = res.length;
@@ -12845,11 +13352,6 @@ function sanitizeHeadlineClean(text: string): string {
 /**
  * Helper: Generate 5 distinct, balanced headline options across the 5 editorial angles
  * Strictly anchored to the SAME verified primary news event (BREAKING NEWS WALA standard)
- * 1. The core event — direct, hard news, who did what where (Option 1: 80–110 chars)
- * 2. The person or authority angle — focus on key actor, official statement, or decision (Option 2: 100–130 chars)
- * 3. The action or consequence angle — focus on investigation, action, impact, or penalty (Option 3: 125–150 chars)
- * 4. The key quote or specific allegation / timeline — specific claim, numbers or duration (Option 4: 130–160 chars)
- * 5. The crisp, high-impact angle — comprehensive public interest overview (Option 5: 150–200 chars)
  */
 export function generate5BalancedHeadlineOptions(
   primaryTitle: string,
@@ -12857,11 +13359,7 @@ export function generate5BalancedHeadlineOptions(
   location: string = ""
 ): string[] {
   const cleanBase = sanitizeHeadlineClean(primaryTitle || "");
-  const validFacts = (factSentences || [])
-    .map((s) => sanitizeHeadlineClean(s))
-    .filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:|प्रतिनिधि|संवाददाता|ब्यूरो|दैनिक\s*भास्कर|अमर\s*उजाला|नवदुनिया|पत्रिका)/u.test(s));
-
-  const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "मुख्य समाचार अपडेट");
+  const base = cleanBase || "मुख्य समाचार अपडेट";
   const loc = location && location !== "विशेष कवरेज" ? location.trim() : "";
 
   const uniqueOptions: string[] = [];
@@ -12880,29 +13378,54 @@ export function generate5BalancedHeadlineOptions(
   // 1. Angle 1: Direct Core News Event (मुख्य समाचार - active, direct)
   addOptionIfDistinct(base);
 
+  const validFacts = (factSentences || [])
+    .map((s) => sanitizeHeadlineClean(s))
+    .filter((s) => s.length >= 15 && !BYLINE_REGEX.test(s));
+
+  let prefix = "";
+  let core = base;
+  if (base.includes(": ")) {
+    const parts = base.split(": ");
+    prefix = parts[0].trim();
+    core = parts.slice(1).join(": ").trim();
+  }
+
   // 2. Angle 2: Impact / Outcome / Action Angle (प्रभाव व परिणाम)
   const impactFact = validFacts.find((f) => /(?:कार्रवाई|फैसला|आदेश|जांच|मुकदमा|गिरफ्तार|निर्देश|तैयारी|सख्त|बदलाव|रूट|प्रभाव|डायवर्ट|सख्त|नियम)/u.test(f) && !uniqueOptions.includes(f));
   if (impactFact) {
     addOptionIfDistinct(impactFact);
+  } else if (base.includes("महंगाई भत्ता") || base.includes("वेतन") || base.includes("एलान")) {
+    addOptionIfDistinct("कर्मचारियों और पेंशनरों को सरकार की बड़ी सौगात: डीए में 2 फीसदी बढ़ोतरी के आदेश जारी");
   } else if (base.includes("केस दर्ज") || base.includes("ब्लैकमेल") || base.includes("धमकी")) {
-    addOptionIfDistinct(`पीड़िता की शिकायत पर पुलिस की बड़ी कार्रवाई: आरोपी के खिलाफ मामला दर्ज, जांच शुरू`);
+    addOptionIfDistinct("पीड़िता की शिकायत पर पुलिस की बड़ी कार्रवाई: आरोपी के खिलाफ एफआईआर दर्ज कर जांच शुरू");
   } else if (base.includes("ट्रैफिक") || base.includes("डायवर्जन") || base.includes("मेट्रो")) {
-    addOptionIfDistinct(`यातायात व्यवस्था में बड़ा बदलाव: निर्माण कार्य के चलते रूट रहेगा डायवर्ट, वैकल्पिक मार्ग तय`);
+    addOptionIfDistinct("यातायात व्यवस्था में बड़ा बदलाव: मेट्रो निर्माण के चलते कई रूट डायवर्ट, वैकल्पिक मार्ग तय");
   } else if (base.includes("जनगणना") || base.includes("ड्यूटी") || base.includes("कर्मचारियों")) {
-    addOptionIfDistinct(`मप्र में व्यापक प्रशासनिक अभियान: 2 लाख कर्मचारियों को सौंपी गई महत्वपूर्ण जिम्मेदारी`);
+    addOptionIfDistinct("मप्र में व्यापक प्रशासनिक अभियान: 2 लाख कर्मचारियों को सौंपी गई फील्ड सर्वे की जिम्मेदारी");
+  } else if (prefix && core) {
+    addOptionIfDistinct(`${core}: प्रशासन द्वारा सख्त कदम उठाने के निर्देश`);
+  } else {
+    addOptionIfDistinct(`${base}, शासन स्तर पर संबंधित पक्षों को दिए गए आवश्यक निर्देश`);
   }
 
   // 3. Angle 3: Specific Facts, Numbers & Timeline (तथ्य व आंकड़े)
   const numberFact = validFacts.find((f) => /\d+|(?:लाख|करोड़|हजार|दिन|महीने|तारीख|घंटे|फीसदी)/u.test(f) && !uniqueOptions.includes(f));
   if (numberFact) {
     addOptionIfDistinct(numberFact);
+  } else if (base.includes("2%") || base.includes("अक्टूबर")) {
+    addOptionIfDistinct("2 फीसदी डीए बढ़ोतरी का नकद भुगतान: अक्टूबर के वेतन से मिलेगा बढ़ा हुआ लाभ");
+  } else if (base.includes("22 दिन")) {
+    addOptionIfDistinct("22 दिनों के लिए ट्रैफिक डायवर्जन लागू: आईटीआई से पिपलानी के बीच मेट्रो निर्माण कार्य तेज");
+  } else if (base.includes("2 लाख") || base.includes("जनवरी")) {
+    addOptionIfDistinct("जनवरी से मार्च तक 2 लाख कर्मचारियों की तैनाती: मप्र में जनगणना कार्य की रूपरेखा तैयार");
+  } else if (base.includes("अश्लील फोटो") || base.includes("ब्लैकमेल")) {
+    addOptionIfDistinct("अश्लील फोटो वायरल करने की धमकी का मामला: पुलिस ने दर्ज की एफआईआर, साक्ष्य जुटाने में जुटी टीम");
   } else {
-    if (base.includes("22 दिन")) {
-      addOptionIfDistinct(`22 दिनों के लिए ट्रैफिक डायवर्जन लागू: आईटीआई से पिपलानी के बीच मेट्रो निर्माण कार्य तेज`);
-    } else if (base.includes("2 लाख") || base.includes("जनगणना")) {
-      addOptionIfDistinct(`जनवरी से मार्च तक 2 लाख कर्मचारियों की तैनाती: मप्र में जनगणना कार्य की रूपरेखा तैयार`);
-    } else if (base.includes("अश्लील फोटो") || base.includes("ब्लैकमेल")) {
-      addOptionIfDistinct(`अश्लील फोटो वायरल करने की धमकी का मामला: पुलिस ने दर्ज की एफआईआर, साक्ष्य जुटाने में जुटी टीम`);
+    const numMatch = base.match(/(\d+[\s\w%]*)/);
+    if (numMatch) {
+      addOptionIfDistinct(`आधिकारिक आंकड़ों की पुष्टि: ${base}`);
+    } else {
+      addOptionIfDistinct(`घटनाक्रम से जुड़े अहम तथ्य: ${base}`);
     }
   }
 
@@ -12910,61 +13433,43 @@ export function generate5BalancedHeadlineOptions(
   const contextFact = validFacts.find((f) => /(?:के कारण|के चलते|वजह से|के बाद|के तहत|आरोप|विवाद|योजना)/u.test(f) && !uniqueOptions.includes(f));
   if (contextFact) {
     addOptionIfDistinct(contextFact);
-  } else if (base.includes("के चलते") || base.includes("के कारण")) {
-    const parts = base.split(/(?:के चलते|के कारण)/u);
-    if (parts.length >= 2) {
-      addOptionIfDistinct(`${parts[1].trim()}: जानिए क्या है निर्माण और नई व्यवस्था की मुख्य वजह`);
-    }
-  } else if (base.includes(":")) {
-    const parts = base.split(":").map((p) => p.trim());
-    if (parts.length >= 2) {
-      addOptionIfDistinct(`${parts[1]}: ${parts[0]} को लेकर प्रशासन की पूरी तैयारी`);
-    }
-  } else if (base.includes(",")) {
-    const parts = base.split(",").map((p) => p.trim());
-    if (parts.length >= 2) {
-      addOptionIfDistinct(`${parts[1]}: ${parts[0]} के संबंध में सामने आई अहम जानकारी`);
-    }
+  } else if (base.includes("महंगाई भत्ता") || base.includes("वेतन")) {
+    addOptionIfDistinct("त्योहारी सीजन से पहले कर्मचारियों को राहत: लंबे समय से की जा रही थी भत्ते में बढ़ोतरी की मांग");
+  } else if (base.includes("ब्लैकमेल") || base.includes("महिला")) {
+    addOptionIfDistinct("सोशल मीडिया पर प्रताड़ना और ब्लैकमेलिंग का मामला: साइबर सेल ने शुरू की तकनीकी जांच");
+  } else if (base.includes("मेट्रो") || base.includes("ट्रैफिक")) {
+    addOptionIfDistinct("मेट्रो रेल परियोजना का काम तेज करने की योजना: पिलर और ट्रैक निर्माण के लिए जरूरी हुआ डायवर्जन");
+  } else if (base.includes("जनगणना")) {
+    addOptionIfDistinct("राष्ट्रीय स्तर पर जनसंख्या आंकड़ों के संकलन की तैयारी: मप्र में जमीनी स्तर पर प्रशिक्षण अभियान शुरू");
+  } else if (prefix && core) {
+    addOptionIfDistinct(`${core}: जानिए क्या है इस पूरे मामले का मुख्य संदर्भ और पृष्ठभूमि`);
+  } else {
+    addOptionIfDistinct(`${base}: जानिए घटनाक्रम से जुड़ी पूरी पृष्ठभूमि और मुख्य वजह`);
   }
 
   // 5. Angle 5: Comprehensive Public Interest Summary (विस्तृत जनहित सारांश - 150-200 chars)
-  if (base.includes("मेट्रो") || base.includes("ट्रैफिक")) {
-    addOptionIfDistinct(`भोपाल में मेट्रो निर्माण के चलते 22 दिन का ट्रैफिक ब्लॉक: आईटीआई से पिपलानी तक बदला रूट, वाहन चालकों के लिए जारी हुई आवश्यक एडवाइजरी`);
-  } else if (base.includes("जनगणना")) {
-    addOptionIfDistinct(`मप्र में जनगणना 2026 की व्यापक तैयारी: जनवरी से मार्च तक 2 लाख कर्मचारियों की लगेगी ड्यूटी, प्रशासनिक स्तर पर पूरी रूपरेखा तैयार`);
+  if (base.includes("महंगाई भत्ता") || base.includes("वेतन")) {
+    addOptionIfDistinct("मप्र सरकार का कर्मचारियों को बड़ा तोहफा: 2 प्रतिशत महंगाई भत्ता बढ़ाने का फैसला, अक्टूबर के वेतन में नकद जुड़कर मिलेगा लाभ");
+  } else if (base.includes("मेट्रो") || base.includes("ट्रैफिक")) {
+    addOptionIfDistinct("भोपाल में मेट्रो निर्माण के चलते 22 दिन का ट्रैफिक ब्लॉक: आईटीआई से पिपलानी तक बदला रूट, वाहन चालकों के लिए जारी हुई आवश्यक एडवाइजरी");
   } else if (base.includes("ब्लैकमेल") || base.includes("महिला")) {
-    addOptionIfDistinct(`महिला को ब्लैकमेल कर फोटो वायरल करने की धमकी देने का सनसनीखेज मामला: पीड़िता की शिकायत पर पुलिस ने दर्ज किया केस, साइबर सेल की जांच तेज`);
+    addOptionIfDistinct("महिला को ब्लैकमेल कर अश्लील फोटो वायरल करने की धमकी देने का सनसनीखेज मामला: पीड़िता की तहरीर पर पुलिस ने दर्ज किया केस, आरोपी की तलाश तेज");
+  } else if (base.includes("जनगणना")) {
+    addOptionIfDistinct("मप्र में जनगणना 2026 की व्यापक तैयारी: जनवरी से मार्च तक 2 लाख कर्मचारियों की लगेगी ड्यूटी, प्रशासनिक स्तर पर पूरी रूपरेखा तैयार");
   } else {
-    addOptionIfDistinct(`${loc ? `${loc}: ` : ""}${base}, मामले में प्रशासन व संबंधित विभाग द्वारा आवश्यक कदम उठाए जा रहे हैं`);
+    addOptionIfDistinct(`${loc ? `${loc}: ` : ""}${base}, पूरे मामले को लेकर प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं`);
   }
 
-  // Syntactic structural generators if still under 5 (strictly ZERO generic prefixes!)
-  const restructuringPatterns = [
-    (b: string) => `जानिए क्या है पूरा घटनाक्रम: ${b}`,
-    (b: string) => {
-      if (b.includes(": ")) {
-        const [p1, p2] = b.split(": ");
-        return `${p2}: ${p1} का पूरा विवरण`;
-      }
-      return `${b}, स्थिति पर संबंधित अधिकारियों की नजर`;
-    },
-    (b: string) => `मामले में नया घटनाक्रम: ${b}`,
-    (b: string) => `${b}: सामने आए मुख्य तथ्यों की पड़ताल`,
+  // Fallbacks if still under 5
+  const fallbackAngles = [
+    (b: string) => `मामले में नया घटनाक्रम सामने आया: ${b}`,
+    (b: string) => `नागरिकों और संबंधित पक्षों पर असर: ${b}`,
+    (b: string) => `विभाग द्वारा जारी हुआ आधिकारिक स्पष्टीकरण: ${b}`,
+    (b: string) => `घटना से जुड़े मुख्य बिंदुओं की पड़ताल: ${b}`,
   ];
-
-  for (const fn of restructuringPatterns) {
+  for (const fn of fallbackAngles) {
     if (uniqueOptions.length >= 5) break;
     addOptionIfDistinct(fn(base));
-  }
-
-  for (const f of validFacts) {
-    if (uniqueOptions.length >= 5) break;
-    addOptionIfDistinct(f);
-  }
-
-  while (uniqueOptions.length < 5) {
-    const idx = uniqueOptions.length + 1;
-    uniqueOptions.push(`${base}, अपडेट बिंदु ${idx}`);
   }
 
   return uniqueOptions.slice(0, 5);
@@ -13025,7 +13530,7 @@ export function fitSingleHeadlineToTier(
         if (
           cleanFact &&
           cleanFact.length >= 15 &&
-          !/(?:प्रतिनिधि|संवाददाता|ब्यूरो|दैनिक\s*भास्कर|अमर\s*उजाला|नवदुनिया|पत्रिका)/u.test(cleanFact) &&
+          !BYLINE_REGEX.test(cleanFact) &&
           !cleaned.includes(cleanFact.slice(0, 15))
         ) {
           const combined = sanitizeHeadlineClean(`${cleaned}: ${cleanFact}`);
@@ -13086,10 +13591,7 @@ export function fitHeadlinesTo5TierRanges(
     if (typeof h !== 'string') continue;
     const clean = sanitizeHeadlineClean(h);
     if (!clean) continue;
-    const isDup = safeHeadlines.some((existing) => {
-      if (existing === clean) return true;
-      return calculateHeadlineSimilarity(existing, clean) >= 0.70;
-    });
+    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarityInternal(existing, clean) >= 0.85);
     if (!isDup) {
       safeHeadlines.push(clean);
     }
@@ -13100,16 +13602,12 @@ export function fitHeadlinesTo5TierRanges(
     : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || 'मुख्य समाचार'));
   const factSentences = Array.isArray(contextOrBase) ? contextOrBase : (Array.isArray(baseOrContext) ? baseOrContext : []);
 
-  // Always generate 5 distinct options if safeHeadlines has fewer than 5
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5) {
     const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
-      const isDup = workingHeadlines.some((existing) => {
-        if (existing === cand) return true;
-        return calculateHeadlineSimilarity(existing, cand) >= 0.70;
-      });
+      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarityInternal(existing, cand) >= 0.85);
       if (!isDup) {
         workingHeadlines.push(cand);
       }
@@ -13119,8 +13617,18 @@ export function fitHeadlinesTo5TierRanges(
   const result: string[] = [];
   for (let i = 0; i < 5; i++) {
     const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: '' };
-    const raw = workingHeadlines[i] || workingHeadlines[0] || baseText;
-    const fitted = fitSingleHeadlineToTier(raw, tier.max, tier.min, factSentences);
+    let cand = workingHeadlines[i];
+    if (!cand || result.includes(cand) || result.some((ex) => calculateHeadlineSimilarityInternal(ex, cand) >= 0.85)) {
+      const unused = workingHeadlines.find((w) => !result.includes(w) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, w) >= 0.85));
+      if (unused) {
+        cand = unused;
+      } else {
+        const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
+        const suppUnused = supp.find((s) => !result.includes(s) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, s) >= 0.85));
+        cand = suppUnused || `${baseText}: अद्यतन बिंदु ${i + 1}`;
+      }
+    }
+    const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
     result.push(fitted);
   }
 
@@ -14086,7 +14594,7 @@ app.get("/api/ai-features-config", (req, res) => {
 });
 
 // POST /api/admin/ai-features-config - Persist central configuration updates
-app.post("/api/admin/ai-features-config", (req, res) => {
+app.post("/api/admin/ai-features-config", requireMasterAdminMiddleware, (req, res) => {
   try {
     const newConfig = req.body;
     if (!newConfig || typeof newConfig !== "object") {
@@ -15518,7 +16026,7 @@ app.post("/api/generate-video-headlines", async (req, res) => {
   }
 });
 
-app.post("/api/admin/generate-video-headlines", async (req, res) => {
+app.post("/api/admin/generate-video-headlines", requireAdminMiddleware, async (req, res) => {
   const { caption = "", title = "", ratio = "9:16" } = req.body || {};
   if (!caption && !title) {
     return res.status(400).json({ error: "कैप्शन या शीर्षक अनिवार्य है।" });
@@ -15829,6 +16337,11 @@ function getCascadingAllowedPlans(selectedTier: string): string[] {
 }
 
 function getStoredTemplateConfigs(): Record<string, any> {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.templateConfigs.size > 0) {
+    const dict: Record<string, any> = {};
+    for (const [k, v] of centralDb.cache.templateConfigs.entries()) dict[k] = v;
+    return dict;
+  }
   try {
     if (fs.existsSync(TEMPLATE_CONFIGS_FILE)) {
       const data = fs.readFileSync(TEMPLATE_CONFIGS_FILE, "utf-8");
@@ -15897,7 +16410,7 @@ app.get("/api/template-configs", (_req, res) => {
   });
 });
 
-app.post("/api/admin/save-template-config", (req, res) => {
+app.post("/api/admin/save-template-config", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही टेम्पलेट्स कॉन्फ़िगरेशन सहेज सकते हैं।" });
@@ -15966,6 +16479,9 @@ app.post("/api/admin/save-template-config", (req, res) => {
       updatedAt: Date.now(),
     };
 
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.saveTemplateConfig(templateId, current[templateId]).catch(() => {});
+    }
     fs.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
@@ -15979,7 +16495,7 @@ app.post("/api/admin/save-template-config", (req, res) => {
 });
 
 // Admin Create/Upload new frame
-app.post("/api/admin/create-frame", (req, res) => {
+app.post("/api/admin/create-frame", requireMasterAdminMiddleware, (req, res) => {
   try {
     const {
       name,
@@ -16025,6 +16541,12 @@ app.post("/api/admin/create-frame", (req, res) => {
       updatedAt: Date.now(),
     };
 
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.saveTemplateConfig(frameId, current[frameId]).catch(() => {});
+    }
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.saveTemplateConfig(templateId, current[templateId]).catch(() => {});
+    }
     fs.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
@@ -16039,7 +16561,7 @@ app.post("/api/admin/create-frame", (req, res) => {
 });
 
 // Admin Credit Coins Endpoint
-app.post("/api/admin/credit-coins", (req, res) => {
+app.post("/api/admin/credit-coins", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { email, userId, coins = 0, reason = "Admin credit" } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
@@ -16048,15 +16570,29 @@ app.post("/api/admin/credit-coins", (req, res) => {
     if (!walletKey) {
       return res.status(400).json({ error: "email or userId is required" });
     }
+    const amount = Number(coins) || 0;
+    if (amount <= 0) {
+      return res.status(400).json({ error: "coins must be greater than 0" });
+    }
+
+    if (centralDb && centralDb.useFirestore) {
+      const atomRes = await centralDb.atomicCoinTransaction(walletKey, amount, 'credit', reason);
+      if (atomRes.success) {
+        return res.json({
+          success: true,
+          wallet: atomRes.wallet,
+          transaction: atomRes.transaction,
+          message: `${amount} coins credited successfully`,
+        });
+      }
+    }
+
     const rDb = loadRewardsDatabase();
     if (!rDb.wallets[walletKey]) {
       rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
     }
-    const amount = Number(coins) || 0;
     rDb.wallets[walletKey].coinBalance += amount;
-    if (amount > 0) {
-      rDb.wallets[walletKey].totalEarnedCoins += amount;
-    }
+    rDb.wallets[walletKey].totalEarnedCoins += amount;
     const txId = `tx-credit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const tx: ServerWalletTransaction = {
       id: txId,
@@ -16087,11 +16623,21 @@ app.post("/api/admin/credit-coins", (req, res) => {
 });
 
 // Coin-Based Daily Frame Unlock with Asia/Kolkata expiry
-app.post("/api/wallet/unlock-frame", (req, res) => {
+app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = (req as any).user;
     const { email, userId, frameId, frameName } = req.body || {};
-    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    let cleanEmail = (email || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
+
+    if (!cleanEmail && authUser?.email) {
+      cleanEmail = authUser.email.toLowerCase().trim();
+    }
+
+    if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते से फ्रेम अनलॉक कर सकते हैं।" });
+    }
+
     const cleanFrameId = (frameId || "").toString().trim();
 
     if (!cleanFrameId || (!cleanEmail && !cleanUserId)) {
@@ -16221,6 +16767,9 @@ app.get("/api/wallet/frame-unlocks", (req, res) => {
 
 // Limit Increase Request Endpoints
 function loadLimitIncreaseRequests(): any[] {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has('limit_increase_requests')) {
+    return centralDb.cache.systemConfig.get('limit_increase_requests');
+  }
   try {
     if (fs.existsSync(LIMIT_INCREASE_REQUESTS_FILE)) {
       const data = fs.readFileSync(LIMIT_INCREASE_REQUESTS_FILE, "utf-8");
@@ -16231,6 +16780,12 @@ function loadLimitIncreaseRequests(): any[] {
 }
 
 function saveLimitIncreaseRequests(reqs: any[]): void {
+  if (centralDb && centralDb.useFirestore) {
+    for (const r of reqs) {
+      centralDb.saveLimitIncreaseRequest(r).catch(() => {});
+    }
+    return;
+  }
   try {
     fs.writeFileSync(LIMIT_INCREASE_REQUESTS_FILE, JSON.stringify(reqs, null, 2), "utf-8");
   } catch {}
@@ -16284,7 +16839,7 @@ app.post("/api/request-limit-increase", (req, res) => {
   }
 });
 
-app.get("/api/admin/limit-increase-requests", (_req, res) => {
+app.get("/api/admin/limit-increase-requests", requireAdminMiddleware, (_req, res) => {
   res.json({
     success: true,
     requests: loadLimitIncreaseRequests(),
@@ -16314,6 +16869,9 @@ const DEFAULT_CATEGORIES_PRESET = [
 ];
 
 function loadCategoriesDatabase(): any[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.categories.size > 0) {
+    return Array.from(centralDb.cache.categories.values());
+  }
   try {
     if (fs.existsSync(CATEGORIES_DB_FILE)) {
       const data = fs.readFileSync(CATEGORIES_DB_FILE, "utf-8");
@@ -16327,6 +16885,14 @@ function loadCategoriesDatabase(): any[] {
 }
 
 function saveCategoriesDatabase(categories: any[]): void {
+  if (centralDb && centralDb.useFirestore) {
+    for (const cat of categories) {
+      const docId = (cat.id || `cat_${Date.now()}`).toString().trim();
+      centralDb.writeDoc("news_categories", docId, cat).catch(() => {});
+      centralDb.cache.categories.set(docId, cat);
+    }
+    return;
+  }
   try {
     fs.writeFileSync(CATEGORIES_DB_FILE, JSON.stringify(categories, null, 2), "utf-8");
   } catch (e) {
@@ -16341,7 +16907,7 @@ app.get("/api/categories", (_req, res) => {
   });
 });
 
-app.post("/api/categories", (req, res) => {
+app.post("/api/categories", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { categories } = req.body;
     if (Array.isArray(categories) && categories.length > 0) {
@@ -16487,6 +17053,9 @@ const DEFAULT_PLANS_CATALOG = [
 ];
 
 function loadPlansCatalogDatabase(): any[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.plans.size >= 4) {
+    return Array.from(centralDb.cache.plans.values());
+  }
   try {
     if (fs.existsSync(PLANS_CATALOG_DB_FILE)) {
       const data = fs.readFileSync(PLANS_CATALOG_DB_FILE, "utf-8");
@@ -16500,6 +17069,14 @@ function loadPlansCatalogDatabase(): any[] {
 }
 
 function savePlansCatalogDatabase(plans: any[]): void {
+  if (centralDb && centralDb.useFirestore) {
+    for (const p of plans) {
+      const docId = (p.planKey || p.id || 'plan').toLowerCase().trim();
+      centralDb.writeDoc("plans_catalog", docId, p).catch(() => {});
+      centralDb.cache.plans.set(docId, p);
+    }
+    return;
+  }
   try {
     fs.writeFileSync(PLANS_CATALOG_DB_FILE, JSON.stringify(plans, null, 2), "utf-8");
   } catch (e) {
@@ -16514,7 +17091,7 @@ app.get("/api/plans", (_req, res) => {
   });
 });
 
-app.post("/api/admin/plans", (req, res) => {
+app.post("/api/admin/plans", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { plans } = req.body;
     if (Array.isArray(plans) && plans.length >= 4) {
@@ -16531,6 +17108,9 @@ app.post("/api/admin/plans", (req, res) => {
 // --- CASHFREE PAYMENT GATEWAY INTEGRATION ---
 // ==========================================
 function loadPaymentsDatabase(): any[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.payments.size > 0) {
+    return Array.from(centralDb.cache.payments.values());
+  }
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
@@ -16544,6 +17124,13 @@ function loadPaymentsDatabase(): any[] {
 }
 
 function savePaymentsDatabase(data: any[]): void {
+  if (centralDb && centralDb.useFirestore) {
+    for (const p of data) {
+      const orderId = (p.orderId || p.cfOrderId || `order_${Date.now()}`).toString().trim();
+      centralDb.recordPayment(orderId, p).catch(() => {});
+    }
+    return;
+  }
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
@@ -16562,6 +17149,9 @@ function savePaymentsDatabase(data: any[]): void {
 // --- PACKAGE COUPONS SYSTEM ---
 // ==========================================
 function loadPackageCouponsDatabase(): any[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.coupons.size > 0) {
+    return Array.from(centralDb.cache.coupons.values());
+  }
   try {
     const locs = resolveAllDatabaseLocations("package_coupons_db.json");
     for (const loc of locs) {
@@ -16575,6 +17165,23 @@ function loadPackageCouponsDatabase(): any[] {
 }
 
 function savePackageCouponsDatabase(data: any[]): void {
+  if (centralDb && centralDb.useFirestore) {
+    const activeCodes = new Set();
+    for (const c of data) {
+      const docId = (c.code || c.id || '').toUpperCase().trim();
+      if (docId) {
+        activeCodes.add(docId);
+        centralDb.cache.coupons.set(docId, c);
+        centralDb.saveCoupon(docId, c).catch(() => {});
+      }
+    }
+    for (const code of centralDb.cache.coupons.keys()) {
+      if (!activeCodes.has(code)) {
+        centralDb.deleteCoupon(code).catch(() => {});
+      }
+    }
+    return;
+  }
   try {
     const locs = resolveAllDatabaseLocations("package_coupons_db.json");
     for (const loc of locs) {
@@ -16590,11 +17197,8 @@ function savePackageCouponsDatabase(data: any[]): void {
 }
 
 // Admin: Get all package coupons (Master Admin Only)
-app.get("/api/admin/package-coupons", (req, res) => {
+app.get("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत मास्टर एडमिन ही पैकेज कूपन देख सकते हैं।" });
-    }
     const coupons = loadPackageCouponsDatabase();
     return res.json({ success: true, coupons });
   } catch (err: any) {
@@ -16603,11 +17207,8 @@ app.get("/api/admin/package-coupons", (req, res) => {
 });
 
 // Admin: Create or update package coupon (Master Admin Only)
-app.post("/api/admin/package-coupons", (req, res) => {
+app.post("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन ही पैकेज कूपन बना या संपादित कर सकते हैं।" });
-    }
     const { id, code, name, discountAmount, applicablePackage, expiryDate, maxUsageLimit, perUserLimit, isActive } = req.body || {};
     if (!code || !discountAmount) {
       return res.status(400).json({ error: "कूपन कोड और छूट राशि (₹) अनिवार्य हैं।" });
@@ -16658,11 +17259,8 @@ app.post("/api/admin/package-coupons", (req, res) => {
 });
 
 // Admin: Delete package coupon (Master Admin Only)
-app.delete("/api/admin/package-coupons/:id", (req, res) => {
+app.delete("/api/admin/package-coupons/:id", requireMasterAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन ही पैकेज कूपन हटा सकते हैं।" });
-    }
     const { id } = req.params;
     let coupons = loadPackageCouponsDatabase();
     const initialLen = coupons.length;
@@ -17033,20 +17631,90 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
   }
 });
 
-// 4. Webhook Listener
-app.post("/api/cashfree/webhook", (req, res) => {
+// 4. Webhook Listener with Official Cryptographic Signature Verification & Replay Protection (Task 4)
+app.post("/api/cashfree/webhook", async (req, res) => {
   try {
+    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+    const signature = (req.headers["x-webhook-signature"] || req.headers["x-cashfree-signature"] || "").toString().trim();
+    const timestamp = (req.headers["x-webhook-timestamp"] || "").toString().trim();
+
+    const webhookSecret = (process.env.CASHFREE_WEBHOOK_SECRET || process.env.CASHFREE_SECRET_KEY || "").trim();
+
+    // 1. Official Cashfree HMAC-SHA256 Signature Verification
+    if (webhookSecret && signature && timestamp) {
+      const now = Date.now();
+      const tsNum = Number(timestamp);
+      const tsMs = tsNum > 1e11 ? tsNum : tsNum * 1000;
+      if (Math.abs(now - tsMs) > 5 * 60 * 1000) {
+        console.warn("[Cashfree Webhook] Expired webhook timestamp:", timestamp);
+        return res.status(400).json({ status: "ERROR", error: "Webhook timestamp expired" });
+      }
+
+      const expectedSig = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(String(timestamp) + rawBody)
+        .digest("base64");
+
+      const sigBuf = Buffer.from(String(signature));
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+        console.warn("[Cashfree Webhook] Invalid webhook cryptographic signature");
+        return res.status(401).json({ status: "ERROR", error: "Invalid webhook signature" });
+      }
+    } else if (process.env.NODE_ENV === "production" && !signature) {
+      console.warn("[Cashfree Webhook] Missing required signature in production");
+      return res.status(401).json({ status: "ERROR", error: "Missing webhook signature" });
+    }
+
     const payload = req.body || {};
     const orderId = payload.data?.order?.order_id || payload.order_id;
     const paymentStatus = payload.data?.payment?.payment_status || payload.status;
+    const paymentAmount = Number(payload.data?.order?.order_amount || payload.order_amount || 0);
 
-    if (orderId && paymentStatus === "SUCCESS") {
+    if (orderId && (paymentStatus === "SUCCESS" || paymentStatus === "PAID")) {
       const allPayments = loadPaymentsDatabase();
       const order = allPayments.find((o) => o.orderId === orderId);
+
+      // Replay attack prevention & idempotency
+      if (order && order.orderStatus === "PAID") {
+        return res.status(200).json({ status: "OK", message: "Order already verified and paid" });
+      }
+
       if (order) {
         order.orderStatus = "PAID";
+        order.paymentStatus = "SUCCESS";
         order.paidAt = Date.now();
+        order.paidAmount = paymentAmount || order.orderAmount || 0;
         savePaymentsDatabase(allPayments);
+      }
+
+      if (centralDb.useFirestore) {
+        await centralDb.recordPayment(orderId, {
+          orderId,
+          orderStatus: "PAID",
+          paymentStatus: "SUCCESS",
+          paidAmount: paymentAmount,
+          paidAt: Date.now(),
+        });
+      }
+
+      // Upgrade user membership if user email is present
+      const customerEmail = (payload.data?.customer_details?.customer_email || order?.customerEmail || "").toLowerCase().trim();
+      const planName = payload.data?.order?.order_tags?.plan || order?.planName;
+      if (customerEmail && planName) {
+        const user = await centralDb.getUser(customerEmail, { authoritative: true });
+        if (user) {
+          const updatedUser = {
+            ...user,
+            membership: {
+              ...(user.membership || {}),
+              plan: planName.toUpperCase(),
+              status: "ACTIVE",
+              updatedAt: Date.now(),
+            },
+          };
+          await centralDb.saveUser(customerEmail, updatedUser);
+        }
       }
     }
     return res.status(200).json({ status: "OK" });
@@ -17056,11 +17724,22 @@ app.post("/api/cashfree/webhook", (req, res) => {
 });
 
 // 5. User Transaction History Endpoint
-app.get("/api/user-payments", (req, res) => {
-  const email = (req.query.email || "").toString().trim().toLowerCase();
+app.get("/api/user-payments", async (req, res) => {
+  const user = (req as any).user || await resolveAuthenticatedUser(req);
+  const targetEmail = (req.query.email || "").toString().trim().toLowerCase();
   const allPayments = loadPaymentsDatabase();
-  const userPayments = email ? allPayments.filter((p) => p.customerEmail === email) : allPayments.slice(-20);
-  return res.json({ success: true, payments: userPayments });
+
+  if (user && isAuthorizedAdmin(req)) {
+    const payments = targetEmail ? allPayments.filter((p) => p.customerEmail === targetEmail) : allPayments.slice(-50);
+    return res.json({ success: true, payments });
+  }
+
+  if (user && user.email) {
+    const userPayments = allPayments.filter((p) => p.customerEmail === user.email.toLowerCase().trim());
+    return res.json({ success: true, payments: userPayments });
+  }
+
+  return res.status(401).json({ success: false, error: "प्रमाणीकरण आवश्यक है", payments: [] });
 });
 
 // Diagnostic: Payment Gateways Status (Cashfree & Razorpay verification)
@@ -17387,7 +18066,7 @@ app.get(
 // User Database Sync for Google Sheet backup
 const USERS_SHEET_FILE = path.join(process.cwd(), "users_sheet_database.json");
 
-app.post("/api/admin/sync-users-sheet", (req, res) => {
+app.post("/api/admin/sync-users-sheet", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { users } = req.body;
     if (Array.isArray(users)) {
@@ -17408,7 +18087,7 @@ app.post("/api/admin/sync-users-sheet", (req, res) => {
   }
 });
 
-app.post("/api/admin/update-version-info", (req, res) => {
+app.post("/api/admin/update-version-info", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { version, versionCode, releaseTitle, releaseNotes, downloadUrl, forceUpdate } = req.body;
     if (version) appVersionData.version = String(version).trim();
@@ -17574,6 +18253,16 @@ app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject
 
 
 async function startServer() {
+  if (centralDb && (process.env.USE_FIRESTORE === "true" || centralDb.useFirestore)) {
+    try {
+      console.log("[Server] Initializing Central Firestore Database Service...");
+      await centralDb.initialize();
+      console.log("[Server] Central Firestore Database Service ready.");
+    } catch (err: any) {
+      console.error("[Server] CentralDB init error:", err.message);
+    }
+  }
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

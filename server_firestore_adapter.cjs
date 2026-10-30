@@ -18,7 +18,10 @@ const STORAGE_BUCKET = process.env.STORAGE_BUCKET || firebaseConfig?.storageBuck
 // Controlled Feature Flag: Defaults to FALSE until live Cloud Run connectivity is proven
 const USE_FIRESTORE = process.env.USE_FIRESTORE === 'true';
 
-function getMetadataAccessToken() {
+let cachedToken = null;
+let tokenExpiry = 0;
+
+function getMetadataAccessTokenInternal() {
   return new Promise((resolve) => {
     const req = http.get(
       {
@@ -46,6 +49,53 @@ function getMetadataAccessToken() {
       resolve(null);
     });
   });
+}
+
+async function getMetadataAccessToken() {
+  if (cachedToken && Date.now() < tokenExpiry - 60000) {
+    return cachedToken;
+  }
+
+  // 1. Explicit env token if set
+  if (process.env.FIRESTORE_ACCESS_TOKEN) {
+    cachedToken = process.env.FIRESTORE_ACCESS_TOKEN;
+    tokenExpiry = Date.now() + 300000;
+    return cachedToken;
+  }
+
+  // 2. Compute metadata server (Google Cloud Run / Compute Engine)
+  const isCloudRuntime = Boolean(
+    process.env.K_SERVICE ||
+    process.env.FUNCTION_NAME ||
+    process.env.GAE_SERVICE ||
+    process.env.CLOUD_RUN_JOB ||
+    process.env.METADATA_SERVER_IP
+  );
+
+  if (isCloudRuntime || process.platform !== 'win32') {
+    const metaToken = await getMetadataAccessTokenInternal();
+    if (metaToken) {
+      cachedToken = metaToken;
+      tokenExpiry = Date.now() + 300000;
+      return cachedToken;
+    }
+  }
+
+  // 3. Local gcloud credentials fallback
+  try {
+    const { execSync } = require('child_process');
+    const localToken = execSync('gcloud auth print-access-token', {
+      timeout: 12000,
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).toString().trim();
+    if (localToken && localToken.startsWith('ya29.')) {
+      cachedToken = localToken;
+      tokenExpiry = Date.now() + 300000;
+      return cachedToken;
+    }
+  } catch {}
+
+  return null;
 }
 
 function getRuntimeServiceAccount() {
@@ -414,3 +464,136 @@ async function firestoreListDocs(collection, pageSize = 100) {
 
 module.exports.firestoreDeleteDoc = firestoreDeleteDoc;
 module.exports.firestoreListDocs = firestoreListDocs;
+
+/**
+ * Atomic Coin Debit / Credit with Transaction Logging
+ */
+async function atomicCoinTransaction(walletKey, amount, type, description, newsItemId = '', newsTitle = '') {
+  const cleanKey = (walletKey || '').toLowerCase().trim();
+  if (!cleanKey) return { success: false, error: 'Invalid walletKey' };
+  const numAmount = Math.max(0, Number(amount) || 0);
+
+  // Read current balance
+  const readRes = await firestoreReadDoc('wallets', cleanKey);
+  const currentWallet = (readRes.success && readRes.data) ? readRes.data : {
+    walletKey: cleanKey,
+    coinBalance: 0,
+    pendingCoins: 0,
+    totalEarnedCoins: 0,
+  };
+
+  const currentBalance = Number(currentWallet.coinBalance) || 0;
+  let newBalance = currentBalance;
+
+  if (type === 'debit') {
+    if (currentBalance < numAmount) {
+      return {
+        success: false,
+        insufficientCoins: true,
+        currentBalance,
+        requiredCoins: numAmount,
+        error: 'Insufficient coins',
+      };
+    }
+    newBalance = currentBalance - numAmount;
+  } else if (type === 'credit') {
+    newBalance = currentBalance + numAmount;
+    currentWallet.totalEarnedCoins = (Number(currentWallet.totalEarnedCoins) || 0) + numAmount;
+  }
+
+  currentWallet.coinBalance = newBalance;
+  currentWallet.updatedAt = new Date().toISOString();
+
+  // Write updated wallet
+  const walletRes = await firestoreWriteDoc('wallets', cleanKey, currentWallet);
+  if (!walletRes.success) return { success: false, error: walletRes.error };
+
+  // Write transaction record
+  const txId = `tx_${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const txPayload = {
+    id: txId,
+    transactionId: txId,
+    userId: cleanKey,
+    userEmail: cleanKey,
+    newsItemId: String(newsItemId || ''),
+    newsTitle: String(newsTitle || ''),
+    description: String(description || `${type.toUpperCase()} ${numAmount} coins`),
+    type,
+    amount: numAmount,
+    timestamp: Date.now(),
+    createdAt: new Date().toISOString(),
+  };
+  await firestoreWriteDoc('wallet_transactions', txId, txPayload);
+
+  return {
+    success: true,
+    txId,
+    balance: newBalance,
+    coinsDeducted: type === 'debit' ? numAmount : 0,
+    coinsCredited: type === 'credit' ? numAmount : 0,
+  };
+}
+
+/**
+ * Atomic Payment Recording & Subscription Activation
+ */
+async function atomicRecordPayment(orderId, paymentData) {
+  const cleanOrderId = String(orderId || '').trim();
+  if (!cleanOrderId) return { success: false, error: 'Invalid orderId' };
+
+  const paymentDoc = {
+    ...paymentData,
+    orderId: cleanOrderId,
+    updatedAt: new Date().toISOString(),
+  };
+  const payRes = await firestoreWriteDoc('payment_transactions', cleanOrderId, paymentDoc);
+  if (!payRes.success) return { success: false, error: payRes.error };
+
+  // If PAID, update user tier
+  const email = (paymentData.customerEmail || '').toLowerCase().trim();
+  if (email && (paymentData.orderStatus === 'PAID' || paymentData.orderStatus === 'SUCCESS')) {
+    const tier = (paymentData.planKey || paymentData.planId || 'pro').toLowerCase().replace('plan_', '').trim();
+    const planName = String(paymentData.planName || tier.toUpperCase()).trim();
+    const durationDays = Number(paymentData.durationDays) || 365;
+
+    await atomicUpdateMembership(email, tier, planName, durationDays);
+  }
+
+  return { success: true, orderId: cleanOrderId };
+}
+
+/**
+ * Atomic Membership Upgrade & Lock against Downward Overwrites
+ */
+async function atomicUpdateMembership(email, tier, planName, durationDays = 365) {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  if (!cleanEmail) return { success: false, error: 'Invalid email' };
+
+  const userRes = await firestoreReadDoc('users', cleanEmail);
+  const existingUser = (userRes.success && userRes.data) ? userRes.data : {
+    email: cleanEmail,
+    role: 'user',
+    createdAt: Date.now(),
+  };
+
+  const now = Date.now();
+  const expiresAt = now + durationDays * 86400000;
+
+  const updatedUser = {
+    ...existingUser,
+    tier: String(tier || 'basic').toLowerCase().trim(),
+    planName: String(planName || tier.toUpperCase()).trim(),
+    activatedAt: now,
+    expiresAt,
+    isProfileLocked: true,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await firestoreWriteDoc('users', cleanEmail, updatedUser);
+  return { success: true, email: cleanEmail, tier, planName, expiresAt };
+}
+
+module.exports.atomicCoinTransaction = atomicCoinTransaction;
+module.exports.atomicRecordPayment = atomicRecordPayment;
+module.exports.atomicUpdateMembership = atomicUpdateMembership;
+

@@ -100,12 +100,12 @@ export function getApiUrl(endpoint: string): string {
 export function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   try {
-    const direct = localStorage.getItem('reporter_auth_token');
+    const direct = localStorage.getItem('reporter_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('token');
     if (direct) return direct.trim();
-    const session = localStorage.getItem('reporter_auth_session');
-    if (session) {
-      const u = JSON.parse(session);
-      if (u.token) return u.token.trim();
+    const sessionStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+    if (sessionStr) {
+      const u = JSON.parse(sessionStr);
+      if (u && u.token) return String(u.token).trim();
     }
   } catch {}
   return '';
@@ -133,4 +133,34 @@ export function getAuthHeaders(): Record<string, string> {
 
 export function getAdminAuthHeaders(): Record<string, string> {
   return getAuthHeaders();
+}
+
+// Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated
+if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+  const originalFetch = window.fetch;
+  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+    const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
+    if (urlStr.includes('/api/')) {
+      const token = getAuthToken();
+      if (token) {
+        init = init || {};
+        if (init.headers instanceof Headers) {
+          if (!init.headers.has('Authorization')) {
+            init.headers.set('Authorization', `Bearer ${token}`);
+          }
+        } else if (Array.isArray(init.headers)) {
+          const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
+          if (!hasAuth) {
+            init.headers.push(['Authorization', `Bearer ${token}`]);
+          }
+        } else {
+          init.headers = {
+            ...(init.headers || {}),
+            Authorization: (init.headers as any)?.Authorization || `Bearer ${token}`,
+          };
+        }
+      }
+    }
+    return originalFetch.call(this, input, init);
+  };
 }

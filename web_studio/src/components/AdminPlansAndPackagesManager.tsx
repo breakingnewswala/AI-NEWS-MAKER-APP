@@ -112,7 +112,7 @@ import { UserTemplateManager } from './UserTemplateManager';
 import { AdminMusicLibraryManager } from './AdminMusicLibraryManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeaders } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,

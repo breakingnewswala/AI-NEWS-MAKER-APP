@@ -71,3 +71,15 @@ scripts/validate-*
 public/assets/aistudio/
 phase4_backups/
 *.bak
+
+reconciliation_pre_execution_report.json
+production_verification_results.json
+test_firestore_backend_integration_results.json
+scripts/*.json
+scripts/*.txt
+scripts/*.md
+deleted_users_tombstones.json
+web_studio/deleted_users_tombstones.json
+
+scripts/*
+test_*.cjs

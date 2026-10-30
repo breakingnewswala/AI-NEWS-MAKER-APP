@@ -11,6 +11,22 @@ env:
     value: "production"
     availability:
       - RUNTIME
+  - variable: USE_FIRESTORE
+    value: "true"
+    availability:
+      - RUNTIME
+  - variable: FIRESTORE_DATABASE_ID
+    value: "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd"
+    availability:
+      - RUNTIME
+  - variable: USE_GCS
+    value: "true"
+    availability:
+      - RUNTIME
+  - variable: STORAGE_BUCKET
+    value: "ai-news-maker-app.firebasestorage.app"
+    availability:
+      - RUNTIME
   - variable: NPM_CONFIG_PRODUCTION
     value: "false"
     availability:

@@ -903,6 +903,14 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       provider.setCustomParameters({ prompt: 'select_account' });
       const userCredential = await signInWithPopup(auth, provider);
       if (userCredential?.user?.email) {
+        try {
+          const idToken = await userCredential.user.getIdToken();
+          if (idToken) {
+            safeLocalStorageSet('reporter_auth_token', idToken);
+          }
+        } catch (tokenErr) {
+          console.warn('Could not retrieve Firebase ID token:', tokenErr);
+        }
         await handleGoogleUserSuccess(
           userCredential.user.email,
           userCredential.user.displayName || undefined,

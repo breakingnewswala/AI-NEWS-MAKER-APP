@@ -113,7 +113,7 @@ import { UserTemplateManager } from './UserTemplateManager';
 import { AdminMusicLibraryManager } from './AdminMusicLibraryManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeaders } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -186,8 +186,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     try {
       const res = await fetch('/api/admin/package-coupons', {
         headers: {
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
       });
       const data = await res.json();
@@ -223,8 +222,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
         body: JSON.stringify({
           id: couponForm.id,
@@ -268,8 +266,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       const res = await fetch(`/api/admin/package-coupons/${id}`, {
         method: 'DELETE',
         headers: {
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
       });
       const data = await res.json();
@@ -290,8 +287,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
         body: JSON.stringify({
           ...coupon,

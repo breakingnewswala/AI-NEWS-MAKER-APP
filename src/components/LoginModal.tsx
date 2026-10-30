@@ -299,8 +299,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      signInWithPopup(auth, provider).then((userCredential) => {
+      signInWithPopup(auth, provider).then(async (userCredential) => {
         if (userCredential?.user?.email) {
+          try {
+            const idToken = await userCredential.user.getIdToken();
+            if (idToken) {
+              safeLocalStorageSet('reporter_auth_token', idToken);
+            }
+          } catch (tokenErr) {
+            console.warn('Could not retrieve Firebase ID token:', tokenErr);
+          }
           processGoogleUser(
             userCredential.user.email,
             userCredential.user.displayName || undefined

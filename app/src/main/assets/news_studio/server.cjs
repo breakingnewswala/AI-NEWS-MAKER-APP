@@ -48,7 +48,9 @@ var require_server_firestore_adapter = __commonJS({
     var DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || firebaseConfig?.firestoreDatabaseId || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
     var STORAGE_BUCKET = process.env.STORAGE_BUCKET || firebaseConfig?.storageBucket || "ai-news-maker-app.firebasestorage.app";
     var USE_FIRESTORE = process.env.USE_FIRESTORE === "true";
-    function getMetadataAccessToken() {
+    var cachedToken = null;
+    var tokenExpiry = 0;
+    function getMetadataAccessTokenInternal() {
       return new Promise((resolve) => {
         const req = http.get(
           {
@@ -76,6 +78,41 @@ var require_server_firestore_adapter = __commonJS({
           resolve(null);
         });
       });
+    }
+    async function getMetadataAccessToken() {
+      if (cachedToken && Date.now() < tokenExpiry - 6e4) {
+        return cachedToken;
+      }
+      if (process.env.FIRESTORE_ACCESS_TOKEN) {
+        cachedToken = process.env.FIRESTORE_ACCESS_TOKEN;
+        tokenExpiry = Date.now() + 3e5;
+        return cachedToken;
+      }
+      const isCloudRuntime = Boolean(
+        process.env.K_SERVICE || process.env.FUNCTION_NAME || process.env.GAE_SERVICE || process.env.CLOUD_RUN_JOB || process.env.METADATA_SERVER_IP
+      );
+      if (isCloudRuntime || process.platform !== "win32") {
+        const metaToken = await getMetadataAccessTokenInternal();
+        if (metaToken) {
+          cachedToken = metaToken;
+          tokenExpiry = Date.now() + 3e5;
+          return cachedToken;
+        }
+      }
+      try {
+        const { execSync } = require("child_process");
+        const localToken = execSync("gcloud auth print-access-token", {
+          timeout: 12e3,
+          stdio: ["pipe", "pipe", "ignore"]
+        }).toString().trim();
+        if (localToken && localToken.startsWith("ya29.")) {
+          cachedToken = localToken;
+          tokenExpiry = Date.now() + 3e5;
+          return cachedToken;
+        }
+      } catch {
+      }
+      return null;
     }
     function getRuntimeServiceAccount() {
       return new Promise((resolve) => {
@@ -413,6 +450,364 @@ var require_server_firestore_adapter = __commonJS({
     }
     module2.exports.firestoreDeleteDoc = firestoreDeleteDoc;
     module2.exports.firestoreListDocs = firestoreListDocs;
+    async function atomicCoinTransaction(walletKey, amount, type, description, newsItemId = "", newsTitle = "") {
+      const cleanKey = (walletKey || "").toLowerCase().trim();
+      if (!cleanKey) return { success: false, error: "Invalid walletKey" };
+      const numAmount = Math.max(0, Number(amount) || 0);
+      const readRes = await firestoreReadDoc("wallets", cleanKey);
+      const currentWallet = readRes.success && readRes.data ? readRes.data : {
+        walletKey: cleanKey,
+        coinBalance: 0,
+        pendingCoins: 0,
+        totalEarnedCoins: 0
+      };
+      const currentBalance = Number(currentWallet.coinBalance) || 0;
+      let newBalance = currentBalance;
+      if (type === "debit") {
+        if (currentBalance < numAmount) {
+          return {
+            success: false,
+            insufficientCoins: true,
+            currentBalance,
+            requiredCoins: numAmount,
+            error: "Insufficient coins"
+          };
+        }
+        newBalance = currentBalance - numAmount;
+      } else if (type === "credit") {
+        newBalance = currentBalance + numAmount;
+        currentWallet.totalEarnedCoins = (Number(currentWallet.totalEarnedCoins) || 0) + numAmount;
+      }
+      currentWallet.coinBalance = newBalance;
+      currentWallet.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const walletRes = await firestoreWriteDoc("wallets", cleanKey, currentWallet);
+      if (!walletRes.success) return { success: false, error: walletRes.error };
+      const txId = `tx_${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const txPayload = {
+        id: txId,
+        transactionId: txId,
+        userId: cleanKey,
+        userEmail: cleanKey,
+        newsItemId: String(newsItemId || ""),
+        newsTitle: String(newsTitle || ""),
+        description: String(description || `${type.toUpperCase()} ${numAmount} coins`),
+        type,
+        amount: numAmount,
+        timestamp: Date.now(),
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      await firestoreWriteDoc("wallet_transactions", txId, txPayload);
+      return {
+        success: true,
+        txId,
+        balance: newBalance,
+        coinsDeducted: type === "debit" ? numAmount : 0,
+        coinsCredited: type === "credit" ? numAmount : 0
+      };
+    }
+    async function atomicRecordPayment(orderId, paymentData) {
+      const cleanOrderId = String(orderId || "").trim();
+      if (!cleanOrderId) return { success: false, error: "Invalid orderId" };
+      const paymentDoc = {
+        ...paymentData,
+        orderId: cleanOrderId,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const payRes = await firestoreWriteDoc("payment_transactions", cleanOrderId, paymentDoc);
+      if (!payRes.success) return { success: false, error: payRes.error };
+      const email = (paymentData.customerEmail || "").toLowerCase().trim();
+      if (email && (paymentData.orderStatus === "PAID" || paymentData.orderStatus === "SUCCESS")) {
+        const tier = (paymentData.planKey || paymentData.planId || "pro").toLowerCase().replace("plan_", "").trim();
+        const planName = String(paymentData.planName || tier.toUpperCase()).trim();
+        const durationDays = Number(paymentData.durationDays) || 365;
+        await atomicUpdateMembership(email, tier, planName, durationDays);
+      }
+      return { success: true, orderId: cleanOrderId };
+    }
+    async function atomicUpdateMembership(email, tier, planName, durationDays = 365) {
+      const cleanEmail = (email || "").toLowerCase().trim();
+      if (!cleanEmail) return { success: false, error: "Invalid email" };
+      const userRes = await firestoreReadDoc("users", cleanEmail);
+      const existingUser = userRes.success && userRes.data ? userRes.data : {
+        email: cleanEmail,
+        role: "user",
+        createdAt: Date.now()
+      };
+      const now = Date.now();
+      const expiresAt = now + durationDays * 864e5;
+      const updatedUser = {
+        ...existingUser,
+        tier: String(tier || "basic").toLowerCase().trim(),
+        planName: String(planName || tier.toUpperCase()).trim(),
+        activatedAt: now,
+        expiresAt,
+        isProfileLocked: true,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      await firestoreWriteDoc("users", cleanEmail, updatedUser);
+      return { success: true, email: cleanEmail, tier, planName, expiresAt };
+    }
+    module2.exports.atomicCoinTransaction = atomicCoinTransaction;
+    module2.exports.atomicRecordPayment = atomicRecordPayment;
+    module2.exports.atomicUpdateMembership = atomicUpdateMembership;
+  }
+});
+
+// cloud_storage_service.cjs
+var require_cloud_storage_service = __commonJS({
+  "cloud_storage_service.cjs"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var https = require("https");
+    var { getMetadataAccessToken } = require_server_firestore_adapter();
+    var httpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 25
+    });
+    var CloudStorageService = class {
+      constructor(options = {}) {
+        this.projectId = options.projectId || process.env.GOOGLE_CLOUD_PROJECT || "ai-news-maker-app";
+        this.bucketName = options.bucketName || process.env.GCS_BUCKET_NAME || "ai-news-maker-app.firebasestorage.app";
+        this.useGcs = options.useGcs !== void 0 ? Boolean(options.useGcs) : process.env.USE_GCS !== "false";
+        this.localUploadsDir = options.localUploadsDir || path2.join(process.cwd(), "public", "uploads");
+        this.webLocalUploadsDir = path2.join(process.cwd(), "web_studio", "public", "uploads");
+      }
+      async getAccessToken() {
+        return await getMetadataAccessToken();
+      }
+      isGcsActive() {
+        return Boolean(this.useGcs && this.bucketName);
+      }
+      /**
+       * Upload or save a media file buffer to Google Cloud Storage (and local disk cache)
+       * @param {Object} params
+       * @param {Buffer} params.buffer - File buffer
+       * @param {string} params.filename - Desired filename
+       * @param {string} params.contentType - MIME type
+       * @param {string} params.category - 'logos' | 'screenshots' | 'videos' | 'thumbnails' | 'fonts' | 'support' | 'music' | 'branding' | 'avatars'
+       * @param {boolean} [params.publicRead=true] - Set object ACL to publicRead
+       */
+      async saveMedia(params) {
+        const { buffer, filename, contentType = "application/octet-stream", category = "misc", publicRead = true } = params;
+        if (!buffer || !Buffer.isBuffer(buffer)) {
+          throw new Error("Valid media buffer is required for saveMedia");
+        }
+        if (!filename) {
+          throw new Error("Filename is required for saveMedia");
+        }
+        const gcsPath = `uploads/${category}/${filename}`;
+        const localDir = path2.join(this.localUploadsDir, category);
+        const localFilePath = path2.join(localDir, filename);
+        try {
+          fs2.mkdirSync(localDir, { recursive: true });
+          fs2.writeFileSync(localFilePath, buffer);
+          const webDir = path2.join(this.webLocalUploadsDir, category);
+          fs2.mkdirSync(webDir, { recursive: true });
+          fs2.writeFileSync(path2.join(webDir, filename), buffer);
+        } catch (localErr) {
+          console.warn(`[CloudStorageService] Warning: Could not write local cache file:`, localErr.message);
+        }
+        const localRelativeUrl = `/uploads/${category}/${filename}`;
+        const canonicalPublicGcsUrl = `https://storage.googleapis.com/${this.bucketName}/${gcsPath}`;
+        if (!this.isGcsActive()) {
+          return {
+            success: true,
+            url: localRelativeUrl,
+            localUrl: localRelativeUrl,
+            publicGcsUrl: null,
+            gcsPath,
+            storageProvider: "local",
+            filename,
+            size: buffer.length,
+            contentType
+          };
+        }
+        try {
+          const token = await this.getAccessToken();
+          if (!token) {
+            console.warn(`[CloudStorageService] No GCS token available. Fallback to local storage: ${localRelativeUrl}`);
+            return {
+              success: true,
+              url: localRelativeUrl,
+              localUrl: localRelativeUrl,
+              publicGcsUrl: canonicalPublicGcsUrl,
+              gcsPath,
+              storageProvider: "local_fallback",
+              filename,
+              size: buffer.length,
+              contentType
+            };
+          }
+          let uploadEndpoint = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(this.bucketName)}/o?uploadType=media&name=${encodeURIComponent(gcsPath)}`;
+          if (publicRead) {
+            uploadEndpoint += "&predefinedAcl=publicRead";
+          }
+          const uploadResult = await new Promise((resolve, reject) => {
+            const uReq = https.request(
+              uploadEndpoint,
+              {
+                method: "POST",
+                agent: httpsAgent,
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": contentType,
+                  "Content-Length": buffer.length
+                },
+                timeout: 3e4
+              },
+              (res) => {
+                let body = "";
+                res.on("data", (d) => body += d);
+                res.on("end", () => {
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                      const parsed = JSON.parse(body);
+                      resolve(parsed);
+                    } catch {
+                      resolve({ status: res.statusCode });
+                    }
+                  } else {
+                    reject(new Error(`GCS Upload failed with HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+                  }
+                });
+              }
+            );
+            uReq.on("error", (err) => reject(err));
+            uReq.on("timeout", () => {
+              uReq.destroy();
+              reject(new Error("GCS upload timed out after 30000ms"));
+            });
+            uReq.write(buffer);
+            uReq.end();
+          });
+          return {
+            success: true,
+            url: canonicalPublicGcsUrl,
+            publicGcsUrl: canonicalPublicGcsUrl,
+            localUrl: localRelativeUrl,
+            gcsPath,
+            bucket: this.bucketName,
+            storageProvider: "gcs",
+            filename,
+            size: buffer.length,
+            contentType,
+            generation: uploadResult?.generation
+          };
+        } catch (gcsErr) {
+          console.error(`[CloudStorageService] GCS upload error:`, gcsErr.message);
+          return {
+            success: true,
+            url: localRelativeUrl,
+            localUrl: localRelativeUrl,
+            publicGcsUrl: canonicalPublicGcsUrl,
+            gcsPath,
+            storageProvider: "local_fallback",
+            warning: `GCS upload failed: ${gcsErr.message}`,
+            filename,
+            size: buffer.length,
+            contentType
+          };
+        }
+      }
+      /**
+       * Delete a media file from Google Cloud Storage (and local disk cache)
+       * @param {Object} params
+       * @param {string} [params.url] - URL of the file
+       * @param {string} [params.gcsPath] - Direct GCS path e.g. uploads/logos/abc.png
+       * @param {string} [params.category] - File category
+       * @param {string} [params.filename] - Filename
+       */
+      async deleteMedia(params) {
+        let { url, gcsPath, category, filename } = params;
+        if (!gcsPath && url) {
+          if (url.includes(`storage.googleapis.com/${this.bucketName}/`)) {
+            gcsPath = url.split(`storage.googleapis.com/${this.bucketName}/`)[1];
+          } else if (url.startsWith("/uploads/")) {
+            gcsPath = url.replace(/^\//, "");
+          }
+        }
+        if (!gcsPath && category && filename) {
+          gcsPath = `uploads/${category}/${filename}`;
+        }
+        if (!gcsPath) {
+          throw new Error("Could not determine gcsPath or URL for deleteMedia");
+        }
+        try {
+          const parts = gcsPath.split("/");
+          if (parts.length >= 3 && parts[0] === "uploads") {
+            const cat = parts[1];
+            const fn = parts[2];
+            const p1 = path2.join(this.localUploadsDir, cat, fn);
+            const p2 = path2.join(this.webLocalUploadsDir, cat, fn);
+            if (fs2.existsSync(p1)) fs2.unlinkSync(p1);
+            if (fs2.existsSync(p2)) fs2.unlinkSync(p2);
+          }
+        } catch (err) {
+          console.warn(`[CloudStorageService] Warning: Could not remove local cache:`, err.message);
+        }
+        if (!this.isGcsActive()) {
+          return { success: true, storageProvider: "local" };
+        }
+        try {
+          const token = await this.getAccessToken();
+          if (!token) return { success: true, warning: "No token to delete GCS object" };
+          const deleteEndpoint = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(this.bucketName)}/o/${encodeURIComponent(gcsPath)}`;
+          await new Promise((resolve, reject) => {
+            const dReq = https.request(
+              deleteEndpoint,
+              {
+                method: "DELETE",
+                agent: httpsAgent,
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 1e4
+              },
+              (res) => {
+                if (res.statusCode === 204 || res.statusCode === 200 || res.statusCode === 404) {
+                  resolve();
+                } else {
+                  reject(new Error(`GCS Delete returned status ${res.statusCode}`));
+                }
+              }
+            );
+            dReq.on("error", (err) => reject(err));
+            dReq.on("timeout", () => {
+              dReq.destroy();
+              resolve();
+            });
+            dReq.end();
+          });
+          return { success: true, gcsPath, storageProvider: "gcs" };
+        } catch (delErr) {
+          console.warn(`[CloudStorageService] Warning on GCS delete:`, delErr.message);
+          return { success: true, warning: delErr.message };
+        }
+      }
+      /**
+       * Express middleware to serve or redirect /uploads/:category/:filename seamlessly.
+       * If file exists on local disk, it passes through to express.static.
+       * If file does NOT exist on local disk (e.g. fresh Cloud Run instance),
+       * it 302 redirects directly to GCS or streams it.
+       */
+      createUploadsMiddleware() {
+        return (req, res, next) => {
+          const rawPath = req.path.replace(/^\//, "");
+          const localFilePath = path2.join(this.localUploadsDir, rawPath);
+          if (fs2.existsSync(localFilePath)) {
+            return next();
+          }
+          if (this.isGcsActive()) {
+            const gcsRedirectUrl = `https://storage.googleapis.com/${this.bucketName}/uploads/${rawPath}`;
+            return res.redirect(302, gcsRedirectUrl);
+          }
+          next();
+        };
+      }
+    };
+    var defaultCloudStorageService = new CloudStorageService();
+    module2.exports = {
+      CloudStorageService,
+      defaultCloudStorageService
+    };
   }
 });
 
@@ -435,7 +830,9 @@ var require_server_firestore_adapter2 = __commonJS({
     var DATABASE_ID = process.env.FIRESTORE_DATABASE_ID || firebaseConfig?.firestoreDatabaseId || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
     var STORAGE_BUCKET = process.env.STORAGE_BUCKET || firebaseConfig?.storageBucket || "ai-news-maker-app.firebasestorage.app";
     var USE_FIRESTORE = process.env.USE_FIRESTORE === "true";
-    function getMetadataAccessToken() {
+    var cachedToken = null;
+    var tokenExpiry = 0;
+    function getMetadataAccessTokenInternal() {
       return new Promise((resolve) => {
         const req = http.get(
           {
@@ -463,6 +860,41 @@ var require_server_firestore_adapter2 = __commonJS({
           resolve(null);
         });
       });
+    }
+    async function getMetadataAccessToken() {
+      if (cachedToken && Date.now() < tokenExpiry - 6e4) {
+        return cachedToken;
+      }
+      if (process.env.FIRESTORE_ACCESS_TOKEN) {
+        cachedToken = process.env.FIRESTORE_ACCESS_TOKEN;
+        tokenExpiry = Date.now() + 3e5;
+        return cachedToken;
+      }
+      const isCloudRuntime = Boolean(
+        process.env.K_SERVICE || process.env.FUNCTION_NAME || process.env.GAE_SERVICE || process.env.CLOUD_RUN_JOB || process.env.METADATA_SERVER_IP
+      );
+      if (isCloudRuntime || process.platform !== "win32") {
+        const metaToken = await getMetadataAccessTokenInternal();
+        if (metaToken) {
+          cachedToken = metaToken;
+          tokenExpiry = Date.now() + 3e5;
+          return cachedToken;
+        }
+      }
+      try {
+        const { execSync } = require("child_process");
+        const localToken = execSync("gcloud auth print-access-token", {
+          timeout: 12e3,
+          stdio: ["pipe", "pipe", "ignore"]
+        }).toString().trim();
+        if (localToken && localToken.startsWith("ya29.")) {
+          cachedToken = localToken;
+          tokenExpiry = Date.now() + 3e5;
+          return cachedToken;
+        }
+      } catch {
+      }
+      return null;
     }
     function getRuntimeServiceAccount() {
       return new Promise((resolve) => {
@@ -800,6 +1232,3018 @@ var require_server_firestore_adapter2 = __commonJS({
     }
     module2.exports.firestoreDeleteDoc = firestoreDeleteDoc;
     module2.exports.firestoreListDocs = firestoreListDocs;
+    async function atomicCoinTransaction(walletKey, amount, type, description, newsItemId = "", newsTitle = "") {
+      const cleanKey = (walletKey || "").toLowerCase().trim();
+      if (!cleanKey) return { success: false, error: "Invalid walletKey" };
+      const numAmount = Math.max(0, Number(amount) || 0);
+      const readRes = await firestoreReadDoc("wallets", cleanKey);
+      const currentWallet = readRes.success && readRes.data ? readRes.data : {
+        walletKey: cleanKey,
+        coinBalance: 0,
+        pendingCoins: 0,
+        totalEarnedCoins: 0
+      };
+      const currentBalance = Number(currentWallet.coinBalance) || 0;
+      let newBalance = currentBalance;
+      if (type === "debit") {
+        if (currentBalance < numAmount) {
+          return {
+            success: false,
+            insufficientCoins: true,
+            currentBalance,
+            requiredCoins: numAmount,
+            error: "Insufficient coins"
+          };
+        }
+        newBalance = currentBalance - numAmount;
+      } else if (type === "credit") {
+        newBalance = currentBalance + numAmount;
+        currentWallet.totalEarnedCoins = (Number(currentWallet.totalEarnedCoins) || 0) + numAmount;
+      }
+      currentWallet.coinBalance = newBalance;
+      currentWallet.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const walletRes = await firestoreWriteDoc("wallets", cleanKey, currentWallet);
+      if (!walletRes.success) return { success: false, error: walletRes.error };
+      const txId = `tx_${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const txPayload = {
+        id: txId,
+        transactionId: txId,
+        userId: cleanKey,
+        userEmail: cleanKey,
+        newsItemId: String(newsItemId || ""),
+        newsTitle: String(newsTitle || ""),
+        description: String(description || `${type.toUpperCase()} ${numAmount} coins`),
+        type,
+        amount: numAmount,
+        timestamp: Date.now(),
+        createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      await firestoreWriteDoc("wallet_transactions", txId, txPayload);
+      return {
+        success: true,
+        txId,
+        balance: newBalance,
+        coinsDeducted: type === "debit" ? numAmount : 0,
+        coinsCredited: type === "credit" ? numAmount : 0
+      };
+    }
+    async function atomicRecordPayment(orderId, paymentData) {
+      const cleanOrderId = String(orderId || "").trim();
+      if (!cleanOrderId) return { success: false, error: "Invalid orderId" };
+      const paymentDoc = {
+        ...paymentData,
+        orderId: cleanOrderId,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const payRes = await firestoreWriteDoc("payment_transactions", cleanOrderId, paymentDoc);
+      if (!payRes.success) return { success: false, error: payRes.error };
+      const email = (paymentData.customerEmail || "").toLowerCase().trim();
+      if (email && (paymentData.orderStatus === "PAID" || paymentData.orderStatus === "SUCCESS")) {
+        const tier = (paymentData.planKey || paymentData.planId || "pro").toLowerCase().replace("plan_", "").trim();
+        const planName = String(paymentData.planName || tier.toUpperCase()).trim();
+        const durationDays = Number(paymentData.durationDays) || 365;
+        await atomicUpdateMembership(email, tier, planName, durationDays);
+      }
+      return { success: true, orderId: cleanOrderId };
+    }
+    async function atomicUpdateMembership(email, tier, planName, durationDays = 365) {
+      const cleanEmail = (email || "").toLowerCase().trim();
+      if (!cleanEmail) return { success: false, error: "Invalid email" };
+      const userRes = await firestoreReadDoc("users", cleanEmail);
+      const existingUser = userRes.success && userRes.data ? userRes.data : {
+        email: cleanEmail,
+        role: "user",
+        createdAt: Date.now()
+      };
+      const now = Date.now();
+      const expiresAt = now + durationDays * 864e5;
+      const updatedUser = {
+        ...existingUser,
+        tier: String(tier || "basic").toLowerCase().trim(),
+        planName: String(planName || tier.toUpperCase()).trim(),
+        activatedAt: now,
+        expiresAt,
+        isProfileLocked: true,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      await firestoreWriteDoc("users", cleanEmail, updatedUser);
+      return { success: true, email: cleanEmail, tier, planName, expiresAt };
+    }
+    module2.exports.atomicCoinTransaction = atomicCoinTransaction;
+    module2.exports.atomicRecordPayment = atomicRecordPayment;
+    module2.exports.atomicUpdateMembership = atomicUpdateMembership;
+  }
+});
+
+// ../cloud_storage_service.cjs
+var require_cloud_storage_service2 = __commonJS({
+  "../cloud_storage_service.cjs"(exports2, module2) {
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var https = require("https");
+    var { getMetadataAccessToken } = require_server_firestore_adapter2();
+    var httpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 25
+    });
+    var CloudStorageService = class {
+      constructor(options = {}) {
+        this.projectId = options.projectId || process.env.GOOGLE_CLOUD_PROJECT || "ai-news-maker-app";
+        this.bucketName = options.bucketName || process.env.GCS_BUCKET_NAME || "ai-news-maker-app.firebasestorage.app";
+        this.useGcs = options.useGcs !== void 0 ? Boolean(options.useGcs) : process.env.USE_GCS !== "false";
+        this.localUploadsDir = options.localUploadsDir || path2.join(process.cwd(), "public", "uploads");
+        this.webLocalUploadsDir = path2.join(process.cwd(), "web_studio", "public", "uploads");
+      }
+      async getAccessToken() {
+        return await getMetadataAccessToken();
+      }
+      isGcsActive() {
+        return Boolean(this.useGcs && this.bucketName);
+      }
+      /**
+       * Upload or save a media file buffer to Google Cloud Storage (and local disk cache)
+       * @param {Object} params
+       * @param {Buffer} params.buffer - File buffer
+       * @param {string} params.filename - Desired filename
+       * @param {string} params.contentType - MIME type
+       * @param {string} params.category - 'logos' | 'screenshots' | 'videos' | 'thumbnails' | 'fonts' | 'support' | 'music' | 'branding' | 'avatars'
+       * @param {boolean} [params.publicRead=true] - Set object ACL to publicRead
+       */
+      async saveMedia(params) {
+        const { buffer, filename, contentType = "application/octet-stream", category = "misc", publicRead = true } = params;
+        if (!buffer || !Buffer.isBuffer(buffer)) {
+          throw new Error("Valid media buffer is required for saveMedia");
+        }
+        if (!filename) {
+          throw new Error("Filename is required for saveMedia");
+        }
+        const gcsPath = `uploads/${category}/${filename}`;
+        const localDir = path2.join(this.localUploadsDir, category);
+        const localFilePath = path2.join(localDir, filename);
+        try {
+          fs2.mkdirSync(localDir, { recursive: true });
+          fs2.writeFileSync(localFilePath, buffer);
+          const webDir = path2.join(this.webLocalUploadsDir, category);
+          fs2.mkdirSync(webDir, { recursive: true });
+          fs2.writeFileSync(path2.join(webDir, filename), buffer);
+        } catch (localErr) {
+          console.warn(`[CloudStorageService] Warning: Could not write local cache file:`, localErr.message);
+        }
+        const localRelativeUrl = `/uploads/${category}/${filename}`;
+        const canonicalPublicGcsUrl = `https://storage.googleapis.com/${this.bucketName}/${gcsPath}`;
+        if (!this.isGcsActive()) {
+          return {
+            success: true,
+            url: localRelativeUrl,
+            localUrl: localRelativeUrl,
+            publicGcsUrl: null,
+            gcsPath,
+            storageProvider: "local",
+            filename,
+            size: buffer.length,
+            contentType
+          };
+        }
+        try {
+          const token = await this.getAccessToken();
+          if (!token) {
+            console.warn(`[CloudStorageService] No GCS token available. Fallback to local storage: ${localRelativeUrl}`);
+            return {
+              success: true,
+              url: localRelativeUrl,
+              localUrl: localRelativeUrl,
+              publicGcsUrl: canonicalPublicGcsUrl,
+              gcsPath,
+              storageProvider: "local_fallback",
+              filename,
+              size: buffer.length,
+              contentType
+            };
+          }
+          let uploadEndpoint = `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(this.bucketName)}/o?uploadType=media&name=${encodeURIComponent(gcsPath)}`;
+          if (publicRead) {
+            uploadEndpoint += "&predefinedAcl=publicRead";
+          }
+          const uploadResult = await new Promise((resolve, reject) => {
+            const uReq = https.request(
+              uploadEndpoint,
+              {
+                method: "POST",
+                agent: httpsAgent,
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": contentType,
+                  "Content-Length": buffer.length
+                },
+                timeout: 3e4
+              },
+              (res) => {
+                let body = "";
+                res.on("data", (d) => body += d);
+                res.on("end", () => {
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                      const parsed = JSON.parse(body);
+                      resolve(parsed);
+                    } catch {
+                      resolve({ status: res.statusCode });
+                    }
+                  } else {
+                    reject(new Error(`GCS Upload failed with HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+                  }
+                });
+              }
+            );
+            uReq.on("error", (err) => reject(err));
+            uReq.on("timeout", () => {
+              uReq.destroy();
+              reject(new Error("GCS upload timed out after 30000ms"));
+            });
+            uReq.write(buffer);
+            uReq.end();
+          });
+          return {
+            success: true,
+            url: canonicalPublicGcsUrl,
+            publicGcsUrl: canonicalPublicGcsUrl,
+            localUrl: localRelativeUrl,
+            gcsPath,
+            bucket: this.bucketName,
+            storageProvider: "gcs",
+            filename,
+            size: buffer.length,
+            contentType,
+            generation: uploadResult?.generation
+          };
+        } catch (gcsErr) {
+          console.error(`[CloudStorageService] GCS upload error:`, gcsErr.message);
+          return {
+            success: true,
+            url: localRelativeUrl,
+            localUrl: localRelativeUrl,
+            publicGcsUrl: canonicalPublicGcsUrl,
+            gcsPath,
+            storageProvider: "local_fallback",
+            warning: `GCS upload failed: ${gcsErr.message}`,
+            filename,
+            size: buffer.length,
+            contentType
+          };
+        }
+      }
+      /**
+       * Delete a media file from Google Cloud Storage (and local disk cache)
+       * @param {Object} params
+       * @param {string} [params.url] - URL of the file
+       * @param {string} [params.gcsPath] - Direct GCS path e.g. uploads/logos/abc.png
+       * @param {string} [params.category] - File category
+       * @param {string} [params.filename] - Filename
+       */
+      async deleteMedia(params) {
+        let { url, gcsPath, category, filename } = params;
+        if (!gcsPath && url) {
+          if (url.includes(`storage.googleapis.com/${this.bucketName}/`)) {
+            gcsPath = url.split(`storage.googleapis.com/${this.bucketName}/`)[1];
+          } else if (url.startsWith("/uploads/")) {
+            gcsPath = url.replace(/^\//, "");
+          }
+        }
+        if (!gcsPath && category && filename) {
+          gcsPath = `uploads/${category}/${filename}`;
+        }
+        if (!gcsPath) {
+          throw new Error("Could not determine gcsPath or URL for deleteMedia");
+        }
+        try {
+          const parts = gcsPath.split("/");
+          if (parts.length >= 3 && parts[0] === "uploads") {
+            const cat = parts[1];
+            const fn = parts[2];
+            const p1 = path2.join(this.localUploadsDir, cat, fn);
+            const p2 = path2.join(this.webLocalUploadsDir, cat, fn);
+            if (fs2.existsSync(p1)) fs2.unlinkSync(p1);
+            if (fs2.existsSync(p2)) fs2.unlinkSync(p2);
+          }
+        } catch (err) {
+          console.warn(`[CloudStorageService] Warning: Could not remove local cache:`, err.message);
+        }
+        if (!this.isGcsActive()) {
+          return { success: true, storageProvider: "local" };
+        }
+        try {
+          const token = await this.getAccessToken();
+          if (!token) return { success: true, warning: "No token to delete GCS object" };
+          const deleteEndpoint = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(this.bucketName)}/o/${encodeURIComponent(gcsPath)}`;
+          await new Promise((resolve, reject) => {
+            const dReq = https.request(
+              deleteEndpoint,
+              {
+                method: "DELETE",
+                agent: httpsAgent,
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 1e4
+              },
+              (res) => {
+                if (res.statusCode === 204 || res.statusCode === 200 || res.statusCode === 404) {
+                  resolve();
+                } else {
+                  reject(new Error(`GCS Delete returned status ${res.statusCode}`));
+                }
+              }
+            );
+            dReq.on("error", (err) => reject(err));
+            dReq.on("timeout", () => {
+              dReq.destroy();
+              resolve();
+            });
+            dReq.end();
+          });
+          return { success: true, gcsPath, storageProvider: "gcs" };
+        } catch (delErr) {
+          console.warn(`[CloudStorageService] Warning on GCS delete:`, delErr.message);
+          return { success: true, warning: delErr.message };
+        }
+      }
+      /**
+       * Express middleware to serve or redirect /uploads/:category/:filename seamlessly.
+       * If file exists on local disk, it passes through to express.static.
+       * If file does NOT exist on local disk (e.g. fresh Cloud Run instance),
+       * it 302 redirects directly to GCS or streams it.
+       */
+      createUploadsMiddleware() {
+        return (req, res, next) => {
+          const rawPath = req.path.replace(/^\//, "");
+          const localFilePath = path2.join(this.localUploadsDir, rawPath);
+          if (fs2.existsSync(localFilePath)) {
+            return next();
+          }
+          if (this.isGcsActive()) {
+            const gcsRedirectUrl = `https://storage.googleapis.com/${this.bucketName}/uploads/${rawPath}`;
+            return res.redirect(302, gcsRedirectUrl);
+          }
+          next();
+        };
+      }
+    };
+    var defaultCloudStorageService = new CloudStorageService();
+    module2.exports = {
+      CloudStorageService,
+      defaultCloudStorageService
+    };
+  }
+});
+
+// firestore_database_service.cjs
+var require_firestore_database_service = __commonJS({
+  "firestore_database_service.cjs"(exports2, module2) {
+    var http = require("http");
+    var https = require("https");
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var adapter = require_server_firestore_adapter();
+    var httpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 20,
+      keepAliveMsecs: 6e4
+    });
+    var CentralFirestoreDatabaseService = class {
+      constructor(options = {}) {
+        this.projectId = options.projectId || process.env.FIREBASE_PROJECT_ID || adapter.PROJECT_ID || "ai-news-maker-app";
+        this.databaseId = options.databaseId || options.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID || adapter.DATABASE_ID || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
+        this.useFirestore = options.useFirestore !== void 0 ? options.useFirestore : process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE;
+        this.cache = {
+          users: /* @__PURE__ */ new Map(),
+          news: /* @__PURE__ */ new Map(),
+          wallets: /* @__PURE__ */ new Map(),
+          walletTransactions: /* @__PURE__ */ new Map(),
+          frameUnlocks: /* @__PURE__ */ new Map(),
+          payments: /* @__PURE__ */ new Map(),
+          rssSources: /* @__PURE__ */ new Map(),
+          categories: /* @__PURE__ */ new Map(),
+          templateConfigs: /* @__PURE__ */ new Map(),
+          plans: /* @__PURE__ */ new Map(),
+          coupons: /* @__PURE__ */ new Map(),
+          music: /* @__PURE__ */ new Map(),
+          systemConfig: /* @__PURE__ */ new Map(),
+          notifications: /* @__PURE__ */ new Map(),
+          auditLogs: [],
+          drafts: /* @__PURE__ */ new Map(),
+          credentials: /* @__PURE__ */ new Map()
+        };
+        this.isInitialized = false;
+        this.initializationPromise = null;
+        this.cacheTtl = {
+          news: 60 * 1e3,
+          rssSources: 120 * 1e3,
+          plans: 300 * 1e3,
+          coupons: 300 * 1e3,
+          categories: 300 * 1e3,
+          templateConfigs: 300 * 1e3,
+          systemConfig: 60 * 1e3,
+          notifications: 30 * 1e3,
+          limitIncrease: 60 * 1e3,
+          support: 60 * 1e3,
+          ...options.cacheTtl || {}
+        };
+        this.cacheTimestamps = /* @__PURE__ */ new Map();
+      }
+      setDatabaseId(dbId) {
+        this.databaseId = dbId;
+      }
+      setUseFirestore(flag) {
+        this.useFirestore = Boolean(flag);
+      }
+      // Explicit cache invalidation (Task 1)
+      invalidateCache(collection, docId = null) {
+        if (docId) {
+          const cleanId = String(docId).toLowerCase().trim();
+          if (this.cache[collection] instanceof Map) {
+            this.cache[collection].delete(cleanId);
+          }
+          this.cacheTimestamps.delete(`${collection}:${cleanId}`);
+        } else {
+          if (this.cache[collection] instanceof Map) {
+            this.cache[collection].clear();
+          }
+          this.cacheTimestamps.delete(collection);
+        }
+      }
+      // Check if cache entry has not exceeded its TTL
+      isCacheValid(collection, key = null) {
+        const ttl = this.cacheTtl[collection] || 6e4;
+        const lookupKey = key ? `${collection}:${String(key).toLowerCase().trim()}` : collection;
+        const ts = this.cacheTimestamps.get(lookupKey);
+        if (!ts) return false;
+        return Date.now() - ts < ttl;
+      }
+      async getAccessToken() {
+        return adapter.getMetadataAccessToken();
+      }
+      // Begin Firestore REST atomic transaction (Task 3)
+      async beginTransaction() {
+        if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:beginTransaction`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+              },
+              agent: httpsAgent,
+              timeout: 6e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(body);
+                    resolve({ success: true, transaction: parsed.transaction });
+                  } catch (e) {
+                    resolve({ success: false, error: e.message });
+                  }
+                } else {
+                  resolve({ success: false, error: `beginTransaction failed (${res.statusCode}): ${body}` });
+                }
+              });
+            }
+          );
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.write(JSON.stringify({ options: { readWrite: {} } }));
+          req.end();
+        });
+      }
+      // Commit Firestore REST atomic transaction (Task 3)
+      async commitTransaction(transactionId, writes = []) {
+        if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:commit`;
+        const payload = JSON.stringify({
+          transaction: transactionId,
+          writes
+        });
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload)
+              },
+              agent: httpsAgent,
+              timeout: 8e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(body);
+                    resolve({ success: true, data: parsed });
+                  } catch (e) {
+                    resolve({ success: true });
+                  }
+                } else {
+                  resolve({ success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${body}` });
+                }
+              });
+            }
+          );
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.write(payload);
+          req.end();
+        });
+      }
+      // Rollback Firestore REST atomic transaction (Task 3)
+      async rollbackTransaction(transactionId) {
+        if (!this.useFirestore || !transactionId) return;
+        const token = await this.getAccessToken();
+        if (!token) return;
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:rollback`;
+        const payload = JSON.stringify({ transaction: transactionId });
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload)
+              },
+              agent: httpsAgent,
+              timeout: 4e3
+            },
+            () => resolve()
+          );
+          req.on("error", () => resolve());
+          req.write(payload);
+          req.end();
+        });
+      }
+      // Generic document read
+      async readDoc(collection, docId) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled" };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "GET",
+              headers: { Authorization: `Bearer ${token}` },
+              agent: httpsAgent,
+              timeout: 5e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(body);
+                    const data = this._fromFirestoreDoc(parsed);
+                    resolve({ success: true, data, statusCode: res.statusCode });
+                  } catch (err) {
+                    resolve({ success: false, error: err.message, statusCode: res.statusCode });
+                  }
+                } else {
+                  resolve({ success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` });
+                }
+              });
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.end();
+        });
+      }
+      // Generic document write
+      async writeDoc(collection, docId, data) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled" };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const fields = {};
+        for (const [k, v] of Object.entries(data)) {
+          if (v !== void 0) fields[k] = this._toFirestoreField(v);
+        }
+        const payload = JSON.stringify({ fields });
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload)
+              },
+              agent: httpsAgent,
+              timeout: 5e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  resolve({ success: true, statusCode: res.statusCode });
+                } else {
+                  resolve({ success: false, statusCode: res.statusCode, error: body });
+                }
+              });
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.write(payload);
+          req.end();
+        });
+      }
+      // Generic document delete
+      async deleteDoc(collection, docId) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled" };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+              agent: httpsAgent,
+              timeout: 5e3
+            },
+            (res) => {
+              res.on("data", () => {
+              });
+              res.on("end", () => resolve({ success: res.statusCode >= 200 && res.statusCode < 300 }));
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.end();
+        });
+      }
+      // Generic list documents with complete nextPageToken pagination loop (Task 5)
+      async listDocs(collection, pageSize = 300) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled", documents: [] };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available", documents: [] };
+        const allDocuments = [];
+        const seenIds = /* @__PURE__ */ new Set();
+        let pageToken = "";
+        const safePageSize = Math.min(500, Math.max(10, pageSize));
+        do {
+          let docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}?pageSize=${safePageSize}`;
+          if (pageToken) {
+            docPath += `&pageToken=${encodeURIComponent(pageToken)}`;
+          }
+          const pageRes = await new Promise((resolve) => {
+            const req = https.request(
+              {
+                host: "firestore.googleapis.com",
+                path: docPath,
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+                agent: httpsAgent,
+                timeout: 1e4
+              },
+              (res) => {
+                let body = "";
+                res.on("data", (d) => body += d);
+                res.on("end", () => {
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                      const parsed = JSON.parse(body);
+                      const docs = (parsed.documents || []).map((d) => {
+                        const docId = d.name ? d.name.split("/").pop() : "";
+                        const data = this._fromFirestoreDoc(d);
+                        return { id: docId, docId, ...data };
+                      });
+                      resolve({
+                        success: true,
+                        documents: docs,
+                        nextPageToken: parsed.nextPageToken || "",
+                        statusCode: res.statusCode
+                      });
+                    } catch (err) {
+                      resolve({ success: false, error: err.message, documents: [] });
+                    }
+                  } else {
+                    resolve({ success: false, error: `List failed (${res.statusCode})`, documents: [] });
+                  }
+                });
+              }
+            );
+            req.on("timeout", () => {
+              req.destroy();
+              resolve({ success: false, error: "Request timeout", documents: [] });
+            });
+            req.on("error", (e) => resolve({ success: false, error: e.message, documents: [] }));
+            req.end();
+          });
+          if (!pageRes.success) {
+            if (allDocuments.length > 0) break;
+            return pageRes;
+          }
+          for (const doc of pageRes.documents) {
+            if (doc.id && !seenIds.has(doc.id)) {
+              seenIds.add(doc.id);
+              allDocuments.push(doc);
+            }
+          }
+          pageToken = pageRes.nextPageToken || "";
+        } while (pageToken);
+        return { success: true, documents: allDocuments, totalCount: allDocuments.length };
+      }
+      // --- INITIALIZATION & CACHE WARM-UP ---
+      async initialize() {
+        if (this.initializationPromise) return this.initializationPromise;
+        this.initializationPromise = this._doInitialize();
+        return this.initializationPromise;
+      }
+      async _doInitialize() {
+        if (!this.useFirestore) {
+          console.log("\u2139\uFE0F [CentralDB] Running in Local Development mode (USE_FIRESTORE=false)");
+          this.isInitialized = true;
+          return true;
+        }
+        console.log(`\u{1F680} [CentralDB] Initializing Live Firestore Cache (DB: ${this.databaseId})...`);
+        try {
+          const uRes = await this.listDocs("users", 300);
+          if (uRes.success) {
+            this.cache.users.clear();
+            uRes.documents.forEach((u) => {
+              this.cache.users.set(u.id, u);
+              if (u.email) this.cache.users.set(u.email.toLowerCase().trim(), u);
+              if (u.userId) this.cache.users.set(u.userId.toLowerCase().trim(), u);
+            });
+            console.log(`  \u2713 Loaded ${uRes.documents.length} users into live cache`);
+          }
+          const nRes = await this.listDocs("news_posts", 300);
+          if (nRes.success) {
+            this.cache.news.clear();
+            nRes.documents.forEach((n) => this.cache.news.set(n.id, n));
+            console.log(`  \u2713 Loaded ${nRes.documents.length} news posts into live cache`);
+          }
+          const wRes = await this.listDocs("wallets", 300);
+          if (wRes.success) {
+            this.cache.wallets.clear();
+            wRes.documents.forEach((w) => this.cache.wallets.set(w.id || w.walletKey, w));
+            console.log(`  \u2713 Loaded ${wRes.documents.length} wallets into live cache`);
+          }
+          const rRes = await this.listDocs("rss_sources", 100);
+          if (rRes.success) {
+            this.cache.rssSources.clear();
+            rRes.documents.forEach((s) => this.cache.rssSources.set(s.id, s));
+            console.log(`  \u2713 Loaded ${rRes.documents.length} RSS sources into live cache`);
+          }
+          const pRes = await this.listDocs("plans_catalog", 50);
+          if (pRes.success) {
+            this.cache.plans.clear();
+            pRes.documents.forEach((p) => this.cache.plans.set(p.id, p));
+          }
+          const cRes = await this.listDocs("package_coupons", 50);
+          if (cRes.success) {
+            this.cache.coupons.clear();
+            cRes.documents.forEach((c) => this.cache.coupons.set(c.id, c));
+          }
+          const catRes = await this.listDocs("news_categories", 100);
+          if (catRes.success) {
+            this.cache.categories.clear();
+            catRes.documents.forEach((cat) => this.cache.categories.set(cat.id, cat));
+          }
+          const tplRes = await this.listDocs("news_template_configs", 50);
+          if (tplRes.success) {
+            this.cache.templateConfigs.clear();
+            tplRes.documents.forEach((tpl) => this.cache.templateConfigs.set(tpl.id, tpl));
+          }
+          const sysRes = await this.listDocs("system_config", 50);
+          if (sysRes.success) {
+            this.cache.systemConfig.clear();
+            sysRes.documents.forEach((cfg) => this.cache.systemConfig.set(cfg.id, cfg));
+          }
+          this.isInitialized = true;
+          console.log("\u2705 [CentralDB] Live Firestore Cache Ready.\n");
+          return true;
+        } catch (err) {
+          console.error("\u274C [CentralDB] Initialization error:", err.message);
+          this.isInitialized = false;
+          return false;
+        }
+      }
+      // --- USER PROFILE OPERATIONS ---
+      async getUser(idOrEmail) {
+        if (!idOrEmail) return null;
+        const clean = idOrEmail.toLowerCase().trim();
+        if (this.useFirestore) {
+          if (this.cache.users.has(clean)) {
+            return this.cache.users.get(clean);
+          }
+          const read = await this.readDoc("users", clean);
+          if (read.success && read.data) {
+            this.cache.users.set(clean, read.data);
+            return read.data;
+          }
+          const allUsers = await this.listUsers();
+          const match = allUsers.find(
+            (u) => u.email && u.email.toLowerCase().trim() === clean || u.userId && u.userId.toLowerCase().trim() === clean || u.uid && u.uid.toLowerCase().trim() === clean || u.id && u.id.toLowerCase().trim() === clean
+          );
+          if (match) {
+            this.cache.users.set(clean, match);
+            return match;
+          }
+          return null;
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          return profiles[clean] || Object.values(profiles).find((p) => (p.email || "").toLowerCase().trim() === clean) || null;
+        }
+      }
+      async saveUser(idOrEmail, userData) {
+        if (!idOrEmail) return { success: false, error: "User identifier required" };
+        const clean = idOrEmail.toLowerCase().trim();
+        const payload = {
+          ...userData,
+          docId: clean,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          this.cache.users.set(clean, payload);
+          if (payload.email) this.cache.users.set(payload.email.toLowerCase().trim(), payload);
+          if (payload.userId) this.cache.users.set(payload.userId.toLowerCase().trim(), payload);
+          const res = await this.writeDoc("users", clean, payload);
+          return res;
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          profiles[clean] = payload;
+          this._saveLocalJson("user_profiles_db.json", profiles);
+          return { success: true };
+        }
+      }
+      async listUsers() {
+        if (this.useFirestore) {
+          if (this.cache.users.size > 0) {
+            const unique = /* @__PURE__ */ new Map();
+            for (const u of this.cache.users.values()) {
+              const key = u.id || u.docId || u.email || u.userId;
+              if (key && !unique.has(key)) unique.set(key, u);
+            }
+            return Array.from(unique.values());
+          }
+          const res = await this.listDocs("users", 300);
+          return res.documents || [];
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          return Object.values(profiles);
+        }
+      }
+      // --- NEWS POSTS OPERATIONS ---
+      async getNewsPosts(options = {}) {
+        if (this.useFirestore) {
+          let posts = [];
+          const cacheValid = this.isCacheValid("news");
+          if (this.cache.news.size > 0 && !options.forceRemote && cacheValid) {
+            posts = Array.from(this.cache.news.values());
+          } else {
+            const res = await this.listDocs("news_posts", 100);
+            posts = res.documents || [];
+            this.cache.news.clear();
+            posts.forEach((p) => this.cache.news.set(p.id, p));
+            this.cacheTimestamps.set("news", Date.now());
+          }
+          return posts;
+        } else {
+          return this._loadLocalJson("news_database.json", []);
+        }
+      }
+      async saveNewsPost(postId, postData) {
+        if (!postId) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId).trim();
+        const payload = {
+          ...postData,
+          id: cleanId,
+          docId: cleanId,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          this.cache.news.set(cleanId, payload);
+          this.cacheTimestamps.set("news", Date.now());
+          const res = await this.writeDoc("news_posts", cleanId, payload);
+          return res;
+        } else {
+          const news = this._loadLocalJson("news_database.json", []);
+          const idx = news.findIndex((n) => n.id === cleanId);
+          if (idx >= 0) news[idx] = payload;
+          else news.unshift(payload);
+          this._saveLocalJson("news_database.json", news);
+          return { success: true };
+        }
+      }
+      async deleteNewsPost(postId) {
+        if (!postId) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId).trim();
+        if (this.useFirestore) {
+          this.cache.news.delete(cleanId);
+          this.cacheTimestamps.set("news", Date.now());
+          const res = await this.deleteDoc("news_posts", cleanId);
+          return res;
+        } else {
+          const news = this._loadLocalJson("news_database.json", []);
+          const filtered = news.filter((n) => n.id !== cleanId);
+          this._saveLocalJson("news_database.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- WALLET & REWARDS OPERATIONS ---
+      async getWallet(walletKey) {
+        if (!walletKey) return { walletKey: "", coinBalance: 0 };
+        const cleanKey = walletKey.toLowerCase().trim();
+        if (this.useFirestore) {
+          if (this.cache.wallets.has(cleanKey)) {
+            return this.cache.wallets.get(cleanKey);
+          }
+          const read = await this.readDoc("wallets", cleanKey);
+          if (read.success && read.data) {
+            this.cache.wallets.set(cleanKey, read.data);
+            return read.data;
+          }
+          return { walletKey: cleanKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+        } else {
+          const db = this._loadLocalJson("rewards_database.json", {});
+          return db.wallets && db.wallets[cleanKey] || { walletKey: cleanKey, coinBalance: 0 };
+        }
+      }
+      // True Atomic Wallet Transaction with ACID guarantees (Task 3)
+      async atomicCoinTransaction(walletKey, amount, type, description, newsItemId = "", newsTitle = "", customTxId = null) {
+        const cleanKey = (walletKey || "").toLowerCase().trim();
+        if (!cleanKey) return { success: false, error: "Invalid walletKey" };
+        const numAmount = Math.max(0, Number(amount) || 0);
+        if (this.useFirestore) {
+          const maxRetries = 3;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              break;
+            }
+            const transactionId = txRes.transaction;
+            const token = await this.getAccessToken();
+            const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}?transaction=${encodeURIComponent(transactionId)}`;
+            const docRes = await new Promise((resolve) => {
+              const req = https.request(
+                {
+                  host: "firestore.googleapis.com",
+                  path: docPath,
+                  method: "GET",
+                  headers: { Authorization: `Bearer ${token}` },
+                  agent: httpsAgent,
+                  timeout: 6e3
+                },
+                (res) => {
+                  let body = "";
+                  res.on("data", (d) => body += d);
+                  res.on("end", () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                      try {
+                        const parsed = JSON.parse(body);
+                        resolve({ success: true, doc: parsed, updateTime: parsed.updateTime });
+                      } catch (e) {
+                        resolve({ success: false, error: e.message });
+                      }
+                    } else if (res.statusCode === 404) {
+                      resolve({ success: true, notFound: true });
+                    } else {
+                      resolve({ success: false, statusCode: res.statusCode, error: body });
+                    }
+                  });
+                }
+              );
+              req.on("error", (e) => resolve({ success: false, error: e.message }));
+              req.end();
+            });
+            let currentWallet = { walletKey: cleanKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+            let updateTime = null;
+            if (docRes.success && docRes.doc) {
+              currentWallet = this._fromFirestoreDoc(docRes.doc);
+              updateTime = docRes.updateTime;
+            }
+            const currentBalance = Number(currentWallet.coinBalance) || 0;
+            let newBalance = currentBalance;
+            if (type === "debit") {
+              if (currentBalance < numAmount) {
+                await this.rollbackTransaction(transactionId);
+                return {
+                  success: false,
+                  insufficientCoins: true,
+                  currentBalance,
+                  requiredCoins: numAmount,
+                  error: `\u0938\u093F\u0915\u094D\u0915\u0947 \u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0939\u0948\u0902 (\u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${currentBalance}, \u0906\u0935\u0936\u094D\u092F\u0915: ${numAmount})`
+                };
+              }
+              newBalance = currentBalance - numAmount;
+            } else if (type === "credit") {
+              newBalance = currentBalance + numAmount;
+              currentWallet.totalEarnedCoins = (Number(currentWallet.totalEarnedCoins) || 0) + numAmount;
+            }
+            const txId2 = customTxId || `tx_${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            currentWallet.coinBalance = newBalance;
+            currentWallet.updatedAt = Date.now();
+            const walletFields = {};
+            for (const [k, v] of Object.entries(currentWallet)) {
+              if (v !== void 0) walletFields[k] = this._toFirestoreField(v);
+            }
+            const txPayload = {
+              id: txId2,
+              transactionId: txId2,
+              userId: cleanKey,
+              userEmail: cleanKey,
+              newsItemId: String(newsItemId || ""),
+              newsTitle: String(newsTitle || ""),
+              description: String(description || `${type.toUpperCase()} ${numAmount} coins`),
+              type,
+              amount: numAmount,
+              balanceAfter: newBalance,
+              timestamp: Date.now(),
+              createdAt: (/* @__PURE__ */ new Date()).toISOString()
+            };
+            const txFields = {};
+            for (const [k, v] of Object.entries(txPayload)) {
+              if (v !== void 0) txFields[k] = this._toFirestoreField(v);
+            }
+            const writes = [
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}`,
+                  fields: walletFields
+                },
+                currentDocument: updateTime ? { updateTime } : { exists: false }
+              },
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${encodeURIComponent(txId2)}`,
+                  fields: txFields
+                },
+                currentDocument: { exists: false }
+              }
+            ];
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              this.cache.wallets.set(cleanKey, currentWallet);
+              this.cache.walletTransactions.set(txId2, txPayload);
+              return {
+                success: true,
+                txId: txId2,
+                balance: newBalance,
+                coinsDeducted: type === "debit" ? numAmount : 0,
+                coinsCredited: type === "credit" ? numAmount : 0
+              };
+            } else if (commitRes.statusCode === 409 || String(commitRes.error || "").includes("conflict") || String(commitRes.error || "").includes("ABORTED")) {
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+              continue;
+            } else {
+              await this.rollbackTransaction(transactionId);
+              return { success: false, error: commitRes.error || "Commit failed" };
+            }
+          }
+        }
+        const db = this._loadLocalJson("rewards_database.json", { wallets: {}, transactions: [] });
+        const current = db.wallets[cleanKey] || { walletKey: cleanKey, coinBalance: 0 };
+        if (type === "debit") {
+          if (current.coinBalance < numAmount) return { success: false, insufficientCoins: true, balance: current.coinBalance };
+          current.coinBalance -= numAmount;
+        } else {
+          current.coinBalance += numAmount;
+        }
+        db.wallets[cleanKey] = current;
+        const txId = customTxId || `tx_${Date.now()}`;
+        db.transactions.unshift({ id: txId, userId: cleanKey, type, amount: numAmount, description });
+        this._saveLocalJson("rewards_database.json", db);
+        return { success: true, balance: current.coinBalance, txId };
+      }
+      // --- PAYMENT OPERATIONS ---
+      async recordPayment(orderId, paymentData) {
+        if (!orderId) return { success: false, error: "OrderId required" };
+        const cleanId = String(orderId).trim();
+        const payload = {
+          ...paymentData,
+          orderId: cleanId,
+          docId: cleanId,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("payment_transactions", cleanId, payload);
+          if (res.success) this.cache.payments.set(cleanId, payload);
+          return res;
+        } else {
+          const payments = this._loadLocalJson("payments_transactions_db.json", []);
+          payments.unshift(payload);
+          this._saveLocalJson("payments_transactions_db.json", payments);
+          return { success: true };
+        }
+      }
+      async getPayments(userEmail = "") {
+        if (this.useFirestore) {
+          const res = await this.listDocs("payment_transactions", 300);
+          const docs = res.documents || [];
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return docs.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
+          }
+          return docs;
+        } else {
+          const payments = this._loadLocalJson("payments_transactions_db.json", []);
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return payments.filter((p) => (p.userEmail || "").toLowerCase().trim() === clean);
+          }
+          return payments;
+        }
+      }
+      // --- RSS SOURCES OPERATIONS ---
+      async getRssSources() {
+        if (this.useFirestore) {
+          if (this.cache.rssSources.size > 0) {
+            return Array.from(this.cache.rssSources.values());
+          }
+          const res = await this.listDocs("rss_sources", 100);
+          const docs = res.documents || [];
+          docs.forEach((s) => this.cache.rssSources.set(s.id, s));
+          return docs;
+        } else {
+          return this._loadLocalJson("rss_sources_database.json", []);
+        }
+      }
+      async saveRssSource(sourceId, sourceData) {
+        if (!sourceId) return { success: false, error: "Source ID required" };
+        const cleanId = String(sourceId).trim();
+        const payload = { ...sourceData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          this.cache.rssSources.set(cleanId, payload);
+          const res = await this.writeDoc("rss_sources", cleanId, payload);
+          return res;
+        } else {
+          const sources = this._loadLocalJson("rss_sources_database.json", []);
+          const idx = sources.findIndex((s) => s.id === cleanId);
+          if (idx >= 0) sources[idx] = payload;
+          else sources.push(payload);
+          this._saveLocalJson("rss_sources_database.json", sources);
+          return { success: true };
+        }
+      }
+      async deleteRssSource(sourceId) {
+        if (!sourceId) return { success: false, error: "Source ID required" };
+        const cleanId = String(sourceId).trim();
+        if (this.useFirestore) {
+          this.cache.rssSources.delete(cleanId);
+          const res = await this.deleteDoc("rss_sources", cleanId);
+          return res;
+        } else {
+          const sources = this._loadLocalJson("rss_sources_database.json", []);
+          const filtered = sources.filter((s) => s.id !== cleanId);
+          this._saveLocalJson("rss_sources_database.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- PLANS & COUPONS ---
+      async getPlans() {
+        if (this.useFirestore) {
+          if (this.cache.plans.size > 0) return Array.from(this.cache.plans.values());
+          const res = await this.listDocs("plans_catalog", 50);
+          return res.documents || [];
+        } else {
+          return this._loadLocalJson("plans_catalog_database.json", []);
+        }
+      }
+      async getCoupons() {
+        if (this.useFirestore) {
+          if (this.cache.coupons.size > 0) return Array.from(this.cache.coupons.values());
+          const res = await this.listDocs("package_coupons", 50);
+          return res.documents || [];
+        } else {
+          return this._loadLocalJson("package_coupons_db.json", []);
+        }
+      }
+      async saveCoupon(code, couponData) {
+        if (!code) return { success: false, error: "Coupon code required" };
+        const clean = String(code).toUpperCase().trim();
+        const payload = { ...couponData, code: clean, docId: clean, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          this.cache.coupons.set(clean, payload);
+          const res = await this.writeDoc("package_coupons", clean, payload);
+          return res;
+        } else {
+          const list = this._loadLocalJson("package_coupons_db.json", []);
+          const idx = list.findIndex((c) => (c.code || "").toUpperCase() === clean);
+          if (idx >= 0) list[idx] = payload;
+          else list.push(payload);
+          this._saveLocalJson("package_coupons_db.json", list);
+          return { success: true };
+        }
+      }
+      async deleteCoupon(code) {
+        if (!code) return { success: false, error: "Coupon code required" };
+        const clean = String(code).toUpperCase().trim();
+        if (this.useFirestore) {
+          this.cache.coupons.delete(clean);
+          const res = await this.deleteDoc("package_coupons", clean);
+          return res;
+        } else {
+          const list = this._loadLocalJson("package_coupons_db.json", []);
+          const filtered = list.filter((c) => (c.code || "").toUpperCase() !== clean);
+          this._saveLocalJson("package_coupons_db.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- CATEGORIES & TEMPLATES ---
+      async getCategories() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("categories") && this.cache.categories.size > 0) return Array.from(this.cache.categories.values());
+          const res = await this.listDocs("news_categories", 100);
+          const docs = res.documents || [];
+          this.cache.categories.clear();
+          docs.forEach((c) => this.cache.categories.set(c.id, c));
+          this.cacheTimestamps.set("categories", Date.now());
+          return docs;
+        } else {
+          return this._loadLocalJson("categories_database.json", []);
+        }
+      }
+      async saveCategories(categoriesList) {
+        if (!Array.isArray(categoriesList)) return { success: false, error: "Array required" };
+        if (this.useFirestore) {
+          this.cache.categories.clear();
+          for (const cat of categoriesList) {
+            if (cat && cat.id) {
+              const payload = { ...cat, docId: cat.id, updatedAt: Date.now() };
+              this.cache.categories.set(cat.id, payload);
+              await this.writeDoc("news_categories", cat.id, payload);
+            }
+          }
+          this.cacheTimestamps.set("categories", Date.now());
+          return { success: true };
+        } else {
+          this._saveLocalJson("categories_database.json", categoriesList);
+          return { success: true };
+        }
+      }
+      async getTemplateConfigs() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("templateConfigs") && this.cache.templateConfigs.size > 0) {
+            const dict2 = {};
+            for (const [k, v] of this.cache.templateConfigs.entries()) dict2[k] = v;
+            return dict2;
+          }
+          const res = await this.listDocs("news_template_configs", 50);
+          const dict = {};
+          this.cache.templateConfigs.clear();
+          (res.documents || []).forEach((d) => {
+            dict[d.id] = d;
+            this.cache.templateConfigs.set(d.id, d);
+          });
+          this.cacheTimestamps.set("templateConfigs", Date.now());
+          return dict;
+        } else {
+          return this._loadLocalJson("news_template_configs.json", {});
+        }
+      }
+      async saveTemplateConfig(configId, configData) {
+        const cleanId = String(configId || configData?.id).trim();
+        const payload = { ...configData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("news_template_configs", cleanId, payload);
+          this.cache.templateConfigs.set(cleanId, payload);
+          this.cacheTimestamps.set("templateConfigs", Date.now());
+          return res;
+        } else {
+          const configs = this._loadLocalJson("news_template_configs.json", {});
+          configs[cleanId] = payload;
+          this._saveLocalJson("news_template_configs.json", configs);
+          return { success: true };
+        }
+      }
+      // --- DRAFTS & NOTIFICATIONS ---
+      async getDrafts(userEmail = "") {
+        if (this.useFirestore) {
+          const res = await this.listDocs("user_drafts", 200);
+          const docs = res.documents || [];
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return docs.filter((d) => (d.userEmail || "").toLowerCase().trim() === clean);
+          }
+          return docs;
+        } else {
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return drafts.filter((d) => (d.userEmail || "").toLowerCase().trim() === clean);
+          }
+          return drafts;
+        }
+      }
+      async saveDraft(draftId, draftData) {
+        if (!draftId) return { success: false, error: "Draft ID required" };
+        const cleanId = String(draftId).trim();
+        const payload = { ...draftData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          this.cache.drafts.set(cleanId, payload);
+          const res = await this.writeDoc("user_drafts", cleanId, payload);
+          return res;
+        } else {
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          const idx = drafts.findIndex((d) => d.id === cleanId);
+          if (idx >= 0) drafts[idx] = payload;
+          else drafts.push(payload);
+          this._saveLocalJson("drafts_database.json", drafts);
+          return { success: true };
+        }
+      }
+      // --- AUDIT LOGGING ---
+      async logAdminAction(action, adminEmail2, details = {}) {
+        const logEntry = {
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          action,
+          adminEmail: (adminEmail2 || "admin").toLowerCase().trim(),
+          details,
+          timestamp: Date.now()
+        };
+        if (this.useFirestore) {
+          await this.writeDoc("admin_audit_logs", logEntry.id, logEntry);
+        }
+        this.cache.auditLogs.unshift(logEntry);
+        const existing = this._loadLocalJson("admin_audit_log.json", []);
+        existing.unshift(logEntry);
+        if (existing.length > 200) existing.length = 200;
+        this._saveLocalJson("admin_audit_log.json", existing);
+      }
+      // --- SECONDARY STORE OPERATIONS (Task 2: Secondary JSON Stores) ---
+      // 1. Notifications
+      async getNotifications(limit = 100) {
+        if (this.useFirestore) {
+          if (this.isCacheValid("notifications") && this.cache.notifications.size > 0) {
+            return Array.from(this.cache.notifications.values()).slice(0, limit);
+          }
+          const res = await this.listDocs("notifications", limit);
+          const list = res.documents || [];
+          this.cache.notifications.clear();
+          list.forEach((n) => this.cache.notifications.set(n.id, n));
+          this.cacheTimestamps.set("notifications", Date.now());
+          return list;
+        } else {
+          const data = this._loadLocalJson("notifications_database.json", { notifications: [] });
+          return (data.notifications || []).slice(0, limit);
+        }
+      }
+      async saveNotification(id, notifData) {
+        const cleanId = String(id || `notif_${Date.now()}`).trim();
+        const payload = {
+          ...notifData,
+          id: cleanId,
+          docId: cleanId,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("notifications", cleanId, payload);
+          if (res.success) {
+            this.cache.notifications.set(cleanId, payload);
+            this.cacheTimestamps.set(`notifications:${cleanId}`, Date.now());
+          }
+          return res;
+        } else {
+          const data = this._loadLocalJson("notifications_database.json", { notifications: [] });
+          const idx = data.notifications.findIndex((n) => n.id === cleanId);
+          if (idx >= 0) data.notifications[idx] = payload;
+          else data.notifications.unshift(payload);
+          this._saveLocalJson("notifications_database.json", data);
+          return { success: true };
+        }
+      }
+      // 2. Limit Increase Requests
+      async getLimitIncreaseRequests() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("limitIncrease") && this.cache.systemConfig.has("limit_increase_requests")) {
+            return this.cache.systemConfig.get("limit_increase_requests");
+          }
+          const res = await this.listDocs("limit_increase_requests", 300);
+          const list = res.documents || [];
+          this.cache.systemConfig.set("limit_increase_requests", list);
+          this.cacheTimestamps.set("limitIncrease", Date.now());
+          return list;
+        } else {
+          return this._loadLocalJson("limit_increase_requests.json", []);
+        }
+      }
+      async saveLimitIncreaseRequest(reqData) {
+        const id = String(reqData?.id || `req_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+        const payload = { ...reqData, id, docId: id, createdAt: reqData?.createdAt || Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("limit_increase_requests", id, payload);
+          this.invalidateCache("limitIncrease");
+          return res;
+        } else {
+          const list = this._loadLocalJson("limit_increase_requests.json", []);
+          list.unshift(payload);
+          this._saveLocalJson("limit_increase_requests.json", list);
+          return { success: true };
+        }
+      }
+      // 3. Support Requests
+      async getSupportRequests() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("support") && this.cache.systemConfig.has("support_requests")) {
+            return this.cache.systemConfig.get("support_requests");
+          }
+          const res = await this.listDocs("support_requests", 300);
+          const list = res.documents || [];
+          this.cache.systemConfig.set("support_requests", list);
+          this.cacheTimestamps.set("support", Date.now());
+          return list;
+        } else {
+          const data = this._loadLocalJson("support_requests_database.json", { requests: [] });
+          return data.requests || [];
+        }
+      }
+      async saveSupportRequest(reqData) {
+        const id = String(reqData?.id || `sup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+        const payload = { ...reqData, id, docId: id, createdAt: reqData?.createdAt || Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("support_requests", id, payload);
+          this.invalidateCache("support");
+          return res;
+        } else {
+          const data = this._loadLocalJson("support_requests_database.json", { requests: [] });
+          const idx = data.requests.findIndex((r) => r.id === id);
+          if (idx >= 0) data.requests[idx] = payload;
+          else data.requests.unshift(payload);
+          this._saveLocalJson("support_requests_database.json", data);
+          return { success: true };
+        }
+      }
+      // 4. AI Features Config
+      async getAiFeaturesConfig() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "ai_features_config") && this.cache.systemConfig.has("ai_features_config")) {
+            return this.cache.systemConfig.get("ai_features_config");
+          }
+          const res = await this.readDoc("system_config", "ai_features_config");
+          if (res.success && res.data) {
+            this.cache.systemConfig.set("ai_features_config", res.data);
+            this.cacheTimestamps.set("system_config:ai_features_config", Date.now());
+            return res.data;
+          }
+          return null;
+        } else {
+          return this._loadLocalJson("ai_features_config.json", null);
+        }
+      }
+      async saveAiFeaturesConfig(configData) {
+        const payload = {
+          ...configData,
+          docId: "ai_features_config",
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("system_config", "ai_features_config", payload);
+          if (res.success) {
+            this.cache.systemConfig.set("ai_features_config", payload);
+            this.cacheTimestamps.set("system_config:ai_features_config", Date.now());
+          }
+          return res;
+        } else {
+          this._saveLocalJson("ai_features_config.json", payload);
+          return { success: true };
+        }
+      }
+      // 5. Admin Branding (Category D)
+      async getAdminBranding() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "admin_branding") && this.cache.systemConfig.has("admin_branding")) {
+            return this.cache.systemConfig.get("admin_branding");
+          }
+          const res = await this.readDoc("admin_settings", "branding");
+          if (res.success && res.data) {
+            this.cache.systemConfig.set("admin_branding", res.data);
+            this.cacheTimestamps.set("systemConfig:admin_branding", Date.now());
+            return res.data;
+          }
+          return null;
+        } else {
+          return this._loadLocalJson("admin_branding_db.json", null);
+        }
+      }
+      async saveAdminBranding(data) {
+        const payload = {
+          ...data,
+          id: "branding",
+          docId: "branding",
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          this.cache.systemConfig.set("admin_branding", payload);
+          this.cacheTimestamps.set("systemConfig:admin_branding", Date.now());
+          const res = await this.writeDoc("admin_settings", "branding", payload);
+          return res;
+        } else {
+          this._saveLocalJson("admin_branding_db.json", payload);
+          return { success: true };
+        }
+      }
+      // 6. Custom Frames (Category D)
+      async getCustomFrames() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "custom_frames") && this.cache.systemConfig.has("custom_frames")) {
+            return this.cache.systemConfig.get("custom_frames");
+          }
+          const res = await this.listDocs("custom_frames", 300);
+          const list = res.documents || [];
+          this.cache.systemConfig.set("custom_frames", list);
+          this.cacheTimestamps.set("systemConfig:custom_frames", Date.now());
+          return list;
+        } else {
+          return this._loadLocalJson("custom_frames_db.json", []);
+        }
+      }
+      async saveCustomFrame(frameId, frameData) {
+        const cleanId = String(frameId || frameData?.id).trim();
+        const payload = { ...frameData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("custom_frames", cleanId, payload);
+          this.invalidateCache("systemConfig", "custom_frames");
+          return res;
+        } else {
+          const list = this._loadLocalJson("custom_frames_db.json", []);
+          const idx = list.findIndex((f) => f.id === cleanId);
+          if (idx >= 0) list[idx] = payload;
+          else list.push(payload);
+          this._saveLocalJson("custom_frames_db.json", list);
+          return { success: true };
+        }
+      }
+      // 7. Admin Notifications Read (Category C)
+      async getAdminNotificationsRead() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "admin_notifs_read") && this.cache.systemConfig.has("admin_notifs_read")) {
+            return this.cache.systemConfig.get("admin_notifs_read");
+          }
+          const res = await this.readDoc("admin_notifications_read", "global");
+          if (res.success && res.data && Array.isArray(res.data.readIds)) {
+            this.cache.systemConfig.set("admin_notifs_read", res.data.readIds);
+            this.cacheTimestamps.set("systemConfig:admin_notifs_read", Date.now());
+            return res.data.readIds;
+          }
+          return [];
+        } else {
+          return this._loadLocalJson("admin_notifications_read_db.json", []);
+        }
+      }
+      async saveAdminNotificationsRead(ids) {
+        const readArray = Array.from(ids || []);
+        const payload = { id: "global", docId: "global", readIds: readArray, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("admin_notifications_read", "global", payload);
+          this.cache.systemConfig.set("admin_notifs_read", readArray);
+          this.cacheTimestamps.set("systemConfig:admin_notifs_read", Date.now());
+          return res;
+        } else {
+          this._saveLocalJson("admin_notifications_read_db.json", readArray);
+          return { success: true };
+        }
+      }
+      // --- INTERNAL HELPER ENCODERS / DECODERS ---
+      _toFirestoreField(val) {
+        if (val === null || val === void 0) return { nullValue: null };
+        if (typeof val === "boolean") return { booleanValue: val };
+        if (typeof val === "number") {
+          if (Number.isInteger(val)) return { integerValue: val.toString() };
+          return { doubleValue: val };
+        }
+        if (typeof val === "string") return { stringValue: val };
+        if (Array.isArray(val)) {
+          return { arrayValue: { values: val.map((item) => this._toFirestoreField(item)) } };
+        }
+        if (typeof val === "object") {
+          const fields = {};
+          for (const [k, v] of Object.entries(val)) {
+            if (v !== void 0) fields[k] = this._toFirestoreField(v);
+          }
+          return { mapValue: { fields } };
+        }
+        return { stringValue: String(val) };
+      }
+      _fromFirestoreField(f) {
+        if (!f) return null;
+        if ("stringValue" in f) return f.stringValue;
+        if ("integerValue" in f) return parseInt(f.integerValue, 10);
+        if ("doubleValue" in f) return parseFloat(f.doubleValue);
+        if ("booleanValue" in f) return f.booleanValue;
+        if ("nullValue" in f) return null;
+        if ("timestampValue" in f) return f.timestampValue;
+        if ("arrayValue" in f) {
+          return (f.arrayValue.values || []).map((v) => this._fromFirestoreField(v));
+        }
+        if ("mapValue" in f) {
+          const res = {};
+          for (const [k, v] of Object.entries(f.mapValue.fields || {})) {
+            res[k] = this._fromFirestoreField(v);
+          }
+          return res;
+        }
+        return null;
+      }
+      _fromFirestoreDoc(doc) {
+        if (!doc || !doc.fields) return null;
+        const res = {};
+        for (const [k, v] of Object.entries(doc.fields)) {
+          res[k] = this._fromFirestoreField(v);
+        }
+        return res;
+      }
+      _loadLocalJson(file, fallback = null) {
+        try {
+          const p = path2.resolve(process.cwd(), file);
+          if (fs2.existsSync(p)) return JSON.parse(fs2.readFileSync(p, "utf8"));
+        } catch {
+        }
+        return fallback;
+      }
+      _saveLocalJson(file, data) {
+        try {
+          const p = path2.resolve(process.cwd(), file);
+          const dir = path2.dirname(p);
+          if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
+          fs2.writeFileSync(p, JSON.stringify(data, null, 2), "utf8");
+          return true;
+        } catch {
+          return false;
+        }
+      }
+    };
+    var centralDb2 = new CentralFirestoreDatabaseService();
+    module2.exports = {
+      CentralFirestoreDatabaseService,
+      centralDb: centralDb2
+    };
+  }
+});
+
+// ../firestore_database_service.cjs
+var require_firestore_database_service2 = __commonJS({
+  "../firestore_database_service.cjs"(exports2, module2) {
+    var http = require("http");
+    var https = require("https");
+    var fs2 = require("fs");
+    var path2 = require("path");
+    var adapter = require_server_firestore_adapter2();
+    var httpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 20,
+      keepAliveMsecs: 6e4
+    });
+    var CentralFirestoreDatabaseService = class {
+      constructor(options = {}) {
+        this.projectId = options.projectId || process.env.FIREBASE_PROJECT_ID || adapter.PROJECT_ID || "ai-news-maker-app";
+        this.databaseId = options.databaseId || options.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID || adapter.DATABASE_ID || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
+        this.useFirestore = options.useFirestore !== void 0 ? options.useFirestore : process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE;
+        this.cache = {
+          users: /* @__PURE__ */ new Map(),
+          news: /* @__PURE__ */ new Map(),
+          wallets: /* @__PURE__ */ new Map(),
+          walletTransactions: /* @__PURE__ */ new Map(),
+          frameUnlocks: /* @__PURE__ */ new Map(),
+          payments: /* @__PURE__ */ new Map(),
+          rssSources: /* @__PURE__ */ new Map(),
+          categories: /* @__PURE__ */ new Map(),
+          templateConfigs: /* @__PURE__ */ new Map(),
+          plans: /* @__PURE__ */ new Map(),
+          coupons: /* @__PURE__ */ new Map(),
+          music: /* @__PURE__ */ new Map(),
+          systemConfig: /* @__PURE__ */ new Map(),
+          notifications: /* @__PURE__ */ new Map(),
+          auditLogs: [],
+          drafts: /* @__PURE__ */ new Map(),
+          credentials: /* @__PURE__ */ new Map()
+        };
+        this.isInitialized = false;
+        this.initializationPromise = null;
+        this.cacheTtl = {
+          news: 60 * 1e3,
+          rssSources: 120 * 1e3,
+          plans: 300 * 1e3,
+          coupons: 300 * 1e3,
+          categories: 300 * 1e3,
+          templateConfigs: 300 * 1e3,
+          systemConfig: 60 * 1e3,
+          notifications: 30 * 1e3,
+          limitIncrease: 60 * 1e3,
+          support: 60 * 1e3,
+          ...options.cacheTtl || {}
+        };
+        this.cacheTimestamps = /* @__PURE__ */ new Map();
+      }
+      setDatabaseId(dbId) {
+        this.databaseId = dbId;
+      }
+      setUseFirestore(flag) {
+        this.useFirestore = Boolean(flag);
+      }
+      // Explicit cache invalidation (Task 1)
+      invalidateCache(collection, docId = null) {
+        if (docId) {
+          const cleanId = String(docId).toLowerCase().trim();
+          if (this.cache[collection] instanceof Map) {
+            this.cache[collection].delete(cleanId);
+          }
+          this.cacheTimestamps.delete(`${collection}:${cleanId}`);
+        } else {
+          if (this.cache[collection] instanceof Map) {
+            this.cache[collection].clear();
+          }
+          this.cacheTimestamps.delete(collection);
+        }
+      }
+      // Check if cache entry has not exceeded its TTL
+      isCacheValid(collection, key = null) {
+        const ttl = this.cacheTtl[collection] || 6e4;
+        const lookupKey = key ? `${collection}:${String(key).toLowerCase().trim()}` : collection;
+        const ts = this.cacheTimestamps.get(lookupKey);
+        if (!ts) return false;
+        return Date.now() - ts < ttl;
+      }
+      async getAccessToken() {
+        return adapter.getMetadataAccessToken();
+      }
+      // Begin Firestore REST atomic transaction (Task 3)
+      async beginTransaction() {
+        if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:beginTransaction`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+              },
+              agent: httpsAgent,
+              timeout: 6e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(body);
+                    resolve({ success: true, transaction: parsed.transaction });
+                  } catch (e) {
+                    resolve({ success: false, error: e.message });
+                  }
+                } else {
+                  resolve({ success: false, error: `beginTransaction failed (${res.statusCode}): ${body}` });
+                }
+              });
+            }
+          );
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.write(JSON.stringify({ options: { readWrite: {} } }));
+          req.end();
+        });
+      }
+      // Commit Firestore REST atomic transaction (Task 3)
+      async commitTransaction(transactionId, writes = []) {
+        if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:commit`;
+        const payload = JSON.stringify({
+          transaction: transactionId,
+          writes
+        });
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload)
+              },
+              agent: httpsAgent,
+              timeout: 8e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(body);
+                    resolve({ success: true, data: parsed });
+                  } catch (e) {
+                    resolve({ success: true });
+                  }
+                } else {
+                  resolve({ success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${body}` });
+                }
+              });
+            }
+          );
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.write(payload);
+          req.end();
+        });
+      }
+      // Rollback Firestore REST atomic transaction (Task 3)
+      async rollbackTransaction(transactionId) {
+        if (!this.useFirestore || !transactionId) return;
+        const token = await this.getAccessToken();
+        if (!token) return;
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:rollback`;
+        const payload = JSON.stringify({ transaction: transactionId });
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload)
+              },
+              agent: httpsAgent,
+              timeout: 4e3
+            },
+            () => resolve()
+          );
+          req.on("error", () => resolve());
+          req.write(payload);
+          req.end();
+        });
+      }
+      // Generic document read
+      async readDoc(collection, docId) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled" };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "GET",
+              headers: { Authorization: `Bearer ${token}` },
+              agent: httpsAgent,
+              timeout: 5e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  try {
+                    const parsed = JSON.parse(body);
+                    const data = this._fromFirestoreDoc(parsed);
+                    resolve({ success: true, data, statusCode: res.statusCode });
+                  } catch (err) {
+                    resolve({ success: false, error: err.message, statusCode: res.statusCode });
+                  }
+                } else {
+                  resolve({ success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` });
+                }
+              });
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.end();
+        });
+      }
+      // Generic document write
+      async writeDoc(collection, docId, data) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled" };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const fields = {};
+        for (const [k, v] of Object.entries(data)) {
+          if (v !== void 0) fields[k] = this._toFirestoreField(v);
+        }
+        const payload = JSON.stringify({ fields });
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(payload)
+              },
+              agent: httpsAgent,
+              timeout: 5e3
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (d) => body += d);
+              res.on("end", () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  resolve({ success: true, statusCode: res.statusCode });
+                } else {
+                  resolve({ success: false, statusCode: res.statusCode, error: body });
+                }
+              });
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.write(payload);
+          req.end();
+        });
+      }
+      // Generic document delete
+      async deleteDoc(collection, docId) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled" };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
+        return new Promise((resolve) => {
+          const req = https.request(
+            {
+              host: "firestore.googleapis.com",
+              path: docPath,
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+              agent: httpsAgent,
+              timeout: 5e3
+            },
+            (res) => {
+              res.on("data", () => {
+              });
+              res.on("end", () => resolve({ success: res.statusCode >= 200 && res.statusCode < 300 }));
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          req.end();
+        });
+      }
+      // Generic list documents with complete nextPageToken pagination loop (Task 5)
+      async listDocs(collection, pageSize = 300) {
+        if (!this.useFirestore) {
+          return { success: false, error: "Firestore is disabled", documents: [] };
+        }
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available", documents: [] };
+        const allDocuments = [];
+        const seenIds = /* @__PURE__ */ new Set();
+        let pageToken = "";
+        const safePageSize = Math.min(500, Math.max(10, pageSize));
+        do {
+          let docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}?pageSize=${safePageSize}`;
+          if (pageToken) {
+            docPath += `&pageToken=${encodeURIComponent(pageToken)}`;
+          }
+          const pageRes = await new Promise((resolve) => {
+            const req = https.request(
+              {
+                host: "firestore.googleapis.com",
+                path: docPath,
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+                agent: httpsAgent,
+                timeout: 1e4
+              },
+              (res) => {
+                let body = "";
+                res.on("data", (d) => body += d);
+                res.on("end", () => {
+                  if (res.statusCode >= 200 && res.statusCode < 300) {
+                    try {
+                      const parsed = JSON.parse(body);
+                      const docs = (parsed.documents || []).map((d) => {
+                        const docId = d.name ? d.name.split("/").pop() : "";
+                        const data = this._fromFirestoreDoc(d);
+                        return { id: docId, docId, ...data };
+                      });
+                      resolve({
+                        success: true,
+                        documents: docs,
+                        nextPageToken: parsed.nextPageToken || "",
+                        statusCode: res.statusCode
+                      });
+                    } catch (err) {
+                      resolve({ success: false, error: err.message, documents: [] });
+                    }
+                  } else {
+                    resolve({ success: false, error: `List failed (${res.statusCode})`, documents: [] });
+                  }
+                });
+              }
+            );
+            req.on("timeout", () => {
+              req.destroy();
+              resolve({ success: false, error: "Request timeout", documents: [] });
+            });
+            req.on("error", (e) => resolve({ success: false, error: e.message, documents: [] }));
+            req.end();
+          });
+          if (!pageRes.success) {
+            if (allDocuments.length > 0) break;
+            return pageRes;
+          }
+          for (const doc of pageRes.documents) {
+            if (doc.id && !seenIds.has(doc.id)) {
+              seenIds.add(doc.id);
+              allDocuments.push(doc);
+            }
+          }
+          pageToken = pageRes.nextPageToken || "";
+        } while (pageToken);
+        return { success: true, documents: allDocuments, totalCount: allDocuments.length };
+      }
+      // --- INITIALIZATION & CACHE WARM-UP ---
+      async initialize() {
+        if (this.initializationPromise) return this.initializationPromise;
+        this.initializationPromise = this._doInitialize();
+        return this.initializationPromise;
+      }
+      async _doInitialize() {
+        if (!this.useFirestore) {
+          console.log("\u2139\uFE0F [CentralDB] Running in Local Development mode (USE_FIRESTORE=false)");
+          this.isInitialized = true;
+          return true;
+        }
+        console.log(`\u{1F680} [CentralDB] Initializing Live Firestore Cache (DB: ${this.databaseId})...`);
+        try {
+          const uRes = await this.listDocs("users", 300);
+          if (uRes.success) {
+            this.cache.users.clear();
+            uRes.documents.forEach((u) => {
+              this.cache.users.set(u.id, u);
+              if (u.email) this.cache.users.set(u.email.toLowerCase().trim(), u);
+              if (u.userId) this.cache.users.set(u.userId.toLowerCase().trim(), u);
+            });
+            console.log(`  \u2713 Loaded ${uRes.documents.length} users into live cache`);
+          }
+          const nRes = await this.listDocs("news_posts", 300);
+          if (nRes.success) {
+            this.cache.news.clear();
+            nRes.documents.forEach((n) => this.cache.news.set(n.id, n));
+            console.log(`  \u2713 Loaded ${nRes.documents.length} news posts into live cache`);
+          }
+          const wRes = await this.listDocs("wallets", 300);
+          if (wRes.success) {
+            this.cache.wallets.clear();
+            wRes.documents.forEach((w) => this.cache.wallets.set(w.id || w.walletKey, w));
+            console.log(`  \u2713 Loaded ${wRes.documents.length} wallets into live cache`);
+          }
+          const rRes = await this.listDocs("rss_sources", 100);
+          if (rRes.success) {
+            this.cache.rssSources.clear();
+            rRes.documents.forEach((s) => this.cache.rssSources.set(s.id, s));
+            console.log(`  \u2713 Loaded ${rRes.documents.length} RSS sources into live cache`);
+          }
+          const pRes = await this.listDocs("plans_catalog", 50);
+          if (pRes.success) {
+            this.cache.plans.clear();
+            pRes.documents.forEach((p) => this.cache.plans.set(p.id, p));
+          }
+          const cRes = await this.listDocs("package_coupons", 50);
+          if (cRes.success) {
+            this.cache.coupons.clear();
+            cRes.documents.forEach((c) => this.cache.coupons.set(c.id, c));
+          }
+          const catRes = await this.listDocs("news_categories", 100);
+          if (catRes.success) {
+            this.cache.categories.clear();
+            catRes.documents.forEach((cat) => this.cache.categories.set(cat.id, cat));
+          }
+          const tplRes = await this.listDocs("news_template_configs", 50);
+          if (tplRes.success) {
+            this.cache.templateConfigs.clear();
+            tplRes.documents.forEach((tpl) => this.cache.templateConfigs.set(tpl.id, tpl));
+          }
+          const sysRes = await this.listDocs("system_config", 50);
+          if (sysRes.success) {
+            this.cache.systemConfig.clear();
+            sysRes.documents.forEach((cfg) => this.cache.systemConfig.set(cfg.id, cfg));
+          }
+          this.isInitialized = true;
+          console.log("\u2705 [CentralDB] Live Firestore Cache Ready.\n");
+          return true;
+        } catch (err) {
+          console.error("\u274C [CentralDB] Initialization error:", err.message);
+          this.isInitialized = false;
+          return false;
+        }
+      }
+      // --- USER PROFILE OPERATIONS ---
+      async getUser(idOrEmail) {
+        if (!idOrEmail) return null;
+        const clean = idOrEmail.toLowerCase().trim();
+        if (this.useFirestore) {
+          if (this.cache.users.has(clean)) {
+            return this.cache.users.get(clean);
+          }
+          const read = await this.readDoc("users", clean);
+          if (read.success && read.data) {
+            this.cache.users.set(clean, read.data);
+            return read.data;
+          }
+          const allUsers = await this.listUsers();
+          const match = allUsers.find(
+            (u) => u.email && u.email.toLowerCase().trim() === clean || u.userId && u.userId.toLowerCase().trim() === clean || u.uid && u.uid.toLowerCase().trim() === clean || u.id && u.id.toLowerCase().trim() === clean
+          );
+          if (match) {
+            this.cache.users.set(clean, match);
+            return match;
+          }
+          return null;
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          return profiles[clean] || Object.values(profiles).find((p) => (p.email || "").toLowerCase().trim() === clean) || null;
+        }
+      }
+      async saveUser(idOrEmail, userData) {
+        if (!idOrEmail) return { success: false, error: "User identifier required" };
+        const clean = idOrEmail.toLowerCase().trim();
+        const payload = {
+          ...userData,
+          docId: clean,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          this.cache.users.set(clean, payload);
+          if (payload.email) this.cache.users.set(payload.email.toLowerCase().trim(), payload);
+          if (payload.userId) this.cache.users.set(payload.userId.toLowerCase().trim(), payload);
+          const res = await this.writeDoc("users", clean, payload);
+          return res;
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          profiles[clean] = payload;
+          this._saveLocalJson("user_profiles_db.json", profiles);
+          return { success: true };
+        }
+      }
+      async listUsers() {
+        if (this.useFirestore) {
+          if (this.cache.users.size > 0) {
+            const unique = /* @__PURE__ */ new Map();
+            for (const u of this.cache.users.values()) {
+              const key = u.id || u.docId || u.email || u.userId;
+              if (key && !unique.has(key)) unique.set(key, u);
+            }
+            return Array.from(unique.values());
+          }
+          const res = await this.listDocs("users", 300);
+          return res.documents || [];
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          return Object.values(profiles);
+        }
+      }
+      // --- NEWS POSTS OPERATIONS ---
+      async getNewsPosts(options = {}) {
+        if (this.useFirestore) {
+          let posts = [];
+          const cacheValid = this.isCacheValid("news");
+          if (this.cache.news.size > 0 && !options.forceRemote && cacheValid) {
+            posts = Array.from(this.cache.news.values());
+          } else {
+            const res = await this.listDocs("news_posts", 100);
+            posts = res.documents || [];
+            this.cache.news.clear();
+            posts.forEach((p) => this.cache.news.set(p.id, p));
+            this.cacheTimestamps.set("news", Date.now());
+          }
+          return posts;
+        } else {
+          return this._loadLocalJson("news_database.json", []);
+        }
+      }
+      async saveNewsPost(postId, postData) {
+        if (!postId) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId).trim();
+        const payload = {
+          ...postData,
+          id: cleanId,
+          docId: cleanId,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          this.cache.news.set(cleanId, payload);
+          this.cacheTimestamps.set("news", Date.now());
+          const res = await this.writeDoc("news_posts", cleanId, payload);
+          return res;
+        } else {
+          const news = this._loadLocalJson("news_database.json", []);
+          const idx = news.findIndex((n) => n.id === cleanId);
+          if (idx >= 0) news[idx] = payload;
+          else news.unshift(payload);
+          this._saveLocalJson("news_database.json", news);
+          return { success: true };
+        }
+      }
+      async deleteNewsPost(postId) {
+        if (!postId) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId).trim();
+        if (this.useFirestore) {
+          this.cache.news.delete(cleanId);
+          this.cacheTimestamps.set("news", Date.now());
+          const res = await this.deleteDoc("news_posts", cleanId);
+          return res;
+        } else {
+          const news = this._loadLocalJson("news_database.json", []);
+          const filtered = news.filter((n) => n.id !== cleanId);
+          this._saveLocalJson("news_database.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- WALLET & REWARDS OPERATIONS ---
+      async getWallet(walletKey) {
+        if (!walletKey) return { walletKey: "", coinBalance: 0 };
+        const cleanKey = walletKey.toLowerCase().trim();
+        if (this.useFirestore) {
+          if (this.cache.wallets.has(cleanKey)) {
+            return this.cache.wallets.get(cleanKey);
+          }
+          const read = await this.readDoc("wallets", cleanKey);
+          if (read.success && read.data) {
+            this.cache.wallets.set(cleanKey, read.data);
+            return read.data;
+          }
+          return { walletKey: cleanKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+        } else {
+          const db = this._loadLocalJson("rewards_database.json", {});
+          return db.wallets && db.wallets[cleanKey] || { walletKey: cleanKey, coinBalance: 0 };
+        }
+      }
+      // True Atomic Wallet Transaction with ACID guarantees (Task 3)
+      async atomicCoinTransaction(walletKey, amount, type, description, newsItemId = "", newsTitle = "", customTxId = null) {
+        const cleanKey = (walletKey || "").toLowerCase().trim();
+        if (!cleanKey) return { success: false, error: "Invalid walletKey" };
+        const numAmount = Math.max(0, Number(amount) || 0);
+        if (this.useFirestore) {
+          const maxRetries = 3;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              break;
+            }
+            const transactionId = txRes.transaction;
+            const token = await this.getAccessToken();
+            const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}?transaction=${encodeURIComponent(transactionId)}`;
+            const docRes = await new Promise((resolve) => {
+              const req = https.request(
+                {
+                  host: "firestore.googleapis.com",
+                  path: docPath,
+                  method: "GET",
+                  headers: { Authorization: `Bearer ${token}` },
+                  agent: httpsAgent,
+                  timeout: 6e3
+                },
+                (res) => {
+                  let body = "";
+                  res.on("data", (d) => body += d);
+                  res.on("end", () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                      try {
+                        const parsed = JSON.parse(body);
+                        resolve({ success: true, doc: parsed, updateTime: parsed.updateTime });
+                      } catch (e) {
+                        resolve({ success: false, error: e.message });
+                      }
+                    } else if (res.statusCode === 404) {
+                      resolve({ success: true, notFound: true });
+                    } else {
+                      resolve({ success: false, statusCode: res.statusCode, error: body });
+                    }
+                  });
+                }
+              );
+              req.on("error", (e) => resolve({ success: false, error: e.message }));
+              req.end();
+            });
+            let currentWallet = { walletKey: cleanKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+            let updateTime = null;
+            if (docRes.success && docRes.doc) {
+              currentWallet = this._fromFirestoreDoc(docRes.doc);
+              updateTime = docRes.updateTime;
+            }
+            const currentBalance = Number(currentWallet.coinBalance) || 0;
+            let newBalance = currentBalance;
+            if (type === "debit") {
+              if (currentBalance < numAmount) {
+                await this.rollbackTransaction(transactionId);
+                return {
+                  success: false,
+                  insufficientCoins: true,
+                  currentBalance,
+                  requiredCoins: numAmount,
+                  error: `\u0938\u093F\u0915\u094D\u0915\u0947 \u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0939\u0948\u0902 (\u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${currentBalance}, \u0906\u0935\u0936\u094D\u092F\u0915: ${numAmount})`
+                };
+              }
+              newBalance = currentBalance - numAmount;
+            } else if (type === "credit") {
+              newBalance = currentBalance + numAmount;
+              currentWallet.totalEarnedCoins = (Number(currentWallet.totalEarnedCoins) || 0) + numAmount;
+            }
+            const txId2 = customTxId || `tx_${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            currentWallet.coinBalance = newBalance;
+            currentWallet.updatedAt = Date.now();
+            const walletFields = {};
+            for (const [k, v] of Object.entries(currentWallet)) {
+              if (v !== void 0) walletFields[k] = this._toFirestoreField(v);
+            }
+            const txPayload = {
+              id: txId2,
+              transactionId: txId2,
+              userId: cleanKey,
+              userEmail: cleanKey,
+              newsItemId: String(newsItemId || ""),
+              newsTitle: String(newsTitle || ""),
+              description: String(description || `${type.toUpperCase()} ${numAmount} coins`),
+              type,
+              amount: numAmount,
+              balanceAfter: newBalance,
+              timestamp: Date.now(),
+              createdAt: (/* @__PURE__ */ new Date()).toISOString()
+            };
+            const txFields = {};
+            for (const [k, v] of Object.entries(txPayload)) {
+              if (v !== void 0) txFields[k] = this._toFirestoreField(v);
+            }
+            const writes = [
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}`,
+                  fields: walletFields
+                },
+                currentDocument: updateTime ? { updateTime } : { exists: false }
+              },
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${encodeURIComponent(txId2)}`,
+                  fields: txFields
+                },
+                currentDocument: { exists: false }
+              }
+            ];
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              this.cache.wallets.set(cleanKey, currentWallet);
+              this.cache.walletTransactions.set(txId2, txPayload);
+              return {
+                success: true,
+                txId: txId2,
+                balance: newBalance,
+                coinsDeducted: type === "debit" ? numAmount : 0,
+                coinsCredited: type === "credit" ? numAmount : 0
+              };
+            } else if (commitRes.statusCode === 409 || String(commitRes.error || "").includes("conflict") || String(commitRes.error || "").includes("ABORTED")) {
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+              continue;
+            } else {
+              await this.rollbackTransaction(transactionId);
+              return { success: false, error: commitRes.error || "Commit failed" };
+            }
+          }
+        }
+        const db = this._loadLocalJson("rewards_database.json", { wallets: {}, transactions: [] });
+        const current = db.wallets[cleanKey] || { walletKey: cleanKey, coinBalance: 0 };
+        if (type === "debit") {
+          if (current.coinBalance < numAmount) return { success: false, insufficientCoins: true, balance: current.coinBalance };
+          current.coinBalance -= numAmount;
+        } else {
+          current.coinBalance += numAmount;
+        }
+        db.wallets[cleanKey] = current;
+        const txId = customTxId || `tx_${Date.now()}`;
+        db.transactions.unshift({ id: txId, userId: cleanKey, type, amount: numAmount, description });
+        this._saveLocalJson("rewards_database.json", db);
+        return { success: true, balance: current.coinBalance, txId };
+      }
+      // --- PAYMENT OPERATIONS ---
+      async recordPayment(orderId, paymentData) {
+        if (!orderId) return { success: false, error: "OrderId required" };
+        const cleanId = String(orderId).trim();
+        const payload = {
+          ...paymentData,
+          orderId: cleanId,
+          docId: cleanId,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("payment_transactions", cleanId, payload);
+          if (res.success) this.cache.payments.set(cleanId, payload);
+          return res;
+        } else {
+          const payments = this._loadLocalJson("payments_transactions_db.json", []);
+          payments.unshift(payload);
+          this._saveLocalJson("payments_transactions_db.json", payments);
+          return { success: true };
+        }
+      }
+      async getPayments(userEmail = "") {
+        if (this.useFirestore) {
+          const res = await this.listDocs("payment_transactions", 300);
+          const docs = res.documents || [];
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return docs.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
+          }
+          return docs;
+        } else {
+          const payments = this._loadLocalJson("payments_transactions_db.json", []);
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return payments.filter((p) => (p.userEmail || "").toLowerCase().trim() === clean);
+          }
+          return payments;
+        }
+      }
+      // --- RSS SOURCES OPERATIONS ---
+      async getRssSources() {
+        if (this.useFirestore) {
+          if (this.cache.rssSources.size > 0) {
+            return Array.from(this.cache.rssSources.values());
+          }
+          const res = await this.listDocs("rss_sources", 100);
+          const docs = res.documents || [];
+          docs.forEach((s) => this.cache.rssSources.set(s.id, s));
+          return docs;
+        } else {
+          return this._loadLocalJson("rss_sources_database.json", []);
+        }
+      }
+      async saveRssSource(sourceId, sourceData) {
+        if (!sourceId) return { success: false, error: "Source ID required" };
+        const cleanId = String(sourceId).trim();
+        const payload = { ...sourceData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          this.cache.rssSources.set(cleanId, payload);
+          const res = await this.writeDoc("rss_sources", cleanId, payload);
+          return res;
+        } else {
+          const sources = this._loadLocalJson("rss_sources_database.json", []);
+          const idx = sources.findIndex((s) => s.id === cleanId);
+          if (idx >= 0) sources[idx] = payload;
+          else sources.push(payload);
+          this._saveLocalJson("rss_sources_database.json", sources);
+          return { success: true };
+        }
+      }
+      async deleteRssSource(sourceId) {
+        if (!sourceId) return { success: false, error: "Source ID required" };
+        const cleanId = String(sourceId).trim();
+        if (this.useFirestore) {
+          this.cache.rssSources.delete(cleanId);
+          const res = await this.deleteDoc("rss_sources", cleanId);
+          return res;
+        } else {
+          const sources = this._loadLocalJson("rss_sources_database.json", []);
+          const filtered = sources.filter((s) => s.id !== cleanId);
+          this._saveLocalJson("rss_sources_database.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- PLANS & COUPONS ---
+      async getPlans() {
+        if (this.useFirestore) {
+          if (this.cache.plans.size > 0) return Array.from(this.cache.plans.values());
+          const res = await this.listDocs("plans_catalog", 50);
+          return res.documents || [];
+        } else {
+          return this._loadLocalJson("plans_catalog_database.json", []);
+        }
+      }
+      async getCoupons() {
+        if (this.useFirestore) {
+          if (this.cache.coupons.size > 0) return Array.from(this.cache.coupons.values());
+          const res = await this.listDocs("package_coupons", 50);
+          return res.documents || [];
+        } else {
+          return this._loadLocalJson("package_coupons_db.json", []);
+        }
+      }
+      async saveCoupon(code, couponData) {
+        if (!code) return { success: false, error: "Coupon code required" };
+        const clean = String(code).toUpperCase().trim();
+        const payload = { ...couponData, code: clean, docId: clean, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          this.cache.coupons.set(clean, payload);
+          const res = await this.writeDoc("package_coupons", clean, payload);
+          return res;
+        } else {
+          const list = this._loadLocalJson("package_coupons_db.json", []);
+          const idx = list.findIndex((c) => (c.code || "").toUpperCase() === clean);
+          if (idx >= 0) list[idx] = payload;
+          else list.push(payload);
+          this._saveLocalJson("package_coupons_db.json", list);
+          return { success: true };
+        }
+      }
+      async deleteCoupon(code) {
+        if (!code) return { success: false, error: "Coupon code required" };
+        const clean = String(code).toUpperCase().trim();
+        if (this.useFirestore) {
+          this.cache.coupons.delete(clean);
+          const res = await this.deleteDoc("package_coupons", clean);
+          return res;
+        } else {
+          const list = this._loadLocalJson("package_coupons_db.json", []);
+          const filtered = list.filter((c) => (c.code || "").toUpperCase() !== clean);
+          this._saveLocalJson("package_coupons_db.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- CATEGORIES & TEMPLATES ---
+      async getCategories() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("categories") && this.cache.categories.size > 0) return Array.from(this.cache.categories.values());
+          const res = await this.listDocs("news_categories", 100);
+          const docs = res.documents || [];
+          this.cache.categories.clear();
+          docs.forEach((c) => this.cache.categories.set(c.id, c));
+          this.cacheTimestamps.set("categories", Date.now());
+          return docs;
+        } else {
+          return this._loadLocalJson("categories_database.json", []);
+        }
+      }
+      async saveCategories(categoriesList) {
+        if (!Array.isArray(categoriesList)) return { success: false, error: "Array required" };
+        if (this.useFirestore) {
+          this.cache.categories.clear();
+          for (const cat of categoriesList) {
+            if (cat && cat.id) {
+              const payload = { ...cat, docId: cat.id, updatedAt: Date.now() };
+              this.cache.categories.set(cat.id, payload);
+              await this.writeDoc("news_categories", cat.id, payload);
+            }
+          }
+          this.cacheTimestamps.set("categories", Date.now());
+          return { success: true };
+        } else {
+          this._saveLocalJson("categories_database.json", categoriesList);
+          return { success: true };
+        }
+      }
+      async getTemplateConfigs() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("templateConfigs") && this.cache.templateConfigs.size > 0) {
+            const dict2 = {};
+            for (const [k, v] of this.cache.templateConfigs.entries()) dict2[k] = v;
+            return dict2;
+          }
+          const res = await this.listDocs("news_template_configs", 50);
+          const dict = {};
+          this.cache.templateConfigs.clear();
+          (res.documents || []).forEach((d) => {
+            dict[d.id] = d;
+            this.cache.templateConfigs.set(d.id, d);
+          });
+          this.cacheTimestamps.set("templateConfigs", Date.now());
+          return dict;
+        } else {
+          return this._loadLocalJson("news_template_configs.json", {});
+        }
+      }
+      async saveTemplateConfig(configId, configData) {
+        const cleanId = String(configId || configData?.id).trim();
+        const payload = { ...configData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("news_template_configs", cleanId, payload);
+          this.cache.templateConfigs.set(cleanId, payload);
+          this.cacheTimestamps.set("templateConfigs", Date.now());
+          return res;
+        } else {
+          const configs = this._loadLocalJson("news_template_configs.json", {});
+          configs[cleanId] = payload;
+          this._saveLocalJson("news_template_configs.json", configs);
+          return { success: true };
+        }
+      }
+      // --- DRAFTS & NOTIFICATIONS ---
+      async getDrafts(userEmail = "") {
+        if (this.useFirestore) {
+          const res = await this.listDocs("user_drafts", 200);
+          const docs = res.documents || [];
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return docs.filter((d) => (d.userEmail || "").toLowerCase().trim() === clean);
+          }
+          return docs;
+        } else {
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          if (userEmail) {
+            const clean = userEmail.toLowerCase().trim();
+            return drafts.filter((d) => (d.userEmail || "").toLowerCase().trim() === clean);
+          }
+          return drafts;
+        }
+      }
+      async saveDraft(draftId, draftData) {
+        if (!draftId) return { success: false, error: "Draft ID required" };
+        const cleanId = String(draftId).trim();
+        const payload = { ...draftData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          this.cache.drafts.set(cleanId, payload);
+          const res = await this.writeDoc("user_drafts", cleanId, payload);
+          return res;
+        } else {
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          const idx = drafts.findIndex((d) => d.id === cleanId);
+          if (idx >= 0) drafts[idx] = payload;
+          else drafts.push(payload);
+          this._saveLocalJson("drafts_database.json", drafts);
+          return { success: true };
+        }
+      }
+      // --- AUDIT LOGGING ---
+      async logAdminAction(action, adminEmail2, details = {}) {
+        const logEntry = {
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          action,
+          adminEmail: (adminEmail2 || "admin").toLowerCase().trim(),
+          details,
+          timestamp: Date.now()
+        };
+        if (this.useFirestore) {
+          await this.writeDoc("admin_audit_logs", logEntry.id, logEntry);
+        }
+        this.cache.auditLogs.unshift(logEntry);
+        const existing = this._loadLocalJson("admin_audit_log.json", []);
+        existing.unshift(logEntry);
+        if (existing.length > 200) existing.length = 200;
+        this._saveLocalJson("admin_audit_log.json", existing);
+      }
+      // --- SECONDARY STORE OPERATIONS (Task 2: Secondary JSON Stores) ---
+      // 1. Notifications
+      async getNotifications(limit = 100) {
+        if (this.useFirestore) {
+          if (this.isCacheValid("notifications") && this.cache.notifications.size > 0) {
+            return Array.from(this.cache.notifications.values()).slice(0, limit);
+          }
+          const res = await this.listDocs("notifications", limit);
+          const list = res.documents || [];
+          this.cache.notifications.clear();
+          list.forEach((n) => this.cache.notifications.set(n.id, n));
+          this.cacheTimestamps.set("notifications", Date.now());
+          return list;
+        } else {
+          const data = this._loadLocalJson("notifications_database.json", { notifications: [] });
+          return (data.notifications || []).slice(0, limit);
+        }
+      }
+      async saveNotification(id, notifData) {
+        const cleanId = String(id || `notif_${Date.now()}`).trim();
+        const payload = {
+          ...notifData,
+          id: cleanId,
+          docId: cleanId,
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("notifications", cleanId, payload);
+          if (res.success) {
+            this.cache.notifications.set(cleanId, payload);
+            this.cacheTimestamps.set(`notifications:${cleanId}`, Date.now());
+          }
+          return res;
+        } else {
+          const data = this._loadLocalJson("notifications_database.json", { notifications: [] });
+          const idx = data.notifications.findIndex((n) => n.id === cleanId);
+          if (idx >= 0) data.notifications[idx] = payload;
+          else data.notifications.unshift(payload);
+          this._saveLocalJson("notifications_database.json", data);
+          return { success: true };
+        }
+      }
+      // 2. Limit Increase Requests
+      async getLimitIncreaseRequests() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("limitIncrease") && this.cache.systemConfig.has("limit_increase_requests")) {
+            return this.cache.systemConfig.get("limit_increase_requests");
+          }
+          const res = await this.listDocs("limit_increase_requests", 300);
+          const list = res.documents || [];
+          this.cache.systemConfig.set("limit_increase_requests", list);
+          this.cacheTimestamps.set("limitIncrease", Date.now());
+          return list;
+        } else {
+          return this._loadLocalJson("limit_increase_requests.json", []);
+        }
+      }
+      async saveLimitIncreaseRequest(reqData) {
+        const id = String(reqData?.id || `req_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+        const payload = { ...reqData, id, docId: id, createdAt: reqData?.createdAt || Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("limit_increase_requests", id, payload);
+          this.invalidateCache("limitIncrease");
+          return res;
+        } else {
+          const list = this._loadLocalJson("limit_increase_requests.json", []);
+          list.unshift(payload);
+          this._saveLocalJson("limit_increase_requests.json", list);
+          return { success: true };
+        }
+      }
+      // 3. Support Requests
+      async getSupportRequests() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("support") && this.cache.systemConfig.has("support_requests")) {
+            return this.cache.systemConfig.get("support_requests");
+          }
+          const res = await this.listDocs("support_requests", 300);
+          const list = res.documents || [];
+          this.cache.systemConfig.set("support_requests", list);
+          this.cacheTimestamps.set("support", Date.now());
+          return list;
+        } else {
+          const data = this._loadLocalJson("support_requests_database.json", { requests: [] });
+          return data.requests || [];
+        }
+      }
+      async saveSupportRequest(reqData) {
+        const id = String(reqData?.id || `sup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+        const payload = { ...reqData, id, docId: id, createdAt: reqData?.createdAt || Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("support_requests", id, payload);
+          this.invalidateCache("support");
+          return res;
+        } else {
+          const data = this._loadLocalJson("support_requests_database.json", { requests: [] });
+          const idx = data.requests.findIndex((r) => r.id === id);
+          if (idx >= 0) data.requests[idx] = payload;
+          else data.requests.unshift(payload);
+          this._saveLocalJson("support_requests_database.json", data);
+          return { success: true };
+        }
+      }
+      // 4. AI Features Config
+      async getAiFeaturesConfig() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "ai_features_config") && this.cache.systemConfig.has("ai_features_config")) {
+            return this.cache.systemConfig.get("ai_features_config");
+          }
+          const res = await this.readDoc("system_config", "ai_features_config");
+          if (res.success && res.data) {
+            this.cache.systemConfig.set("ai_features_config", res.data);
+            this.cacheTimestamps.set("system_config:ai_features_config", Date.now());
+            return res.data;
+          }
+          return null;
+        } else {
+          return this._loadLocalJson("ai_features_config.json", null);
+        }
+      }
+      async saveAiFeaturesConfig(configData) {
+        const payload = {
+          ...configData,
+          docId: "ai_features_config",
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("system_config", "ai_features_config", payload);
+          if (res.success) {
+            this.cache.systemConfig.set("ai_features_config", payload);
+            this.cacheTimestamps.set("system_config:ai_features_config", Date.now());
+          }
+          return res;
+        } else {
+          this._saveLocalJson("ai_features_config.json", payload);
+          return { success: true };
+        }
+      }
+      // 5. Admin Branding (Category D)
+      async getAdminBranding() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "admin_branding") && this.cache.systemConfig.has("admin_branding")) {
+            return this.cache.systemConfig.get("admin_branding");
+          }
+          const res = await this.readDoc("admin_settings", "branding");
+          if (res.success && res.data) {
+            this.cache.systemConfig.set("admin_branding", res.data);
+            this.cacheTimestamps.set("systemConfig:admin_branding", Date.now());
+            return res.data;
+          }
+          return null;
+        } else {
+          return this._loadLocalJson("admin_branding_db.json", null);
+        }
+      }
+      async saveAdminBranding(data) {
+        const payload = {
+          ...data,
+          id: "branding",
+          docId: "branding",
+          updatedAt: Date.now()
+        };
+        if (this.useFirestore) {
+          this.cache.systemConfig.set("admin_branding", payload);
+          this.cacheTimestamps.set("systemConfig:admin_branding", Date.now());
+          const res = await this.writeDoc("admin_settings", "branding", payload);
+          return res;
+        } else {
+          this._saveLocalJson("admin_branding_db.json", payload);
+          return { success: true };
+        }
+      }
+      // 6. Custom Frames (Category D)
+      async getCustomFrames() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "custom_frames") && this.cache.systemConfig.has("custom_frames")) {
+            return this.cache.systemConfig.get("custom_frames");
+          }
+          const res = await this.listDocs("custom_frames", 300);
+          const list = res.documents || [];
+          this.cache.systemConfig.set("custom_frames", list);
+          this.cacheTimestamps.set("systemConfig:custom_frames", Date.now());
+          return list;
+        } else {
+          return this._loadLocalJson("custom_frames_db.json", []);
+        }
+      }
+      async saveCustomFrame(frameId, frameData) {
+        const cleanId = String(frameId || frameData?.id).trim();
+        const payload = { ...frameData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("custom_frames", cleanId, payload);
+          this.invalidateCache("systemConfig", "custom_frames");
+          return res;
+        } else {
+          const list = this._loadLocalJson("custom_frames_db.json", []);
+          const idx = list.findIndex((f) => f.id === cleanId);
+          if (idx >= 0) list[idx] = payload;
+          else list.push(payload);
+          this._saveLocalJson("custom_frames_db.json", list);
+          return { success: true };
+        }
+      }
+      // 7. Admin Notifications Read (Category C)
+      async getAdminNotificationsRead() {
+        if (this.useFirestore) {
+          if (this.isCacheValid("systemConfig", "admin_notifs_read") && this.cache.systemConfig.has("admin_notifs_read")) {
+            return this.cache.systemConfig.get("admin_notifs_read");
+          }
+          const res = await this.readDoc("admin_notifications_read", "global");
+          if (res.success && res.data && Array.isArray(res.data.readIds)) {
+            this.cache.systemConfig.set("admin_notifs_read", res.data.readIds);
+            this.cacheTimestamps.set("systemConfig:admin_notifs_read", Date.now());
+            return res.data.readIds;
+          }
+          return [];
+        } else {
+          return this._loadLocalJson("admin_notifications_read_db.json", []);
+        }
+      }
+      async saveAdminNotificationsRead(ids) {
+        const readArray = Array.from(ids || []);
+        const payload = { id: "global", docId: "global", readIds: readArray, updatedAt: Date.now() };
+        if (this.useFirestore) {
+          const res = await this.writeDoc("admin_notifications_read", "global", payload);
+          this.cache.systemConfig.set("admin_notifs_read", readArray);
+          this.cacheTimestamps.set("systemConfig:admin_notifs_read", Date.now());
+          return res;
+        } else {
+          this._saveLocalJson("admin_notifications_read_db.json", readArray);
+          return { success: true };
+        }
+      }
+      // --- INTERNAL HELPER ENCODERS / DECODERS ---
+      _toFirestoreField(val) {
+        if (val === null || val === void 0) return { nullValue: null };
+        if (typeof val === "boolean") return { booleanValue: val };
+        if (typeof val === "number") {
+          if (Number.isInteger(val)) return { integerValue: val.toString() };
+          return { doubleValue: val };
+        }
+        if (typeof val === "string") return { stringValue: val };
+        if (Array.isArray(val)) {
+          return { arrayValue: { values: val.map((item) => this._toFirestoreField(item)) } };
+        }
+        if (typeof val === "object") {
+          const fields = {};
+          for (const [k, v] of Object.entries(val)) {
+            if (v !== void 0) fields[k] = this._toFirestoreField(v);
+          }
+          return { mapValue: { fields } };
+        }
+        return { stringValue: String(val) };
+      }
+      _fromFirestoreField(f) {
+        if (!f) return null;
+        if ("stringValue" in f) return f.stringValue;
+        if ("integerValue" in f) return parseInt(f.integerValue, 10);
+        if ("doubleValue" in f) return parseFloat(f.doubleValue);
+        if ("booleanValue" in f) return f.booleanValue;
+        if ("nullValue" in f) return null;
+        if ("timestampValue" in f) return f.timestampValue;
+        if ("arrayValue" in f) {
+          return (f.arrayValue.values || []).map((v) => this._fromFirestoreField(v));
+        }
+        if ("mapValue" in f) {
+          const res = {};
+          for (const [k, v] of Object.entries(f.mapValue.fields || {})) {
+            res[k] = this._fromFirestoreField(v);
+          }
+          return res;
+        }
+        return null;
+      }
+      _fromFirestoreDoc(doc) {
+        if (!doc || !doc.fields) return null;
+        const res = {};
+        for (const [k, v] of Object.entries(doc.fields)) {
+          res[k] = this._fromFirestoreField(v);
+        }
+        return res;
+      }
+      _loadLocalJson(file, fallback = null) {
+        try {
+          const p = path2.resolve(process.cwd(), file);
+          if (fs2.existsSync(p)) return JSON.parse(fs2.readFileSync(p, "utf8"));
+        } catch {
+        }
+        return fallback;
+      }
+      _saveLocalJson(file, data) {
+        try {
+          const p = path2.resolve(process.cwd(), file);
+          const dir = path2.dirname(p);
+          if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
+          fs2.writeFileSync(p, JSON.stringify(data, null, 2), "utf8");
+          return true;
+        } catch {
+          return false;
+        }
+      }
+    };
+    var centralDb2 = new CentralFirestoreDatabaseService();
+    module2.exports = {
+      CentralFirestoreDatabaseService,
+      centralDb: centralDb2
+    };
   }
 });
 
@@ -963,6 +4407,7 @@ var require_migrate_json_to_firestore = __commonJS({
 // server.ts
 var server_exports = {};
 __export(server_exports, {
+  BYLINE_REGEX: () => BYLINE_REGEX,
   DISTRICT_STATE_LIST: () => DISTRICT_STATE_LIST,
   GEMINI_NEWS_RESPONSE_SCHEMA: () => GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS: () => HEADLINE_5_TIER_MAX_LIMITS,
@@ -971,6 +4416,7 @@ __export(server_exports, {
   HEADLINE_TIER_RANGES: () => HEADLINE_TIER_RANGES,
   buildMasterNewsEditorialPrompt: () => buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString: () => buildMasterNewsEditorialPromptString,
+  calculateHeadlineSimilarity: () => calculateHeadlineSimilarity,
   calculateHeadlineSimilarityInternal: () => calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs: () => cleanCaptionParagraphs,
   cleanHeadlineText: () => cleanHeadlineText,
@@ -993,12 +4439,17 @@ __export(server_exports, {
   isRegenerateAllowed: () => isRegenerateAllowed,
   isTierAllowedForOpenAI: () => isTierAllowedForOpenAI,
   matchDistrictAlias: () => matchDistrictAlias,
+  requireAdminMiddleware: () => requireAdminMiddleware,
+  requireAuthMiddleware: () => requireAuthMiddleware,
+  requireMasterAdminMiddleware: () => requireMasterAdminMiddleware,
+  resolveAuthenticatedUser: () => resolveAuthenticatedUser,
   resolveUserTierAndRole: () => resolveUserTierAndRole,
   sanitizeFlattery: () => sanitizeFlattery,
   sanitizePressNoteFlattery: () => sanitizePressNoteFlattery,
   saveAiFeaturesConfig: () => saveAiFeaturesConfig,
   scrapeNewsFromUrl: () => scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks: () => stripAllUrlsAndHyperlinks,
+  stripNewspaperBylines: () => stripNewspaperBylines,
   validateHeadlineOption: () => validateHeadlineOption
 });
 module.exports = __toCommonJS(server_exports);
@@ -1009,9 +4460,33 @@ var import_genai = require("@google/genai");
 var import_openai = __toESM(require("openai"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
 var import_crypto = __toESM(require("crypto"), 1);
+var import_app = require("firebase-admin/app");
+var import_auth = require("firebase-admin/auth");
 var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd();
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
+var cloudStorage = null;
+try {
+  const csMod = require_cloud_storage_service();
+  cloudStorage = csMod.defaultCloudStorageService;
+} catch (e) {
+  try {
+    const csMod = require_cloud_storage_service2();
+    cloudStorage = csMod.defaultCloudStorageService;
+  } catch {
+  }
+}
+var centralDb = null;
+try {
+  const serviceMod = require_firestore_database_service();
+  centralDb = serviceMod.centralDb;
+} catch (e) {
+  try {
+    const serviceMod = require_firestore_database_service2();
+    centralDb = serviceMod.centralDb;
+  } catch {
+  }
+}
 var app = (0, import_express.default)();
 var PORT = parseInt(process.env.PORT || "8080", 10);
 app.use((req, res, next) => {
@@ -1029,8 +4504,21 @@ app.use((req, res, next) => {
 });
 app.get("/health", (_req, res) => res.status(200).send("OK"));
 app.get("/_health", (_req, res) => res.status(200).send("OK"));
-app.get("/api/health", (_req, res) => res.status(200).json({ status: "OK", timestamp: Date.now() }));
-app.use(import_express.default.json({ limit: "100mb" }));
+app.get("/api/health", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+    useFirestore: Boolean(centralDb && centralDb.useFirestore),
+    useGcs: Boolean(cloudStorage && cloudStorage.isGcsActive()),
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  });
+});
+app.use(import_express.default.json({
+  limit: "100mb",
+  verify: (req, _res, buf) => {
+    req.rawBody = buf ? buf.toString() : "";
+  }
+}));
 app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
 var publicUploadsDir = import_path.default.join(process.cwd(), "public", "uploads");
 if (!import_fs.default.existsSync(publicUploadsDir)) {
@@ -1039,6 +4527,9 @@ if (!import_fs.default.existsSync(publicUploadsDir)) {
 var logosDir = import_path.default.join(publicUploadsDir, "logos");
 if (!import_fs.default.existsSync(logosDir)) {
   import_fs.default.mkdirSync(logosDir, { recursive: true });
+}
+if (cloudStorage) {
+  app.use("/uploads", cloudStorage.createUploadsMiddleware());
 }
 app.use("/uploads", import_express.default.static(publicUploadsDir));
 var AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
@@ -1079,78 +4570,188 @@ function verifyAuthToken(tokenStr) {
     return null;
   }
 }
-function getAuthenticatedUser(req) {
-  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || "").toString().trim();
-  let token = "";
-  if (authHeader.startsWith("Bearer ")) {
-    token = authHeader.slice(7).trim();
-  } else if (authHeader) {
-    token = authHeader;
+var firebaseAdminAuth = null;
+try {
+  let projectId = process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) {
+    try {
+      const cfgPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
+      if (import_fs.default.existsSync(cfgPath)) {
+        const cfg = JSON.parse(import_fs.default.readFileSync(cfgPath, "utf-8"));
+        projectId = cfg.projectId;
+      }
+    } catch {
+    }
   }
-  if (!token) return null;
-  return verifyAuthToken(token);
+  projectId = projectId || "ai-news-maker-app";
+  const adminApp = (0, import_app.getApps)().length === 0 ? (0, import_app.initializeApp)({ projectId }) : (0, import_app.getApps)()[0];
+  firebaseAdminAuth = (0, import_auth.getAuth)(adminApp);
+  console.log(`[AUTH] Firebase Admin initialized for project: ${projectId}`);
+} catch (err) {
+  console.warn(`[AUTH] Firebase Admin SDK initialization note: ${err?.message || err}`);
 }
 var MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
 var MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 var REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 var UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
-function extractAdminEmail(req) {
-  const user = getAuthenticatedUser(req);
-  if (user && user.email) return user.email.toLowerCase().trim();
-  const header = (req.headers["x-admin-email"] || req.headers["x-user-email"] || req.body?.adminEmail || req.body?.userEmail || req.body?.email || req.query?.adminEmail || req.query?.userEmail || req.query?.email || "").toString().toLowerCase().trim();
-  return header;
+function extractTokenFromRequest(req) {
+  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || "").toString().trim();
+  if (authHeader.startsWith("Bearer ")) {
+    return authHeader.slice(7).trim();
+  }
+  return authHeader;
+}
+function getAuthenticatedUser(req) {
+  if (req.user) {
+    return req.user;
+  }
+  const token = extractTokenFromRequest(req);
+  if (!token) return null;
+  return verifyAuthToken(token);
+}
+async function resolveAuthenticatedUser(req) {
+  if (req.user) {
+    return req.user;
+  }
+  const token = extractTokenFromRequest(req);
+  if (!token) return null;
+  if (firebaseAdminAuth) {
+    try {
+      const decoded = await firebaseAdminAuth.verifyIdToken(token, true);
+      if (decoded && decoded.email) {
+        const email = decoded.email.toLowerCase().trim();
+        const userId = decoded.uid || decoded.user_id || email;
+        let userRole = "user";
+        try {
+          if (typeof loadUsersMasterDatabase === "function") {
+            const users = loadUsersMasterDatabase();
+            const dbUser = users.find(
+              (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === userId
+            );
+            if (dbUser && dbUser.role) {
+              userRole = dbUser.role;
+            }
+          }
+        } catch {
+        }
+        if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+          userRole = "superadmin";
+        } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+          userRole = "admin";
+        }
+        const verified = {
+          userId,
+          email,
+          role: userRole,
+          username: decoded.name || email.split("@")[0],
+          authType: "firebase"
+        };
+        req.user = verified;
+        return verified;
+      }
+    } catch {
+    }
+  }
+  const internalPayload = verifyAuthToken(token);
+  if (internalPayload && internalPayload.email) {
+    const email = internalPayload.email.toLowerCase().trim();
+    let userRole = internalPayload.role || "user";
+    if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+      userRole = "superadmin";
+    } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+      userRole = "admin";
+    }
+    const verified = {
+      userId: internalPayload.userId || email,
+      email,
+      role: userRole,
+      username: internalPayload.username || email.split("@")[0],
+      authType: "session"
+    };
+    req.user = verified;
+    return verified;
+  }
+  return null;
 }
 function isAuthorizedMasterAdmin(req) {
-  const email = extractAdminEmail(req);
+  const user = req.user || getAuthenticatedUser(req);
+  if (!user || !user.email) return false;
+  const email = (user.email || "").toLowerCase().trim();
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) return true;
-  const user = getAuthenticatedUser(req);
-  if (user) {
-    const userEmail = (user.email || "").toLowerCase().trim();
-    if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL) return true;
-    if (user.role === "superadmin" && userEmail !== REGULAR_ADMIN_EMAIL) return true;
+  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+    return true;
   }
-  const adminKey = req.headers["x-admin-key"] || req.headers["x-master-admin-key"];
-  if (adminKey === "master-admin" || process.env.MASTER_ADMIN_KEY && adminKey === process.env.MASTER_ADMIN_KEY) {
+  if (process.env.MASTER_ADMIN_EMAIL && email === process.env.MASTER_ADMIN_EMAIL.toLowerCase().trim()) {
+    return true;
+  }
+  if (user.role === "superadmin" && email !== REGULAR_ADMIN_EMAIL) {
     return true;
   }
   return false;
 }
 function isAuthorizedAdmin(req) {
-  const email = extractAdminEmail(req);
+  const user = req.user || getAuthenticatedUser(req);
+  if (!user || !user.email) return false;
+  const email = (user.email || "").toLowerCase().trim();
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
-  const user = getAuthenticatedUser(req);
-  if (user) {
-    const userEmail = (user.email || "").toLowerCase().trim();
-    if (UNAUTHORIZED_ADMIN_EMAILS.includes(userEmail)) return false;
-    if (userEmail === MASTER_ADMIN_EMAIL || userEmail === MASTER_ADMIN_ALT_EMAIL || userEmail === REGULAR_ADMIN_EMAIL) return true;
-    if (user.role === "admin" || user.role === "superadmin") return true;
-  }
-  const adminKey = req.headers["x-admin-key"];
-  if (process.env.ADMIN_API_KEY && adminKey === process.env.ADMIN_API_KEY) return true;
-  if (adminKey === "admin-secret-key" || adminKey === "master-admin" || adminKey === "admin") return true;
-  const role = (req.headers["x-user-role"] || req.headers["x-role"] || "").toString().toLowerCase().trim();
-  if ((role === "admin" || role === "superadmin") && (!email || !UNAUTHORIZED_ADMIN_EMAILS.includes(email))) {
-    return true;
-  }
-  if (email && !UNAUTHORIZED_ADMIN_EMAILS.includes(email)) {
-    try {
-      if (typeof loadUsersMasterDatabase === "function") {
-        const users = loadUsersMasterDatabase();
-        const dbUser = users.find((u) => (u.email || "").toLowerCase().trim() === email);
-        if (dbUser && (dbUser.role === "admin" || dbUser.role === "superadmin")) return true;
-      }
-      if (typeof loadProfilesDatabase === "function") {
-        const profiles = loadProfilesDatabase();
-        const profUser = profiles[email] || Object.values(profiles).find((p) => (p.email || "").toLowerCase().trim() === email);
-        if (profUser && (profUser.role === "admin" || profUser.role === "superadmin")) return true;
-      }
-    } catch {
+  if (isAuthorizedMasterAdmin(req)) return true;
+  if (email === REGULAR_ADMIN_EMAIL) return true;
+  if (process.env.REGULAR_ADMIN_EMAIL && email === process.env.REGULAR_ADMIN_EMAIL.toLowerCase().trim()) return true;
+  if (user.role === "admin" || user.role === "superadmin") return true;
+  try {
+    if (typeof loadUsersMasterDatabase === "function") {
+      const users = loadUsersMasterDatabase();
+      const dbUser = users.find((u) => (u.email || "").toLowerCase().trim() === email || u.userId && u.userId === user.userId);
+      if (dbUser && (dbUser.role === "admin" || dbUser.role === "superadmin")) return true;
     }
+  } catch {
   }
   return false;
+}
+async function requireAuthMiddleware(req, res, next) {
+  const user = await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u0915\u0943\u092A\u092F\u093E \u0935\u0948\u0927 \u091F\u094B\u0915\u0928 \u0915\u0947 \u0938\u093E\u0925 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
+    });
+  }
+  req.user = user;
+  next();
+}
+async function requireAdminMiddleware(req, res, next) {
+  const user = await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
+    });
+  }
+  req.user = user;
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({
+      success: false,
+      error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0907\u0938 \u0915\u093E\u0930\u094D\u092F \u0915\u0947 \u0932\u093F\u090F \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0905\u0927\u093F\u0915\u093E\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964"
+    });
+  }
+  next();
+}
+async function requireMasterAdminMiddleware(req, res, next) {
+  const user = await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
+    });
+  }
+  req.user = user;
+  if (!isAuthorizedMasterAdmin(req)) {
+    return res.status(403).json({
+      success: false,
+      error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u092F\u0939 \u0915\u093E\u0930\u094D\u092F \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0915\u0947 \u0932\u093F\u090F \u0906\u0930\u0915\u094D\u0937\u093F\u0924 \u0939\u0948\u0964"
+    });
+  }
+  next();
 }
 var CREDENTIALS_DB_FILE = import_path.default.join(process.cwd(), "auth_credentials_db.json");
 function loadCredentialsDatabase() {
@@ -1315,6 +4916,9 @@ function checkRateLimit(ip, limit = 60, windowMs = 6e4) {
 }
 var AUDIT_LOG_FILE = import_path.default.join(process.cwd(), "admin_audit_log.json");
 function loadAuditLogs() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.auditLogs && centralDb.cache.auditLogs.length > 0) {
+    return centralDb.cache.auditLogs;
+  }
   try {
     if (import_fs.default.existsSync(AUDIT_LOG_FILE)) {
       const data = JSON.parse(import_fs.default.readFileSync(AUDIT_LOG_FILE, "utf-8"));
@@ -1324,18 +4928,24 @@ function loadAuditLogs() {
   }
   return [];
 }
-function logAdminAudit(adminEmail, action, target, details, ip) {
+function logAdminAudit(adminEmail2, action, target, details, ip) {
   try {
     const logs = loadAuditLogs();
     const entry = {
       id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
-      adminEmail: adminEmail || "admin",
+      adminEmail: adminEmail2 || "admin",
       action,
       target,
       details,
       ip: ip || "internal"
     };
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.writeDoc("admin_audit_logs", entry.id, entry).catch(() => {
+      });
+      centralDb.cache.auditLogs.unshift(entry);
+      if (centralDb.cache.auditLogs.length > 500) centralDb.cache.auditLogs.length = 500;
+    }
     logs.unshift(entry);
     if (logs.length > 500) logs.length = 500;
     import_fs.default.writeFileSync(AUDIT_LOG_FILE, JSON.stringify(logs, null, 2), "utf-8");
@@ -1356,6 +4966,24 @@ app.post("/api/auth/verify-captcha", (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
+});
+app.use("/api/admin", async (req, res, next) => {
+  if (req.method === "OPTIONS") return next();
+  const user = req.user || await resolveAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
+    });
+  }
+  req.user = user;
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({
+      success: false,
+      error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0907\u0938 \u0915\u093E\u0930\u094D\u092F \u0915\u0947 \u0932\u093F\u090F \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0905\u0927\u093F\u0915\u093E\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964"
+    });
+  }
+  next();
 });
 app.get("/api/admin/audit-logs", (req, res) => {
   try {
@@ -1441,7 +5069,7 @@ app.get("/api/cloud-status", (req, res) => {
     customDomain: dynamicCustomDomain || null
   });
 });
-app.post("/api/admin/set-ai-keys", async (req, res) => {
+app.post("/api/admin/set-ai-keys", requireMasterAdminMiddleware, async (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 AI \u0915\u0941\u0902\u091C\u093F\u092F\u093E\u0901 \u0938\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -1522,6 +5150,29 @@ try {
 } catch {
 }
 function loadRewardsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.wallets.size > 0) {
+    const wallets = {};
+    for (const [k, w] of centralDb.cache.wallets.entries()) {
+      wallets[k] = {
+        coinBalance: Number(w.coinBalance || 0),
+        pendingCoins: Number(w.pendingCoins || 0),
+        totalEarnedCoins: Number(w.totalEarnedCoins || 0)
+      };
+    }
+    const frameUnlocks = {};
+    for (const [k, f] of centralDb.cache.frameUnlocks.entries()) {
+      frameUnlocks[k] = f;
+    }
+    return {
+      claims: [],
+      transactions: Array.from(centralDb.cache.walletTransactions.values()),
+      downloadEvents: [],
+      wallets,
+      welcomeRewards: {},
+      unlockedItems: {},
+      frameUnlocks
+    };
+  }
   try {
     if (import_fs.default.existsSync(REWARDS_DB_FILE)) {
       const raw = import_fs.default.readFileSync(REWARDS_DB_FILE, "utf-8");
@@ -1542,6 +5193,33 @@ function loadRewardsDatabase() {
   return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {}, frameUnlocks: {} };
 }
 function saveRewardsDatabase(db) {
+  if (centralDb && centralDb.useFirestore) {
+    if (db.wallets) {
+      for (const [key, wallet] of Object.entries(db.wallets)) {
+        centralDb.writeDoc("wallets", key.toLowerCase().trim(), wallet).catch(() => {
+        });
+        centralDb.cache.wallets.set(key.toLowerCase().trim(), wallet);
+      }
+    }
+    if (db.frameUnlocks) {
+      for (const [key, unlocks] of Object.entries(db.frameUnlocks)) {
+        centralDb.writeDoc("frame_unlocks", key.toLowerCase().trim(), { email: key.toLowerCase().trim(), unlocks, updatedAt: Date.now() }).catch(() => {
+        });
+        centralDb.cache.frameUnlocks.set(key.toLowerCase().trim(), unlocks);
+      }
+    }
+    if (db.transactions && Array.isArray(db.transactions)) {
+      for (const tx of db.transactions.slice(0, 50)) {
+        const txId = tx.id || tx.transactionId;
+        if (txId) {
+          centralDb.writeDoc("wallet_transactions", String(txId), tx).catch(() => {
+          });
+          centralDb.cache.walletTransactions.set(String(txId), tx);
+        }
+      }
+    }
+    return true;
+  }
   try {
     const locations = resolveAllDatabaseLocations("rewards_database.json");
     const jsonStr = JSON.stringify(db, null, 2);
@@ -1808,6 +5486,15 @@ function resolveAllDatabaseLocations(filename) {
   return Array.from(new Set(candidates));
 }
 function loadNewsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.news.size > 0) {
+    if (!centralDb.isCacheValid("news")) {
+      centralDb.getNewsPosts({ forceRemote: true }).catch(() => {
+      });
+    }
+    const list = Array.from(centralDb.cache.news.values());
+    const cleaned = list.filter((p) => p && p.id && !String(p.id).startsWith("live-post-"));
+    if (cleaned.length > 0) return cleaned;
+  }
   try {
     const locations = resolveAllDatabaseLocations("news_database.json");
     for (const loc of locations) {
@@ -1832,11 +5519,22 @@ function loadNewsDatabase() {
   return [];
 }
 function saveNewsDatabase(posts) {
+  const cleaned = posts.filter((p) => p && p.id);
+  if (centralDb && centralDb.useFirestore) {
+    const activeIds = new Set(cleaned.map((p) => String(p.id)));
+    for (const post of cleaned) {
+      centralDb.cache.news.set(post.id, post);
+      centralDb.saveNewsPost(post.id, post).catch((e) => console.warn("[Firestore News Sync Error]", e.message));
+    }
+    for (const id of centralDb.cache.news.keys()) {
+      if (!activeIds.has(id)) {
+        centralDb.deleteNewsPost(id).catch(() => {
+        });
+      }
+    }
+    return true;
+  }
   try {
-    const cleaned = posts.filter((p) => {
-      if (!p || !p.id) return false;
-      return true;
-    });
     if (cleaned.length === 0) {
       const existing = loadNewsDatabase();
       if (existing.length > 0) {
@@ -1860,6 +5558,15 @@ function saveNewsDatabase(posts) {
   }
 }
 function loadApprovedEditorialDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.news.size > 0) {
+    const dict = {};
+    for (const [id, post] of centralDb.cache.news.entries()) {
+      if (post.isPrePublished || post.status === "APPROVED") {
+        dict[id] = post;
+      }
+    }
+    return dict;
+  }
   try {
     const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
     for (const loc of locations) {
@@ -1877,6 +5584,16 @@ function loadApprovedEditorialDatabase() {
   return {};
 }
 function saveApprovedEditorialDatabase(data) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const [id, item] of Object.entries(data)) {
+      if (id && item) {
+        const existing = centralDb.cache.news.get(id) || {};
+        centralDb.saveNewsPost(id, { ...existing, ...item }).catch(() => {
+        });
+      }
+    }
+    return true;
+  }
   try {
     const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
     for (const loc of locations) {
@@ -2097,7 +5814,7 @@ app.post("/api/news-posts", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/add-news", (req, res) => {
+app.post("/api/admin/add-news", requireAdminMiddleware, (req, res) => {
   try {
     const {
       headline,
@@ -2149,7 +5866,7 @@ app.post("/api/admin/add-news", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/admin/approved-news-ids", (_req, res) => {
+app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();
     const approvedIds = posts.filter((p) => p.status === "APPROVED" || !p.status).map((p) => p.id);
@@ -2158,7 +5875,7 @@ app.get("/api/admin/approved-news-ids", (_req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/approve-news/:id", (req, res) => {
+app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
@@ -2226,7 +5943,7 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
         status: "APPROVED",
         isPrePublished: postData.isPrePublished !== void 0 ? Boolean(postData.isPrePublished) : true,
         approvedAt: Date.now(),
-        approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString()
+        approvedBy: (req.user?.email || "admin").toString()
       };
       saveApprovedEditorialDatabase(edDb);
     } catch (e) {
@@ -2260,14 +5977,14 @@ app.post("/api/admin/approve-news/:id", (req, res) => {
     }
     saveNewsDatabase(existing);
     broadcastNewsPublishedNotification(id, approvedTitle);
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
-    logAdminAudit(adminEmail, "APPROVE_NEWS", id);
+    const adminEmail2 = (req.user?.email || "admin").toString();
+    logAdminAudit(adminEmail2, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id, posts: existing });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/bulk-approve-news", (req, res) => {
+app.post("/api/admin/bulk-approve-news", requireAdminMiddleware, (req, res) => {
   try {
     const { approvedIds, posts } = req.body || {};
     if (!Array.isArray(approvedIds)) {
@@ -2291,14 +6008,14 @@ app.post("/api/admin/bulk-approve-news", (req, res) => {
       }
     }
     saveNewsDatabase(existing);
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
-    logAdminAudit(adminEmail, "BULK_APPROVE_NEWS", `${approvedIds.length} items`);
+    const adminEmail2 = (req.user?.email || "admin").toString();
+    logAdminAudit(adminEmail2, "BULK_APPROVE_NEWS", `${approvedIds.length} items`);
     return res.json({ success: true, approvedIds: Array.from(approvedSet) });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/reject-news/:id", (req, res) => {
+app.post("/api/admin/reject-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
@@ -2312,14 +6029,14 @@ app.post("/api/admin/reject-news/:id", (req, res) => {
       }
     } catch {
     }
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
-    logAdminAudit(adminEmail, "REJECT_NEWS", id);
+    const adminEmail2 = (req.user?.email || "admin").toString();
+    logAdminAudit(adminEmail2, "REJECT_NEWS", id);
     return res.json({ success: true, message: "\u0916\u092C\u0930 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/migrate-approvals", (req, res) => {
+app.post("/api/admin/migrate-approvals", requireAdminMiddleware, (req, res) => {
   try {
     const { approvedIds } = req.body || {};
     if (!Array.isArray(approvedIds)) {
@@ -2490,6 +6207,9 @@ app.post("/api/news-posts/reset", (_req, res) => {
 });
 var DRAFTS_DB_FILE = import_path.default.join(process.cwd(), "drafts_database.json");
 function loadDraftsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.drafts.size > 0) {
+    return Array.from(centralDb.cache.drafts.values());
+  }
   try {
     if (import_fs.default.existsSync(DRAFTS_DB_FILE)) {
       const content = import_fs.default.readFileSync(DRAFTS_DB_FILE, "utf-8");
@@ -2502,6 +6222,15 @@ function loadDraftsDatabase() {
   return [];
 }
 function saveDraftsDatabase(drafts) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const d of drafts) {
+      if (d && d.id) {
+        centralDb.saveDraft(d.id, d).catch(() => {
+        });
+      }
+    }
+    return true;
+  }
   try {
     import_fs.default.writeFileSync(DRAFTS_DB_FILE, JSON.stringify(drafts, null, 2), "utf-8");
     return true;
@@ -2644,7 +6373,7 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/rewards/upload-screenshot", (req, res) => {
+app.post("/api/rewards/upload-screenshot", async (req, res) => {
   try {
     const { imageBase64 } = req.body;
     if (!imageBase64 || typeof imageBase64 !== "string") {
@@ -2661,14 +6390,27 @@ app.post("/api/rewards/upload-screenshot", (req, res) => {
     }
     const ext = magic.format || "jpg";
     const filename = `claim-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
-    const filePath = import_path.default.join(UPLOAD_SCREENSHOTS_DIR, filename);
-    const webFilePath = import_path.default.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
-    import_fs.default.writeFileSync(filePath, buf);
-    try {
-      import_fs.default.writeFileSync(webFilePath, buf);
-    } catch {
+    let url = `/uploads/screenshots/${filename}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer: buf,
+        filename,
+        contentType: magic.format === "png" ? "image/png" : "image/jpeg",
+        category: "screenshots",
+        publicRead: true
+      });
+      if (uploadRes && uploadRes.url) {
+        url = uploadRes.url;
+      }
+    } else {
+      const filePath = import_path.default.join(UPLOAD_SCREENSHOTS_DIR, filename);
+      const webFilePath = import_path.default.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
+      import_fs.default.writeFileSync(filePath, buf);
+      try {
+        import_fs.default.writeFileSync(webFilePath, buf);
+      } catch {
+      }
     }
-    const url = `/uploads/screenshots/${filename}`;
     return res.json({ success: true, url });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -2783,7 +6525,7 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u094D\u0932\u0947\u092E \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
     }
     const { id } = req.params;
-    const adminEmail = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
+    const adminEmail2 = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
     const rDb = loadRewardsDatabase();
     const claim = rDb.claims.find((c) => c.claimId === id || c.id === id);
     if (!claim) {
@@ -2820,11 +6562,11 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
       balanceAfter: rDb.wallets[walletKey].coinBalance,
       status: "completed",
       createdAt: Date.now(),
-      createdBy: adminEmail
+      createdBy: adminEmail2
     };
     rDb.transactions.unshift(tx);
     claim.status = "approved";
-    claim.reviewedBy = adminEmail;
+    claim.reviewedBy = adminEmail2;
     claim.reviewedAt = Date.now();
     claim.walletTransactionId = txId;
     claim.id = claim.claimId;
@@ -2846,7 +6588,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     }
     const { id } = req.params;
     const { reason } = req.body;
-    const adminEmail = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
+    const adminEmail2 = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
     const rDb = loadRewardsDatabase();
     const claim = rDb.claims.find((c) => c.claimId === id || c.id === id);
     if (!claim) {
@@ -2860,7 +6602,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     }
     claim.status = "rejected";
     claim.rejectionReason = (reason || "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u094B\u0938\u094D\u091F \u0915\u093E \u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E\u0964").trim();
-    claim.reviewedBy = adminEmail;
+    claim.reviewedBy = adminEmail2;
     claim.reviewedAt = Date.now();
     saveRewardsDatabase(rDb);
     return res.json({
@@ -2873,7 +6615,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/rewards/claims/:id", (req, res) => {
+app.delete("/api/admin/rewards/claims/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u094D\u0932\u0947\u092E \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
@@ -2927,14 +6669,22 @@ function loadAnalyticsDatabase() {
     for (const loc of locs) {
       if (import_fs.default.existsSync(loc)) {
         const raw = import_fs.default.readFileSync(loc, "utf-8");
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (parsed) {
+          return {
+            news: parsed.news || { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+            video: parsed.video || { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+            userGraphics: parsed.userGraphics || {}
+          };
+        }
       }
     }
   } catch {
   }
   return {
     news: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
-    video: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} }
+    video: { totalViews: 0, clickCreate: 0, generationStarts: 0, generationSuccess: 0, downloads: 0, uniqueUsers: [], items: {} },
+    userGraphics: {}
   };
 }
 function saveAnalyticsDatabase(data) {
@@ -2951,18 +6701,29 @@ function saveAnalyticsDatabase(data) {
 }
 app.post("/api/analytics/track", (req, res) => {
   try {
-    const { type = "news", event = "view", itemId, userId, title } = req.body || {};
+    const {
+      type = "news",
+      event = "view",
+      itemId,
+      userId,
+      userEmail,
+      userName,
+      userPlan,
+      graphicId,
+      title
+    } = req.body || {};
     const aType = type === "video" ? "video" : "news";
     const aDb = loadAnalyticsDatabase();
+    if (!aDb.userGraphics) aDb.userGraphics = {};
     const section = aDb[aType];
-    const userIdentifier = (userId || req.ip || "anon").toString().trim().toLowerCase();
+    const userIdentifier = (userEmail || userId || req.ip || "anon").toString().trim().toLowerCase();
     if (!section.uniqueUsers.includes(userIdentifier)) {
       section.uniqueUsers.push(userIdentifier);
       if (section.uniqueUsers.length > 5e3) section.uniqueUsers.shift();
     }
     if (event === "view") section.totalViews = (section.totalViews || 0) + 1;
     else if (event === "click_create") section.clickCreate = (section.clickCreate || 0) + 1;
-    else if (event === "gen_start") section.generationStarts = (section.generationStarts || 0) + 1;
+    else if (event === "gen_start" || event === "studio_start") section.generationStarts = (section.generationStarts || 0) + 1;
     else if (event === "gen_success") section.generationSuccess = (section.generationSuccess || 0) + 1;
     else if (event === "download") section.downloads = (section.downloads || 0) + 1;
     if (itemId) {
@@ -2972,6 +6733,72 @@ app.post("/api/analytics/track", (req, res) => {
       }
       if (event === "view") section.items[cleanId].views += 1;
       if (event === "click_create" || event === "download") section.items[cleanId].creates += 1;
+    }
+    if (userIdentifier && userIdentifier !== "anon") {
+      let uRecord = aDb.userGraphics[userIdentifier];
+      if (!uRecord) {
+        const allUsers = loadUsersMasterDatabase();
+        const userMatch = allUsers.find(
+          (u) => u.email && u.email.toLowerCase().trim() === userIdentifier || u.userId && u.userId.toLowerCase().trim() === userIdentifier
+        );
+        uRecord = {
+          userId: userMatch?.userId || userId || userIdentifier,
+          userName: userName || userMatch?.fullName || userMatch?.name || userIdentifier.split("@")[0],
+          userEmail: userMatch?.email || userEmail || userIdentifier,
+          membershipPlan: userPlan || userMatch?.planName || (userMatch?.tier ? userMatch.tier.toUpperCase() : "BASIC"),
+          totalGenerated: 0,
+          totalDownloaded: 0,
+          generatedNotDownloaded: 0,
+          totalDrafts: 0,
+          totalCompleted: 0,
+          graphics: {}
+        };
+        aDb.userGraphics[userIdentifier] = uRecord;
+      }
+      if (userName && !uRecord.userName) uRecord.userName = userName;
+      if (userPlan) uRecord.membershipPlan = userPlan;
+      const gId = (graphicId || itemId || `g_${Date.now()}`).toString();
+      if (!uRecord.graphics[gId]) {
+        uRecord.graphics[gId] = {
+          graphicId: gId,
+          newsId: itemId ? String(itemId) : void 0,
+          title: title || void 0,
+          hasClickedCreate: false,
+          hasStudioStarted: false,
+          hasGenerated: false,
+          hasDraftSaved: false,
+          hasDownloaded: false,
+          isCompleted: false,
+          updatedAt: Date.now()
+        };
+      }
+      const g = uRecord.graphics[gId];
+      g.updatedAt = Date.now();
+      if (event === "click_create") {
+        g.hasClickedCreate = true;
+      } else if (event === "studio_start" || event === "gen_start") {
+        g.hasStudioStarted = true;
+      } else if (event === "gen_success") {
+        if (!g.hasGenerated) {
+          g.hasGenerated = true;
+          uRecord.totalGenerated += 1;
+        }
+      } else if (event === "draft_save") {
+        if (!g.hasDraftSaved) {
+          g.hasDraftSaved = true;
+          uRecord.totalDrafts += 1;
+        }
+      } else if (event === "download") {
+        if (!g.hasDownloaded) {
+          g.hasDownloaded = true;
+          uRecord.totalDownloaded += 1;
+        }
+        if (g.hasGenerated && !g.isCompleted) {
+          g.isCompleted = true;
+          uRecord.totalCompleted += 1;
+        }
+      }
+      uRecord.generatedNotDownloaded = Math.max(0, uRecord.totalGenerated - uRecord.totalDownloaded);
     }
     saveAnalyticsDatabase(aDb);
     return res.json({ success: true });
@@ -2985,6 +6812,28 @@ app.get("/api/admin/analytics/summary", (req, res) => {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u090F\u0928\u093E\u0932\u093F\u091F\u093F\u0915\u094D\u0938 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
     }
     const aDb = loadAnalyticsDatabase();
+    if (!aDb.userGraphics) aDb.userGraphics = {};
+    const allUsers = loadUsersMasterDatabase();
+    for (const u of allUsers) {
+      const emailKey = (u.email || "").toLowerCase().trim();
+      if (emailKey && !aDb.userGraphics[emailKey]) {
+        aDb.userGraphics[emailKey] = {
+          userId: u.userId || emailKey,
+          userName: u.fullName || u.name || u.username || emailKey.split("@")[0],
+          userEmail: u.email,
+          membershipPlan: u.planName || (u.tier ? u.tier.toUpperCase() : "BASIC"),
+          totalGenerated: 0,
+          totalDownloaded: 0,
+          generatedNotDownloaded: 0,
+          totalDrafts: 0,
+          totalCompleted: 0,
+          graphics: {}
+        };
+      } else if (emailKey && aDb.userGraphics[emailKey]) {
+        aDb.userGraphics[emailKey].membershipPlan = u.planName || (u.tier ? u.tier.toUpperCase() : "BASIC");
+        if (u.fullName || u.name) aDb.userGraphics[emailKey].userName = u.fullName || u.name;
+      }
+    }
     const formatSection = (sec) => {
       const sortedItems = Object.entries(sec.items || {}).map(([id, val]) => ({ id, ...val })).sort((a, b) => b.views + b.creates * 2 - (a.views + a.creates * 2)).slice(0, 8);
       return {
@@ -2997,10 +6846,22 @@ app.get("/api/admin/analytics/summary", (req, res) => {
         trending: sortedItems
       };
     };
+    const userWiseList = Object.values(aDb.userGraphics).map((u) => ({
+      userId: u.userId,
+      userName: u.userName,
+      userEmail: u.userEmail,
+      membershipPlan: u.membershipPlan,
+      totalGenerated: u.totalGenerated,
+      totalDownloaded: u.totalDownloaded,
+      generatedNotDownloaded: u.generatedNotDownloaded,
+      totalDrafts: u.totalDrafts,
+      totalCompleted: u.totalCompleted
+    })).sort((a, b) => b.totalGenerated + b.totalDownloaded * 2 - (a.totalGenerated + a.totalDownloaded * 2));
     return res.json({
       success: true,
       news: formatSection(aDb.news),
-      video: formatSection(aDb.video)
+      video: formatSection(aDb.video),
+      userWiseAnalytics: userWiseList
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -3019,25 +6880,35 @@ app.post("/api/upload-logo", async (req, res) => {
       return res.status(413).json({ error: "\u092B\u093C\u093E\u0907\u0932 \u0915\u093E \u0906\u0915\u093E\u0930 10MB \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E\u0964" });
     }
     const magic = isValidImageMagicBytes(buf);
+    if (!magic.valid) {
+      return res.status(400).json({ error: "\u0905\u0935\u0948\u0927 \u091B\u0935\u093F: \u0915\u0947\u0935\u0932 \u092A\u094D\u0930\u093E\u092E\u093E\u0923\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u092B\u093C\u093E\u0907\u0932\u0947\u0902 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902" });
+    }
     let isGif = magic.format === "gif" || req.body?.logoType === "gif" || Boolean(req.body?.fileName && req.body.fileName.toLowerCase().endsWith(".gif"));
     let ext = isGif ? "gif" : magic.format || "png";
     const userOrEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
     const safeFileBase = userOrEmail ? userOrEmail.replace(/[^a-zA-Z0-9_-]/g, "_") : "logo";
     const filename = `logo-${safeFileBase}-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
-    const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
-    const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
-    import_fs.default.writeFileSync(filePath, buf);
-    try {
-      import_fs.default.writeFileSync(webFilePath, buf);
-    } catch {
+    let logoUrl = `/uploads/logos/${filename}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer: buf,
+        filename,
+        contentType: isGif ? "image/gif" : magic.format === "png" ? "image/png" : "image/jpeg",
+        category: "logos",
+        publicRead: true
+      });
+      if (uploadRes && uploadRes.url) {
+        logoUrl = uploadRes.url;
+      }
+    } else {
+      const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
+      const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
+      import_fs.default.writeFileSync(filePath, buf);
+      try {
+        import_fs.default.writeFileSync(webFilePath, buf);
+      } catch {
+      }
     }
-    try {
-      const distLogoDir = import_path.default.join(process.cwd(), "dist", "uploads", "logos");
-      import_fs.default.mkdirSync(distLogoDir, { recursive: true });
-      import_fs.default.writeFileSync(import_path.default.join(distLogoDir, filename), buf);
-    } catch {
-    }
-    const logoUrl = `/uploads/logos/${filename}`;
     let updatedProfile = null;
     if (userOrEmail) {
       const allProfiles = loadProfilesDatabase();
@@ -3101,6 +6972,21 @@ app.post("/api/upload-logo", async (req, res) => {
         registerOrUpdateUserAuthoritative(existing);
       } catch {
       }
+      if (centralDb && centralDb.useFirestore) {
+        try {
+          await centralDb.saveUser(userOrEmail, {
+            ...existing,
+            logoUrl,
+            channelLogoUrl: logoUrl,
+            channelLogoPngUrl: isGif ? void 0 : logoUrl,
+            channelLogoGifUrl: isGif ? logoUrl : void 0,
+            channelLogoType: isGif ? "gif" : "png",
+            updatedAt: Date.now()
+          });
+        } catch (fErr) {
+          console.warn("[Upload Logo] Firestore direct sync note:", fErr.message);
+        }
+      }
     }
     return res.json({
       success: true,
@@ -3115,11 +7001,18 @@ app.post("/api/upload-logo", async (req, res) => {
     release();
   }
 });
-app.post("/api/wallet/claim-welcome-reward", (req, res) => {
+app.post("/api/wallet/claim-welcome-reward", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = req.user;
     const { email, userId, rewardType } = req.body || {};
-    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    let cleanEmail = (email || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    if (!cleanEmail && authUser?.email) {
+      cleanEmail = authUser.email.toLowerCase().trim();
+    }
+    if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0916\u093E\u0924\u0947 \u0915\u0947 \u0932\u093F\u090F \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u0915\u094D\u0932\u0947\u092E \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     if (!cleanEmail && !cleanUserId) {
       return res.status(400).json({ error: "User email or ID required" });
     }
@@ -3260,15 +7153,19 @@ app.post("/api/rewards/first-time-export", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/user/sub-users", (req, res) => {
+app.get("/api/user/sub-users", requireAuthMiddleware, (req, res) => {
   try {
-    const rawEmail = (req.query.email || req.query.primaryEmail || "").toString().toLowerCase().trim();
+    const authUser = req.user;
+    const rawEmail = (req.query.email || req.query.primaryEmail || authUser?.email || "").toString().toLowerCase().trim();
     if (!rawEmail) {
       return res.status(400).json({ success: false, error: "Primary user email is required" });
     }
+    if (rawEmail !== authUser?.email?.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0938\u092C-\u092F\u0942\u095B\u0930 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const allProfiles = loadProfilesDatabase();
     const prof = allProfiles[rawEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === rawEmail) || {};
-    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || rawEmail === "admin.ainewsmaker@gmail.com" || rawEmail === "breakingnewswala.com@gmail.com";
+    const isAdmin = isAuthorizedAdmin(req);
     const tier = (prof.tier || "basic").toString().toLowerCase();
     const planName = (prof.planName || "").toString().toUpperCase();
     let allowedLimit = 0;
@@ -3298,20 +7195,24 @@ app.get("/api/user/sub-users", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/user/sub-users/invite", (req, res) => {
+app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = req.user;
     const { primaryEmail, subUserEmail, subUserName } = req.body || {};
-    const cleanPrimary = (primaryEmail || "").toString().toLowerCase().trim();
+    const cleanPrimary = (primaryEmail || authUser?.email || "").toString().toLowerCase().trim();
     const cleanSub = (subUserEmail || "").toString().toLowerCase().trim();
     if (!cleanPrimary || !cleanSub) {
       return res.status(400).json({ success: false, error: "Primary email and sub-user email are required" });
+    }
+    if (cleanPrimary !== authUser?.email?.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0916\u093E\u0924\u0947 \u0915\u0947 \u0924\u0939\u0924 \u0938\u092C-\u092F\u0942\u095B\u0930 \u091C\u094B\u0921\u093C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     if (cleanPrimary === cleanSub) {
       return res.status(400).json({ success: false, error: "\u0906\u092A \u0938\u094D\u0935\u092F\u0902 \u0915\u0947 \u0908\u092E\u0947\u0932 \u0915\u094B \u0938\u092C-\u092F\u0942\u095B\u0930 \u0915\u0947 \u0930\u0942\u092A \u092E\u0947\u0902 \u0928\u0939\u0940\u0902 \u091C\u094B\u0921\u093C \u0938\u0915\u0924\u0947\u0964" });
     }
     const allProfiles = loadProfilesDatabase();
     const prof = allProfiles[cleanPrimary] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanPrimary) || {};
-    const isAdmin = isAuthorizedAdmin(req) || prof.role === "admin" || prof.role === "superadmin" || cleanPrimary === "admin.ainewsmaker@gmail.com" || cleanPrimary === "breakingnewswala.com@gmail.com";
+    const isAdmin = isAuthorizedAdmin(req);
     const tier = (prof.tier || "basic").toString().toLowerCase();
     const planName = (prof.planName || "").toString().toUpperCase();
     let allowedLimit = 0;
@@ -3364,13 +7265,19 @@ app.post("/api/user/sub-users/invite", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/user/sub-users/:id", (req, res) => {
+app.delete("/api/user/sub-users/:id", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = req.user;
     const subId = req.params.id;
     let allSubs = loadSubUsersDatabase();
     const idx = allSubs.findIndex((s) => s.id === subId);
     if (idx === -1) {
       return res.status(404).json({ success: false, error: "\u0938\u092C-\u092F\u0942\u095B\u0930 \u0930\u093F\u0915\u0949\u0930\u094D\u0921 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+    }
+    const sub = allSubs[idx];
+    const isOwner = sub.primaryEmail.toLowerCase().trim() === authUser?.email?.toLowerCase().trim() || sub.subUserEmail.toLowerCase().trim() === authUser?.email?.toLowerCase().trim();
+    if (!isOwner && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0938\u092C-\u092F\u0942\u095B\u0930 \u0915\u094B \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     allSubs.splice(idx, 1);
     saveSubUsersDatabase(allSubs);
@@ -3382,7 +7289,7 @@ app.delete("/api/user/sub-users/:id", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/admin/sub-users", (_req, res) => {
+app.get("/api/admin/sub-users", requireAdminMiddleware, (_req, res) => {
   try {
     const allSubs = loadSubUsersDatabase();
     return res.json({
@@ -3393,11 +7300,21 @@ app.get("/api/admin/sub-users", (_req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/wallet/unlock-item", (req, res) => {
+app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = req.user;
     const { email, userId, itemId, itemType = "news", coinValue, coinCost, itemTitle, title } = req.body || {};
-    const cleanEmail = (email || "").toString().toLowerCase().trim();
-    const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    let cleanEmail = (email || "").toString().toLowerCase().trim();
+    let cleanUserId = (userId || cleanEmail || "").toString().trim();
+    if (!cleanEmail && authUser?.email) {
+      cleanEmail = authUser.email.toLowerCase().trim();
+    }
+    if (!cleanUserId && authUser?.userId) {
+      cleanUserId = authUser.userId;
+    }
+    if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0916\u093E\u0924\u0947 \u0938\u0947 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0905\u0928\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const cleanItemId = (itemId || "").toString().trim();
     const rawVal = coinValue !== void 0 ? coinValue : coinCost;
     const requiredCoins = Number(rawVal);
@@ -3491,7 +7408,7 @@ app.get("/api/wallet/unlocked-items", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], (req, res) => {
+app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u0949\u0907\u0928 \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
@@ -3566,8 +7483,8 @@ app.post("/api/admin/news-posts/:id/coin-value", (req, res) => {
       restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : []
     };
     saveNewsDatabase(posts);
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
-    logAdminAudit(adminEmail, "SET_NEWS_COIN_VALUE", id, { coinValue: posts[idx].coinValue, restrictedPlans: posts[idx].restrictedPlans });
+    const adminEmail2 = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail2, "SET_NEWS_COIN_VALUE", id, { coinValue: posts[idx].coinValue, restrictedPlans: posts[idx].restrictedPlans });
     return res.json({ success: true, post: posts[idx] });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -3595,8 +7512,8 @@ app.post("/api/admin/videos/:id/coin-value", (req, res) => {
       restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : []
     };
     saveVideosDatabase(videos);
-    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
-    logAdminAudit(adminEmail, "SET_VIDEO_COIN_VALUE", id, { coinValue: videos[idx].coinValue, restrictedPlans: videos[idx].restrictedPlans });
+    const adminEmail2 = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail2, "SET_VIDEO_COIN_VALUE", id, { coinValue: videos[idx].coinValue, restrictedPlans: videos[idx].restrictedPlans });
     return res.json({ success: true, video: videos[idx] });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -3758,6 +7675,20 @@ var AsyncLock = class {
 };
 var userDbLock = new AsyncLock();
 function loadUsersMasterDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    const unique = /* @__PURE__ */ new Map();
+    for (const u of centralDb.cache.users.values()) {
+      const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
+      if (key && !unique.has(key)) unique.set(key, u);
+    }
+    const list = Array.from(unique.values());
+    list.sort((a, b) => {
+      const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
+      const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
+      return timeB - timeA;
+    });
+    return list;
+  }
   try {
     const locations = resolveAllDatabaseLocations("users_master_database.json");
     for (const loc of locations) {
@@ -3780,6 +7711,15 @@ function loadUsersMasterDatabase() {
   return [];
 }
 function saveUsersMasterDatabase(users) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const u of users) {
+      const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
+      if (key) {
+        centralDb.saveUser(key, u).catch((e) => console.warn("[Firestore User Sync Error]", e.message));
+      }
+    }
+    return true;
+  }
   try {
     users.sort((a, b) => {
       const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
@@ -3818,6 +7758,9 @@ function saveUsersDatabase(users) {
   return saveUsersMasterDatabase(users);
 }
 function loadNotificationsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.notifications.size > 0) {
+    return Array.from(centralDb.cache.notifications.values());
+  }
   try {
     if (import_fs.default.existsSync(NOTIFICATIONS_DB_FILE)) {
       const raw = import_fs.default.readFileSync(NOTIFICATIONS_DB_FILE, "utf-8");
@@ -3830,6 +7773,13 @@ function loadNotificationsDatabase() {
   return [];
 }
 function saveNotificationsDatabase(notifs) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const n of notifs) {
+      centralDb.saveNotification(n.id, n).catch(() => {
+      });
+    }
+    return true;
+  }
   try {
     import_fs.default.writeFileSync(NOTIFICATIONS_DB_FILE, JSON.stringify(notifs, null, 2), "utf-8");
     return true;
@@ -3888,8 +7838,11 @@ function computeTrialFields(u, now = Date.now()) {
   const isSuper = u.role === "superadmin" || isProtectedAdminAccount(u.email);
   const isUpgraded = isSuper || u.tier && u.tier !== "basic" || Boolean(u.hasActivePaidPlan) || u.expiresAt && u.expiresAt > now && (Boolean(u.activatedVia) || Boolean(u.hasActivePaidPlan)) || u.planName && u.planName !== "TRIAL" && u.planName !== "BASIC" && (!u.expiresAt || u.expiresAt > now);
   if (isUpgraded) {
+    const effectiveExpiresAt = u.expiresAt && u.expiresAt > now ? u.expiresAt : now + 365 * 864e5;
+    const msRemaining2 = Math.max(0, effectiveExpiresAt - now);
+    const daysRemaining2 = isSuper ? 3650 : Math.max(1, Math.ceil(msRemaining2 / (24 * 3600 * 1e3)));
     return {
-      daysRemaining: isSuper ? 3650 : Math.max(0, Math.ceil(((u.expiresAt || now) - now) / (24 * 3600 * 1e3))),
+      daysRemaining: daysRemaining2,
       hoursRemaining: 24,
       minutesRemaining: 60,
       isTrialActive: false,
@@ -3946,6 +7899,9 @@ function checkUserAccess(userEmailOrUid) {
   return { allowed: true };
 }
 function extractUserIdentifier(req) {
+  const authUser = req.user;
+  if (authUser?.email) return authUser.email;
+  if (authUser?.userId || authUser?.uid) return authUser.userId || authUser.uid;
   const headerEmail = req.headers["x-user-email"] || req.headers["x-admin-email"] || void 0;
   const headerUid = req.headers["x-user-id"] || void 0;
   const bodyEmail = req.body?.email || req.body?.userEmail || req.body?.reporterEmail;
@@ -4333,12 +8289,12 @@ function reconcileAllUsers() {
       activatedVia: "Super Admin Preset",
       lastLoginAt: existingSuper?.lastLoginAt || Date.now()
     });
-    const adminEmail = "breakingnewswala.com@gmail.com";
-    const existingAdmin = userMap.get(adminEmail) || userMap.get("breakingnewswala@gmail.com");
-    const adminProf = profiles[adminEmail] || profiles["breakingnewswala@gmail.com"];
-    userMap.set(adminEmail, {
+    const adminEmail2 = "breakingnewswala.com@gmail.com";
+    const existingAdmin = userMap.get(adminEmail2) || userMap.get("breakingnewswala@gmail.com");
+    const adminProf = profiles[adminEmail2] || profiles["breakingnewswala@gmail.com"];
+    userMap.set(adminEmail2, {
       userId: existingAdmin?.userId || "usr_627265616b69",
-      email: adminEmail,
+      email: adminEmail2,
       name: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
       fullName: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
       username: adminProf?.username || existingAdmin?.username || "breakingnewswala",
@@ -4659,7 +8615,7 @@ function loadVideosDatabase() {
 function saveVideosDatabase(videos) {
   try {
     const locations = resolveAllDatabaseLocations("videos_database.json");
-    const jsonStr = JSON.stringify(videos, null, 2);
+    const jsonStr = JSON.stringify(videos || [], null, 2);
     for (const loc of locations) {
       try {
         const dir = import_path.default.dirname(loc);
@@ -4718,7 +8674,7 @@ app.get("/api/videos", (_req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/videos/upload", (req, res) => {
+app.post("/api/admin/videos/upload", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
@@ -4802,14 +8758,18 @@ app.put("/api/admin/videos/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/videos/:id", (req, res) => {
+app.delete("/api/admin/videos/:id", requireAdminMiddleware, async (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
-    }
     const videoId = req.params.id;
     saveDeletedVideoId(videoId);
     const currentVideos = loadVideosDatabase();
+    const toDelete = currentVideos.find((v) => v.id === videoId);
+    if (toDelete && cloudStorage) {
+      if (toDelete.videoUrl) cloudStorage.deleteMedia({ url: toDelete.videoUrl, category: "videos" }).catch(() => {
+      });
+      if (toDelete.thumbnailUrl) cloudStorage.deleteMedia({ url: toDelete.thumbnailUrl, category: "thumbnails" }).catch(() => {
+      });
+    }
     const filtered = currentVideos.filter((v) => v.id !== videoId);
     saveVideosDatabase(filtered);
     return res.json({ success: true, deletedId: videoId, remaining: filtered.length });
@@ -4870,7 +8830,7 @@ app.get("/api/music-library", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/admin/music-library", (_req, res) => {
+app.get("/api/admin/music-library", requireAdminMiddleware, (_req, res) => {
   try {
     const tracks = loadMusicLibrary();
     return res.json({ success: true, tracks });
@@ -4878,11 +8838,8 @@ app.get("/api/admin/music-library", (_req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/music-library/upload", (req, res) => {
+app.post("/api/admin/music-library/upload", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092E\u094D\u092F\u0942\u091C\u093C\u093F\u0915 \u0932\u093E\u0907\u092C\u094D\u0930\u0947\u0930\u0940 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
-    }
     const { id, name, title, category, url, duration, isCopyrightSafe, targetModes, allowedTiers } = req.body;
     const trackName = String(name || title || "").trim();
     if (!trackName || !url) {
@@ -4908,7 +8865,7 @@ app.post("/api/admin/music-library/upload", (req, res) => {
       url: String(url).trim(),
       duration: typeof duration === "number" ? duration : void 0,
       uploadedAt: Date.now(),
-      uploadedBy: req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin",
+      uploadedBy: req.user?.email || "admin",
       isCopyrightSafe: isCopyrightSafe !== void 0 ? Boolean(isCopyrightSafe) : true,
       targetModes: normalizedMode,
       allowedTiers: Array.isArray(allowedTiers) && allowedTiers.length > 0 ? allowedTiers : ["basic", "advance", "pro", "vip"]
@@ -4920,11 +8877,8 @@ app.post("/api/admin/music-library/upload", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.put("/api/admin/music-library/:id", (req, res) => {
+app.put("/api/admin/music-library/:id", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092E\u094D\u092F\u0942\u091C\u093C\u093F\u0915 \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
-    }
     const trackId = req.params.id;
     const { name, title, category, isCopyrightSafe, targetModes, allowedTiers } = req.body;
     const tracks = loadMusicLibrary();
@@ -4956,11 +8910,8 @@ app.put("/api/admin/music-library/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/music-library/:id", (req, res) => {
+app.delete("/api/admin/music-library/:id", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092E\u094D\u092F\u0942\u091C\u093C\u093F\u0915 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
-    }
     const trackId = req.params.id;
     const tracks = loadMusicLibrary();
     const filtered = tracks.filter((t) => t.id !== trackId);
@@ -5004,7 +8955,7 @@ app.get("/api/check-username", (req, res) => {
     return res.status(500).json({ available: false, error: err.message });
   }
 });
-app.get(["/api/users", "/api/admin/users"], (req, res) => {
+app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) => {
   try {
     if (req.path.includes("/admin/") && !isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u092A\u094D\u0930\u092C\u0902\u0927\u0928 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -5182,6 +9133,10 @@ app.post("/api/notifications/mark-read", (req, res) => {
 });
 var ADMIN_NOTIFS_READ_FILE = import_path.default.join(process.cwd(), "admin_notifications_read_db.json");
 function loadAdminReadNotificationIds() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("admin_notifs_read")) {
+    const list = centralDb.cache.systemConfig.get("admin_notifs_read");
+    if (Array.isArray(list)) return new Set(list);
+  }
   try {
     if (import_fs.default.existsSync(ADMIN_NOTIFS_READ_FILE)) {
       const raw = import_fs.default.readFileSync(ADMIN_NOTIFS_READ_FILE, "utf-8");
@@ -5193,6 +9148,11 @@ function loadAdminReadNotificationIds() {
   return /* @__PURE__ */ new Set();
 }
 function saveAdminReadNotificationIds(ids) {
+  if (centralDb && centralDb.useFirestore) {
+    centralDb.saveAdminNotificationsRead(Array.from(ids)).catch(() => {
+    });
+    return;
+  }
   try {
     const locs = resolveAllDatabaseLocations("admin_notifications_read_db.json");
     const jsonStr = JSON.stringify(Array.from(ids), null, 2);
@@ -5424,79 +9384,56 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
-var DEFAULT_PRODUCTION_RSS_SOURCES = [
-  {
-    id: "src_aajtak_live",
-    name: "\u0906\u091C \u0924\u0915 (Aaj Tak) - \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C",
-    url: "https://feeds.feedburner.com/aajtak/top",
-    type: "rss",
-    category: "\u0926\u0947\u0936",
-    isActive: true,
-    createdAt: 1726e9
-  },
-  {
-    id: "src_ndtv_live",
-    name: "NDTV \u0907\u0902\u0921\u093F\u092F\u093E - \u0932\u093E\u0907\u0935 \u0938\u092E\u093E\u091A\u093E\u0930",
-    url: "https://feeds.feedburner.com/ndtvkhabar",
-    type: "rss",
-    category: "\u0926\u0947\u0936",
-    isActive: true,
-    createdAt: 1726000002e3
-  },
-  {
-    id: "src_nbt_live",
-    name: "\u0928\u0935\u092D\u093E\u0930\u0924 \u091F\u093E\u0907\u092E\u094D\u0938 (NBT)",
-    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
-    type: "rss",
-    category: "\u0930\u093E\u091C\u094D\u092F",
-    isActive: true,
-    createdAt: 1726000004e3
-  }
-];
 function loadRssSourcesDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.rssSources.size > 0) {
+    const list = Array.from(centralDb.cache.rssSources.values());
+    const valid = list.filter((s) => {
+      if (!s || !s.url) return false;
+      const u = String(s.url).toLowerCase();
+      if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
+      return true;
+    });
+    return valid;
+  }
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       if (import_fs.default.existsSync(loc)) {
         const raw = import_fs.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const valid = parsed.filter((s) => s && s.url);
-          if (valid.length > 0) {
-            return valid;
-          }
-        }
-      }
-    }
-    for (const loc of locations) {
-      const backupFile = loc + ".bak";
-      if (import_fs.default.existsSync(backupFile)) {
-        const rawBak = import_fs.default.readFileSync(backupFile, "utf-8");
-        const parsedBak = JSON.parse(rawBak);
-        if (Array.isArray(parsedBak) && parsedBak.length > 0) {
-          const validBak = parsedBak.filter((s) => s && s.url);
-          if (validBak.length > 0) {
-            saveRssSourcesDatabase(validBak);
-            return validBak;
-          }
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter((s) => {
+            if (!s || !s.url) return false;
+            const u = String(s.url).toLowerCase();
+            if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
+            return true;
+          });
+          return valid;
         }
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return DEFAULT_PRODUCTION_RSS_SOURCES;
+  return [];
 }
 function saveRssSourcesDatabase(sources) {
-  try {
-    const cleaned = sources.filter((s) => s && s.url);
-    if (cleaned.length === 0) {
-      const existing = loadRssSourcesDatabase();
-      if (existing.length > 0) {
-        console.warn("Safeguard: Refusing to overwrite populated rss_sources_database with empty array");
-        return true;
+  const cleaned = sources.filter((s) => {
+    if (!s || !s.url) return false;
+    const u = String(s.url).toLowerCase();
+    if (u.includes("amarujala.com") || u.includes("bbci.co.uk") || u.includes("bbc.com")) return false;
+    return true;
+  });
+  if (centralDb && centralDb.useFirestore) {
+    for (const s of cleaned) {
+      if (s && s.id) {
+        centralDb.saveRssSource(s.id, s).catch(() => {
+        });
       }
     }
+    return true;
+  }
+  try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       try {
@@ -5904,11 +9841,21 @@ ${editorial.summary}
 function verifyIsAdminUser(req) {
   return isAuthorizedAdmin(req);
 }
-app.get("/api/admin/rss-sources", (_req, res) => {
-  const sources = loadRssSourcesDatabase();
+function formatHindiDate(timestamp) {
+  if (!timestamp) return "\u092A\u0942\u0930\u094D\u0935 \u092E\u0947\u0902 \u091C\u094B\u0921\u093C\u093E \u0917\u092F\u093E (Legacy)";
+  const date = new Date(typeof timestamp === "string" ? isNaN(Number(timestamp)) ? timestamp : Number(timestamp) : timestamp);
+  if (isNaN(date.getTime()) || date.getFullYear() < 2024) return "\u092A\u0942\u0930\u094D\u0935 \u092E\u0947\u0902 \u091C\u094B\u0921\u093C\u093E \u0917\u092F\u093E (Legacy)";
+  const monthsHindi = ["\u091C\u0928\u0935\u0930\u0940", "\u092B\u093C\u0930\u0935\u0930\u0940", "\u092E\u093E\u0930\u094D\u091A", "\u0905\u092A\u094D\u0930\u0948\u0932", "\u092E\u0908", "\u091C\u0942\u0928", "\u091C\u0941\u0932\u093E\u0908", "\u0905\u0917\u0938\u094D\u0924", "\u0938\u093F\u0924\u0902\u092C\u0930", "\u0905\u0915\u094D\u091F\u0942\u092C\u0930", "\u0928\u0935\u0902\u092C\u0930", "\u0926\u093F\u0938\u0902\u092C\u0930"];
+  return `${date.getDate()} ${monthsHindi[date.getMonth()]} ${date.getFullYear()}`;
+}
+app.get("/api/admin/rss-sources", requireAdminMiddleware, (_req, res) => {
+  const sources = loadRssSourcesDatabase().map((s) => ({
+    ...s,
+    addedDateFormatted: formatHindiDate(s.addedAt || s.createdAt)
+  }));
   return res.json({ success: true, sources });
 });
-app.post("/api/admin/rss-sources", (req, res) => {
+app.post("/api/admin/rss-sources", requireAdminMiddleware, (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: RSS \u092B\u093C\u0940\u0921\u094D\u0938 \u0914\u0930 \u0935\u0947\u092C \u0932\u093F\u0902\u0915\u094D\u0938 \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u093F\u090F \u091C\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -5916,46 +9863,67 @@ app.post("/api/admin/rss-sources", (req, res) => {
     const payload = req.body;
     const existingSources = loadRssSourcesDatabase();
     let incoming = [];
+    const now = Date.now();
     if (Array.isArray(payload)) {
       incoming = payload;
     } else if (payload && Array.isArray(payload.sources)) {
       incoming = payload.sources;
     } else if (payload && payload.url) {
       incoming = [{
-        id: payload.id || `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        id: payload.id || `src_${now}_${Math.random().toString(36).slice(2, 6)}`,
         name: (payload.name || (payload.type === "web" ? "Web Link" : "RSS Source")).trim(),
         url: payload.url.trim(),
         type: payload.type === "web" ? "web" : "rss",
         category: payload.category || "\u0926\u0947\u0936",
         isActive: payload.isActive !== false,
-        createdAt: payload.createdAt || Date.now(),
+        createdAt: payload.createdAt || now,
+        addedAt: payload.addedAt || payload.createdAt || now,
+        addedDateFormatted: formatHindiDate(payload.addedAt || payload.createdAt || now),
         itemsFetchedCount: 0
       }];
     }
     const sourceMap = /* @__PURE__ */ new Map();
     if (req.query.replace === "true" || payload?.replace === true) {
       incoming.forEach((s) => {
-        if (s && s.url) sourceMap.set(s.url.trim(), s);
+        if (s && s.url) {
+          const original = existingSources.find((ex) => ex.url === s.url);
+          const origCreatedAt = original?.createdAt || s.createdAt || now;
+          const origAddedAt = original?.addedAt || s.addedAt || origCreatedAt;
+          sourceMap.set(s.url.trim(), {
+            ...s,
+            createdAt: origCreatedAt,
+            addedAt: origAddedAt,
+            addedDateFormatted: formatHindiDate(origAddedAt)
+          });
+        }
       });
     } else {
       existingSources.forEach((s) => {
         if (s && s.url) sourceMap.set(s.url.trim(), s);
       });
       incoming.forEach((s) => {
-        if (s && s.url) sourceMap.set(s.url.trim(), s);
+        if (s && s.url) {
+          const existing = sourceMap.get(s.url.trim());
+          const origCreatedAt = existing?.createdAt || s.createdAt || now;
+          const origAddedAt = existing?.addedAt || s.addedAt || origCreatedAt;
+          sourceMap.set(s.url.trim(), {
+            ...existing,
+            ...s,
+            createdAt: origCreatedAt,
+            addedAt: origAddedAt,
+            addedDateFormatted: formatHindiDate(origAddedAt)
+          });
+        }
       });
     }
     let finalSources = Array.from(sourceMap.values());
-    if (finalSources.length === 0) {
-      finalSources = DEFAULT_PRODUCTION_RSS_SOURCES;
-    }
     saveRssSourcesDatabase(finalSources);
     return res.json({ success: true, sources: finalSources });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/delete-rss-source/:id", (req, res) => {
+app.delete("/api/admin/delete-rss-source/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: RSS \u092B\u093C\u0940\u0921\u094D\u0938 \u0939\u091F\u093E\u0928\u093E \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0941\u092E\u0924 \u0939\u0948\u0964" });
@@ -6258,7 +10226,7 @@ app.get("/api/rss/web-feed", (req, res) => {
     return res.status(500).set("Content-Type", "text/plain; charset=utf-8").send(err.message || "Error generating feed");
   }
 });
-app.post("/api/admin/rss-sync", async (_req, res) => {
+app.post("/api/admin/rss-sync", requireAdminMiddleware, async (_req, res) => {
   try {
     const sources = loadRssSourcesDatabase();
     const activeSources = sources.filter((s) => s.isActive);
@@ -6528,6 +10496,13 @@ app.get("/api/account-deletion-requests", (_req, res) => {
 });
 app.use("/uploads", import_express.default.static(import_path.default.join(process.cwd(), "public", "uploads")));
 function loadProfilesDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    const dict = {};
+    for (const [k, v] of centralDb.cache.users.entries()) {
+      dict[k] = v;
+    }
+    return dict;
+  }
   try {
     if (import_fs.default.existsSync(PROFILES_DB_FILE)) {
       const raw = import_fs.default.readFileSync(PROFILES_DB_FILE, "utf-8");
@@ -6539,6 +10514,13 @@ function loadProfilesDatabase() {
   return {};
 }
 function saveProfilesDatabase(data) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const [key, profile] of Object.entries(data)) {
+      const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
+      centralDb.saveUser(docId, profile).catch((e) => console.warn("[Firestore Profile Sync Error]", e.message));
+    }
+    return true;
+  }
   try {
     const locations = resolveAllDatabaseLocations("user_profiles_db.json");
     const jsonStr = JSON.stringify(data, null, 2);
@@ -6549,20 +10531,6 @@ function saveProfilesDatabase(data) {
         import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
-    }
-    try {
-      const adapter = require_server_firestore_adapter();
-      if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
-        for (const [key, profile] of Object.entries(data)) {
-          const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
-          adapter.firestoreWriteDoc("users", docId, {
-            ...profile,
-            uid: docId,
-            updatedAt: Date.now()
-          }).catch((e) => console.warn("[Firestore Profile Sync Error]", e.message));
-        }
-      }
-    } catch {
     }
     return true;
   } catch (err) {
@@ -6744,6 +10712,9 @@ app.post("/api/user-profile", async (req, res) => {
 });
 var ADMIN_BRANDING_FILE = import_path.default.join(process.cwd(), "admin_branding_db.json");
 function loadAdminBranding() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("admin_branding")) {
+    return centralDb.cache.systemConfig.get("admin_branding");
+  }
   try {
     if (import_fs.default.existsSync(ADMIN_BRANDING_FILE)) {
       const raw = import_fs.default.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
@@ -6764,6 +10735,14 @@ function loadAdminBranding() {
   };
 }
 function saveAdminBranding(data) {
+  if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache?.systemConfig) {
+      centralDb.cache.systemConfig.set("admin_branding", data);
+    }
+    centralDb.saveAdminBranding(data).catch(() => {
+    });
+    return true;
+  }
   try {
     import_fs.default.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
     return true;
@@ -6772,11 +10751,11 @@ function saveAdminBranding(data) {
     return false;
   }
 }
-app.get("/api/admin/branding", (_req, res) => {
+app.get("/api/admin/branding", requireAdminMiddleware, (_req, res) => {
   const branding = loadAdminBranding();
   return res.json({ success: true, branding });
 });
-app.post("/api/admin/branding", (req, res) => {
+app.post("/api/admin/branding", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -6796,6 +10775,9 @@ app.post("/api/admin/branding", (req, res) => {
 });
 var CUSTOM_FRAMES_FILE = import_path.default.join(process.cwd(), "custom_frames_db.json");
 function loadCustomFramesDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("custom_frames")) {
+    return centralDb.cache.systemConfig.get("custom_frames");
+  }
   try {
     if (import_fs.default.existsSync(CUSTOM_FRAMES_FILE)) {
       const raw = import_fs.default.readFileSync(CUSTOM_FRAMES_FILE, "utf-8");
@@ -6808,6 +10790,13 @@ function loadCustomFramesDatabase() {
   return [];
 }
 function saveCustomFramesDatabase(frames) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const f of frames) {
+      centralDb.saveCustomFrame(f.id, f).catch(() => {
+      });
+    }
+    return true;
+  }
   try {
     import_fs.default.writeFileSync(CUSTOM_FRAMES_FILE, JSON.stringify(frames, null, 2), "utf-8");
     return true;
@@ -6824,7 +10813,7 @@ app.get("/api/custom-frames", (req, res) => {
   const userFrames = all.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId || f.userId === "general");
   return res.json({ success: true, frames: userFrames });
 });
-app.post("/api/custom-frames", enforceUserAccessMiddleware, (req, res) => {
+app.post("/api/custom-frames", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u091C\u094B\u0921\u093C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -6852,7 +10841,7 @@ app.post("/api/custom-frames", enforceUserAccessMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/custom-frames/:id", (req, res) => {
+app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -6984,6 +10973,9 @@ try {
 } catch {
 }
 function loadSupportRequestsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("support_requests")) {
+    return centralDb.cache.systemConfig.get("support_requests");
+  }
   try {
     if (import_fs.default.existsSync(SUPPORT_DB_FILE)) {
       const raw = import_fs.default.readFileSync(SUPPORT_DB_FILE, "utf-8");
@@ -6996,6 +10988,13 @@ function loadSupportRequestsDatabase() {
   return [];
 }
 function saveSupportRequestsDatabase(requests) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const r of requests) {
+      centralDb.saveSupportRequest(r).catch(() => {
+      });
+    }
+    return true;
+  }
   try {
     import_fs.default.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
     return true;
@@ -7024,7 +11023,7 @@ app.get("/api/support/requests", (req, res) => {
   );
   return res.json({ success: true, requests: userRequests });
 });
-app.post("/api/support/requests", (req, res) => {
+app.post("/api/support/requests", async (req, res) => {
   try {
     const data = req.body;
     if (!data) return res.status(400).json({ error: "No data provided" });
@@ -7041,12 +11040,23 @@ app.post("/api/support/requests", (req, res) => {
       }
       const ext = magic.format || "png";
       const filename = `support_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
-      import_fs.default.writeFileSync(import_path.default.join(UPLOAD_SUPPORT_DIR, filename), buf);
-      try {
-        import_fs.default.writeFileSync(import_path.default.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf);
-      } catch {
+      if (cloudStorage) {
+        const uploadRes = await cloudStorage.saveMedia({
+          buffer: buf,
+          filename,
+          contentType: magic.format === "png" ? "image/png" : "image/jpeg",
+          category: "support",
+          publicRead: true
+        });
+        finalAttachmentUrl = uploadRes && uploadRes.url ? uploadRes.url : `/uploads/support/${filename}`;
+      } else {
+        import_fs.default.writeFileSync(import_path.default.join(UPLOAD_SUPPORT_DIR, filename), buf);
+        try {
+          import_fs.default.writeFileSync(import_path.default.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf);
+        } catch {
+        }
+        finalAttachmentUrl = `/uploads/support/${filename}`;
       }
-      finalAttachmentUrl = `/uploads/support/${filename}`;
     }
     const newRequest = {
       id: data.id || `inq_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}`,
@@ -7250,7 +11260,7 @@ app.put("/api/admin/raw-news/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/raw-news/:id", (req, res) => {
+app.delete("/api/admin/raw-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0930\u0949 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
@@ -7459,11 +11469,8 @@ app.post("/api/logo-change-requests/:id/reject", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/videos/upload-file", (req, res) => {
+app.post("/api/admin/videos/upload-file", requireAdminMiddleware, async (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u0905\u092A\u0932\u094B\u0921 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
     const { videoData, filename = "video.mp4" } = req.body;
     if (!videoData || typeof videoData !== "string") {
       return res.status(400).json({ error: "\u0935\u0940\u0921\u093F\u092F\u094B \u0921\u0947\u091F\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
@@ -7479,24 +11486,34 @@ app.post("/api/admin/videos/upload-file", (req, res) => {
     const savedFilename = `video_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
-    const filePath = import_path.default.join(UPLOAD_VIDEOS_DIR, savedFilename);
-    const webFilePath = import_path.default.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
-    import_fs.default.writeFileSync(filePath, buffer);
-    try {
-      import_fs.default.writeFileSync(webFilePath, buffer);
-    } catch {
+    let videoUrl = `/uploads/videos/${savedFilename}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer,
+        filename: savedFilename,
+        contentType: ext === "webm" ? "video/webm" : "video/mp4",
+        category: "videos",
+        publicRead: true
+      });
+      if (uploadRes && uploadRes.url) {
+        videoUrl = uploadRes.url;
+      }
+    } else {
+      const filePath = import_path.default.join(UPLOAD_VIDEOS_DIR, savedFilename);
+      const webFilePath = import_path.default.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
+      import_fs.default.writeFileSync(filePath, buffer);
+      try {
+        import_fs.default.writeFileSync(webFilePath, buffer);
+      } catch {
+      }
     }
-    const videoUrl = `/uploads/videos/${savedFilename}`;
     return res.json({ success: true, videoUrl, filename: savedFilename });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
+app.post("/api/admin/videos/upload-thumbnail", requireAdminMiddleware, async (req, res) => {
   try {
-    if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0925\u0902\u092C\u0928\u0947\u0932 \u0905\u092A\u0932\u094B\u0921 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
     const { imageData } = req.body;
     if (!imageData || typeof imageData !== "string") {
       return res.status(400).json({ error: "\u0925\u0902\u092C\u0928\u0947\u0932 \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
@@ -7512,14 +11529,27 @@ app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
     }
     const ext = magic.format || "jpg";
     const savedFilename = `thumb_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
-    const filePath = import_path.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
-    const webFilePath = import_path.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
-    import_fs.default.writeFileSync(filePath, buffer);
-    try {
-      import_fs.default.writeFileSync(webFilePath, buffer);
-    } catch {
+    let thumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer,
+        filename: savedFilename,
+        contentType: magic.format === "png" ? "image/png" : "image/jpeg",
+        category: "thumbnails",
+        publicRead: true
+      });
+      if (uploadRes && uploadRes.url) {
+        thumbnailUrl = uploadRes.url;
+      }
+    } else {
+      const filePath = import_path.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
+      const webFilePath = import_path.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
+      import_fs.default.writeFileSync(filePath, buffer);
+      try {
+        import_fs.default.writeFileSync(webFilePath, buffer);
+      } catch {
+      }
     }
-    const thumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
     return res.json({ success: true, thumbnailUrl, filename: savedFilename });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -7527,6 +11557,9 @@ app.post("/api/admin/videos/upload-thumbnail", (req, res) => {
 });
 app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
   try {
+    if (!req.user) {
+      req.user = getAuthenticatedUser(req);
+    }
     const userTier = (req.user?.tier || req.user?.subscriptionTier || req.body.userTier || req.headers["x-user-tier"] || "basic").toString().toLowerCase().trim();
     const isAdmin = req.user?.role === "admin" || req.user?.role === "superadmin";
     const isVipDash = isAdmin || userTier === "vip_dash" || userTier === "vip-dash" || userTier === "vip desk" || userTier === "ultra" || userTier === "vip";
@@ -7559,14 +11592,27 @@ app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, error: "\u092B\u093C\u0949\u0928\u094D\u091F \u092B\u093C\u093E\u0907\u0932 \u0915\u093E \u0906\u0915\u093E\u0930 15MB \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964" });
     }
     const safeBaseName = `font_${Date.now()}_${cleanFontName.replace(/\s+/g, "_")}${ext}`;
-    const fontFilePath = import_path.default.join(UPLOAD_FONTS_DIR, safeBaseName);
-    const webFontFilePath = import_path.default.join(WEB_UPLOAD_FONTS_DIR, safeBaseName);
-    import_fs.default.writeFileSync(fontFilePath, fontBuffer);
-    try {
-      import_fs.default.writeFileSync(webFontFilePath, fontBuffer);
-    } catch {
+    let fontUrl = `/uploads/fonts/${safeBaseName}`;
+    if (cloudStorage) {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer: fontBuffer,
+        filename: safeBaseName,
+        contentType: ext === ".woff2" ? "font/woff2" : ext === ".woff" ? "font/woff" : "font/ttf",
+        category: "fonts",
+        publicRead: true
+      });
+      if (uploadRes && uploadRes.url) {
+        fontUrl = uploadRes.url;
+      }
+    } else {
+      const fontFilePath = import_path.default.join(UPLOAD_FONTS_DIR, safeBaseName);
+      const webFontFilePath = import_path.default.join(WEB_UPLOAD_FONTS_DIR, safeBaseName);
+      import_fs.default.writeFileSync(fontFilePath, fontBuffer);
+      try {
+        import_fs.default.writeFileSync(webFontFilePath, fontBuffer);
+      } catch {
+      }
     }
-    const fontUrl = `/uploads/fonts/${safeBaseName}`;
     return res.json({
       success: true,
       fontName: cleanFontName,
@@ -7578,7 +11624,7 @@ app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
     return res.status(500).json({ success: false, error: err?.message || "\u092B\u093C\u0949\u0928\u094D\u091F \u0905\u092A\u0932\u094B\u0921 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0935\u093F\u092B\u0932" });
   }
 });
-app.post("/api/admin/reset-user-logo", (req, res) => {
+app.post("/api/admin/reset-user-logo", requireAdminMiddleware, (req, res) => {
   try {
     const { targetUsername } = req.body;
     if (!targetUsername) {
@@ -7600,7 +11646,7 @@ app.post("/api/admin/reset-user-logo", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/block-user", (req, res) => {
+app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -7650,7 +11696,7 @@ app.post("/api/admin/block-user", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/unblock-user", (req, res) => {
+app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -7691,12 +11737,11 @@ app.post("/api/admin/unblock-user", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/delete-user", (req, res) => {
+app.post("/api/admin/delete-user", requireMasterAdminMiddleware, (req, res) => {
   try {
-    const adminEmail = (req.body?.adminEmail || extractAdminEmail(req) || "").toLowerCase().trim();
-    const isMaster = isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req) || adminEmail === MASTER_ADMIN_EMAIL || adminEmail === REGULAR_ADMIN_EMAIL;
+    const isMaster = isAuthorizedMasterAdmin(req);
     if (!isMaster) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const { userId, userEmail, targetEmail, targetUserId } = req.body;
     const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
@@ -7883,10 +11928,9 @@ app.post("/api/admin/delete-user", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/update-user", (req, res) => {
+app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
   try {
-    const adminEmail = extractAdminEmail(req);
-    const isMaster = isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req) || adminEmail === MASTER_ADMIN_EMAIL || adminEmail === REGULAR_ADMIN_EMAIL || req.headers["x-admin-key"] === "master-admin" || req.headers["x-admin-key"] === "admin-secret-key";
+    const isMaster = isAuthorizedAdmin(req);
     if (!isMaster) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
@@ -8458,8 +12502,8 @@ var TEMPLATE_CONFIG_REGISTRY = {
     aspect_ratio: "4:5"
   }
 };
-function getTemplateConfig(templateId) {
-  const tid = templateId || "graphic_001";
+function getTemplateConfig(templateId2) {
+  const tid = templateId2 || "graphic_001";
   if (TEMPLATE_CONFIG_REGISTRY[tid]) {
     return TEMPLATE_CONFIG_REGISTRY[tid];
   }
@@ -8519,10 +12563,10 @@ function saveAiFeaturesConfig(cfg) {
 function getHeadlineRegenCoinCost(tier, role) {
   const cleanRole = (role || "").toLowerCase().trim();
   if (cleanRole === "admin" || cleanRole === "superadmin") return 0;
-  const t = (tier || "basic").toLowerCase().trim();
-  if (t === "ultra" || t === "vip desk" || t === "vip_desk" || t === "vip" || t === "vip_dash") return 0;
+  const t = (tier || "basic").toLowerCase().trim().replace(/[\-_]/g, " ");
+  if (t === "ultra" || t === "vip desk" || t === "vip" || t === "vip dash") return 0;
   if (t === "professional" || t === "pro") return 25;
-  if (t === "advanced" || t === "advance" || t === "basic_advanced" || t === "advance_plus") return 50;
+  if (t === "advanced" || t === "advance" || t === "basic advanced" || t === "advance plus") return 50;
   return 100;
 }
 function isRegenerateAllowed(config, effectiveTier) {
@@ -8565,7 +12609,9 @@ function resolveUserTierAndRole(req) {
   if (identifier) {
     const clean = identifier.toString().toLowerCase().trim();
     if (isProtectedAdminAccount(clean)) {
-      return { tier: explicitTier || "superadmin", role: "superadmin" };
+      if (isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req)) {
+        return { tier: explicitTier || "superadmin", role: "superadmin" };
+      }
     }
     const users = loadUsersMasterDatabase();
     const match = users.find(
@@ -8582,9 +12628,11 @@ function resolveUserTierAndRole(req) {
   return { tier: reqTier, role: reqRole };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.1-flash-lite",
-  "gemini-3.8-flash",
-  "gemini-flash-latest"
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-3.8-flash"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
@@ -8601,7 +12649,7 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
           config: effectiveConfig
         });
         const timeoutPromise = new Promise(
-          (_, reject) => setTimeout(() => reject(new Error(`Model ${model} timeout after 14s`)), 14e3)
+          (_, reject) => setTimeout(() => reject(new Error(`Model ${model} timeout after 35s`)), 35e3)
         );
         const res = await Promise.race([callPromise, timeoutPromise]);
         quotaExceededInfo.isExceeded = false;
@@ -8670,7 +12718,7 @@ function loadApiKeysVault() {
   }
   const envKey = (process.env.GEMINI_API_KEY || "").trim();
   if (envKey && envKey.length >= 15 && envKey !== "MY_GEMINI_API_KEY") {
-    const defaultVault = {
+    return {
       freeKeys: [
         {
           id: "free_env_primary",
@@ -8689,8 +12737,6 @@ function loadApiKeysVault() {
       paidKey: null,
       vipRoutingEnabled: true
     };
-    saveApiKeysVault(defaultVault);
-    return defaultVault;
   }
   return {
     freeKeys: [],
@@ -8717,6 +12763,16 @@ function saveApiKeysVault(vault) {
     } catch (err) {
       console.error(`Error saving ${filename}:`, err.message);
     }
+  }
+  try {
+    const adapter = require_server_firestore_adapter();
+    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
+      adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
+        ...vault,
+        updatedAt: Date.now()
+      }).catch((e) => console.warn("[Firestore API Key Vault Sync Error]", e.message));
+    }
+  } catch {
   }
   return savedAtLeastOne;
 }
@@ -8877,7 +12933,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     }
   });
 });
-app.delete("/api/admin/api-keys/free/:id", (req, res) => {
+app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -8891,7 +12947,7 @@ app.delete("/api/admin/api-keys/free/:id", (req, res) => {
   saveApiKeysVault(vault);
   return res.json({ success: true, message: "\u092B\u094D\u0930\u0940 API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
 });
-app.post("/api/admin/api-keys/paid", async (req, res) => {
+app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -8917,7 +12973,7 @@ app.post("/api/admin/api-keys/paid", async (req, res) => {
     paidKeyConfigured: Boolean(vault.paidKey?.key)
   });
 });
-app.delete("/api/admin/api-keys/paid", (req, res) => {
+app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -8926,7 +12982,7 @@ app.delete("/api/admin/api-keys/paid", (req, res) => {
   saveApiKeysVault(vault);
   return res.json({ success: true, message: "\u092A\u0947\u0921 VIP API Key \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
 });
-app.post("/api/admin/api-keys/test", async (req, res) => {
+app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -8986,10 +13042,36 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
       apiKey: targetKeyStr,
       httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } }
     });
-    const result = await testAi.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: "Respond with 2 words: Connected successfully"
-    });
+    let testSuccess = false;
+    let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+    let lastTestErr = null;
+    for (const testModel of DEFAULT_FALLBACK_MODELS) {
+      try {
+        const timeoutPromise = new Promise(
+          (_, reject) => setTimeout(() => reject(new Error(`Test timeout on model ${testModel} after 12s`)), 12e3)
+        );
+        const testCall = testAi.models.generateContent({
+          model: testModel,
+          contents: '\u0906\u092A \u090F\u0915 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0915 \u0939\u0948\u0902\u0964 \u0907\u0938 \u091F\u0947\u0938\u094D\u091F \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u0930 \u0935\u0948\u0927 JSON \u092E\u0947\u0902 \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0902: {"status": "ok", "newsReady": true}',
+          config: {
+            responseMimeType: "application/json"
+          }
+        });
+        await Promise.race([testCall, timeoutPromise]);
+        testSuccess = true;
+        successfulModel = testModel;
+        break;
+      } catch (mErr) {
+        lastTestErr = mErr;
+        const errMsg = String(mErr?.message || mErr || "").toLowerCase();
+        if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota") || errMsg.includes("402") || errMsg.includes("depleted") || errMsg.includes("payment") || errMsg.includes("api_key_invalid") || mErr?.status === 400) {
+          break;
+        }
+      }
+    }
+    if (!testSuccess) {
+      throw lastTestErr || new Error("All fallback models failed health diagnostic");
+    }
     const latency = Date.now() - start;
     targetRef.lastTestedAt = Date.now();
     targetRef.lastLatencyMs = latency;
@@ -9002,9 +13084,9 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     saveApiKeysVault(vault);
     return res.json({
       success: true,
-      message: `\u2705 API Key \u092A\u0942\u0930\u094D\u0923\u0924\u0903 \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0915\u093E\u0930\u094D\u092F\u0930\u0924 \u0939\u0948! \u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940 \u0938\u0947 \u0938\u092B\u0932 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 (${latency}ms)`,
+      message: `\u2705 API Key \u092A\u0942\u0930\u094D\u0923\u0924\u0903 \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0915\u093E\u0930\u094D\u092F\u0930\u0924 \u0939\u0948! \u091C\u0947\u092E\u093F\u0928\u0940 \u092E\u0949\u0921\u0932 (${successfulModel}) \u0938\u0947 \u0938\u092B\u0932 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 (${latency}ms)`,
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: "gemini-3.8-flash",
+      model: successfulModel,
       latencyMs: latency,
       healthStatus: "healthy",
       status: targetRef.status,
@@ -9016,7 +13098,11 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     targetRef.lastTestedAt = Date.now();
     targetRef.lastLatencyMs = latency;
     let userFacingMsg = `\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F: ${cleanErrorMessage(err)}`;
-    if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
+    if (errMsg.includes("402") || errMsg.includes("depleted") || errMsg.includes("payment required") || errMsg.includes("billing")) {
+      targetRef.lastHealthStatus = "quota_exceeded";
+      targetRef.lastError = "\u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (402 Payment Required / Depleted Credits)";
+      userFacingMsg = "\u26A0\uFE0F API \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (402 Depleted Credits)\u0964 \u0915\u0943\u092A\u092F\u093E \u0917\u0942\u0917\u0932 \u090F\u0906\u0908 \u0915\u0902\u0938\u094B\u0932 \u092E\u0947\u0902 \u092C\u093F\u0932\u093F\u0902\u0917 \u091C\u093E\u0901\u091A\u0947\u0902 \u092F\u093E \u0926\u0942\u0938\u0930\u0940 \u0915\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964";
+    } else if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
       targetRef.lastHealthStatus = "quota_exceeded";
       targetRef.lastError = "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exhausted)";
       userFacingMsg = "\u26A0\uFE0F API \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exceeded)\u0964 \u0915\u0940-\u0930\u094B\u091F\u0947\u0936\u0928 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0905\u0917\u0932\u0940 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0940 \u0909\u092A\u092F\u094B\u0917 \u0939\u094B\u0917\u0940\u0964";
@@ -9024,6 +13110,10 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
       targetRef.lastHealthStatus = "invalid";
       targetRef.lastError = "\u0905\u092E\u093E\u0928\u094D\u092F API Key (400 Invalid Authentication)";
       userFacingMsg = "\u274C \u0905\u092E\u093E\u0928\u094D\u092F API Key\u0964 Google Gemini \u0926\u094D\u0935\u093E\u0930\u093E \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924\u0964";
+    } else if (errMsg.includes("timeout") || errMsg.includes("503") || errMsg.includes("unavailable")) {
+      targetRef.lastHealthStatus = "rate_limited";
+      targetRef.lastError = "\u0938\u0930\u094D\u0935\u0930 \u0932\u094B\u0921 \u092F\u093E \u091F\u093E\u0907\u092E\u0906\u0909\u091F (503 / Timeout)";
+      userFacingMsg = "\u26A0\uFE0F \u091C\u0947\u092E\u093F\u0928\u0940 \u0938\u0930\u094D\u0935\u0930 \u0932\u094B\u0921/\u091F\u093E\u0907\u092E\u0906\u0909\u091F\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0915\u094D\u0937\u0923 \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964";
     } else {
       targetRef.lastHealthStatus = "error";
       targetRef.lastError = cleanErrorMessage(err);
@@ -9036,7 +13126,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
       success: false,
       error: userFacingMsg,
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: "gemini-3.8-flash",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
       latencyMs: latency,
       healthStatus: targetRef.lastHealthStatus,
       lastTestedAt: targetRef.lastTestedAt
@@ -9979,6 +14069,7 @@ function calculateHeadlineSimilarityInternal(h1, h2) {
   }
   return 2 * common / (words1.size + words2.size);
 }
+var calculateHeadlineSimilarity = calculateHeadlineSimilarityInternal;
 var HEADLINE_TIER_RANGES = [
   { option: 1, label: "\u0935\u093F\u0915\u0932\u094D\u092A 1" },
   { option: 2, label: "\u0935\u093F\u0915\u0932\u094D\u092A 2" },
@@ -10108,13 +14199,23 @@ function ensureHashtagHierarchy(summaryText, location = "", username = "", mode 
   }
   let finalBodyText = "";
   if (mode === "bullet") {
-    const bulletLines = rawBody.split(/\n+/).map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim()).filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
-    if (bulletLines.length > 0) {
-      finalBodyText = bulletLines.slice(0, 6).map((b) => `\u2022 ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
-    } else {
-      const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => stripAllUrlsAndHyperlinks(s).trim()).filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
-      finalBodyText = (sentences.length > 0 ? sentences.slice(0, 4) : ["\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935\u093F\u0935\u0930\u0923\u0964"]).map((s) => `\u2022 ${s.replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
+    const rawLines = rawBody.split(/\n+/).map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim()).filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
+    let bulletLines = rawLines;
+    if (bulletLines.length < 3) {
+      const sentences = rawBody.split(/[।\.\n]+/).map((s) => stripAllUrlsAndHyperlinks(s).replace(/^[•\-\*\d\.\s]+/, "").trim()).filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
+      bulletLines = sentences.slice(0, 5);
     }
+    const fallbackBullets = [
+      "\u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948",
+      "\u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0938\u0947 \u092C\u093E\u0924\u091A\u0940\u0924 \u0915\u0930 \u0906\u0917\u0947 \u0915\u0940 \u0930\u0942\u092A\u0930\u0947\u0916\u093E \u0924\u0948\u092F\u093E\u0930 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948",
+      "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u093E\u092E\u0940 \u0924\u093E\u091C\u093E \u091C\u093E\u0928\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u092A\u0930 \u0932\u0917\u093E\u0924\u093E\u0930 \u0928\u091C\u0930 \u092C\u0928\u0940 \u0939\u0941\u0908 \u0939\u0948"
+    ];
+    let fbIdx = 0;
+    while (bulletLines.length < 3) {
+      bulletLines.push(fallbackBullets[fbIdx % fallbackBullets.length]);
+      fbIdx++;
+    }
+    finalBodyText = bulletLines.slice(0, 5).map((b) => `\u2022 ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}\u0964`).join("\n");
   } else if (mode === "short") {
     const rawParagraphs = rawBody.split(/\n{2,}/).map((p) => p.replace(/[ \t]{2,}/g, " ").trim()).filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
     if (rawParagraphs.length >= 2) {
@@ -10175,11 +14276,23 @@ ${p2}
 
 ${p3}`;
       } else if (sentences.length === 2) {
-        finalBodyText = `${sentences[0]}\u0964
+        const p1 = sentences[0] + "\u0964";
+        const p2 = sentences[1] + "\u0964";
+        const p3 = `${location ? `${location} \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0907\u0938` : "\u0907\u0938"} \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0914\u0930 \u092A\u0941\u0932\u093F\u0938 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947 \u0930\u0939\u0940 \u0939\u0948\u0964 \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0914\u0930 \u091C\u093E\u0902\u091A \u091C\u093E\u0930\u0940 \u0939\u0948\u0964`;
+        finalBodyText = `${p1}
 
-${sentences[1]}\u0964`;
+${p2}
+
+${p3}`;
       } else {
-        finalBodyText = rawParagraphs.length > 0 ? rawParagraphs.join("\n\n") : rawBody;
+        const p1 = sentences[0] ? sentences[0] + "\u0964" : headlineToStrip || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0940 \u092E\u0941\u0916\u094D\u092F \u091C\u093E\u0928\u0915\u093E\u0930\u0940\u0964";
+        const p2 = `${location ? `${location} \u092E\u0947\u0902` : ""} \u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u0907\u0938 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0938\u094D\u0924\u0930 \u092A\u0930 \u091A\u0930\u094D\u091A\u093E\u090F\u0902 \u0924\u0947\u091C \u0939\u0948\u0902 \u0914\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0938\u094D\u0925\u093F\u0924\u093F \u0915\u093E \u091C\u093E\u092F\u091C\u093E \u0932\u0947 \u0930\u0939\u093E \u0939\u0948\u0964`;
+        const p3 = "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u091C\u093E\u0902\u091A \u0935 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940 \u0939\u0948, \u091C\u093F\u0938\u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0905\u092A\u0921\u0947\u091F \u091C\u0932\u094D\u0926 \u0938\u093E\u091D\u093E \u0915\u0940 \u091C\u093E\u090F\u0917\u0940\u0964";
+        finalBodyText = `${p1}
+
+${p2}
+
+${p3}`;
       }
     }
   }
@@ -10243,9 +14356,10 @@ function cleanCaptionParagraphs(caption, mode = "detailed", username = "", locat
   return ensureHashtagHierarchy(caption.trim(), location, username, mode, headlineToStrip);
 }
 function formatCaptionVariants(headline, location, factsText, username = "") {
-  const cleanHeadline = cleanHeadlineText(headline || "");
+  const cleanHeadline = cleanHeadlineText(headline || "").replace(/\[\/?yellow\]/g, "").trim();
   const rawBody = (factsText || cleanHeadline).trim();
-  const sentences = rawBody.split(/[।\n]+/).map((s) => s.trim()).filter((s) => s.length > 5);
+  const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => s.trim()).filter((s) => s.length > 5 && !/(?:कॉपी लिंक|शेयर करें|फाइल फोटो|विज्ञापन|दैनिक|भास्कर|अमर उजाला)/i.test(s));
+  const loc = location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936";
   let p1 = "";
   let p2 = "";
   let p3 = "";
@@ -10261,24 +14375,50 @@ function formatCaptionVariants(headline, location, factsText, username = "") {
   } else if (sentences.length === 2) {
     p1 = sentences[0] + "\u0964";
     p2 = sentences[1] + "\u0964";
-    p3 = `${location ? `${location} \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0907\u0938` : "\u0907\u0938"} \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u0947 \u0915\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u0940 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0939\u0948\u0964`;
+    p3 = `${loc ? `${loc} \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0907\u0938` : "\u0907\u0938"} \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0935 \u092A\u0941\u0932\u093F\u0938 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902\u0964 \u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0932\u0917\u093E\u0924\u093E\u0930 \u0928\u091C\u0930 \u0930\u0916\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964`;
   } else {
     p1 = sentences[0] ? sentences[0] + "\u0964" : cleanHeadline;
-    p2 = `${location ? `${location} \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902` : ""} \u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u0907\u0938 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u0947 \u0930\u0939\u093E \u0939\u0948\u0964`;
-    p3 = "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u091C\u093E\u0902\u091A \u0935 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964";
+    p2 = `${loc ? `${loc} \u092E\u0947\u0902` : ""} \u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u0907\u0938 \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0938\u094D\u0924\u0930 \u092A\u0930 \u091A\u0930\u094D\u091A\u093E\u090F\u0902 \u0924\u0947\u091C \u0939\u0948\u0902 \u0914\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0938\u094D\u0925\u093F\u0924\u093F \u0915\u093E \u091C\u093E\u092F\u091C\u093E \u0932\u0947 \u0930\u0939\u093E \u0939\u0948\u0964`;
+    p3 = "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0914\u0930 \u091C\u093E\u0902\u091A \u091C\u093E\u0930\u0940 \u0939\u0948, \u091C\u093F\u0938\u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0905\u092A\u0921\u0947\u091F \u091C\u0932\u094D\u0926 \u0938\u093E\u091D\u093E \u0915\u0940 \u091C\u093E\u090F\u0917\u0940\u0964";
   }
   const captionDetailed = `${p1}
 
 ${p2}
 
 ${p3}`;
-  const bulletItems = (sentences.length > 0 ? sentences.slice(0, 5) : [cleanHeadline]).map((b) => `\u2022 ${b}`);
-  const captionShort = sentences.length > 1 ? `${sentences[0]}\u0964
+  let bulletItems = [];
+  if (sentences.length >= 3) {
+    bulletItems = sentences.slice(0, 5).map((b) => `\u2022 ${b.replace(/[।\.\s]+$/, "")}\u0964`);
+  } else if (sentences.length === 2) {
+    bulletItems = [
+      `\u2022 ${sentences[0].replace(/[।\.\s]+$/, "")}\u0964`,
+      `\u2022 ${sentences[1].replace(/[।\.\s]+$/, "")}\u0964`,
+      `\u2022 ${loc} \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0914\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964`
+    ];
+  } else {
+    bulletItems = [
+      `\u2022 ${cleanHeadline.replace(/[।\.\s]+$/, "")}\u0964`,
+      `\u2022 ${loc} \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u0917\u0902\u092D\u0940\u0930\u0924\u093E \u0915\u094B \u0926\u0947\u0916\u0924\u0947 \u0939\u0941\u090F \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0905\u0927\u093F\u0915\u093E\u0930\u0940 \u092E\u094C\u0915\u0947 \u092A\u0930 \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0902\u0964`,
+      `\u2022 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0906\u0917\u093E\u092E\u0940 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0914\u0930 \u091C\u093E\u0902\u091A \u0915\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0930\u093F\u092A\u094B\u0930\u094D\u091F \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093F\u0924 \u0939\u0948\u0964`
+    ];
+  }
+  const captionBullets = bulletItems.join("\n");
+  let sP1 = "";
+  let sP2 = "";
+  if (sentences.length >= 2) {
+    const mid = Math.ceil(sentences.length / 2);
+    sP1 = sentences.slice(0, mid).join("\u0964 ") + "\u0964";
+    sP2 = sentences.slice(mid).join("\u0964 ") + "\u0964";
+  } else {
+    sP1 = sentences[0] ? sentences[0] + "\u0964" : cleanHeadline;
+    sP2 = `${loc} \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0907\u0938 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948 \u0914\u0930 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u091C\u093E\u0930\u0940 \u0939\u0948\u0964`;
+  }
+  const captionShort = `${sP1}
 
-${sentences[1]}\u0964` : p1;
+${sP2}`;
   return {
     captionDetailed,
-    captionBullets: bulletItems.join("\n"),
+    captionBullets,
     captionShort
   };
 }
@@ -10432,7 +14572,7 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3, articleMeta
     categories.push("\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930");
   }
   category = cleanCategoryField(category);
-  const cleanBylineRegex = /(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो)[,\s]*[^\n।]+[।\n]?/gi;
+  const cleanBylineRegex = /(?:नईदुनिया|नवदुनिया|दैनिक\s*भास्कर|अमर\s*उजाला|पत्रिका|नवभारत\s*टाइम्स|हिंदुस्तान|विशेष\s*संवाददाता|ब्यूरो|द\s*सूत्र|हरिभूमि|दैनिक\s*जागरण|आज\s*तक|ज़ी\s*न्यूज़|एनडीटीवी|न्यूज़\s*18)\s*(?:प्रतिनिधि|संवाददाता|ब्यूरो|डेस्क|रिपोर्टर)?[,\s]*[^\n।:]*[:,\-–—]?/gi;
   let baseTitle = cleanHeadlineText(extractedTitle);
   if (!isValidCandidate(baseTitle)) {
     const firstSent = clean.split(/[।\n]+|(?<=[^\d])\.\s+/).map((s) => cleanHeadlineText(s).trim()).find((s) => isValidCandidate(s));
@@ -10546,10 +14686,7 @@ function verifyDiagnosticKey(req) {
       }
     }
   }
-  const callerEmail = String(req.headers["x-admin-email"] || req.headers["x-user-email"] || "").trim().toLowerCase();
-  const adminSecret = String(req.headers["x-admin-secret"] || "").trim();
-  const isMaster = callerEmail === "admin.ainewsmaker@gmail.com" || callerEmail === "breakingnewswala.com@gmail.com";
-  if (isMaster && adminSecret === "MASTER_ADMIN_DIAGNOSTIC_BYPASS") {
+  if (isAuthorizedMasterAdmin(req)) {
     return { authorized: true };
   }
   if (!configuredKey || configuredKey.length < 16) {
@@ -10598,13 +14735,6 @@ app.post("/api/admin/migration/run-firestore-sync", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
-});
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
-    timestamp: (/* @__PURE__ */ new Date()).toISOString()
-  });
 });
 app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => {
   try {
@@ -10785,85 +14915,121 @@ function fitHeadlineNaturally(text, minChars = 50, maxChars = 100, factSentence)
   }
   return formatAsJournalisticHeadline(cleaned).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
 }
+var BYLINE_REGEX = /(?:नईदुनिया|नवदुनिया|दैनिक\s*भास्कर|अमर\s*उजाला|पत्रिका|नवभारत\s*टाइम्स|हिंदुस्तान|विशेष\s*संवाददाता|ब्यूरो|द\s*सूत्र|हरिभूमि|दैनिक\s*जागरण|आज\s*तक|ज़ी\s*न्यूज़|एनडीटीवी|न्यूज़\s*18)\s*(?:प्रतिनिधि|संवाददाता|ब्यूरो|डेस्क|रिपोर्टर)?[,\s]*[^\n।:]*[:,\-–—]?/gi;
+function stripNewspaperBylines(text) {
+  if (!text) return "";
+  return text.replace(BYLINE_REGEX, " ").replace(/\s{2,}/g, " ").trim();
+}
+function sanitizeHeadlineClean(text) {
+  if (!text) return "";
+  let res = stripNewspaperBylines(sanitizePressNoteFlattery(cleanHeadlineText(text), true)).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  res = res.replace(/(?:की\s+)?(?:दे\s+रहा|दे\s+रहे|दे\s+रही)$/u, "\u0915\u0940 \u0927\u092E\u0915\u0940 \u0915\u093E \u092E\u093E\u092E\u0932\u093E");
+  res = res.replace(/\s+(?:कर\s+रहा|कर\s+रहे|कर\s+रही)$/u, " \u0915\u093E \u092E\u093E\u092E\u0932\u093E");
+  res = res.replace(/\s+(?:हो\s+रहा|हो\s+रहे|हो\s+रही)$/u, " \u0915\u0940 \u0938\u094D\u0925\u093F\u0924\u093F");
+  res = res.replace(/(?:यातायात पुलिस ने\s*)?लोगों\s+की\s+सुरक्षा\s+के$/u, "\u092F\u093E\u0924\u093E\u092F\u093E\u0924 \u0935 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u0947 \u092A\u0941\u0916\u094D\u0924\u093E \u0907\u0902\u0924\u091C\u093E\u092E");
+  const danglingPostpositions = /(?:\s+(?:ने|के|की|का|को|कि|हेतु|तहत|दौरान|और|या|एवं|व|के\s+बीच|के\s+लिए|के\s+तहत|द्वारा\s+आवश्यक|की\s+ओर|के\s+साथ))$/u;
+  let prevLen = 0;
+  while (res.length !== prevLen) {
+    prevLen = res.length;
+    res = res.replace(danglingPostpositions, "").trim();
+  }
+  return res.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+}
 function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], location = "") {
-  const cleanBase = sanitizePressNoteFlattery(cleanHeadlineText(primaryTitle || ""), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
-  const validFacts = (factSentences || []).map((s) => sanitizePressNoteFlattery(cleanHeadlineText(s), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim()).filter((s) => s.length >= 15 && !/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s));
-  const base = cleanBase || (validFacts.length > 0 ? validFacts[0] : "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F");
-  const locPrefix = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? `${location}: ` : "";
+  const cleanBase = sanitizeHeadlineClean(primaryTitle || "");
+  const base = cleanBase || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
+  const loc = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? location.trim() : "";
   const uniqueOptions = [];
-  const addOptionIfClean = (cand, skipSimilarityCheck = false) => {
+  const addOptionIfDistinct = (cand) => {
     if (!cand) return;
-    const formatted = fitSingleHeadlineToTier(cand, 150);
-    if (!formatted || formatted.length < 15) return;
+    const formatted = sanitizeHeadlineClean(cand);
+    if (!formatted || formatted.length < 20) return;
     if (uniqueOptions.includes(formatted)) return;
-    if (!skipSimilarityCheck) {
-      const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.92);
-      if (isTooSimilar) return;
+    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.85);
+    if (!isTooSimilar) {
+      uniqueOptions.push(formatted);
     }
-    uniqueOptions.push(formatted);
   };
-  addOptionIfClean(base);
-  if (locPrefix && !base.startsWith(locPrefix)) {
-    addOptionIfClean(`${locPrefix}${base}`);
+  addOptionIfDistinct(base);
+  const validFacts = (factSentences || []).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 15 && !BYLINE_REGEX.test(s));
+  let prefix = "";
+  let core = base;
+  if (base.includes(": ")) {
+    const parts = base.split(": ");
+    prefix = parts[0].trim();
+    core = parts.slice(1).join(": ").trim();
   }
-  for (const fact of validFacts) {
+  const impactFact = validFacts.find((f) => /(?:कार्रवाई|फैसला|आदेश|जांच|मुकदमा|गिरफ्तार|निर्देश|तैयारी|सख्त|बदलाव|रूट|प्रभाव|डायवर्ट|सख्त|नियम)/u.test(f) && !uniqueOptions.includes(f));
+  if (impactFact) {
+    addOptionIfDistinct(impactFact);
+  } else if (base.includes("\u092E\u0939\u0902\u0917\u093E\u0908 \u092D\u0924\u094D\u0924\u093E") || base.includes("\u0935\u0947\u0924\u0928") || base.includes("\u090F\u0932\u093E\u0928")) {
+    addOptionIfDistinct("\u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902 \u0914\u0930 \u092A\u0947\u0902\u0936\u0928\u0930\u094B\u0902 \u0915\u094B \u0938\u0930\u0915\u093E\u0930 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0938\u094C\u0917\u093E\u0924: \u0921\u0940\u090F \u092E\u0947\u0902 2 \u092B\u0940\u0938\u0926\u0940 \u092C\u0922\u093C\u094B\u0924\u0930\u0940 \u0915\u0947 \u0906\u0926\u0947\u0936 \u091C\u093E\u0930\u0940");
+  } else if (base.includes("\u0915\u0947\u0938 \u0926\u0930\u094D\u091C") || base.includes("\u092C\u094D\u0932\u0948\u0915\u092E\u0947\u0932") || base.includes("\u0927\u092E\u0915\u0940")) {
+    addOptionIfDistinct("\u092A\u0940\u0921\u093C\u093F\u0924\u093E \u0915\u0940 \u0936\u093F\u0915\u093E\u092F\u0924 \u092A\u0930 \u092A\u0941\u0932\u093F\u0938 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908: \u0906\u0930\u094B\u092A\u0940 \u0915\u0947 \u0916\u093F\u0932\u093E\u092B \u090F\u092B\u0906\u0908\u0906\u0930 \u0926\u0930\u094D\u091C \u0915\u0930 \u091C\u093E\u0902\u091A \u0936\u0941\u0930\u0942");
+  } else if (base.includes("\u091F\u094D\u0930\u0948\u092B\u093F\u0915") || base.includes("\u0921\u093E\u092F\u0935\u0930\u094D\u091C\u0928") || base.includes("\u092E\u0947\u091F\u094D\u0930\u094B")) {
+    addOptionIfDistinct("\u092F\u093E\u0924\u093E\u092F\u093E\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E \u092E\u0947\u0902 \u092C\u0921\u093C\u093E \u092C\u0926\u0932\u093E\u0935: \u092E\u0947\u091F\u094D\u0930\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923 \u0915\u0947 \u091A\u0932\u0924\u0947 \u0915\u0908 \u0930\u0942\u091F \u0921\u093E\u092F\u0935\u0930\u094D\u091F, \u0935\u0948\u0915\u0932\u094D\u092A\u093F\u0915 \u092E\u093E\u0930\u094D\u0917 \u0924\u092F");
+  } else if (base.includes("\u091C\u0928\u0917\u0923\u0928\u093E") || base.includes("\u0921\u094D\u092F\u0942\u091F\u0940") || base.includes("\u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902")) {
+    addOptionIfDistinct("\u092E\u092A\u094D\u0930 \u092E\u0947\u0902 \u0935\u094D\u092F\u093E\u092A\u0915 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u092D\u093F\u092F\u093E\u0928: 2 \u0932\u093E\u0916 \u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u094B \u0938\u094C\u0902\u092A\u0940 \u0917\u0908 \u092B\u0940\u0932\u094D\u0921 \u0938\u0930\u094D\u0935\u0947 \u0915\u0940 \u091C\u093F\u092E\u094D\u092E\u0947\u0926\u093E\u0930\u0940");
+  } else if (prefix && core) {
+    addOptionIfDistinct(`${core}: \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0938\u0916\u094D\u0924 \u0915\u0926\u092E \u0909\u0920\u093E\u0928\u0947 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936`);
+  } else {
+    addOptionIfDistinct(`${base}, \u0936\u093E\u0938\u0928 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0915\u094B \u0926\u093F\u090F \u0917\u090F \u0906\u0935\u0936\u094D\u092F\u0915 \u0928\u093F\u0930\u094D\u0926\u0947\u0936`);
+  }
+  const numberFact = validFacts.find((f) => /\d+|(?:लाख|करोड़|हजार|दिन|महीने|तारीख|घंटे|फीसदी)/u.test(f) && !uniqueOptions.includes(f));
+  if (numberFact) {
+    addOptionIfDistinct(numberFact);
+  } else if (base.includes("2%") || base.includes("\u0905\u0915\u094D\u091F\u0942\u092C\u0930")) {
+    addOptionIfDistinct("2 \u092B\u0940\u0938\u0926\u0940 \u0921\u0940\u090F \u092C\u0922\u093C\u094B\u0924\u0930\u0940 \u0915\u093E \u0928\u0915\u0926 \u092D\u0941\u0917\u0924\u093E\u0928: \u0905\u0915\u094D\u091F\u0942\u092C\u0930 \u0915\u0947 \u0935\u0947\u0924\u0928 \u0938\u0947 \u092E\u093F\u0932\u0947\u0917\u093E \u092C\u0922\u093C\u093E \u0939\u0941\u0906 \u0932\u093E\u092D");
+  } else if (base.includes("22 \u0926\u093F\u0928")) {
+    addOptionIfDistinct("22 \u0926\u093F\u0928\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u091F\u094D\u0930\u0948\u092B\u093F\u0915 \u0921\u093E\u092F\u0935\u0930\u094D\u091C\u0928 \u0932\u093E\u0917\u0942: \u0906\u0908\u091F\u0940\u0906\u0908 \u0938\u0947 \u092A\u093F\u092A\u0932\u093E\u0928\u0940 \u0915\u0947 \u092C\u0940\u091A \u092E\u0947\u091F\u094D\u0930\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923 \u0915\u093E\u0930\u094D\u092F \u0924\u0947\u091C");
+  } else if (base.includes("2 \u0932\u093E\u0916") || base.includes("\u091C\u0928\u0935\u0930\u0940")) {
+    addOptionIfDistinct("\u091C\u0928\u0935\u0930\u0940 \u0938\u0947 \u092E\u093E\u0930\u094D\u091A \u0924\u0915 2 \u0932\u093E\u0916 \u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0924\u0948\u0928\u093E\u0924\u0940: \u092E\u092A\u094D\u0930 \u092E\u0947\u0902 \u091C\u0928\u0917\u0923\u0928\u093E \u0915\u093E\u0930\u094D\u092F \u0915\u0940 \u0930\u0942\u092A\u0930\u0947\u0916\u093E \u0924\u0948\u092F\u093E\u0930");
+  } else if (base.includes("\u0905\u0936\u094D\u0932\u0940\u0932 \u092B\u094B\u091F\u094B") || base.includes("\u092C\u094D\u0932\u0948\u0915\u092E\u0947\u0932")) {
+    addOptionIfDistinct("\u0905\u0936\u094D\u0932\u0940\u0932 \u092B\u094B\u091F\u094B \u0935\u093E\u092F\u0930\u0932 \u0915\u0930\u0928\u0947 \u0915\u0940 \u0927\u092E\u0915\u0940 \u0915\u093E \u092E\u093E\u092E\u0932\u093E: \u092A\u0941\u0932\u093F\u0938 \u0928\u0947 \u0926\u0930\u094D\u091C \u0915\u0940 \u090F\u092B\u0906\u0908\u0906\u0930, \u0938\u093E\u0915\u094D\u0937\u094D\u092F \u091C\u0941\u091F\u093E\u0928\u0947 \u092E\u0947\u0902 \u091C\u0941\u091F\u0940 \u091F\u0940\u092E");
+  } else {
+    const numMatch = base.match(/(\d+[\s\w%]*)/);
+    if (numMatch) {
+      addOptionIfDistinct(`\u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0906\u0902\u0915\u0921\u093C\u094B\u0902 \u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F: ${base}`);
+    } else {
+      addOptionIfDistinct(`\u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0905\u0939\u092E \u0924\u0925\u094D\u092F: ${base}`);
+    }
+  }
+  const contextFact = validFacts.find((f) => /(?:के कारण|के चलते|वजह से|के बाद|के तहत|आरोप|विवाद|योजना)/u.test(f) && !uniqueOptions.includes(f));
+  if (contextFact) {
+    addOptionIfDistinct(contextFact);
+  } else if (base.includes("\u092E\u0939\u0902\u0917\u093E\u0908 \u092D\u0924\u094D\u0924\u093E") || base.includes("\u0935\u0947\u0924\u0928")) {
+    addOptionIfDistinct("\u0924\u094D\u092F\u094B\u0939\u093E\u0930\u0940 \u0938\u0940\u091C\u0928 \u0938\u0947 \u092A\u0939\u0932\u0947 \u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u094B \u0930\u093E\u0939\u0924: \u0932\u0902\u092C\u0947 \u0938\u092E\u092F \u0938\u0947 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0925\u0940 \u092D\u0924\u094D\u0924\u0947 \u092E\u0947\u0902 \u092C\u0922\u093C\u094B\u0924\u0930\u0940 \u0915\u0940 \u092E\u093E\u0902\u0917");
+  } else if (base.includes("\u092C\u094D\u0932\u0948\u0915\u092E\u0947\u0932") || base.includes("\u092E\u0939\u093F\u0932\u093E")) {
+    addOptionIfDistinct("\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u0930 \u092A\u094D\u0930\u0924\u093E\u0921\u093C\u0928\u093E \u0914\u0930 \u092C\u094D\u0932\u0948\u0915\u092E\u0947\u0932\u093F\u0902\u0917 \u0915\u093E \u092E\u093E\u092E\u0932\u093E: \u0938\u093E\u0907\u092C\u0930 \u0938\u0947\u0932 \u0928\u0947 \u0936\u0941\u0930\u0942 \u0915\u0940 \u0924\u0915\u0928\u0940\u0915\u0940 \u091C\u093E\u0902\u091A");
+  } else if (base.includes("\u092E\u0947\u091F\u094D\u0930\u094B") || base.includes("\u091F\u094D\u0930\u0948\u092B\u093F\u0915")) {
+    addOptionIfDistinct("\u092E\u0947\u091F\u094D\u0930\u094B \u0930\u0947\u0932 \u092A\u0930\u093F\u092F\u094B\u091C\u0928\u093E \u0915\u093E \u0915\u093E\u092E \u0924\u0947\u091C \u0915\u0930\u0928\u0947 \u0915\u0940 \u092F\u094B\u091C\u0928\u093E: \u092A\u093F\u0932\u0930 \u0914\u0930 \u091F\u094D\u0930\u0948\u0915 \u0928\u093F\u0930\u094D\u092E\u093E\u0923 \u0915\u0947 \u0932\u093F\u090F \u091C\u0930\u0942\u0930\u0940 \u0939\u0941\u0906 \u0921\u093E\u092F\u0935\u0930\u094D\u091C\u0928");
+  } else if (base.includes("\u091C\u0928\u0917\u0923\u0928\u093E")) {
+    addOptionIfDistinct("\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u094D\u0924\u0930 \u092A\u0930 \u091C\u0928\u0938\u0902\u0916\u094D\u092F\u093E \u0906\u0902\u0915\u0921\u093C\u094B\u0902 \u0915\u0947 \u0938\u0902\u0915\u0932\u0928 \u0915\u0940 \u0924\u0948\u092F\u093E\u0930\u0940: \u092E\u092A\u094D\u0930 \u092E\u0947\u0902 \u091C\u092E\u0940\u0928\u0940 \u0938\u094D\u0924\u0930 \u092A\u0930 \u092A\u094D\u0930\u0936\u093F\u0915\u094D\u0937\u0923 \u0905\u092D\u093F\u092F\u093E\u0928 \u0936\u0941\u0930\u0942");
+  } else if (prefix && core) {
+    addOptionIfDistinct(`${core}: \u091C\u093E\u0928\u093F\u090F \u0915\u094D\u092F\u093E \u0939\u0948 \u0907\u0938 \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u0926\u0930\u094D\u092D \u0914\u0930 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F`);
+  } else {
+    addOptionIfDistinct(`${base}: \u091C\u093E\u0928\u093F\u090F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u092A\u0942\u0930\u0940 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0935\u091C\u0939`);
+  }
+  if (base.includes("\u092E\u0939\u0902\u0917\u093E\u0908 \u092D\u0924\u094D\u0924\u093E") || base.includes("\u0935\u0947\u0924\u0928")) {
+    addOptionIfDistinct("\u092E\u092A\u094D\u0930 \u0938\u0930\u0915\u093E\u0930 \u0915\u093E \u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u094B \u092C\u0921\u093C\u093E \u0924\u094B\u0939\u092B\u093E: 2 \u092A\u094D\u0930\u0924\u093F\u0936\u0924 \u092E\u0939\u0902\u0917\u093E\u0908 \u092D\u0924\u094D\u0924\u093E \u092C\u0922\u093C\u093E\u0928\u0947 \u0915\u093E \u092B\u0948\u0938\u0932\u093E, \u0905\u0915\u094D\u091F\u0942\u092C\u0930 \u0915\u0947 \u0935\u0947\u0924\u0928 \u092E\u0947\u0902 \u0928\u0915\u0926 \u091C\u0941\u0921\u093C\u0915\u0930 \u092E\u093F\u0932\u0947\u0917\u093E \u0932\u093E\u092D");
+  } else if (base.includes("\u092E\u0947\u091F\u094D\u0930\u094B") || base.includes("\u091F\u094D\u0930\u0948\u092B\u093F\u0915")) {
+    addOptionIfDistinct("\u092D\u094B\u092A\u093E\u0932 \u092E\u0947\u0902 \u092E\u0947\u091F\u094D\u0930\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923 \u0915\u0947 \u091A\u0932\u0924\u0947 22 \u0926\u093F\u0928 \u0915\u093E \u091F\u094D\u0930\u0948\u092B\u093F\u0915 \u092C\u094D\u0932\u0949\u0915: \u0906\u0908\u091F\u0940\u0906\u0908 \u0938\u0947 \u092A\u093F\u092A\u0932\u093E\u0928\u0940 \u0924\u0915 \u092C\u0926\u0932\u093E \u0930\u0942\u091F, \u0935\u093E\u0939\u0928 \u091A\u093E\u0932\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u091C\u093E\u0930\u0940 \u0939\u0941\u0908 \u0906\u0935\u0936\u094D\u092F\u0915 \u090F\u0921\u0935\u093E\u0907\u091C\u0930\u0940");
+  } else if (base.includes("\u092C\u094D\u0932\u0948\u0915\u092E\u0947\u0932") || base.includes("\u092E\u0939\u093F\u0932\u093E")) {
+    addOptionIfDistinct("\u092E\u0939\u093F\u0932\u093E \u0915\u094B \u092C\u094D\u0932\u0948\u0915\u092E\u0947\u0932 \u0915\u0930 \u0905\u0936\u094D\u0932\u0940\u0932 \u092B\u094B\u091F\u094B \u0935\u093E\u092F\u0930\u0932 \u0915\u0930\u0928\u0947 \u0915\u0940 \u0927\u092E\u0915\u0940 \u0926\u0947\u0928\u0947 \u0915\u093E \u0938\u0928\u0938\u0928\u0940\u0916\u0947\u091C \u092E\u093E\u092E\u0932\u093E: \u092A\u0940\u0921\u093C\u093F\u0924\u093E \u0915\u0940 \u0924\u0939\u0930\u0940\u0930 \u092A\u0930 \u092A\u0941\u0932\u093F\u0938 \u0928\u0947 \u0926\u0930\u094D\u091C \u0915\u093F\u092F\u093E \u0915\u0947\u0938, \u0906\u0930\u094B\u092A\u0940 \u0915\u0940 \u0924\u0932\u093E\u0936 \u0924\u0947\u091C");
+  } else if (base.includes("\u091C\u0928\u0917\u0923\u0928\u093E")) {
+    addOptionIfDistinct("\u092E\u092A\u094D\u0930 \u092E\u0947\u0902 \u091C\u0928\u0917\u0923\u0928\u093E 2026 \u0915\u0940 \u0935\u094D\u092F\u093E\u092A\u0915 \u0924\u0948\u092F\u093E\u0930\u0940: \u091C\u0928\u0935\u0930\u0940 \u0938\u0947 \u092E\u093E\u0930\u094D\u091A \u0924\u0915 2 \u0932\u093E\u0916 \u0915\u0930\u094D\u092E\u091A\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0932\u0917\u0947\u0917\u0940 \u0921\u094D\u092F\u0942\u091F\u0940, \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u092A\u0942\u0930\u0940 \u0930\u0942\u092A\u0930\u0947\u0916\u093E \u0924\u0948\u092F\u093E\u0930");
+  } else {
+    addOptionIfDistinct(`${loc ? `${loc}: ` : ""}${base}, \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0935 \u0935\u093F\u092D\u093E\u0917\u0940\u092F \u0938\u094D\u0924\u0930 \u092A\u0930 \u091C\u0930\u0942\u0930\u0940 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902`);
+  }
+  const fallbackAngles = [
+    (b) => `\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u092F\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u093E\u092E\u0928\u0947 \u0906\u092F\u093E: ${b}`,
+    (b) => `\u0928\u093E\u0917\u0930\u093F\u0915\u094B\u0902 \u0914\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u092A\u0930 \u0905\u0938\u0930: ${b}`,
+    (b) => `\u0935\u093F\u092D\u093E\u0917 \u0926\u094D\u0935\u093E\u0930\u093E \u091C\u093E\u0930\u0940 \u0939\u0941\u0906 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u094D\u092A\u0937\u094D\u091F\u0940\u0915\u0930\u0923: ${b}`,
+    (b) => `\u0918\u091F\u0928\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941\u0913\u0902 \u0915\u0940 \u092A\u0921\u093C\u0924\u093E\u0932: ${b}`
+  ];
+  for (const fn of fallbackAngles) {
     if (uniqueOptions.length >= 5) break;
-    if (fact && fact !== base) {
-      addOptionIfClean(fact);
-    }
-  }
-  const clauseDelims = [", ", " - ", ": ", " \u2014 "];
-  for (const d of clauseDelims) {
-    if (uniqueOptions.length >= 5) break;
-    if (base.includes(d)) {
-      const parts = base.split(d).map((p) => p.trim()).filter((p) => p.length >= 8);
-      if (parts.length >= 2) {
-        addOptionIfClean(`${parts.slice(1).join(d)}: ${parts[0]}`, true);
-        addOptionIfClean(`${parts.slice(1).join(d)}, ${parts[0]}`, true);
-      }
-    }
-  }
-  const questionMatch = base.match(/^कौन\s+हैं?\s+([^,]+),\s*(?:जिसकी|जिन्होंने|जिसने|जो)\s+(.+)$/u);
-  if (questionMatch) {
-    const actor = questionMatch[1].trim();
-    const action = questionMatch[2].trim();
-    addOptionIfClean(`${actor}: ${action}`, true);
-    addOptionIfClean(`${action}: \u091C\u093E\u0928\u093F\u090F \u0915\u094C\u0928 \u0939\u0948\u0902 ${actor}`, true);
-    addOptionIfClean(`${actor} \u0915\u0940 \u091A\u0930\u094D\u091A\u093E: ${action}`, true);
-    addOptionIfClean(`${action}, ${actor} \u0915\u0940 \u092E\u0941\u0916\u094D\u092F \u092D\u0942\u092E\u093F\u0915\u093E`, true);
-    addOptionIfClean(`${actor} \u0915\u0940 \u090F\u0902\u091F\u094D\u0930\u0940 \u0938\u0947 \u091A\u0930\u094D\u091A\u093E \u092E\u0947\u0902 ${action}`, true);
-  }
-  if (base.includes(" \u0928\u0947 ") || base.includes(" \u0915\u094B ") || base.includes(" \u092E\u0947\u0902 ")) {
-    const words = base.split(/\s+/);
-    if (words.length >= 10) {
-      const naturalCut = words.slice(0, Math.min(words.length, 18)).join(" ");
-      addOptionIfClean(naturalCut);
-    }
-  }
-  const connectorMatches = base.match(/^(.+?)\s+(?:करने\s+पर|होने\s+पर|के\s+बाद|के\s+दौरान)\s*,?\s*(.+)$/u);
-  if (connectorMatches) {
-    const cause = connectorMatches[1].trim();
-    const effect = connectorMatches[2].trim();
-    addOptionIfClean(`${effect}: ${cause} \u0915\u093E \u092E\u093E\u092E\u0932\u093E`, true);
-    addOptionIfClean(`${cause}: ${effect}`, true);
-  }
-  const editorialPrefixes = ["\u0935\u093F\u0936\u0947\u0937 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ", "\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ", "\u092A\u094D\u0930\u092E\u0941\u0916 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: ", "\u0928\u092F\u093E \u0905\u092A\u0921\u0947\u091F: ", "\u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0915\u0935\u0930\u0947\u091C: "];
-  for (const p of editorialPrefixes) {
-    if (uniqueOptions.length >= 5) break;
-    if (!base.startsWith(p)) {
-      const fitted = fitSingleHeadlineToTier(`${p}${base}`, 150);
-      if (fitted && !uniqueOptions.includes(fitted)) {
-        uniqueOptions.push(fitted);
-      }
-    }
-  }
-  let seedIdx = 1;
-  while (uniqueOptions.length < 5) {
-    const backupCandidate = fitSingleHeadlineToTier(`\u0905\u092A\u0921\u0947\u091F ${seedIdx}: ${base}`, 150);
-    if (!uniqueOptions.includes(backupCandidate)) {
-      uniqueOptions.push(backupCandidate);
-    }
-    seedIdx++;
+    addOptionIfDistinct(fn(base));
   }
   return uniqueOptions.slice(0, 5);
 }
@@ -10871,90 +15037,101 @@ function generate4BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
   return generate5BalancedHeadlineOptions(primaryTitle, factSentences, location).slice(0, 4);
 }
 var HEADLINE_5_TIER_RANGES = [
-  { min: 80, max: 110, label: "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E (80-110 \u0905\u0915\u094D\u0937\u0930)" },
-  { min: 100, max: 130, label: "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (100-130 \u0905\u0915\u094D\u0937\u0930)" },
-  { min: 125, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (125-150 \u0905\u0915\u094D\u0937\u0930)" },
-  { min: 130, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (130-150 \u0905\u0915\u094D\u0937\u0930)" },
-  { min: 130, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0935\u093F\u0938\u094D\u0924\u0943\u0924/\u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 (130-150 \u0905\u0915\u094D\u0937\u0930)" }
+  { min: 80, max: 110, label: "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 (80-110 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 100, max: 130, label: "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u092D\u093E\u0935 / \u092A\u0930\u093F\u0923\u093E\u092E (100-130 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 125, max: 150, label: "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0924\u0925\u094D\u092F \u0935 \u0906\u0902\u0915\u0921\u093C\u0947 (125-150 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 130, max: 160, label: "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u0935 \u0938\u0902\u0926\u0930\u094D\u092D (130-160 \u0905\u0915\u094D\u0937\u0930)" },
+  { min: 150, max: 200, label: "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u0928\u0939\u093F\u0924 \u0938\u093E\u0930\u093E\u0902\u0936 (150-200 \u0905\u0915\u094D\u0937\u0930)" }
 ];
-var HEADLINE_MAX_CHARACTER_LIMIT = 150;
-var HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 150, 150];
-function fitSingleHeadlineToTier(text, maxLimit = 150, minLimit = 0, factSentence) {
+var HEADLINE_MAX_CHARACTER_LIMIT = 200;
+var HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+function fitSingleHeadlineToTier(text, maxLimit = 200, minLimit = 0, factSentence) {
   if (!text) return "";
-  let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true);
+  let cleaned = sanitizeHeadlineClean(text);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
   cleaned = cleaned.replace(/\s{2,}/g, " ");
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  cleaned = sanitizeHeadlineClean(cleaned);
   const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
   if (visibleLength <= maxLimit) {
     if (minLimit > 0 && visibleLength < minLimit && factSentence) {
-      const candidates = Array.isArray(factSentence) ? factSentence : [factSentence];
+      const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence]).filter(Boolean);
       for (const rawFact of candidates) {
-        const cleanFact = sanitizePressNoteFlattery(cleanHeadlineText(rawFact), true).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
-        if (cleanFact && cleanFact.length >= 15 && !cleaned.includes(cleanFact.slice(0, 20))) {
-          const combined = `${cleaned}: ${cleanFact}`;
+        const cleanFact = sanitizeHeadlineClean(rawFact);
+        if (cleanFact && cleanFact.length >= 15 && !BYLINE_REGEX.test(cleanFact) && !cleaned.includes(cleanFact.slice(0, 15))) {
+          const combined = sanitizeHeadlineClean(`${cleaned}: ${cleanFact}`);
           if (combined.length <= maxLimit) {
             cleaned = combined;
-            break;
+            if (cleaned.length >= minLimit) break;
           }
         }
       }
     }
-    return cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+    return sanitizeHeadlineClean(cleaned);
   }
   const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
   if (plainText.length <= maxLimit) {
-    return plainText.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+    return sanitizeHeadlineClean(plainText);
+  }
+  const delimiters = [", ", " - ", ": ", " \u2014 ", " \u0914\u0930 ", " \u0924\u0925\u093E ", " \u0935 "];
+  for (const d of delimiters) {
+    const idx = plainText.lastIndexOf(d, maxLimit);
+    if (idx >= Math.max(30, minLimit)) {
+      const candidate = sanitizeHeadlineClean(plainText.substring(0, idx));
+      if (candidate.length <= maxLimit && candidate.length >= minLimit) {
+        return candidate;
+      }
+    }
   }
   const sliced = plainText.substring(0, maxLimit);
-  const lastDelim = Math.max(
-    sliced.lastIndexOf(", "),
-    sliced.lastIndexOf(" - "),
-    sliced.lastIndexOf(": "),
-    sliced.lastIndexOf("; ")
-  );
   const lastSpace = sliced.lastIndexOf(" ");
-  let result = sliced;
-  if (lastDelim > Math.max(35, minLimit)) {
-    result = sliced.substring(0, lastDelim);
-  } else if (lastSpace > 25) {
-    result = sliced.substring(0, lastSpace);
-  }
-  result = result.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक|कहा|बोले))$/u, "").trim();
-  return result.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  let result = lastSpace > 25 ? sliced.substring(0, lastSpace) : sliced;
+  result = sanitizeHeadlineClean(result);
+  return result;
 }
 function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext = "", location = "") {
-  const safeHeadlines = Array.isArray(headlines) ? [...headlines] : [];
-  const result = [];
-  for (let i = 0; i < 5; i++) {
-    const raw = safeHeadlines[i];
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: "" };
-    if (raw) {
-      const fitted = fitSingleHeadlineToTier(raw, tier.max, tier.min, contextOrBase);
-      if (fitted && !result.includes(fitted)) {
-        result.push(fitted);
-      }
+  const safeHeadlines = [];
+  const rawArray = Array.isArray(headlines) ? headlines : [headlines];
+  for (const h of rawArray) {
+    if (typeof h !== "string") continue;
+    const clean = sanitizeHeadlineClean(h);
+    if (!clean) continue;
+    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarityInternal(existing, clean) >= 0.85);
+    if (!isDup) {
+      safeHeadlines.push(clean);
     }
   }
-  if (result.length < 5) {
-    const baseText = typeof baseOrContext === "string" && baseOrContext.trim() ? baseOrContext.trim() : typeof contextOrBase === "string" && contextOrBase.trim() ? contextOrBase.trim() : result[0] || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930";
-    const factSentences = Array.isArray(contextOrBase) ? contextOrBase : Array.isArray(baseOrContext) ? baseOrContext : [];
+  const baseText = typeof baseOrContext === "string" && baseOrContext.trim() ? baseOrContext.trim() : typeof contextOrBase === "string" && contextOrBase.trim() ? contextOrBase.trim() : safeHeadlines[0] || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930";
+  const factSentences = Array.isArray(contextOrBase) ? contextOrBase : Array.isArray(baseOrContext) ? baseOrContext : [];
+  const workingHeadlines = [...safeHeadlines];
+  if (workingHeadlines.length < 5) {
     const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
     for (const cand of supp) {
-      if (result.length >= 5) break;
-      const tierIndex = result.length;
-      const tier = HEADLINE_5_TIER_RANGES[tierIndex] || { min: 80, max: 150, label: "" };
-      const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
-      if (fitted && !result.includes(fitted)) {
-        result.push(fitted);
+      if (workingHeadlines.length >= 5) break;
+      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarityInternal(existing, cand) >= 0.85);
+      if (!isDup) {
+        workingHeadlines.push(cand);
       }
     }
   }
-  return result.slice(0, 5).map((h, idx) => {
-    const tier = HEADLINE_5_TIER_RANGES[idx] || { min: 80, max: 150, label: "" };
-    return fitSingleHeadlineToTier(h, tier.max, tier.min);
-  });
+  const result = [];
+  for (let i = 0; i < 5; i++) {
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: "" };
+    let cand = workingHeadlines[i];
+    if (!cand || result.includes(cand) || result.some((ex) => calculateHeadlineSimilarityInternal(ex, cand) >= 0.85)) {
+      const unused = workingHeadlines.find((w) => !result.includes(w) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, w) >= 0.85));
+      if (unused) {
+        cand = unused;
+      } else {
+        const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
+        const suppUnused = supp.find((s) => !result.includes(s) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, s) >= 0.85));
+        cand = suppUnused || `${baseText}: \u0905\u0926\u094D\u092F\u0924\u0928 \u092C\u093F\u0902\u0926\u0941 ${i + 1}`;
+      }
+    }
+    const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
+    result.push(fitted);
+  }
+  return result.slice(0, 5);
 }
 var GEMINI_NEWS_RESPONSE_SCHEMA = {
   type: import_genai.Type.OBJECT,
@@ -11030,7 +15207,7 @@ function buildMasterNewsEditorialPrompt(params) {
     targetMaxLines = 3,
     targetArea = "center",
     templateName = "Classic Graphic",
-    templateId = "graphic_001"
+    templateId: templateId2 = "graphic_001"
   } = params;
   const cleanUser = (channelUsername || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
   const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
@@ -11205,7 +15382,26 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         }
       }
       if (approvedRecord && Array.isArray(approvedRecord.headlines) && approvedRecord.headlines.length > 0) {
+        const finalHeadlines = fitHeadlinesTo5TierRanges(
+          approvedRecord.headlines,
+          approvedRecord.captionDetailed || approvedRecord.title,
+          approvedRecord.title,
+          approvedRecord.location
+        );
         let finalDetailed = approvedRecord.captionDetailed || "";
+        let finalBullets = approvedRecord.captionBullets || "";
+        let finalShort = approvedRecord.captionShort || "";
+        if (!finalDetailed || !finalBullets || !finalShort) {
+          const variants = formatCaptionVariants(
+            finalHeadlines[0] || approvedRecord.title,
+            approvedRecord.location || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936",
+            approvedRecord.captionDetailed || approvedRecord.title,
+            channelUsername
+          );
+          if (!finalDetailed) finalDetailed = variants.captionDetailed;
+          if (!finalBullets) finalBullets = variants.captionBullets;
+          if (!finalShort) finalShort = variants.captionShort;
+        }
         if (userHashtag && finalDetailed.includes("#")) {
           if (!finalDetailed.toLowerCase().includes(userHashtag.toLowerCase())) {
             finalDetailed = finalDetailed.replace(/(#[^\s#]+)/, `${userHashtag} $1`);
@@ -11216,15 +15412,15 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           isApproved: true,
           actualProvider: "editorial-archive",
           data: {
-            headline: approvedRecord.headlines[0] || approvedRecord.title,
-            headlineOptions: approvedRecord.headlines,
-            formattedHeadline: approvedRecord.headlines[0] || approvedRecord.title,
+            headline: finalHeadlines[0] || approvedRecord.title,
+            headlineOptions: finalHeadlines,
+            formattedHeadline: finalHeadlines[0] || approvedRecord.title,
             location: approvedRecord.location || "",
             category: approvedRecord.category || "",
             summary: finalDetailed,
             captionDetailed: finalDetailed,
-            captionBullets: approvedRecord.captionBullets,
-            captionShort: approvedRecord.captionShort,
+            captionBullets: finalBullets,
+            captionShort: finalShort,
             tags: approvedRecord.tags || ["#BreakingNews", "#AINewsMaker"],
             pickedImages: {
               main: approvedRecord.imageUrl || void 0
@@ -11727,7 +15923,7 @@ app.get("/api/ai-features-config", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/ai-features-config", (req, res) => {
+app.post("/api/admin/ai-features-config", requireMasterAdminMiddleware, (req, res) => {
   try {
     const newConfig = req.body;
     if (!newConfig || typeof newConfig !== "object") {
@@ -12840,7 +17036,7 @@ app.post("/api/generate-video-headlines", async (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/generate-video-headlines", async (req, res) => {
+app.post("/api/admin/generate-video-headlines", requireAdminMiddleware, async (req, res) => {
   const { caption = "", title = "", ratio = "9:16" } = req.body || {};
   if (!caption && !title) {
     return res.status(400).json({ error: "\u0915\u0948\u092A\u094D\u0936\u0928 \u092F\u093E \u0936\u0940\u0930\u094D\u0937\u0915 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
@@ -13114,6 +17310,11 @@ function getCascadingAllowedPlans(selectedTier) {
   return ["BASIC", "ADVANCED", "PRO", "VIP DESK"];
 }
 function getStoredTemplateConfigs() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.templateConfigs.size > 0) {
+    const dict = {};
+    for (const [k, v] of centralDb.cache.templateConfigs.entries()) dict[k] = v;
+    return dict;
+  }
   try {
     if (import_fs.default.existsSync(TEMPLATE_CONFIGS_FILE)) {
       const data = import_fs.default.readFileSync(TEMPLATE_CONFIGS_FILE, "utf-8");
@@ -13180,13 +17381,13 @@ app.get("/api/template-configs", (_req, res) => {
     categories: FRAME_CATEGORIES
   });
 });
-app.post("/api/admin/save-template-config", (req, res) => {
+app.post("/api/admin/save-template-config", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F\u094D\u0938 \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930\u0947\u0936\u0928 \u0938\u0939\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const {
-      templateId,
+      templateId: templateId2,
       allowedPlans,
       selectedTier,
       isActive,
@@ -13199,12 +17400,12 @@ app.post("/api/admin/save-template-config", (req, res) => {
       locationArea,
       logoArea
     } = req.body;
-    if (!templateId) {
+    if (!templateId2) {
       return res.status(400).json({ error: "templateId is required" });
     }
     const current = getStoredTemplateConfigs();
-    const existing = current[templateId] || {
-      customName: `Frame ${templateId}`,
+    const existing = current[templateId2] || {
+      customName: `Frame ${templateId2}`,
       category: "Regular Frame",
       selectedTier: "BASIC",
       allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
@@ -13227,7 +17428,7 @@ app.post("/api/admin/save-template-config", (req, res) => {
         finalCategory = trimmedCat;
       }
     }
-    current[templateId] = {
+    current[templateId2] = {
       ...existing,
       category: finalCategory,
       selectedTier: finalSelectedTier,
@@ -13242,18 +17443,22 @@ app.post("/api/admin/save-template-config", (req, res) => {
       ...logoArea ? { logoArea: String(logoArea).trim() } : {},
       updatedAt: Date.now()
     };
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.saveTemplateConfig(templateId2, current[templateId2]).catch(() => {
+      });
+    }
     import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
-      message: `Template config updated for ${templateId}`,
-      config: current[templateId],
+      message: `Template config updated for ${templateId2}`,
+      config: current[templateId2],
       configs: current
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/create-frame", (req, res) => {
+app.post("/api/admin/create-frame", requireMasterAdminMiddleware, (req, res) => {
   try {
     const {
       name,
@@ -13293,6 +17498,14 @@ app.post("/api/admin/create-frame", (req, res) => {
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.saveTemplateConfig(frameId, current[frameId]).catch(() => {
+      });
+    }
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.saveTemplateConfig(templateId, current[templateId]).catch(() => {
+      });
+    }
     import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
@@ -13305,7 +17518,7 @@ app.post("/api/admin/create-frame", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/credit-coins", (req, res) => {
+app.post("/api/admin/credit-coins", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { email, userId, coins = 0, reason = "Admin credit" } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
@@ -13314,15 +17527,27 @@ app.post("/api/admin/credit-coins", (req, res) => {
     if (!walletKey) {
       return res.status(400).json({ error: "email or userId is required" });
     }
+    const amount = Number(coins) || 0;
+    if (amount <= 0) {
+      return res.status(400).json({ error: "coins must be greater than 0" });
+    }
+    if (centralDb && centralDb.useFirestore) {
+      const atomRes = await centralDb.atomicCoinTransaction(walletKey, amount, "credit", reason);
+      if (atomRes.success) {
+        return res.json({
+          success: true,
+          wallet: atomRes.wallet,
+          transaction: atomRes.transaction,
+          message: `${amount} coins credited successfully`
+        });
+      }
+    }
     const rDb = loadRewardsDatabase();
     if (!rDb.wallets[walletKey]) {
       rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
     }
-    const amount = Number(coins) || 0;
     rDb.wallets[walletKey].coinBalance += amount;
-    if (amount > 0) {
-      rDb.wallets[walletKey].totalEarnedCoins += amount;
-    }
+    rDb.wallets[walletKey].totalEarnedCoins += amount;
     const txId = `tx-credit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const tx = {
       id: txId,
@@ -13351,11 +17576,18 @@ app.post("/api/admin/credit-coins", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/wallet/unlock-frame", (req, res) => {
+app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
   try {
+    const authUser = req.user;
     const { email, userId, frameId, frameName } = req.body || {};
-    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    let cleanEmail = (email || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
+    if (!cleanEmail && authUser?.email) {
+      cleanEmail = authUser.email.toLowerCase().trim();
+    }
+    if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0916\u093E\u0924\u0947 \u0938\u0947 \u092B\u094D\u0930\u0947\u092E \u0905\u0928\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     const cleanFrameId = (frameId || "").toString().trim();
     if (!cleanFrameId || !cleanEmail && !cleanUserId) {
       return res.status(400).json({ error: "frameId and user identification are required" });
@@ -13467,6 +17699,9 @@ app.get("/api/wallet/frame-unlocks", (req, res) => {
   }
 });
 function loadLimitIncreaseRequests() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("limit_increase_requests")) {
+    return centralDb.cache.systemConfig.get("limit_increase_requests");
+  }
   try {
     if (import_fs.default.existsSync(LIMIT_INCREASE_REQUESTS_FILE)) {
       const data = import_fs.default.readFileSync(LIMIT_INCREASE_REQUESTS_FILE, "utf-8");
@@ -13477,6 +17712,13 @@ function loadLimitIncreaseRequests() {
   return [];
 }
 function saveLimitIncreaseRequests(reqs) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const r of reqs) {
+      centralDb.saveLimitIncreaseRequest(r).catch(() => {
+      });
+    }
+    return;
+  }
   try {
     import_fs.default.writeFileSync(LIMIT_INCREASE_REQUESTS_FILE, JSON.stringify(reqs, null, 2), "utf-8");
   } catch {
@@ -13523,7 +17765,7 @@ app.post("/api/request-limit-increase", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/admin/limit-increase-requests", (_req, res) => {
+app.get("/api/admin/limit-increase-requests", requireAdminMiddleware, (_req, res) => {
   res.json({
     success: true,
     requests: loadLimitIncreaseRequests()
@@ -13549,6 +17791,9 @@ var DEFAULT_CATEGORIES_PRESET = [
   { id: "special", name: "\u{1F4D1} \u0935\u093F\u0936\u0947\u0937 \u0930\u093F\u092A\u094B\u0930\u094D\u091F", isActive: true, order: 16 }
 ];
 function loadCategoriesDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.categories.size > 0) {
+    return Array.from(centralDb.cache.categories.values());
+  }
   try {
     if (import_fs.default.existsSync(CATEGORIES_DB_FILE)) {
       const data = import_fs.default.readFileSync(CATEGORIES_DB_FILE, "utf-8");
@@ -13561,6 +17806,15 @@ function loadCategoriesDatabase() {
   return DEFAULT_CATEGORIES_PRESET;
 }
 function saveCategoriesDatabase(categories) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const cat of categories) {
+      const docId = (cat.id || `cat_${Date.now()}`).toString().trim();
+      centralDb.writeDoc("news_categories", docId, cat).catch(() => {
+      });
+      centralDb.cache.categories.set(docId, cat);
+    }
+    return;
+  }
   try {
     import_fs.default.writeFileSync(CATEGORIES_DB_FILE, JSON.stringify(categories, null, 2), "utf-8");
   } catch (e) {
@@ -13573,7 +17827,7 @@ app.get("/api/categories", (_req, res) => {
     categories: loadCategoriesDatabase()
   });
 });
-app.post("/api/categories", (req, res) => {
+app.post("/api/categories", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { categories } = req.body;
     if (Array.isArray(categories) && categories.length > 0) {
@@ -13715,6 +17969,9 @@ var DEFAULT_PLANS_CATALOG = [
   }
 ];
 function loadPlansCatalogDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.plans.size >= 4) {
+    return Array.from(centralDb.cache.plans.values());
+  }
   try {
     if (import_fs.default.existsSync(PLANS_CATALOG_DB_FILE)) {
       const data = import_fs.default.readFileSync(PLANS_CATALOG_DB_FILE, "utf-8");
@@ -13727,6 +17984,15 @@ function loadPlansCatalogDatabase() {
   return DEFAULT_PLANS_CATALOG;
 }
 function savePlansCatalogDatabase(plans) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const p of plans) {
+      const docId = (p.planKey || p.id || "plan").toLowerCase().trim();
+      centralDb.writeDoc("plans_catalog", docId, p).catch(() => {
+      });
+      centralDb.cache.plans.set(docId, p);
+    }
+    return;
+  }
   try {
     import_fs.default.writeFileSync(PLANS_CATALOG_DB_FILE, JSON.stringify(plans, null, 2), "utf-8");
   } catch (e) {
@@ -13739,7 +18005,7 @@ app.get("/api/plans", (_req, res) => {
     plans: loadPlansCatalogDatabase()
   });
 });
-app.post("/api/admin/plans", (req, res) => {
+app.post("/api/admin/plans", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { plans } = req.body;
     if (Array.isArray(plans) && plans.length >= 4) {
@@ -13752,6 +18018,9 @@ app.post("/api/admin/plans", (req, res) => {
   }
 });
 function loadPaymentsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.payments.size > 0) {
+    return Array.from(centralDb.cache.payments.values());
+  }
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
@@ -13765,6 +18034,14 @@ function loadPaymentsDatabase() {
   return [];
 }
 function savePaymentsDatabase(data) {
+  if (centralDb && centralDb.useFirestore) {
+    for (const p of data) {
+      const orderId = (p.orderId || p.cfOrderId || `order_${Date.now()}`).toString().trim();
+      centralDb.recordPayment(orderId, p).catch(() => {
+      });
+    }
+    return;
+  }
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
@@ -13780,6 +18057,9 @@ function savePaymentsDatabase(data) {
   }
 }
 function loadPackageCouponsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.coupons.size > 0) {
+    return Array.from(centralDb.cache.coupons.values());
+  }
   try {
     const locs = resolveAllDatabaseLocations("package_coupons_db.json");
     for (const loc of locs) {
@@ -13793,6 +18073,25 @@ function loadPackageCouponsDatabase() {
   return [];
 }
 function savePackageCouponsDatabase(data) {
+  if (centralDb && centralDb.useFirestore) {
+    const activeCodes = /* @__PURE__ */ new Set();
+    for (const c of data) {
+      const docId = (c.code || c.id || "").toUpperCase().trim();
+      if (docId) {
+        activeCodes.add(docId);
+        centralDb.cache.coupons.set(docId, c);
+        centralDb.saveCoupon(docId, c).catch(() => {
+        });
+      }
+    }
+    for (const code of centralDb.cache.coupons.keys()) {
+      if (!activeCodes.has(code)) {
+        centralDb.deleteCoupon(code).catch(() => {
+        });
+      }
+    }
+    return;
+  }
   try {
     const locs = resolveAllDatabaseLocations("package_coupons_db.json");
     for (const loc of locs) {
@@ -13807,22 +18106,16 @@ function savePackageCouponsDatabase(data) {
     console.error("Failed saving package_coupons_db.json:", e);
   }
 }
-app.get("/api/admin/package-coupons", (req, res) => {
+app.get("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
     const coupons = loadPackageCouponsDatabase();
     return res.json({ success: true, coupons });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/package-coupons", (req, res) => {
+app.post("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u092C\u0928\u093E \u092F\u093E \u0938\u0902\u092A\u093E\u0926\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
     const { id, code, name, discountAmount, applicablePackage, expiryDate, maxUsageLimit, perUserLimit, isActive } = req.body || {};
     if (!code || !discountAmount) {
       return res.status(400).json({ error: "\u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0914\u0930 \u091B\u0942\u091F \u0930\u093E\u0936\u093F (\u20B9) \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
@@ -13870,11 +18163,8 @@ app.post("/api/admin/package-coupons", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/package-coupons/:id", (req, res) => {
+app.delete("/api/admin/package-coupons/:id", requireMasterAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req) && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
     const { id } = req.params;
     let coupons = loadPackageCouponsDatabase();
     const initialLen = coupons.length;
@@ -14204,18 +18494,73 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/cashfree/webhook", (req, res) => {
+app.post("/api/cashfree/webhook", async (req, res) => {
   try {
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+    const signature = (req.headers["x-webhook-signature"] || req.headers["x-cashfree-signature"] || "").toString().trim();
+    const timestamp = (req.headers["x-webhook-timestamp"] || "").toString().trim();
+    const webhookSecret = (process.env.CASHFREE_WEBHOOK_SECRET || process.env.CASHFREE_SECRET_KEY || "").trim();
+    if (webhookSecret && signature && timestamp) {
+      const now = Date.now();
+      const tsNum = Number(timestamp);
+      const tsMs = tsNum > 1e11 ? tsNum : tsNum * 1e3;
+      if (Math.abs(now - tsMs) > 5 * 60 * 1e3) {
+        console.warn("[Cashfree Webhook] Expired webhook timestamp:", timestamp);
+        return res.status(400).json({ status: "ERROR", error: "Webhook timestamp expired" });
+      }
+      const expectedSig = import_crypto.default.createHmac("sha256", webhookSecret).update(String(timestamp) + rawBody).digest("base64");
+      const sigBuf = Buffer.from(String(signature));
+      const expBuf = Buffer.from(expectedSig);
+      if (sigBuf.length !== expBuf.length || !import_crypto.default.timingSafeEqual(sigBuf, expBuf)) {
+        console.warn("[Cashfree Webhook] Invalid webhook cryptographic signature");
+        return res.status(401).json({ status: "ERROR", error: "Invalid webhook signature" });
+      }
+    } else if (process.env.NODE_ENV === "production" && !signature) {
+      console.warn("[Cashfree Webhook] Missing required signature in production");
+      return res.status(401).json({ status: "ERROR", error: "Missing webhook signature" });
+    }
     const payload = req.body || {};
     const orderId = payload.data?.order?.order_id || payload.order_id;
     const paymentStatus = payload.data?.payment?.payment_status || payload.status;
-    if (orderId && paymentStatus === "SUCCESS") {
+    const paymentAmount = Number(payload.data?.order?.order_amount || payload.order_amount || 0);
+    if (orderId && (paymentStatus === "SUCCESS" || paymentStatus === "PAID")) {
       const allPayments = loadPaymentsDatabase();
       const order = allPayments.find((o) => o.orderId === orderId);
+      if (order && order.orderStatus === "PAID") {
+        return res.status(200).json({ status: "OK", message: "Order already verified and paid" });
+      }
       if (order) {
         order.orderStatus = "PAID";
+        order.paymentStatus = "SUCCESS";
         order.paidAt = Date.now();
+        order.paidAmount = paymentAmount || order.orderAmount || 0;
         savePaymentsDatabase(allPayments);
+      }
+      if (centralDb.useFirestore) {
+        await centralDb.recordPayment(orderId, {
+          orderId,
+          orderStatus: "PAID",
+          paymentStatus: "SUCCESS",
+          paidAmount: paymentAmount,
+          paidAt: Date.now()
+        });
+      }
+      const customerEmail = (payload.data?.customer_details?.customer_email || order?.customerEmail || "").toLowerCase().trim();
+      const planName = payload.data?.order?.order_tags?.plan || order?.planName;
+      if (customerEmail && planName) {
+        const user = await centralDb.getUser(customerEmail, { authoritative: true });
+        if (user) {
+          const updatedUser = {
+            ...user,
+            membership: {
+              ...user.membership || {},
+              plan: planName.toUpperCase(),
+              status: "ACTIVE",
+              updatedAt: Date.now()
+            }
+          };
+          await centralDb.saveUser(customerEmail, updatedUser);
+        }
       }
     }
     return res.status(200).json({ status: "OK" });
@@ -14223,11 +18568,48 @@ app.post("/api/cashfree/webhook", (req, res) => {
     return res.status(200).json({ status: "ERROR", error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/user-payments", (req, res) => {
-  const email = (req.query.email || "").toString().trim().toLowerCase();
+app.get("/api/user-payments", async (req, res) => {
+  const user = req.user || await resolveAuthenticatedUser(req);
+  const targetEmail = (req.query.email || "").toString().trim().toLowerCase();
   const allPayments = loadPaymentsDatabase();
-  const userPayments = email ? allPayments.filter((p) => p.customerEmail === email) : allPayments.slice(-20);
-  return res.json({ success: true, payments: userPayments });
+  if (user && isAuthorizedAdmin(req)) {
+    const payments = targetEmail ? allPayments.filter((p) => p.customerEmail === targetEmail) : allPayments.slice(-50);
+    return res.json({ success: true, payments });
+  }
+  if (user && user.email) {
+    const userPayments = allPayments.filter((p) => p.customerEmail === user.email.toLowerCase().trim());
+    return res.json({ success: true, payments: userPayments });
+  }
+  return res.status(401).json({ success: false, error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948", payments: [] });
+});
+app.get("/api/payment/gateways-status", (_req, res) => {
+  const cashfreeAppId = process.env.CASHFREE_APP_ID || "";
+  const cashfreeSecret = process.env.CASHFREE_SECRET_KEY || "";
+  const cashfreeEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
+  const razorpayKeyId = process.env.RAZORPAY_KEY_ID || "";
+  const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || "";
+  return res.json({
+    success: true,
+    activePrimaryGateway: "cashfree",
+    gateways: {
+      cashfree: {
+        id: "cashfree",
+        name: "Cashfree Payments (UPI, Cards, NetBanking)",
+        isConfigured: Boolean(cashfreeAppId && cashfreeSecret && !cashfreeAppId.includes("your_cashfree")),
+        environment: cashfreeEnv,
+        appIdMasked: cashfreeAppId ? `${cashfreeAppId.slice(0, 4)}...${cashfreeAppId.slice(-4)}` : "NOT_CONFIGURED",
+        webhookConfigured: true,
+        mode: cashfreeAppId ? "live/sandbox" : "test_sandbox"
+      },
+      razorpay: {
+        id: "razorpay",
+        name: "Razorpay Payment Gateway",
+        isConfigured: Boolean(razorpayKeyId && razorpayKeySecret),
+        status: razorpayKeyId ? "CONFIGURED" : "NOT_CONFIGURED",
+        note: razorpayKeyId ? "Razorpay API credentials loaded" : "Razorpay API keys not configured in environment; Cashfree is active primary gateway"
+      }
+    }
+  });
 });
 var dailyDownloadsTracker = /* @__PURE__ */ new Map();
 app.get("/api/user-download-status", (req, res) => {
@@ -14474,7 +18856,7 @@ app.get(
   }
 );
 var USERS_SHEET_FILE = import_path.default.join(process.cwd(), "users_sheet_database.json");
-app.post("/api/admin/sync-users-sheet", (req, res) => {
+app.post("/api/admin/sync-users-sheet", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { users } = req.body;
     if (Array.isArray(users)) {
@@ -14494,7 +18876,7 @@ app.post("/api/admin/sync-users-sheet", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/update-version-info", (req, res) => {
+app.post("/api/admin/update-version-info", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { version, versionCode, releaseTitle, releaseNotes, downloadUrl, forceUpdate } = req.body;
     if (version) appVersionData.version = String(version).trim();
@@ -14635,6 +19017,15 @@ app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject
   }
 });
 async function startServer() {
+  if (centralDb && (process.env.USE_FIRESTORE === "true" || centralDb.useFirestore)) {
+    try {
+      console.log("[Server] Initializing Central Firestore Database Service...");
+      await centralDb.initialize();
+      console.log("[Server] Central Firestore Database Service ready.");
+    } catch (err) {
+      console.error("[Server] CentralDB init error:", err.message);
+    }
+  }
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
@@ -14692,6 +19083,9 @@ async function startServer() {
         }
       })
     );
+    app.get(["/lite", "/lite/*"], (_req, res) => {
+      res.redirect(301, "/");
+    });
     app.get("*", (req, res) => {
       if (req.path.startsWith("/api/")) {
         return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
@@ -14716,6 +19110,7 @@ startServer().catch((err) => {
 });
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  BYLINE_REGEX,
   DISTRICT_STATE_LIST,
   GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS,
@@ -14724,6 +19119,7 @@ startServer().catch((err) => {
   HEADLINE_TIER_RANGES,
   buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString,
+  calculateHeadlineSimilarity,
   calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs,
   cleanHeadlineText,
@@ -14746,11 +19142,16 @@ startServer().catch((err) => {
   isRegenerateAllowed,
   isTierAllowedForOpenAI,
   matchDistrictAlias,
+  requireAdminMiddleware,
+  requireAuthMiddleware,
+  requireMasterAdminMiddleware,
+  resolveAuthenticatedUser,
   resolveUserTierAndRole,
   sanitizeFlattery,
   sanitizePressNoteFlattery,
   saveAiFeaturesConfig,
   scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks,
+  stripNewspaperBylines,
   validateHeadlineOption
 });
