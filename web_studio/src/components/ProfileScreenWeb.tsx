@@ -2824,9 +2824,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-white pb-28 w-full max-w-full overflow-x-clip transition-colors">
+    <div className="min-h-screen bg-[#070D1E] text-white pb-28 w-full max-w-full overflow-x-clip transition-colors">
       {/* Top Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white px-3.5 sm:px-6 py-3 sm:py-4 shadow-sm sticky top-0 z-40 transition-colors">
+      <div className="bg-[#0B132B] border-b border-slate-800 text-white px-3.5 sm:px-6 py-3 sm:py-4 shadow-sm sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">

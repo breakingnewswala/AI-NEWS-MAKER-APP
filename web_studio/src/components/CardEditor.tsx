@@ -1580,51 +1580,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         )}
 
         {/* Step 1 Mobile Nav Button */}
-        
-        {/* Template Color Palette */}
-        <div className="pt-2.5 border-t border-neutral-800 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-neutral-300 font-bold text-[11px] flex items-center gap-1.5">
-              <span>🎨</span>
-              <span>टेम्पलेट रंग बदलें:</span>
-            </span>
-            <span className="text-[10px] text-neutral-400 font-mono">
-              {card.highlightColor || '#FFE600'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {[
-              { color: '#FFE600', name: 'पीला' },
-              { color: '#EF4444', name: 'लाल' },
-              { color: '#FFFFFF', name: 'सफेद' },
-              { color: '#3B82F6', name: 'नीला' },
-              { color: '#10B981', name: 'हरा' },
-              { color: '#F97316', name: 'नारंगी' },
-              { color: '#A855F7', name: 'बैंगनी' },
-              { color: '#EC4899', name: 'गुलाबी' },
-              { color: '#06B6D4', name: 'स्काई' },
-            ].map((c) => {
-              const isSel = (card.highlightColor || '#FFE600').toUpperCase() === c.color.toUpperCase();
-              return (
-                <button
-                  key={c.color}
-                  type="button"
-                  onClick={() => onChange({ highlightColor: c.color })}
-                  className={`w-7 h-7 rounded-full shrink-0 border-2 transition-all cursor-pointer flex items-center justify-center ${
-                    isSel ? 'border-yellow-400 scale-110 shadow-lg ring-2 ring-yellow-400/50' : 'border-neutral-700 hover:border-neutral-500'
-                  }`}
-                  style={{ backgroundColor: c.color }}
-                  title={c.name}
-                >
-                  {isSel && (
-                    <Check className={`w-3.5 h-3.5 ${c.color === '#FFFFFF' || c.color === '#FFE600' ? 'text-black' : 'text-white'}`} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {renderMobileStepNavigation(1)}
       </div>
 

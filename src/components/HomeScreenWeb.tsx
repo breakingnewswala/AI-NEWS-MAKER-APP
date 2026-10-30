@@ -1397,7 +1397,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const currentTickerPost = breakingPosts[currentTickerIndex] || breakingPosts[0];
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-24 transition-colors">
+    <div className="min-h-screen bg-[#070D1E] text-slate-100 pb-24 transition-colors">
       {/* Admin Filter Bar */}
       {canModerate && (
         <>

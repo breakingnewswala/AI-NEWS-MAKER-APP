@@ -427,9 +427,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   };
 
   return (
-    <div className="w-full max-w-full lg:max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 pb-24 text-slate-900 dark:text-white transition-colors overflow-x-hidden">
+    <div className="w-full max-w-full lg:max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 pb-24 text-white transition-colors overflow-x-hidden">
       {/* 1. Header Banner */}
-      <div className="w-full bg-gradient-to-r from-red-50 dark:from-red-950/70 via-white dark:via-slate-900 to-amber-50 dark:to-amber-950/50 border border-slate-200 dark:border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-sm dark:shadow-2xl flex items-center justify-between gap-4">
+      <div className="w-full bg-gradient-to-r from-red-950/70 via-slate-900 to-amber-950/50 border border-red-500/40 rounded-2xl p-4 sm:p-6 shadow-2xl flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-red-600 to-amber-500 flex items-center justify-center shadow-lg text-white shrink-0">
             <Newspaper className="w-5 h-5 sm:w-6 sm:h-6" />

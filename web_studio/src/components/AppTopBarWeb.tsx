@@ -230,9 +230,9 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   return (
     <>
       <header
-        className={`bg-white/95 dark:bg-[#0B132B]/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800/90 text-slate-800 dark:text-white ${
+        className={`bg-[#0B132B]/95 backdrop-blur-md border-b border-slate-800/90 text-white ${
           isAdminUser && adminSystemMode === 'test' ? 'relative' : 'sticky top-0'
-        } z-40 shadow-sm dark:shadow-md transition-colors ${isStudio ? 'hidden md:block' : ''}`}
+        } z-40 shadow-md transition-colors ${isStudio ? 'hidden md:block' : ''}`}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className={`h-14 flex items-center ${isStudio ? 'justify-center md:justify-between' : 'justify-between'} gap-2`}>
@@ -284,7 +284,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             </div>
 
             {/* Desktop Tab Links (md+) - Exact 5 Primary Options */}
-            <nav className="hidden md:flex items-center gap-1 bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-800/80 rounded-xl p-1 shrink-0 shadow-xs">
+            <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0 shadow-xs">
               <button
                 onClick={() => onNavigateToTab('home')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${

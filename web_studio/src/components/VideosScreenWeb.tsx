@@ -1084,7 +1084,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 pb-24 transition-colors">
+    <div className="min-h-screen bg-[#070D1E] text-slate-100 pb-24 transition-colors">
       {/* Top Header */}
       <div className="bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md text-slate-900 dark:text-white">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">

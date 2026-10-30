@@ -2,7 +2,7 @@
   {
     "id": "src_aajtak_live",
     "name": "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
-    "url": "https://feeds.feedburner.com/aajtak/top",
+    "url": "https://www.aajtak.in/rssfeeds/?id=home",
     "type": "rss",
     "category": "देश",
     "isActive": true,

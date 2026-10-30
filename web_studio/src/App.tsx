@@ -478,7 +478,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return [];
+    return (INITIAL_NEWS_POSTS && INITIAL_NEWS_POSTS.length > 0) ? INITIAL_NEWS_POSTS : [];
   });
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
@@ -2629,7 +2629,7 @@ export default function App() {
   // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
   if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
-      <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
+      <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-slate-950 px-4 py-2 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
             <Sparkles className="w-4 h-4 text-slate-950" />
@@ -2699,7 +2699,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
+    <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-neutral-950 px-4 py-2.5 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
@@ -2735,7 +2735,7 @@ export default function App() {
       )}
 
       {/* Top Bar Navigation - Always visible in Home, Video, Newsroom, Control Room. In Studio: visible ONLY on Desktop (hidden md:block), preserving mobile & APK layout unchanged */}
-      <div className={`sticky top-0 z-50 bg-white/95 dark:bg-[#0B132B]/95 backdrop-blur-md shadow-sm dark:shadow-md transition-colors ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
+      <div className={`sticky top-0 z-50 bg-[#0B132B]/95 backdrop-blur-md shadow-md transition-colors ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
         <AppTopBarWeb
           currentTab={currentTab}
           currentUser={currentUser}
