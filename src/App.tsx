@@ -34,6 +34,7 @@ import {
   generate5BalancedHeadlineOptions,
   fitHeadlinesTo5TierRanges,
   cleanHeadlineText,
+  formatCaptionVariants,
 } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
@@ -2311,32 +2312,40 @@ export default function App() {
           };
         }
 
-        let approvedHeadlines = Array.isArray(approvedData.headlines) && approvedData.headlines.length > 0
+        const rawHeadlines = Array.isArray(approvedData.headlines) && approvedData.headlines.length > 0
           ? approvedData.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean)
           : [cleanHeadlineText(post.title)];
 
-        // Guarantee all 5 balanced headline options are available for all user tiers
-        if (approvedHeadlines.length < 5) {
-          const baseTitle = cleanHeadlineText(approvedHeadlines[0] || post.title || 'ताज़ा समाचार');
-          const factSentences = (post.summary || (post as any).fullContent || baseTitle)
-            .split(/[।\n]+|\.\s+/)
-            .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-            .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-          const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, effectiveLoc);
-          const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, effectiveLoc);
-          fitted.forEach((h) => {
-            if (approvedHeadlines.length < 5 && !approvedHeadlines.includes(h)) {
-              approvedHeadlines.push(h);
-            }
-          });
-        }
-        approvedHeadlines = approvedHeadlines.slice(0, 5);
+        const baseTitle = cleanHeadlineText(rawHeadlines[0] || post.title || 'ताज़ा समाचार');
+        const factSentences = (post.summary || (post as any).fullContent || baseTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+
+        const approvedHeadlines = fitHeadlinesTo5TierRanges(rawHeadlines, factSentences, baseTitle, effectiveLoc);
         const initialHeadline = approvedHeadlines[0] || post.title;
 
         // Caption personalization: append username to first hashtag only, leave remaining content and final #AINewsMaker unchanged
         const savedProf = getSavedChannelProfile();
         const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '';
-        let formattedCaption = approvedData.captionDetailed || post.summary || post.title;
+
+        let finalDetailed = approvedData.captionDetailed || post.summary || post.title;
+        let finalBullets = approvedData.captionBullets || '';
+        let finalShort = approvedData.captionShort || '';
+
+        if (!finalDetailed || !finalBullets || !finalShort) {
+          const variants = formatCaptionVariants(
+            initialHeadline,
+            effectiveLoc || 'मध्य प्रदेश',
+            finalDetailed || post.title,
+            savedProf?.username
+          );
+          if (!finalDetailed) finalDetailed = variants.captionDetailed;
+          if (!finalBullets) finalBullets = variants.captionBullets;
+          if (!finalShort) finalShort = variants.captionShort;
+        }
+
+        let formattedCaption = finalDetailed;
         if (userTag && formattedCaption.includes('#')) {
           if (!formattedCaption.toLowerCase().includes(userTag.toLowerCase())) {
             formattedCaption = formattedCaption.replace(/(#[^\s#]+)/, `${userTag} $1`);
@@ -2393,8 +2402,8 @@ export default function App() {
             approvedHeadlines,
             headlineOptions: approvedHeadlines,
             captionDetailed: formattedCaption,
-            captionBullets: approvedData.captionBullets,
-            captionShort: approvedData.captionShort,
+            captionBullets: finalBullets,
+            captionShort: finalShort,
             tags: approvedData.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'],
           });
 
