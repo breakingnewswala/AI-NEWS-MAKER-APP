@@ -94,7 +94,17 @@ const SENSITIVE_STATIC_PATTERNS = [
   /users_accounts_db/i,
   /payments_transactions_db/i,
   /package_coupons_db/i,
-  /registered_users\.json/i,
+  /user_profiles/i,
+  /sub_users/i,
+  /registered_users/i,
+  /users_sheet_database/i,
+  /account_deletion_requests/i,
+  /admin_audit_log/i,
+  /admin_notifications_read_db/i,
+  /deleted_users_tombstones/i,
+  /limit_increase_requests/i,
+  /restricted_channels_db/i,
+  /support_requests_database/i,
   /server\.(ts|cjs|js)(\.map)?(?=[?#\s\/]|$)/i,
   /\.env(?=[?#\s\.\/]|$)/i,
   /\.git(?=[?#\s\/]|$)/i,
@@ -18820,6 +18830,10 @@ async function startServer() {
     app.get("*", (req, res) => {
       if (req.path.startsWith("/api/")) {
         return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
+      }
+      const ext = path.extname(req.path);
+      if (ext && ext !== ".html") {
+        return res.status(404).json({ success: false, error: "Not Found" });
       }
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
