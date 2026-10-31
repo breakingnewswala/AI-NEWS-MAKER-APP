@@ -56,7 +56,7 @@ import {
 } from '../lib/userPlanManager';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, ensureAuthToken } from '../lib/apiConfig';
 import { safeLocalStorageSet, safeLocalStorageGet, safeLocalStorageRemove, compressImageBase64 } from '../lib/storageUtils';
 import { GoogleAuthProvider, signInWithPopup, signInWithCredential } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
@@ -714,6 +714,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       safeLocalStorageSet(`onboarding_completed_${cleanEmail}`, 'true');
       safeLocalStorageSet('is_onboarding_completed', 'true');
       safeLocalStorageRemove('auth_current_step');
+      ensureAuthToken().catch(() => {});
 
       registerOrUpdateUser({
         email: cleanEmail,

@@ -24,7 +24,7 @@ import { InstallPwaModal } from './components/InstallPwaModal';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
-import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
+import { getApiUrl, getApiBaseUrl, ensureAuthToken } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
@@ -892,7 +892,8 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveNews();
-  }, [currentUser?.role]);
+    ensureAuthToken().catch(() => {});
+  }, [currentUser?.role, currentUser?.email]);
 
   // Onboarding completion status (Login -> Details setup -> App)
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {

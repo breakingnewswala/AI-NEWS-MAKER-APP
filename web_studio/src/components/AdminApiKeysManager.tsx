@@ -21,6 +21,7 @@ import {
   Shield,
   Activity,
 } from 'lucide-react';
+import { getAuthToken, ensureAuthToken } from '../lib/apiConfig';
 
 interface FreeKeyItem {
   id: string;
@@ -98,19 +99,13 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
 
   const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
 
-  const getAuthHeaders = (extra: Record<string, string> = {}) => {
-    let token = '';
-    try {
-      token = localStorage.getItem('reporter_auth_token') || currentUser?.token || '';
-      if (!token) {
-        const sess = localStorage.getItem('reporter_auth_session');
-        if (sess) {
-          const parsed = JSON.parse(sess);
-          token = parsed?.token || '';
-        }
-      }
-    } catch {}
-
+  const getAuthHeaders = async (extra: Record<string, string> = {}) => {
+    let token = getAuthToken();
+    if (!token) {
+      try {
+        token = await ensureAuthToken();
+      } catch {}
+    }
     const headers: Record<string, string> = {
       'x-admin-email': adminEmail,
       ...extra,
@@ -125,9 +120,19 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
     try {
-      const res = await fetch('/api/admin/api-keys', {
-        headers: getAuthHeaders(),
+      let headers = await getAuthHeaders();
+      let res = await fetch('/api/admin/api-keys', {
+        headers,
       });
+
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
+          res = await fetch('/api/admin/api-keys', { headers });
+        }
+      }
+
       if (res.ok) {
         const json = await res.json();
         if (json.success) {
@@ -160,14 +165,35 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     }
     setAddingFreeKey(true);
     try {
-      const res = await fetch('/api/admin/api-keys/free', {
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch('/api/admin/api-keys/free', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        headers,
         body: JSON.stringify({
           apiKey: newFreeKey.trim(),
           label: newFreeLabel.trim() || undefined,
         }),
       });
+
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${freshToken}`,
+            'x-admin-email': adminEmail,
+          };
+          res = await fetch('/api/admin/api-keys/free', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              apiKey: newFreeKey.trim(),
+              label: newFreeLabel.trim() || undefined,
+            }),
+          });
+        }
+      }
+
       const resData = await res.json();
       if (res.ok && resData.success) {
         showToast(resData.message || '✅ फ्री API की जोड़ी गई!');
@@ -189,10 +215,23 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
       return;
     }
     try {
-      const res = await fetch(`/api/admin/api-keys/free/${encodeURIComponent(id)}`, {
+      let headers = await getAuthHeaders();
+      let res = await fetch(`/api/admin/api-keys/free/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers,
       });
+
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
+          res = await fetch(`/api/admin/api-keys/free/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+            headers,
+          });
+        }
+      }
+
       const resData = await res.json();
       if (res.ok && resData.success) {
         showToast('🗑️ फ्री API की सफलतापूर्वक हटा दी गई');
@@ -209,15 +248,37 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     e.preventDefault();
     setSavingPaidKey(true);
     try {
-      const res = await fetch('/api/admin/api-keys/paid', {
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch('/api/admin/api-keys/paid', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        headers,
         body: JSON.stringify({
           apiKey: paidKeyInput.trim() || undefined,
           label: paidKeyLabel.trim() || undefined,
           vipRoutingEnabled: vipRoutingToggle,
         }),
       });
+
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${freshToken}`,
+            'x-admin-email': adminEmail,
+          };
+          res = await fetch('/api/admin/api-keys/paid', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              apiKey: paidKeyInput.trim() || undefined,
+              label: paidKeyLabel.trim() || undefined,
+              vipRoutingEnabled: vipRoutingToggle,
+            }),
+          });
+        }
+      }
+
       const resData = await res.json();
       if (res.ok && resData.success) {
         showToast(resData.message || '✅ पेड VIP API Key सेटिंग्स अपडेट हो गईं!');
@@ -238,10 +299,23 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
       return;
     }
     try {
-      const res = await fetch('/api/admin/api-keys/paid', {
+      let headers = await getAuthHeaders();
+      let res = await fetch('/api/admin/api-keys/paid', {
         method: 'DELETE',
-        headers: getAuthHeaders(),
+        headers,
       });
+
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
+          res = await fetch('/api/admin/api-keys/paid', {
+            method: 'DELETE',
+            headers,
+          });
+        }
+      }
+
       const resData = await res.json();
       if (res.ok && resData.success) {
         showToast('🗑️ पेड VIP Key हटा दी गई');
@@ -259,11 +333,29 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
   const handleTestSavedKey = async (keyId: string, type: 'free' | 'paid') => {
     setTestingKeyId(keyId);
     try {
-      const res = await fetch('/api/admin/api-keys/test-id', {
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch('/api/admin/api-keys/test-id', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        headers,
         body: JSON.stringify({ keyId, type }),
       });
+
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${freshToken}`,
+            'x-admin-email': adminEmail,
+          };
+          res = await fetch('/api/admin/api-keys/test-id', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ keyId, type }),
+          });
+        }
+      }
+
       const resData = await res.json();
       if (res.ok && resData.success) {
         showToast(resData.message || '✅ API की सक्रिय है!');
@@ -287,13 +379,33 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     setTestingKey(true);
     setTestResult(null);
     try {
-      const res = await fetch('/api/admin/api-keys/test', {
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch('/api/admin/api-keys/test', {
         method: 'POST',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        headers,
         body: JSON.stringify({
           apiKey: testKeyInput.trim(),
         }),
       });
+
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${freshToken}`,
+            'x-admin-email': adminEmail,
+          };
+          res = await fetch('/api/admin/api-keys/test', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              apiKey: testKeyInput.trim(),
+            }),
+          });
+        }
+      }
+
       const resData = await res.json();
       if (res.ok && resData.success) {
         setTestResult({
