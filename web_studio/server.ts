@@ -15488,6 +15488,9 @@ const draftRegenerationStateMap = new Map<string, {
   generationRequestId?: string;
 }>();
 
+// Atomic in-flight lock to prevent duplicate regeneration and double-coin debit on concurrent requests for the same draft
+const draftRegenerationInFlight = new Map<string, Promise<any>>();
+
 // GET /api/regenerate-headlines - Health / status check
 app.get("/api/regenerate-headlines", (_req, res) => {
   res.json({ success: true, message: "Regenerate headlines API endpoint active", rulesVersion: "3.0.0-core-lock" });
@@ -15594,6 +15597,28 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       });
     }
 
+    // Concurrency shield: if regeneration is already in-flight for this draft, await its completion
+    if (draftId && draftRegenerationInFlight.has(draftId)) {
+      try {
+        const inFlightRes = await draftRegenerationInFlight.get(draftId);
+        if (inFlightRes) {
+          return res.json({
+            ...inFlightRes,
+            coinsDeducted: 0,
+            idempotent: true,
+            joinedInFlight: true,
+            message: "समानांतर अनुरोध (Concurrent Request) के माध्यम से पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाई गईं।",
+          });
+        }
+      } catch (inFlightErr: any) {
+        return res.status(409).json({
+          success: false,
+          alreadyUsed: true,
+          error: "इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।",
+        });
+      }
+    }
+
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
       return res.status(400).json({
         success: false,
@@ -15602,6 +15627,17 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
         requiredCoins,
         currentBalance,
       });
+    }
+
+    // Set up atomic in-flight lock for this draft
+    let resolveInFlight: ((val: any) => void) | null = null;
+    let rejectInFlight: ((err: any) => void) | null = null;
+    if (draftId) {
+      const p = new Promise((resolve, reject) => {
+        resolveInFlight = resolve;
+        rejectInFlight = reject;
+      });
+      draftRegenerationInFlight.set(draftId, p);
     }
 
     const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
@@ -15837,7 +15873,7 @@ JSON Output Schema:
 
     const totalHeadlineOptions = [...rawPrev.slice(0, 5), ...finalOptions].slice(0, 10);
 
-    return res.json({
+    const responsePayload = {
       success: true,
       actualProvider,
       headlines: finalOptions,
@@ -15860,10 +15896,23 @@ JSON Output Schema:
         totalCount: totalHeadlineOptions.length,
         graduatedWordCounts: finalOptions.map((h: string) => h.split(/\s+/).length),
       }
-    });
+    };
+
+    if (draftId && resolveInFlight) {
+      (resolveInFlight as any)(responsePayload);
+    }
+
+    return res.json(responsePayload);
   } catch (err: any) {
+    if (draftId && rejectInFlight) {
+      (rejectInFlight as any)(err);
+    }
     console.error("Error in /api/regenerate-headlines:", err);
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  } finally {
+    if (draftId) {
+      draftRegenerationInFlight.delete(draftId);
+    }
   }
 });
 
@@ -18719,6 +18768,26 @@ app.get("/api/payment/gateways-status", (_req, res) => {
 });
 
 // Authoritative Download Entitlement & Quota Verification
+const DAILY_DOWNLOADS_DB_FILE = path.join(process.cwd(), "daily_downloads_database.json");
+
+function loadDailyDownloadsDatabase(): Record<string, { date: string; count: number; processedRequestIds?: string[]; updatedAt?: number }> {
+  try {
+    if (fs.existsSync(DAILY_DOWNLOADS_DB_FILE)) {
+      const raw = fs.readFileSync(DAILY_DOWNLOADS_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return {};
+}
+
+function saveDailyDownloadsDatabase(data: Record<string, { date: string; count: number; processedRequestIds?: string[]; updatedAt?: number }>) {
+  try {
+    fs.writeFileSync(DAILY_DOWNLOADS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err: any) {
+    console.warn("[DailyDownloads] Persistent save failed:", err.message);
+  }
+}
+
 const dailyDownloadsTracker = new Map<string, { date: string; count: number }>();
 const recentDownloadRequests = new Map<string, number>();
 
@@ -18750,6 +18819,19 @@ app.get("/api/user-download-status", (req, res) => {
     let downloadsToday = 0;
     if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
+    } else {
+      // Check persistent store on server restart / cold start
+      const persisted = loadDailyDownloadsDatabase();
+      const recordKey = `${userKey}_${dateStr}`;
+      if (persisted[recordKey] && persisted[recordKey].date === dateStr) {
+        downloadsToday = persisted[recordKey].count;
+        dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday });
+        if (Array.isArray(persisted[recordKey].processedRequestIds)) {
+          for (const reqId of persisted[recordKey].processedRequestIds!) {
+            recentDownloadRequests.set(reqId, Date.now());
+          }
+        }
+      }
     }
     const isExhausted = downloadsToday >= maxAllowed;
     const remainingCount = Math.max(0, maxAllowed - downloadsToday);
@@ -18893,7 +18975,20 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
     } else {
-      dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
+      // Check persistent store on server restart / cold start
+      const persisted = loadDailyDownloadsDatabase();
+      const recordKey = `${userKey}_${dateStr}`;
+      if (persisted[recordKey] && persisted[recordKey].date === dateStr) {
+        downloadsToday = persisted[recordKey].count;
+        dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday });
+        if (Array.isArray(persisted[recordKey].processedRequestIds)) {
+          for (const reqId of persisted[recordKey].processedRequestIds!) {
+            recentDownloadRequests.set(reqId, Date.now());
+          }
+        }
+      } else {
+        dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
+      }
     }
 
     if (downloadsToday >= maxAllowed) {
@@ -18907,7 +19002,22 @@ app.post("/api/verify-download-entitlement", (req, res) => {
 
     // 5.1 Idempotency & double-click protection for download quota
     const downloadRequestId = req.body?.downloadRequestId || (card?.id ? `${userKey}_${card.id}_${dateStr}` : null);
-    if (!checkOnly && downloadRequestId && recentDownloadRequests.has(downloadRequestId)) {
+    let isAlreadyProcessed = false;
+    if (downloadRequestId) {
+      if (recentDownloadRequests.has(downloadRequestId)) {
+        isAlreadyProcessed = true;
+      } else {
+        // Also check persistent database for cold start / multi-instance
+        const persisted = loadDailyDownloadsDatabase();
+        const recordKey = `${userKey}_${dateStr}`;
+        if (persisted[recordKey]?.processedRequestIds?.includes(downloadRequestId)) {
+          isAlreadyProcessed = true;
+          recentDownloadRequests.set(downloadRequestId, Date.now());
+        }
+      }
+    }
+
+    if (!checkOnly && isAlreadyProcessed) {
       return res.json({
         allowed: true,
         plan: tier,
@@ -18926,6 +19036,28 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       }
       dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday + 1 });
       downloadsToday += 1;
+
+      // Persist across server restarts and multi-instance container restarts
+      try {
+        const persisted = loadDailyDownloadsDatabase();
+        const recordKey = `${userKey}_${dateStr}`;
+        const prevIds = persisted[recordKey]?.processedRequestIds || [];
+        if (downloadRequestId && !prevIds.includes(downloadRequestId)) {
+          prevIds.push(downloadRequestId);
+        }
+        persisted[recordKey] = {
+          date: dateStr,
+          count: downloadsToday,
+          processedRequestIds: prevIds,
+          updatedAt: Date.now(),
+        };
+        saveDailyDownloadsDatabase(persisted);
+
+        // If Central Firestore is active, sync asynchronously
+        if (centralDb && centralDb.useFirestore) {
+          centralDb.writeDoc("daily_graphic_downloads", recordKey, persisted[recordKey]).catch(() => {});
+        }
+      } catch {}
     }
 
     return res.json({

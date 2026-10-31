@@ -2575,9 +2575,9 @@ var require_firestore_database_service = __commonJS({
           return drafts;
         }
       }
-      async saveDraft(draftId, draftData) {
-        if (!draftId) return { success: false, error: "Draft ID required" };
-        const cleanId = String(draftId).trim();
+      async saveDraft(draftId2, draftData) {
+        if (!draftId2) return { success: false, error: "Draft ID required" };
+        const cleanId = String(draftId2).trim();
         const payload = { ...draftData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
         if (this.useFirestore) {
           this.cache.drafts.set(cleanId, payload);
@@ -3902,9 +3902,9 @@ var require_firestore_database_service2 = __commonJS({
           return drafts;
         }
       }
-      async saveDraft(draftId, draftData) {
-        if (!draftId) return { success: false, error: "Draft ID required" };
-        const cleanId = String(draftId).trim();
+      async saveDraft(draftId2, draftData) {
+        if (!draftId2) return { success: false, error: "Draft ID required" };
+        const cleanId = String(draftId2).trim();
         const payload = { ...draftData, id: cleanId, docId: cleanId, updatedAt: Date.now() };
         if (this.useFirestore) {
           this.cache.drafts.set(cleanId, payload);
@@ -16581,6 +16581,7 @@ app.post("/api/admin/ai-features-config", requireMasterAdminMiddleware, (req, re
   }
 });
 var draftRegenerationStateMap = /* @__PURE__ */ new Map();
+var draftRegenerationInFlight = /* @__PURE__ */ new Map();
 app.get("/api/regenerate-headlines", (_req, res) => {
   res.json({ success: true, message: "Regenerate headlines API endpoint active", rulesVersion: "3.0.0-core-lock" });
 });
@@ -16603,7 +16604,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       aiProvider = "gemini",
       geminiApiKey = ""
     } = req.body;
-    const draftId = (req.body.draftId || req.body.newsId || canonicalContext?.newsId || canonicalContext?.draftId || "").toString().trim();
+    const draftId2 = (req.body.draftId || req.body.newsId || canonicalContext?.newsId || canonicalContext?.draftId || "").toString().trim();
     const generationRequestId = (req.body.generationRequestId || req.body.idempotencyKey || "").toString().trim();
     const userResolution = resolveUserTierAndRole(req);
     const userTier = (userResolution.tier || "basic").toString().toLowerCase().trim();
@@ -16640,8 +16641,8 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     }
     const currentBalance = walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey].coinBalance : 0;
     const drafts = loadDraftsDatabase();
-    const existingDraft = draftId ? drafts.find((d) => d.id === draftId) : null;
-    const memoryRegenState = draftId ? draftRegenerationStateMap.get(draftId) : null;
+    const existingDraft = draftId2 ? drafts.find((d) => d.id === draftId2) : null;
+    const memoryRegenState = draftId2 ? draftRegenerationStateMap.get(draftId2) : null;
     if (existingDraft && existingDraft.regenerationUsed || memoryRegenState && memoryRegenState.used) {
       const savedHeadlines = existingDraft && existingDraft.regeneratedHeadlines || memoryRegenState && memoryRegenState.headlines || [];
       if (savedHeadlines.length > 0 && generationRequestId && (existingDraft?.generationRequestId === generationRequestId || memoryRegenState?.generationRequestId === generationRequestId)) {
@@ -16656,7 +16657,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           headline: savedHeadlines[0] || "",
           coinsDeducted: 0,
           remainingCoins: currentBalance,
-          draftId: draftId || void 0,
+          draftId: draftId2 || void 0,
           alreadyRegenerated: true,
           regenerationUsed: true,
           message: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u0947 \u0932\u093F\u090F \u092A\u0942\u0930\u094D\u0935-\u091C\u0928\u0930\u0947\u091F\u0947\u0921 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0932\u094C\u091F\u093E\u090F \u0917\u090F \u0939\u0948\u0902\u0964"
@@ -16668,6 +16669,26 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
         error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
       });
     }
+    if (draftId2 && draftRegenerationInFlight.has(draftId2)) {
+      try {
+        const inFlightRes = await draftRegenerationInFlight.get(draftId2);
+        if (inFlightRes) {
+          return res.json({
+            ...inFlightRes,
+            coinsDeducted: 0,
+            idempotent: true,
+            joinedInFlight: true,
+            message: "\u0938\u092E\u093E\u0928\u093E\u0902\u0924\u0930 \u0905\u0928\u0941\u0930\u094B\u0927 (Concurrent Request) \u0915\u0947 \u092E\u093E\u0927\u094D\u092F\u092E \u0938\u0947 \u092A\u0942\u0930\u094D\u0935-\u091C\u0928\u0930\u0947\u091F\u0947\u0921 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0932\u094C\u091F\u093E\u0908 \u0917\u0908\u0902\u0964"
+          });
+        }
+      } catch (inFlightErr) {
+        return res.status(409).json({
+          success: false,
+          alreadyUsed: true,
+          error: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+        });
+      }
+    }
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
       return res.status(400).json({
         success: false,
@@ -16676,6 +16697,15 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
         requiredCoins,
         currentBalance
       });
+    }
+    let resolveInFlight = null;
+    let rejectInFlight2 = null;
+    if (draftId2) {
+      const p = new Promise((resolve, reject) => {
+        resolveInFlight = resolve;
+        rejectInFlight2 = reject;
+      });
+      draftRegenerationInFlight.set(draftId2, p);
     }
     const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
     const excludeTitles = rawPrev.map((h) => cleanHeadlineText(String(h || "")).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter(Boolean);
@@ -16852,7 +16882,7 @@ JSON Output Schema:
         transactionId: txId,
         userId: userId || walletKey,
         userEmail: userEmail || walletKey,
-        newsItemId: (draftId || req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
+        newsItemId: (draftId2 || req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
         newsTitle: sourceTitle || "5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938",
         description: `5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u091C\u0928\u0930\u0947\u0936\u0928 (${userTier.toUpperCase()}): -${requiredCoins} \u0915\u0949\u0907\u0928\u094D\u0938`,
         transactionType: "debit",
@@ -16870,8 +16900,8 @@ JSON Output Schema:
     } else if (walletKey && rDb.wallets[walletKey]) {
       remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
     }
-    if (draftId) {
-      draftRegenerationStateMap.set(draftId, {
+    if (draftId2) {
+      draftRegenerationStateMap.set(draftId2, {
         used: true,
         headlines: finalOptions,
         userId: walletKey,
@@ -16887,7 +16917,7 @@ JSON Output Schema:
       }
     }
     const totalHeadlineOptions = [...rawPrev.slice(0, 5), ...finalOptions].slice(0, 10);
-    return res.json({
+    const responsePayload = {
       success: true,
       actualProvider,
       headlines: finalOptions,
@@ -16897,12 +16927,12 @@ JSON Output Schema:
       headline: finalOptions[0] || "",
       coinsDeducted,
       remainingCoins,
-      draftId: draftId || void 0,
+      draftId: draftId2 || void 0,
       regenerationUsed: true,
       wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : void 0,
       canonicalContext: {
         ...canonicalContext,
-        draftId: draftId || void 0,
+        draftId: draftId2 || void 0,
         lastRegeneratedAt: (/* @__PURE__ */ new Date()).toISOString()
       },
       diagnostics: {
@@ -16910,10 +16940,21 @@ JSON Output Schema:
         totalCount: totalHeadlineOptions.length,
         graduatedWordCounts: finalOptions.map((h) => h.split(/\s+/).length)
       }
-    });
+    };
+    if (draftId2 && resolveInFlight) {
+      resolveInFlight(responsePayload);
+    }
+    return res.json(responsePayload);
   } catch (err) {
+    if (draftId && rejectInFlight) {
+      rejectInFlight(err);
+    }
     console.error("Error in /api/regenerate-headlines:", err);
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  } finally {
+    if (draftId) {
+      draftRegenerationInFlight.delete(draftId);
+    }
   }
 });
 var CATEGORY_KEYWORDS_LIST = [
@@ -19305,6 +19346,24 @@ app.get("/api/payment/gateways-status", (_req, res) => {
     }
   });
 });
+var DAILY_DOWNLOADS_DB_FILE = import_path.default.join(process.cwd(), "daily_downloads_database.json");
+function loadDailyDownloadsDatabase() {
+  try {
+    if (import_fs.default.existsSync(DAILY_DOWNLOADS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(DAILY_DOWNLOADS_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {
+  }
+  return {};
+}
+function saveDailyDownloadsDatabase(data) {
+  try {
+    import_fs.default.writeFileSync(DAILY_DOWNLOADS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[DailyDownloads] Persistent save failed:", err.message);
+  }
+}
 var dailyDownloadsTracker = /* @__PURE__ */ new Map();
 var recentDownloadRequests = /* @__PURE__ */ new Map();
 app.get("/api/user-download-status", (req, res) => {
@@ -19331,6 +19390,18 @@ app.get("/api/user-download-status", (req, res) => {
     let downloadsToday = 0;
     if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
+    } else {
+      const persisted = loadDailyDownloadsDatabase();
+      const recordKey = `${userKey}_${dateStr}`;
+      if (persisted[recordKey] && persisted[recordKey].date === dateStr) {
+        downloadsToday = persisted[recordKey].count;
+        dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday });
+        if (Array.isArray(persisted[recordKey].processedRequestIds)) {
+          for (const reqId of persisted[recordKey].processedRequestIds) {
+            recentDownloadRequests.set(reqId, Date.now());
+          }
+        }
+      }
     }
     const isExhausted = downloadsToday >= maxAllowed;
     const remainingCount = Math.max(0, maxAllowed - downloadsToday);
@@ -19447,7 +19518,19 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     if (currentRecord && currentRecord.date === dateStr) {
       downloadsToday = currentRecord.count;
     } else {
-      dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
+      const persisted = loadDailyDownloadsDatabase();
+      const recordKey = `${userKey}_${dateStr}`;
+      if (persisted[recordKey] && persisted[recordKey].date === dateStr) {
+        downloadsToday = persisted[recordKey].count;
+        dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday });
+        if (Array.isArray(persisted[recordKey].processedRequestIds)) {
+          for (const reqId of persisted[recordKey].processedRequestIds) {
+            recentDownloadRequests.set(reqId, Date.now());
+          }
+        }
+      } else {
+        dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
+      }
     }
     if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
@@ -19458,7 +19541,20 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       });
     }
     const downloadRequestId = req.body?.downloadRequestId || (card?.id ? `${userKey}_${card.id}_${dateStr}` : null);
-    if (!checkOnly && downloadRequestId && recentDownloadRequests.has(downloadRequestId)) {
+    let isAlreadyProcessed = false;
+    if (downloadRequestId) {
+      if (recentDownloadRequests.has(downloadRequestId)) {
+        isAlreadyProcessed = true;
+      } else {
+        const persisted = loadDailyDownloadsDatabase();
+        const recordKey = `${userKey}_${dateStr}`;
+        if (persisted[recordKey]?.processedRequestIds?.includes(downloadRequestId)) {
+          isAlreadyProcessed = true;
+          recentDownloadRequests.set(downloadRequestId, Date.now());
+        }
+      }
+    }
+    if (!checkOnly && isAlreadyProcessed) {
       return res.json({
         allowed: true,
         plan: tier,
@@ -19475,6 +19571,26 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       }
       dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday + 1 });
       downloadsToday += 1;
+      try {
+        const persisted = loadDailyDownloadsDatabase();
+        const recordKey = `${userKey}_${dateStr}`;
+        const prevIds = persisted[recordKey]?.processedRequestIds || [];
+        if (downloadRequestId && !prevIds.includes(downloadRequestId)) {
+          prevIds.push(downloadRequestId);
+        }
+        persisted[recordKey] = {
+          date: dateStr,
+          count: downloadsToday,
+          processedRequestIds: prevIds,
+          updatedAt: Date.now()
+        };
+        saveDailyDownloadsDatabase(persisted);
+        if (centralDb && centralDb.useFirestore) {
+          centralDb.writeDoc("daily_graphic_downloads", recordKey, persisted[recordKey]).catch(() => {
+          });
+        }
+      } catch {
+      }
     }
     return res.json({
       allowed: true,
