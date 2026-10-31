@@ -12710,11 +12710,11 @@ function resolveUserTierAndRole(req) {
   return { tier: "basic", role: "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-3.8-flash"
+  "gemini-3.5-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-flash-lite-latest",
+  "gemini-3.8-flash",
+  "gemini-flash-latest"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
@@ -12809,13 +12809,13 @@ function classifyApiKeyError(err) {
       shouldDisableKey: true
     };
   }
-  if (status === 400 || errMsg.includes("bad request") || errMsg.includes("invalid argument") || errMsg.includes("not supported") || errMsg.includes("unsupported model") || errMsg.includes("unknown name") || errMsg.includes("safety")) {
+  if (status === 400 || status === 404 || errMsg.includes("bad request") || errMsg.includes("invalid argument") || errMsg.includes("not supported") || errMsg.includes("unsupported model") || errMsg.includes("no longer available") || errMsg.includes("not found") || errMsg.includes("unknown name") || errMsg.includes("safety")) {
     return {
       type: "bad_request",
       isRetryable: false,
       cooldownMs: 0,
       // No cooldown for the key itself
-      userFacingError: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0928\u0941\u0930\u094B\u0927 \u092F\u093E \u0905\u0938\u092E\u0930\u094D\u0925\u093F\u0924 \u092E\u0949\u0921\u0932 (400 Bad Request / Unsupported Model)",
+      userFacingError: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0928\u0941\u0930\u094B\u0927 \u092F\u093E \u0905\u0938\u092E\u0930\u094D\u0925\u093F\u0924 \u092E\u0949\u0921\u0932 (400/404 Unsupported Model)",
       healthStatus: "healthy",
       shouldDisableKey: false
     };
@@ -13235,7 +13235,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
   let initialHealth = "healthy";
   let initialLatency;
   let initialError;
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite";
   const testStart = Date.now();
   let testSuccess = false;
   let lastTestErr = null;
@@ -13441,7 +13441,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
       httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } }
     });
     let testSuccess = false;
-    let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+    let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite";
     let lastTestErr = null;
     for (const testModel of DEFAULT_FALLBACK_MODELS) {
       try {
@@ -13508,7 +13508,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
       success: false,
       error: `\u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0924\u094D\u0930\u0941\u091F\u093F: ${classified.userFacingError}`,
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite",
       latencyMs: latency,
       healthStatus: targetRef.lastHealthStatus,
       lastTestedAt: targetRef.lastTestedAt

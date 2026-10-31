@@ -10177,11 +10177,11 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-flash-lite-latest",
   "gemini-3.8-flash",
+  "gemini-flash-latest",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -10406,14 +10406,17 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
     };
   }
 
-  // 4. Invalid Request or Unsupported Model (HTTP 400)
-  // STRICT RULE (Phase 2.4F): HTTP 400 caused by an invalid request or unsupported model must NEVER disable the API key!
+  // 4. Invalid Request or Unsupported / Deprecated Model (HTTP 400 / 404)
+  // STRICT RULE (Phase 2.4F): HTTP 400/404 caused by an invalid request or unsupported/deprecated model must NEVER disable the API key!
   if (
     status === 400 ||
+    status === 404 ||
     errMsg.includes("bad request") ||
     errMsg.includes("invalid argument") ||
     errMsg.includes("not supported") ||
     errMsg.includes("unsupported model") ||
+    errMsg.includes("no longer available") ||
+    errMsg.includes("not found") ||
     errMsg.includes("unknown name") ||
     errMsg.includes("safety")
   ) {
@@ -10421,7 +10424,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "bad_request",
       isRetryable: false,
       cooldownMs: 0, // No cooldown for the key itself
-      userFacingError: "अमान्य अनुरोध या असमर्थित मॉडल (400 Bad Request / Unsupported Model)",
+      userFacingError: "अमान्य अनुरोध या असमर्थित मॉडल (400/404 Unsupported Model)",
       healthStatus: "healthy",
       shouldDisableKey: false,
     };
@@ -10975,7 +10978,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
   let initialHealth: "healthy" | "quota_exceeded" | "invalid" | "error" = "healthy";
   let initialLatency: number | undefined;
   let initialError: string | undefined;
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite";
 
   const testStart = Date.now();
   let testSuccess = false;
@@ -11206,7 +11209,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     });
 
     let testSuccess = false;
-    let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+    let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite";
     let lastTestErr: any = null;
 
     for (const testModel of DEFAULT_FALLBACK_MODELS) {
@@ -11280,7 +11283,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
       success: false,
       error: `स्वास्थ्य परीक्षण त्रुटि: ${classified.userFacingError}`,
       provider: "Google Gemini (गूगल जेमिनी)",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite",
       latencyMs: latency,
       healthStatus: targetRef.lastHealthStatus,
       lastTestedAt: targetRef.lastTestedAt,

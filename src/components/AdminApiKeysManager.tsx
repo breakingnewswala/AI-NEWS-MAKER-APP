@@ -632,7 +632,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
                         <span>प्रदाता: {item.provider || 'गूगल जेमिनी (Google Gemini)'}</span>
-                        <span>मॉडल: {item.model || 'gemini-3.8-flash'}</span>
+                        <span>मॉडल: {item.model || 'gemini-3.5-flash-lite'}</span>
                         <span className="text-emerald-400 font-mono">✅ {item.successCount} सफल</span>
                         {item.errorCount > 0 && (
                           <span className="text-red-400 font-mono">❌ {item.errorCount} एरर / 429</span>
