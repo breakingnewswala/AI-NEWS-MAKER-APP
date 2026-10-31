@@ -4420,6 +4420,7 @@ __export(server_exports, {
   calculateHeadlineSimilarityInternal: () => calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs: () => cleanCaptionParagraphs,
   cleanHeadlineText: () => cleanHeadlineText,
+  countHeadlineVisibleCharacters: () => countHeadlineVisibleCharacters,
   createLocalNewsFallback: () => createLocalNewsFallback,
   detectDistrictAndState: () => detectDistrictAndState,
   enrichHeadlineWithContext: () => enrichHeadlineWithContext,
@@ -4451,7 +4452,8 @@ __export(server_exports, {
   scrapeNewsFromUrl: () => scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks: () => stripAllUrlsAndHyperlinks,
   stripNewspaperBylines: () => stripNewspaperBylines,
-  validateHeadlineOption: () => validateHeadlineOption
+  validateHeadlineOption: () => validateHeadlineOption,
+  validateHeadlines5Tier: () => validateHeadlines5Tier
 });
 module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
@@ -14681,7 +14683,20 @@ ${p3}`;
   finalBodyText = stripAllUrlsAndHyperlinks(finalBodyText);
   const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || []).filter((t, i, arr) => arr.indexOf(t) === i);
   const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
-  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
+  const isGeneric = [
+    "user",
+    "username",
+    "reporter",
+    "admin",
+    "superadmin",
+    "null",
+    "undefined",
+    "ainewsmaker",
+    "ai_news_maker",
+    "breakingnewswala",
+    "bnwtv",
+    "breaking_news_wala"
+  ].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : "";
   let locTag = "";
   if (location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C") {
@@ -14693,7 +14708,7 @@ ${p3}`;
   const filteredMiddleTags = [];
   for (const t of rawTags) {
     const lower = t.toLowerCase();
-    if (userTag && lower === userTag.toLowerCase() || lower === "#ainewsmaker" || lower === "#ai_news_maker" || lower === "#breakingnewswala" || lower === "#bnwtv" || lower === "#\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E" || lower.startsWith("#http") || lower.startsWith("#www") || lower.startsWith("#url")) {
+    if (userTag && lower === userTag.toLowerCase() || lower === "#ainewsmaker" || lower === "#ai_news_maker" || lower === "#breakingnewswala" || lower === "#bnwtv" || lower === "#breaking_news_wala" || lower === "#\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E" || lower.startsWith("#http") || lower.startsWith("#www") || lower.startsWith("#url")) {
       continue;
     }
     filteredMiddleTags.push(t);
@@ -14710,12 +14725,12 @@ ${p3}`;
   }
   const middleSlice = filteredMiddleTags.slice(0, 6);
   const cleanFinalTags = [];
-  if (userTag && userTag.toLowerCase() !== "#ainewsmaker" && userTag.toLowerCase() !== "#ai_news_maker") {
+  if (userTag && userTag.toLowerCase() !== "#ainewsmaker" && userTag.toLowerCase() !== "#ai_news_maker" && userTag.toLowerCase() !== "#breakingnewswala" && userTag.toLowerCase() !== "#bnwtv" && userTag.toLowerCase() !== "#breaking_news_wala" && userTag.toLowerCase() !== "#\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E") {
     cleanFinalTags.push(userTag);
   }
   for (const t of middleSlice) {
     const lower = t.toLowerCase();
-    if (lower !== "#ainewsmaker" && lower !== "#ai_news_maker") {
+    if (lower !== "#ainewsmaker" && lower !== "#ai_news_maker" && lower !== "#breakingnewswala" && lower !== "#bnwtv" && lower !== "#breaking_news_wala" && lower !== "#\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917\u0928\u094D\u092F\u0942\u091C\u0935\u093E\u0932\u093E") {
       cleanFinalTags.push(t);
     }
   }
@@ -15424,6 +15439,56 @@ var HEADLINE_5_TIER_RANGES = [
 ];
 var HEADLINE_MAX_CHARACTER_LIMIT = 200;
 var HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+function countHeadlineVisibleCharacters(text) {
+  if (!text || typeof text !== "string") return 0;
+  let s = text.replace(/\[\/?(?:yellow|highlight)\]/gi, "");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+  s = s.replace(/["'“”‘’«»]/g, "");
+  s = s.replace(/[।\.\!\?\,\:\-]+$/g, "");
+  s = s.replace(/\s+/g, " ").trim();
+  return s.length;
+}
+function validateHeadlines5Tier(headlines) {
+  const safe = Array.isArray(headlines) ? headlines.slice(0, 5) : [];
+  const results = [];
+  const invalidTiers = [];
+  for (let i = 0; i < 5; i++) {
+    const tier = HEADLINE_5_TIER_RANGES[i];
+    const text = safe[i] || "";
+    const charCount = countHeadlineVisibleCharacters(text);
+    const trimmed = text.replace(/\[\/?(?:yellow|highlight)\]/gi, "").trim();
+    let valid = true;
+    let reason;
+    if (!text) {
+      valid = false;
+      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0916\u093E\u0932\u0940 \u0939\u0948\u0964";
+    } else if (charCount < tier.min) {
+      valid = false;
+      reason = `\u0935\u0930\u094D\u0923 \u0938\u0902\u0916\u094D\u092F\u093E (${charCount}) \u0928\u094D\u092F\u0942\u0928\u0924\u092E \u0938\u0940\u092E\u093E (${tier.min}) \u0938\u0947 \u0915\u092E \u0939\u0948\u0964`;
+    } else if (charCount > tier.max) {
+      valid = false;
+      reason = `\u0935\u0930\u094D\u0923 \u0938\u0902\u0916\u094D\u092F\u093E (${charCount}) \u0905\u0927\u093F\u0915\u0924\u092E \u0938\u0940\u092E\u093E (${tier.max}) \u0938\u0947 \u0905\u0927\u093F\u0915 \u0939\u0948\u0964`;
+    } else if (/[।\.]$/.test(trimmed)) {
+      valid = false;
+      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (. \u092F\u093E \u0964) \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964";
+    }
+    if (!valid) invalidTiers.push(i + 1);
+    results.push({
+      tier: i + 1,
+      text,
+      charCount,
+      min: tier.min,
+      max: tier.max,
+      valid,
+      reason
+    });
+  }
+  return {
+    valid: invalidTiers.length === 0 && results.length === 5,
+    results,
+    invalidTiers
+  };
+}
 function fitSingleHeadlineToTier(text, maxLimit = 200, minLimit = 0, factSentence) {
   if (!text) return "";
   let cleaned = sanitizeHeadlineClean(text);
@@ -15431,42 +15496,55 @@ function fitSingleHeadlineToTier(text, maxLimit = 200, minLimit = 0, factSentenc
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
   cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = sanitizeHeadlineClean(cleaned);
-  const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
-  if (visibleLength <= maxLimit) {
-    if (minLimit > 0 && visibleLength < minLimit && factSentence) {
-      const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence]).filter(Boolean);
-      for (const rawFact of candidates) {
-        const cleanFact = sanitizeHeadlineClean(rawFact);
-        if (cleanFact && cleanFact.length >= 15 && !BYLINE_REGEX.test(cleanFact) && !cleaned.includes(cleanFact.slice(0, 15))) {
-          const combined = sanitizeHeadlineClean(`${cleaned}: ${cleanFact}`);
-          if (combined.length <= maxLimit) {
-            cleaned = combined;
-            if (cleaned.length >= minLimit) break;
-          }
+  let currentLen = countHeadlineVisibleCharacters(cleaned);
+  if (currentLen >= minLimit && currentLen <= maxLimit) {
+    return cleaned;
+  }
+  if (currentLen > maxLimit) {
+    const delimiters = [", ", " - ", ": ", " \u2014 ", " \u0914\u0930 ", " \u0924\u0925\u093E ", " \u0935 "];
+    for (const d of delimiters) {
+      const idx = cleaned.lastIndexOf(d, maxLimit);
+      if (idx >= minLimit) {
+        const candidate = sanitizeHeadlineClean(cleaned.substring(0, idx));
+        const cLen = countHeadlineVisibleCharacters(candidate);
+        if (cLen >= minLimit && cLen <= maxLimit) {
+          return candidate;
         }
       }
     }
-    return sanitizeHeadlineClean(cleaned);
+    const sliced = cleaned.substring(0, maxLimit);
+    const lastSpace = sliced.lastIndexOf(" ");
+    let result = lastSpace >= minLimit ? sliced.substring(0, lastSpace) : sliced;
+    return sanitizeHeadlineClean(result);
   }
-  const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
-  if (plainText.length <= maxLimit) {
-    return sanitizeHeadlineClean(plainText);
-  }
-  const delimiters = [", ", " - ", ": ", " \u2014 ", " \u0914\u0930 ", " \u0924\u0925\u093E ", " \u0935 "];
-  for (const d of delimiters) {
-    const idx = plainText.lastIndexOf(d, maxLimit);
-    if (idx >= Math.max(30, minLimit)) {
-      const candidate = sanitizeHeadlineClean(plainText.substring(0, idx));
-      if (candidate.length <= maxLimit && candidate.length >= minLimit) {
-        return candidate;
+  if (minLimit > 0 && currentLen < minLimit && factSentence) {
+    const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence]).filter(Boolean).flatMap((f) => String(f).split(/[।\n]+/)).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 10);
+    for (const rawFact of candidates) {
+      if (cleaned.includes(rawFact.slice(0, 15))) continue;
+      for (const sep of [", ", " - ", ": ", " \u0914\u0930 "]) {
+        const combined = sanitizeHeadlineClean(`${cleaned}${sep}${rawFact}`);
+        const cLen = countHeadlineVisibleCharacters(combined);
+        if (cLen >= minLimit && cLen <= maxLimit) {
+          return combined;
+        }
+      }
+      const words = rawFact.split(/\s+/).filter(Boolean);
+      let built = cleaned + ",";
+      for (const w of words) {
+        const next = built + " " + w;
+        const nextLen = countHeadlineVisibleCharacters(next);
+        if (nextLen <= maxLimit) {
+          built = next;
+          if (nextLen >= minLimit) {
+            return sanitizeHeadlineClean(built);
+          }
+        } else {
+          break;
+        }
       }
     }
   }
-  const sliced = plainText.substring(0, maxLimit);
-  const lastSpace = sliced.lastIndexOf(" ");
-  let result = lastSpace > 25 ? sliced.substring(0, lastSpace) : sliced;
-  result = sanitizeHeadlineClean(result);
-  return result;
+  return sanitizeHeadlineClean(cleaned);
 }
 function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext = "", location = "") {
   const safeHeadlines = [];
@@ -15481,10 +15559,19 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
     }
   }
   const baseText = typeof baseOrContext === "string" && baseOrContext.trim() ? baseOrContext.trim() : typeof contextOrBase === "string" && contextOrBase.trim() ? contextOrBase.trim() : safeHeadlines[0] || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930";
-  const factSentences = Array.isArray(contextOrBase) ? contextOrBase : Array.isArray(baseOrContext) ? baseOrContext : [];
+  const factCandidates = Array.isArray(contextOrBase) ? contextOrBase : Array.isArray(baseOrContext) ? baseOrContext : [];
+  const factsList = (Array.isArray(factCandidates) ? factCandidates : [factCandidates]).filter(Boolean).flatMap((f) => String(f).split(/[।\n]+/)).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 10);
+  const subClauses = [];
+  for (const f of factsList) {
+    const parts = f.split(/[,:]\s*|\s+(?:और|तथा|व|जिसमें|जहां|जिससे)\s+/).map((p) => sanitizeHeadlineClean(p)).filter((p) => p.length >= 10);
+    for (const p of parts) {
+      if (!subClauses.includes(p)) subClauses.push(p);
+    }
+    if (!subClauses.includes(f)) subClauses.push(f);
+  }
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5) {
-    const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
+    const supp = generate5BalancedHeadlineOptions(baseText, factCandidates, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
       const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarityInternal(existing, cand) >= 0.85);
@@ -15493,22 +15580,81 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
       }
     }
   }
+  const usedClauses = /* @__PURE__ */ new Set();
   const result = [];
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: "" };
-    let cand = workingHeadlines[i];
-    if (!cand || result.includes(cand) || result.some((ex) => calculateHeadlineSimilarityInternal(ex, cand) >= 0.85)) {
-      const unused = workingHeadlines.find((w) => !result.includes(w) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, w) >= 0.85));
-      if (unused) {
-        cand = unused;
-      } else {
-        const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
-        const suppUnused = supp.find((s) => !result.includes(s) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, s) >= 0.85));
-        cand = suppUnused || `${baseText}: \u0905\u0926\u094D\u092F\u0924\u0928 \u092C\u093F\u0902\u0926\u0941 ${i + 1}`;
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: "" };
+    let cand = workingHeadlines[i] || workingHeadlines[0] || baseText || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930";
+    let cleaned = sanitizeHeadlineClean(cand);
+    let currentLen = countHeadlineVisibleCharacters(cleaned);
+    if (currentLen >= tier.min && currentLen <= tier.max) {
+      result.push(cleaned);
+      continue;
+    }
+    if (currentLen > tier.max) {
+      let truncated = cleaned;
+      const delimiters = [", ", " - ", ": ", " \u2014 ", " \u0914\u0930 ", " \u0924\u0925\u093E ", " \u0935 "];
+      for (const d of delimiters) {
+        const idx = cleaned.lastIndexOf(d, tier.max);
+        if (idx >= tier.min) {
+          const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
+          const testLen = countHeadlineVisibleCharacters(testCand);
+          if (testLen >= tier.min && testLen <= tier.max) {
+            truncated = testCand;
+            break;
+          }
+        }
+      }
+      if (countHeadlineVisibleCharacters(truncated) > tier.max) {
+        const sliced = cleaned.substring(0, tier.max);
+        const lastSpace = sliced.lastIndexOf(" ");
+        truncated = sanitizeHeadlineClean(lastSpace >= tier.min ? sliced.substring(0, lastSpace) : sliced);
+      }
+      result.push(truncated);
+      continue;
+    }
+    let expanded = cleaned;
+    let foundClause = null;
+    const availableClauses = subClauses.filter(
+      (c) => !usedClauses.has(c) && !cleaned.includes(c.slice(0, 15))
+    );
+    for (const clause of availableClauses) {
+      for (const sep of [", ", " - ", ": ", " \u0914\u0930 "]) {
+        const combined = sanitizeHeadlineClean(`${cleaned}${sep}${clause}`);
+        const combinedLen = countHeadlineVisibleCharacters(combined);
+        if (combinedLen >= tier.min && combinedLen <= tier.max) {
+          expanded = combined;
+          foundClause = clause;
+          break;
+        }
+      }
+      if (foundClause) break;
+    }
+    if (countHeadlineVisibleCharacters(expanded) < tier.min) {
+      for (const clause of availableClauses) {
+        const words = clause.split(/\s+/).filter(Boolean);
+        let built = cleaned + ",";
+        for (const w of words) {
+          const next = built + " " + w;
+          const nextLen = countHeadlineVisibleCharacters(next);
+          if (nextLen <= tier.max) {
+            built = next;
+            if (nextLen >= tier.min) {
+              expanded = sanitizeHeadlineClean(built);
+              foundClause = clause;
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+        if (foundClause) break;
       }
     }
-    const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
-    result.push(fitted);
+    if (foundClause) {
+      usedClauses.add(foundClause);
+    }
+    result.push(expanded);
   }
   return result.slice(0, 5);
 }
@@ -15589,8 +15735,20 @@ function buildMasterNewsEditorialPrompt(params) {
     templateId: templateId2 = "graphic_001"
   } = params;
   const cleanUser = (channelUsername || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
-  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
-  const userTagInstruction = cleanUser && !isGeneric ? `\u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917: #${cleanUser}` : `(\u092F\u0926\u093F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u0928 \u0939\u094B \u0924\u094B \u0915\u094B\u0908 \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0928 \u0932\u0917\u093E\u090F\u0902)`;
+  const isGeneric = [
+    "user",
+    "username",
+    "reporter",
+    "admin",
+    "superadmin",
+    "null",
+    "undefined",
+    "ainewsmaker",
+    "ai_news_maker",
+    "breakingnewswala",
+    "bnwtv"
+  ].includes(cleanUser.toLowerCase());
+  const userTagInstruction = cleanUser && !isGeneric ? `\u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917: #${cleanUser}` : `(\u092F\u0926\u093F \u0915\u094B\u0908 \u0928\u093F\u091C\u0940 \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u0928 \u0939\u094B \u0924\u094B \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0928 \u0932\u0917\u093E\u090F\u0902)`;
   const systemInstruction = `\u0906\u092A BREAKING NEWS WALA \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u092E\u093E\u0928\u0915\u094B\u0902 \u0915\u0947 \u0924\u0939\u0924 \u090F\u0915 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u0915\u0947 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915 (Chief Editor) \u0939\u0948\u0902\u0964 \u0926\u0940 \u0917\u0908 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0915\u093E \u0917\u0939\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0915\u0947 \u0915\u0947\u0935\u0932 \u092E\u0941\u0916\u094D\u092F \u092A\u0941\u0937\u094D\u091F \u0918\u091F\u0928\u093E \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0938\u091F\u0940\u0915, \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928, \u0909\u0938\u0940 \u090F\u0915 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u0947 5 \u0905\u0932\u0917-\u0905\u0932\u0917 \u0928\u093F\u0930\u094D\u0927\u093E\u0930\u093F\u0924 \u0932\u0902\u092C\u093E\u0908 \u0935\u093E\u0932\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A (\u0935\u093F\u0915\u0932\u094D\u092A 1: 80-110, \u0935\u093F\u0915\u0932\u094D\u092A 2: 100-130, \u0935\u093F\u0915\u0932\u094D\u092A 3: 125-150, \u0935\u093F\u0915\u0932\u094D\u092A 4: 130-160, \u0935\u093F\u0915\u0932\u094D\u092A 5: 150-200 \u0935\u0930\u094D\u0923) \u0914\u0930 3 \u0905\u0932\u0917-\u0905\u0932\u0917 \u0936\u0948\u0932\u093F\u092F\u094B\u0902 \u0915\u0947 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u0932\u094C\u091F\u093E\u090F\u0902\u0964`;
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
@@ -15616,11 +15774,12 @@ ${customPrompt}
    - \u0906\u0932\u0947\u0916 \u0915\u0947 \u092C\u0949\u0921\u0940 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u094B \u091C\u094D\u092F\u094B\u0902-\u0915\u093E-\u0924\u094D\u092F\u094B\u0902 \u0915\u0949\u092A\u0940-\u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0915\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u092D\u0940 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964
    - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E (NO UNRELATED FILLER PHRASES): \u092E\u0928\u0917\u0922\u093C\u0902\u0924 \u092F\u093E \u0905\u0938\u0902\u092C\u0926\u094D\u0927 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u091C\u0941\u092E\u0932\u0947 (\u091C\u0948\u0938\u0947 '\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0914\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0938\u094D\u0925\u093F\u0924\u093F \u092A\u0930 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0940 \u0932\u0917\u093E\u0924\u093E\u0930 \u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0936\u093E\u0938\u0928 \u0915\u0940 \u0938\u0916\u094D\u0924 \u0928\u091C\u0930') \u0915\u092D\u0940 \u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902 \u091C\u092C \u0924\u0915 \u0915\u093F \u092E\u0942\u0932 \u0916\u092C\u0930 \u092E\u0947\u0902 \u0935\u093E\u0938\u094D\u0924\u0935 \u092E\u0947\u0902 \u0910\u0938\u093E \u0928 \u0932\u093F\u0916\u093E \u0939\u094B!
 2. 5 \u0936\u094D\u0930\u0947\u0923\u0940\u092C\u0926\u094D\u0927 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0932\u0902\u092C\u093E\u0908 \u0928\u093F\u092F\u092E (5-TIER GRADUATED HEADLINE LENGTH RULES):
-   - \u0935\u093F\u0915\u0932\u094D\u092A 1: 80\u2013110 \u0905\u0915\u094D\u0937\u0930 (\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u2014 \u0915\u093F\u0938\u0928\u0947 \u0915\u094D\u092F\u093E \u0915\u093F\u092F\u093E, \u0915\u0939\u093E\u0901 \u0939\u0941\u0906, \u0938\u0940\u0927\u093E, \u0924\u0925\u094D\u092F\u092A\u0930\u0915)
-   - \u0935\u093F\u0915\u0932\u094D\u092A 2: 100\u2013130 \u0905\u0915\u094D\u0937\u0930 (\u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940 \u092F\u093E \u092E\u0941\u0916\u094D\u092F \u092A\u093E\u0924\u094D\u0930 \u0915\u094B\u0923 \u2014 \u092E\u0941\u0916\u094D\u092F \u0935\u094D\u092F\u0915\u094D\u0924\u093F, \u092D\u0942\u092E\u093F\u0915\u093E \u092F\u093E \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0928\u093F\u0930\u094D\u0923\u092F)
-   - \u0935\u093F\u0915\u0932\u094D\u092A 3: 125\u2013150 \u0905\u0915\u094D\u0937\u0930 (\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u092F\u093E \u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 \u2014 \u0918\u091F\u0928\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908, \u0905\u0938\u0930 \u092F\u093E \u0935\u093F\u0915\u093E\u0938)
-   - \u0935\u093F\u0915\u0932\u094D\u092A 4: 130\u2013160 \u0905\u0915\u094D\u0937\u0930 (\u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941 \u092F\u093E \u0926\u093E\u0935\u093E \u2014 \u0916\u092C\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0938\u092C\u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F, \u0938\u0902\u0926\u0930\u094D\u092D \u092F\u093E \u092C\u092F\u093E\u0928)
-   - \u0935\u093F\u0915\u0932\u094D\u092A 5: 150\u2013200 \u0905\u0915\u094D\u0937\u0930 (\u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0935 \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 \u2014 \u0909\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u0915\u093E \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u092A\u0942\u0930\u094D\u0923 \u0935 \u0927\u093E\u0930\u0926\u093E\u0930 \u0930\u0942\u092A)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 1: \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 80\u2013110 \u0905\u0915\u094D\u0937\u0930 (\u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u2014 \u0915\u093F\u0938\u0928\u0947 \u0915\u094D\u092F\u093E \u0915\u093F\u092F\u093E, \u0915\u0939\u093E\u0901 \u0939\u0941\u0906, \u0938\u0940\u0927\u093E, \u0924\u0925\u094D\u092F\u092A\u0930\u0915)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 2: \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 100\u2013130 \u0905\u0915\u094D\u0937\u0930 (\u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940 \u092F\u093E \u092E\u0941\u0916\u094D\u092F \u092A\u093E\u0924\u094D\u0930 \u0915\u094B\u0923 \u2014 \u092E\u0941\u0916\u094D\u092F \u0935\u094D\u092F\u0915\u094D\u0924\u093F, \u092D\u0942\u092E\u093F\u0915\u093E \u092F\u093E \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0928\u093F\u0930\u094D\u0923\u092F \u091C\u094B\u0921\u093C\u0915\u0930 100-130 \u0905\u0915\u094D\u0937\u0930 \u092A\u0942\u0930\u093E \u0915\u0930\u0947\u0902)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 3: \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 125\u2013150 \u0905\u0915\u094D\u0937\u0930 (\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u092F\u093E \u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 \u2014 \u0918\u091F\u0928\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908, \u0905\u0938\u0930 \u092F\u093E \u0935\u093F\u0915\u093E\u0938 \u0915\u0947 2 \u0924\u0925\u094D\u092F \u091C\u094B\u0921\u093C\u0915\u0930 125-150 \u0905\u0915\u094D\u0937\u0930 \u092A\u0942\u0930\u093E \u0915\u0930\u0947\u0902)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 4: \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 130\u2013160 \u0905\u0915\u094D\u0937\u0930 (\u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941 \u092F\u093E \u0926\u093E\u0935\u093E \u2014 \u0916\u092C\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0938\u092C\u0938\u0947 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F, \u0938\u0902\u0926\u0930\u094D\u092D \u092F\u093E \u092C\u092F\u093E\u0928 \u091C\u094B\u0921\u093C\u0915\u0930 130-160 \u0905\u0915\u094D\u0937\u0930 \u092A\u0942\u0930\u093E \u0915\u0930\u0947\u0902)
+   - \u0935\u093F\u0915\u0932\u094D\u092A 5: \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 150\u2013200 \u0905\u0915\u094D\u0937\u0930 (\u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0935 \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0915\u094B\u0923 \u2014 \u0918\u091F\u0928\u093E, \u0938\u094D\u0925\u093E\u0928, \u0915\u093E\u0930\u0923, \u0939\u0924\u093E\u0939\u0924 \u0935 \u0938\u094D\u0925\u093F\u0924\u093F \u0915\u093E \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0935 \u092A\u0942\u0930\u094D\u0923 \u0930\u0942\u092A 150-200 \u0905\u0915\u094D\u0937\u0930 \u092A\u0942\u0930\u093E \u0915\u0930\u0947\u0902)
+   - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E: \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u092A\u0928\u0940 \u0928\u093F\u0930\u094D\u0927\u093E\u0930\u093F\u0924 \u0928\u094D\u092F\u0942\u0928\u0924\u092E \u0914\u0930 \u0905\u0927\u093F\u0915\u0924\u092E \u0935\u0930\u094D\u0923-\u0938\u0940\u092E\u093E \u0915\u0947 \u092D\u0940\u0924\u0930 \u0939\u0940 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
    - \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E: \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (. \u092F\u093E \u0964 \u092F\u093E ?) \u0915\u092D\u0940 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964
    - Headlines \u0936\u0941\u0926\u094D\u0927, \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0914\u0930 \u0935\u094D\u092F\u093E\u0915\u0930\u0923\u0938\u092E\u094D\u092E\u0924 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0939\u094B\u0902\u0964 \u0938\u094D\u0925\u093E\u0928\u094B\u0902 \u0915\u0947 \u0928\u093E\u092E \u0914\u0930 \u0939\u093F\u0902\u0926\u0940 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0947 \u092C\u0940\u091A \u0938\u0939\u0940 \u0938\u094D\u092A\u0947\u0938\u093F\u0902\u0917 \u0939\u094B\u0964
    - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u092D\u0940 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 (Roman script) \u0936\u092C\u094D\u0926 \u0928 \u0930\u0916\u0947\u0902\u0964 \u0938\u092D\u0940 \u0935\u093F\u0926\u0947\u0936\u0940 \u0928\u093E\u092E\u094B\u0902 \u0935 \u0938\u0902\u0938\u094D\u0925\u093E\u0913\u0902 (\u091C\u0948\u0938\u0947 BCCI, IPL, Supreme Court, WhatsApp, Twitter, Delhi, Congress) \u0915\u094B \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0932\u093F\u0916\u0947\u0902 (\u091C\u0948\u0938\u0947 \u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908, \u0906\u0908\u092A\u0940\u090F\u0932, \u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F, \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A, \u091F\u094D\u0935\u093F\u091F\u0930, \u0926\u093F\u0932\u094D\u0932\u0940, \u0915\u093E\u0902\u0917\u094D\u0930\u0947\u0938)\u0964
@@ -15640,6 +15799,7 @@ ${customPrompt}
    - \u0905\u0902\u0924 \u092E\u0947\u0902 \u0920\u0940\u0915 \u090F\u0915 \u0916\u093E\u0932\u0940 \u0932\u093E\u0907\u0928 \u091B\u094B\u0921\u093C\u0915\u0930 6-8 \u0939\u0948\u0936\u091F\u0948\u0917:
      * \u0938\u092C\u0938\u0947 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917: ${userTagInstruction}
      * \u092C\u0940\u091A \u092E\u0947\u0902 4-6 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (#BreakingNews #HindiNews #LatestNews #CityNews)
+     * #BNWTV \u0914\u0930 #breakingnewswala \u0915\u094B \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0939\u091F\u093E \u0926\u0947\u0902 (\u0915\u092D\u0940 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902)
      * \u0938\u092C\u0938\u0947 \u0905\u0902\u0924\u093F\u092E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #AINewsMaker
 6. suggestedImagePrompt:
    - \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u092E\u0947\u0902 \u0930\u093F\u092F\u0932\u093F\u0938\u094D\u091F\u093F\u0915 \u092A\u094D\u0930\u0947\u0938 \u092B\u094B\u091F\u094B \u092A\u094D\u0930\u0949\u092E\u094D\u092A\u094D\u091F (35mm lens, natural lighting, Indian news photojournalism style, no text or watermark).
@@ -16122,6 +16282,64 @@ ${rawLink}` : rawLink;
       if (parsedData.headlineOptions.length > 0) {
         parsedData.headline = parsedData.headlineOptions[0];
       }
+      let validationReport = validateHeadlines5Tier(parsedData.headlineOptions);
+      if (!validationReport.valid && actualProvider !== "local" && parsedData.headlineOptions.length > 0) {
+        try {
+          const retryPrompt = `\u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u092E\u0947\u0902 \u0938\u0947 \u0915\u0941\u091B \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u092A\u0928\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0935\u0930\u094D\u0923-\u0938\u0940\u092E\u093E (Character Length) \u0915\u093E \u092A\u093E\u0932\u0928 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902:
+${validationReport.results.map((r) => `\u0935\u093F\u0915\u0932\u094D\u092A ${r.tier} (${r.min}-${r.max} \u0935\u0930\u094D\u0923, \u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${r.charCount} \u0935\u0930\u094D\u0923): "${r.text}" ${r.valid ? "[\u092E\u093E\u0928\u094D\u092F]" : `[\u0924\u094D\u0930\u0941\u091F\u093F: ${r.reason}]`}`).join("\n")}
+
+\u092E\u0942\u0932 \u0938\u092E\u093E\u091A\u093E\u0930 \u0924\u0925\u094D\u092F:
+"""
+${primarySourceHeadline || parsedData.headline || ""}
+${factSentences.slice(0, 5).join("\n")}
+"""
+
+\u0915\u0943\u092A\u092F\u093E \u0909\u092A\u0930\u094B\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u0915\u094B \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0930 \u0920\u0940\u0915 5 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u0915\u093E \u0935\u0948\u0927 JSON Object \u0932\u094C\u091F\u093E\u090F\u0902\u0964
+\u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0905\u092A\u0928\u0940 \u0928\u093F\u0930\u094D\u0927\u093E\u0930\u093F\u0924 \u0938\u0940\u092E\u093E (\u0935\u093F\u0915\u0932\u094D\u092A 1: 80-110, \u0935\u093F\u0915\u0932\u094D\u092A 2: 100-130, \u0935\u093F\u0915\u0932\u094D\u092A 3: 125-150, \u0935\u093F\u0915\u0932\u094D\u092A 4: 130-160, \u0935\u093F\u0915\u0932\u094D\u092A 5: 150-200 \u0935\u0930\u094D\u0923) \u0915\u0947 \u092D\u0940\u0924\u0930 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F \u0914\u0930 \u0915\u093F\u0938\u0940 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F:
+{"headlineOptions": ["\u0935\u093F\u0915\u0932\u094D\u092A 1 (80-110)", "\u0935\u093F\u0915\u0932\u094D\u092A 2 (100-130)", "\u0935\u093F\u0915\u0932\u094D\u092A 3 (125-150)", "\u0935\u093F\u0915\u0932\u094D\u092A 4 (130-160)", "\u0935\u093F\u0915\u0932\u094D\u092A 5 (150-200)"]}`;
+          const retryAiResult = await executeGeminiWithKeyPool(async (ai) => {
+            const resp = await generateWithFallbackAndRetry(
+              ai,
+              DEFAULT_FALLBACK_MODELS,
+              {
+                contents: retryPrompt,
+                config: {
+                  responseMimeType: "application/json",
+                  responseSchema: {
+                    type: import_genai.Type.OBJECT,
+                    properties: {
+                      headlineOptions: {
+                        type: import_genai.Type.ARRAY,
+                        items: { type: import_genai.Type.STRING }
+                      }
+                    },
+                    required: ["headlineOptions"]
+                  }
+                }
+              }
+            );
+            return JSON.parse(resp.text || "{}");
+          }, isVipDeskUser);
+          if (retryAiResult && Array.isArray(retryAiResult.headlineOptions) && retryAiResult.headlineOptions.length >= 5) {
+            const reFitted = fitHeadlinesTo5TierRanges(
+              retryAiResult.headlineOptions,
+              factSentences,
+              primarySourceHeadline || parsedData.headline || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
+              parsedData.location
+            );
+            const reValidation = validateHeadlines5Tier(reFitted);
+            if (reValidation.valid || reValidation.invalidTiers.length < validationReport.invalidTiers.length) {
+              parsedData.headlineOptions = reFitted;
+              if (parsedData.headlineOptions[0]) {
+                parsedData.headline = parsedData.headlineOptions[0];
+              }
+              validationReport = reValidation;
+            }
+          }
+        } catch (retryErr) {
+          console.warn("[News AI] Bounded retry for headline bounds notice:", retryErr?.message?.slice(0, 80));
+        }
+      }
       parsedData.canonicalContext = {
         sourceUrl: rawLink || linkUrl || "",
         title: primarySourceHeadline || parsedData.headline,
@@ -16134,7 +16352,8 @@ ${rawLink}` : rawLink;
       parsedData.diagnostics = {
         optionsCount: parsedData.headlineOptions.length,
         locationDetected: parsedData.location,
-        categoryDetected: parsedData.category
+        categoryDetected: parsedData.category,
+        headlineValidation: validationReport
       };
       const currentHlWords = (parsedData.highlightWords || []).filter((w) => w && w.length >= 2);
       if (currentHlWords.length === 0) {
@@ -19522,6 +19741,7 @@ startServer().catch((err) => {
   calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs,
   cleanHeadlineText,
+  countHeadlineVisibleCharacters,
   createLocalNewsFallback,
   detectDistrictAndState,
   enrichHeadlineWithContext,
@@ -19553,5 +19773,6 @@ startServer().catch((err) => {
   scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks,
   stripNewspaperBylines,
-  validateHeadlineOption
+  validateHeadlineOption,
+  validateHeadlines5Tier
 });

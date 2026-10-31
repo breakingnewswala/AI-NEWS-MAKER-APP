@@ -13014,7 +13014,10 @@ export function ensureHashtagHierarchy(
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
   const cleanUser = (username || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
-  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
+  const isGeneric = [
+    "user", "username", "reporter", "admin", "superadmin", "null", "undefined",
+    "ainewsmaker", "ai_news_maker", "breakingnewswala", "bnwtv", "breaking_news_wala"
+  ].includes(cleanUser.toLowerCase());
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : "";
 
   let locTag = "";
@@ -13034,6 +13037,7 @@ export function ensureHashtagHierarchy(
       lower === "#ai_news_maker" ||
       lower === "#breakingnewswala" ||
       lower === "#bnwtv" ||
+      lower === "#breaking_news_wala" ||
       lower === "#ब्रेकिंगन्यूजवाला" ||
       lower.startsWith("#http") ||
       lower.startsWith("#www") ||
@@ -13058,12 +13062,27 @@ export function ensureHashtagHierarchy(
   const middleSlice = filteredMiddleTags.slice(0, 6);
 
   const cleanFinalTags: string[] = [];
-  if (userTag && userTag.toLowerCase() !== "#ainewsmaker" && userTag.toLowerCase() !== "#ai_news_maker") {
+  if (
+    userTag &&
+    userTag.toLowerCase() !== "#ainewsmaker" &&
+    userTag.toLowerCase() !== "#ai_news_maker" &&
+    userTag.toLowerCase() !== "#breakingnewswala" &&
+    userTag.toLowerCase() !== "#bnwtv" &&
+    userTag.toLowerCase() !== "#breaking_news_wala" &&
+    userTag.toLowerCase() !== "#ब्रेकिंगन्यूजवाला"
+  ) {
     cleanFinalTags.push(userTag);
   }
   for (const t of middleSlice) {
     const lower = t.toLowerCase();
-    if (lower !== "#ainewsmaker" && lower !== "#ai_news_maker") {
+    if (
+      lower !== "#ainewsmaker" &&
+      lower !== "#ai_news_maker" &&
+      lower !== "#breakingnewswala" &&
+      lower !== "#bnwtv" &&
+      lower !== "#breaking_news_wala" &&
+      lower !== "#ब्रेकिंगन्यूजवाला"
+    ) {
       cleanFinalTags.push(t);
     }
   }
@@ -14050,6 +14069,82 @@ export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
 export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
 
 /**
+ * Canonical character counter for headlines across backend and frontend.
+ * Strips highlight tags, markdown formatting, quotation marks, and trailing punctuation.
+ */
+export function countHeadlineVisibleCharacters(text: string): number {
+  if (!text || typeof text !== 'string') return 0;
+  let s = text.replace(/\[\/?(?:yellow|highlight)\]/gi, '');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
+  s = s.replace(/["'“”‘’«»]/g, '');
+  s = s.replace(/[।\.\!\?\,\:\-]+$/g, '');
+  s = s.replace(/\s+/g, ' ').trim();
+  return s.length;
+}
+
+/**
+ * Validates a full set of 5 headline options against mandatory graduated character limits.
+ */
+export function validateHeadlines5Tier(headlines: string[]): {
+  valid: boolean;
+  results: Array<{
+    tier: number;
+    text: string;
+    charCount: number;
+    min: number;
+    max: number;
+    valid: boolean;
+    reason?: string;
+  }>;
+  invalidTiers: number[];
+} {
+  const safe = Array.isArray(headlines) ? headlines.slice(0, 5) : [];
+  const results = [];
+  const invalidTiers = [];
+
+  for (let i = 0; i < 5; i++) {
+    const tier = HEADLINE_5_TIER_RANGES[i];
+    const text = safe[i] || '';
+    const charCount = countHeadlineVisibleCharacters(text);
+    const trimmed = text.replace(/\[\/?(?:yellow|highlight)\]/gi, '').trim();
+    let valid = true;
+    let reason: string | undefined;
+
+    if (!text) {
+      valid = false;
+      reason = 'हेडलाइन खाली है।';
+    } else if (charCount < tier.min) {
+      valid = false;
+      reason = `वर्ण संख्या (${charCount}) न्यूनतम सीमा (${tier.min}) से कम है।`;
+    } else if (charCount > tier.max) {
+      valid = false;
+      reason = `वर्ण संख्या (${charCount}) अधिकतम सीमा (${tier.max}) से अधिक है।`;
+    } else if (/[।\.]$/.test(trimmed)) {
+      valid = false;
+      reason = 'हेडलाइन के अंत में पूर्णविराम (. या ।) नहीं होना चाहिए।';
+    }
+
+    if (!valid) invalidTiers.push(i + 1);
+
+    results.push({
+      tier: i + 1,
+      text,
+      charCount,
+      min: tier.min,
+      max: tier.max,
+      valid,
+      reason,
+    });
+  }
+
+  return {
+    valid: invalidTiers.length === 0 && results.length === 5,
+    results,
+    invalidTiers,
+  };
+}
+
+/**
  * Enforces character limits without padding or mid-word cutoffs
  */
 export function fitSingleHeadlineToTier(
@@ -14061,59 +14156,73 @@ export function fitSingleHeadlineToTier(
   if (!text) return "";
   let cleaned = sanitizeHeadlineClean(text);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  // Ensure proper spacing between Hindi words and location names
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
   cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = sanitizeHeadlineClean(cleaned);
 
-  // Strip highlight tags to check visible character length so hidden markup doesn't penalize headlines
-  const visibleLength = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim().length;
-  if (visibleLength <= maxLimit) {
-    if (minLimit > 0 && visibleLength < minLimit && factSentence) {
-      const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence]).filter(Boolean);
-      for (const rawFact of candidates) {
-        const cleanFact = sanitizeHeadlineClean(rawFact);
-        if (
-          cleanFact &&
-          cleanFact.length >= 15 &&
-          !BYLINE_REGEX.test(cleanFact) &&
-          !cleaned.includes(cleanFact.slice(0, 15))
-        ) {
-          const combined = sanitizeHeadlineClean(`${cleaned}: ${cleanFact}`);
-          if (combined.length <= maxLimit) {
-            cleaned = combined;
-            if (cleaned.length >= minLimit) break;
-          }
+  let currentLen = countHeadlineVisibleCharacters(cleaned);
+  if (currentLen >= minLimit && currentLen <= maxLimit) {
+    return cleaned;
+  }
+
+  // If too long, cleanly truncate at clause or word boundaries
+  if (currentLen > maxLimit) {
+    const delimiters = [", ", " - ", ": ", " — ", " और ", " तथा ", " व "];
+    for (const d of delimiters) {
+      const idx = cleaned.lastIndexOf(d, maxLimit);
+      if (idx >= minLimit) {
+        const candidate = sanitizeHeadlineClean(cleaned.substring(0, idx));
+        const cLen = countHeadlineVisibleCharacters(candidate);
+        if (cLen >= minLimit && cLen <= maxLimit) {
+          return candidate;
         }
       }
     }
-    return sanitizeHeadlineClean(cleaned);
+    const sliced = cleaned.substring(0, maxLimit);
+    const lastSpace = sliced.lastIndexOf(" ");
+    let result = lastSpace >= minLimit ? sliced.substring(0, lastSpace) : sliced;
+    return sanitizeHeadlineClean(result);
   }
 
-  // If text exceeds maxLimit, strip markup before truncating so tags are never broken mid-tag
-  const plainText = cleaned.replace(/\[\/?(?:yellow|highlight)\]/g, "").trim();
-  if (plainText.length <= maxLimit) {
-    return sanitizeHeadlineClean(plainText);
-  }
+  // If too short, expand factually using provided news facts
+  if (minLimit > 0 && currentLen < minLimit && factSentence) {
+    const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence])
+      .filter(Boolean)
+      .flatMap((f: any) => String(f).split(/[।\n]+/))
+      .map((s: string) => sanitizeHeadlineClean(s))
+      .filter((s: string) => s.length >= 10);
 
-  // Trim to maximum limit cleanly at grammatical clause boundaries first
-  const delimiters = [", ", " - ", ": ", " — ", " और ", " तथा ", " व "];
-  for (const d of delimiters) {
-    const idx = plainText.lastIndexOf(d, maxLimit);
-    if (idx >= Math.max(30, minLimit)) {
-      const candidate = sanitizeHeadlineClean(plainText.substring(0, idx));
-      if (candidate.length <= maxLimit && candidate.length >= minLimit) {
-        return candidate;
+    for (const rawFact of candidates) {
+      if (cleaned.includes(rawFact.slice(0, 15))) continue;
+
+      // 1. Try whole clause
+      for (const sep of [", ", " - ", ": ", " और "]) {
+        const combined = sanitizeHeadlineClean(`${cleaned}${sep}${rawFact}`);
+        const cLen = countHeadlineVisibleCharacters(combined);
+        if (cLen >= minLimit && cLen <= maxLimit) {
+          return combined;
+        }
+      }
+
+      // 2. Try word-by-word addition
+      const words = rawFact.split(/\s+/).filter(Boolean);
+      let built = cleaned + ",";
+      for (const w of words) {
+        const next = built + " " + w;
+        const nextLen = countHeadlineVisibleCharacters(next);
+        if (nextLen <= maxLimit) {
+          built = next;
+          if (nextLen >= minLimit) {
+            return sanitizeHeadlineClean(built);
+          }
+        } else {
+          break;
+        }
       }
     }
   }
 
-  // Fallback to word boundary without slicing mid-word
-  const sliced = plainText.substring(0, maxLimit);
-  const lastSpace = sliced.lastIndexOf(" ");
-  let result = lastSpace > 25 ? sliced.substring(0, lastSpace) : sliced;
-  result = sanitizeHeadlineClean(result);
-  return result;
+  return sanitizeHeadlineClean(cleaned);
 }
 
 /**
@@ -14146,11 +14255,27 @@ export function fitHeadlinesTo5TierRanges(
   const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
     ? baseOrContext.trim()
     : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || 'मुख्य समाचार'));
-  const factSentences = Array.isArray(contextOrBase) ? contextOrBase : (Array.isArray(baseOrContext) ? baseOrContext : []);
+  const factCandidates = Array.isArray(contextOrBase) ? contextOrBase : (Array.isArray(baseOrContext) ? baseOrContext : []);
+
+  const factsList = (Array.isArray(factCandidates) ? factCandidates : [factCandidates])
+    .filter(Boolean)
+    .flatMap((f: any) => String(f).split(/[।\n]+/))
+    .map((s: string) => sanitizeHeadlineClean(s))
+    .filter((s: string) => s.length >= 10);
+
+  // Sub-clauses from facts
+  const subClauses: string[] = [];
+  for (const f of factsList) {
+    const parts = f.split(/[,:]\s*|\s+(?:और|तथा|व|जिसमें|जहां|जिससे)\s+/).map((p: string) => sanitizeHeadlineClean(p)).filter((p: string) => p.length >= 10);
+    for (const p of parts) {
+      if (!subClauses.includes(p)) subClauses.push(p);
+    }
+    if (!subClauses.includes(f)) subClauses.push(f);
+  }
 
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5) {
-    const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
+    const supp = generate5BalancedHeadlineOptions(baseText, factCandidates, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
       const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarityInternal(existing, cand) >= 0.85);
@@ -14160,22 +14285,93 @@ export function fitHeadlinesTo5TierRanges(
     }
   }
 
+  const usedClauses = new Set<string>();
   const result: string[] = [];
+
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 150, label: '' };
-    let cand = workingHeadlines[i];
-    if (!cand || result.includes(cand) || result.some((ex) => calculateHeadlineSimilarityInternal(ex, cand) >= 0.85)) {
-      const unused = workingHeadlines.find((w) => !result.includes(w) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, w) >= 0.85));
-      if (unused) {
-        cand = unused;
-      } else {
-        const supp = generate5BalancedHeadlineOptions(baseText, factSentences, location);
-        const suppUnused = supp.find((s) => !result.includes(s) && !result.some((ex) => calculateHeadlineSimilarityInternal(ex, s) >= 0.85));
-        cand = suppUnused || `${baseText}: अद्यतन बिंदु ${i + 1}`;
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: '' };
+    let cand = workingHeadlines[i] || workingHeadlines[0] || baseText || 'मुख्य समाचार';
+    let cleaned = sanitizeHeadlineClean(cand);
+    let currentLen = countHeadlineVisibleCharacters(cleaned);
+
+    // Case 1: Already fits
+    if (currentLen >= tier.min && currentLen <= tier.max) {
+      result.push(cleaned);
+      continue;
+    }
+
+    // Case 2: Too long -> Truncate cleanly
+    if (currentLen > tier.max) {
+      let truncated = cleaned;
+      const delimiters = [", ", " - ", ": ", " — ", " और ", " तथा ", " व "];
+      for (const d of delimiters) {
+        const idx = cleaned.lastIndexOf(d, tier.max);
+        if (idx >= tier.min) {
+          const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
+          const testLen = countHeadlineVisibleCharacters(testCand);
+          if (testLen >= tier.min && testLen <= tier.max) {
+            truncated = testCand;
+            break;
+          }
+        }
+      }
+      if (countHeadlineVisibleCharacters(truncated) > tier.max) {
+        const sliced = cleaned.substring(0, tier.max);
+        const lastSpace = sliced.lastIndexOf(" ");
+        truncated = sanitizeHeadlineClean(lastSpace >= tier.min ? sliced.substring(0, lastSpace) : sliced);
+      }
+      result.push(truncated);
+      continue;
+    }
+
+    // Case 3: Too short -> Expand factually using unused factual clauses
+    let expanded = cleaned;
+    let foundClause: string | null = null;
+    const availableClauses = subClauses.filter(
+      (c) => !usedClauses.has(c) && !cleaned.includes(c.slice(0, 15))
+    );
+
+    for (const clause of availableClauses) {
+      for (const sep of [", ", " - ", ": ", " और "]) {
+        const combined = sanitizeHeadlineClean(`${cleaned}${sep}${clause}`);
+        const combinedLen = countHeadlineVisibleCharacters(combined);
+        if (combinedLen >= tier.min && combinedLen <= tier.max) {
+          expanded = combined;
+          foundClause = clause;
+          break;
+        }
+      }
+      if (foundClause) break;
+    }
+
+    // If still short, try word-by-word addition
+    if (countHeadlineVisibleCharacters(expanded) < tier.min) {
+      for (const clause of availableClauses) {
+        const words = clause.split(/\s+/).filter(Boolean);
+        let built = cleaned + ",";
+        for (const w of words) {
+          const next = built + " " + w;
+          const nextLen = countHeadlineVisibleCharacters(next);
+          if (nextLen <= tier.max) {
+            built = next;
+            if (nextLen >= tier.min) {
+              expanded = sanitizeHeadlineClean(built);
+              foundClause = clause;
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+        if (foundClause) break;
       }
     }
-    const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factSentences);
-    result.push(fitted);
+
+    if (foundClause) {
+      usedClauses.add(foundClause);
+    }
+
+    result.push(expanded);
   }
 
   return result.slice(0, 5);
@@ -14288,10 +14484,13 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
   } = params;
 
   const cleanUser = (channelUsername || "").replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
-  const isGeneric = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
+  const isGeneric = [
+    "user", "username", "reporter", "admin", "superadmin", "null", "undefined",
+    "ainewsmaker", "ai_news_maker", "breakingnewswala", "bnwtv"
+  ].includes(cleanUser.toLowerCase());
   const userTagInstruction = cleanUser && !isGeneric
     ? `पहला हैशटैग: #${cleanUser}`
-    : `(यदि यूज़रनेम न हो तो कोई यूज़रनेम हैशटैग न लगाएं)`;
+    : `(यदि कोई निजी यूज़रनेम न हो तो पहला हैशटैग न लगाएं)`;
 
   const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के मुख्य संपादक (Chief Editor) हैं। दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मुख्य पुष्ट घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी एक मुख्य घटना के 5 अलग-अलग निर्धारित लंबाई वाले हेडलाइन विकल्प (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 वर्ण) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
 
@@ -14315,11 +14514,12 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - आलेख के बॉडी वाक्यों को ज्यों-का-त्यों कॉपी-पेस्ट करके हेडलाइन कभी न बनाएं।
    - कड़ा नियम (NO UNRELATED FILLER PHRASES): मनगढ़ंत या असंबद्ध प्रशासनिक जुमले (जैसे 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'स्थिति पर अधिकारियों की लगातार निगरानी', 'पूरे घटनाक्रम पर शासन की सख्त नजर') कभी भी न जोड़ें जब तक कि मूल खबर में वास्तव में ऐसा न लिखा हो!
 2. 5 श्रेणीबद्ध हेडलाइन लंबाई नियम (5-TIER GRADUATED HEADLINE LENGTH RULES):
-   - विकल्प 1: 80–110 अक्षर (मुख्य घटनाक्रम — किसने क्या किया, कहाँ हुआ, सीधा, तथ्यपरक)
-   - विकल्प 2: 100–130 अक्षर (प्राधिकारी या मुख्य पात्र कोण — मुख्य व्यक्ति, भूमिका या आधिकारिक निर्णय)
-   - विकल्प 3: 125–150 अक्षर (कार्रवाई या परिणाम कोण — घटना से जुड़ी कार्रवाई, असर या विकास)
-   - विकल्प 4: 130–160 अक्षर (मुख्य बिंदु या दावा — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान)
-   - विकल्प 5: 150–200 अक्षर (विस्तृत व सारगर्भित कोण — उसी मुख्य घटना का संतुलित, पूर्ण व धारदार रूप)
+   - विकल्प 1: अनिवार्य रूप से 80–110 अक्षर (मुख्य घटनाक्रम — किसने क्या किया, कहाँ हुआ, सीधा, तथ्यपरक)
+   - विकल्प 2: अनिवार्य रूप से 100–130 अक्षर (प्राधिकारी या मुख्य पात्र कोण — मुख्य व्यक्ति, भूमिका या आधिकारिक निर्णय जोड़कर 100-130 अक्षर पूरा करें)
+   - विकल्प 3: अनिवार्य रूप से 125–150 अक्षर (कार्रवाई या परिणाम कोण — घटना से जुड़ी कार्रवाई, असर या विकास के 2 तथ्य जोड़कर 125-150 अक्षर पूरा करें)
+   - विकल्प 4: अनिवार्य रूप से 130–160 अक्षर (मुख्य बिंदु या दावा — खबर से जुड़ा सबसे महत्वपूर्ण तथ्य, संदर्भ या बयान जोड़कर 130-160 अक्षर पूरा करें)
+   - विकल्प 5: अनिवार्य रूप से 150–200 अक्षर (विस्तृत व सारगर्भित कोण — घटना, स्थान, कारण, हताहत व स्थिति का संतुलित व पूर्ण रूप 150-200 अक्षर पूरा करें)
+   - कड़ा नियम: प्रत्येक विकल्प अपनी निर्धारित न्यूनतम और अधिकतम वर्ण-सीमा के भीतर ही होना चाहिए।
    - कड़ा नियम: किसी भी हेडलाइन के अंत में पूर्णविराम (. या । या ?) कभी न लगाएं।
    - Headlines शुद्ध, स्वाभाविक और व्याकरणसम्मत देवनागरी हिंदी में हों। स्थानों के नाम और हिंदी शब्दों के बीच सही स्पेसिंग हो।
    - हेडलाइन में कोई भी अंग्रेजी (Roman script) शब्द न रखें। सभी विदेशी नामों व संस्थाओं (जैसे BCCI, IPL, Supreme Court, WhatsApp, Twitter, Delhi, Congress) को अनिवार्य रूप से शुद्ध देवनागरी हिंदी में लिखें (जैसे बीसीसीआई, आईपीएल, सुप्रीम कोर्ट, व्हाट्सएप, ट्विटर, दिल्ली, कांग्रेस)।
@@ -14339,6 +14539,7 @@ ${customPrompt ? `[यूज़र का अतिरिक्त निर्�
    - अंत में ठीक एक खाली लाइन छोड़कर 6-8 हैशटैग:
      * सबसे पहला हैशटैग: ${userTagInstruction}
      * बीच में 4-6 प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #CityNews)
+     * #BNWTV और #breakingnewswala को पूरी तरह हटा दें (कभी न जोड़ें)
      * सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
 6. suggestedImagePrompt:
    - अंग्रेजी में रियलिस्टिक प्रेस फोटो प्रॉम्प्ट (35mm lens, natural lighting, Indian news photojournalism style, no text or watermark).
@@ -14930,6 +15131,69 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         parsedData.headline = parsedData.headlineOptions[0];
       }
 
+      // Validate all 5 headline options against 5-tier mandatory character bounds
+      let validationReport = validateHeadlines5Tier(parsedData.headlineOptions);
+
+      // Bounded retry if any tier is out of bounds and we used Gemini/OpenAI
+      if (!validationReport.valid && actualProvider !== "local" && parsedData.headlineOptions.length > 0) {
+        try {
+          const retryPrompt = `निम्नलिखित समाचार हेडलाइंस में से कुछ विकल्प अपनी अनिवार्य वर्ण-सीमा (Character Length) का पालन नहीं कर रहे हैं:
+${validationReport.results.map((r: any) => `विकल्प ${r.tier} (${r.min}-${r.max} वर्ण, वर्तमान: ${r.charCount} वर्ण): "${r.text}" ${r.valid ? '[मान्य]' : `[त्रुटि: ${r.reason}]`}`).join('\n')}
+
+मूल समाचार तथ्य:
+"""
+${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0, 5).join('\n')}
+"""
+
+कृपया उपरोक्त 5 हेडलाइन विकल्पों को संशोधित कर ठीक 5 विकल्पों का वैध JSON Object लौटाएं।
+प्रत्येक विकल्प अनिवार्य रूप से अपनी निर्धारित सीमा (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 वर्ण) के भीतर होना चाहिए और किसी के अंत में पूर्णविराम नहीं होना चाहिए:
+{"headlineOptions": ["विकल्प 1 (80-110)", "विकल्प 2 (100-130)", "विकल्प 3 (125-150)", "विकल्प 4 (130-160)", "विकल्प 5 (150-200)"]}`;
+
+          const retryAiResult = await executeGeminiWithKeyPool(async (ai) => {
+            const resp = await generateWithFallbackAndRetry(
+              ai,
+              DEFAULT_FALLBACK_MODELS,
+              {
+                contents: retryPrompt,
+                config: {
+                  responseMimeType: "application/json",
+                  responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                      headlineOptions: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                    },
+                    required: ["headlineOptions"],
+                  },
+                },
+              }
+            );
+            return JSON.parse(resp.text || "{}");
+          }, isVipDeskUser);
+
+          if (retryAiResult && Array.isArray(retryAiResult.headlineOptions) && retryAiResult.headlineOptions.length >= 5) {
+            const reFitted = fitHeadlinesTo5TierRanges(
+              retryAiResult.headlineOptions,
+              factSentences,
+              primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
+              parsedData.location
+            );
+            const reValidation = validateHeadlines5Tier(reFitted);
+            if (reValidation.valid || reValidation.invalidTiers.length < validationReport.invalidTiers.length) {
+              parsedData.headlineOptions = reFitted;
+              if (parsedData.headlineOptions[0]) {
+                parsedData.headline = parsedData.headlineOptions[0];
+              }
+              validationReport = reValidation;
+            }
+          }
+        } catch (retryErr: any) {
+          console.warn("[News AI] Bounded retry for headline bounds notice:", retryErr?.message?.slice(0, 80));
+        }
+      }
+
       parsedData.canonicalContext = {
         sourceUrl: rawLink || linkUrl || "",
         title: primarySourceHeadline || parsedData.headline,
@@ -14944,6 +15208,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         optionsCount: parsedData.headlineOptions.length,
         locationDetected: parsedData.location,
         categoryDetected: parsedData.category,
+        headlineValidation: validationReport,
       };
 
       // Multi-Color Headline Highlighting: 2-4 keywords wrapped in [highlight]
