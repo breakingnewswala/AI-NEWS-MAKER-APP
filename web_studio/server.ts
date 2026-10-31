@@ -14069,16 +14069,58 @@ export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
 export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
 
 /**
- * Canonical character counter for headlines across backend and frontend.
- * Strips highlight tags, markdown formatting, quotation marks, and trailing punctuation.
+ * Canonical segmenter for user-perceived Unicode grapheme clusters (Devanagari aksharas).
  */
-export function countHeadlineVisibleCharacters(text: string): number {
-  if (!text || typeof text !== 'string') return 0;
+let hindiGraphemeSegmenter: any = null;
+try {
+  if (typeof Intl !== 'undefined' && typeof (Intl as any).Segmenter === 'function') {
+    hindiGraphemeSegmenter = new (Intl as any).Segmenter('hi', { granularity: 'grapheme' });
+  }
+} catch {
+  hindiGraphemeSegmenter = null;
+}
+
+/**
+ * Strips highlight tags, HTML tags, markdown formatting, quotation marks, and trailing punctuation.
+ */
+export function sanitizeHeadlineForLengthCounting(text: string): string {
+  if (!text || typeof text !== 'string') return '';
   let s = text.replace(/\[\/?(?:yellow|highlight)\]/gi, '');
+  s = s.replace(/<[^>]*>/g, '');
   s = s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
   s = s.replace(/["'“”‘’«»]/g, '');
   s = s.replace(/[।\.\!\?\,\:\-]+$/g, '');
   s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
+
+/**
+ * Counts user-perceived visible grapheme clusters (Aksharas in Devanagari)
+ * accurately combining consonants, virama, matras, anusvara, and nukta.
+ */
+export function countHeadlineGraphemes(text: string): number {
+  const s = sanitizeHeadlineForLengthCounting(text);
+  if (!s) return 0;
+  if (hindiGraphemeSegmenter) {
+    return Array.from(hindiGraphemeSegmenter.segment(s)).length;
+  }
+  return Array.from(s).length;
+}
+
+/**
+ * Canonical character counter for headlines across backend and frontend.
+ * Strips highlight tags, HTML tags, markdown formatting, quotation marks, and trailing punctuation.
+ * Supports { mode: 'grapheme' } for Unicode grapheme cluster counting (user-perceived aksharas),
+ * while defaulting to sanitized character units matching broadcast 5-tier limits.
+ */
+export function countHeadlineVisibleCharacters(
+  text: string,
+  options?: { mode?: 'codeunit' | 'grapheme' }
+): number {
+  if (options?.mode === 'grapheme') {
+    return countHeadlineGraphemes(text);
+  }
+  const s = sanitizeHeadlineForLengthCounting(text);
   return s.length;
 }
 
@@ -14246,27 +14288,35 @@ export function fitHeadlinesTo5TierRanges(
     if (typeof h !== 'string') continue;
     const clean = sanitizeHeadlineClean(h);
     if (!clean) continue;
-    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarityInternal(existing, clean) >= 0.85);
+    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarity(existing, clean) >= 0.85);
     if (!isDup) {
       safeHeadlines.push(clean);
     }
   }
 
+  const rawSources: string[] = [];
+  if (typeof contextOrBase === 'string' && contextOrBase.trim()) rawSources.push(contextOrBase.trim());
+  if (Array.isArray(contextOrBase)) rawSources.push(...contextOrBase.filter(Boolean).map(String));
+  if (typeof baseOrContext === 'string' && baseOrContext.trim()) rawSources.push(baseOrContext.trim());
+  if (Array.isArray(baseOrContext)) rawSources.push(...baseOrContext.filter(Boolean).map(String));
+  if (safeHeadlines.length > 0) rawSources.push(...safeHeadlines);
+
   const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
     ? baseOrContext.trim()
     : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || 'मुख्य समाचार'));
-  const factCandidates = Array.isArray(contextOrBase) ? contextOrBase : (Array.isArray(baseOrContext) ? baseOrContext : []);
 
-  const factsList = (Array.isArray(factCandidates) ? factCandidates : [factCandidates])
-    .filter(Boolean)
-    .flatMap((f: any) => String(f).split(/[।\n]+/))
+  const factsList = rawSources
+    .flatMap((f: string) => f.split(/[।\n\.\r]+/))
     .map((s: string) => sanitizeHeadlineClean(s))
     .filter((s: string) => s.length >= 10);
 
   // Sub-clauses from facts
   const subClauses: string[] = [];
   for (const f of factsList) {
-    const parts = f.split(/[,:]\s*|\s+(?:और|तथा|व|जिसमें|जहां|जिससे)\s+/).map((p: string) => sanitizeHeadlineClean(p)).filter((p: string) => p.length >= 10);
+    const parts = f
+      .split(/[,:]s*|s+(?:और|तथा|व|जिसमें|जहां|जिससे)s+/)
+      .map((p: string) => sanitizeHeadlineClean(p))
+      .filter((p: string) => p.length >= 8);
     for (const p of parts) {
       if (!subClauses.includes(p)) subClauses.push(p);
     }
@@ -14275,17 +14325,20 @@ export function fitHeadlinesTo5TierRanges(
 
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5) {
-    const supp = generate5BalancedHeadlineOptions(baseText, factCandidates, location);
+    const supp = generate5BalancedHeadlineOptions(baseText, factsList, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
-      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarityInternal(existing, cand) >= 0.85);
+      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.85);
       if (!isDup) {
         workingHeadlines.push(cand);
       }
     }
+    while (workingHeadlines.length < 5) {
+      const fallbackCand = factsList[workingHeadlines.length % Math.max(factsList.length, 1)] || workingHeadlines[0] || 'मुख्य समाचार';
+      workingHeadlines.push(fallbackCand);
+    }
   }
 
-  const usedClauses = new Set<string>();
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
@@ -14324,54 +14377,46 @@ export function fitHeadlinesTo5TierRanges(
       continue;
     }
 
-    // Case 3: Too short -> Expand factually using unused factual clauses
+    // Case 3: Too short -> Expand factually using available subClauses cumulatively
     let expanded = cleaned;
-    let foundClause: string | null = null;
-    const availableClauses = subClauses.filter(
-      (c) => !usedClauses.has(c) && !cleaned.includes(c.slice(0, 15))
-    );
 
-    for (const clause of availableClauses) {
-      for (const sep of [", ", " - ", ": ", " और "]) {
-        const combined = sanitizeHeadlineClean(`${cleaned}${sep}${clause}`);
-        const combinedLen = countHeadlineVisibleCharacters(combined);
-        if (combinedLen >= tier.min && combinedLen <= tier.max) {
-          expanded = combined;
-          foundClause = clause;
+    for (const clause of subClauses) {
+      if (expanded.includes(clause.slice(0, 15))) continue;
+      const testCombined = sanitizeHeadlineClean(`${expanded}, ${clause}`);
+      const testLen = countHeadlineVisibleCharacters(testCombined);
+      if (testLen <= tier.max) {
+        expanded = testCombined;
+        if (testLen >= tier.min) {
           break;
         }
-      }
-      if (foundClause) break;
-    }
-
-    // If still short, try word-by-word addition
-    if (countHeadlineVisibleCharacters(expanded) < tier.min) {
-      for (const clause of availableClauses) {
+      } else {
         const words = clause.split(/\s+/).filter(Boolean);
-        let built = cleaned + ",";
+        let built = expanded + ',';
+        let added = false;
         for (const w of words) {
-          const next = built + " " + w;
-          const nextLen = countHeadlineVisibleCharacters(next);
+          const next = built + ' ' + w;
+          const cleanCand = sanitizeHeadlineClean(next);
+          const nextLen = countHeadlineVisibleCharacters(cleanCand);
           if (nextLen <= tier.max) {
             built = next;
+            added = true;
             if (nextLen >= tier.min) {
-              expanded = sanitizeHeadlineClean(built);
-              foundClause = clause;
               break;
             }
           } else {
             break;
           }
         }
-        if (foundClause) break;
+        if (added) {
+          expanded = sanitizeHeadlineClean(built);
+        }
+        if (countHeadlineVisibleCharacters(expanded) >= tier.min) {
+          break;
+        }
       }
     }
 
-    if (foundClause) {
-      usedClauses.add(foundClause);
-    }
-
-    result.push(expanded);
+    result.push(sanitizeHeadlineClean(expanded));
   }
 
   return result.slice(0, 5);
@@ -15822,7 +15867,7 @@ export function cleanHeadlineText(text: string): string {
   // 6. Remove appended category/location tags at the end of headlines
   cleaned = cleaned
     .replace(
-      /\s*[:\-–—]?\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i,
+      /\s*[\/\-–—:]\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i,
       ""
     )
     .trim();

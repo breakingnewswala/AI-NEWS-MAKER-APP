@@ -4420,6 +4420,7 @@ __export(server_exports, {
   calculateHeadlineSimilarityInternal: () => calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs: () => cleanCaptionParagraphs,
   cleanHeadlineText: () => cleanHeadlineText,
+  countHeadlineGraphemes: () => countHeadlineGraphemes,
   countHeadlineVisibleCharacters: () => countHeadlineVisibleCharacters,
   createLocalNewsFallback: () => createLocalNewsFallback,
   detectDistrictAndState: () => detectDistrictAndState,
@@ -4447,6 +4448,7 @@ __export(server_exports, {
   resolveAuthenticatedUser: () => resolveAuthenticatedUser,
   resolveUserTierAndRole: () => resolveUserTierAndRole,
   sanitizeFlattery: () => sanitizeFlattery,
+  sanitizeHeadlineForLengthCounting: () => sanitizeHeadlineForLengthCounting,
   sanitizePressNoteFlattery: () => sanitizePressNoteFlattery,
   saveAiFeaturesConfig: () => saveAiFeaturesConfig,
   scrapeNewsFromUrl: () => scrapeNewsFromUrl,
@@ -15439,13 +15441,37 @@ var HEADLINE_5_TIER_RANGES = [
 ];
 var HEADLINE_MAX_CHARACTER_LIMIT = 200;
 var HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
-function countHeadlineVisibleCharacters(text) {
-  if (!text || typeof text !== "string") return 0;
+var hindiGraphemeSegmenter = null;
+try {
+  if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
+    hindiGraphemeSegmenter = new Intl.Segmenter("hi", { granularity: "grapheme" });
+  }
+} catch {
+  hindiGraphemeSegmenter = null;
+}
+function sanitizeHeadlineForLengthCounting(text) {
+  if (!text || typeof text !== "string") return "";
   let s = text.replace(/\[\/?(?:yellow|highlight)\]/gi, "");
+  s = s.replace(/<[^>]*>/g, "");
   s = s.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
   s = s.replace(/["'“”‘’«»]/g, "");
   s = s.replace(/[।\.\!\?\,\:\-]+$/g, "");
   s = s.replace(/\s+/g, " ").trim();
+  return s;
+}
+function countHeadlineGraphemes(text) {
+  const s = sanitizeHeadlineForLengthCounting(text);
+  if (!s) return 0;
+  if (hindiGraphemeSegmenter) {
+    return Array.from(hindiGraphemeSegmenter.segment(s)).length;
+  }
+  return Array.from(s).length;
+}
+function countHeadlineVisibleCharacters(text, options) {
+  if (options?.mode === "grapheme") {
+    return countHeadlineGraphemes(text);
+  }
+  const s = sanitizeHeadlineForLengthCounting(text);
   return s.length;
 }
 function validateHeadlines5Tier(headlines) {
@@ -15553,17 +15579,22 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
     if (typeof h !== "string") continue;
     const clean = sanitizeHeadlineClean(h);
     if (!clean) continue;
-    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarityInternal(existing, clean) >= 0.85);
+    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarity(existing, clean) >= 0.85);
     if (!isDup) {
       safeHeadlines.push(clean);
     }
   }
+  const rawSources = [];
+  if (typeof contextOrBase === "string" && contextOrBase.trim()) rawSources.push(contextOrBase.trim());
+  if (Array.isArray(contextOrBase)) rawSources.push(...contextOrBase.filter(Boolean).map(String));
+  if (typeof baseOrContext === "string" && baseOrContext.trim()) rawSources.push(baseOrContext.trim());
+  if (Array.isArray(baseOrContext)) rawSources.push(...baseOrContext.filter(Boolean).map(String));
+  if (safeHeadlines.length > 0) rawSources.push(...safeHeadlines);
   const baseText = typeof baseOrContext === "string" && baseOrContext.trim() ? baseOrContext.trim() : typeof contextOrBase === "string" && contextOrBase.trim() ? contextOrBase.trim() : safeHeadlines[0] || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930";
-  const factCandidates = Array.isArray(contextOrBase) ? contextOrBase : Array.isArray(baseOrContext) ? baseOrContext : [];
-  const factsList = (Array.isArray(factCandidates) ? factCandidates : [factCandidates]).filter(Boolean).flatMap((f) => String(f).split(/[।\n]+/)).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 10);
+  const factsList = rawSources.flatMap((f) => f.split(/[।\n\.\r]+/)).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 10);
   const subClauses = [];
   for (const f of factsList) {
-    const parts = f.split(/[,:]\s*|\s+(?:और|तथा|व|जिसमें|जहां|जिससे)\s+/).map((p) => sanitizeHeadlineClean(p)).filter((p) => p.length >= 10);
+    const parts = f.split(/[,:]s*|s+(?:और|तथा|व|जिसमें|जहां|जिससे)s+/).map((p) => sanitizeHeadlineClean(p)).filter((p) => p.length >= 8);
     for (const p of parts) {
       if (!subClauses.includes(p)) subClauses.push(p);
     }
@@ -15571,16 +15602,19 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
   }
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5) {
-    const supp = generate5BalancedHeadlineOptions(baseText, factCandidates, location);
+    const supp = generate5BalancedHeadlineOptions(baseText, factsList, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
-      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarityInternal(existing, cand) >= 0.85);
+      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.85);
       if (!isDup) {
         workingHeadlines.push(cand);
       }
     }
+    while (workingHeadlines.length < 5) {
+      const fallbackCand = factsList[workingHeadlines.length % Math.max(factsList.length, 1)] || workingHeadlines[0] || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930";
+      workingHeadlines.push(fallbackCand);
+    }
   }
-  const usedClauses = /* @__PURE__ */ new Set();
   const result = [];
   for (let i = 0; i < 5; i++) {
     const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: "" };
@@ -15614,47 +15648,42 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
       continue;
     }
     let expanded = cleaned;
-    let foundClause = null;
-    const availableClauses = subClauses.filter(
-      (c) => !usedClauses.has(c) && !cleaned.includes(c.slice(0, 15))
-    );
-    for (const clause of availableClauses) {
-      for (const sep of [", ", " - ", ": ", " \u0914\u0930 "]) {
-        const combined = sanitizeHeadlineClean(`${cleaned}${sep}${clause}`);
-        const combinedLen = countHeadlineVisibleCharacters(combined);
-        if (combinedLen >= tier.min && combinedLen <= tier.max) {
-          expanded = combined;
-          foundClause = clause;
+    for (const clause of subClauses) {
+      if (expanded.includes(clause.slice(0, 15))) continue;
+      const testCombined = sanitizeHeadlineClean(`${expanded}, ${clause}`);
+      const testLen = countHeadlineVisibleCharacters(testCombined);
+      if (testLen <= tier.max) {
+        expanded = testCombined;
+        if (testLen >= tier.min) {
           break;
         }
-      }
-      if (foundClause) break;
-    }
-    if (countHeadlineVisibleCharacters(expanded) < tier.min) {
-      for (const clause of availableClauses) {
+      } else {
         const words = clause.split(/\s+/).filter(Boolean);
-        let built = cleaned + ",";
+        let built = expanded + ",";
+        let added = false;
         for (const w of words) {
           const next = built + " " + w;
-          const nextLen = countHeadlineVisibleCharacters(next);
+          const cleanCand = sanitizeHeadlineClean(next);
+          const nextLen = countHeadlineVisibleCharacters(cleanCand);
           if (nextLen <= tier.max) {
             built = next;
+            added = true;
             if (nextLen >= tier.min) {
-              expanded = sanitizeHeadlineClean(built);
-              foundClause = clause;
               break;
             }
           } else {
             break;
           }
         }
-        if (foundClause) break;
+        if (added) {
+          expanded = sanitizeHeadlineClean(built);
+        }
+        if (countHeadlineVisibleCharacters(expanded) >= tier.min) {
+          break;
+        }
       }
     }
-    if (foundClause) {
-      usedClauses.add(foundClause);
-    }
-    result.push(expanded);
+    result.push(sanitizeHeadlineClean(expanded));
   }
   return result.slice(0, 5);
 }
@@ -16874,7 +16903,7 @@ function cleanHeadlineText(text) {
     ""
   ).trim();
   cleaned = cleaned.replace(
-    /\s*[:\-–—]?\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i,
+    /\s*[\/\-–—:]\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय)$/i,
     ""
   ).trim();
   cleaned = cleaned.replace(/https?:\/\/\S+/gi, "").replace(/www\.\S+/gi, "").replace(/\b[a-zA-Z0-9.\-]+\.(?:com|in|org|net|co|io)\b/gi, "").replace(/#[\w\u0900-\u097F]+/g, "").replace(/@[\w\u0900-\u097F]+/g, "");
@@ -19741,6 +19770,7 @@ startServer().catch((err) => {
   calculateHeadlineSimilarityInternal,
   cleanCaptionParagraphs,
   cleanHeadlineText,
+  countHeadlineGraphemes,
   countHeadlineVisibleCharacters,
   createLocalNewsFallback,
   detectDistrictAndState,
@@ -19768,6 +19798,7 @@ startServer().catch((err) => {
   resolveAuthenticatedUser,
   resolveUserTierAndRole,
   sanitizeFlattery,
+  sanitizeHeadlineForLengthCounting,
   sanitizePressNoteFlattery,
   saveAiFeaturesConfig,
   scrapeNewsFromUrl,
