@@ -24,6 +24,7 @@ import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
 import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges, formatCaptionVariants } from '../lib/speakerUtils';
+import { getRegenCoinCostForPlan, FIVE_HEADLINE_TIERS } from '../lib/aiCoreRules';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
 import { scrapeNewsUrlClient } from '../lib/clientScraper';
@@ -269,6 +270,29 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   });
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
   const [regenSuccessMsg, setRegenSuccessMsg] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+
+  useEffect(() => {
+    const email = currentUser?.email || '';
+    const uid = currentUser?.userId || currentUser?.uid || '';
+    if (email || uid) {
+      fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(uid)}`))
+        .then((res) => res.json())
+        .then((d) => {
+          if (d?.success && d?.wallet) setWalletBalance(d.wallet.coinBalance ?? 0);
+        })
+        .catch(() => {});
+    }
+    const onWalletUpdated = (e: any) => {
+      if (e?.detail?.coinBalance !== undefined) setWalletBalance(e.detail.coinBalance);
+    };
+    window.addEventListener('ai_news_wallet_updated', onWalletUpdated);
+    window.addEventListener('wallet_balance_updated', onWalletUpdated);
+    return () => {
+      window.removeEventListener('ai_news_wallet_updated', onWalletUpdated);
+      window.removeEventListener('wallet_balance_updated', onWalletUpdated);
+    };
+  }, [currentUser]);
 
   // AI Photo state inside result
   const [generatingAiPhoto, setGeneratingAiPhoto] = useState<boolean>(false);
@@ -1499,17 +1523,29 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
   };
 
-  // Regenerate 5 brand new headline options from the same canonical news context
+  // Regenerate 5 brand new headline options from the same canonical news context (Part 8 Single-Use Coin Engine)
   const handleRegenerateHeadlines = async () => {
     if (isRegenerating || loading) return;
-    if (!isVipDeskUser) {
-      setError('अतिरिक्त हेडलाइन रीजेनरेशन केवल VIP DESK व अधिकृत एडमिन के लिए उपलब्ध है।');
+
+    const userRole = (currentUser?.role || '').toLowerCase();
+    const rawTier = (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
+    const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
+
+    if (card.regenerationUsed || (result && (result as any).regenerationUsed)) {
+      setError('इस ड्राफ्ट के लिए अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।');
       return;
     }
+
+    if (regenCost > 0 && walletBalance < regenCost) {
+      setError(`अपर्याप्त कॉइन बैलेंस! 5 नई हेडलाइन बनाने के लिए ${regenCost} कॉइन्स आवश्यक हैं, जबकि आपके पास केवल ${walletBalance} कॉइन्स उपलब्ध हैं।`);
+      return;
+    }
+
     if (aiProvider === 'openai' && !canUseOpenAi) {
       setError('यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।');
       return;
     }
+
     setIsRegenerating(true);
     setError(null);
     setRegenSuccessMsg(null);
@@ -1522,16 +1558,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       category: result?.category || card.category || '',
     };
 
+    const activeDraftId = card.draftId || card.id || card.sourceNewsId || autoFillNews?.newsId || (result as any)?.draftId || `draft-${Date.now()}`;
+
     try {
       const payload = {
+        draftId: activeDraftId,
+        generationRequestId: `req-regen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         canonicalContext: activeCtx,
         sourceHeadline: result?.headline || card.headline || '',
         summary: inputText || result?.summary || card.summary || '',
         location: result?.location || card.location || '',
-        previousHeadlines: headlineOptions,
+        previousHeadlines: headlineOptions.slice(0, 5),
         template_id: card.templateId || 'graphic_001',
         channelUsername: card.socialHandle || currentUser?.username || '',
-        userTier: userPlan || currentUser?.tier || 'pro',
+        userTier: rawTier,
         email: currentUser?.email || 'admin.ainewsmaker@gmail.com',
         userId: currentUser?.userId || currentUser?.uid || 'reporter-admin-01',
         aiProvider,
@@ -1557,6 +1597,18 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             data = null;
           }
         }
+
+        if (res.status === 409 || data?.alreadyUsed) {
+          setError('इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।');
+          setIsRegenerating(false);
+          return;
+        }
+
+        if (res.status === 400 && data?.insufficientCoins) {
+          setError(data.error || 'अपर्याप्त कॉइन बैलेंस!');
+          setIsRegenerating(false);
+          return;
+        }
       } catch (fetchErr) {
         console.warn('Network or endpoint fetch error in regenerate-headlines:', fetchErr);
         data = null;
@@ -1579,19 +1631,23 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
         .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const newOptions = fitHeadlinesTo5TierRanges(rawNew, articleSentences, sourceTitle, sourceLoc);
+      const new5Options = fitHeadlinesTo5TierRanges(rawNew, articleSentences, sourceTitle, sourceLoc).slice(0, 5);
 
-      if (newOptions.length > 0) {
-        setHeadlineOptions(newOptions);
-        setSelectedHeadlineIndex(0);
-        const topH = newOptions[0];
+      if (new5Options.length > 0) {
+        const initial5 = headlineOptions.slice(0, 5);
+        const combined10 = [...initial5, ...new5Options].slice(0, 10);
+        setHeadlineOptions(combined10);
+        setSelectedHeadlineIndex(initial5.length); // Auto-select the first new option (index 5)
+        const topH = new5Options[0];
         setResult((prev) =>
           prev
             ? {
                 ...prev,
                 headline: topH,
                 formattedHeadline: topH,
-                headlineOptions: newOptions,
+                headlineOptions: combined10,
+                regenerationUsed: true,
+                regeneratedHeadlines: new5Options,
                 canonicalContext: (data && data.canonicalContext) || activeCtx,
               }
             : null
@@ -1599,9 +1655,22 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         if (data && data.actualProvider) {
           setActiveGeneratedProvider(data.actualProvider);
         }
-        onChange({ headline: topH, formattedHeadline: topH, headlineOptions: newOptions });
-        setRegenSuccessMsg('5 नए संतुलित हेडलाइन विकल्प सफलतापूर्वक तैयार किए गए!');
-        setTimeout(() => setRegenSuccessMsg(null), 3500);
+        onChange({
+          headline: topH,
+          formattedHeadline: topH,
+          headlineOptions: combined10,
+          regenerationUsed: true,
+          regeneratedHeadlines: new5Options,
+        });
+
+        if (data && data.remainingCoins !== undefined) {
+          setWalletBalance(data.remainingCoins);
+          window.dispatchEvent(new CustomEvent('ai_news_wallet_updated', { detail: { coinBalance: data.remainingCoins } }));
+          window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { coinBalance: data.remainingCoins } }));
+        }
+
+        setRegenSuccessMsg(`✓ 5 नए संतुलित हेडलाइन विकल्प सफलतापूर्वक जोड़े गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
+        setTimeout(() => setRegenSuccessMsg(null), 4000);
       } else {
         setError('हेडलाइन्स के नए विकल्प तैयार नहीं हो सके। कृपया समाचार टेक्स्ट जांचें।');
       }
@@ -1616,15 +1685,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
           .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
         const generated = generate5BalancedHeadlineOptions(sourceTitle, articleSentences, sourceLoc);
-        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc).slice(0, 5);
         if (fitted.length > 0) {
-          setHeadlineOptions(fitted.slice(0, 5));
-          setSelectedHeadlineIndex(0);
+          const initial5 = headlineOptions.slice(0, 5);
+          const combined10 = [...initial5, ...fitted].slice(0, 10);
+          setHeadlineOptions(combined10);
+          setSelectedHeadlineIndex(initial5.length);
           const topH = fitted[0];
-          setResult((prev) => (prev ? { ...prev, headline: topH, formattedHeadline: topH, headlineOptions: fitted } : null));
-          onChange({ headline: topH, formattedHeadline: topH });
-          setRegenSuccessMsg('5 नए संतुलित हेडलाइन विकल्प तैयार किए गए!');
-          setTimeout(() => setRegenSuccessMsg(null), 3500);
+          setResult((prev) => (prev ? { ...prev, headline: topH, formattedHeadline: topH, headlineOptions: combined10, regenerationUsed: true } : null));
+          onChange({ headline: topH, formattedHeadline: topH, headlineOptions: combined10, regenerationUsed: true });
+          setRegenSuccessMsg(`✓ 5 नए संतुलित हेडलाइन विकल्प तैयार किए गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
+          setTimeout(() => setRegenSuccessMsg(null), 4000);
           return;
         }
       } catch {}
@@ -2165,67 +2236,95 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
-            <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
-              <Check className="w-4 h-4 text-green-400" />
-              <span>
-                तैयार AI हेडलाइन (5 विकल्प उपलब्ध)
-              </span>
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleRegenerateHeadlines}
-                disabled={isRegenerating || loading}
-                className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
-                title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
-                <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 पाँच नई हेडलाइन बनाएँ'}</span>
-              </button>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
-                📍 {result.location || card.location || 'मध्य प्रदेश'}
-              </span>
-            </div>
-          </div>
+          {(() => {
+            const userRole = (currentUser?.role || '').toLowerCase();
+            const rawTier = (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
+            const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
+            const isRegenUsed = Boolean(card.regenerationUsed || (result && (result as any).regenerationUsed));
+
+            return (
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
+                <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-green-400" />
+                  <span>
+                    तैयार AI हेडलाइन्स ({headlineOptions.length} विकल्प उपलब्ध)
+                  </span>
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleRegenerateHeadlines}
+                    disabled={isRegenerating || loading || isRegenUsed}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
+                      isRegenUsed
+                        ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-80'
+                        : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black'
+                    }`}
+                    title={isRegenUsed ? 'इस ड्राफ्ट पर अतिरिक्त हेडलाइन रीजेनरेशन का उपयोग हो चुका है' : `उसी खबर के लिए 5 नई हेडलाइन बनाएं (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+                    <span>
+                      {isRegenerating
+                        ? 'नई हेडलाइन्स बन रही हैं...'
+                        : isRegenUsed
+                        ? '✓ 5 अतिरिक्त हेडलाइन्स जोड़ी गईं'
+                        : `🔄 पाँच नई हेडलाइन बनाएँ (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
+                    </span>
+                  </button>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
+                    📍 {result.location || card.location || 'मध्य प्रदेश'}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           {regenSuccessMsg && (
-            <div className="p-2 rounded bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
-              <Check className="w-4 h-4 text-emerald-400" />
+            <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{regenSuccessMsg}</span>
             </div>
           )}
 
-          {/* Headline Options: Exactly 5 Simple Numbered Options with Word and Character Counts (Available to All Plans on Initial Generation) */}
-          {/* Headline Options: Exactly 5 Simple Numbered Options with Radio Buttons and Character Counts */}
+          {/* Headline Options: Up to 10 Options (Initial 5 + 5 Regenerated) with 5-Tier Graduated Bounds */}
           {headlineOptions.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-neutral-300 font-bold flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
-                  <span>तैयार 5 संतुलित AI हेडलाइन विकल्प (रेडियो बटन से चुनें):</span>
+                  <span>
+                    {headlineOptions.length > 5
+                      ? `तैयार संतुलित AI हेडलाइन्स (कुल ${headlineOptions.length} विकल्प - कोई एक चुनें):`
+                      : 'तैयार 5 संतुलित AI हेडलाइन विकल्प (रेडियो बटन से चुनें):'}
+                  </span>
                 </span>
-                <span className="text-[10px] text-amber-300/80 font-mono">100-150 वर्ण सीमा</span>
+                <span className="text-[10px] text-amber-300/90 font-mono bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
+                  5-टियर श्रेणीबद्ध वर्ण सीमा
+                </span>
               </div>
               <div className="space-y-1.5" role="radiogroup" aria-label="हेडलाइन विकल्प">
-                {headlineOptions.slice(0, 5).map((opt, idx) => {
+                {headlineOptions.slice(0, 10).map((opt, idx) => {
                   const isSelected = selectedHeadlineIndex === idx;
                   const displayText = isSelected && result?.headline ? result.headline : opt;
                   const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                   const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
                   const charCount = cleanDisplay.length;
+                  const tierRule = FIVE_HEADLINE_TIERS[idx % 5];
+                  const isRegeneratedOption = idx >= 5;
 
                   return (
                     <label
                       key={idx}
                       onClick={() => handleSelectHeadline(opt, idx)}
-                      className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1.5 ${
+                      className={`p-2.5 rounded-xl border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1.5 ${
                         isSelected
-                          ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                          ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-md ring-1 ring-yellow-400/40'
+                          : isRegeneratedOption
+                          ? 'bg-neutral-900/90 border-amber-900/40 text-neutral-300 hover:border-amber-700/60 hover:text-white'
                           : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
                           <input
                             type="radio"
@@ -2235,14 +2334,19 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                             className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
-                            विकल्प {idx + 1}
+                            {isRegeneratedOption ? `अतिरिक्त विकल्प ${idx + 1} (रीजेनरेटेड)` : `विकल्प ${idx + 1}`}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            ({tierRule.angle})
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                             <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
                             <span className="text-neutral-600">•</span>
-                            <span className={charCount > 150 ? 'text-red-400' : 'text-neutral-300'}>{charCount} अक्षर</span>
+                            <span className={charCount < tierRule.min || charCount > tierRule.max ? 'text-amber-400' : 'text-emerald-400 font-bold'}>
+                              {charCount} अक्षर (लक्ष्य: {tierRule.min}-{tierRule.max})
+                            </span>
                           </span>
                           {isSelected && (
                             <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold shrink-0">
@@ -2276,7 +2380,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       .filter(Boolean).length} शब्द
                   </span>
                   <span className="text-neutral-600">|</span>
-                  <span>{(result.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, '').trim().length} / 150 अक्षर</span>
+                  <span>{countHeadlineVisibleCharacters(result.headline || '')} / 200 अक्षर (टियर 1-5)</span>
                 </span>
               </div>
               <VoiceInputButton

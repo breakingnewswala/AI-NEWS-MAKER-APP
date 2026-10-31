@@ -132,8 +132,8 @@ export function cleanHeadlineText(text: any): string {
   cleaned = cleaned.replace(/\uE001/g, '[yellow]');
   cleaned = cleaned.replace(/\uE002/g, '[/yellow]');
 
-  // 10. Strip leading and trailing punctuation repeatedly (. or । or ! or ? or , or - or : or ;)
-  cleaned = cleaned.replace(/^[\s:\-–—,;।.]+/g, '').replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+  // 10. Strip leading and trailing punctuation repeatedly (. or । or ! or ? or , or - or : or ; or quotes)
+  cleaned = cleaned.replace(/^[\s:\-–—,;।. "“'‘]+/g, '').replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, '').trim();
 
   // 11. Clean spaces around highlight tags and punctuation
   cleaned = cleaned
@@ -157,8 +157,8 @@ export function cleanHeadlineText(text: any): string {
     .replace(/हिमाचलप्रदेश/g, 'हिमाचल प्रदेश')
     .replace(/आंध्रप्रदेश/g, 'आंध्र प्रदेश');
 
-  // 16. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
+  // 16. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation or quotes
+  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, '').trim();
 
   return cleaned;
 }

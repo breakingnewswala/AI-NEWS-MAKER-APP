@@ -3054,8 +3054,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         <span className="text-slate-500 dark:text-slate-400">दैनिक डाउनलोड सीमा:</span>
                         <span className="font-mono font-bold text-amber-300 text-right">
                           {dailyQuotaStatus?.unlimited
-                            ? 'असीमित (VIP DESK)'
-                            : `${dailyQuotaStatus?.dailyQuota ?? (subscription.planKey === 'VIP DESK' ? 99999 : subscription.planKey === 'PRO' ? 50 : subscription.planKey === 'ADVANCE' ? 25 : 10)} ग्राफिक / दिन`}
+                            ? 'असीमित (Admin)'
+                            : `${dailyQuotaStatus?.dailyQuota ?? (subscription.planKey === 'VIP DESK' ? 75 : subscription.planKey === 'PRO' ? 40 : subscription.planKey === 'ADVANCE' ? 25 : 10)} ग्राफिक / दिन`}
                         </span>
                       </div>
 
@@ -3064,7 +3064,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         <span className="font-mono font-black text-emerald-400 text-right text-xs sm:text-sm">
                           {dailyQuotaStatus?.unlimited
                             ? 'असीमित डाउनलोड'
-                            : `${dailyQuotaStatus?.remainingToday ?? 10} ग्राफिक बाकी`}
+                            : `${dailyQuotaStatus?.remainingToday ?? (subscription.planKey === 'VIP DESK' ? 75 : subscription.planKey === 'PRO' ? 40 : subscription.planKey === 'ADVANCE' ? 25 : 10)} ग्राफिक बाकी`}
                         </span>
                       </div>
 

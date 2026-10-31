@@ -191,17 +191,17 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
     badge: 'पत्रकार व चैनल चॉइस',
-    tagline: 'फुल ग्राफिक + वीडियो डिज़ाइन स्टूडियो — 50 कार्ड प्रतिदिन',
+    tagline: 'फुल ग्राफिक + वीडियो डिज़ाइन स्टूडियो — 40 कार्ड प्रतिदिन',
     hasWatermark: false,
     graphicExportResolution: '1080p',
-    maxGraphicsPerDay: 50,
+    maxGraphicsPerDay: 40,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
       '🚫 100% वॉटरमार्क रहित (No Watermark)',
-      '⚡ 50 ग्राफिक डाउनलोड प्रतिदिन',
+      '⚡ 40 ग्राफिक डाउनलोड प्रतिदिन',
       '🎨 पूर्ण स्टैंडर्ड फ़ॉन्ट कलेक्शन व प्राइमरी कलर हाइलाइट',
       '🔍 इंटरनेट इमेज सर्च व सभी मल्टी-ग्रिड फोटो लेआउट्स',
       '🔤 कस्टम टेक्स्ट वॉटरमार्क व सभी फुटर कलर्स',
@@ -221,18 +221,18 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     durationDays: 30,
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
-    badge: 'असीमित पावर',
-    tagline: 'मल्टी-रिपोर्टर नेटवर्क, 4K एक्सपोर्ट व असीमित डाउनलोड्स',
+    badge: 'वीआईपी पावर',
+    tagline: 'मल्टी-रिपोर्टर नेटवर्क, 4K एक्सपोर्ट व 75 दैनिक डाउनलोड्स',
     hasWatermark: false,
     graphicExportResolution: '4K',
-    maxGraphicsPerDay: 99999,
+    maxGraphicsPerDay: 75,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: true,
     isActive: true,
     features: [
       '🚫 100% वॉटरमार्क रहित (No Watermark)',
-      '👑 असीमित (Unlimited) दैनिक ग्राफिक डाउनलोड्स',
+      '👑 75 दैनिक ग्राफिक डाउनलोड्स (75 Downloads / Day)',
       '🔤 कस्टम फ़ॉन्ट अपलोड (.ttf / .woff2) सुविधा',
       '🎨 कस्टम हाइलाइट व फुटर बैकग्राउंड कलर पिकर',
       '📱 प्रति-ग्राफिक WhatsApp नंबर ओवरराइड इनपुट',
@@ -308,7 +308,7 @@ export async function fetchUserDailyDownloadStatus(email?: string): Promise<User
   }
 
   const sub = getUserSubscription();
-  const max = sub.planKey === 'VIP DESK' ? 99999 : sub.planKey === 'PRO' ? 50 : sub.planKey === 'ADVANCE' ? 25 : 10;
+  const max = sub.planKey === 'VIP DESK' ? 75 : sub.planKey === 'PRO' ? 40 : sub.planKey === 'ADVANCE' ? 25 : 10;
   const fallbackStatus: UserDailyDownloadStatus = {
     success: true,
     plan: sub.tier,
@@ -318,7 +318,7 @@ export async function fetchUserDailyDownloadStatus(email?: string): Promise<User
     remainingToday: max,
     remainingDownloads: max,
     isExhausted: false,
-    unlimited: max >= 99999,
+    unlimited: false,
     dateStr: new Date().toISOString().slice(0, 10),
   };
   cachedDownloadStatus = fallbackStatus;

@@ -15479,9 +15479,18 @@ app.post("/api/admin/ai-features-config", requireMasterAdminMiddleware, (req, re
   }
 });
 
+// In-memory single-use tracker for headline regeneration per draft
+const draftRegenerationStateMap = new Map<string, {
+  used: boolean;
+  headlines: string[];
+  userId: string;
+  timestamp: number;
+  generationRequestId?: string;
+}>();
+
 // GET /api/regenerate-headlines - Health / status check
 app.get("/api/regenerate-headlines", (_req, res) => {
-  res.json({ success: true, message: "Regenerate headlines API endpoint active" });
+  res.json({ success: true, message: "Regenerate headlines API endpoint active", rulesVersion: "3.0.0-core-lock" });
 });
 
 // POST /api/regenerate-headlines - Regenerate 5 brand new, distinct headline options from canonical context
@@ -15506,6 +15515,10 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       aiProvider = "gemini",
       geminiApiKey = "",
     } = req.body;
+
+    // Draft Identification & Single-Use Check (Part 8 Permanent Core Rule)
+    const draftId = (req.body.draftId || req.body.newsId || canonicalContext?.newsId || canonicalContext?.draftId || "").toString().trim();
+    const generationRequestId = (req.body.generationRequestId || req.body.idempotencyKey || "").toString().trim();
 
     // Tier Access Enforcement from central config
     const userResolution = resolveUserTierAndRole(req);
@@ -15536,7 +15549,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       });
     }
 
-    // User identity and coin-based billing per Part 4
+    // User identity and coin-based billing per Part 8
     const userEmail = (req.body.email || (req as any).user?.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
     const userId = (req.body.userId || (req as any).user?.userId || req.headers["x-user-id"] || userEmail).toString().trim();
     const walletKey = userEmail || userId;
@@ -15547,6 +15560,39 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
     }
     const currentBalance = (walletKey && rDb.wallets[walletKey]) ? rDb.wallets[walletKey].coinBalance : 0;
+
+    // Check Single-Use lock across drafts database and memory state
+    const drafts = loadDraftsDatabase();
+    const existingDraft = draftId ? drafts.find((d: any) => d.id === draftId) : null;
+    const memoryRegenState = draftId ? draftRegenerationStateMap.get(draftId) : null;
+
+    if ((existingDraft && existingDraft.regenerationUsed) || (memoryRegenState && memoryRegenState.used)) {
+      const savedHeadlines = (existingDraft && existingDraft.regeneratedHeadlines) || (memoryRegenState && memoryRegenState.headlines) || [];
+      if (savedHeadlines.length > 0 && generationRequestId && (existingDraft?.generationRequestId === generationRequestId || memoryRegenState?.generationRequestId === generationRequestId)) {
+        // Idempotent retry: return saved headlines without deducting coins again!
+        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
+        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        return res.json({
+          success: true,
+          actualProvider: "idempotent-cache",
+          headlines: savedHeadlines,
+          headlineOptions: savedHeadlines,
+          totalHeadlineOptions: combinedSaved,
+          headline: savedHeadlines[0] || "",
+          coinsDeducted: 0,
+          remainingCoins: currentBalance,
+          draftId: draftId || undefined,
+          alreadyRegenerated: true,
+          regenerationUsed: true,
+          message: "इस ड्राफ्ट के लिए पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाए गए हैं।"
+        });
+      }
+      return res.status(409).json({
+        success: false,
+        alreadyUsed: true,
+        error: "इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।"
+      });
+    }
 
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
       return res.status(400).json({
@@ -15595,32 +15641,34 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     };
 
     const regenInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
-Generate exactly 5 distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
+Generate exactly 5 BRAND NEW, distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
 - All 5 options must be based strictly on the same central event (no secondary stories or unrelated paragraphs).
-- STRICT RULE: Do NOT append generic administrative or police filler words (such as 'प्रशासन ने दिए कड़े निर्देश', 'मामले में निष्पक्ष जांच और कार्रवाई के निर्देश', 'निगरानी', 'सख्त नजर') unless that exact event actually took place in the news story. For entertainment, sports, business, or lifestyle news, keep the phrasing strictly relevant to the subject.
-- Single headline length policy: Target 100 to 150 visible characters per headline, with an absolute maximum of 150 visible characters.
-- Aim for the 100-150 character range when supported by verified facts, with no artificial filler, padding, or fabricated administrative phrases.
-- Option 1: Core event (direct, hard news)
-- Option 2: Key person/actor angle
-- Option 3: Action/Development angle
-- Option 4: Crucial fact/Quote angle
-- Option 5: Crisp, punchy journalistic angle
-- No ending punctuation (. or ।). No tier labels or bracketed counts like '[58/100]'.
+- STRICT RULE: Do NOT append generic administrative or police filler words ('प्रशासन ने दिए कड़े निर्देश', 'निगरानी', 'सख्त नजर') unless that exact event actually took place in the news story.
+- MANDATORY 5-TIER GRADUATED LENGTH RULES:
+  * Option 1: Strictly 80–110 characters (Core news event development)
+  * Option 2: Strictly 100–130 characters (Key actor / authority angle)
+  * Option 3: Strictly 125–150 characters (Action / outcome angle)
+  * Option 4: Strictly 130–160 characters (Crucial fact / impact angle)
+  * Option 5: Strictly 150–200 characters (Comprehensive editorial headline)
+- Every option must be strictly within its min and max bounds.
+- No ending punctuation (. or । or ?). No tier labels or bracketed counts like '[58/100]'.
+- Pure Devanagari Hindi only (no Roman English characters).
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
-    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें (सभी 5 विकल्प केवल इसी मुख्य घटना पर आधारित हों, लक्ष्य 100-150 वर्ण, प्रत्येक अधिकतम 150 वर्ण, बिना किसी पूर्णविराम के, शुद्ध हिंदी)।
+    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें।
+प्रत्येक विकल्प अपनी निर्धारित लंबाई सीमा में हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में।
 शीर्षक संदर्भ: ${sourceTitle}
-समाचार सामग्री/तथ्य: ${sourceText.slice(0, 2500)}
+समाचार सामग्री/तथ्य: ${sourceText.slice(0, 3000)}
 ${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
-${excludeTitles.length > 0 ? `पिछले विकल्प जिन्हें नहीं दोहराना है:\n${excludeTitles.map((t: string) => `- ${t}`).join('\n')}\n` : ""}
+${excludeTitles.length > 0 ? `पिछले 5 विकल्प (इन्हें बिल्कुल न दोहराएं, नए कोण बनाएं):\n${excludeTitles.map((t: string, idx: number) => `${idx + 1}. ${t}`).join('\n')}\n` : ""}
 JSON Output Schema:
 {
   "headlineOptions": [
-    "विकल्प 1: मुख्य घटना (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 2: प्राधिकारी/व्यक्ति कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 3: कार्रवाई/परिणाम कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 4: मुख्य बिंदु/तथ्य कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)",
-    "विकल्प 5: संक्षिप्त व प्रभावशाली कोण (लक्ष्य 100-150 वर्ण, <=150 वर्ण)"
+    "विकल्प 1: मुख्य समाचार कोण (80-110 अक्षर)",
+    "विकल्प 2: तथ्य एवं संदर्भ कोण (100-130 अक्षर)",
+    "विकल्प 3: विस्तृत विवरण कोण (125-150 अक्षर)",
+    "विकल्प 4: प्रभाव एवं प्रतिक्रिया कोण (130-160 अक्षर)",
+    "विकल्प 5: समग्र संपादकीय कोण (150-200 अक्षर)"
   ]
 }`;
 
@@ -15736,7 +15784,7 @@ JSON Output Schema:
       sourceLoc
     );
 
-    // Atomic coin billing upon successful generation per Part 4.4
+    // Atomic coin billing upon successful generation per Part 8
     let coinsDeducted = 0;
     let remainingCoins = currentBalance;
     if (requiredCoins > 0 && walletKey) {
@@ -15750,7 +15798,7 @@ JSON Output Schema:
         transactionId: txId,
         userId: userId || walletKey,
         userEmail: userEmail || walletKey,
-        newsItemId: (req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
+        newsItemId: (draftId || req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
         newsTitle: sourceTitle || "5 नई हेडलाइन्स",
         description: `5 नई हेडलाइन्स जनरेशन (${userTier.toUpperCase()}): -${requiredCoins} कॉइन्स`,
         transactionType: "debit",
@@ -15769,22 +15817,47 @@ JSON Output Schema:
       remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
     }
 
+    // Persist Single-Use State per News Draft (Part 8 Permanent Core Rule)
+    if (draftId) {
+      draftRegenerationStateMap.set(draftId, {
+        used: true,
+        headlines: finalOptions,
+        userId: walletKey,
+        timestamp: Date.now(),
+        generationRequestId,
+      });
+      if (existingDraft) {
+        existingDraft.regenerationUsed = true;
+        existingDraft.regeneratedHeadlines = finalOptions;
+        existingDraft.generationRequestId = generationRequestId;
+        existingDraft.updatedAt = Date.now();
+        saveDraftsDatabase(drafts);
+      }
+    }
+
+    const totalHeadlineOptions = [...rawPrev.slice(0, 5), ...finalOptions].slice(0, 10);
+
     return res.json({
       success: true,
       actualProvider,
       headlines: finalOptions,
       headlineOptions: finalOptions,
       options: finalOptions,
+      totalHeadlineOptions,
       headline: finalOptions[0] || "",
       coinsDeducted,
       remainingCoins,
+      draftId: draftId || undefined,
+      regenerationUsed: true,
       wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : undefined,
       canonicalContext: {
         ...canonicalContext,
+        draftId: draftId || undefined,
         lastRegeneratedAt: new Date().toISOString(),
       },
       diagnostics: {
         count: finalOptions.length,
+        totalCount: totalHeadlineOptions.length,
         graduatedWordCounts: finalOptions.map((h: string) => h.split(/\s+/).length),
       }
     });
@@ -17870,16 +17943,16 @@ const DEFAULT_PLANS_CATALOG = [
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
     badge: 'लॉन्चिंग ऑफर 40% OFF',
-    tagline: '50 ग्राफिक प्रतिदिन — सभी मानक फॉन्ट, कस्टम वॉटरमार्क व इंटरनेट सर्च',
+    tagline: '40 ग्राफिक प्रतिदिन — सभी मानक फॉन्ट, कस्टम वॉटरमार्क व इंटरनेट सर्च',
     hasWatermark: false,
     graphicExportResolution: '1080p',
-    maxGraphicsPerDay: 50,
+    maxGraphicsPerDay: 40,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '⚡ 50 ग्राफिक प्रतिदिन डाउनलोड सीमा',
+      '⚡ 40 ग्राफिक प्रतिदिन डाउनलोड सीमा',
       '🔤 सभी मानक फॉन्ट कलेक्शन व कलर हाईलाइट्स (प्राइमरी कलर सिलेक्शन)',
       '🏷️ कस्टम टेक्स्ट वॉटरमार्क व AI सिम्बॉलिक वॉटरमार्क',
       '🖼️ सभी मल्टी-फोटो ग्रिड लेआउट्स व इंटरनेट इमेज सर्च',
@@ -17901,17 +17974,17 @@ const DEFAULT_PLANS_CATALOG = [
     durationDays: 30,
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
-    badge: 'लॉन्चिंग ऑफर 35% OFF',
-    tagline: 'असीमित डाउनलोड — कस्टम फॉन्ट अपलोड, कस्टम कलर्स, WhatsApp नंबर ओवरराइड',
+    badge: 'वीआईपी पावर 35% OFF',
+    tagline: '75 ग्राफिक प्रतिदिन — कस्टम फॉन्ट अपलोड, कस्टम कलर्स, WhatsApp नंबर ओवरराइड',
     hasWatermark: false,
     graphicExportResolution: '4K',
-    maxGraphicsPerDay: 99999,
+    maxGraphicsPerDay: 75,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: true,
     isActive: true,
     features: [
-      '👑 असीमित ग्राफिक डाउनलोड (Unlimited Downloads)',
+      '👑 75 दैनिक ग्राफिक डाउनलोड सीमा (75 Downloads / Day)',
       '🔤 सभी मानक फॉन्ट + कस्टम फॉन्ट (.ttf/.otf) अपलोड',
       '🎨 कस्टम हाईलाइट कलर, फूटर कलर व टेक्स्ट कलर पिकर',
       '📱 प्रति-ग्राफिक WhatsApp नंबर ओवरराइड इनपुट',
@@ -18647,6 +18720,7 @@ app.get("/api/payment/gateways-status", (_req, res) => {
 
 // Authoritative Download Entitlement & Quota Verification
 const dailyDownloadsTracker = new Map<string, { date: string; count: number }>();
+const recentDownloadRequests = new Map<string, number>();
 
 app.get("/api/user-download-status", (req, res) => {
   try {
@@ -18666,10 +18740,10 @@ app.get("/api/user-download-status", (req, res) => {
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find(p => p.id === tier);
     const isVipTier = tier === 'ultra' || tier === 'vip' || tier === 'vip_desk';
-    // Part 5: VIP Desk displays "असीमित" (unlimited: true), but has a 100 daily graphic effective safety cap
+    // Daily graphic limits: BASIC: 10, ADVANCE: 25, PRO: 40, VIP DESK: 75
     const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined
       ? planDetail.maxGraphicsPerDay
-      : (isVipTier ? 100 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
+      : (isVipTier ? 75 : tier === 'professional' ? 40 : tier === 'advanced' ? 25 : 10);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = email;
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -18678,7 +18752,7 @@ app.get("/api/user-download-status", (req, res) => {
       downloadsToday = currentRecord.count;
     }
     const isExhausted = downloadsToday >= maxAllowed;
-    const remainingCount = isVipTier ? 99999 : Math.max(0, maxAllowed - downloadsToday);
+    const remainingCount = Math.max(0, maxAllowed - downloadsToday);
     return res.json({
       success: true,
       plan: tier,
@@ -18688,7 +18762,7 @@ app.get("/api/user-download-status", (req, res) => {
       remainingToday: remainingCount,
       remainingDownloads: remainingCount,
       isExhausted,
-      unlimited: isVipTier,
+      unlimited: false,
       dateStr,
     });
   } catch (err: any) {
@@ -18698,8 +18772,22 @@ app.get("/api/user-download-status", (req, res) => {
 
 app.post("/api/verify-download-entitlement", (req, res) => {
   try {
-    const { email, frameId, checkOnly, isBonus, headlineScheduleMode, hasScheduledHeadlines } = req.body || {};
+    const { email, frameId, checkOnly, isBonus, headlineScheduleMode, hasScheduledHeadlines, card } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
+
+    // Validate graphic card completion if card is provided (Part 11 Backend Lock)
+    if (card) {
+      const templateValid = Boolean(card.frameDesign || card.templateId);
+      const headlineValid = Boolean(card.headline && card.headline.trim().length >= 20);
+      const locationValid = Boolean(card.location && card.location.trim().length >= 2);
+      if (!templateValid || !headlineValid || !locationValid) {
+        return res.status(400).json({
+          allowed: false,
+          error: "अधूरे ग्राफिक्स को डाउनलोड नहीं किया जा सकता। कृपया सभी आवश्यक स्टेप (टेम्पलेट, हेडलाइन और स्थान) पूरे करें।",
+          incompleteSteps: true,
+        });
+      }
+    }
 
     // 0. Bonus video generation entitlement bypass (Part 8)
     if (isBonus) {
@@ -18789,12 +18877,13 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     }
 
     // 5. Daily download limits per tier (using Asia/Kolkata date)
+    // Daily graphic limits: BASIC: 10, ADVANCE: 25, PRO: 40, VIP DESK: 75
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find(p => p.id === tier);
     const isVipTier = tier === 'ultra' || tier === 'vip' || tier === 'vip_desk';
     const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined
       ? planDetail.maxGraphicsPerDay
-      : (isVipTier ? 100 : tier === 'professional' ? 50 : tier === 'advanced' ? 25 : 10);
+      : (isVipTier ? 75 : tier === 'professional' ? 40 : tier === 'advanced' ? 25 : 10);
 
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";
@@ -18809,17 +18898,32 @@ app.post("/api/verify-download-entitlement", (req, res) => {
 
     if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
-        error: isVipTier
-          ? `आपकी दैनिक VIP डाउनलोड सुरक्षा सीमा (${maxAllowed} ग्राफिक प्रतिदिन) पूरी हो चुकी है। कृपया कल पुनः प्रयास करें।`
-          : `आपकी दैनिक डाउनलोड सीमा (${maxAllowed} ग्राफिक प्रतिदिन) पूरी हो चुकी है। कृपया अगले दिन प्रयास करें या प्लान अपग्रेड करें।`,
+        error: "आपकी आज की ग्राफिक डाउनलोड सीमा पूरी हो चुकी है। कृपया अगली दैनिक सीमा रीसेट होने तक प्रतीक्षा करें।",
         quotaExceeded: true,
         maxAllowed,
         downloadsToday,
       });
     }
 
+    // 5.1 Idempotency & double-click protection for download quota
+    const downloadRequestId = req.body?.downloadRequestId || (card?.id ? `${userKey}_${card.id}_${dateStr}` : null);
+    if (!checkOnly && downloadRequestId && recentDownloadRequests.has(downloadRequestId)) {
+      return res.json({
+        allowed: true,
+        plan: tier,
+        maxAllowed,
+        downloadsToday,
+        remainingToday: Math.max(0, maxAllowed - downloadsToday),
+        unlimited: false,
+        idempotent: true,
+      });
+    }
+
     // Record verified download quota usage only if not checkOnly
     if (!checkOnly) {
+      if (downloadRequestId) {
+        recentDownloadRequests.set(downloadRequestId, Date.now());
+      }
       dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday + 1 });
       downloadsToday += 1;
     }
@@ -18829,8 +18933,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       plan: tier,
       maxAllowed,
       downloadsToday,
-      remainingToday: maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday),
-      unlimited: maxAllowed >= 99999,
+      remainingToday: Math.max(0, maxAllowed - downloadsToday),
+      unlimited: false,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

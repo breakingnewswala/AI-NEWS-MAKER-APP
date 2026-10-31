@@ -106,6 +106,7 @@ import {
   getSavedNewsChannels,
   saveNewsChannel,
   deleteSavedNewsChannel,
+  formatHindiDate,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { UserTemplateManager } from './UserTemplateManager';
@@ -150,7 +151,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 }) => {
   // Sub-tabs: main accordions in exact order - initially closed per requirement
   const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'package_coupons' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | 'analytics' | ''>('');
-  const [analyticsTab, setAnalyticsTab] = useState<'news' | 'video'>('news');
+  const [analyticsTab, setAnalyticsTab] = useState<'news' | 'video' | 'users'>('news');
   const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
 
@@ -185,8 +186,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     try {
       const res = await fetch('/api/admin/package-coupons', {
         headers: {
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
       });
       const data = await res.json();
@@ -222,8 +222,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
         body: JSON.stringify({
           id: couponForm.id,
@@ -267,8 +266,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       const res = await fetch(`/api/admin/package-coupons/${id}`, {
         method: 'DELETE',
         headers: {
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
       });
       const data = await res.json();
@@ -289,8 +287,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-email': currentUser?.email || '',
+          ...getAdminAuthHeaders(),
         },
         body: JSON.stringify({
           ...coupon,
@@ -3119,7 +3116,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <div>
                           <span className="text-slate-500">दैनिक कोटा: </span>
                           <span className="font-mono text-amber-300 font-bold">
-                            {u.tier === 'ultra' ? 'असीमित' : u.tier === 'professional' ? '50/दिन' : u.tier === 'advanced' ? '25/दिन' : '10/दिन'}
+                            {u.tier === 'ultra' ? '75/दिन' : u.tier === 'professional' ? '40/दिन' : u.tier === 'advanced' ? '25/दिन' : '10/दिन'}
                           </span>
                         </div>
                       </div>
@@ -4664,6 +4661,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <tr>
                     <th className="p-3">चैनल नाम</th>
                     <th className="p-3">श्रेणी</th>
+                    <th className="p-3">जोड़ी गई तारीख</th>
                     <th className="p-3">RSS XML URL</th>
                     <th className="p-3 text-center">स्थिति</th>
                     <th className="p-3 text-right">एक्शन</th>
@@ -4679,6 +4677,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3">
                         <span className="px-2 py-0.5 bg-slate-800 text-amber-300 rounded font-bold text-[10px]">
                           {s.category}
+                        </span>
+                      </td>
+                      <td className="p-3 text-[11px] text-amber-300 font-bold whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                          <Calendar className="w-3 h-3 text-amber-400" />
+                          <span>{s.addedDateFormatted || formatHindiDate(s.addedAt || s.createdAt)}</span>
                         </span>
                       </td>
                       <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
@@ -5204,6 +5208,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <tr>
                     <th className="p-3">पोर्टल / आर्टिकल नाम</th>
                     <th className="p-3">श्रेणी</th>
+                    <th className="p-3">जोड़ी गई तारीख</th>
                     <th className="p-3">वेब URL</th>
                     <th className="p-3 text-center">स्थिति</th>
                     <th className="p-3 text-right">एक्शन</th>
@@ -5219,6 +5224,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3">
                         <span className="px-2 py-0.5 bg-slate-800 text-cyan-300 rounded font-bold text-[10px]">
                           {s.category}
+                        </span>
+                      </td>
+                      <td className="p-3 text-[11px] text-cyan-300 font-bold whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
+                          <Calendar className="w-3 h-3 text-cyan-400" />
+                          <span>{s.addedDateFormatted || formatHindiDate(s.addedAt || s.createdAt)}</span>
                         </span>
                       </td>
                       <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">

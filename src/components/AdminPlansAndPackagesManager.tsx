@@ -3116,7 +3116,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <div>
                           <span className="text-slate-500">दैनिक कोटा: </span>
                           <span className="font-mono text-amber-300 font-bold">
-                            {u.tier === 'ultra' ? 'असीमित' : u.tier === 'professional' ? '50/दिन' : u.tier === 'advanced' ? '25/दिन' : '10/दिन'}
+                            {u.tier === 'ultra' ? '75/दिन' : u.tier === 'professional' ? '40/दिन' : u.tier === 'advanced' ? '25/दिन' : '10/दिन'}
                           </span>
                         </div>
                       </div>
@@ -6152,7 +6152,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     )}
                   </div>
                 </div>
-              ) : analyticsTab === 'video' ? (
+              ) : (
                 /* SECTION B: वीडियो विश्लेषण (VIDEO ANALYTICS) */
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

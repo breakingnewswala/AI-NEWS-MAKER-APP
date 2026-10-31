@@ -36,6 +36,7 @@ import {
   cleanHeadlineText,
   formatCaptionVariants,
 } from './lib/speakerUtils';
+import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
@@ -1965,6 +1966,11 @@ export default function App() {
 
   const handleDownload = async (formatOverride?: 'png' | 'jpeg') => {
     if (downloading) return;
+    const progress = calculateEditorProgress(card, activeStep);
+    if (!progress.is100Percent) {
+      showToast(`⚠️ JPG डाउनलोड के लिए कृपया सभी 7 स्टेप पूरे करें (वर्तमान: ${progress.percentage}% पूर्ण)।`);
+      return;
+    }
     const isBonusCard = Boolean(card?.isBonus);
     if (isActionLocked && !isBonusCard) {
       showToast('⚠️ आपका 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कार्ड डाउनलोड करने के लिए कृपया मेंबरशिप प्लान चुनें।');
@@ -1976,12 +1982,12 @@ export default function App() {
       const verifyRes = await fetch(getApiUrl('/api/verify-download-entitlement'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentUser?.email, isBonus: isBonusCard }),
+        body: JSON.stringify({ email: currentUser?.email, isBonus: isBonusCard, card }),
       });
-      if (verifyRes.status === 403) {
+      if (verifyRes.status === 403 || verifyRes.status === 400) {
         const data = await verifyRes.json();
         showToast(`⚠️ ${data.error || 'ट्रायल समाप्त हो चुका है। कृपया प्लान चुनें।'}`);
-        setCurrentTab('profile');
+        if (verifyRes.status === 403) setCurrentTab('profile');
         return;
       }
     } catch {}
@@ -3185,8 +3191,11 @@ export default function App() {
 
                     {/* Right Column: ~30% width for 7 Editor Steps (Text only, exact order) */}
                     <div className="w-[31%] min-w-0 flex flex-col justify-between py-0.5">
-                      <div className="text-[11px] sm:text-xs font-black text-amber-400 tracking-wide mb-1 text-center truncate">
-                        एडिटर स्टेप्स
+                      <div className="text-[11px] sm:text-xs font-black text-amber-400 tracking-wide mb-1 text-center truncate flex items-center justify-center gap-1">
+                        <span>एडिटर स्टेप्स</span>
+                        <span className="text-[9.5px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                          {calculateEditorProgress(card, activeStep).percentage}%
+                        </span>
                       </div>
                       <div className="flex-1 flex flex-col justify-between gap-1">
                         {[
@@ -3332,69 +3341,117 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Action Bar below Preview: 3 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट) */}
-                    <div className="flex items-center gap-1.5 sm:gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
-                      {/* 1. JPG डाउनलोड - Priority Action */}
-                      <button
-                        type="button"
-                        onClick={() => handleDownload('jpeg')}
-                        disabled={downloading || (isActionLocked && !isCurrentCardBonus)}
-                        className={`flex-[1.5] min-w-[120px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
-                          isActionLocked && !isCurrentCardBonus
-                            ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
-                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 cursor-pointer disabled:opacity-50'
-                        }`}
-                        title={isActionLocked && !isCurrentCardBonus ? 'ट्रायल समाप्त — डाउनलोड लॉक' : 'कार्ड को HD JPG इमेज में डाउनलोड करें'}
-                      >
-                        {isActionLocked && !isCurrentCardBonus ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />}
-                        <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
-                      </button>
+                    {/* Action Bar below Preview: 3 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
+                    {(() => {
+                      const editorProgress = calculateEditorProgress(card, activeStep);
+                      const isExportReady = editorProgress.is100Percent;
 
-                      {/* 2. कैप्शन */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (isActionLocked && !isCurrentCardBonus) {
-                            showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कैप्शन हेतु प्लान अपग्रेड करें।');
-                            setCurrentTab('profile');
-                          } else {
-                            setIsCaptionModalOpen(true);
-                          }
-                        }}
-                        disabled={isActionLocked && !isCurrentCardBonus}
-                        className={`flex-1 min-w-[80px] py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
-                          isActionLocked && !isCurrentCardBonus
-                            ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
-                            : 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 cursor-pointer'
-                        }`}
-                        title={isActionLocked && !isCurrentCardBonus ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'कैप्शन और शेयर'}
-                      >
-                        {isActionLocked && !isCurrentCardBonus ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />}
-                        <span className="whitespace-nowrap">कैप्शन</span>
-                      </button>
+                      return (
+                        <>
+                          <div className="flex items-center gap-1.5 sm:gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
+                            {/* 1. JPG डाउनलोड - Locked until 100% completion */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isExportReady) {
+                                  showToast(`⚠️ JPG डाउनलोड के लिए कृपया सभी 7 स्टेप पूरे करें (वर्तमान: ${editorProgress.percentage}% पूर्ण)।`);
+                                  return;
+                                }
+                                handleDownload('jpeg');
+                              }}
+                              disabled={downloading || !isExportReady || (isActionLocked && !isCurrentCardBonus)}
+                              className={`flex-[1.5] min-w-[120px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                                !isExportReady
+                                  ? 'bg-neutral-850 text-neutral-500 border border-neutral-800 opacity-65 cursor-not-allowed'
+                                  : isActionLocked && !isCurrentCardBonus
+                                  ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
+                                  : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 cursor-pointer disabled:opacity-50'
+                              }`}
+                              title={
+                                !isExportReady
+                                  ? `डाउनलोड लॉक: कृपया सभी 7 स्टेप पूरे करें (${editorProgress.percentage}% पूर्ण)`
+                                  : isActionLocked && !isCurrentCardBonus
+                                  ? 'ट्रायल समाप्त — डाउनलोड लॉक'
+                                  : 'कार्ड को HD JPG इमेज में डाउनलोड करें'
+                              }
+                            >
+                              {!isExportReady ? (
+                                <Lock className="w-3.5 h-3.5 shrink-0 text-amber-400/80" />
+                              ) : isActionLocked && !isCurrentCardBonus ? (
+                                <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
+                              )}
+                              <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
+                            </button>
 
-                      {/* 3. ड्राफ्ट */}
-                      <button
-                        type="button"
-                        onClick={handleSaveCurrentCardAsDraft}
-                        className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                        title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
-                      >
-                        <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                        <span className="whitespace-nowrap">ड्राफ्ट</span>
-                      </button>
+                            {/* 2. कैप्शन - Locked until 100% completion */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!isExportReady) {
+                                  showToast(`⚠️ कैप्शन के लिए कृपया सभी 7 स्टेप पूरे करें (वर्तमान: ${editorProgress.percentage}% पूर्ण)।`);
+                                  return;
+                                }
+                                if (isActionLocked && !isCurrentCardBonus) {
+                                  showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कैप्शन हेतु प्लान अपग्रेड करें।');
+                                  setCurrentTab('profile');
+                                } else {
+                                  setIsCaptionModalOpen(true);
+                                }
+                              }}
+                              disabled={!isExportReady || (isActionLocked && !isCurrentCardBonus)}
+                              className={`flex-1 min-w-[80px] py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                                !isExportReady
+                                  ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
+                                  : isActionLocked && !isCurrentCardBonus
+                                  ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
+                                  : 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 cursor-pointer'
+                              }`}
+                              title={!isExportReady ? 'कैप्शन लॉक: सभी 7 स्टेप पूरे करें' : 'कैप्शन और शेयर'}
+                            >
+                              {!isExportReady ? <Lock className="w-3.5 h-3.5 shrink-0 text-amber-400/80" /> : <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />}
+                              <span className="whitespace-nowrap">कैप्शन</span>
+                            </button>
 
-                      {/* 4. रिफ्रेश */}
-                      <button
-                        type="button"
-                        onClick={handleResetCard}
-                        className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                        title="नया ग्राफिक / रीसेट सेशन"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                        <span className="whitespace-nowrap">रिफ्रेश</span>
-                      </button>
-                    </div>
+                            {/* 3. ड्राफ्ट */}
+                            <button
+                              type="button"
+                              onClick={handleSaveCurrentCardAsDraft}
+                              className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                              title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                              <span className="whitespace-nowrap">ड्राफ्ट</span>
+                            </button>
+
+                            {/* 4. रिफ्रेश */}
+                            <button
+                              type="button"
+                              onClick={handleResetCard}
+                              className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                              title="नया ग्राफिक / रीसेट सेशन"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                              <span className="whitespace-nowrap">रिफ्रेश</span>
+                            </button>
+                          </div>
+
+                          {/* Progress Warning Banner if Steps < 100% (Part 11 Lock Requirement) */}
+                          {!isExportReady && (
+                            <div className="w-full mt-2 p-2 bg-amber-950/70 border border-amber-600/50 rounded-xl flex items-center justify-between text-[11px] text-amber-300 shadow-sm animate-in fade-in">
+                              <div className="flex items-center gap-1.5 font-bold">
+                                <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                <span>JPG डाउनलोड और कैप्शन के लिए कृपया सभी 7 स्टेप पूरे करें।</span>
+                              </div>
+                              <span className="font-mono font-black text-amber-400 bg-amber-900/80 px-2 py-0.5 rounded-md border border-amber-500/40 shrink-0">
+                                {editorProgress.percentage}% पूर्ण
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
 
                     {/* Informative Note Card below Buttons */}
                     <div className="mt-3 p-3 bg-neutral-900/70 border border-neutral-800/80 rounded-xl flex items-start gap-2">
@@ -3419,6 +3476,19 @@ export default function App() {
                           <span>🎛️</span>
                           <span>एडिटर स्टेप्स (स्टेप {activeStep} / {STUDIO_STEPS.length})</span>
                         </span>
+                        {(() => {
+                          const progress = calculateEditorProgress(card, activeStep);
+                          return (
+                            <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-black shadow-sm flex items-center gap-1 ${
+                              progress.is100Percent
+                                ? 'bg-emerald-500 text-slate-950 ring-1 ring-emerald-300'
+                                : 'bg-amber-400 text-slate-950 ring-1 ring-amber-300'
+                            }`}>
+                              <span>📊</span>
+                              <span>{progress.percentage}% पूर्ण</span>
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black shadow-sm flex items-center gap-1">
@@ -3429,6 +3499,23 @@ export default function App() {
                         </span>
                       </div>
                     </div>
+
+                    {/* Progress Bar (0 to 100%) */}
+                    {(() => {
+                      const progress = calculateEditorProgress(card, activeStep);
+                      return (
+                        <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-300 ${
+                              progress.is100Percent
+                                ? 'bg-emerald-400'
+                                : 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                            }`}
+                            style={{ width: `${progress.percentage}%` }}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     {/* Horizontal Scrollable Tabs: Step 1 to 8 */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">

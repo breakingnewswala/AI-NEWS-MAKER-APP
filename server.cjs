@@ -16580,8 +16580,9 @@ app.post("/api/admin/ai-features-config", requireMasterAdminMiddleware, (req, re
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
+var draftRegenerationStateMap = /* @__PURE__ */ new Map();
 app.get("/api/regenerate-headlines", (_req, res) => {
-  res.json({ success: true, message: "Regenerate headlines API endpoint active" });
+  res.json({ success: true, message: "Regenerate headlines API endpoint active", rulesVersion: "3.0.0-core-lock" });
 });
 app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, res) => {
   try {
@@ -16602,6 +16603,8 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       aiProvider = "gemini",
       geminiApiKey = ""
     } = req.body;
+    const draftId = (req.body.draftId || req.body.newsId || canonicalContext?.newsId || canonicalContext?.draftId || "").toString().trim();
+    const generationRequestId = (req.body.generationRequestId || req.body.idempotencyKey || "").toString().trim();
     const userResolution = resolveUserTierAndRole(req);
     const userTier = (userResolution.tier || "basic").toString().toLowerCase().trim();
     const requestedProvider = (aiProvider || "gemini").toLowerCase();
@@ -16636,6 +16639,35 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
     }
     const currentBalance = walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey].coinBalance : 0;
+    const drafts = loadDraftsDatabase();
+    const existingDraft = draftId ? drafts.find((d) => d.id === draftId) : null;
+    const memoryRegenState = draftId ? draftRegenerationStateMap.get(draftId) : null;
+    if (existingDraft && existingDraft.regenerationUsed || memoryRegenState && memoryRegenState.used) {
+      const savedHeadlines = existingDraft && existingDraft.regeneratedHeadlines || memoryRegenState && memoryRegenState.headlines || [];
+      if (savedHeadlines.length > 0 && generationRequestId && (existingDraft?.generationRequestId === generationRequestId || memoryRegenState?.generationRequestId === generationRequestId)) {
+        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
+        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        return res.json({
+          success: true,
+          actualProvider: "idempotent-cache",
+          headlines: savedHeadlines,
+          headlineOptions: savedHeadlines,
+          totalHeadlineOptions: combinedSaved,
+          headline: savedHeadlines[0] || "",
+          coinsDeducted: 0,
+          remainingCoins: currentBalance,
+          draftId: draftId || void 0,
+          alreadyRegenerated: true,
+          regenerationUsed: true,
+          message: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u0947 \u0932\u093F\u090F \u092A\u0942\u0930\u094D\u0935-\u091C\u0928\u0930\u0947\u091F\u0947\u0921 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0932\u094C\u091F\u093E\u090F \u0917\u090F \u0939\u0948\u0902\u0964"
+        });
+      }
+      return res.status(409).json({
+        success: false,
+        alreadyUsed: true,
+        error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+      });
+    }
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
       return res.status(400).json({
         success: false,
@@ -16672,35 +16704,37 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       }
     };
     const regenInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
-Generate exactly 5 distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
+Generate exactly 5 BRAND NEW, distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script:
 - All 5 options must be based strictly on the same central event (no secondary stories or unrelated paragraphs).
-- STRICT RULE: Do NOT append generic administrative or police filler words (such as '\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u091C\u093E\u0902\u091A \u0914\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u0938\u0916\u094D\u0924 \u0928\u091C\u0930') unless that exact event actually took place in the news story. For entertainment, sports, business, or lifestyle news, keep the phrasing strictly relevant to the subject.
-- Single headline length policy: Target 100 to 150 visible characters per headline, with an absolute maximum of 150 visible characters.
-- Aim for the 100-150 character range when supported by verified facts, with no artificial filler, padding, or fabricated administrative phrases.
-- Option 1: Core event (direct, hard news)
-- Option 2: Key person/actor angle
-- Option 3: Action/Development angle
-- Option 4: Crucial fact/Quote angle
-- Option 5: Crisp, punchy journalistic angle
-- No ending punctuation (. or \u0964). No tier labels or bracketed counts like '[58/100]'.
+- STRICT RULE: Do NOT append generic administrative or police filler words ('\u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0926\u093F\u090F \u0915\u0921\u093C\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936', '\u0928\u093F\u0917\u0930\u093E\u0928\u0940', '\u0938\u0916\u094D\u0924 \u0928\u091C\u0930') unless that exact event actually took place in the news story.
+- MANDATORY 5-TIER GRADUATED LENGTH RULES:
+  * Option 1: Strictly 80\u2013110 characters (Core news event development)
+  * Option 2: Strictly 100\u2013130 characters (Key actor / authority angle)
+  * Option 3: Strictly 125\u2013150 characters (Action / outcome angle)
+  * Option 4: Strictly 130\u2013160 characters (Crucial fact / impact angle)
+  * Option 5: Strictly 150\u2013200 characters (Comprehensive editorial headline)
+- Every option must be strictly within its min and max bounds.
+- No ending punctuation (. or \u0964 or ?). No tier labels or bracketed counts like '[58/100]'.
+- Pure Devanagari Hindi only (no Roman English characters).
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
-    const regenPrompt = `\u0915\u0943\u092A\u092F\u093E \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0920\u0940\u0915 5 \u0928\u090F \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902 (\u0938\u092D\u0940 5 \u0935\u093F\u0915\u0932\u094D\u092A \u0915\u0947\u0935\u0932 \u0907\u0938\u0940 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u094B\u0902, \u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0905\u0927\u093F\u0915\u0924\u092E 150 \u0935\u0930\u094D\u0923, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947, \u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940)\u0964
+    const regenPrompt = `\u0915\u0943\u092A\u092F\u093E \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0920\u0940\u0915 5 \u0928\u090F \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
+\u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u092A\u0928\u0940 \u0928\u093F\u0930\u094D\u0927\u093E\u0930\u093F\u0924 \u0932\u0902\u092C\u093E\u0908 \u0938\u0940\u092E\u093E \u092E\u0947\u0902 \u0939\u094B, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947, \u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092E\u0947\u0902\u0964
 \u0936\u0940\u0930\u094D\u0937\u0915 \u0938\u0902\u0926\u0930\u094D\u092D: ${sourceTitle}
-\u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940/\u0924\u0925\u094D\u092F: ${sourceText.slice(0, 2500)}
+\u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940/\u0924\u0925\u094D\u092F: ${sourceText.slice(0, 3e3)}
 ${sourceLoc ? `\u0938\u094D\u0925\u093E\u0928: ${sourceLoc}
 ` : ""}${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936\u0947\u0937 \u0928\u093F\u0930\u094D\u0926\u0947\u0936: ${customPrompt}
 ` : ""}
-${excludeTitles.length > 0 ? `\u092A\u093F\u091B\u0932\u0947 \u0935\u093F\u0915\u0932\u094D\u092A \u091C\u093F\u0928\u094D\u0939\u0947\u0902 \u0928\u0939\u0940\u0902 \u0926\u094B\u0939\u0930\u093E\u0928\u093E \u0939\u0948:
-${excludeTitles.map((t) => `- ${t}`).join("\n")}
+${excludeTitles.length > 0 ? `\u092A\u093F\u091B\u0932\u0947 5 \u0935\u093F\u0915\u0932\u094D\u092A (\u0907\u0928\u094D\u0939\u0947\u0902 \u092C\u093F\u0932\u094D\u0915\u0941\u0932 \u0928 \u0926\u094B\u0939\u0930\u093E\u090F\u0902, \u0928\u090F \u0915\u094B\u0923 \u092C\u0928\u093E\u090F\u0902):
+${excludeTitles.map((t, idx) => `${idx + 1}. ${t}`).join("\n")}
 ` : ""}
 JSON Output Schema:
 {
   "headlineOptions": [
-    "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u092A\u094D\u0930\u093E\u0927\u093F\u0915\u093E\u0930\u0940/\u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908/\u092A\u0930\u093F\u0923\u093E\u092E \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092E\u0941\u0916\u094D\u092F \u092C\u093F\u0902\u0926\u0941/\u0924\u0925\u094D\u092F \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)",
-    "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0915\u094B\u0923 (\u0932\u0915\u094D\u0937\u094D\u092F 100-150 \u0935\u0930\u094D\u0923, <=150 \u0935\u0930\u094D\u0923)"
+    "\u0935\u093F\u0915\u0932\u094D\u092A 1: \u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u094B\u0923 (80-110 \u0905\u0915\u094D\u0937\u0930)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 2: \u0924\u0925\u094D\u092F \u090F\u0935\u0902 \u0938\u0902\u0926\u0930\u094D\u092D \u0915\u094B\u0923 (100-130 \u0905\u0915\u094D\u0937\u0930)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 3: \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0935\u093F\u0935\u0930\u0923 \u0915\u094B\u0923 (125-150 \u0905\u0915\u094D\u0937\u0930)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 4: \u092A\u094D\u0930\u092D\u093E\u0935 \u090F\u0935\u0902 \u092A\u094D\u0930\u0924\u093F\u0915\u094D\u0930\u093F\u092F\u093E \u0915\u094B\u0923 (130-160 \u0905\u0915\u094D\u0937\u0930)",
+    "\u0935\u093F\u0915\u0932\u094D\u092A 5: \u0938\u092E\u0917\u094D\u0930 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0915\u094B\u0923 (150-200 \u0905\u0915\u094D\u0937\u0930)"
   ]
 }`;
     const tryOpenAI = async () => {
@@ -16818,7 +16852,7 @@ JSON Output Schema:
         transactionId: txId,
         userId: userId || walletKey,
         userEmail: userEmail || walletKey,
-        newsItemId: (req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
+        newsItemId: (draftId || req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
         newsTitle: sourceTitle || "5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938",
         description: `5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u091C\u0928\u0930\u0947\u0936\u0928 (${userTier.toUpperCase()}): -${requiredCoins} \u0915\u0949\u0907\u0928\u094D\u0938`,
         transactionType: "debit",
@@ -16836,22 +16870,44 @@ JSON Output Schema:
     } else if (walletKey && rDb.wallets[walletKey]) {
       remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
     }
+    if (draftId) {
+      draftRegenerationStateMap.set(draftId, {
+        used: true,
+        headlines: finalOptions,
+        userId: walletKey,
+        timestamp: Date.now(),
+        generationRequestId
+      });
+      if (existingDraft) {
+        existingDraft.regenerationUsed = true;
+        existingDraft.regeneratedHeadlines = finalOptions;
+        existingDraft.generationRequestId = generationRequestId;
+        existingDraft.updatedAt = Date.now();
+        saveDraftsDatabase(drafts);
+      }
+    }
+    const totalHeadlineOptions = [...rawPrev.slice(0, 5), ...finalOptions].slice(0, 10);
     return res.json({
       success: true,
       actualProvider,
       headlines: finalOptions,
       headlineOptions: finalOptions,
       options: finalOptions,
+      totalHeadlineOptions,
       headline: finalOptions[0] || "",
       coinsDeducted,
       remainingCoins,
+      draftId: draftId || void 0,
+      regenerationUsed: true,
       wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : void 0,
       canonicalContext: {
         ...canonicalContext,
+        draftId: draftId || void 0,
         lastRegeneratedAt: (/* @__PURE__ */ new Date()).toISOString()
       },
       diagnostics: {
         count: finalOptions.length,
+        totalCount: totalHeadlineOptions.length,
         graduatedWordCounts: finalOptions.map((h) => h.split(/\s+/).length)
       }
     });
@@ -18556,16 +18612,16 @@ var DEFAULT_PLANS_CATALOG = [
     validityLabel: "30 \u0926\u093F\u0928 (\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930)",
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
     badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 40% OFF",
-    tagline: "50 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F, \u0915\u0938\u094D\u091F\u092E \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A",
+    tagline: "40 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F, \u0915\u0938\u094D\u091F\u092E \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A",
     hasWatermark: false,
     graphicExportResolution: "1080p",
-    maxGraphicsPerDay: 50,
+    maxGraphicsPerDay: 40,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      "\u26A1 50 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E",
+      "\u26A1 40 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E",
       "\u{1F524} \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F \u0915\u0932\u0947\u0915\u094D\u0936\u0928 \u0935 \u0915\u0932\u0930 \u0939\u093E\u0908\u0932\u093E\u0907\u091F\u094D\u0938 (\u092A\u094D\u0930\u093E\u0907\u092E\u0930\u0940 \u0915\u0932\u0930 \u0938\u093F\u0932\u0947\u0915\u094D\u0936\u0928)",
       "\u{1F3F7}\uFE0F \u0915\u0938\u094D\u091F\u092E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0935 AI \u0938\u093F\u092E\u094D\u092C\u0949\u0932\u093F\u0915 \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915",
       "\u{1F5BC}\uFE0F \u0938\u092D\u0940 \u092E\u0932\u094D\u091F\u0940-\u092B\u094B\u091F\u094B \u0917\u094D\u0930\u093F\u0921 \u0932\u0947\u0906\u0909\u091F\u094D\u0938 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0907\u092E\u0947\u091C \u0938\u0930\u094D\u091A",
@@ -18587,17 +18643,17 @@ var DEFAULT_PLANS_CATALOG = [
     durationDays: 30,
     validityLabel: "30 \u0926\u093F\u0928 (\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930)",
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
-    badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 35% OFF",
-    tagline: "\u0905\u0938\u0940\u092E\u093F\u0924 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u2014 \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F \u0905\u092A\u0932\u094B\u0921, \u0915\u0938\u094D\u091F\u092E \u0915\u0932\u0930\u094D\u0938, WhatsApp \u0928\u0902\u092C\u0930 \u0913\u0935\u0930\u0930\u093E\u0907\u0921",
+    badge: "\u0935\u0940\u0906\u0908\u092A\u0940 \u092A\u093E\u0935\u0930 35% OFF",
+    tagline: "75 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F \u0905\u092A\u0932\u094B\u0921, \u0915\u0938\u094D\u091F\u092E \u0915\u0932\u0930\u094D\u0938, WhatsApp \u0928\u0902\u092C\u0930 \u0913\u0935\u0930\u0930\u093E\u0907\u0921",
     hasWatermark: false,
     graphicExportResolution: "4K",
-    maxGraphicsPerDay: 99999,
+    maxGraphicsPerDay: 75,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: true,
     isActive: true,
     features: [
-      "\u{1F451} \u0905\u0938\u0940\u092E\u093F\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 (Unlimited Downloads)",
+      "\u{1F451} 75 \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E (75 Downloads / Day)",
       "\u{1F524} \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F + \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F (.ttf/.otf) \u0905\u092A\u0932\u094B\u0921",
       "\u{1F3A8} \u0915\u0938\u094D\u091F\u092E \u0939\u093E\u0908\u0932\u093E\u0907\u091F \u0915\u0932\u0930, \u092B\u0942\u091F\u0930 \u0915\u0932\u0930 \u0935 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930 \u092A\u093F\u0915\u0930",
       "\u{1F4F1} \u092A\u094D\u0930\u0924\u093F-\u0917\u094D\u0930\u093E\u092B\u093F\u0915 WhatsApp \u0928\u0902\u092C\u0930 \u0913\u0935\u0930\u0930\u093E\u0907\u0921 \u0907\u0928\u092A\u0941\u091F",
@@ -19250,6 +19306,7 @@ app.get("/api/payment/gateways-status", (_req, res) => {
   });
 });
 var dailyDownloadsTracker = /* @__PURE__ */ new Map();
+var recentDownloadRequests = /* @__PURE__ */ new Map();
 app.get("/api/user-download-status", (req, res) => {
   try {
     const email = (req.query.email || "").toString().toLowerCase().trim();
@@ -19267,7 +19324,7 @@ app.get("/api/user-download-status", (req, res) => {
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find((p) => p.id === tier);
     const isVipTier = tier === "ultra" || tier === "vip" || tier === "vip_desk";
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 100 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 75 : tier === "professional" ? 40 : tier === "advanced" ? 25 : 10;
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = email;
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -19276,7 +19333,7 @@ app.get("/api/user-download-status", (req, res) => {
       downloadsToday = currentRecord.count;
     }
     const isExhausted = downloadsToday >= maxAllowed;
-    const remainingCount = isVipTier ? 99999 : Math.max(0, maxAllowed - downloadsToday);
+    const remainingCount = Math.max(0, maxAllowed - downloadsToday);
     return res.json({
       success: true,
       plan: tier,
@@ -19286,7 +19343,7 @@ app.get("/api/user-download-status", (req, res) => {
       remainingToday: remainingCount,
       remainingDownloads: remainingCount,
       isExhausted,
-      unlimited: isVipTier,
+      unlimited: false,
       dateStr
     });
   } catch (err) {
@@ -19295,8 +19352,20 @@ app.get("/api/user-download-status", (req, res) => {
 });
 app.post("/api/verify-download-entitlement", (req, res) => {
   try {
-    const { email, frameId, checkOnly, isBonus, headlineScheduleMode, hasScheduledHeadlines } = req.body || {};
+    const { email, frameId, checkOnly, isBonus, headlineScheduleMode, hasScheduledHeadlines, card } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (card) {
+      const templateValid = Boolean(card.frameDesign || card.templateId);
+      const headlineValid = Boolean(card.headline && card.headline.trim().length >= 20);
+      const locationValid = Boolean(card.location && card.location.trim().length >= 2);
+      if (!templateValid || !headlineValid || !locationValid) {
+        return res.status(400).json({
+          allowed: false,
+          error: "\u0905\u0927\u0942\u0930\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915\u094D\u0938 \u0915\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E\u0964 \u0915\u0943\u092A\u092F\u093E \u0938\u092D\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0938\u094D\u091F\u0947\u092A (\u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F, \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u0938\u094D\u0925\u093E\u0928) \u092A\u0942\u0930\u0947 \u0915\u0930\u0947\u0902\u0964",
+          incompleteSteps: true
+        });
+      }
+    }
     if (isBonus) {
       return res.json({
         allowed: true,
@@ -19370,7 +19439,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find((p) => p.id === tier);
     const isVipTier = tier === "ultra" || tier === "vip" || tier === "vip_desk";
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 100 : tier === "professional" ? 50 : tier === "advanced" ? 25 : 10;
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 75 : tier === "professional" ? 40 : tier === "advanced" ? 25 : 10;
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -19382,13 +19451,28 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     }
     if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
-        error: isVipTier ? `\u0906\u092A\u0915\u0940 \u0926\u0948\u0928\u093F\u0915 VIP \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0940\u092E\u093E (${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928) \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964` : `\u0906\u092A\u0915\u0940 \u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E (${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928) \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0947 \u0926\u093F\u0928 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
+        error: "\u0906\u092A\u0915\u0940 \u0906\u091C \u0915\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0940 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E \u0930\u0940\u0938\u0947\u091F \u0939\u094B\u0928\u0947 \u0924\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964",
         quotaExceeded: true,
         maxAllowed,
         downloadsToday
       });
     }
+    const downloadRequestId = req.body?.downloadRequestId || (card?.id ? `${userKey}_${card.id}_${dateStr}` : null);
+    if (!checkOnly && downloadRequestId && recentDownloadRequests.has(downloadRequestId)) {
+      return res.json({
+        allowed: true,
+        plan: tier,
+        maxAllowed,
+        downloadsToday,
+        remainingToday: Math.max(0, maxAllowed - downloadsToday),
+        unlimited: false,
+        idempotent: true
+      });
+    }
     if (!checkOnly) {
+      if (downloadRequestId) {
+        recentDownloadRequests.set(downloadRequestId, Date.now());
+      }
       dailyDownloadsTracker.set(userKey, { date: dateStr, count: downloadsToday + 1 });
       downloadsToday += 1;
     }
@@ -19397,8 +19481,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       plan: tier,
       maxAllowed,
       downloadsToday,
-      remainingToday: maxAllowed >= 99999 ? 99999 : Math.max(0, maxAllowed - downloadsToday),
-      unlimited: maxAllowed >= 99999
+      remainingToday: Math.max(0, maxAllowed - downloadsToday),
+      unlimited: false
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

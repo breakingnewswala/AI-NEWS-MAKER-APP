@@ -309,14 +309,16 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       }
 
       if (newOpts.length > 0) {
-        setHeadlineOptions(newOpts);
-        setSelectedHeadlineIndex(0);
+        const combined = [...headlineOptions, ...newOpts].slice(0, 10);
+        setHeadlineOptions(combined);
+        setSelectedHeadlineIndex(headlineOptions.length);
         setResult((prev) =>
           prev
             ? {
                 ...prev,
                 headline: newOpts[0],
                 formattedHeadline: newOpts[0],
+                headlineOptions: combined,
               }
             : null
         );
@@ -686,12 +688,12 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    {headlineOptions.slice(0, 5).map((opt, idx) => {
+                    {headlineOptions.slice(0, 10).map((opt, idx) => {
                       const isSelected = result.headline === opt;
                       const cleanOpt = opt.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                       const wordCount = cleanOpt.split(/\s+/).filter(Boolean).length;
                       const charLen = countHeadlineVisibleCharacters(opt);
-                      const tier = HEADLINE_5_TIER_RANGES[idx] || { min: 80, max: 200, label: '' };
+                      const tier = HEADLINE_5_TIER_RANGES[idx % 5] || { min: 80, max: 200, label: '' };
                       const isCompliant = charLen >= tier.min && charLen <= tier.max;
                       return (
                         <div
