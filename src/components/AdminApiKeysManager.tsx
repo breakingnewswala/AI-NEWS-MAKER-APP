@@ -21,7 +21,7 @@ import {
   Shield,
   Activity,
 } from 'lucide-react';
-import { getAuthToken, ensureAuthToken } from '../lib/apiConfig';
+import { getApiUrl, getAuthToken, ensureAuthToken } from '../lib/apiConfig';
 
 interface FreeKeyItem {
   id: string;
@@ -121,7 +121,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     else setRefreshing(true);
     try {
       let headers = await getAuthHeaders();
-      let res = await fetch('/api/admin/api-keys', {
+      let res = await fetch(getApiUrl('/api/admin/api-keys'), {
         headers,
       });
 
@@ -129,7 +129,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
-          res = await fetch('/api/admin/api-keys', { headers });
+          res = await fetch(getApiUrl('/api/admin/api-keys'), { headers });
         }
       }
 
@@ -166,7 +166,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     setAddingFreeKey(true);
     try {
       let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
-      let res = await fetch('/api/admin/api-keys/free', {
+      let res = await fetch(getApiUrl('/api/admin/api-keys/free'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -183,7 +183,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
             'Authorization': `Bearer ${freshToken}`,
             'x-admin-email': adminEmail,
           };
-          res = await fetch('/api/admin/api-keys/free', {
+          res = await fetch(getApiUrl('/api/admin/api-keys/free'), {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -216,7 +216,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     }
     try {
       let headers = await getAuthHeaders();
-      let res = await fetch(`/api/admin/api-keys/free/${encodeURIComponent(id)}`, {
+      let res = await fetch(getApiUrl(`/api/admin/api-keys/free/${encodeURIComponent(id)}`), {
         method: 'DELETE',
         headers,
       });
@@ -225,7 +225,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
-          res = await fetch(`/api/admin/api-keys/free/${encodeURIComponent(id)}`, {
+          res = await fetch(getApiUrl(`/api/admin/api-keys/free/${encodeURIComponent(id)}`), {
             method: 'DELETE',
             headers,
           });
@@ -249,7 +249,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     setSavingPaidKey(true);
     try {
       let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
-      let res = await fetch('/api/admin/api-keys/paid', {
+      let res = await fetch(getApiUrl('/api/admin/api-keys/paid'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -267,7 +267,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
             'Authorization': `Bearer ${freshToken}`,
             'x-admin-email': adminEmail,
           };
-          res = await fetch('/api/admin/api-keys/paid', {
+          res = await fetch(getApiUrl('/api/admin/api-keys/paid'), {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -300,7 +300,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     }
     try {
       let headers = await getAuthHeaders();
-      let res = await fetch('/api/admin/api-keys/paid', {
+      let res = await fetch(getApiUrl('/api/admin/api-keys/paid'), {
         method: 'DELETE',
         headers,
       });
@@ -309,7 +309,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
-          res = await fetch('/api/admin/api-keys/paid', {
+          res = await fetch(getApiUrl('/api/admin/api-keys/paid'), {
             method: 'DELETE',
             headers,
           });
@@ -334,7 +334,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     setTestingKeyId(keyId);
     try {
       let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
-      let res = await fetch('/api/admin/api-keys/test-id', {
+      let res = await fetch(getApiUrl('/api/admin/api-keys/test-id'), {
         method: 'POST',
         headers,
         body: JSON.stringify({ keyId, type }),
@@ -348,7 +348,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
             'Authorization': `Bearer ${freshToken}`,
             'x-admin-email': adminEmail,
           };
-          res = await fetch('/api/admin/api-keys/test-id', {
+          res = await fetch(getApiUrl('/api/admin/api-keys/test-id'), {
             method: 'POST',
             headers,
             body: JSON.stringify({ keyId, type }),
@@ -380,7 +380,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     setTestResult(null);
     try {
       let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
-      let res = await fetch('/api/admin/api-keys/test', {
+      let res = await fetch(getApiUrl('/api/admin/api-keys/test'), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -396,7 +396,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
             'Authorization': `Bearer ${freshToken}`,
             'x-admin-email': adminEmail,
           };
-          res = await fetch('/api/admin/api-keys/test', {
+          res = await fetch(getApiUrl('/api/admin/api-keys/test'), {
             method: 'POST',
             headers,
             body: JSON.stringify({

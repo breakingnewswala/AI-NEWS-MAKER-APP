@@ -116,8 +116,12 @@ export function setAuthToken(token: string): void {
   try {
     if (token) {
       localStorage.setItem('reporter_auth_token', token.trim());
+      localStorage.setItem('auth_token', token.trim());
+      localStorage.setItem('token', token.trim());
     } else {
       localStorage.removeItem('reporter_auth_token');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('token');
     }
   } catch {}
 }
@@ -127,14 +131,36 @@ let ongoingAuthPromise: Promise<string> | null = null;
 /**
  * Enterprise Automatic Session Token Assurance:
  * Guarantees a cryptographically verified JWT / HMAC session token is active in localStorage.
- * Automatically exchanges active reporter/admin session with /api/auth/login if token is missing.
+ * Automatically exchanges active reporter/admin session with /api/auth/login if token is missing or expired.
  */
 export async function ensureAuthToken(forceRefresh = false): Promise<string> {
   if (typeof window === 'undefined') return '';
 
   const existing = getAuthToken();
   if (existing && !forceRefresh) {
-    return existing;
+    try {
+      const parts = existing.split('.');
+      if (parts.length === 3) {
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const jsonStr = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const payload = JSON.parse(jsonStr);
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          forceRefresh = true;
+        }
+      } else {
+        forceRefresh = true;
+      }
+    } catch {
+      forceRefresh = true;
+    }
+    if (!forceRefresh) {
+      return existing;
+    }
   }
 
   if (ongoingAuthPromise) {
