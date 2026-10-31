@@ -12994,7 +12994,7 @@ function loadApiKeysVault() {
   vaultLastLoadedAt = Date.now();
   return emptyVault;
 }
-function saveApiKeysVault(vault) {
+async function saveApiKeysVault(vault) {
   cachedApiKeysVault = vault;
   vaultLastLoadedAt = Date.now();
   let savedAtLeastOne = false;
@@ -13018,17 +13018,35 @@ function saveApiKeysVault(vault) {
       console.error(`Error saving vault to ${loc}:`, err.message);
     }
   }
+  let firestoreSuccess = false;
+  let firestoreError;
   try {
     const adapter = require_server_firestore_adapter();
     if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
-      adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
+      const writeRes = await adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
         ...vault,
         updatedAt: Date.now()
-      }).catch((e) => console.warn("[Firestore API Key Vault Sync Error]", e.message));
+      });
+      if (writeRes && writeRes.success) {
+        firestoreSuccess = true;
+      } else {
+        firestoreError = writeRes?.error || `Firestore write failed (HTTP ${writeRes?.statusCode})`;
+        console.error("[KeyPool Firestore Persistence Error]", firestoreError);
+      }
+    } else {
+      firestoreSuccess = savedAtLeastOne;
     }
-  } catch {
+  } catch (err) {
+    firestoreError = err.message;
+    console.error("[KeyPool Firestore Exception]", err.message);
   }
-  return savedAtLeastOne;
+  const isProduction = Boolean(process.env.K_SERVICE || process.env.NODE_ENV === "production" || process.env.USE_FIRESTORE === "true");
+  const overallSuccess = isProduction ? firestoreSuccess : firestoreSuccess || savedAtLeastOne;
+  return {
+    success: overallSuccess,
+    firestoreSuccess,
+    error: firestoreError
+  };
 }
 async function executeGeminiWithKeyPool(action, isVip = false) {
   const vault = await getOrLoadApiKeysVault();
@@ -13068,7 +13086,7 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
           paidKey.status = "disabled";
         }
         if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
-          saveApiKeysVault(vault);
+          saveApiKeysVault(vault).catch((e) => console.warn("[KeyPool Failover Sync]", e?.message));
         }
         console.warn(
           `[KeyPool VIP Failover] Dedicated Paid VIP Key failed (${classified.type}: ${classified.userFacingError}). Failover Policy: Routing VIP request to Free Pool.`
@@ -13122,7 +13140,7 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
           candidate.status = "disabled";
         }
         if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
-          saveApiKeysVault(vault);
+          saveApiKeysVault(vault).catch((e) => console.warn("[KeyPool Failover Sync]", e?.message));
         }
         console.warn(
           `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failover to next candidate...`
@@ -13217,25 +13235,36 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
   let initialHealth = "healthy";
   let initialLatency;
   let initialError;
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
   const testStart = Date.now();
-  try {
-    const testAi = new import_genai.GoogleGenAI({
-      apiKey: cleanKey,
-      httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
-    });
-    await testAi.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: "Say 'OK'"
-    });
-    initialLatency = Date.now() - testStart;
-  } catch (testErr) {
-    initialLatency = Date.now() - testStart;
-    const classified = classifyApiKeyError(testErr);
+  let testSuccess = false;
+  let lastTestErr = null;
+  for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
+    try {
+      const testAi = new import_genai.GoogleGenAI({
+        apiKey: cleanKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
+      });
+      await testAi.models.generateContent({
+        model: candidateModel,
+        contents: "Say 'OK'"
+      });
+      successfulModel = candidateModel;
+      testSuccess = true;
+      break;
+    } catch (testErr) {
+      lastTestErr = testErr;
+      const classified = classifyApiKeyError(testErr);
+      if (classified.type === "invalid") {
+        return res.status(400).json({ error: `\u0905\u092E\u093E\u0928\u094D\u092F API Key: ${classified.userFacingError}` });
+      }
+    }
+  }
+  initialLatency = Date.now() - testStart;
+  if (!testSuccess && lastTestErr) {
+    const classified = classifyApiKeyError(lastTestErr);
     initialHealth = classified.healthStatus;
     initialError = classified.userFacingError;
-    if (classified.type === "invalid") {
-      return res.status(400).json({ error: `\u0905\u092E\u093E\u0928\u094D\u092F API Key: ${classified.userFacingError}` });
-    }
   }
   const newKeyItem = {
     id: `free_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -13244,17 +13273,24 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     addedAt: Date.now(),
     status: "active",
     cooldownUntil: 0,
-    successCount: initialHealth === "healthy" ? 1 : 0,
-    errorCount: initialHealth !== "healthy" ? 1 : 0,
+    successCount: testSuccess ? 1 : 0,
+    errorCount: testSuccess ? 0 : 1,
     lastTestedAt: Date.now(),
     lastLatencyMs: initialLatency,
     lastHealthStatus: initialHealth,
     lastError: initialError,
     provider: "Google Gemini",
-    model: "gemini-3.8-flash"
+    model: successfulModel
   };
   vault.freeKeys.push(newKeyItem);
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    vault.freeKeys = vault.freeKeys.filter((k) => k.id !== newKeyItem.id);
+    cachedApiKeysVault = vault;
+    return res.status(500).json({
+      error: `\u092B\u093E\u092F\u0930\u0938\u094D\u091F\u094B\u0930 \u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u092E\u0947\u0902 API Key \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`
+    });
+  }
   const adminEmail2 = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail2, "ADD_FREE_API_KEY", newKeyItem.id, { label: newKeyItem.label, masked: maskApiKey(newKeyItem.key) });
   return res.json({
@@ -13276,11 +13312,17 @@ app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (
   const { id } = req.params;
   const vault = await getOrLoadApiKeysVault(true);
   const initialLen = vault.freeKeys.length;
+  const previousKeys = [...vault.freeKeys];
   vault.freeKeys = vault.freeKeys.filter((k) => k.id !== id);
   if (vault.freeKeys.length === initialLen) {
     return res.status(404).json({ error: "API Key \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940" });
   }
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    vault.freeKeys = previousKeys;
+    cachedApiKeysVault = vault;
+    return res.status(500).json({ error: `\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0938\u0947 API Key \u0939\u091F\u093E\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}` });
+  }
   const adminEmail2 = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail2, "DELETE_FREE_API_KEY", id);
   return res.json({ success: true, message: "\u092B\u094D\u0930\u0940 API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
@@ -13306,7 +13348,10 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
       lastHealthStatus: "healthy"
     };
   }
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    return res.status(500).json({ error: `\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u092E\u0947\u0902 \u092A\u0947\u0921 VIP Key \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}` });
+  }
   const adminEmail2 = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail2, "UPDATE_PAID_API_KEY", "paid_key", {
     configured: Boolean(vault.paidKey?.key),
@@ -13325,7 +13370,10 @@ app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req,
   }
   const vault = await getOrLoadApiKeysVault(true);
   vault.paidKey = null;
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    return res.status(500).json({ error: `\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0938\u0947 \u092A\u0947\u0921 VIP Key \u0939\u091F\u093E\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}` });
+  }
   const adminEmail2 = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail2, "DELETE_PAID_API_KEY", "paid_key");
   return res.json({ success: true, message: "\u092A\u0947\u0921 VIP API Key \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
@@ -13431,7 +13479,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     if ("successCount" in targetRef) {
       targetRef.successCount = (targetRef.successCount || 0) + 1;
     }
-    saveApiKeysVault(vault);
+    await saveApiKeysVault(vault);
     return res.json({
       success: true,
       message: `\u2705 API Key \u092A\u0942\u0930\u094D\u0923\u0924\u0903 \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0915\u093E\u0930\u094D\u092F\u0930\u0924 \u0939\u0948! \u091C\u0947\u092E\u093F\u0928\u0940 \u092E\u0949\u0921\u0932 (${successfulModel}) \u0938\u0947 \u0938\u092B\u0932 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 (${latency}ms)`,
@@ -13455,7 +13503,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     if ("errorCount" in targetRef) {
       targetRef.errorCount = (targetRef.errorCount || 0) + 1;
     }
-    saveApiKeysVault(vault);
+    await saveApiKeysVault(vault);
     return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
       error: `\u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0924\u094D\u0930\u0941\u091F\u093F: ${classified.userFacingError}`,

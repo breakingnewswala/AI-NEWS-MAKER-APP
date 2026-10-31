@@ -10683,7 +10683,7 @@ function loadApiKeysVault(): ApiKeysVault {
   return emptyVault;
 }
 
-function saveApiKeysVault(vault: ApiKeysVault): boolean {
+async function saveApiKeysVault(vault: ApiKeysVault): Promise<{ success: boolean; firestoreSuccess: boolean; error?: string }> {
   cachedApiKeysVault = vault;
   vaultLastLoadedAt = Date.now();
 
@@ -10711,18 +10711,40 @@ function saveApiKeysVault(vault: ApiKeysVault): boolean {
     }
   }
 
-  // Cloud Firestore Permanent Replication
+  // Cloud Firestore Permanent Authoritative Persistence
+  let firestoreSuccess = false;
+  let firestoreError: string | undefined;
+
   try {
     const adapter = require("./server_firestore_adapter.cjs");
     if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
-      adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
+      const writeRes = await adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
         ...vault,
         updatedAt: Date.now(),
-      }).catch((e: any) => console.warn("[Firestore API Key Vault Sync Error]", e.message));
+      });
+      if (writeRes && writeRes.success) {
+        firestoreSuccess = true;
+      } else {
+        firestoreError = writeRes?.error || `Firestore write failed (HTTP ${writeRes?.statusCode})`;
+        console.error("[KeyPool Firestore Persistence Error]", firestoreError);
+      }
+    } else {
+      // In local dev without Firestore, local disk save is sufficient
+      firestoreSuccess = savedAtLeastOne;
     }
-  } catch {}
+  } catch (err: any) {
+    firestoreError = err.message;
+    console.error("[KeyPool Firestore Exception]", err.message);
+  }
 
-  return savedAtLeastOne;
+  const isProduction = Boolean(process.env.K_SERVICE || process.env.NODE_ENV === "production" || process.env.USE_FIRESTORE === "true");
+  const overallSuccess = isProduction ? firestoreSuccess : (firestoreSuccess || savedAtLeastOne);
+
+  return {
+    success: overallSuccess,
+    firestoreSuccess,
+    error: firestoreError,
+  };
 }
 
 async function executeGeminiWithKeyPool<T>(
@@ -10776,7 +10798,7 @@ async function executeGeminiWithKeyPool<T>(
 
         // Only persist to Firestore & disk when key state changes (cooldown or disabled)
         if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
-          saveApiKeysVault(vault);
+          saveApiKeysVault(vault).catch((e: any) => console.warn("[KeyPool Failover Sync]", e?.message));
         }
 
         console.warn(
@@ -10842,7 +10864,7 @@ async function executeGeminiWithKeyPool<T>(
 
         // Only persist to Firestore & disk when key state changes (cooldown or disabled)
         if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
-          saveApiKeysVault(vault);
+          saveApiKeysVault(vault).catch((e: any) => console.warn("[KeyPool Failover Sync]", e?.message));
         }
 
         console.warn(
@@ -10949,30 +10971,43 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     return res.status(400).json({ error: "यह API Key पहले से ही फ्री पूल में मौजूद है।" });
   }
 
-  // Quick connectivity test
+  // Quick connectivity test across supported fallback models
   let initialHealth: "healthy" | "quota_exceeded" | "invalid" | "error" = "healthy";
   let initialLatency: number | undefined;
   let initialError: string | undefined;
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
 
   const testStart = Date.now();
-  try {
-    const testAi = new GoogleGenAI({
-      apiKey: cleanKey,
-      httpOptions: { headers: { "User-Agent": "aistudio-build-test" } },
-    });
-    await testAi.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: "Say 'OK'",
-    });
-    initialLatency = Date.now() - testStart;
-  } catch (testErr: any) {
-    initialLatency = Date.now() - testStart;
-    const classified = classifyApiKeyError(testErr);
+  let testSuccess = false;
+  let lastTestErr: any = null;
+
+  for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
+    try {
+      const testAi = new GoogleGenAI({
+        apiKey: cleanKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-build-test" } },
+      });
+      await testAi.models.generateContent({
+        model: candidateModel,
+        contents: "Say 'OK'",
+      });
+      successfulModel = candidateModel;
+      testSuccess = true;
+      break;
+    } catch (testErr: any) {
+      lastTestErr = testErr;
+      const classified = classifyApiKeyError(testErr);
+      if (classified.type === "invalid") {
+        return res.status(400).json({ error: `अमान्य API Key: ${classified.userFacingError}` });
+      }
+    }
+  }
+
+  initialLatency = Date.now() - testStart;
+  if (!testSuccess && lastTestErr) {
+    const classified = classifyApiKeyError(lastTestErr);
     initialHealth = classified.healthStatus;
     initialError = classified.userFacingError;
-    if (classified.type === "invalid") {
-      return res.status(400).json({ error: `अमान्य API Key: ${classified.userFacingError}` });
-    }
   }
 
   const newKeyItem: VaultFreeKey = {
@@ -10982,18 +11017,26 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     addedAt: Date.now(),
     status: "active",
     cooldownUntil: 0,
-    successCount: initialHealth === "healthy" ? 1 : 0,
-    errorCount: initialHealth !== "healthy" ? 1 : 0,
+    successCount: testSuccess ? 1 : 0,
+    errorCount: testSuccess ? 0 : 1,
     lastTestedAt: Date.now(),
     lastLatencyMs: initialLatency,
     lastHealthStatus: initialHealth,
     lastError: initialError,
     provider: "Google Gemini",
-    model: "gemini-3.8-flash",
+    model: successfulModel,
   };
 
   vault.freeKeys.push(newKeyItem);
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    // Rollback in-memory modification on persistence failure
+    vault.freeKeys = vault.freeKeys.filter((k) => k.id !== newKeyItem.id);
+    cachedApiKeysVault = vault;
+    return res.status(500).json({
+      error: `फायरस्टोर डेटाबेस में API Key सुरक्षित नहीं हो सकी: ${saveResult.error || "डेटाबेस त्रुटि"}। कृपया पुनः प्रयास करें।`,
+    });
+  }
 
   const adminEmail = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail, "ADD_FREE_API_KEY", newKeyItem.id, { label: newKeyItem.label, masked: maskApiKey(newKeyItem.key) });
@@ -11018,11 +11061,17 @@ app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (
   const { id } = req.params;
   const vault = await getOrLoadApiKeysVault(true);
   const initialLen = vault.freeKeys.length;
+  const previousKeys = [...vault.freeKeys];
   vault.freeKeys = vault.freeKeys.filter((k) => k.id !== id);
   if (vault.freeKeys.length === initialLen) {
     return res.status(404).json({ error: "API Key नहीं मिली" });
   }
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    vault.freeKeys = previousKeys;
+    cachedApiKeysVault = vault;
+    return res.status(500).json({ error: `डेटाबेस से API Key हटाने में त्रुटि: ${saveResult.error || "डेटाबेस त्रुटि"}` });
+  }
 
   const adminEmail = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail, "DELETE_FREE_API_KEY", id);
@@ -11054,7 +11103,10 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
     };
   }
 
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    return res.status(500).json({ error: `डेटाबेस में पेड VIP Key सुरक्षित नहीं हो सकी: ${saveResult.error || "डेटाबेस त्रुटि"}` });
+  }
 
   const adminEmail = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail, "UPDATE_PAID_API_KEY", "paid_key", {
@@ -11076,7 +11128,10 @@ app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req,
   }
   const vault = await getOrLoadApiKeysVault(true);
   vault.paidKey = null;
-  saveApiKeysVault(vault);
+  const saveResult = await saveApiKeysVault(vault);
+  if (!saveResult.success) {
+    return res.status(500).json({ error: `डेटाबेस से पेड VIP Key हटाने में त्रुटि: ${saveResult.error || "डेटाबेस त्रुटि"}` });
+  }
 
   const adminEmail = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail, "DELETE_PAID_API_KEY", "paid_key");
@@ -11192,7 +11247,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     if ("successCount" in targetRef) {
       targetRef.successCount = (targetRef.successCount || 0) + 1;
     }
-    saveApiKeysVault(vault);
+    await saveApiKeysVault(vault);
 
     return res.json({
       success: true,
@@ -11219,7 +11274,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     if ("errorCount" in targetRef) {
       targetRef.errorCount = (targetRef.errorCount || 0) + 1;
     }
-    saveApiKeysVault(vault);
+    await saveApiKeysVault(vault);
 
     return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
