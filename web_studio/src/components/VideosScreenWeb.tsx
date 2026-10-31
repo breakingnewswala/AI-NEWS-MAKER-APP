@@ -31,7 +31,7 @@ import {
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
-import { getApiBaseUrl, getApiUrl } from '../lib/apiConfig';
+import { getApiBaseUrl, getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 
 interface VideosScreenWebProps {
@@ -657,7 +657,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       const baseUrl = getApiBaseUrl();
       const res = await fetch(`${baseUrl}/api/generate-video-headlines`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           caption: adminCaption.trim(),
           title: adminTitle.trim(),

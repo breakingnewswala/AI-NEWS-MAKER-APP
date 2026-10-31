@@ -44,6 +44,40 @@ debug.keystore.base64
 *.log
 backups/
 
+# Local temporary uploads (Cloud Storage used for production media)
+uploads/
+**/uploads/
+public/uploads/
+web_studio/public/uploads/
+
+# Security: API Key Vault & Sensitive Database Stores
+*gemini_api_keys_vault*.json
+*api_keys_database*.json
+**/*gemini_api_keys_vault*.json
+**/*api_keys_database*.json
+public/*vault*
+public/*api_key*
+dist/*vault*
+dist/*api_key*
+
+# Sensitive User, Auth, Payment & Private Databases
+*auth_credentials*.json
+*users_master_database*.json
+*users_accounts_db*.json
+*payments_transactions_db*.json
+*package_coupons_db*.json
+*sub_users_db*.json
+*registered_users*.json
+*user_profiles_db*.json
+**/*auth_credentials*.json
+**/*users_master_database*.json
+**/*users_accounts_db*.json
+**/*payments_transactions_db*.json
+**/*package_coupons_db*.json
+**/*sub_users_db*.json
+**/*registered_users*.json
+**/*user_profiles_db*.json
+
 # Keep important config templates
 !.env.example
 

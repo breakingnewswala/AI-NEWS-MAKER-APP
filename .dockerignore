@@ -25,3 +25,25 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+
+# Security: Sensitive Key Vault Stores
+*gemini_api_keys_vault*.json
+*api_keys_database*.json
+**/*gemini_api_keys_vault*.json
+**/*api_keys_database*.json
+*auth_credentials*.json
+*users_master_database*.json
+*users_accounts_db*.json
+*payments_transactions_db*.json
+*package_coupons_db*.json
+*sub_users_db*.json
+*registered_users*.json
+*user_profiles_db*.json
+**/*auth_credentials*.json
+**/*users_master_database*.json
+**/*users_accounts_db*.json
+**/*payments_transactions_db*.json
+**/*package_coupons_db*.json
+**/*sub_users_db*.json
+**/*registered_users*.json
+**/*user_profiles_db*.json

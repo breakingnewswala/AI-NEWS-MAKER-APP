@@ -1,26 +1,26 @@
 [
   {
-    "id": "audit_1793378834911_2f2q",
-    "timestamp": 1793378834911,
-    "adminEmail": "admin",
+    "id": "audit_1793420189489_81yq",
+    "timestamp": 1793420189489,
+    "adminEmail": "breakingnewswala.com@gmail.com",
     "action": "REJECT_NEWS",
-    "target": "rss-src_aajtak_live-1793378834849",
+    "target": "rss-src_aajtak_live-1793420189458",
     "ip": "internal"
   },
   {
-    "id": "audit_1793378834911_2f2q",
-    "timestamp": 1793378834911,
-    "adminEmail": "admin",
+    "id": "audit_1793420189489_81yq",
+    "timestamp": 1793420189489,
+    "adminEmail": "breakingnewswala.com@gmail.com",
     "action": "REJECT_NEWS",
-    "target": "rss-src_aajtak_live-1793378834849",
+    "target": "rss-src_aajtak_live-1793420189458",
     "ip": "internal"
   },
   {
-    "id": "audit_1793378834882_3z12",
-    "timestamp": 1793378834882,
-    "adminEmail": "admin",
+    "id": "audit_1793420189470_6v3n",
+    "timestamp": 1793420189470,
+    "adminEmail": "breakingnewswala.com@gmail.com",
     "action": "APPROVE_NEWS",
-    "target": "rss-src_aajtak_live-1793378834849",
+    "target": "rss-src_aajtak_live-1793420189458",
     "ip": "internal"
   }
 ]

@@ -4434,6 +4434,7 @@ __export(server_exports, {
   generate4BalancedHeadlineOptions: () => generate4BalancedHeadlineOptions,
   generate5BalancedHeadlineOptions: () => generate5BalancedHeadlineOptions,
   generate5JournalisticHeadlines: () => generate5JournalisticHeadlines,
+  generateVideoHeadlinesInternal: () => generateVideoHeadlinesInternal,
   getAiFeaturesConfig: () => getAiFeaturesConfig,
   getHeadlineRegenCoinCost: () => getHeadlineRegenCoinCost,
   isRegenerateAllowed: () => isRegenerateAllowed,
@@ -4520,6 +4521,65 @@ app.use(import_express.default.json({
   }
 }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
+var SENSITIVE_STATIC_PATTERNS = [
+  /gemini_api_keys_vault/i,
+  /api_keys_database/i,
+  /api_keys_vault/i,
+  /auth_credentials/i,
+  /users_master_database/i,
+  /users_accounts_db/i,
+  /payments_transactions_db/i,
+  /package_coupons_db/i,
+  /registered_users\.json/i,
+  /server\.(ts|cjs|js)(\.map)?(?=[?#\s\/]|$)/i,
+  /\.env(?=[?#\s\.\/]|$)/i,
+  /\.git(?=[?#\s\/]|$)/i,
+  /\.bak(?=[?#\s\.\/]|$)/i,
+  /\.sqlite(?=[?#\s\/]|$)/i
+];
+app.use((req, res, next) => {
+  const rawPath = String(req.path || "");
+  const rawOriginal = String(req.originalUrl || req.url || "");
+  const normalizeUrlString = (str) => {
+    let curr = str;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const decoded = decodeURIComponent(curr);
+        if (decoded === curr) break;
+        curr = decoded;
+      } catch {
+        break;
+      }
+    }
+    return curr.replace(/\\/g, "/");
+  };
+  const normPath = normalizeUrlString(rawPath);
+  const normOriginal = normalizeUrlString(rawOriginal);
+  const pathOnly = normPath.split("?")[0].split("#")[0].toLowerCase();
+  const origPathOnly = normOriginal.split("?")[0].split("#")[0].toLowerCase();
+  const fullTarget = `${normPath} ${normOriginal} ${pathOnly} ${origPathOnly}`.toLowerCase();
+  if (normPath.startsWith("/api/") && !normOriginal.includes("..")) {
+    let hasSensitiveMatch = false;
+    for (const pattern of SENSITIVE_STATIC_PATTERNS) {
+      if (pattern.test(pathOnly)) {
+        hasSensitiveMatch = true;
+        break;
+      }
+    }
+    if (!hasSensitiveMatch) {
+      return next();
+    }
+  }
+  for (const pattern of SENSITIVE_STATIC_PATTERNS) {
+    if (pattern.test(fullTarget) || pattern.test(pathOnly) || pattern.test(origPathOnly)) {
+      return res.status(404).json({
+        success: false,
+        error: "Not Found"
+      });
+    }
+  }
+  next();
+});
 var publicUploadsDir = import_path.default.join(process.cwd(), "public", "uploads");
 if (!import_fs.default.existsSync(publicUploadsDir)) {
   import_fs.default.mkdirSync(publicUploadsDir, { recursive: true });
@@ -4672,6 +4732,11 @@ async function resolveAuthenticatedUser(req) {
     return verified;
   }
   return null;
+}
+function extractAdminEmail(req) {
+  const user = req.user || getAuthenticatedUser(req);
+  if (user && user.email) return user.email.toLowerCase().trim();
+  return "";
 }
 function isAuthorizedMasterAdmin(req) {
   const user = req.user || getAuthenticatedUser(req);
@@ -4913,6 +4978,22 @@ function checkRateLimit(ip, limit = 60, windowMs = 6e4) {
   }
   entry.count++;
   return { allowed: true, remaining: limit - entry.count };
+}
+function apiRateLimiter(limit = 60, windowMs = 6e4) {
+  return (req, res, next) => {
+    const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown-ip";
+    const check = checkRateLimit(String(ip), limit, windowMs);
+    res.setHeader("X-RateLimit-Limit", limit);
+    res.setHeader("X-RateLimit-Remaining", check.remaining);
+    if (!check.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: "Too many requests. Please slow down and try again later.",
+        retryAfterMs: 6e4
+      });
+    }
+    next();
+  };
 }
 var AUDIT_LOG_FILE = import_path.default.join(process.cwd(), "admin_audit_log.json");
 function loadAuditLogs() {
@@ -9632,10 +9713,8 @@ function cleanAndCraftHindiHeadline(rawHeadline, articleText) {
 }
 async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, sourceUrl) {
   const fallback = cleanAndCraftHindiHeadline(rawTitle, rawDesc);
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey && geminiKey !== "MY_GEMINI_API_KEY" && geminiKey.length > 5) {
-    try {
-      const ai = getGeminiClient();
+  try {
+    const parsed = await executeGeminiWithKeyPool(async (ai) => {
       const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920, \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0914\u0930 \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0939\u093F\u0902\u0926\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
 \u0928\u0940\u091A\u0947 \u0926\u0940 \u0917\u0908 \u0916\u092C\u0930 \u0915\u0947 \u0935\u093F\u0935\u0930\u0923 \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0915\u093E \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0947\u0902 \u0914\u0930 \u090F\u0915 \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u0938\u094D\u092A\u0937\u094D\u091F, \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (Headline) \u0935 2 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0938\u093E\u0930 (Summary) \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
 
@@ -9656,18 +9735,19 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
       const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.headline && parsed.headline.trim().length > 5) {
-          return {
-            title: parsed.headline.trim(),
-            summary: parsed.summary?.trim() || fallback.summary,
-            location: parsed.location?.trim() || fallback.location,
-            categoryName: sourceCategory || "\u0926\u0947\u0936"
-          };
-        }
+        return JSON.parse(jsonMatch[0]);
       }
-    } catch {
+      return null;
+    });
+    if (parsed && parsed.headline && parsed.headline.trim().length > 5) {
+      return {
+        title: parsed.headline.trim(),
+        summary: parsed.summary?.trim() || fallback.summary,
+        location: parsed.location?.trim() || fallback.location,
+        categoryName: sourceCategory || "\u0926\u0947\u0936"
+      };
     }
+  } catch {
   }
   return {
     title: fallback.title,
@@ -12358,23 +12438,6 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
   }
 });
 var aiClient = null;
-function getGeminiClient() {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("GEMINI_API_KEY is not set in environment variables.");
-    }
-    aiClient = new import_genai.GoogleGenAI({
-      apiKey: apiKey || "",
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build"
-        }
-      }
-    });
-  }
-  return aiClient;
-}
 var openaiClient = null;
 function getOpenAIClient() {
   const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || "";
@@ -12610,7 +12673,7 @@ function resolveUserTierAndRole(req) {
     const clean = identifier.toString().toLowerCase().trim();
     if (isProtectedAdminAccount(clean)) {
       if (isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req)) {
-        return { tier: explicitTier || "superadmin", role: "superadmin" };
+        return { tier: "superadmin", role: "superadmin" };
       }
     }
     const users = loadUsersMasterDatabase();
@@ -12619,13 +12682,22 @@ function resolveUserTierAndRole(req) {
     );
     if (match) {
       const role = (match.role || "reporter").toLowerCase().trim();
-      const tier = explicitTier || (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
+      let tier = (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
+      const trialFields = computeTrialFields(match);
+      if (trialFields.isTrialExpired && !trialFields.hasActivePaidPlan && role !== "admin" && role !== "superadmin") {
+        tier = "basic";
+      }
       return { tier, role };
     }
   }
-  const reqTier = explicitTier || (req.user?.tier || req.user?.subscriptionTier || "basic").toString().toLowerCase().trim();
-  const reqRole = (req.user?.role || req.body?.role || "reporter").toString().toLowerCase().trim();
-  return { tier: reqTier, role: reqRole };
+  const authUser = req.user;
+  if (authUser && authUser.role) {
+    return {
+      tier: (authUser.tier || authUser.subscriptionTier || (authUser.role === "admin" || authUser.role === "superadmin" ? authUser.role : "basic")).toString().toLowerCase().trim(),
+      role: authUser.role.toString().toLowerCase().trim()
+    };
+  }
+  return { tier: "basic", role: "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
   "gemini-2.5-flash",
@@ -12690,35 +12762,197 @@ function maskApiKey(key) {
   if (trimmed.length <= 10) return `${trimmed.slice(0, 3)}...${trimmed.slice(-2)}`;
   return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
 }
-var freeKeyRoundRobinIndex = 0;
+function classifyApiKeyError(err) {
+  const errMsg = String(err?.message || err?.error || err || "").toLowerCase();
+  const status = err?.status || err?.statusCode || 0;
+  if (status === 402 || errMsg.includes("402") || errMsg.includes("payment required") || errMsg.includes("depleted") || errMsg.includes("prepayment credits") || errMsg.includes("insufficient credits") || errMsg.includes("billing")) {
+    return {
+      type: "billing",
+      isRetryable: true,
+      cooldownMs: 15 * 60 * 1e3,
+      // 15 mins cooldown
+      userFacingError: "\u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (402 Payment Required / Depleted Credits)",
+      healthStatus: "quota_exceeded",
+      shouldDisableKey: false
+    };
+  }
+  if (status === 429 || errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("rate limit") || errMsg.includes("too many requests") || errMsg.includes("quota")) {
+    return {
+      type: "quota",
+      isRetryable: true,
+      cooldownMs: 5 * 60 * 1e3,
+      // 5 mins cooldown
+      userFacingError: "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exhausted)",
+      healthStatus: "quota_exceeded",
+      shouldDisableKey: false
+    };
+  }
+  const hasConfirmedInvalidCredential = errMsg.includes("api_key_invalid") || errMsg.includes("api key not valid") || errMsg.includes("invalid api key") || errMsg.includes("api_key_expired") || errMsg.includes("api key expired") || errMsg.includes("credential_invalid") || (status === 400 || status === 401 || status === 403) && (errMsg.includes("api key") || errMsg.includes("apikey") || errMsg.includes("unauthenticated") || errMsg.includes("invalid authentication"));
+  if (hasConfirmedInvalidCredential) {
+    return {
+      type: "invalid",
+      isRetryable: true,
+      cooldownMs: 60 * 60 * 1e3,
+      // 1 hour cooldown / disabled
+      userFacingError: "\u0905\u092E\u093E\u0928\u094D\u092F API Key (Confirmed Invalid Authentication Credential)",
+      healthStatus: "invalid",
+      shouldDisableKey: true
+    };
+  }
+  if (status === 400 || errMsg.includes("bad request") || errMsg.includes("invalid argument") || errMsg.includes("not supported") || errMsg.includes("unsupported model") || errMsg.includes("unknown name") || errMsg.includes("safety")) {
+    return {
+      type: "bad_request",
+      isRetryable: false,
+      cooldownMs: 0,
+      // No cooldown for the key itself
+      userFacingError: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0928\u0941\u0930\u094B\u0927 \u092F\u093E \u0905\u0938\u092E\u0930\u094D\u0925\u093F\u0924 \u092E\u0949\u0921\u0932 (400 Bad Request / Unsupported Model)",
+      healthStatus: "healthy",
+      shouldDisableKey: false
+    };
+  }
+  if (status === 500 || status === 502 || status === 503 || status === 504 || errMsg.includes("500") || errMsg.includes("502") || errMsg.includes("503") || errMsg.includes("504") || errMsg.includes("overloaded") || errMsg.includes("service unavailable") || errMsg.includes("bad gateway")) {
+    return {
+      type: "server",
+      isRetryable: true,
+      cooldownMs: 30 * 1e3,
+      // 30 seconds temporary cooldown
+      userFacingError: "\u0938\u0930\u094D\u0935\u0930 \u0932\u094B\u0921 \u092F\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0924\u094D\u0930\u0941\u091F\u093F (503 / Service Unavailable)",
+      healthStatus: "error",
+      shouldDisableKey: false
+    };
+  }
+  if (errMsg.includes("timeout") || errMsg.includes("econnreset") || errMsg.includes("etimedout") || errMsg.includes("fetch failed") || errMsg.includes("socket hang up")) {
+    return {
+      type: "network",
+      isRetryable: true,
+      cooldownMs: 20 * 1e3,
+      // 20s cooldown
+      userFacingError: "\u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u091F\u093E\u0907\u092E\u0906\u0909\u091F (Network Timeout)",
+      healthStatus: "error",
+      shouldDisableKey: false
+    };
+  }
+  return {
+    type: "unknown",
+    isRetryable: true,
+    cooldownMs: 30 * 1e3,
+    userFacingError: cleanErrorMessage(err),
+    healthStatus: "error",
+    shouldDisableKey: false
+  };
+}
+function isUserVipEligible(req) {
+  try {
+    const authUser = req.user || getAuthenticatedUser(req);
+    let email = authUser?.email || "";
+    let userId = authUser?.userId || "";
+    if (!email) {
+      email = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    }
+    if (!userId) {
+      userId = (req.headers["x-user-id"] || "").toString().trim();
+    }
+    if (!email && !userId) {
+      return false;
+    }
+    const users = loadUsersMasterDatabase();
+    const cleanEmail = email.toLowerCase().trim();
+    const user = users.find(
+      (u) => cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail || cleanEmail && u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "") || userId && u.userId && u.userId === userId
+    );
+    if (!user) {
+      return false;
+    }
+    if (user.isBlocked) {
+      return false;
+    }
+    const trialFields = computeTrialFields(user);
+    if (trialFields.isTrialExpired && !trialFields.hasActivePaidPlan) {
+      return false;
+    }
+    const tier = String(user.tier || "").toLowerCase().trim();
+    const planName = String(user.planName || "").toUpperCase().trim();
+    if (tier === "pro" || tier === "professional" || planName.includes("PRO")) {
+      return false;
+    }
+    if (tier === "basic" || planName.includes("BASIC") || tier === "advanced" || planName.includes("ADVANCE")) {
+      return false;
+    }
+    const isVipDesk = tier === "ultra" || tier === "vip_desk" || tier === "vip-desk" || planName === "VIP DESK" || planName === "VIP_DESK" || planName === "ULTRA";
+    return Boolean(isVipDesk);
+  } catch (err) {
+    console.warn("[isUserVipEligible Error]", err);
+    return false;
+  }
+}
+var freeKeyRoundRobinIndex = Math.floor(Math.random() * 100);
+var cachedApiKeysVault = null;
+var vaultLastLoadedAt = 0;
+async function getOrLoadApiKeysVault(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedApiKeysVault && now - vaultLastLoadedAt < 1e4) {
+    return cachedApiKeysVault;
+  }
+  try {
+    const adapter = require_server_firestore_adapter();
+    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
+      const doc = await adapter.firestoreReadDoc("system_config", "gemini_api_keys_vault");
+      if (doc && doc.success && doc.data) {
+        const firestoreVault = {
+          freeKeys: Array.isArray(doc.data.freeKeys) ? doc.data.freeKeys : [],
+          paidKey: doc.data.paidKey || null,
+          vipRoutingEnabled: doc.data.vipRoutingEnabled !== false
+        };
+        cachedApiKeysVault = firestoreVault;
+        vaultLastLoadedAt = now;
+        return cachedApiKeysVault;
+      }
+    }
+  } catch (firestoreErr) {
+    console.warn("[KeyPool] Firestore vault read error, using cache/file:", firestoreErr?.message);
+  }
+  cachedApiKeysVault = loadApiKeysVault();
+  vaultLastLoadedAt = now;
+  return cachedApiKeysVault;
+}
 function loadApiKeysVault() {
-  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
-  for (const filename of fileCandidates) {
+  if (cachedApiKeysVault) {
+    return cachedApiKeysVault;
+  }
+  const secureServerCandidates = [
+    import_path.default.join(process.cwd(), "gemini_api_keys_vault.json"),
+    import_path.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json"),
+    import_path.default.join(process.cwd(), "api_keys_database.json")
+  ];
+  for (const loc of secureServerCandidates) {
     try {
-      const locations = resolveAllDatabaseLocations(filename);
-      for (const loc of locations) {
-        if (import_fs.default.existsSync(loc)) {
-          const raw = import_fs.default.readFileSync(loc, "utf-8");
-          const parsed = JSON.parse(raw);
-          if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
-            const vaultData = {
-              freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
-              paidKey: parsed?.paidKey || null,
-              vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
-            };
-            if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
-              return vaultData;
-            }
+      const normalized = loc.replace(/\\/g, "/").toLowerCase();
+      if (normalized.includes("/public/") || normalized.includes("/dist/") || normalized.includes("/assets/")) {
+        continue;
+      }
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
+          const vaultData = {
+            freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+            paidKey: parsed?.paidKey || null,
+            vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
+          };
+          if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
+            cachedApiKeysVault = vaultData;
+            vaultLastLoadedAt = Date.now();
+            return vaultData;
           }
         }
       }
     } catch (err) {
-      console.error(`Error loading ${filename}:`, err.message);
+      console.error(`Error loading vault from ${loc}:`, err.message);
     }
   }
   const envKey = (process.env.GEMINI_API_KEY || "").trim();
   if (envKey && envKey.length >= 15 && envKey !== "MY_GEMINI_API_KEY") {
-    return {
+    const fallbackVault = {
       freeKeys: [
         {
           id: "free_env_primary",
@@ -12737,31 +12971,41 @@ function loadApiKeysVault() {
       paidKey: null,
       vipRoutingEnabled: true
     };
+    cachedApiKeysVault = fallbackVault;
+    vaultLastLoadedAt = Date.now();
+    return fallbackVault;
   }
-  return {
+  const emptyVault = {
     freeKeys: [],
     paidKey: null,
     vipRoutingEnabled: true
   };
+  cachedApiKeysVault = emptyVault;
+  vaultLastLoadedAt = Date.now();
+  return emptyVault;
 }
 function saveApiKeysVault(vault) {
+  cachedApiKeysVault = vault;
+  vaultLastLoadedAt = Date.now();
   let savedAtLeastOne = false;
-  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
-  for (const filename of fileCandidates) {
+  const secureServerTargets = [
+    import_path.default.join(process.cwd(), "gemini_api_keys_vault.json"),
+    import_path.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json")
+  ];
+  for (const loc of secureServerTargets) {
     try {
-      const locations = resolveAllDatabaseLocations(filename);
-      for (const loc of locations) {
-        try {
-          const dir = import_path.default.dirname(loc);
-          if (import_fs.default.existsSync(dir)) {
-            import_fs.default.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
-            savedAtLeastOne = true;
-          }
-        } catch {
-        }
+      const normalized = loc.replace(/\\/g, "/").toLowerCase();
+      if (normalized.includes("/public/") || normalized.includes("/dist/") || normalized.includes("/assets/")) {
+        console.warn(`[Security Alert] Blocked attempt to write vault to public location: ${loc}`);
+        continue;
+      }
+      const dir = import_path.default.dirname(loc);
+      if (import_fs.default.existsSync(dir)) {
+        import_fs.default.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
+        savedAtLeastOne = true;
       }
     } catch (err) {
-      console.error(`Error saving ${filename}:`, err.message);
+      console.error(`Error saving vault to ${loc}:`, err.message);
     }
   }
   try {
@@ -12777,66 +13021,131 @@ function saveApiKeysVault(vault) {
   return savedAtLeastOne;
 }
 async function executeGeminiWithKeyPool(action, isVip = false) {
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault();
   const now = Date.now();
-  if (isVip && vault.vipRoutingEnabled && vault.paidKey?.key && vault.paidKey.status === "active") {
-    try {
-      const ai = new import_genai.GoogleGenAI({
-        apiKey: vault.paidKey.key.trim(),
-        httpOptions: { headers: { "User-Agent": "aistudio-build-vip" } }
-      });
-      return await action(ai);
-    } catch (vipErr) {
-      console.warn("[KeyPool] VIP key error, falling back to free pool:", vipErr?.message);
-    }
-  }
-  const activeFreeKeys = vault.freeKeys.filter(
-    (k) => k.status === "active" && (!k.cooldownUntil || k.cooldownUntil <= now)
-  );
-  if (activeFreeKeys.length > 0) {
-    const startIndex = freeKeyRoundRobinIndex % activeFreeKeys.length;
-    freeKeyRoundRobinIndex = (freeKeyRoundRobinIndex + 1) % activeFreeKeys.length;
-    let lastFreeErr = null;
-    for (let i = 0; i < activeFreeKeys.length; i++) {
-      const candidate = activeFreeKeys[(startIndex + i) % activeFreeKeys.length];
+  const attemptedKeys = /* @__PURE__ */ new Set();
+  if (isVip && vault.vipRoutingEnabled) {
+    const paidKey = vault.paidKey;
+    const isPaidConfigured = Boolean(paidKey?.key && paidKey.key.trim().length >= 15);
+    const isPaidHealthy = isPaidConfigured && paidKey.status === "active" && (!paidKey.cooldownUntil || paidKey.cooldownUntil <= now);
+    if (isPaidHealthy) {
+      const cleanKey = paidKey.key.trim();
+      attemptedKeys.add(cleanKey);
+      const start = Date.now();
       try {
         const ai = new import_genai.GoogleGenAI({
-          apiKey: candidate.key.trim(),
+          apiKey: cleanKey,
+          httpOptions: { headers: { "User-Agent": "aistudio-build-vip-pool" } }
+        });
+        const result = await action(ai);
+        paidKey.successCount = (paidKey.successCount || 0) + 1;
+        paidKey.lastTestedAt = Date.now();
+        paidKey.lastLatencyMs = Date.now() - start;
+        paidKey.lastHealthStatus = "healthy";
+        paidKey.lastError = void 0;
+        return result;
+      } catch (vipErr) {
+        const classified = classifyApiKeyError(vipErr);
+        paidKey.errorCount = (paidKey.errorCount || 0) + 1;
+        paidKey.lastTestedAt = Date.now();
+        paidKey.lastLatencyMs = Date.now() - start;
+        paidKey.lastHealthStatus = classified.healthStatus;
+        paidKey.lastError = classified.userFacingError;
+        if (classified.cooldownMs > 0) {
+          paidKey.cooldownUntil = Date.now() + classified.cooldownMs;
+        }
+        if (classified.shouldDisableKey) {
+          paidKey.status = "disabled";
+        }
+        if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
+          saveApiKeysVault(vault);
+        }
+        console.warn(
+          `[KeyPool VIP Failover] Dedicated Paid VIP Key failed (${classified.type}: ${classified.userFacingError}). Failover Policy: Routing VIP request to Free Pool.`
+        );
+      }
+    } else {
+      console.warn(
+        `[KeyPool VIP Policy] Paid VIP Key is ${!isPaidConfigured ? "not configured" : "in cooldown"}. Routing VIP request to Free Pool with priority.`
+      );
+    }
+  }
+  const candidateKeys = vault.freeKeys.filter((k) => {
+    if (k.status !== "active") return false;
+    if (k.cooldownUntil && k.cooldownUntil > now) return false;
+    return true;
+  });
+  if (candidateKeys.length > 0) {
+    const startIndex = freeKeyRoundRobinIndex % candidateKeys.length;
+    freeKeyRoundRobinIndex = (freeKeyRoundRobinIndex + 1) % candidateKeys.length;
+    let lastFreeErr = null;
+    for (let i = 0; i < candidateKeys.length; i++) {
+      const candidate = candidateKeys[(startIndex + i) % candidateKeys.length];
+      const cleanKey = (candidate.key || "").trim();
+      if (!cleanKey || attemptedKeys.has(cleanKey)) continue;
+      attemptedKeys.add(cleanKey);
+      const start = Date.now();
+      try {
+        const ai = new import_genai.GoogleGenAI({
+          apiKey: cleanKey,
           httpOptions: { headers: { "User-Agent": "aistudio-build-free-pool" } }
         });
         const result = await action(ai);
         candidate.successCount = (candidate.successCount || 0) + 1;
-        saveApiKeysVault(vault);
+        candidate.lastTestedAt = Date.now();
+        candidate.lastLatencyMs = Date.now() - start;
+        candidate.lastHealthStatus = "healthy";
+        candidate.lastError = void 0;
         return result;
       } catch (keyErr) {
         lastFreeErr = keyErr;
-        const errMsg = String(keyErr?.message || keyErr || "").toLowerCase();
+        const classified = classifyApiKeyError(keyErr);
         candidate.errorCount = (candidate.errorCount || 0) + 1;
-        if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
-          console.warn(`[KeyPool] Free key "${candidate.label}" (${candidate.id}) hit 429 limit; cooldown 5 mins.`);
-          candidate.cooldownUntil = Date.now() + 5 * 60 * 1e3;
-          saveApiKeysVault(vault);
-        } else {
-          console.warn(`[KeyPool] Free key "${candidate.label}" failed:`, errMsg.slice(0, 80));
+        candidate.lastTestedAt = Date.now();
+        candidate.lastLatencyMs = Date.now() - start;
+        candidate.lastHealthStatus = classified.healthStatus;
+        candidate.lastError = classified.userFacingError;
+        if (classified.cooldownMs > 0) {
+          candidate.cooldownUntil = Date.now() + classified.cooldownMs;
         }
+        if (classified.shouldDisableKey) {
+          candidate.status = "disabled";
+        }
+        if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
+          saveApiKeysVault(vault);
+        }
+        console.warn(
+          `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failover to next candidate...`
+        );
       }
     }
   }
   const fallbackEnvKey = (process.env.GEMINI_API_KEY || "").trim();
-  if (fallbackEnvKey && fallbackEnvKey !== "MY_GEMINI_API_KEY") {
-    const ai = new import_genai.GoogleGenAI({
-      apiKey: fallbackEnvKey,
-      httpOptions: { headers: { "User-Agent": "aistudio-build-fallback" } }
-    });
-    return await action(ai);
+  if (fallbackEnvKey && fallbackEnvKey.length >= 15 && fallbackEnvKey !== "MY_GEMINI_API_KEY" && !attemptedKeys.has(fallbackEnvKey)) {
+    attemptedKeys.add(fallbackEnvKey);
+    try {
+      const ai = new import_genai.GoogleGenAI({
+        apiKey: fallbackEnvKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-build-fallback" } }
+      });
+      return await action(ai);
+    } catch (envErr) {
+      console.warn("[KeyPool] System environment key fallback failed:", envErr?.message?.slice(0, 100));
+    }
   }
-  throw new Error("No operational Gemini API keys available in pool or environment");
+  const totalAttempted = attemptedKeys.size;
+  const exhaustionErr = new Error(
+    `ALL_API_KEYS_EXHAUSTED: All Gemini API keys (${totalAttempted} attempted) are currently exhausted, in cooldown, or unconfigured.`
+  );
+  exhaustionErr.code = "ALL_API_KEYS_EXHAUSTED";
+  exhaustionErr.attemptedCount = totalAttempted;
+  throw exhaustionErr;
 }
-app.get("/api/admin/api-keys", (req, res) => {
+app.get("/api/admin/api-keys", async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0915\u0940\u091C\u093C \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   const now = Date.now();
   const maskedFreeKeys = vault.freeKeys.map((k) => ({
     id: k.id,
@@ -12891,10 +13200,14 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F API Key\u0964 \u0915\u0943\u092A\u092F\u093E \u092E\u093E\u0928\u094D\u092F Google Gemini API Key \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
   }
   const cleanKey = apiKey.trim();
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   if (vault.freeKeys.some((k) => k.key === cleanKey)) {
     return res.status(400).json({ error: "\u092F\u0939 API Key \u092A\u0939\u0932\u0947 \u0938\u0947 \u0939\u0940 \u092B\u094D\u0930\u0940 \u092A\u0942\u0932 \u092E\u0947\u0902 \u092E\u094C\u091C\u0942\u0926 \u0939\u0948\u0964" });
   }
+  let initialHealth = "healthy";
+  let initialLatency;
+  let initialError;
+  const testStart = Date.now();
   try {
     const testAi = new import_genai.GoogleGenAI({
       apiKey: cleanKey,
@@ -12904,10 +13217,14 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
       model: "gemini-3.8-flash",
       contents: "Say 'OK'"
     });
+    initialLatency = Date.now() - testStart;
   } catch (testErr) {
-    console.warn("Key test warning:", testErr?.message);
-    if (testErr?.status === 400 || testErr?.message?.includes("API_KEY_INVALID")) {
-      return res.status(400).json({ error: `\u0905\u092E\u093E\u0928\u094D\u092F API Key: ${testErr?.message || "Google \u0926\u094D\u0935\u093E\u0930\u093E \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924"}` });
+    initialLatency = Date.now() - testStart;
+    const classified = classifyApiKeyError(testErr);
+    initialHealth = classified.healthStatus;
+    initialError = classified.userFacingError;
+    if (classified.type === "invalid") {
+      return res.status(400).json({ error: `\u0905\u092E\u093E\u0928\u094D\u092F API Key: ${classified.userFacingError}` });
     }
   }
   const newKeyItem = {
@@ -12917,11 +13234,19 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     addedAt: Date.now(),
     status: "active",
     cooldownUntil: 0,
-    successCount: 0,
-    errorCount: 0
+    successCount: initialHealth === "healthy" ? 1 : 0,
+    errorCount: initialHealth !== "healthy" ? 1 : 0,
+    lastTestedAt: Date.now(),
+    lastLatencyMs: initialLatency,
+    lastHealthStatus: initialHealth,
+    lastError: initialError,
+    provider: "Google Gemini",
+    model: "gemini-3.8-flash"
   };
   vault.freeKeys.push(newKeyItem);
   saveApiKeysVault(vault);
+  const adminEmail2 = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail2, "ADD_FREE_API_KEY", newKeyItem.id, { label: newKeyItem.label, masked: maskApiKey(newKeyItem.key) });
   return res.json({
     success: true,
     message: "\u2705 \u0928\u0908 \u092B\u094D\u0930\u0940 Gemini API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092B\u094D\u0930\u0940 \u092A\u0942\u0932 \u092E\u0947\u0902 \u091C\u094B\u0921\u093C \u0926\u0940 \u0917\u0908!",
@@ -12929,22 +13254,25 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
       id: newKeyItem.id,
       label: newKeyItem.label,
       maskedKey: maskApiKey(newKeyItem.key),
-      status: newKeyItem.status
+      status: newKeyItem.status,
+      healthStatus: newKeyItem.lastHealthStatus
     }
   });
 });
-app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, (req, res) => {
+app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
   const { id } = req.params;
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   const initialLen = vault.freeKeys.length;
   vault.freeKeys = vault.freeKeys.filter((k) => k.id !== id);
   if (vault.freeKeys.length === initialLen) {
     return res.status(404).json({ error: "API Key \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940" });
   }
   saveApiKeysVault(vault);
+  const adminEmail2 = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail2, "DELETE_FREE_API_KEY", id);
   return res.json({ success: true, message: "\u092B\u094D\u0930\u0940 API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
 });
 app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
@@ -12952,7 +13280,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
   const { apiKey, label, vipRoutingEnabled } = req.body;
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   if (typeof vipRoutingEnabled === "boolean") {
     vault.vipRoutingEnabled = vipRoutingEnabled;
   }
@@ -12962,10 +13290,18 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
       key: cleanKey,
       label: label && typeof label === "string" && label.trim() ? label.trim() : "Paid VIP Dedicated Key",
       updatedAt: Date.now(),
-      status: "active"
+      status: "active",
+      provider: "Google Gemini",
+      model: "gemini-3.8-flash",
+      lastHealthStatus: "healthy"
     };
   }
   saveApiKeysVault(vault);
+  const adminEmail2 = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail2, "UPDATE_PAID_API_KEY", "paid_key", {
+    configured: Boolean(vault.paidKey?.key),
+    vipRoutingEnabled: vault.vipRoutingEnabled
+  });
   return res.json({
     success: true,
     message: "\u2705 \u092A\u0947\u0921 VIP API Key \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0939\u094B \u0917\u0908\u0902!",
@@ -12973,13 +13309,15 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
     paidKeyConfigured: Boolean(vault.paidKey?.key)
   });
 });
-app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, (req, res) => {
+app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   vault.paidKey = null;
   saveApiKeysVault(vault);
+  const adminEmail2 = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail2, "DELETE_PAID_API_KEY", "paid_key");
   return res.json({ success: true, message: "\u092A\u0947\u0921 VIP API Key \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
 });
 app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, res) => {
@@ -13008,9 +13346,11 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
       text: result.text || "OK"
     });
   } catch (err) {
-    return res.status(500).json({
+    const classified = classifyApiKeyError(err);
+    return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
-      error: `\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F: ${cleanErrorMessage(err)}`
+      error: `\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F: ${classified.userFacingError}`,
+      classification: classified.type
     });
   }
 });
@@ -13019,7 +13359,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }
   const { keyId, type } = req.body || {};
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   let targetKeyStr = "";
   let targetRef = null;
   if (type === "paid") {
@@ -13063,8 +13403,8 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
         break;
       } catch (mErr) {
         lastTestErr = mErr;
-        const errMsg = String(mErr?.message || mErr || "").toLowerCase();
-        if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota") || errMsg.includes("402") || errMsg.includes("depleted") || errMsg.includes("payment") || errMsg.includes("api_key_invalid") || mErr?.status === 400) {
+        const classified = classifyApiKeyError(mErr);
+        if (classified.type === "quota" || classified.type === "billing" || classified.type === "invalid") {
           break;
         }
       }
@@ -13094,37 +13434,21 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     });
   } catch (err) {
     const latency = Date.now() - start;
-    const errMsg = String(err?.message || err || "").toLowerCase();
+    const classified = classifyApiKeyError(err);
     targetRef.lastTestedAt = Date.now();
     targetRef.lastLatencyMs = latency;
-    let userFacingMsg = `\u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F: ${cleanErrorMessage(err)}`;
-    if (errMsg.includes("402") || errMsg.includes("depleted") || errMsg.includes("payment required") || errMsg.includes("billing")) {
-      targetRef.lastHealthStatus = "quota_exceeded";
-      targetRef.lastError = "\u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (402 Payment Required / Depleted Credits)";
-      userFacingMsg = "\u26A0\uFE0F API \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (402 Depleted Credits)\u0964 \u0915\u0943\u092A\u092F\u093E \u0917\u0942\u0917\u0932 \u090F\u0906\u0908 \u0915\u0902\u0938\u094B\u0932 \u092E\u0947\u0902 \u092C\u093F\u0932\u093F\u0902\u0917 \u091C\u093E\u0901\u091A\u0947\u0902 \u092F\u093E \u0926\u0942\u0938\u0930\u0940 \u0915\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964";
-    } else if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
-      targetRef.lastHealthStatus = "quota_exceeded";
-      targetRef.lastError = "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exhausted)";
-      userFacingMsg = "\u26A0\uFE0F API \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exceeded)\u0964 \u0915\u0940-\u0930\u094B\u091F\u0947\u0936\u0928 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0905\u0917\u0932\u0940 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0940 \u0909\u092A\u092F\u094B\u0917 \u0939\u094B\u0917\u0940\u0964";
-    } else if (errMsg.includes("api_key_invalid") || err?.status === 400) {
-      targetRef.lastHealthStatus = "invalid";
-      targetRef.lastError = "\u0905\u092E\u093E\u0928\u094D\u092F API Key (400 Invalid Authentication)";
-      userFacingMsg = "\u274C \u0905\u092E\u093E\u0928\u094D\u092F API Key\u0964 Google Gemini \u0926\u094D\u0935\u093E\u0930\u093E \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924\u0964";
-    } else if (errMsg.includes("timeout") || errMsg.includes("503") || errMsg.includes("unavailable")) {
-      targetRef.lastHealthStatus = "rate_limited";
-      targetRef.lastError = "\u0938\u0930\u094D\u0935\u0930 \u0932\u094B\u0921 \u092F\u093E \u091F\u093E\u0907\u092E\u0906\u0909\u091F (503 / Timeout)";
-      userFacingMsg = "\u26A0\uFE0F \u091C\u0947\u092E\u093F\u0928\u0940 \u0938\u0930\u094D\u0935\u0930 \u0932\u094B\u0921/\u091F\u093E\u0907\u092E\u0906\u0909\u091F\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0915\u094D\u0937\u0923 \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964";
-    } else {
-      targetRef.lastHealthStatus = "error";
-      targetRef.lastError = cleanErrorMessage(err);
+    targetRef.lastHealthStatus = classified.healthStatus;
+    targetRef.lastError = classified.userFacingError;
+    if (classified.type === "invalid") {
+      targetRef.status = "disabled";
     }
     if ("errorCount" in targetRef) {
       targetRef.errorCount = (targetRef.errorCount || 0) + 1;
     }
     saveApiKeysVault(vault);
-    return res.status(targetRef.lastHealthStatus === "quota_exceeded" ? 429 : 500).json({
+    return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
-      error: userFacingMsg,
+      error: `\u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0924\u094D\u0930\u0941\u091F\u093F: ${classified.userFacingError}`,
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
       model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
       latencyMs: latency,
@@ -14750,12 +15074,6 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
     if (!imageBase64) {
       return res.status(400).json({ error: "Missing imageBase64 data" });
     }
-    const ai = getGeminiClient();
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY is missing. Please set it in Settings > Secrets."
-      });
-    }
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
     const effectiveTemplateId = template_id || "graphic_001";
     const tplConfig = getTemplateConfig(effectiveTemplateId);
@@ -14793,45 +15111,48 @@ ${userContext ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0928\u093F\u0930\
         }
       ]
     };
-    const response = await generateWithFallbackAndRetry(
-      ai,
-      DEFAULT_FALLBACK_MODELS,
-      {
-        contents,
-        config: {
-          systemInstruction: "You are a professional Hindi news editor. Strip PR flattery and honorifics. Output valid JSON.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: import_genai.Type.OBJECT,
-            properties: {
-              headline: { type: import_genai.Type.STRING },
-              highlightWords: {
-                type: import_genai.Type.ARRAY,
-                items: { type: import_genai.Type.STRING }
+    const isVip = isUserVipEligible(req);
+    const parsedData = await executeGeminiWithKeyPool(async (ai) => {
+      const response = await generateWithFallbackAndRetry(
+        ai,
+        DEFAULT_FALLBACK_MODELS,
+        {
+          contents,
+          config: {
+            systemInstruction: "You are a professional Hindi news editor. Strip PR flattery and honorifics. Output valid JSON.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: import_genai.Type.OBJECT,
+              properties: {
+                headline: { type: import_genai.Type.STRING },
+                highlightWords: {
+                  type: import_genai.Type.ARRAY,
+                  items: { type: import_genai.Type.STRING }
+                },
+                formattedHeadline: { type: import_genai.Type.STRING },
+                location: { type: import_genai.Type.STRING },
+                summary: { type: import_genai.Type.STRING },
+                category: { type: import_genai.Type.STRING },
+                hasPerson: { type: import_genai.Type.BOOLEAN },
+                description: { type: import_genai.Type.STRING },
+                isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
+                speakerName: { type: import_genai.Type.STRING },
+                speakerTitle: { type: import_genai.Type.STRING }
               },
-              formattedHeadline: { type: import_genai.Type.STRING },
-              location: { type: import_genai.Type.STRING },
-              summary: { type: import_genai.Type.STRING },
-              category: { type: import_genai.Type.STRING },
-              hasPerson: { type: import_genai.Type.BOOLEAN },
-              description: { type: import_genai.Type.STRING },
-              isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
-              speakerName: { type: import_genai.Type.STRING },
-              speakerTitle: { type: import_genai.Type.STRING }
-            },
-            required: [
-              "headline",
-              "highlightWords",
-              "formattedHeadline",
-              "location",
-              "summary"
-            ]
+              required: [
+                "headline",
+                "highlightWords",
+                "formattedHeadline",
+                "location",
+                "summary"
+              ]
+            }
           }
         }
-      }
-    );
-    const textOutput = response.text || "{}";
-    const parsedData = JSON.parse(textOutput);
+      );
+      const textOutput = response.text || "{}";
+      return JSON.parse(textOutput);
+    }, isVip);
     if (parsedData.headline) parsedData.headline = sanitizePressNoteFlattery(parsedData.headline);
     if (parsedData.formattedHeadline) parsedData.formattedHeadline = sanitizePressNoteFlattery(parsedData.formattedHeadline);
     if (parsedData.summary) parsedData.summary = sanitizePressNoteFlattery(parsedData.summary);
@@ -15354,7 +15675,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     const requestedNewsId = String(req.body.newsId || "").trim();
     const requestedProvider = (req.body.aiProvider || "gemini").toLowerCase();
     const userResolution = resolveUserTierAndRole(req);
-    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
+    const userTier = (userResolution.tier || "basic").toString().toLowerCase().trim();
     if (requestedProvider === "openai") {
       if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
         return res.status(403).json({
@@ -15568,9 +15889,7 @@ ${rawLink}` : rawLink;
       }
       return result;
     };
-    const isVipDeskUser = Boolean(
-      userResolution.role === "admin" || userResolution.role === "superadmin" || ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userTier.toLowerCase().trim()) || String(req.body?.userTier || "").toLowerCase().includes("vip")
-    );
+    const isVipDeskUser = isUserVipEligible(req);
     const runGemini = async () => {
       const clientPassedKey = (req.body.geminiApiKey || "").trim();
       if (clientPassedKey && clientPassedKey !== "MY_GEMINI_API_KEY") {
@@ -15978,7 +16297,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       geminiApiKey = ""
     } = req.body;
     const userResolution = resolveUserTierAndRole(req);
-    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
+    const userTier = (userResolution.tier || "basic").toString().toLowerCase().trim();
     const requestedProvider = (aiProvider || "gemini").toLowerCase();
     if (requestedProvider === "openai") {
       if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
@@ -16114,9 +16433,7 @@ JSON Output Schema:
         return Array.isArray(parsed.headlineOptions) ? parsed.headlineOptions : [];
       }
       const userResolution2 = resolveUserTierAndRole(req);
-      const isVipUser = Boolean(
-        userResolution2.role === "admin" || userResolution2.role === "superadmin" || ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userResolution2.tier.toLowerCase().trim()) || String(req.body?.userTier || "").toLowerCase().includes("vip")
-      );
+      const isVipUser = isUserVipEligible(req);
       return await executeGeminiWithKeyPool(async (ai) => {
         const response = await generateWithFallbackAndRetry(
           ai,
@@ -16565,21 +16882,23 @@ epaperCity, epaperKicker, epaperHeadline, epaperSubHeadline, epaperByline, epape
         console.warn("OpenAI epaper parsing error, falling back to Gemini:", openAiErr?.message);
       }
     }
-    if (!parsedData && process.env.GEMINI_API_KEY) {
+    if (!parsedData) {
       try {
-        const ai = getGeminiClient();
-        const response = await generateWithFallbackAndRetry(
-          ai,
-          DEFAULT_FALLBACK_MODELS,
-          {
-            contents: systemPrompt,
-            config: {
-              responseMimeType: "application/json",
-              temperature: 0.5
+        const isVip = isUserVipEligible(req);
+        parsedData = await executeGeminiWithKeyPool(async (ai) => {
+          const response = await generateWithFallbackAndRetry(
+            ai,
+            DEFAULT_FALLBACK_MODELS,
+            {
+              contents: systemPrompt,
+              config: {
+                responseMimeType: "application/json",
+                temperature: 0.5
+              }
             }
-          }
-        );
-        parsedData = JSON.parse(response.text || "{}");
+          );
+          return JSON.parse(response.text || "{}");
+        }, isVip);
       } catch (geminiError) {
         console.warn("Gemini epaper parsing error:", geminiError?.message?.slice(0, 100));
       }
@@ -16671,7 +16990,7 @@ app.post("/api/generate-ai-image", enforceUserAccessMiddleware, async (req, res)
     if (!headline && !customPrompt) {
       return res.status(400).json({ error: "Headline or prompt is required" });
     }
-    const ai = getGeminiClient();
+    const isVip = isUserVipEligible(req);
     const perspectiveAngles = [
       "authentic journalistic press photography, standard documentary eye-level angle, realistic Indian press coverage, natural daylight",
       "wide-angle documentary press shot, complete environmental context, authentic news reportage, sharp journalistic realism",
@@ -16681,8 +17000,8 @@ app.post("/api/generate-ai-image", enforceUserAccessMiddleware, async (req, res)
     const variationAngle = perspectiveAngles[Math.abs(Number(variation) || 0) % perspectiveAngles.length];
     let imagePrompt = customPrompt;
     if (!imagePrompt || imagePrompt.trim().length === 0) {
-      if (process.env.GEMINI_API_KEY) {
-        try {
+      try {
+        imagePrompt = await executeGeminiWithKeyPool(async (ai) => {
           const promptGenResponse = await generateWithFallbackAndRetry(
             ai,
             DEFAULT_FALLBACK_MODELS,
@@ -16698,11 +17017,12 @@ Requirements:
 Return ONLY the English prompt string.`
             }
           );
-          imagePrompt = promptGenResponse.text?.trim() || `Realistic journalistic press news photography depicting: ${headline}, ${variationAngle}, high detail, 4k`;
-        } catch (pErr) {
-          imagePrompt = `Realistic journalistic press news photography depicting: ${headline}, ${variationAngle}, high detail, 4k`;
-        }
-      } else {
+          return promptGenResponse.text?.trim() || "";
+        }, isVip);
+      } catch (pErr) {
+        imagePrompt = "";
+      }
+      if (!imagePrompt) {
         imagePrompt = `Realistic journalistic press news photography depicting: ${headline}, ${variationAngle}, high detail, 4k`;
       }
     }
@@ -16750,37 +17070,11 @@ Return ONLY the English prompt string.`
       if (aspectRatio === "1:1") mappedAspectRatio = "1:1";
       else if (aspectRatio === "9:16") mappedAspectRatio = "9:16";
       else if (aspectRatio === "16:9") mappedAspectRatio = "16:9";
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const imgResponse = await ai.models.generateContent({
-            model: "gemini-3.1-flash-image",
-            contents: {
-              parts: [
-                {
-                  text: `${imagePrompt}${PRESS_PHOTO_STYLE_SUFFIX}`
-                }
-              ]
-            },
-            config: {
-              imageConfig: {
-                aspectRatio: mappedAspectRatio
-              }
-            }
-          });
-          if (imgResponse.candidates && imgResponse.candidates[0]?.content?.parts) {
-            for (const part of imgResponse.candidates[0].content.parts) {
-              if (part.inlineData) {
-                imageBase64 = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                isAiGenerated = true;
-                break;
-              }
-            }
-          }
-        } catch (primaryErr) {
-          console.warn("gemini-3.1-flash-image failed:", primaryErr?.message?.slice(0, 100));
+      try {
+        imageBase64 = await executeGeminiWithKeyPool(async (ai) => {
           try {
-            const imgFallback = await ai.models.generateContent({
-              model: "gemini-3.1-flash-lite-image",
+            const imgResponse = await ai.models.generateContent({
+              model: "gemini-3.1-flash-image",
               contents: {
                 parts: [
                   {
@@ -16794,19 +17088,45 @@ Return ONLY the English prompt string.`
                 }
               }
             });
-            if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
-              for (const part of imgFallback.candidates[0].content.parts) {
+            if (imgResponse.candidates && imgResponse.candidates[0]?.content?.parts) {
+              for (const part of imgResponse.candidates[0].content.parts) {
                 if (part.inlineData) {
-                  imageBase64 = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                  isAiGenerated = true;
-                  break;
+                  return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
                 }
               }
             }
-          } catch (secondaryErr) {
-            console.warn("gemini-3.1-flash-lite-image also failed:", secondaryErr?.message?.slice(0, 100));
+          } catch (primaryErr) {
+            console.warn("gemini-3.1-flash-image failed:", primaryErr?.message?.slice(0, 100));
           }
+          const imgFallback = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite-image",
+            contents: {
+              parts: [
+                {
+                  text: `${imagePrompt}${PRESS_PHOTO_STYLE_SUFFIX}`
+                }
+              ]
+            },
+            config: {
+              imageConfig: {
+                aspectRatio: mappedAspectRatio
+              }
+            }
+          });
+          if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
+            for (const part of imgFallback.candidates[0].content.parts) {
+              if (part.inlineData) {
+                return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
+              }
+            }
+          }
+          return "";
+        }, isVip);
+        if (imageBase64) {
+          isAiGenerated = true;
         }
+      } catch (geminiImgErr) {
+        console.warn("Gemini image generation pool error:", geminiImgErr?.message?.slice(0, 100));
       }
     }
     if (!imageBase64) {
@@ -16932,18 +17252,20 @@ ${modeGuidance}
       }
     } else {
       try {
-        const ai = getGeminiClient();
-        const response = await generateWithFallbackAndRetry(
-          ai,
-          DEFAULT_FALLBACK_MODELS,
-          {
-            contents: prompt,
-            config: {
-              systemInstruction
+        const isVip = isUserVipEligible(req);
+        caption = await executeGeminiWithKeyPool(async (ai) => {
+          const response = await generateWithFallbackAndRetry(
+            ai,
+            DEFAULT_FALLBACK_MODELS,
+            {
+              contents: prompt,
+              config: {
+                systemInstruction
+              }
             }
-          }
-        );
-        caption = (response.text || "").trim();
+          );
+          return (response.text || "").trim();
+        }, isVip);
       } catch (capErr) {
       }
     }
@@ -16983,17 +17305,11 @@ function createVideoHeadlineVariantsFallback(caption, title) {
   }
   return options.slice(0, 4);
 }
-app.post("/api/generate-video-headlines", async (req, res) => {
+async function generateVideoHeadlinesInternal(caption, title, ratio = "9:16", isVip = false) {
+  const fallbackHeadlines = createVideoHeadlineVariantsFallback(caption, title);
   try {
-    const { caption = "", title = "", ratio = "9:16" } = req.body || {};
-    if (!caption && !title) {
-      return res.status(400).json({ error: "\u0915\u0948\u092A\u094D\u0936\u0928 \u092F\u093E \u0936\u0940\u0930\u094D\u0937\u0915 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
-    }
-    const fallbackHeadlines = createVideoHeadlineVariantsFallback(caption, title);
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const ai = getGeminiClient();
-        const prompt = `\u0935\u0940\u0921\u093F\u092F\u094B \u0938\u0902\u0926\u0930\u094D\u092D (Caption) \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 4 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902:
+    const parsed = await executeGeminiWithKeyPool(async (ai) => {
+      const prompt = `\u0935\u0940\u0921\u093F\u092F\u094B \u0938\u0902\u0926\u0930\u094D\u092D (Caption) \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 4 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902:
 
 \u0935\u0940\u0921\u093F\u092F\u094B \u0936\u0940\u0930\u094D\u0937\u0915: "${title}"
 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u0902\u0926\u0930\u094D\u092D/\u0915\u0948\u092A\u094D\u0936\u0928: "${caption}"
@@ -17008,32 +17324,47 @@ app.post("/api/generate-video-headlines", async (req, res) => {
     "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 4"
   ]
 }`;
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), 3500));
-        const response = await Promise.race([
-          generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json"
-            }
-          }),
-          timeoutPromise
-        ]);
-        const raw = response.text?.trim() || "";
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed?.headlines) && parsed.headlines.length >= 4) {
-          const valid = parsed.headlines.slice(0, 4).map((h) => String(h || "").trim()).filter(Boolean);
-          if (valid.length === 4) {
-            return res.json({ success: true, headlines: valid, source: "ai" });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), 4500));
+      const response = await Promise.race([
+        generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json"
           }
-        }
-      } catch (aiErr) {
-        console.warn("Gemini video headline generator busy, using journalistic editorial fallback:", aiErr?.message?.slice(0, 80));
+        }),
+        timeoutPromise
+      ]);
+      const raw = response.text?.trim() || "";
+      return JSON.parse(raw);
+    }, isVip);
+    if (Array.isArray(parsed?.headlines) && parsed.headlines.length >= 4) {
+      const valid = parsed.headlines.slice(0, 4).map((h) => String(h || "").trim()).filter(Boolean);
+      if (valid.length === 4) {
+        return { success: true, headlines: valid, source: "ai" };
       }
     }
-    return res.json({ success: true, headlines: fallbackHeadlines, source: "fallback" });
+  } catch (aiErr) {
+    console.warn("Gemini video headline generator busy, using journalistic editorial fallback:", aiErr?.message?.slice(0, 80));
+  }
+  return { success: true, headlines: fallbackHeadlines, source: "fallback" };
+}
+app.post("/api/generate-video-headlines", apiRateLimiter(20, 6e4), requireAuthMiddleware, enforceUserAccessMiddleware, async (req, res) => {
+  try {
+    const { caption = "", title = "", ratio = "9:16" } = req.body || {};
+    const cleanCaption = String(caption || "").trim();
+    const cleanTitle = String(title || "").trim();
+    if (!cleanCaption && !cleanTitle) {
+      return res.status(400).json({ success: false, error: "\u0915\u0948\u092A\u094D\u0936\u0928 \u092F\u093E \u0936\u0940\u0930\u094D\u0937\u0915 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    if (cleanCaption.length > 2e3 || cleanTitle.length > 500) {
+      return res.status(400).json({ success: false, error: "\u0907\u0928\u092A\u0941\u091F \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0940 \u0932\u0902\u092C\u093E\u0908 \u0905\u0928\u0941\u092E\u0924 \u0938\u0940\u092E\u093E \u0938\u0947 \u0905\u0927\u093F\u0915 \u0939\u0948\u0964" });
+    }
+    const isVip = isUserVipEligible(req);
+    const result = await generateVideoHeadlinesInternal(cleanCaption, cleanTitle, String(ratio || "9:16"), isVip);
+    return res.json(result);
   } catch (err) {
     console.error("Error in /api/generate-video-headlines:", err);
-    return res.status(500).json({ error: cleanErrorMessage(err) });
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
 app.post("/api/admin/generate-video-headlines", requireAdminMiddleware, async (req, res) => {
@@ -17085,7 +17416,7 @@ app.post("/api/generate-morning-jacket", enforceUserAccessMiddleware, async (req
       const randIdx = Math.floor(Math.random() * defaultMorningTopics.length);
       activePrompt = defaultMorningTopics[randIdx];
     }
-    const ai = getGeminiClient();
+    const isVip = isUserVipEligible(req);
     const isImageChangeRequest = action === "change_image" || /इमेज\s*(बदलें|बदलो|change|हटाओ|गलत|दूसरी)/i.test(activePrompt) || /फोटो\s*(बदलें|बदलो|change|हटाओ|गलत|दूसरी)/i.test(activePrompt) || /बैकग्राउंड\s*(बदलें|बदलो|change|नया)/i.test(activePrompt);
     let contentData = null;
     if (isImageChangeRequest && currentCard?.headline) {
@@ -17133,17 +17464,19 @@ Strictly return valid JSON object matching these keys.`;
           console.warn("OpenAI morning generation error, falling back to Gemini:", openAiErr?.message);
         }
       }
-      if (!contentData && process.env.GEMINI_API_KEY) {
+      if (!contentData) {
         try {
-          const geminiRes = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-            contents: systemInstruction,
-            config: {
-              responseMimeType: "application/json",
-              temperature: 0.6
-            }
-          });
-          const raw = geminiRes.text?.trim() || "{}";
-          contentData = JSON.parse(raw);
+          contentData = await executeGeminiWithKeyPool(async (ai) => {
+            const geminiRes = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
+              contents: systemInstruction,
+              config: {
+                responseMimeType: "application/json",
+                temperature: 0.6
+              }
+            });
+            const raw = geminiRes.text?.trim() || "{}";
+            return JSON.parse(raw);
+          }, isVip);
         } catch (geminiErr) {
           console.log("[Morning AI] Gemini busy or quota limit, activating serene editorial fallback.");
         }
@@ -17171,40 +17504,15 @@ Strictly return valid JSON object matching these keys.`;
     const imagePrompt = contentData.imagePrompt || `Aesthetic soft light-colored morning background wallpaper for: ${contentData.headline || activePrompt}. ${angleText}. Soft pastel morning lighting, gentle ambient glow, bright airy daylight, clean light background, no dark shadows, strictly NO text, NO words, NO letters, NO watermark, 4k`;
     if (generateImage) {
       console.log("Generating Morning Jacket AI image with prompt:", imagePrompt, "variation:", variation);
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const imgRes = await ai.models.generateContent({
-            model: "gemini-3.1-flash-image",
-            contents: {
-              parts: [
-                {
-                  text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, pale soft colors, bright clean lighting, strictly no text, no words, no letters, no logos.`
-                }
-              ]
-            },
-            config: {
-              imageConfig: {
-                aspectRatio: "3:4"
-              }
-            }
-          });
-          if (imgRes.candidates && imgRes.candidates[0]?.content?.parts) {
-            for (const part of imgRes.candidates[0].content.parts) {
-              if (part.inlineData) {
-                generatedImageUrl = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                break;
-              }
-            }
-          }
-        } catch (imgErr) {
-          console.warn("Morning gemini-3.1-flash-image error:", imgErr?.message?.slice(0, 100));
+      try {
+        generatedImageUrl = await executeGeminiWithKeyPool(async (ai) => {
           try {
-            const imgFallback = await ai.models.generateContent({
-              model: "gemini-3.1-flash-lite-image",
+            const imgRes = await ai.models.generateContent({
+              model: "gemini-3.1-flash-image",
               contents: {
                 parts: [
                   {
-                    text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, strictly no text, no letters.`
+                    text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, pale soft colors, bright clean lighting, strictly no text, no words, no letters, no logos.`
                   }
                 ]
               },
@@ -17214,18 +17522,42 @@ Strictly return valid JSON object matching these keys.`;
                 }
               }
             });
-            if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
-              for (const part of imgFallback.candidates[0].content.parts) {
+            if (imgRes.candidates && imgRes.candidates[0]?.content?.parts) {
+              for (const part of imgRes.candidates[0].content.parts) {
                 if (part.inlineData) {
-                  generatedImageUrl = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                  break;
+                  return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
                 }
               }
             }
-          } catch (liteErr) {
-            console.warn("gemini-3.1-flash-lite-image also busy:", liteErr?.message?.slice(0, 100));
+          } catch (imgErr) {
+            console.warn("Morning gemini-3.1-flash-image error:", imgErr?.message?.slice(0, 100));
           }
-        }
+          const imgFallback = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite-image",
+            contents: {
+              parts: [
+                {
+                  text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, strictly no text, no letters.`
+                }
+              ]
+            },
+            config: {
+              imageConfig: {
+                aspectRatio: "3:4"
+              }
+            }
+          });
+          if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
+            for (const part of imgFallback.candidates[0].content.parts) {
+              if (part.inlineData) {
+                return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
+              }
+            }
+          }
+          return "";
+        }, isVip);
+      } catch (poolErr) {
+        console.warn("Morning Jacket image generation error:", poolErr?.message?.slice(0, 100));
       }
       if (!generatedImageUrl && aiProvider === "openai") {
         try {
@@ -19098,6 +19430,11 @@ async function startServer() {
   }
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`AI News Maker server running on http://0.0.0.0:${PORT}`);
+    getOrLoadApiKeysVault().then((vault) => {
+      const freeCount = Array.isArray(vault.freeKeys) ? vault.freeKeys.length : 0;
+      const hasPaid = Boolean(vault.paidKey && vault.paidKey.key);
+      console.log(`[API Key Vault] Pre-warmed cache: ${freeCount} Free keys, Paid key: ${hasPaid ? "configured" : "none"}`);
+    }).catch((e) => console.warn("[API Key Vault] Startup cache pre-warm error:", e.message));
   });
   serverInstance.on("error", (err) => {
     console.error("Server listen error:", err.message);
@@ -19137,6 +19474,7 @@ startServer().catch((err) => {
   generate4BalancedHeadlineOptions,
   generate5BalancedHeadlineOptions,
   generate5JournalisticHeadlines,
+  generateVideoHeadlinesInternal,
   getAiFeaturesConfig,
   getHeadlineRegenCoinCost,
   isRegenerateAllowed,

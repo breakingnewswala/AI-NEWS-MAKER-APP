@@ -98,14 +98,35 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
 
   const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
 
+  const getAuthHeaders = (extra: Record<string, string> = {}) => {
+    let token = '';
+    try {
+      token = localStorage.getItem('reporter_auth_token') || currentUser?.token || '';
+      if (!token) {
+        const sess = localStorage.getItem('reporter_auth_session');
+        if (sess) {
+          const parsed = JSON.parse(sess);
+          token = parsed?.token || '';
+        }
+      }
+    } catch {}
+
+    const headers: Record<string, string> = {
+      'x-admin-email': adminEmail,
+      ...extra,
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  };
+
   const fetchKeysData = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
     try {
       const res = await fetch('/api/admin/api-keys', {
-        headers: {
-          'x-admin-email': adminEmail,
-        },
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         const json = await res.json();
@@ -141,10 +162,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       const res = await fetch('/api/admin/api-keys/free', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-email': adminEmail,
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           apiKey: newFreeKey.trim(),
           label: newFreeLabel.trim() || undefined,
@@ -173,9 +191,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       const res = await fetch(`/api/admin/api-keys/free/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: {
-          'x-admin-email': adminEmail,
-        },
+        headers: getAuthHeaders(),
       });
       const resData = await res.json();
       if (res.ok && resData.success) {
@@ -195,10 +211,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       const res = await fetch('/api/admin/api-keys/paid', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-email': adminEmail,
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           apiKey: paidKeyInput.trim() || undefined,
           label: paidKeyLabel.trim() || undefined,
@@ -227,9 +240,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       const res = await fetch('/api/admin/api-keys/paid', {
         method: 'DELETE',
-        headers: {
-          'x-admin-email': adminEmail,
-        },
+        headers: getAuthHeaders(),
       });
       const resData = await res.json();
       if (res.ok && resData.success) {
@@ -250,10 +261,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       const res = await fetch('/api/admin/api-keys/test-id', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-email': adminEmail,
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ keyId, type }),
       });
       const resData = await res.json();
@@ -281,10 +289,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       const res = await fetch('/api/admin/api-keys/test', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-email': adminEmail,
-        },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           apiKey: testKeyInput.trim(),
         }),

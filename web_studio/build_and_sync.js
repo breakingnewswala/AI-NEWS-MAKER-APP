@@ -96,10 +96,29 @@ targets.forEach((target) => {
       });
     }
 
+    const SENSITIVE_BUILD_EXCLUSIONS = new Set([
+      'gemini_api_keys_vault.json',
+      'api_keys_database.json',
+      'auth_credentials_db.json',
+      'payments_transactions_db.json',
+      'package_coupons_db.json',
+      'users_master_database.json',
+      'users_accounts_db.json',
+      'user_profiles_db.json',
+      'sub_users_db.json',
+      'registered_users.json',
+      'server.cjs.map',
+    ]);
+
     fs.cpSync(distDir, target, {
       recursive: true,
       force: true,
       filter: (src) => {
+        const base = path.basename(src).toLowerCase();
+        // Security check: Never copy sensitive files into distribution targets
+        if (SENSITIVE_BUILD_EXCLUSIONS.has(base) || base.includes('vault') || base.includes('api_key')) {
+          return false;
+        }
         // Do not copy apk into Android assets dir
         if (target.includes('assets') && src.endsWith('.apk')) return false;
         return true;
@@ -167,8 +186,9 @@ if (fs.existsSync(dbPath)) {
     }
   }
 
-  // 5. Synchronize all persistent backend databases across bundles
-  function syncDatabaseFile(filename) {
+  // 5. Synchronize databases with strict security boundary separation
+  // 5a. Public databases (safe for web distribution)
+  function syncPublicDatabaseFile(filename) {
     const rootFile = path.resolve(rootDir, filename);
     const studioFile = path.resolve(__dirname, filename);
     let content = null;
@@ -194,24 +214,52 @@ if (fs.existsSync(dbPath)) {
           fs.writeFileSync(path.join(target, filename), content, 'utf-8');
         } catch {}
       });
-      console.log(` ✅ Synchronized ${filename} across all bundles`);
+      console.log(` ✅ Synchronized public ${filename} across all bundles`);
     }
   }
 
-  syncDatabaseFile('videos_database.json');
-  syncDatabaseFile('deleted_videos_ids.json');
-  syncDatabaseFile('users_master_database.json');
-  syncDatabaseFile('users_accounts_db.json');
-  syncDatabaseFile('user_profiles_db.json');
-  syncDatabaseFile('sub_users_db.json');
-  syncDatabaseFile('categories_database.json');
-  syncDatabaseFile('approved_editorial_database.json');
-  syncDatabaseFile('payments_transactions_db.json');
-  syncDatabaseFile('auth_credentials_db.json');
-  syncDatabaseFile('gemini_api_keys_vault.json');
-  syncDatabaseFile('api_keys_database.json');
-  syncDatabaseFile('analytics_database.json');
-  syncDatabaseFile('package_coupons_db.json');
+  // 5b. Server-only databases (NEVER copied to public, dist, or Android assets!)
+  function syncServerOnlyDatabaseFile(filename) {
+    const rootFile = path.resolve(rootDir, filename);
+    const studioFile = path.resolve(__dirname, filename);
+    let content = null;
+
+    if (fs.existsSync(rootFile)) {
+      try {
+        const c = fs.readFileSync(rootFile, 'utf-8').replace(/^\uFEFF/, '').trim();
+        if (c && c.length >= 2) content = c;
+      } catch {}
+    }
+    if (!content && fs.existsSync(studioFile)) {
+      try {
+        const c = fs.readFileSync(studioFile, 'utf-8').replace(/^\uFEFF/, '').trim();
+        if (c && c.length >= 2) content = c;
+      } catch {}
+    }
+
+    if (content) {
+      try { fs.writeFileSync(rootFile, content, 'utf-8'); } catch {}
+      try { fs.writeFileSync(studioFile, content, 'utf-8'); } catch {}
+      console.log(` 🔒 Synchronized server-only ${filename} (excluded from public assets)`);
+    }
+  }
+
+  // Public asset datasets
+  syncPublicDatabaseFile('videos_database.json');
+  syncPublicDatabaseFile('deleted_videos_ids.json');
+  syncPublicDatabaseFile('categories_database.json');
+  syncPublicDatabaseFile('approved_editorial_database.json');
+
+  // Server-only datasets (STRICTLY excluded from public/dist targets)
+  syncServerOnlyDatabaseFile('users_master_database.json');
+  syncServerOnlyDatabaseFile('users_accounts_db.json');
+  syncServerOnlyDatabaseFile('user_profiles_db.json');
+  syncServerOnlyDatabaseFile('sub_users_db.json');
+  syncServerOnlyDatabaseFile('payments_transactions_db.json');
+  syncServerOnlyDatabaseFile('auth_credentials_db.json');
+  syncServerOnlyDatabaseFile('analytics_database.json');
+  syncServerOnlyDatabaseFile('package_coupons_db.json');
+  // NOTE: gemini_api_keys_vault.json and api_keys_database.json are EXCLUDED entirely from public sync!
 
   // 6. Ensure persistent uploads directory is synced
   const rootUploads = path.resolve(rootDir, 'uploads');
@@ -276,6 +324,46 @@ ${itemsXml}
   } catch (rssErr) {
     console.warn(' ⚠️ Could not generate rss.xml:', rssErr.message);
   }
+  // 8. SECURITY PURGE: Guarantee no sensitive vault, key, or credential files exist in any distribution or public directory
+  console.log('\n🔒 Step 8: Executing security purge of sensitive files in public and distribution directories...');
+  const purgeDirectories = [
+    path.resolve(rootDir, 'public'),
+    path.resolve(rootDir, 'dist'),
+    path.resolve(rootDir, 'app/src/main/assets/news_studio'),
+    path.resolve(__dirname, 'public'),
+    path.resolve(__dirname, 'dist'),
+  ];
+  const sensitivePurgeFilenames = [
+    'gemini_api_keys_vault.json',
+    'api_keys_database.json',
+    'auth_credentials_db.json',
+    'payments_transactions_db.json',
+    'package_coupons_db.json',
+    'users_master_database.json',
+    'users_accounts_db.json',
+    'user_profiles_db.json',
+    'sub_users_db.json',
+    'registered_users.json',
+    'server.cjs.map',
+  ];
+  let purgedCount = 0;
+  purgeDirectories.forEach((dir) => {
+    if (fs.existsSync(dir)) {
+      sensitivePurgeFilenames.forEach((fname) => {
+        const p = path.join(dir, fname);
+        if (fs.existsSync(p)) {
+          try {
+            fs.unlinkSync(p);
+            purgedCount++;
+            console.log(`  🔒 Purged sensitive asset: ${path.relative(rootDir, p)}`);
+          } catch (e) {
+            console.warn(`  ⚠️ Could not purge ${p}:`, e.message);
+          }
+        }
+      });
+    }
+  });
+  console.log(` 🛡️ Security purge finished: ${purgedCount} sensitive files removed from public bundles.`);
 }
 
 console.log('\n====================================================');

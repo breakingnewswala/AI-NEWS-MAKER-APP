@@ -31,7 +31,7 @@ import {
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
-import { getApiBaseUrl, getApiUrl } from '../lib/apiConfig';
+import { getApiBaseUrl, getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 
 interface VideosScreenWebProps {
@@ -53,13 +53,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   onAdminDeleteVideo,
   onNavigateToTab,
 }) => {
-  // Role-based Admin check: Super Admin and Admin have access to video upload controls
-  const isAdmin =
-    isEffectiveAdmin(currentUser) ||
-    isUserSuperAdmin(currentUser) ||
-    currentUser?.role === 'admin' ||
-    currentUser?.role === 'superadmin';
-
   // State for Editing Video Dialog
   const [editingVideo, setEditingVideo] = useState<VideoFeedItem | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -664,7 +657,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       const baseUrl = getApiBaseUrl();
       const res = await fetch(`${baseUrl}/api/generate-video-headlines`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           caption: adminCaption.trim(),
           title: adminTitle.trim(),
@@ -845,6 +838,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       return true;
     });
   }, [activeVideos, selectedRatioFilter, isBonusOnlyFilter]);
+
+  // Role-based Admin check: Super Admin and Admin have access to video upload controls
+  const isAdmin =
+    isEffectiveAdmin(currentUser) ||
+    isUserSuperAdmin(currentUser) ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'superadmin';
 
   const getAspectRatioClass = (ratio?: string) => {
     switch (ratio) {

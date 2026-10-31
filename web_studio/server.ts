@@ -78,6 +78,83 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
+// ============================================================================
+// SECURITY HARDENING: SENSITIVE FILE ACCESS DENYLIST & EXPOSURE ELIMINATION
+// ============================================================================
+// Explicitly blocks any request targeting sensitive internal files, vault files,
+// database dumps, environment files, or credential stores, regardless of URL encoding,
+// double URL encoding, backslashes, dot-segments, case variations, nested paths,
+// query parameters, or directory traversal attempts.
+const SENSITIVE_STATIC_PATTERNS = [
+  /gemini_api_keys_vault/i,
+  /api_keys_database/i,
+  /api_keys_vault/i,
+  /auth_credentials/i,
+  /users_master_database/i,
+  /users_accounts_db/i,
+  /payments_transactions_db/i,
+  /package_coupons_db/i,
+  /registered_users\.json/i,
+  /server\.(ts|cjs|js)(\.map)?(?=[?#\s\/]|$)/i,
+  /\.env(?=[?#\s\.\/]|$)/i,
+  /\.git(?=[?#\s\/]|$)/i,
+  /\.bak(?=[?#\s\.\/]|$)/i,
+  /\.sqlite(?=[?#\s\/]|$)/i,
+];
+
+app.use((req, res, next) => {
+  const rawPath = String(req.path || "");
+  const rawOriginal = String(req.originalUrl || req.url || "");
+
+  // Normalization function: up to 3 decode passes + normalize backslashes to forward slashes
+  const normalizeUrlString = (str: string): string => {
+    let curr = str;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const decoded = decodeURIComponent(curr);
+        if (decoded === curr) break;
+        curr = decoded;
+      } catch {
+        break;
+      }
+    }
+    return curr.replace(/\\/g, "/");
+  };
+
+  const normPath = normalizeUrlString(rawPath);
+  const normOriginal = normalizeUrlString(rawOriginal);
+
+  const pathOnly = normPath.split("?")[0].split("#")[0].toLowerCase();
+  const origPathOnly = normOriginal.split("?")[0].split("#")[0].toLowerCase();
+  const fullTarget = `${normPath} ${normOriginal} ${pathOnly} ${origPathOnly}`.toLowerCase();
+
+  // If request legitimately belongs to an API route AND does not contain path traversal (../)
+  // targeting internal database files or vault files:
+  if (normPath.startsWith("/api/") && !normOriginal.includes("..")) {
+    let hasSensitiveMatch = false;
+    for (const pattern of SENSITIVE_STATIC_PATTERNS) {
+      if (pattern.test(pathOnly)) {
+        hasSensitiveMatch = true;
+        break;
+      }
+    }
+    if (!hasSensitiveMatch) {
+      return next();
+    }
+  }
+
+  for (const pattern of SENSITIVE_STATIC_PATTERNS) {
+    if (pattern.test(fullTarget) || pattern.test(pathOnly) || pattern.test(origPathOnly)) {
+      return res.status(404).json({
+        success: false,
+        error: "Not Found",
+      });
+    }
+  }
+
+  next();
+});
+
 // Static serving for public uploads (logos, custom media)
 const publicUploadsDir = path.join(process.cwd(), "public", "uploads");
 if (!fs.existsSync(publicUploadsDir)) {
@@ -6393,11 +6470,9 @@ async function processRssItemWithAiEditorial(
   sourceUrl: string
 ): Promise<{ title: string; summary: string; location: string; categoryName: string }> {
   const fallback = cleanAndCraftHindiHeadline(rawTitle, rawDesc);
-  const geminiKey = process.env.GEMINI_API_KEY;
 
-  if (geminiKey && geminiKey !== "MY_GEMINI_API_KEY" && geminiKey.length > 5) {
-    try {
-      const ai = getGeminiClient();
+  try {
+    const parsed = await executeGeminiWithKeyPool(async (ai) => {
       const prompt = `आप एक वरिष्ठ, निष्पक्ष और तथ्यपरक हिंदी समाचार संपादक हैं।
 नीचे दी गई खबर के विवरण और शीर्षक का विश्लेषण करें और एक तथ्यपरक, स्पष्ट, संक्षिप्त और निष्पक्ष हिंदी हेडलाइन (Headline) व 2 वाक्यों का संक्षिप्त सार (Summary) तैयार करें।
 
@@ -6417,19 +6492,21 @@ async function processRssItemWithAiEditorial(
       const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        if (parsed.headline && parsed.headline.trim().length > 5) {
-          return {
-            title: parsed.headline.trim(),
-            summary: parsed.summary?.trim() || fallback.summary,
-            location: parsed.location?.trim() || fallback.location,
-            categoryName: sourceCategory || "देश",
-          };
-        }
+        return JSON.parse(jsonMatch[0]);
       }
-    } catch {
-      // Fallback cleanly to editorial heuristics
+      return null;
+    });
+
+    if (parsed && parsed.headline && parsed.headline.trim().length > 5) {
+      return {
+        title: parsed.headline.trim(),
+        summary: parsed.summary?.trim() || fallback.summary,
+        location: parsed.location?.trim() || fallback.location,
+        categoryName: sourceCategory || "देश",
+      };
     }
+  } catch {
+    // Fallback cleanly to editorial heuristics
   }
 
   return {
@@ -10057,7 +10134,7 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
     const clean = identifier.toString().toLowerCase().trim();
     if (isProtectedAdminAccount(clean)) {
       if (isAuthorizedMasterAdmin(req) || isAuthorizedAdmin(req)) {
-        return { tier: explicitTier || "superadmin", role: "superadmin" };
+        return { tier: "superadmin", role: "superadmin" };
       }
     }
     const users = loadUsersMasterDatabase();
@@ -10068,24 +10145,24 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
     );
     if (match) {
       const role = (match.role || "reporter").toLowerCase().trim();
-      const tier = explicitTier || (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
+      let tier = (match.tier || (role === "admin" || role === "superadmin" ? role : "basic")).toLowerCase().trim();
+      const trialFields = computeTrialFields(match);
+      if (trialFields.isTrialExpired && !trialFields.hasActivePaidPlan && role !== "admin" && role !== "superadmin") {
+        tier = "basic"; // Expired subscription falls back to basic
+      }
       return { tier, role };
     }
   }
 
-  const reqTier = explicitTier || (
-    (req as any).user?.tier ||
-    (req as any).user?.subscriptionTier ||
-    "basic"
-  ).toString().toLowerCase().trim();
+  const authUser = (req as any).user;
+  if (authUser && authUser.role) {
+    return {
+      tier: (authUser.tier || authUser.subscriptionTier || (authUser.role === "admin" || authUser.role === "superadmin" ? authUser.role : "basic")).toString().toLowerCase().trim(),
+      role: authUser.role.toString().toLowerCase().trim(),
+    };
+  }
 
-  const reqRole = (
-    (req as any).user?.role ||
-    req.body?.role ||
-    "reporter"
-  ).toString().toLowerCase().trim();
-
-  return { tier: reqTier, role: reqRole };
+  return { tier: "basic", role: "reporter" };
 }
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
@@ -10240,38 +10317,329 @@ function maskApiKey(key: string): string {
   return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
 }
 
-let freeKeyRoundRobinIndex = 0;
+// ============================================================================
+// CENTRALIZED MULTI-KEY POOL, ROTATION, FAILOVER & PLAN-BASED ROUTING ENGINE
+// ============================================================================
+
+interface ClassifiedKeyError {
+  type: "quota" | "billing" | "invalid" | "bad_request" | "server" | "network" | "unknown";
+  isRetryable: boolean;
+  cooldownMs: number;
+  userFacingError: string;
+  healthStatus: "healthy" | "quota_exceeded" | "invalid" | "error";
+  shouldDisableKey: boolean;
+}
+
+function classifyApiKeyError(err: any): ClassifiedKeyError {
+  const errMsg = String(err?.message || err?.error || err || "").toLowerCase();
+  const status = err?.status || err?.statusCode || 0;
+
+  // 1. Billing / Prepayment Credit Exhaustion (HTTP 402)
+  if (
+    status === 402 ||
+    errMsg.includes("402") ||
+    errMsg.includes("payment required") ||
+    errMsg.includes("depleted") ||
+    errMsg.includes("prepayment credits") ||
+    errMsg.includes("insufficient credits") ||
+    errMsg.includes("billing")
+  ) {
+    return {
+      type: "billing",
+      isRetryable: true,
+      cooldownMs: 15 * 60 * 1000, // 15 mins cooldown
+      userFacingError: "क्रेडिट समाप्त (402 Payment Required / Depleted Credits)",
+      healthStatus: "quota_exceeded",
+      shouldDisableKey: false,
+    };
+  }
+
+  // 2. Quota / Rate Limiting (HTTP 429)
+  if (
+    status === 429 ||
+    errMsg.includes("429") ||
+    errMsg.includes("resource_exhausted") ||
+    errMsg.includes("rate limit") ||
+    errMsg.includes("too many requests") ||
+    errMsg.includes("quota")
+  ) {
+    return {
+      type: "quota",
+      isRetryable: true,
+      cooldownMs: 5 * 60 * 1000, // 5 mins cooldown
+      userFacingError: "दैनिक कोटा समाप्त (429 Quota Exhausted)",
+      healthStatus: "quota_exceeded",
+      shouldDisableKey: false,
+    };
+  }
+
+  // 3. Invalid or Revoked API Key (Confirmed Authentication / Credential Failure)
+  // STRICT RULE (Phase 2.4F): Only disable when provider response explicitly confirms an invalid credential!
+  const hasConfirmedInvalidCredential =
+    errMsg.includes("api_key_invalid") ||
+    errMsg.includes("api key not valid") ||
+    errMsg.includes("invalid api key") ||
+    errMsg.includes("api_key_expired") ||
+    errMsg.includes("api key expired") ||
+    errMsg.includes("credential_invalid") ||
+    ((status === 400 || status === 401 || status === 403) &&
+      (errMsg.includes("api key") || errMsg.includes("apikey") || errMsg.includes("unauthenticated") || errMsg.includes("invalid authentication")));
+
+  if (hasConfirmedInvalidCredential) {
+    return {
+      type: "invalid",
+      isRetryable: true,
+      cooldownMs: 60 * 60 * 1000, // 1 hour cooldown / disabled
+      userFacingError: "अमान्य API Key (Confirmed Invalid Authentication Credential)",
+      healthStatus: "invalid",
+      shouldDisableKey: true,
+    };
+  }
+
+  // 4. Invalid Request or Unsupported Model (HTTP 400)
+  // STRICT RULE (Phase 2.4F): HTTP 400 caused by an invalid request or unsupported model must NEVER disable the API key!
+  if (
+    status === 400 ||
+    errMsg.includes("bad request") ||
+    errMsg.includes("invalid argument") ||
+    errMsg.includes("not supported") ||
+    errMsg.includes("unsupported model") ||
+    errMsg.includes("unknown name") ||
+    errMsg.includes("safety")
+  ) {
+    return {
+      type: "bad_request",
+      isRetryable: false,
+      cooldownMs: 0, // No cooldown for the key itself
+      userFacingError: "अमान्य अनुरोध या असमर्थित मॉडल (400 Bad Request / Unsupported Model)",
+      healthStatus: "healthy",
+      shouldDisableKey: false,
+    };
+  }
+
+  // 5. Server-Side Temporary Error (HTTP 500, 502, 503, 504)
+  if (
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    errMsg.includes("500") ||
+    errMsg.includes("502") ||
+    errMsg.includes("503") ||
+    errMsg.includes("504") ||
+    errMsg.includes("overloaded") ||
+    errMsg.includes("service unavailable") ||
+    errMsg.includes("bad gateway")
+  ) {
+    return {
+      type: "server",
+      isRetryable: true,
+      cooldownMs: 30 * 1000, // 30 seconds temporary cooldown
+      userFacingError: "सर्वर लोड या अस्थायी त्रुटि (503 / Service Unavailable)",
+      healthStatus: "error",
+      shouldDisableKey: false,
+    };
+  }
+
+  // 6. Network / Timeout
+  if (
+    errMsg.includes("timeout") ||
+    errMsg.includes("econnreset") ||
+    errMsg.includes("etimedout") ||
+    errMsg.includes("fetch failed") ||
+    errMsg.includes("socket hang up")
+  ) {
+    return {
+      type: "network",
+      isRetryable: true,
+      cooldownMs: 20 * 1000, // 20s cooldown
+      userFacingError: "नेटवर्क टाइमआउट (Network Timeout)",
+      healthStatus: "error",
+      shouldDisableKey: false,
+    };
+  }
+
+  return {
+    type: "unknown",
+    isRetryable: true,
+    cooldownMs: 30 * 1000,
+    userFacingError: cleanErrorMessage(err),
+    healthStatus: "error",
+    shouldDisableKey: false,
+  };
+}
+
+/**
+ * Strict Server-Side Plan & Entitlement Verification for AI Routing
+ * Anti-Spoofing: NEVER trusts client-submitted request bodies (e.g. req.body.userTier),
+ * untrusted headers, or client-provided role fields.
+ * 
+ * STRICT BUSINESS POLICY (Phase 2.4F):
+ * - BASIC -> Free API Keys Pool
+ * - ADVANCE -> Free API Keys Pool
+ * - PRO -> Free API Keys Pool (PRO is NEVER eligible for Paid API Key routing)
+ * - VIP DESK -> Dedicated Paid API Key (Only authenticated, database-verified, active VIP DESK subscribers)
+ * - Master Admin accounts do NOT automatically receive Paid API access unless explicitly entitled to VIP DESK.
+ */
+function isUserVipEligible(req: express.Request): boolean {
+  try {
+    // 1. Extract authenticated identity from cryptographically verified token/session
+    const authUser = (req as any).user || getAuthenticatedUser(req);
+    let email = authUser?.email || "";
+    let userId = authUser?.userId || "";
+
+    if (!email) {
+      email = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    }
+    if (!userId) {
+      userId = (req.headers["x-user-id"] || "").toString().trim();
+    }
+
+    // STRICT RULE: Unauthenticated or anonymous users NEVER get Paid Key access
+    if (!email && !userId) {
+      return false;
+    }
+
+    // 2. Look up user record in authoritative database (NEVER trust client body or headers)
+    const users = loadUsersMasterDatabase();
+    const cleanEmail = email.toLowerCase().trim();
+    const user = users.find((u: any) =>
+      (cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+      (cleanEmail && u.email && u.email.toLowerCase().replace(/\s+/g, "") === cleanEmail.replace(/\s+/g, "")) ||
+      (userId && u.userId && u.userId === userId)
+    );
+
+    if (!user) {
+      return false; // Unknown user in database -> Free Pool only
+    }
+
+    // 3. Blocked users NEVER get VIP privileges
+    if (user.isBlocked) {
+      return false;
+    }
+
+    // 4. Check subscription / trial expiration
+    const trialFields = computeTrialFields(user);
+    if (trialFields.isTrialExpired && !trialFields.hasActivePaidPlan) {
+      return false; // Expired subscription -> Free Pool only
+    }
+
+    // 5. Strict Plan-to-Key Mapping Verification:
+    // - BASIC: Free API Keys Pool
+    // - ADVANCE: Free API Keys Pool
+    // - PRO: Free API Keys Pool (PRO is NEVER eligible for Paid API Key routing)
+    // - VIP DESK: Dedicated Paid API Key
+    const tier = String(user.tier || "").toLowerCase().trim();
+    const planName = String(user.planName || "").toUpperCase().trim();
+
+    // STRICT RULE 2: PRO must NEVER be considered VIP eligible for Paid API Key routing!
+    if (tier === "pro" || tier === "professional" || planName.includes("PRO")) {
+      return false;
+    }
+
+    // STRICT RULE 1: BASIC and ADVANCE must NEVER be considered VIP eligible!
+    if (tier === "basic" || planName.includes("BASIC") || tier === "advanced" || planName.includes("ADVANCE")) {
+      return false;
+    }
+
+    // STRICT RULE 3 & 8: Only an authentic VIP DESK entitlement qualifies.
+    // Master Admin status does NOT automatically grant Paid API access unless the account is explicitly entitled to VIP DESK.
+    const isVipDesk = (
+      tier === "ultra" ||
+      tier === "vip_desk" ||
+      tier === "vip-desk" ||
+      planName === "VIP DESK" ||
+      planName === "VIP_DESK" ||
+      planName === "ULTRA"
+    );
+
+    return Boolean(isVipDesk);
+  } catch (err) {
+    console.warn("[isUserVipEligible Error]", err);
+    return false;
+  }
+}
+
+// Randomize initial round-robin index on boot to balance cold-start distribution across multi-instance Cloud Run
+let freeKeyRoundRobinIndex = Math.floor(Math.random() * 100);
+let cachedApiKeysVault: ApiKeysVault | null = null;
+let vaultLastLoadedAt = 0;
+
+async function getOrLoadApiKeysVault(forceRefresh: boolean = false): Promise<ApiKeysVault> {
+  const now = Date.now();
+  if (!forceRefresh && cachedApiKeysVault && now - vaultLastLoadedAt < 10000) {
+    return cachedApiKeysVault;
+  }
+
+  // 1. Cloud Firestore Authoritative Load
+  try {
+    const adapter = require("./server_firestore_adapter.cjs");
+    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
+      const doc = await adapter.firestoreReadDoc("system_config", "gemini_api_keys_vault");
+      if (doc && doc.success && doc.data) {
+        const firestoreVault: ApiKeysVault = {
+          freeKeys: Array.isArray(doc.data.freeKeys) ? doc.data.freeKeys : [],
+          paidKey: doc.data.paidKey || null,
+          vipRoutingEnabled: doc.data.vipRoutingEnabled !== false,
+        };
+        cachedApiKeysVault = firestoreVault;
+        vaultLastLoadedAt = now;
+        return cachedApiKeysVault;
+      }
+    }
+  } catch (firestoreErr: any) {
+    console.warn("[KeyPool] Firestore vault read error, using cache/file:", firestoreErr?.message);
+  }
+
+  // 2. Local JSON Files Load
+  cachedApiKeysVault = loadApiKeysVault();
+  vaultLastLoadedAt = now;
+  return cachedApiKeysVault;
+}
 
 function loadApiKeysVault(): ApiKeysVault {
-  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
-  for (const filename of fileCandidates) {
+  if (cachedApiKeysVault) {
+    return cachedApiKeysVault;
+  }
+
+  // SECURITY HARDENING: Load ONLY from server-private root locations, NEVER from public/dist/assets
+  const secureServerCandidates = [
+    path.join(process.cwd(), "gemini_api_keys_vault.json"),
+    path.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json"),
+    path.join(process.cwd(), "api_keys_database.json"),
+  ];
+
+  for (const loc of secureServerCandidates) {
     try {
-      const locations = resolveAllDatabaseLocations(filename);
-      for (const loc of locations) {
-        if (fs.existsSync(loc)) {
-          const raw = fs.readFileSync(loc, "utf-8");
-          const parsed = JSON.parse(raw);
-          if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
-            const vaultData: ApiKeysVault = {
-              freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
-              paidKey: parsed?.paidKey || null,
-              vipRoutingEnabled: parsed?.vipRoutingEnabled !== false,
-            };
-            if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
-              return vaultData;
-            }
+      const normalized = loc.replace(/\\/g, "/").toLowerCase();
+      if (normalized.includes("/public/") || normalized.includes("/dist/") || normalized.includes("/assets/")) {
+        continue;
+      }
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
+          const vaultData: ApiKeysVault = {
+            freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+            paidKey: parsed?.paidKey || null,
+            vipRoutingEnabled: parsed?.vipRoutingEnabled !== false,
+          };
+          if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
+            cachedApiKeysVault = vaultData;
+            vaultLastLoadedAt = Date.now();
+            return vaultData;
           }
         }
       }
     } catch (err: any) {
-      console.error(`Error loading ${filename}:`, err.message);
+      console.error(`Error loading vault from ${loc}:`, err.message);
     }
   }
 
-  // Runtime fallback with system environment key if available (never overwrites stored admin configuration)
+  // Runtime fallback with system environment key if available
   const envKey = (process.env.GEMINI_API_KEY || "").trim();
   if (envKey && envKey.length >= 15 && envKey !== "MY_GEMINI_API_KEY") {
-    return {
+    const fallbackVault: ApiKeysVault = {
       freeKeys: [
         {
           id: "free_env_primary",
@@ -10290,32 +10658,46 @@ function loadApiKeysVault(): ApiKeysVault {
       paidKey: null,
       vipRoutingEnabled: true,
     };
+    cachedApiKeysVault = fallbackVault;
+    vaultLastLoadedAt = Date.now();
+    return fallbackVault;
   }
 
-  return {
+  const emptyVault: ApiKeysVault = {
     freeKeys: [],
     paidKey: null,
     vipRoutingEnabled: true,
   };
+  cachedApiKeysVault = emptyVault;
+  vaultLastLoadedAt = Date.now();
+  return emptyVault;
 }
 
 function saveApiKeysVault(vault: ApiKeysVault): boolean {
+  cachedApiKeysVault = vault;
+  vaultLastLoadedAt = Date.now();
+
   let savedAtLeastOne = false;
-  const fileCandidates = ["gemini_api_keys_vault.json", "api_keys_database.json"];
-  for (const filename of fileCandidates) {
+  // SECURITY HARDENING: Never replicate API keys or vault data to public, dist, or web assets!
+  const secureServerTargets = [
+    path.join(process.cwd(), "gemini_api_keys_vault.json"),
+    path.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json"),
+  ];
+
+  for (const loc of secureServerTargets) {
     try {
-      const locations = resolveAllDatabaseLocations(filename);
-      for (const loc of locations) {
-        try {
-          const dir = path.dirname(loc);
-          if (fs.existsSync(dir)) {
-            fs.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
-            savedAtLeastOne = true;
-          }
-        } catch {}
+      const normalized = loc.replace(/\\/g, "/").toLowerCase();
+      if (normalized.includes("/public/") || normalized.includes("/dist/") || normalized.includes("/assets/")) {
+        console.warn(`[Security Alert] Blocked attempt to write vault to public location: ${loc}`);
+        continue;
+      }
+      const dir = path.dirname(loc);
+      if (fs.existsSync(dir)) {
+        fs.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
+        savedAtLeastOne = true;
       }
     } catch (err: any) {
-      console.error(`Error saving ${filename}:`, err.message);
+      console.error(`Error saving vault to ${loc}:`, err.message);
     }
   }
 
@@ -10337,77 +10719,164 @@ async function executeGeminiWithKeyPool<T>(
   action: (ai: GoogleGenAI) => Promise<T>,
   isVip: boolean = false
 ): Promise<T> {
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault();
   const now = Date.now();
+  const attemptedKeys = new Set<string>();
 
-  // 1. VIP Dedicated Routing: if user is VIP, paidKey is configured, and VIP routing enabled
-  if (isVip && vault.vipRoutingEnabled && vault.paidKey?.key && vault.paidKey.status === "active") {
-    try {
-      const ai = new GoogleGenAI({
-        apiKey: vault.paidKey.key.trim(),
-        httpOptions: { headers: { "User-Agent": "aistudio-build-vip" } },
-      });
-      return await action(ai);
-    } catch (vipErr: any) {
-      console.warn("[KeyPool] VIP key error, falling back to free pool:", vipErr?.message);
+  // 1. VIP Dedicated Routing Policy
+  if (isVip && vault.vipRoutingEnabled) {
+    const paidKey = vault.paidKey;
+    const isPaidConfigured = Boolean(paidKey?.key && paidKey.key.trim().length >= 15);
+    const isPaidHealthy =
+      isPaidConfigured &&
+      paidKey!.status === "active" &&
+      (!paidKey!.cooldownUntil || paidKey!.cooldownUntil <= now);
+
+    if (isPaidHealthy) {
+      const cleanKey = paidKey!.key.trim();
+      attemptedKeys.add(cleanKey);
+      const start = Date.now();
+      try {
+        const ai = new GoogleGenAI({
+          apiKey: cleanKey,
+          httpOptions: { headers: { "User-Agent": "aistudio-build-vip-pool" } },
+        });
+        const result = await action(ai);
+        paidKey!.successCount = (paidKey!.successCount || 0) + 1;
+        paidKey!.lastTestedAt = Date.now();
+        paidKey!.lastLatencyMs = Date.now() - start;
+        paidKey!.lastHealthStatus = "healthy";
+        paidKey!.lastError = undefined;
+        // In-memory success tracking: Do not trigger expensive Firestore writes on every single successful request
+        return result;
+      } catch (vipErr: any) {
+        const classified = classifyApiKeyError(vipErr);
+        paidKey!.errorCount = (paidKey!.errorCount || 0) + 1;
+        paidKey!.lastTestedAt = Date.now();
+        paidKey!.lastLatencyMs = Date.now() - start;
+        paidKey!.lastHealthStatus = classified.healthStatus;
+        paidKey!.lastError = classified.userFacingError;
+
+        if (classified.cooldownMs > 0) {
+          paidKey!.cooldownUntil = Date.now() + classified.cooldownMs;
+        }
+        if (classified.shouldDisableKey) {
+          paidKey!.status = "disabled";
+        }
+
+        // Only persist to Firestore & disk when key state changes (cooldown or disabled)
+        if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
+          saveApiKeysVault(vault);
+        }
+
+        console.warn(
+          `[KeyPool VIP Failover] Dedicated Paid VIP Key failed (${classified.type}: ${classified.userFacingError}). Failover Policy: Routing VIP request to Free Pool.`
+        );
+      }
+    } else {
+      console.warn(
+        `[KeyPool VIP Policy] Paid VIP Key is ${!isPaidConfigured ? "not configured" : "in cooldown"}. Routing VIP request to Free Pool with priority.`
+      );
     }
   }
 
-  // 2. Free Keys Pool: Round-Robin with automatic failover on 429
-  const activeFreeKeys = vault.freeKeys.filter(
-    (k) => k.status === "active" && (!k.cooldownUntil || k.cooldownUntil <= now)
-  );
+  // 2. Free Keys Pool: Round-Robin with Automatic Multi-Key Failover
+  const candidateKeys = vault.freeKeys.filter((k) => {
+    if (k.status !== "active") return false;
+    if (k.cooldownUntil && k.cooldownUntil > now) return false;
+    return true;
+  });
 
-  if (activeFreeKeys.length > 0) {
-    const startIndex = freeKeyRoundRobinIndex % activeFreeKeys.length;
-    freeKeyRoundRobinIndex = (freeKeyRoundRobinIndex + 1) % activeFreeKeys.length;
+  if (candidateKeys.length > 0) {
+    const startIndex = freeKeyRoundRobinIndex % candidateKeys.length;
+    freeKeyRoundRobinIndex = (freeKeyRoundRobinIndex + 1) % candidateKeys.length;
 
     let lastFreeErr: any = null;
-    for (let i = 0; i < activeFreeKeys.length; i++) {
-      const candidate = activeFreeKeys[(startIndex + i) % activeFreeKeys.length];
+
+    for (let i = 0; i < candidateKeys.length; i++) {
+      const candidate = candidateKeys[(startIndex + i) % candidateKeys.length];
+      const cleanKey = (candidate.key || "").trim();
+
+      if (!cleanKey || attemptedKeys.has(cleanKey)) continue;
+      attemptedKeys.add(cleanKey);
+
+      const start = Date.now();
       try {
         const ai = new GoogleGenAI({
-          apiKey: candidate.key.trim(),
+          apiKey: cleanKey,
           httpOptions: { headers: { "User-Agent": "aistudio-build-free-pool" } },
         });
         const result = await action(ai);
         candidate.successCount = (candidate.successCount || 0) + 1;
-        saveApiKeysVault(vault);
+        candidate.lastTestedAt = Date.now();
+        candidate.lastLatencyMs = Date.now() - start;
+        candidate.lastHealthStatus = "healthy";
+        candidate.lastError = undefined;
+        // In-memory success tracking: Do not trigger expensive Firestore writes on every single successful request
         return result;
       } catch (keyErr: any) {
         lastFreeErr = keyErr;
-        const errMsg = String(keyErr?.message || keyErr || "").toLowerCase();
+        const classified = classifyApiKeyError(keyErr);
         candidate.errorCount = (candidate.errorCount || 0) + 1;
-        if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
-          console.warn(`[KeyPool] Free key "${candidate.label}" (${candidate.id}) hit 429 limit; cooldown 5 mins.`);
-          candidate.cooldownUntil = Date.now() + 5 * 60 * 1000;
-          saveApiKeysVault(vault);
-        } else {
-          console.warn(`[KeyPool] Free key "${candidate.label}" failed:`, errMsg.slice(0, 80));
+        candidate.lastTestedAt = Date.now();
+        candidate.lastLatencyMs = Date.now() - start;
+        candidate.lastHealthStatus = classified.healthStatus;
+        candidate.lastError = classified.userFacingError;
+
+        if (classified.cooldownMs > 0) {
+          candidate.cooldownUntil = Date.now() + classified.cooldownMs;
         }
+        if (classified.shouldDisableKey) {
+          candidate.status = "disabled";
+        }
+
+        // Only persist to Firestore & disk when key state changes (cooldown or disabled)
+        if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
+          saveApiKeysVault(vault);
+        }
+
+        console.warn(
+          `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failover to next candidate...`
+        );
       }
     }
   }
 
-  // 3. Fallback to process.env.GEMINI_API_KEY
+  // 3. Fallback to System Environment Key if available & not yet attempted
   const fallbackEnvKey = (process.env.GEMINI_API_KEY || "").trim();
-  if (fallbackEnvKey && fallbackEnvKey !== "MY_GEMINI_API_KEY") {
-    const ai = new GoogleGenAI({
-      apiKey: fallbackEnvKey,
-      httpOptions: { headers: { "User-Agent": "aistudio-build-fallback" } },
-    });
-    return await action(ai);
+  if (
+    fallbackEnvKey &&
+    fallbackEnvKey.length >= 15 &&
+    fallbackEnvKey !== "MY_GEMINI_API_KEY" &&
+    !attemptedKeys.has(fallbackEnvKey)
+  ) {
+    attemptedKeys.add(fallbackEnvKey);
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: fallbackEnvKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-build-fallback" } },
+      });
+      return await action(ai);
+    } catch (envErr: any) {
+      console.warn("[KeyPool] System environment key fallback failed:", envErr?.message?.slice(0, 100));
+    }
   }
 
-  throw new Error("No operational Gemini API keys available in pool or environment");
+  const totalAttempted = attemptedKeys.size;
+  const exhaustionErr = new Error(
+    `ALL_API_KEYS_EXHAUSTED: All Gemini API keys (${totalAttempted} attempted) are currently exhausted, in cooldown, or unconfigured.`
+  );
+  (exhaustionErr as any).code = "ALL_API_KEYS_EXHAUSTED";
+  (exhaustionErr as any).attemptedCount = totalAttempted;
+  throw exhaustionErr;
 }
 
 // Admin API Keys Manager Endpoints
-app.get("/api/admin/api-keys", (req, res) => {
+app.get("/api/admin/api-keys", async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API कीज़ देख सकते हैं।" });
   }
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   const now = Date.now();
   const maskedFreeKeys = vault.freeKeys.map((k) => ({
     id: k.id,
@@ -10465,12 +10934,17 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     return res.status(400).json({ error: "अमान्य API Key। कृपया मान्य Google Gemini API Key दर्ज करें।" });
   }
   const cleanKey = apiKey.trim();
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   if (vault.freeKeys.some((k) => k.key === cleanKey)) {
     return res.status(400).json({ error: "यह API Key पहले से ही फ्री पूल में मौजूद है।" });
   }
 
   // Quick connectivity test
+  let initialHealth: "healthy" | "quota_exceeded" | "invalid" | "error" = "healthy";
+  let initialLatency: number | undefined;
+  let initialError: string | undefined;
+
+  const testStart = Date.now();
   try {
     const testAi = new GoogleGenAI({
       apiKey: cleanKey,
@@ -10480,10 +10954,14 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
       model: "gemini-3.8-flash",
       contents: "Say 'OK'",
     });
+    initialLatency = Date.now() - testStart;
   } catch (testErr: any) {
-    console.warn("Key test warning:", testErr?.message);
-    if (testErr?.status === 400 || testErr?.message?.includes("API_KEY_INVALID")) {
-      return res.status(400).json({ error: `अमान्य API Key: ${testErr?.message || "Google द्वारा अस्वीकृत"}` });
+    initialLatency = Date.now() - testStart;
+    const classified = classifyApiKeyError(testErr);
+    initialHealth = classified.healthStatus;
+    initialError = classified.userFacingError;
+    if (classified.type === "invalid") {
+      return res.status(400).json({ error: `अमान्य API Key: ${classified.userFacingError}` });
     }
   }
 
@@ -10494,12 +10972,21 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     addedAt: Date.now(),
     status: "active",
     cooldownUntil: 0,
-    successCount: 0,
-    errorCount: 0,
+    successCount: initialHealth === "healthy" ? 1 : 0,
+    errorCount: initialHealth !== "healthy" ? 1 : 0,
+    lastTestedAt: Date.now(),
+    lastLatencyMs: initialLatency,
+    lastHealthStatus: initialHealth,
+    lastError: initialError,
+    provider: "Google Gemini",
+    model: "gemini-3.8-flash",
   };
 
   vault.freeKeys.push(newKeyItem);
   saveApiKeysVault(vault);
+
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "ADD_FREE_API_KEY", newKeyItem.id, { label: newKeyItem.label, masked: maskApiKey(newKeyItem.key) });
 
   return res.json({
     success: true,
@@ -10509,22 +10996,27 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
       label: newKeyItem.label,
       maskedKey: maskApiKey(newKeyItem.key),
       status: newKeyItem.status,
+      healthStatus: newKeyItem.lastHealthStatus,
     },
   });
 });
 
-app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, (req, res) => {
+app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
   const { id } = req.params;
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   const initialLen = vault.freeKeys.length;
   vault.freeKeys = vault.freeKeys.filter((k) => k.id !== id);
   if (vault.freeKeys.length === initialLen) {
     return res.status(404).json({ error: "API Key नहीं मिली" });
   }
   saveApiKeysVault(vault);
+
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "DELETE_FREE_API_KEY", id);
+
   return res.json({ success: true, message: "फ्री API Key सफलतापूर्वक हटा दी गई।" });
 });
 
@@ -10533,7 +11025,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
     return res.status(403).json({ error: "अनधिकृत" });
   }
   const { apiKey, label, vipRoutingEnabled } = req.body;
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
 
   if (typeof vipRoutingEnabled === "boolean") {
     vault.vipRoutingEnabled = vipRoutingEnabled;
@@ -10546,10 +11038,20 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
       label: label && typeof label === "string" && label.trim() ? label.trim() : "Paid VIP Dedicated Key",
       updatedAt: Date.now(),
       status: "active",
+      provider: "Google Gemini",
+      model: "gemini-3.8-flash",
+      lastHealthStatus: "healthy",
     };
   }
 
   saveApiKeysVault(vault);
+
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "UPDATE_PAID_API_KEY", "paid_key", {
+    configured: Boolean(vault.paidKey?.key),
+    vipRoutingEnabled: vault.vipRoutingEnabled,
+  });
+
   return res.json({
     success: true,
     message: "✅ पेड VIP API Key सेटिंग्स सफलतापूर्वक सुरक्षित हो गईं!",
@@ -10558,13 +11060,17 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
   });
 });
 
-app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, (req, res) => {
+app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   vault.paidKey = null;
   saveApiKeysVault(vault);
+
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "DELETE_PAID_API_KEY", "paid_key");
+
   return res.json({ success: true, message: "पेड VIP API Key हटा दी गई।" });
 });
 
@@ -10594,9 +11100,11 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
       text: result.text || "OK",
     });
   } catch (err: any) {
-    return res.status(500).json({
+    const classified = classifyApiKeyError(err);
+    return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
-      error: `कनेक्शन त्रुटि: ${cleanErrorMessage(err)}`,
+      error: `कनेक्शन त्रुटि: ${classified.userFacingError}`,
+      classification: classified.type,
     });
   }
 });
@@ -10606,7 +11114,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API स्वास्थ्य परीक्षण कर सकते हैं।" });
   }
   const { keyId, type } = req.body || {};
-  const vault = loadApiKeysVault();
+  const vault = await getOrLoadApiKeysVault(true);
   let targetKeyStr = "";
   let targetRef: VaultFreeKey | VaultPaidKey | null = null;
 
@@ -10631,8 +11139,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
       apiKey: targetKeyStr,
       httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } },
     });
-    
-    // Test across DEFAULT_FALLBACK_MODELS to verify actual generation compatibility
+
     let testSuccess = false;
     let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
     let lastTestErr: any = null;
@@ -10644,7 +11151,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
         );
         const testCall = testAi.models.generateContent({
           model: testModel,
-          contents: "आप एक संपादकीय परीक्षक हैं। इस टेस्ट अनुरोध पर वैध JSON में उत्तर दें: {\"status\": \"ok\", \"newsReady\": true}",
+          contents: 'आप एक संपादकीय परीक्षक हैं। इस टेस्ट अनुरोध पर वैध JSON में उत्तर दें: {"status": "ok", "newsReady": true}',
           config: {
             responseMimeType: "application/json",
           },
@@ -10655,19 +11162,9 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
         break;
       } catch (mErr: any) {
         lastTestErr = mErr;
-        const errMsg = String(mErr?.message || mErr || "").toLowerCase();
-        // Stop retrying models if key is invalid, exhausted, or payment required
-        if (
-          errMsg.includes("429") ||
-          errMsg.includes("resource_exhausted") ||
-          errMsg.includes("quota") ||
-          errMsg.includes("402") ||
-          errMsg.includes("depleted") ||
-          errMsg.includes("payment") ||
-          errMsg.includes("api_key_invalid") ||
-          mErr?.status === 400
-        ) {
-          break;
+        const classified = classifyApiKeyError(mErr);
+        if (classified.type === "quota" || classified.type === "billing" || classified.type === "invalid") {
+          break; // Stop model retries if key is depleted, exhausted or invalid
         }
       }
     }
@@ -10699,39 +11196,24 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     });
   } catch (err: any) {
     const latency = Date.now() - start;
-    const errMsg = String(err?.message || err || "").toLowerCase();
+    const classified = classifyApiKeyError(err);
     targetRef.lastTestedAt = Date.now();
     targetRef.lastLatencyMs = latency;
+    targetRef.lastHealthStatus = classified.healthStatus;
+    targetRef.lastError = classified.userFacingError;
 
-    let userFacingMsg = `कनेक्शन त्रुटि: ${cleanErrorMessage(err)}`;
-    if (errMsg.includes("402") || errMsg.includes("depleted") || errMsg.includes("payment required") || errMsg.includes("billing")) {
-      targetRef.lastHealthStatus = "quota_exceeded";
-      targetRef.lastError = "क्रेडिट समाप्त (402 Payment Required / Depleted Credits)";
-      userFacingMsg = "⚠️ API क्रेडिट समाप्त (402 Depleted Credits)। कृपया गूगल एआई कंसोल में बिलिंग जाँचें या दूसरी की उपयोग करें।";
-    } else if (errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("quota")) {
-      targetRef.lastHealthStatus = "quota_exceeded";
-      targetRef.lastError = "दैनिक कोटा समाप्त (429 Quota Exhausted)";
-      userFacingMsg = "⚠️ API कोटा समाप्त (429 Quota Exceeded)। की-रोटेशन के अनुसार अगली सक्रिय की उपयोग होगी।";
-    } else if (errMsg.includes("api_key_invalid") || err?.status === 400) {
-      targetRef.lastHealthStatus = "invalid";
-      targetRef.lastError = "अमान्य API Key (400 Invalid Authentication)";
-      userFacingMsg = "❌ अमान्य API Key। Google Gemini द्वारा ऑथेंटिकेशन अस्वीकृत।";
-    } else if (errMsg.includes("timeout") || errMsg.includes("503") || errMsg.includes("unavailable")) {
-      targetRef.lastHealthStatus = "rate_limited";
-      targetRef.lastError = "सर्वर लोड या टाइमआउट (503 / Timeout)";
-      userFacingMsg = "⚠️ जेमिनी सर्वर लोड/टाइमआउट। कृपया कुछ क्षण बाद पुनः प्रयास करें।";
-    } else {
-      targetRef.lastHealthStatus = "error";
-      targetRef.lastError = cleanErrorMessage(err);
+    if (classified.type === "invalid") {
+      targetRef.status = "disabled";
     }
+
     if ("errorCount" in targetRef) {
       targetRef.errorCount = (targetRef.errorCount || 0) + 1;
     }
     saveApiKeysVault(vault);
 
-    return res.status(targetRef.lastHealthStatus === "quota_exceeded" ? 429 : 500).json({
+    return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
-      error: userFacingMsg,
+      error: `स्वास्थ्य परीक्षण त्रुटि: ${classified.userFacingError}`,
       provider: "Google Gemini (गूगल जेमिनी)",
       model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
       latencyMs: latency,
@@ -13102,13 +13584,6 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
       return res.status(400).json({ error: "Missing imageBase64 data" });
     }
 
-    const ai = getGeminiClient();
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY is missing. Please set it in Settings > Secrets.",
-      });
-    }
-
     // Clean base64 string
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
@@ -13155,46 +13630,49 @@ ${userContext ? `यूज़र का निर्देश / संदर्�
       ],
     };
 
-    const response = await generateWithFallbackAndRetry(
-      ai,
-      DEFAULT_FALLBACK_MODELS,
-      {
-        contents,
-        config: {
-          systemInstruction: "You are a professional Hindi news editor. Strip PR flattery and honorifics. Output valid JSON.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              headline: { type: Type.STRING },
-              highlightWords: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
+    const isVip = isUserVipEligible(req);
+    const parsedData = await executeGeminiWithKeyPool(async (ai) => {
+      const response = await generateWithFallbackAndRetry(
+        ai,
+        DEFAULT_FALLBACK_MODELS,
+        {
+          contents,
+          config: {
+            systemInstruction: "You are a professional Hindi news editor. Strip PR flattery and honorifics. Output valid JSON.",
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                headline: { type: Type.STRING },
+                highlightWords: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+                formattedHeadline: { type: Type.STRING },
+                location: { type: Type.STRING },
+                summary: { type: Type.STRING },
+                category: { type: Type.STRING },
+                hasPerson: { type: Type.BOOLEAN },
+                description: { type: Type.STRING },
+                isAiGeneratedPhoto: { type: Type.BOOLEAN },
+                speakerName: { type: Type.STRING },
+                speakerTitle: { type: Type.STRING },
               },
-              formattedHeadline: { type: Type.STRING },
-              location: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              category: { type: Type.STRING },
-              hasPerson: { type: Type.BOOLEAN },
-              description: { type: Type.STRING },
-              isAiGeneratedPhoto: { type: Type.BOOLEAN },
-              speakerName: { type: Type.STRING },
-              speakerTitle: { type: Type.STRING },
+              required: [
+                "headline",
+                "highlightWords",
+                "formattedHeadline",
+                "location",
+                "summary",
+              ],
             },
-            required: [
-              "headline",
-              "highlightWords",
-              "formattedHeadline",
-              "location",
-              "summary",
-            ],
           },
-        },
-      }
-    );
+        }
+      );
 
-    const textOutput = response.text || "{}";
-    const parsedData = JSON.parse(textOutput);
+      const textOutput = response.text || "{}";
+      return JSON.parse(textOutput);
+    }, isVip);
 
     // Sanitize flattery & honorifics
     if (parsedData.headline) parsedData.headline = sanitizePressNoteFlattery(parsedData.headline);
@@ -13904,7 +14382,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
 
     const requestedProvider = (req.body.aiProvider || "gemini").toLowerCase();
     const userResolution = resolveUserTierAndRole(req);
-    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
+    const userTier = (userResolution.tier || "basic").toString().toLowerCase().trim();
     if (requestedProvider === "openai") {
       if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
         return res.status(403).json({
@@ -14165,12 +14643,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       return result;
     };
 
-    const isVipDeskUser = Boolean(
-      userResolution.role === "admin" ||
-      userResolution.role === "superadmin" ||
-      ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userTier.toLowerCase().trim()) ||
-      String((req.body as any)?.userTier || "").toLowerCase().includes("vip")
-    );
+    const isVipDeskUser = isUserVipEligible(req);
 
     const runGemini = async (): Promise<any> => {
       const clientPassedKey = (req.body.geminiApiKey || "").trim();
@@ -14658,7 +15131,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
 
     // Tier Access Enforcement from central config
     const userResolution = resolveUserTierAndRole(req);
-    const userTier = (req.body?.userTier || req.body?.tier || userResolution.tier || "basic").toString().toLowerCase().trim();
+    const userTier = (userResolution.tier || "basic").toString().toLowerCase().trim();
     const requestedProvider = (aiProvider || "gemini").toLowerCase();
 
     if (requestedProvider === "openai") {
@@ -14811,12 +15284,7 @@ JSON Output Schema:
       }
 
       const userResolution = resolveUserTierAndRole(req);
-      const isVipUser = Boolean(
-        userResolution.role === "admin" ||
-        userResolution.role === "superadmin" ||
-        ["ultra", "vip_dash", "vip-dash", "vip", "vip_desk", "vip desk"].includes(userResolution.tier.toLowerCase().trim()) ||
-        String((req.body as any)?.userTier || "").toLowerCase().includes("vip")
-      );
+      const isVipUser = isUserVipEligible(req);
 
       return await executeGeminiWithKeyPool(async (ai) => {
         const response = await generateWithFallbackAndRetry(
@@ -15386,21 +15854,23 @@ epaperCity, epaperKicker, epaperHeadline, epaperSubHeadline, epaperByline, epape
       }
     }
 
-    if (!parsedData && process.env.GEMINI_API_KEY) {
+    if (!parsedData) {
       try {
-        const ai = getGeminiClient();
-        const response = await generateWithFallbackAndRetry(
-          ai,
-          DEFAULT_FALLBACK_MODELS,
-          {
-            contents: systemPrompt,
-            config: {
-              responseMimeType: "application/json",
-              temperature: 0.5,
-            },
-          }
-        );
-        parsedData = JSON.parse(response.text || "{}");
+        const isVip = isUserVipEligible(req);
+        parsedData = await executeGeminiWithKeyPool(async (ai) => {
+          const response = await generateWithFallbackAndRetry(
+            ai,
+            DEFAULT_FALLBACK_MODELS,
+            {
+              contents: systemPrompt,
+              config: {
+                responseMimeType: "application/json",
+                temperature: 0.5,
+              },
+            }
+          );
+          return JSON.parse(response.text || "{}");
+        }, isVip);
       } catch (geminiError: any) {
         console.warn("Gemini epaper parsing error:", geminiError?.message?.slice(0, 100));
       }
@@ -15612,7 +16082,7 @@ app.post("/api/generate-ai-image", enforceUserAccessMiddleware, async (req, res)
       return res.status(400).json({ error: "Headline or prompt is required" });
     }
 
-    const ai = getGeminiClient();
+    const isVip = isUserVipEligible(req);
 
     const perspectiveAngles = [
       "authentic journalistic press photography, standard documentary eye-level angle, realistic Indian press coverage, natural daylight",
@@ -15625,8 +16095,8 @@ app.post("/api/generate-ai-image", enforceUserAccessMiddleware, async (req, res)
     // Step 1: Create an editorial, journalistic photography prompt in English
     let imagePrompt = customPrompt;
     if (!imagePrompt || imagePrompt.trim().length === 0) {
-      if (process.env.GEMINI_API_KEY) {
-        try {
+      try {
+        imagePrompt = await executeGeminiWithKeyPool(async (ai) => {
           const promptGenResponse = await generateWithFallbackAndRetry(
             ai,
             DEFAULT_FALLBACK_MODELS,
@@ -15642,13 +16112,12 @@ Requirements:
 Return ONLY the English prompt string.`,
             }
           );
-          imagePrompt =
-            promptGenResponse.text?.trim() ||
-            `Realistic journalistic press news photography depicting: ${headline}, ${variationAngle}, high detail, 4k`;
-        } catch (pErr) {
-          imagePrompt = `Realistic journalistic press news photography depicting: ${headline}, ${variationAngle}, high detail, 4k`;
-        }
-      } else {
+          return promptGenResponse.text?.trim() || "";
+        }, isVip);
+      } catch (pErr) {
+        imagePrompt = "";
+      }
+      if (!imagePrompt) {
         imagePrompt = `Realistic journalistic press news photography depicting: ${headline}, ${variationAngle}, high detail, 4k`;
       }
     }
@@ -15706,38 +16175,11 @@ Return ONLY the English prompt string.`,
       else if (aspectRatio === "9:16") mappedAspectRatio = "9:16";
       else if (aspectRatio === "16:9") mappedAspectRatio = "16:9";
 
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const imgResponse = await ai.models.generateContent({
-            model: "gemini-3.1-flash-image",
-            contents: {
-              parts: [
-                {
-                  text: `${imagePrompt}${PRESS_PHOTO_STYLE_SUFFIX}`,
-                },
-              ],
-            },
-            config: {
-              imageConfig: {
-                aspectRatio: mappedAspectRatio,
-              },
-            },
-          });
-
-          if (imgResponse.candidates && imgResponse.candidates[0]?.content?.parts) {
-            for (const part of imgResponse.candidates[0].content.parts) {
-              if (part.inlineData) {
-                imageBase64 = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                isAiGenerated = true;
-                break;
-              }
-            }
-          }
-        } catch (primaryErr: any) {
-          console.warn("gemini-3.1-flash-image failed:", primaryErr?.message?.slice(0, 100));
+      try {
+        imageBase64 = await executeGeminiWithKeyPool(async (ai) => {
           try {
-            const imgFallback = await ai.models.generateContent({
-              model: "gemini-3.1-flash-lite-image",
+            const imgResponse = await ai.models.generateContent({
+              model: "gemini-3.1-flash-image",
               contents: {
                 parts: [
                   {
@@ -15752,19 +16194,48 @@ Return ONLY the English prompt string.`,
               },
             });
 
-            if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
-              for (const part of imgFallback.candidates[0].content.parts) {
+            if (imgResponse.candidates && imgResponse.candidates[0]?.content?.parts) {
+              for (const part of imgResponse.candidates[0].content.parts) {
                 if (part.inlineData) {
-                  imageBase64 = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                  isAiGenerated = true;
-                  break;
+                  return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
                 }
               }
             }
-          } catch (secondaryErr: any) {
-            console.warn("gemini-3.1-flash-lite-image also failed:", secondaryErr?.message?.slice(0, 100));
+          } catch (primaryErr: any) {
+            console.warn("gemini-3.1-flash-image failed:", primaryErr?.message?.slice(0, 100));
           }
+
+          const imgFallback = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite-image",
+            contents: {
+              parts: [
+                {
+                  text: `${imagePrompt}${PRESS_PHOTO_STYLE_SUFFIX}`,
+                },
+              ],
+            },
+            config: {
+              imageConfig: {
+                aspectRatio: mappedAspectRatio,
+              },
+            },
+          });
+
+          if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
+            for (const part of imgFallback.candidates[0].content.parts) {
+              if (part.inlineData) {
+                return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
+              }
+            }
+          }
+          return "";
+        }, isVip);
+
+        if (imageBase64) {
+          isAiGenerated = true;
         }
+      } catch (geminiImgErr: any) {
+        console.warn("Gemini image generation pool error:", geminiImgErr?.message?.slice(0, 100));
       }
     }
 
@@ -15905,18 +16376,20 @@ ${modeGuidance}
       }
     } else {
       try {
-        const ai = getGeminiClient();
-        const response = await generateWithFallbackAndRetry(
-          ai,
-          DEFAULT_FALLBACK_MODELS,
-          {
-            contents: prompt,
-            config: {
-              systemInstruction,
-            },
-          }
-        );
-        caption = (response.text || "").trim();
+        const isVip = isUserVipEligible(req);
+        caption = await executeGeminiWithKeyPool(async (ai) => {
+          const response = await generateWithFallbackAndRetry(
+            ai,
+            DEFAULT_FALLBACK_MODELS,
+            {
+              contents: prompt,
+              config: {
+                systemInstruction,
+              },
+            }
+          );
+          return (response.text || "").trim();
+        }, isVip);
       } catch (capErr: any) {
         // Fallback to local editorial synthesizer
       }
@@ -15966,20 +16439,16 @@ function createVideoHeadlineVariantsFallback(caption: string, title?: string): s
   return options.slice(0, 4);
 }
 
-// Endpoint: AI Headline Generation for Admin Video Publishing (4 variants)
-app.post("/api/generate-video-headlines", async (req, res) => {
+export async function generateVideoHeadlinesInternal(
+  caption: string,
+  title: string,
+  ratio: string = "9:16",
+  isVip: boolean = false
+): Promise<{ success: boolean; headlines: string[]; source: "ai" | "fallback" }> {
+  const fallbackHeadlines = createVideoHeadlineVariantsFallback(caption, title);
   try {
-    const { caption = "", title = "", ratio = "9:16" } = req.body || {};
-    if (!caption && !title) {
-      return res.status(400).json({ error: "कैप्शन या शीर्षक अनिवार्य है।" });
-    }
-
-    const fallbackHeadlines = createVideoHeadlineVariantsFallback(caption, title);
-
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const ai = getGeminiClient();
-        const prompt = `वीडियो संदर्भ (Caption) और शीर्षक के आधार पर 4 हिंदी हेडलाइन्स तैयार करें:
+    const parsed = await executeGeminiWithKeyPool(async (ai) => {
+      const prompt = `वीडियो संदर्भ (Caption) और शीर्षक के आधार पर 4 हिंदी हेडलाइन्स तैयार करें:
 
 वीडियो शीर्षक: "${title}"
 वीडियो संदर्भ/कैप्शन: "${caption}"
@@ -15995,34 +16464,54 @@ app.post("/api/generate-video-headlines", async (req, res) => {
   ]
 }`;
 
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), 3500));
-        const response = (await Promise.race([
-          generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-            contents: prompt,
-            config: {
-              responseMimeType: "application/json",
-            },
-          }),
-          timeoutPromise,
-        ])) as any;
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), 4500));
+      const response = (await Promise.race([
+        generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+          },
+        }),
+        timeoutPromise,
+      ])) as any;
 
-        const raw = response.text?.trim() || "";
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed?.headlines) && parsed.headlines.length >= 4) {
-          const valid = parsed.headlines.slice(0, 4).map((h: any) => String(h || "").trim()).filter(Boolean);
-          if (valid.length === 4) {
-            return res.json({ success: true, headlines: valid, source: "ai" });
-          }
-        }
-      } catch (aiErr: any) {
-        console.warn("Gemini video headline generator busy, using journalistic editorial fallback:", aiErr?.message?.slice(0, 80));
+      const raw = response.text?.trim() || "";
+      return JSON.parse(raw);
+    }, isVip);
+
+    if (Array.isArray(parsed?.headlines) && parsed.headlines.length >= 4) {
+      const valid = parsed.headlines.slice(0, 4).map((h: any) => String(h || "").trim()).filter(Boolean);
+      if (valid.length === 4) {
+        return { success: true, headlines: valid, source: "ai" };
       }
     }
+  } catch (aiErr: any) {
+    console.warn("Gemini video headline generator busy, using journalistic editorial fallback:", aiErr?.message?.slice(0, 80));
+  }
 
-    return res.json({ success: true, headlines: fallbackHeadlines, source: "fallback" });
+  return { success: true, headlines: fallbackHeadlines, source: "fallback" };
+}
+
+// Endpoint: AI Headline Generation for Video Publishing (4 variants)
+// Security: Protected by rate limiting, authentication check, user trial/block enforcement, and input validation
+app.post("/api/generate-video-headlines", apiRateLimiter(20, 60000), requireAuthMiddleware, enforceUserAccessMiddleware, async (req, res) => {
+  try {
+    const { caption = "", title = "", ratio = "9:16" } = req.body || {};
+    const cleanCaption = String(caption || "").trim();
+    const cleanTitle = String(title || "").trim();
+    if (!cleanCaption && !cleanTitle) {
+      return res.status(400).json({ success: false, error: "कैप्शन या शीर्षक अनिवार्य है।" });
+    }
+    if (cleanCaption.length > 2000 || cleanTitle.length > 500) {
+      return res.status(400).json({ success: false, error: "इनपुट टेक्स्ट की लंबाई अनुमत सीमा से अधिक है।" });
+    }
+
+    const isVip = isUserVipEligible(req);
+    const result = await generateVideoHeadlinesInternal(cleanCaption, cleanTitle, String(ratio || "9:16"), isVip);
+    return res.json(result);
   } catch (err: any) {
     console.error("Error in /api/generate-video-headlines:", err);
-    return res.status(500).json({ error: cleanErrorMessage(err) });
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
 
@@ -16075,7 +16564,7 @@ app.post("/api/generate-morning-jacket", enforceUserAccessMiddleware, async (req
       activePrompt = defaultMorningTopics[randIdx];
     }
 
-    const ai = getGeminiClient();
+    const isVip = isUserVipEligible(req);
 
     // Check if user is asking to change or replace the image
     const isImageChangeRequest =
@@ -16135,17 +16624,19 @@ Strictly return valid JSON object matching these keys.`;
         }
       }
 
-      if (!contentData && process.env.GEMINI_API_KEY) {
+      if (!contentData) {
         try {
-          const geminiRes = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
-            contents: systemInstruction,
-            config: {
-              responseMimeType: "application/json",
-              temperature: 0.6,
-            },
-          });
-          const raw = geminiRes.text?.trim() || "{}";
-          contentData = JSON.parse(raw);
+          contentData = await executeGeminiWithKeyPool(async (ai) => {
+            const geminiRes = await generateWithFallbackAndRetry(ai, DEFAULT_FALLBACK_MODELS, {
+              contents: systemInstruction,
+              config: {
+                responseMimeType: "application/json",
+                temperature: 0.6,
+              },
+            });
+            const raw = geminiRes.text?.trim() || "{}";
+            return JSON.parse(raw);
+          }, isVip);
         } catch (geminiErr: any) {
           console.log("[Morning AI] Gemini busy or quota limit, activating serene editorial fallback.");
         }
@@ -16181,41 +16672,15 @@ Strictly return valid JSON object matching these keys.`;
 
     if (generateImage) {
       console.log("Generating Morning Jacket AI image with prompt:", imagePrompt, "variation:", variation);
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const imgRes = await ai.models.generateContent({
-            model: "gemini-3.1-flash-image",
-            contents: {
-              parts: [
-                {
-                  text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, pale soft colors, bright clean lighting, strictly no text, no words, no letters, no logos.`,
-                },
-              ],
-            },
-            config: {
-              imageConfig: {
-                aspectRatio: "3:4",
-              },
-            },
-          });
-
-          if (imgRes.candidates && imgRes.candidates[0]?.content?.parts) {
-            for (const part of imgRes.candidates[0].content.parts) {
-              if (part.inlineData) {
-                generatedImageUrl = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                break;
-              }
-            }
-          }
-        } catch (imgErr: any) {
-          console.warn("Morning gemini-3.1-flash-image error:", imgErr?.message?.slice(0, 100));
+      try {
+        generatedImageUrl = await executeGeminiWithKeyPool(async (ai) => {
           try {
-            const imgFallback = await ai.models.generateContent({
-              model: "gemini-3.1-flash-lite-image",
+            const imgRes = await ai.models.generateContent({
+              model: "gemini-3.1-flash-image",
               contents: {
                 parts: [
                   {
-                    text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, strictly no text, no letters.`,
+                    text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, pale soft colors, bright clean lighting, strictly no text, no words, no letters, no logos.`,
                   },
                 ],
               },
@@ -16226,18 +16691,44 @@ Strictly return valid JSON object matching these keys.`;
               },
             });
 
-            if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
-              for (const part of imgFallback.candidates[0].content.parts) {
+            if (imgRes.candidates && imgRes.candidates[0]?.content?.parts) {
+              for (const part of imgRes.candidates[0].content.parts) {
                 if (part.inlineData) {
-                  generatedImageUrl = `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
-                  break;
+                  return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
                 }
               }
             }
-          } catch (liteErr: any) {
-            console.warn("gemini-3.1-flash-lite-image also busy:", liteErr?.message?.slice(0, 100));
+          } catch (imgErr: any) {
+            console.warn("Morning gemini-3.1-flash-image error:", imgErr?.message?.slice(0, 100));
           }
-        }
+
+          const imgFallback = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite-image",
+            contents: {
+              parts: [
+                {
+                  text: `${imagePrompt}. ${angleText}. Soft light-colored photographic background wallpaper, aesthetic bright morning atmosphere, strictly no text, no letters.`,
+                },
+              ],
+            },
+            config: {
+              imageConfig: {
+                aspectRatio: "3:4",
+              },
+            },
+          });
+
+          if (imgFallback.candidates && imgFallback.candidates[0]?.content?.parts) {
+            for (const part of imgFallback.candidates[0].content.parts) {
+              if (part.inlineData) {
+                return `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`;
+              }
+            }
+          }
+          return "";
+        }, isVip);
+      } catch (poolErr: any) {
+        console.warn("Morning Jacket image generation error:", poolErr?.message?.slice(0, 100));
       }
 
       // Fallback to OpenAI DALL-E 3 if Gemini failed and user chose OpenAI
@@ -18339,6 +18830,12 @@ async function startServer() {
 
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`AI News Maker server running on http://0.0.0.0:${PORT}`);
+    // Pre-warm API Key Pool Vault from Cloud Firestore & local disk cache
+    getOrLoadApiKeysVault().then((vault) => {
+      const freeCount = Array.isArray(vault.freeKeys) ? vault.freeKeys.length : 0;
+      const hasPaid = Boolean(vault.paidKey && vault.paidKey.key);
+      console.log(`[API Key Vault] Pre-warmed cache: ${freeCount} Free keys, Paid key: ${hasPaid ? "configured" : "none"}`);
+    }).catch((e) => console.warn("[API Key Vault] Startup cache pre-warm error:", e.message));
   });
 
   serverInstance.on("error", (err: any) => {

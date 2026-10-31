@@ -2,6 +2,48 @@
   "claims": [],
   "transactions": [
     {
+      "id": "tx_1793391037112",
+      "userId": "user_wallet_1793391037107",
+      "type": "debit",
+      "amount": 25,
+      "description": "Frame Unlock 1080p"
+    },
+    {
+      "id": "tx_1793391037109",
+      "userId": "user_wallet_1793391037107",
+      "type": "credit",
+      "amount": 100,
+      "description": "Welcome Bonus Credit"
+    },
+    {
+      "id": "tx_1793390977330",
+      "userId": "user_wallet_1793390977326",
+      "type": "debit",
+      "amount": 25,
+      "description": "Frame Unlock 1080p"
+    },
+    {
+      "id": "tx_1793390977327",
+      "userId": "user_wallet_1793390977326",
+      "type": "credit",
+      "amount": 100,
+      "description": "Welcome Bonus Credit"
+    },
+    {
+      "id": "tx_1793390939067",
+      "userId": "user_wallet_1793390939060",
+      "type": "debit",
+      "amount": 25,
+      "description": "Frame Unlock 1080p"
+    },
+    {
+      "id": "tx_1793390939062",
+      "userId": "user_wallet_1793390939060",
+      "type": "credit",
+      "amount": 100,
+      "description": "Welcome Bonus Credit"
+    },
+    {
       "id": "tx-frame-1793367890484-3cmq",
       "transactionId": "tx-frame-1793367890484-3cmq",
       "userId": "coin_test_1793367890444@example.com",
@@ -2827,6 +2869,18 @@
       "coinBalance": 35,
       "pendingCoins": 0,
       "totalEarnedCoins": 50
+    },
+    "user_wallet_1793390939060": {
+      "walletKey": "user_wallet_1793390939060",
+      "coinBalance": 75
+    },
+    "user_wallet_1793390977326": {
+      "walletKey": "user_wallet_1793390977326",
+      "coinBalance": 75
+    },
+    "user_wallet_1793391037107": {
+      "walletKey": "user_wallet_1793391037107",
+      "coinBalance": 75
     }
   },
   "welcomeRewards": {
