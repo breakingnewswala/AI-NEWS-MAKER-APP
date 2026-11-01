@@ -1002,7 +1002,7 @@ async function runTests() {
       `AI Generator returns exactly 5 headline options (got ${aiData?.headlineOptions?.length})`
     );
 
-    const maxLimits = [150, 150, 150, 150, 150];
+    const maxLimits = [110, 130, 150, 160, 200];
     aiData.headlineOptions.forEach((h, idx) => {
       assert(
         h.length <= maxLimits[idx],

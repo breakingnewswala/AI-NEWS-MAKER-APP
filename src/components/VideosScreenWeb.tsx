@@ -209,7 +209,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     }
     const cost = vid.coinCost || vid.coinValue || 0;
     if (cost <= 0) {
-      setInlinePlayingId(vid.id);
+      handlePlayOrOpenVideo(vid);
       return;
     }
     const confirmUnlock = window.confirm(`क्या आप ${cost} कॉइन खर्च करके यह वीडियो अनलॉक करना चाहते हैं?`);
@@ -242,7 +242,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         });
         window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
         alert(`🎉 बधाई! ${cost} कॉइन में वीडियो अनलॉक हो गया।`);
-        setInlinePlayingId(vid.id);
+        handlePlayOrOpenVideo(vid);
       } else {
         alert(data.error || 'अनलॉक विफल रहा। कृपया पर्याप्त कॉइन बैलेंस सुनिश्चित करें।');
       }
@@ -863,6 +863,11 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     }
   };
 
+  const handlePlayOrOpenVideo = (vid: VideoFeedItem) => {
+    setActiveVideo(vid);
+    setInlinePlayingId(vid.id);
+  };
+
   const renderVideoCard = (vid: VideoFeedItem, isHorizontal = false) => {
     const isPlaying = inlinePlayingId === vid.id;
     const ratioClass = getAspectRatioClass(vid.aspectRatio);
@@ -906,7 +911,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               </div>
             ) : (
               <div
-                onClick={() => setInlinePlayingId(vid.id)}
+                onClick={() => handlePlayOrOpenVideo(vid)}
                 className="w-full h-full relative cursor-pointer group"
               >
                 <img
@@ -964,7 +969,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </div>
 
             <h3
-              onClick={() => setInlinePlayingId(vid.id)}
+              onClick={() => handlePlayOrOpenVideo(vid)}
               className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
             >
               {vid.title}
@@ -1059,7 +1064,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
           <button
             type="button"
-            onClick={() => setInlinePlayingId(vid.id)}
+            onClick={() => handlePlayOrOpenVideo(vid)}
             className={`py-2.5 px-3.5 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 border transition-colors cursor-pointer active:scale-95 shrink-0 ${
               isPlaying
                 ? 'bg-red-600 text-white border-red-500'

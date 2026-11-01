@@ -65,6 +65,7 @@ import {
   RedeemResult,
   PLAN_DETAILS,
   getPlansCatalog,
+  sortPlansByCanonicalOrder,
   PLAN_KEY_MAP,
   UserPlanTier,
   UserSubscriptionInfo,
@@ -1488,6 +1489,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     try {
       const serverPayload = {
         ...updatedProfile,
+        userId: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
+        uid: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
         email: cleanEmail,
         fullName: channelProfile.fullName || currentUser?.name || 'संपादक',
         username: channelProfile.username,
@@ -1602,7 +1605,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       setTimeout(() => setPlanSuccessMsg(''), 4000);
       return;
     }
-    const planDetail = PLAN_DETAILS.find((p) => p.id === tier) || null;
+    const catalog = sortPlansByCanonicalOrder(getPlansCatalog());
+    const planDetail = catalog.find((p) => p.id === tier) || PLAN_DETAILS.find((p) => p.id === tier) || null;
     if (planDetail) {
       setCashfreeModalPlan(planDetail);
     } else {
@@ -1786,7 +1790,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
               {/* 4 Plan Cards Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                {PLAN_DETAILS.map((plan) => {
+                {sortPlansByCanonicalOrder(getPlansCatalog()).map((plan) => {
                   const isCurrent = subscription.tier === plan.id;
                   return (
                     <div

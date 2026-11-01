@@ -41,6 +41,7 @@ class CentralFirestoreDatabaseService {
     this.cache = {
       users: new Map(),
       news: new Map(),
+      videos: new Map(),
       wallets: new Map(),
       walletTransactions: new Map(),
       frameUnlocks: new Map(),
@@ -64,6 +65,7 @@ class CentralFirestoreDatabaseService {
     // Configurable Cache TTLs (Task 1: Multi-instance Cache Consistency)
     this.cacheTtl = {
       news: 60 * 1000,
+      videos: 60 * 1000,
       rssSources: 120 * 1000,
       plans: 300 * 1000,
       coupons: 300 * 1000,
@@ -445,6 +447,15 @@ class CentralFirestoreDatabaseService {
         console.log(`  ✓ Loaded ${nRes.documents.length} news posts into live cache`);
       }
 
+      // 2.5. Videos & Reels
+      const vRes = await this.listDocs('videos', 200);
+      if (vRes.success) {
+        if (!this.cache.videos) this.cache.videos = new Map();
+        this.cache.videos.clear();
+        vRes.documents.forEach((v) => this.cache.videos.set(v.id, v));
+        console.log(`  ✓ Loaded ${vRes.documents.length} videos into live cache`);
+      }
+
       // 3. Wallets
       const wRes = await this.listDocs('wallets', 300);
       if (wRes.success) {
@@ -503,20 +514,52 @@ class CentralFirestoreDatabaseService {
   }
 
   // --- USER PROFILE OPERATIONS ---
+  _isMasterAdminIdentifier(id) {
+    if (!id) return false;
+    const clean = String(id).toLowerCase().trim();
+    return clean === 'breakingnewswala.com@gmail.com' ||
+           clean === 'usr_627265616b69' ||
+           clean === 'admin.ainewsmaker@gmail.com' ||
+           clean === 'admin';
+  }
+
   async getUser(idOrEmail) {
     if (!idOrEmail) return null;
     const clean = idOrEmail.toLowerCase().trim();
+    const isMasterAdmin = this._isMasterAdminIdentifier(clean);
 
     if (this.useFirestore) {
       // 1. Try memory cache first for speed
       if (this.cache.users.has(clean)) {
         return this.cache.users.get(clean);
       }
+      if (isMasterAdmin) {
+        if (this.cache.users.has('breakingnewswala.com@gmail.com')) {
+          return this.cache.users.get('breakingnewswala.com@gmail.com');
+        }
+        if (this.cache.users.has('usr_627265616b69')) {
+          return this.cache.users.get('usr_627265616b69');
+        }
+      }
+
       // 2. Fetch directly from Firestore
       const read = await this.readDoc('users', clean);
       if (read.success && read.data) {
-        this.cache.users.set(clean, read.data);
-        return read.data;
+        let user = read.data;
+        if (isMasterAdmin) {
+          const altKey = clean === 'usr_627265616b69' ? 'breakingnewswala.com@gmail.com' : 'usr_627265616b69';
+          const altRead = await this.readDoc('users', altKey);
+          if (altRead.success && altRead.data) {
+            user = { ...altRead.data, ...user, email: 'breakingnewswala.com@gmail.com', userId: 'usr_627265616b69', uid: 'usr_627265616b69', role: 'superadmin' };
+          }
+        }
+        this.cache.users.set(clean, user);
+        if (isMasterAdmin) {
+          this.cache.users.set('breakingnewswala.com@gmail.com', user);
+          this.cache.users.set('usr_627265616b69', user);
+          this.cache.users.set('admin', user);
+        }
+        return user;
       }
       // 3. Fallback scan across users collection if doc ID was an internal UUID
       const allUsers = await this.listUsers();
@@ -542,21 +585,55 @@ class CentralFirestoreDatabaseService {
   async saveUser(idOrEmail, userData) {
     if (!idOrEmail) return { success: false, error: 'User identifier required' };
     const clean = idOrEmail.toLowerCase().trim();
-    const payload = {
+    const isMasterAdmin = this._isMasterAdminIdentifier(clean) ||
+                          this._isMasterAdminIdentifier(userData.email) ||
+                          this._isMasterAdminIdentifier(userData.userId) ||
+                          this._isMasterAdminIdentifier(userData.uid);
+
+    let payload = {
       ...userData,
       docId: clean,
       updatedAt: Date.now(),
     };
 
+    if (isMasterAdmin) {
+      payload = {
+        ...payload,
+        email: 'breakingnewswala.com@gmail.com',
+        userId: payload.userId || 'usr_627265616b69',
+        uid: payload.uid || payload.userId || 'usr_627265616b69',
+        role: 'superadmin',
+        tier: 'ultra',
+      };
+    }
+
     if (this.useFirestore) {
       this.cache.users.set(clean, payload);
       if (payload.email) this.cache.users.set(payload.email.toLowerCase().trim(), payload);
       if (payload.userId) this.cache.users.set(payload.userId.toLowerCase().trim(), payload);
-      const res = await this.writeDoc('users', clean, payload);
-      return res;
+      if (payload.uid) this.cache.users.set(payload.uid.toLowerCase().trim(), payload);
+
+      if (isMasterAdmin) {
+        this.cache.users.set('breakingnewswala.com@gmail.com', payload);
+        this.cache.users.set('usr_627265616b69', payload);
+        this.cache.users.set('admin', payload);
+        // Persist to both documents in Firestore
+        await Promise.all([
+          this.writeDoc('users', 'breakingnewswala.com@gmail.com', { ...payload, docId: 'breakingnewswala.com@gmail.com' }),
+          this.writeDoc('users', 'usr_627265616b69', { ...payload, docId: 'usr_627265616b69' }),
+        ]);
+        return { success: true };
+      } else {
+        const res = await this.writeDoc('users', clean, payload);
+        return res;
+      }
     } else {
       const profiles = this._loadLocalJson('user_profiles_db.json', {});
       profiles[clean] = payload;
+      if (isMasterAdmin) {
+        profiles['breakingnewswala.com@gmail.com'] = payload;
+        profiles['usr_627265616b69'] = payload;
+      }
       this._saveLocalJson('user_profiles_db.json', profiles);
       return { success: true };
     }
@@ -564,17 +641,25 @@ class CentralFirestoreDatabaseService {
 
   async listUsers() {
     if (this.useFirestore) {
+      let docs = [];
       if (this.cache.users.size > 0) {
         // Return unique documents from cache
         const unique = new Map();
         for (const u of this.cache.users.values()) {
-          const key = u.id || u.docId || u.email || u.userId;
-          if (key && !unique.has(key)) unique.set(key, u);
+          const isMA = this._isMasterAdminIdentifier(u.email) || this._isMasterAdminIdentifier(u.userId) || this._isMasterAdminIdentifier(u.id);
+          const key = isMA ? 'breakingnewswala.com@gmail.com' : (u.id || u.docId || u.email || u.userId);
+          if (key && !unique.has(key)) {
+            unique.set(key, u);
+          } else if (isMA && unique.has(key)) {
+            unique.set(key, { ...unique.get(key), ...u });
+          }
         }
-        return Array.from(unique.values());
+        docs = Array.from(unique.values());
+      } else {
+        const res = await this.listDocs('users', 300);
+        docs = res.documents || [];
       }
-      const res = await this.listDocs('users', 300);
-      return res.documents || [];
+      return docs;
     } else {
       const profiles = this._loadLocalJson('user_profiles_db.json', {});
       return Object.values(profiles);
@@ -639,6 +724,70 @@ class CentralFirestoreDatabaseService {
       const news = this._loadLocalJson('news_database.json', []);
       const filtered = news.filter((n) => n.id !== cleanId);
       this._saveLocalJson('news_database.json', filtered);
+      return { success: true };
+    }
+  }
+
+  // --- VIDEOS & REELS OPERATIONS ---
+  async getVideos(options = {}) {
+    if (this.useFirestore) {
+      let videos = [];
+      const cacheValid = this.isCacheValid('videos');
+      if (this.cache.videos && this.cache.videos.size > 0 && !options.forceRemote && cacheValid) {
+        videos = Array.from(this.cache.videos.values());
+      } else {
+        const res = await this.listDocs('videos', 200);
+        videos = res.documents || [];
+        if (!this.cache.videos) this.cache.videos = new Map();
+        this.cache.videos.clear();
+        videos.forEach((v) => this.cache.videos.set(v.id, v));
+        this.cacheTimestamps.set('videos', Date.now());
+      }
+      return videos;
+    } else {
+      return this._loadLocalJson('videos_database.json', []);
+    }
+  }
+
+  async saveVideo(videoData) {
+    if (!videoData || !videoData.id) return { success: false, error: 'Video ID required' };
+    const cleanId = String(videoData.id).trim();
+    const payload = {
+      ...videoData,
+      id: cleanId,
+      docId: cleanId,
+      updatedAt: Date.now(),
+    };
+
+    if (this.useFirestore) {
+      if (!this.cache.videos) this.cache.videos = new Map();
+      this.cache.videos.set(cleanId, payload);
+      this.cacheTimestamps.set('videos', Date.now());
+      const res = await this.writeDoc('videos', cleanId, payload);
+      return res;
+    } else {
+      const videos = this._loadLocalJson('videos_database.json', []);
+      const idx = videos.findIndex((v) => v.id === cleanId);
+      if (idx >= 0) videos[idx] = payload;
+      else videos.unshift(payload);
+      this._saveLocalJson('videos_database.json', videos);
+      return { success: true };
+    }
+  }
+
+  async deleteVideo(videoId) {
+    if (!videoId) return { success: false, error: 'Video ID required' };
+    const cleanId = String(videoId).trim();
+
+    if (this.useFirestore) {
+      if (this.cache.videos) this.cache.videos.delete(cleanId);
+      this.cacheTimestamps.set('videos', Date.now());
+      const res = await this.deleteDoc('videos', cleanId);
+      return res;
+    } else {
+      const videos = this._loadLocalJson('videos_database.json', []);
+      const filtered = videos.filter((v) => v.id !== cleanId);
+      this._saveLocalJson('videos_database.json', filtered);
       return { success: true };
     }
   }
@@ -886,13 +1035,23 @@ class CentralFirestoreDatabaseService {
 
   // --- PLANS & COUPONS ---
   async getPlans() {
+    const canonicalOrder = { basic: 1, advanced: 2, advance: 2, professional: 3, pro: 3, ultra: 4, vip: 4, enterprise: 4 };
+    let list = [];
     if (this.useFirestore) {
-      if (this.cache.plans.size > 0) return Array.from(this.cache.plans.values());
-      const res = await this.listDocs('plans_catalog', 50);
-      return res.documents || [];
+      if (this.cache.plans.size > 0) {
+        list = Array.from(this.cache.plans.values());
+      } else {
+        const res = await this.listDocs('plans_catalog', 50);
+        list = res.documents || [];
+      }
     } else {
-      return this._loadLocalJson('plans_catalog_database.json', []);
+      list = this._loadLocalJson('plans_catalog_database.json', []);
     }
+    return list.sort((a, b) => {
+      const orderA = canonicalOrder[(a.id || a.planKey || '').toLowerCase()] || 99;
+      const orderB = canonicalOrder[(b.id || b.planKey || '').toLowerCase()] || 99;
+      return orderA - orderB;
+    });
   }
 
   async getCoupons() {

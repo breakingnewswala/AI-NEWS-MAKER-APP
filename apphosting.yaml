@@ -31,3 +31,11 @@ env:
     value: "false"
     availability:
       - BUILD
+  - variable: CASHFREE_APP_ID
+    secret: CASHFREE_APP_ID
+  - variable: CASHFREE_SECRET_KEY
+    secret: CASHFREE_SECRET_KEY
+  - variable: CASHFREE_ENVIRONMENT
+    value: "PRODUCTION"
+    availability:
+      - RUNTIME

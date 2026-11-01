@@ -42,6 +42,14 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
   } | null>(null);
   const [couponLoading, setCouponLoading] = useState<boolean>(false);
   const [couponMsg, setCouponMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [gatewayConfig, setGatewayConfig] = useState<{ hasCredentials?: boolean; environment?: string } | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/cashfree/config')
+      .then((r) => r.json())
+      .then((d) => setGatewayConfig(d))
+      .catch(() => {});
+  }, []);
 
   if (!isOpen || !plan) return null;
 
@@ -153,7 +161,12 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
         }
       }
 
-      // 3. Reviewer / Sandbox Fast-Verification Mode
+      // 3. Check live gateway credentials before verification
+      if (!isLiveGateway) {
+        setError('लाइव पेमेंट गेटवे क्रेडेंशियल्स (Cashfree App ID व Secret Key) सर्वर पर अभी कॉन्फ़िगर नहीं हैं। कृपया सहायता टीम से संपर्क करें।');
+        setLoading(false);
+        return;
+      }
       await verifyOrderCompletion(orderId, cleanEmail);
 
     } catch (err: any) {
@@ -235,6 +248,19 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
             </h2>
           </div>
         </div>
+
+        {/* Gateway Notice if credentials are not configured */}
+        {gatewayConfig && !gatewayConfig.hasCredentials && (
+          <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-300 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold">गेटवे स्थिति: लाइव क्रेडेंशियल्स कॉन्फ़िगरेशन प्रतीक्षारत (Pending Setup)</p>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Cashfree App ID व Secret Key का सेटअप सर्वर एनवायरनमेंट में बाकी है।
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Plan Summary Card */}
         <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">

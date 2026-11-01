@@ -451,6 +451,62 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     }
   };
 
+  const handlePublishRssNews = async (rawId: string, eventId: string) => {
+    if (!rawId) return;
+    try {
+      const res = await fetch(getApiUrl('/api/admin/news/publish-rss'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-role': 'superadmin',
+          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
+          'x-user-email': currentUser?.email || 'admin@ainewsmaker.online',
+        },
+        body: JSON.stringify({ id: rawId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAdminNotifActionMsg('✅ RSS खबर मुख्य होम फ़ीड में सफलतापूर्वक प्रकाशित कर दी गई!');
+        setAdminNotifications((prev) => prev.map((n) => n.id === eventId ? { ...n, unread: false, isPublished: true, status: 'APPROVED' } : n));
+        setAdminNotifCounts((prev) => ({ ...prev, rss: Math.max(0, prev.rss - 1), all: Math.max(0, prev.all - 1) }));
+        setTimeout(() => setAdminNotifActionMsg(''), 4000);
+      } else {
+        alert(data.error || 'खबर प्रकाशित करने में त्रुटि आई।');
+      }
+    } catch {
+      alert('नेटवर्क त्रुटि: खबर प्रकाशित नहीं की जा सकी।');
+    }
+  };
+
+  const handleResolveSupportRequest = async (rawId: string, eventId: string, category: string) => {
+    if (!rawId) return;
+    try {
+      const res = await fetch(getApiUrl('/api/admin/support/update-status'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-role': 'superadmin',
+          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
+          'x-user-email': currentUser?.email || 'admin@ainewsmaker.online',
+        },
+        body: JSON.stringify({ id: rawId, type: category, status: 'resolved' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAdminNotifActionMsg('✅ सपोर्ट अनुरोध स्थिति सफलतापूर्वक Resolved मार्क की गई!');
+        setAdminNotifications((prev) => prev.map((n) => n.id === eventId ? { ...n, unread: false, status: 'resolved' } : n));
+        setAdminNotifCounts((prev) => ({ ...prev, support: Math.max(0, prev.support - 1), all: Math.max(0, prev.all - 1) }));
+        setTimeout(() => setAdminNotifActionMsg(''), 4000);
+      } else {
+        alert(data.error || 'स्थिति अपडेट करने में त्रुटि आई।');
+      }
+    } catch {
+      alert('नेटवर्क त्रुटि: स्थिति अपडेट नहीं की जा सकी।');
+    }
+  };
+
   useEffect(() => {
     fetchAdminRewards();
     fetchAdminNotifications();
@@ -1248,17 +1304,31 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     adminUpdateUserRecord(editingBrandingUser.email, updates);
     try {
       await adminUpdateCloudUser(editingBrandingUser.userId || editingBrandingUser.email, updates);
-      await fetch(getApiUrl('/api/user-profile'), {
+      const res = await fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': 'master-admin',
+          'x-user-role': 'superadmin',
+          'x-admin-email': currentUser?.email || editingBrandingUser.email,
+          'x-user-email': currentUser?.email || editingBrandingUser.email,
+        },
         body: JSON.stringify({
           userId: editingBrandingUser.userId || editingBrandingUser.email,
+          uid: editingBrandingUser.userId || editingBrandingUser.email,
           email: editingBrandingUser.email,
           ...updates,
         }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setEditBrandMsg(`⚠️ ${errData.error || 'सर्वर पर ब्रांडिंग सुरक्षित करने में त्रुटि।'}`);
+        return;
+      }
     } catch (e) {
       console.warn('Error saving user branding to server:', e);
+      setEditBrandMsg(`⚠️ नेटवर्क त्रुटि: ${e?.message || 'ब्रांडिंग सुरक्षित नहीं हो सकी।'}`);
+      return;
     }
     setPlanUsers(getPlanUsers());
     setEditBrandMsg('✅ यूज़र ब्रांडिंग विवरण सफलतापूर्वक सुरक्षित हो गया!');
@@ -2250,9 +2320,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <div className="min-w-0">
                 <h4 className="text-base font-black text-white flex items-center gap-2">
                   <span>पैकेज कूपन कोड</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black tracking-wide uppercase bg-rose-950 text-rose-300 border border-rose-500/40">
-                    Master Admin
-                  </span>
+
                 </h4>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
                   कैशफ्री गेटवे हेतु पैकेज डिस्काउंट कूपन बनाएं, छूट राशि तय करें व उपयोग सीमा प्रबंधित करें
@@ -5709,9 +5777,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-indigo-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
-                मास्टर एडमिन
-              </span>
+
               <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'api_keys' ? 'rotate-180 text-amber-400' : ''}`} />
             </div>
           </button>
@@ -5906,16 +5972,72 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                 {n.message}
                               </p>
                             )}
+                            {/* Meta & Request details */}
                             {n.meta && (
-                              <div className="flex items-center gap-3 text-[10px] text-slate-400 pt-0.5">
-                                {n.meta.email && <span>ईमेल: {n.meta.email}</span>}
-                                {n.meta.source && <span>स्रोत: {n.meta.source}</span>}
+                              <div className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-lg text-[11px] text-slate-300 space-y-1 mt-1">
+                                {n.category === 'rss' ? (
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-amber-400 font-bold">स्रोत: {n.meta.channelName || n.meta.source || 'RSS Feed'}</span>
+                                      {n.meta.location && <span className="text-slate-400">| {n.meta.location}</span>}
+                                    </div>
+                                    {n.meta.sourceUrl && (
+                                      <a
+                                        href={n.meta.sourceUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-amber-300 hover:underline text-[10px] font-mono"
+                                      >
+                                        मूल लिंक देखें ↗
+                                      </a>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+                                    <div><strong className="text-amber-400 font-bold">यूज़र:</strong> {n.meta.userName || 'संपादक'}</div>
+                                    <div><strong className="text-amber-400 font-bold">ईमेल:</strong> {n.meta.userEmail || n.meta.email || 'N/A'}</div>
+                                    {n.meta.userMobile && <div><strong className="text-amber-400 font-bold">मोबाइल:</strong> {n.meta.userMobile}</div>}
+                                    <div><strong className="text-amber-400 font-bold">स्थिति:</strong> <span className={n.status === 'resolved' || n.status === 'approved' ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>{n.status === 'resolved' || n.status === 'approved' ? '✓ Resolved' : '⏳ Pending'}</span></div>
+                                    {n.meta.channelName && <div><strong className="text-amber-400 font-bold">चैनल:</strong> {n.meta.channelName}</div>}
+                                    {n.meta.newLogoUrl && (
+                                      <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                                        <strong className="text-amber-400 font-bold">नया लोगो:</strong>
+                                        <img src={n.meta.newLogoUrl} alt="Logo" className="w-7 h-7 object-contain bg-black rounded border border-slate-700" />
+                                        <a href={n.meta.newLogoUrl} target="_blank" rel="noreferrer" className="text-xs text-amber-300 underline">लोगो डाउनलोड</a>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {/* Direct Action: Publish RSS News */}
+                          {n.category === 'rss' && !n.isPublished && n.status !== 'APPROVED' && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublishRssNews(n.rawId, n.id)}
+                              className="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-emerald-400/40"
+                              title="इस RSS खबर को तुरंत मुख्य होम फ़ीड में प्रकाशित करें"
+                            >
+                              <span>📰 प्रकाशित करें</span>
+                            </button>
+                          )}
+
+                          {/* Direct Action: Resolve Support Request */}
+                          {n.category !== 'rss' && n.status !== 'resolved' && n.status !== 'approved' && (
+                            <button
+                              type="button"
+                              onClick={() => handleResolveSupportRequest(n.rawId, n.id, n.category)}
+                              className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] font-bold rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-blue-400/40"
+                              title="इस सपोर्ट अनुरोध को Resolved मार्क करें"
+                            >
+                              <span>✓ Resolve करें</span>
+                            </button>
+                          )}
+
                           {n.unread && (
                             <button
                               type="button"

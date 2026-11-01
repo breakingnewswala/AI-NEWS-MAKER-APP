@@ -835,6 +835,29 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [videoUrl, setVideoUrl] = useState<string>(
     initialVideoUrl || initialVideo?.videoUrl || ''
   );
+
+  // Sync video source whenever an initial video or URL is passed
+  useEffect(() => {
+    const url = initialVideoUrl || initialVideo?.videoUrl || '';
+    if (url) {
+      setVideoUrl(url);
+      setClips([{
+        id: `clip-${Date.now()}`,
+        name: initialVideo?.title || 'वीडियो क्लिप',
+        url,
+        duration: parseFloat(String(initialVideo?.duration || '60')) || 60,
+        trimStart: 0,
+        trimEnd: parseFloat(String(initialVideo?.duration || '60')) || 60,
+      }]);
+      if (initialHeadline || initialVideo?.title) {
+        setHeadlines([initialHeadline || initialVideo?.title || '']);
+      }
+      if (initialVideo?.aspectRatio) {
+        const ar = initialVideo.aspectRatio === '16:9' ? '4:3' : (initialVideo.aspectRatio as VideoAspect);
+        setAspect(ar);
+      }
+    }
+  }, [initialVideoUrl, initialVideo?.videoUrl, initialVideo?.id, initialHeadline]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
@@ -2571,7 +2594,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       playsInline
                       loop
                       muted={isMuted}
-                      crossOrigin="anonymous"
+                      crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
                       className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                       style={{
                         objectPosition: cropRegion ? `center ${cropRegion.y * 100}%` : `center ${Math.min(100, Math.max(0, 50 + offsetY))}%`,
@@ -2631,7 +2654,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     playsInline
                     loop
                     muted={isMuted}
-                    crossOrigin="anonymous"
+                    crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
                     className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                     style={{
                       transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
@@ -2738,7 +2761,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     playsInline
                     loop
                     muted={isMuted}
-                    crossOrigin="anonymous"
+                    crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
                     className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                     style={{
                       transform: `scale(${zoomScale}) translateY(${offsetY}px)`,

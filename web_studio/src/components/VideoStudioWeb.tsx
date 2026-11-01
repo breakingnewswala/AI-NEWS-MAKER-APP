@@ -835,6 +835,29 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [videoUrl, setVideoUrl] = useState<string>(
     initialVideoUrl || initialVideo?.videoUrl || ''
   );
+
+  // Sync video source whenever an initial video or URL is passed
+  useEffect(() => {
+    const url = initialVideoUrl || initialVideo?.videoUrl || '';
+    if (url) {
+      setVideoUrl(url);
+      setClips([{
+        id: `clip-${Date.now()}`,
+        name: initialVideo?.title || 'वीडियो क्लिप',
+        url,
+        duration: parseFloat(String(initialVideo?.duration || '60')) || 60,
+        trimStart: 0,
+        trimEnd: parseFloat(String(initialVideo?.duration || '60')) || 60,
+      }]);
+      if (initialHeadline || initialVideo?.title) {
+        setHeadlines([initialHeadline || initialVideo?.title || '']);
+      }
+      if (initialVideo?.aspectRatio) {
+        const ar = initialVideo.aspectRatio === '16:9' ? '4:3' : (initialVideo.aspectRatio as VideoAspect);
+        setAspect(ar);
+      }
+    }
+  }, [initialVideoUrl, initialVideo?.videoUrl, initialVideo?.id, initialHeadline]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
@@ -2571,7 +2594,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       playsInline
                       loop
                       muted={isMuted}
-                      crossOrigin="anonymous"
+                      crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
                       className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                       style={{
                         objectPosition: cropRegion ? `center ${cropRegion.y * 100}%` : `center ${Math.min(100, Math.max(0, 50 + offsetY))}%`,
@@ -2631,7 +2654,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     playsInline
                     loop
                     muted={isMuted}
-                    crossOrigin="anonymous"
+                    crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
                     className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                     style={{
                       transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
@@ -2738,7 +2761,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     playsInline
                     loop
                     muted={isMuted}
-                    crossOrigin="anonymous"
+                    crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
                     className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                     style={{
                       transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
@@ -3211,7 +3234,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Film className="w-4 h-4 text-amber-400" />
-                      1. वीडियो जोड़ें व ट्रिम (Add Video & Clips)
+                      1. वीडियो जोड़ें और ट्रिम करें
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-300">
                       क्लिप्स: {clips.length}/3
@@ -3244,7 +3267,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   {/* Clip Selection Tabs if multiple clips */}
                   {clips.length > 1 && (
                     <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                      <span className="text-[11px] font-bold text-slate-400">सक्रिय क्लिप चुनें (Active Clip):</span>
+                      <span className="text-[11px] font-bold text-slate-400">सक्रिय क्लिप चुनें:</span>
                       <div className="flex gap-2 overflow-x-auto pb-1">
                         {clips.map((c, idx) => (
                           <button
@@ -3293,7 +3316,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                         <span className="flex items-center gap-1.5 text-amber-300">
                           <Scissors className="w-3.5 h-3.5" />
-                          <span>क्लिप {activeClipIndex + 1} ट्रिमिंग (Trimming):</span>
+                          <span>क्लिप {activeClipIndex + 1} ट्रिमिंग:</span>
                         </span>
                         <span className="font-mono text-amber-400">
                           {Math.max(0, Math.round(trimEnd - trimStart))}s (स्टार्ट: {Math.round(trimStart)}s, अंत: {Math.round(trimEnd)}s)
@@ -3383,7 +3406,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           <div className="flex justify-between text-xs font-bold text-slate-300">
                             <span className="flex items-center gap-1 text-amber-300">
                               <ZoomIn className="w-3.5 h-3.5" />
-                              <span>ज़ूम (Zoom Scale):</span>
+                              <span>ज़ूम (स्केल):</span>
                             </span>
                             <span className="text-amber-400 font-mono">{zoomScale.toFixed(2)}x</span>
                           </div>
@@ -3410,7 +3433,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           <div className="flex justify-between text-xs font-bold text-slate-300">
                             <span className="flex items-center gap-1 text-amber-300">
                               <MoveVertical className="w-3.5 h-3.5" />
-                              <span>ऊर्ध्वाधर स्थिति (Vertical Position):</span>
+                              <span>ऊर्ध्वाधर स्थिति:</span>
                             </span>
                             <span className="text-amber-400 font-mono">{offsetY}px</span>
                           </div>
@@ -3821,7 +3844,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      5. लोगो व वॉटरमार्क (Logo & Watermark)
+                      5. लोगो और वॉटरमार्क
                     </span>
                   </div>
 
@@ -4238,7 +4261,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Film className="w-4 h-4 text-amber-400" />
-                        1. वीडियो टाइमलाइन व क्लिप्स (Multi-Clip Timeline)
+                        1. वीडियो टाइमलाइन और क्लिप्स
                       </span>
                       <button
                         type="button"
@@ -4246,7 +4269,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer transition active:scale-95"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>+ क्लिप जोड़ें (Add Clip)</span>
+                        <span>+ क्लिप जोड़ें</span>
                       </button>
                     </div>
 
@@ -5075,7 +5098,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Tag className="w-4 h-4 text-amber-400" />
-                        8. चैनल लोगो व वॉटरमार्क (Logo & Watermark)
+                        8. चैनल लोगो और वॉटरमार्क
                       </span>
                     </div>
 
