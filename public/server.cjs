@@ -7357,6 +7357,39 @@ function resolveAllDatabaseLocations(filename) {
   }
   return Array.from(new Set(candidates));
 }
+function loadDeletedNewsIds() {
+  try {
+    const locations = resolveAllDatabaseLocations("deleted_news_ids.json");
+    for (const loc of locations) {
+      if (import_fs.default.existsSync(loc)) {
+        const raw = import_fs.default.readFileSync(loc, "utf-8");
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) return new Set(list);
+      }
+    }
+  } catch (err) {
+    console.error("Error reading deleted news file:", err.message);
+  }
+  return /* @__PURE__ */ new Set();
+}
+function saveDeletedNewsId(id) {
+  try {
+    const deletedSet = loadDeletedNewsIds();
+    deletedSet.add(id);
+    const jsonStr = JSON.stringify(Array.from(deletedSet), null, 2);
+    const locations = resolveAllDatabaseLocations("deleted_news_ids.json");
+    for (const loc of locations) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+  } catch (err) {
+    console.error("Error saving deleted news id:", err.message);
+  }
+}
 function loadNewsDatabase() {
   let diskPosts = [];
   try {
@@ -7392,9 +7425,13 @@ function loadNewsDatabase() {
         }
       }
     }
-    if (cleaned.length > 0) return cleaned;
+    if (cleaned.length > 0) {
+      const deletedIds2 = loadDeletedNewsIds();
+      return deletedIds2.size > 0 ? cleaned.filter((p) => !deletedIds2.has(p.id)) : cleaned;
+    }
   }
-  return diskPosts;
+  const deletedIds = loadDeletedNewsIds();
+  return deletedIds.size > 0 ? diskPosts.filter((p) => !deletedIds.has(p.id)) : diskPosts;
 }
 function saveNewsDatabase(posts) {
   const cleaned = posts.filter((p) => p && p.id);
@@ -8075,6 +8112,11 @@ app.delete("/api/news-posts/:id", (req, res) => {
     let existing = loadNewsDatabase();
     existing = existing.filter((p) => p.id !== id);
     saveNewsDatabase(existing);
+    saveDeletedNewsId(id);
+    if (centralDb && centralDb.isInitialized) {
+      centralDb.deleteNewsPost(id).catch(() => {
+      });
+    }
     return res.json({ success: true, posts: existing });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -12344,8 +12386,10 @@ app.post("/api/admin/rss-sync", requireAdminMiddleware, async (_req, res) => {
       let existingPosts = loadNewsDatabase();
       const existingIds = new Set(existingPosts.map((p) => p.id));
       const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+      const deletedNewsIds = loadDeletedNewsIds();
       const trulyNew = [];
       for (const p of fetchedPosts) {
+        if (deletedNewsIds.has(p.id)) continue;
         p.status = p.status || "APPROVED";
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         if (!existingIds.has(p.id) && !existingTitles.has(titleKey)) {
@@ -14731,8 +14775,9 @@ function resolveUserTierAndRole(req) {
   return { tier: explicitTier || "basic", role: "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.5-flash",
+  "gemini-3-flash-preview",
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
   "gemini-flash-lite-latest",
   "gemini-3.8-flash",
   "gemini-flash-latest"
@@ -18075,13 +18120,22 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           articleBodySnippets && articleBodySnippets.trim().length > 30 || effectiveArticleDesc && effectiveArticleDesc.trim().length > 25 && effectiveArticleTitle && effectiveArticleTitle.trim().length > 10 || effectiveInput && effectiveInput.trim().length > 25
         );
         if ((scrapedStatus === "failed" || !hasRealFacts) && (!effectiveInput || effectiveInput.trim().length < 25)) {
-          const detailReason = scrapedReason ? ` (${scrapedReason})` : "";
-          return res.status(422).json({
-            error: `\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0932\u093F\u0902\u0915 \u0938\u0947 \u092E\u0941\u0916\u094D\u092F \u0916\u092C\u0930/\u0906\u0932\u0947\u0916 \u092A\u0922\u093C\u093E \u0928\u0939\u0940\u0902 \u091C\u093E \u0938\u0915\u093E${detailReason}\u0964 \u0915\u0943\u092A\u092F\u093E \u0916\u092C\u0930 \u0915\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0949\u092A\u0940 \u0915\u0930\u0915\u0947 \u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0947\u0902 \u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0938\u0941\u0932\u092D \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u0926\u093E\u0928 \u0915\u0930\u0947\u0902\u0964`,
-            extraction_status: "failed",
-            reason: scrapedReason || "Webpage content unavailable",
-            submitted_url: rawLink
-          });
+          const fallbackText = (req.body.title || req.body.summary || req.body.headline || effectiveArticleTitle || effectiveArticleDesc || "").trim();
+          if (fallbackText.length >= 10) {
+            effectiveInput = `${req.body.title || effectiveArticleTitle || ""}
+${req.body.summary || effectiveArticleDesc || ""}`.trim();
+            articleBodySnippets = effectiveInput;
+            effectiveArticleTitle = req.body.title || effectiveArticleTitle || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930";
+            scrapedStatus = "fallback_used";
+          } else {
+            const detailReason = scrapedReason ? ` (${scrapedReason})` : "";
+            return res.status(422).json({
+              error: `\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0932\u093F\u0902\u0915 \u0938\u0947 \u092E\u0941\u0916\u094D\u092F \u0916\u092C\u0930/\u0906\u0932\u0947\u0916 \u092A\u0922\u093C\u093E \u0928\u0939\u0940\u0902 \u091C\u093E \u0938\u0915\u093E${detailReason}\u0964 \u0915\u0943\u092A\u092F\u093E \u0916\u092C\u0930 \u0915\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0949\u092A\u0940 \u0915\u0930\u0915\u0947 \u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0947\u0902 \u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0938\u0941\u0932\u092D \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u0926\u093E\u0928 \u0915\u0930\u0947\u0902\u0964`,
+              extraction_status: "failed",
+              reason: scrapedReason || "Webpage content unavailable",
+              submitted_url: rawLink
+            });
+          }
         }
         const hasAuthenticHindiInput = Boolean(
           effectiveInput && effectiveInput.trim().length > 15 && /[\u0900-\u097F]/.test(effectiveInput)

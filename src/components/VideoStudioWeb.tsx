@@ -2527,10 +2527,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
 
                       {/* Website / Handle */}
-                      <div className="flex items-center gap-1 text-[10px] font-black text-neutral-950 truncate max-w-[120px]">
-                        <Globe className="w-3 h-3 text-neutral-950 shrink-0" />
-                        <span className="truncate">{websiteUrl || 'ainewsmaker.online'}</span>
-                      </div>
+                      {websiteUrl ? (
+                        <div className="flex items-center gap-1 text-[10px] font-black text-neutral-950 truncate max-w-[120px]">
+                          <Globe className="w-3 h-3 text-neutral-950 shrink-0" />
+                          <span className="truncate">{websiteUrl}</span>
+                        </div>
+                      ) : null}
                     </div>
                   )}
 
@@ -2635,10 +2637,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
 
                       {/* Website / Handle */}
-                      <div className="flex items-center gap-1 text-[10px] font-black text-neutral-950 truncate max-w-[120px]">
-                        <Globe className="w-3 h-3 text-neutral-950 shrink-0" />
-                        <span className="truncate">{websiteUrl || 'ainewsmaker.online'}</span>
-                      </div>
+                      {websiteUrl ? (
+                        <div className="flex items-center gap-1 text-[10px] font-black text-neutral-950 truncate max-w-[120px]">
+                          <Globe className="w-3 h-3 text-neutral-950 shrink-0" />
+                          <span className="truncate">{websiteUrl}</span>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>

@@ -1180,7 +1180,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           console.warn('GIF upload server sync warning:', err);
         }
         setChannelProfile((prev) => {
-          const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
+          const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '');
           const updated = {
             ...prev,
             channelLogoGifUrl: finalUrl,
@@ -1231,7 +1231,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const handleRemoveGifLogo = async () => {
     const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
     setChannelProfile((prev) => {
-      const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
+      const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '');
       const updated = {
         ...prev,
         channelLogoGifUrl: undefined,
@@ -1412,7 +1412,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const effectiveHeaderPng = isProOrVipUser ? customHeaderPng : '';
     const effectiveFooterPng = isProOrVipUser ? customFooterPng : '';
 
-    const primaryPngLogo = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png';
+    const primaryPngLogo = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '');
     const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
     const finalDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
@@ -2734,94 +2734,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Social Media Links Inputs */}
-              <div className="pt-3 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-300">
-                    सोशल मीडिया प्रोफाइल लिंक्स (Social Media Profile Links)
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-medium">
-                    (YouTube, Facebook, Instagram, X/Twitter, LinkedIn)
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">YouTube चैनल लिंक</label>
-                    <input
-                      type="url"
-                      value={channelProfile.socialLinks?.youtube || ''}
-                      onChange={(e) =>
-                        setChannelProfile((p) => ({
-                          ...p,
-                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), youtube: e.target.value },
-                        }))
-                      }
-                      placeholder="https://youtube.com/@yourchannel"
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">Facebook पेज / प्रोफाइल लिंक</label>
-                    <input
-                      type="url"
-                      value={channelProfile.socialLinks?.facebook || ''}
-                      onChange={(e) =>
-                        setChannelProfile((p) => ({
-                          ...p,
-                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), facebook: e.target.value },
-                        }))
-                      }
-                      placeholder="https://facebook.com/yourpage"
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">Instagram प्रोफाइल लिंक</label>
-                    <input
-                      type="url"
-                      value={channelProfile.socialLinks?.instagram || ''}
-                      onChange={(e) =>
-                        setChannelProfile((p) => ({
-                          ...p,
-                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), instagram: e.target.value },
-                        }))
-                      }
-                      placeholder="https://instagram.com/yourprofile"
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">X (Twitter) प्रोफाइल लिंक</label>
-                    <input
-                      type="url"
-                      value={channelProfile.socialLinks?.twitter || ''}
-                      onChange={(e) =>
-                        setChannelProfile((p) => ({
-                          ...p,
-                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), twitter: e.target.value },
-                        }))
-                      }
-                      placeholder="https://x.com/yourhandle"
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="text-[11px] text-slate-400 block mb-1">LinkedIn प्रोफाइल लिंक</label>
-                    <input
-                      type="url"
-                      value={channelProfile.socialLinks?.linkedin || ''}
-                      onChange={(e) =>
-                        setChannelProfile((p) => ({
-                          ...p,
-                          socialLinks: { ...(p.socialLinks || DEFAULT_SOCIAL_LINKS), linkedin: e.target.value },
-                        }))
-                      }
-                      placeholder="https://linkedin.com/in/yourprofile"
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                    />
-                  </div>
-                </div>
-              </div>
+
 
               <div className="flex justify-end pt-3">
                 <button

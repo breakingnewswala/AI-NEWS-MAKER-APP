@@ -1469,6 +1469,40 @@ function resolveAllDatabaseLocations(filename: string): string[] {
   return Array.from(new Set(candidates));
 }
 
+function loadDeletedNewsIds(): Set<string> {
+  try {
+    const locations = resolveAllDatabaseLocations("deleted_news_ids.json");
+    for (const loc of locations) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) return new Set(list);
+      }
+    }
+  } catch (err: any) {
+    console.error("Error reading deleted news file:", err.message);
+  }
+  return new Set();
+}
+
+function saveDeletedNewsId(id: string): void {
+  try {
+    const deletedSet = loadDeletedNewsIds();
+    deletedSet.add(id);
+    const jsonStr = JSON.stringify(Array.from(deletedSet), null, 2);
+    const locations = resolveAllDatabaseLocations("deleted_news_ids.json");
+    for (const loc of locations) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
+  } catch (err: any) {
+    console.error("Error saving deleted news id:", err.message);
+  }
+}
+
 function loadNewsDatabase(): StoredNewsPost[] {
   let diskPosts: StoredNewsPost[] = [];
   try {
@@ -1505,10 +1539,14 @@ function loadNewsDatabase(): StoredNewsPost[] {
         }
       }
     }
-    if (cleaned.length > 0) return cleaned;
+    if (cleaned.length > 0) {
+      const deletedIds = loadDeletedNewsIds();
+      return deletedIds.size > 0 ? cleaned.filter((p) => !deletedIds.has(p.id)) : cleaned;
+    }
   }
 
-  return diskPosts;
+  const deletedIds = loadDeletedNewsIds();
+  return deletedIds.size > 0 ? diskPosts.filter((p) => !deletedIds.has(p.id)) : diskPosts;
 }
 
 function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
@@ -2355,6 +2393,10 @@ app.delete("/api/news-posts/:id", (req, res) => {
     let existing = loadNewsDatabase();
     existing = existing.filter((p) => p.id !== id);
     saveNewsDatabase(existing);
+    saveDeletedNewsId(id);
+    if (centralDb && centralDb.isInitialized) {
+      centralDb.deleteNewsPost(id).catch(() => {});
+    }
     return res.json({ success: true, posts: existing });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -7546,9 +7588,11 @@ app.post("/api/admin/rss-sync", requireAdminMiddleware, async (_req, res) => {
       let existingPosts = loadNewsDatabase();
       const existingIds = new Set(existingPosts.map((p) => p.id));
       const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+      const deletedNewsIds = loadDeletedNewsIds();
 
       const trulyNew: StoredNewsPost[] = [];
       for (const p of fetchedPosts) {
+        if (deletedNewsIds.has(p.id)) continue;
         p.status = p.status || "APPROVED";
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         if (!existingIds.has(p.id) && !existingTitles.has(titleKey)) {
@@ -10462,8 +10506,9 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.5-flash",
+  "gemini-3-flash-preview",
+  "gemini-3.1-flash-lite",
+  "gemini-3.7-flash",
   "gemini-flash-lite-latest",
   "gemini-3.8-flash",
   "gemini-flash-latest",
@@ -15143,13 +15188,21 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         );
 
         if ((scrapedStatus === "failed" || !hasRealFacts) && (!effectiveInput || effectiveInput.trim().length < 25)) {
-          const detailReason = scrapedReason ? ` (${scrapedReason})` : "";
-          return res.status(422).json({
-            error: `इस न्यूज़ लिंक से मुख्य खबर/आलेख पढ़ा नहीं जा सका${detailReason}। कृपया खबर का वास्तविक टेक्स्ट कॉपी करके पेस्ट करें या दूसरा सुलभ लिंक प्रदान करें।`,
-            extraction_status: "failed",
-            reason: scrapedReason || "Webpage content unavailable",
-            submitted_url: rawLink,
-          });
+          const fallbackText = (req.body.title || req.body.summary || req.body.headline || effectiveArticleTitle || effectiveArticleDesc || "").trim();
+          if (fallbackText.length >= 10) {
+            effectiveInput = `${req.body.title || effectiveArticleTitle || ''}\n${req.body.summary || effectiveArticleDesc || ''}`.trim();
+            articleBodySnippets = effectiveInput;
+            effectiveArticleTitle = req.body.title || effectiveArticleTitle || 'ताज़ा समाचार';
+            scrapedStatus = "fallback_used";
+          } else {
+            const detailReason = scrapedReason ? ` (${scrapedReason})` : "";
+            return res.status(422).json({
+              error: `इस न्यूज़ लिंक से मुख्य खबर/आलेख पढ़ा नहीं जा सका${detailReason}। कृपया खबर का वास्तविक टेक्स्ट कॉपी करके पेस्ट करें या दूसरा सुलभ लिंक प्रदान करें।`,
+              extraction_status: "failed",
+              reason: scrapedReason || "Webpage content unavailable",
+              submitted_url: rawLink,
+            });
+          }
         }
 
         const hasAuthenticHindiInput = Boolean(

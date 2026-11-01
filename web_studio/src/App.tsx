@@ -1139,6 +1139,34 @@ export default function App() {
     return () => window.removeEventListener('channel_profile_updated', handleProfileUpdated);
   }, []);
 
+  // User profile photo/logo and channel name synchronization with Graphic Photo Studio (Part 4)
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    const activeEmail = currentUser.email.toLowerCase().trim();
+    let savedProfile: any = null;
+    try {
+      const perUserRaw = localStorage.getItem(`user_profile_${activeEmail}`);
+      if (perUserRaw) savedProfile = JSON.parse(perUserRaw);
+    } catch {}
+    if (!savedProfile) {
+      try {
+        const raw = localStorage.getItem('user_channel_profile');
+        if (raw) savedProfile = JSON.parse(raw);
+      } catch {}
+    }
+    if (savedProfile) {
+      const primaryLogo = savedProfile.channelLogoPngUrl || (savedProfile.channelLogoUrl?.endsWith('.gif') ? '' : savedProfile.channelLogoUrl);
+      if (primaryLogo) {
+        setCard((prev) => ({
+          ...prev,
+          customLogoUrl: primaryLogo,
+          brandName: savedProfile.channelNameHi || prev.brandName,
+          channelNameHi: savedProfile.channelNameHi || prev.channelNameHi,
+        }));
+      }
+    }
+  }, [currentUser?.email]);
+
   // Handle saving channel profile
   const handleSaveProfile = (profile: ChannelProfile, redirectAfterSave: boolean = false) => {
     if (!profile) return;
@@ -2538,6 +2566,13 @@ export default function App() {
         main: vid.thumbnailUrl || prev.images.main,
       },
     }));
+    setBrandedLoader({
+      isOpen: true,
+      mode: 'video_render',
+      title: 'आपका वीडियो स्टूडियो तैयार किया जा रहा है...',
+      durationSeconds: 10,
+      error: null,
+    });
     navigateToTab('studio');
     setActiveStep(1);
     setToastMessage('वीडियो न्यूज़ स्टूडियो में लोड हो गया है!');
@@ -2625,7 +2660,7 @@ export default function App() {
     setToastMessage('खबर सफलतापूर्वक अपडेट हुई!');
   };
 
-  const handleDeleteNews = (postId: string) => {
+  const handleDeleteNews = async (postId: string) => {
     const updated = posts.filter((p) => p.id !== postId);
     setPosts(updated);
     try {
@@ -2636,6 +2671,14 @@ export default function App() {
       localStorage.setItem('app_deleted_news_ids_v1', JSON.stringify(Array.from(set)));
     } catch {
       // ignore
+    }
+    try {
+      await fetch(getApiUrl(`/api/news-posts/${encodeURIComponent(postId)}`), {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+    } catch (err) {
+      console.warn('Backend news delete warning:', err);
     }
     syncPostsToServer(updated);
     setToastMessage('खबर सफलतापूर्वक हटाई गई!');
@@ -3147,6 +3190,36 @@ export default function App() {
             </div>
           </div>
 
+          {/* Universal Mobile Studio Mode Switcher (visible on mobile in both graphic and video studio modes) */}
+          <div className="lg:hidden w-full bg-slate-950 px-2.5 pt-2 pb-1">
+            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-1 max-w-md mx-auto">
+              <button
+                type="button"
+                onClick={() => updateStudioMode('graphic')}
+                className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  studioMode === 'graphic'
+                    ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 shadow-md font-black'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5 text-slate-950" />
+                <span>ग्राफिक फोटो न्यूज़</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateStudioMode('video')}
+                className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                  studioMode === 'video'
+                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                }`}
+              >
+                <Film className="w-3.5 h-3.5 text-white" />
+                <span>वीडियो न्यूज़</span>
+              </button>
+            </div>
+          </div>
+
           {studioMode === 'video' ? (
             <div className="w-full">
               <VideoStudioWeb
@@ -3164,36 +3237,6 @@ export default function App() {
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
               {/* ============================================================== */}
               <div className="lg:hidden w-full flex flex-col min-h-screen">
-                {/* Row 1: Studio Mode Selector Tabs (Graphic Photo News & Video News) - Scrolls naturally out of view */}
-                <div className="w-full bg-slate-950 px-2.5 pt-2 pb-1">
-                  <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-1 max-w-md mx-auto">
-                    <button
-                      type="button"
-                      onClick={() => updateStudioMode('graphic')}
-                      className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                        studioMode === 'graphic'
-                          ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 shadow-md font-black'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                      }`}
-                    >
-                      <Palette className="w-3.5 h-3.5 text-slate-950" />
-                      <span>ग्राफिक फोटो न्यूज़</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateStudioMode('video')}
-                      className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                        studioMode === 'video'
-                          ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                      }`}
-                    >
-                      <Film className="w-3.5 h-3.5 text-white" />
-                      <span>वीडियो न्यूज़</span>
-                    </button>
-                  </div>
-                </div>
-
                 {/* 🔒 STICKY / FROZEN STUDIO HEADER (70/30 Preview & Steps + Live Preview Action Strip) */}
                 <div
                   id="mobile-studio-sticky-header"

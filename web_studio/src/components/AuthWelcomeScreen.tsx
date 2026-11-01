@@ -679,11 +679,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           telegram: false,
           whatsapp: true,
         },
-        username: serverProfile?.username || (isBreakingNewsWala ? 'breakingnewswala' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.username || knownProfile?.username || 'user'))),
-        mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '9669802408',
-        whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '9669802408',
+        username: serverProfile?.username || (isBreakingNewsWala ? 'breakingnewswala' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.username || knownProfile?.username || (name ? name.toLowerCase().replace(/[^a-z0-9]/g, '') : '')))),
+        mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '',
+        whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '',
         showMobileNumber: true,
-        websiteUrl: serverProfile?.websiteUrl || (isBreakingNewsWala ? 'breakingnewswala.com' : (isAiNewsAdmin ? 'ainewsmaker.online' : (parsedProfile?.websiteUrl || knownProfile?.websiteUrl || 'ainewsmaker.online'))),
+        websiteUrl: serverProfile?.websiteUrl || (isBreakingNewsWala ? 'breakingnewswala.com' : (isAiNewsAdmin ? 'ainewsmaker.online' : (parsedProfile?.websiteUrl || knownProfile?.websiteUrl || ''))),
       };
 
       const googleUser: ReporterUser = {
@@ -1154,7 +1154,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         mobileNumber: primaryMobileNumber.trim() || finalContact,
         whatsappNumber: finalWhatsapp,
         showMobileNumber,
-        websiteUrl: websiteUrl.trim() || "ainewsmaker.online",
+        websiteUrl: websiteUrl.trim(),
         isLocked: !isAdm,
       };
 

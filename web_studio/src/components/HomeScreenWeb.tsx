@@ -1402,8 +1402,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       {/* Admin Filter Bar */}
       {canModerate && (
         <>
-          {/* Mobile-Only Admin Layout (Part 6): Single Clean Row with 4 Buttons */}
-          <div className="sm:hidden px-3 pt-2.5 pb-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 backdrop-blur-md">
+          {/* Mobile-Only Admin Layout (Part 6 & 12): Sticky Frozen Single Clean Row with 4 Buttons */}
+          <div className="sm:hidden sticky top-0 z-30 px-3 pt-2.5 pb-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 backdrop-blur-md shadow-md">
             <div className="grid grid-cols-4 gap-1.5 w-full">
               <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-1 py-1.5 flex items-center justify-center shadow-xs">
                 <select
@@ -2122,6 +2122,32 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </button>
                       )}
 
+                      {/* Admin / Master Admin Only: वेबसाइट पर जाएँ button */}
+                      {canModerate && (
+                        (post.sourceUrl || post.url) ? (
+                          <a
+                            href={post.sourceUrl || post.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-1.5 px-2.5 bg-slate-800/90 hover:bg-blue-900/60 text-blue-300 hover:text-blue-200 rounded-xl border border-blue-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-xs"
+                            title="मूल स्रोत वेबसाइट पर खबर देखें"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span>वेबसाइट पर जाएँ</span>
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="py-1.5 px-2.5 bg-slate-800/50 text-slate-500 rounded-xl border border-slate-700/40 font-bold text-xs flex items-center justify-center gap-1.5 opacity-50 cursor-not-allowed shrink-0"
+                            title="इस खबर का कोई वेबसाइट लिंक उपलब्ध नहीं है"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            <span>वेबसाइट पर जाएँ</span>
+                          </button>
+                        )
+                      )}
+
                       {/* Ordinary User: प्रमुख रिपोर्ट करें बटन */}
                       {!canModerate && (
                         <button
@@ -2552,6 +2578,32 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                   : `खबर से ग्राफिक बनाएं · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`)}
                           </span>
                         </button>
+                      )}
+
+                      {/* Admin / Master Admin Only: वेबसाइट पर जाएँ button */}
+                      {canModerate && (
+                        (post.sourceUrl || post.url) ? (
+                          <a
+                            href={post.sourceUrl || post.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-2 px-3 bg-slate-800/90 hover:bg-blue-900/60 text-blue-300 hover:text-blue-200 rounded-xl border border-blue-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-xs"
+                            title="मूल स्रोत वेबसाइट पर खबर देखें"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                            <span>वेबसाइट पर जाएँ</span>
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="py-2 px-3 bg-slate-800/50 text-slate-500 rounded-xl border border-slate-700/40 font-bold text-xs flex items-center justify-center gap-1.5 opacity-50 cursor-not-allowed shrink-0"
+                            title="इस खबर का कोई वेबसाइट लिंक उपलब्ध नहीं है"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            <span>वेबसाइट पर जाएँ</span>
+                          </button>
+                        )
                       )}
 
                       {/* Ordinary User: Prominent, clearly visible 'रिपोर्ट करें' button with icon and readable label */}

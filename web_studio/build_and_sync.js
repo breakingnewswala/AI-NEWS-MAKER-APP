@@ -247,6 +247,7 @@ if (fs.existsSync(dbPath)) {
   // Public asset datasets
   syncPublicDatabaseFile('videos_database.json');
   syncPublicDatabaseFile('deleted_videos_ids.json');
+  syncPublicDatabaseFile('deleted_news_ids.json');
   syncPublicDatabaseFile('categories_database.json');
   syncPublicDatabaseFile('approved_editorial_database.json');
 
