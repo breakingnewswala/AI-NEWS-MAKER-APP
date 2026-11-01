@@ -83,13 +83,12 @@ export const HEADLINE_REGEN_COIN_MATRIX: Record<string, number> = {
 };
 
 export function getRegenCoinCostForPlan(plan: string, role?: string): number {
-  const cleanRole = (role || '').toLowerCase().trim();
-  if (cleanRole === 'admin' || cleanRole === 'superadmin') return 0;
   const p = (plan || 'basic').toLowerCase().trim();
+  // VIP DESK tier exclusively receives 0 coin cost for headline regeneration (admin status alone does not grant free regeneration if on Basic tier)
   if (p.includes('vip') || p.includes('ultra')) return 0;
   if (p.includes('pro')) return 25;
   if (p.includes('advanc')) return 50;
-  return 100;
+  return 100; // Basic / default (including admin on basic tier)
 }
 
 /**

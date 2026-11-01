@@ -1977,18 +1977,30 @@ export default function App() {
       setCurrentTab('profile');
       return;
     }
-    // Verify entitlement with server
+    // Verify entitlement with server (pre-flight check, checkOnly: true)
+    let preflightToken = '';
+    const downloadRequestId = `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     try {
       const verifyRes = await fetch(getApiUrl('/api/verify-download-entitlement'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: currentUser?.email, isBonus: isBonusCard, card }),
+        body: JSON.stringify({
+          email: currentUser?.email,
+          isBonus: isBonusCard,
+          card,
+          checkOnly: true,
+          downloadRequestId,
+        }),
       });
       if (verifyRes.status === 403 || verifyRes.status === 400) {
         const data = await verifyRes.json();
         showToast(`⚠️ ${data.error || 'ट्रायल समाप्त हो चुका है। कृपया प्लान चुनें।'}`);
         if (verifyRes.status === 403) setCurrentTab('profile');
         return;
+      }
+      const verifyData = await verifyRes.json();
+      if (verifyData && verifyData.downloadToken) {
+        preflightToken = verifyData.downloadToken;
       }
     } catch {}
 
@@ -2033,6 +2045,24 @@ export default function App() {
       const filename = `${baseFilename}${ext}`;
 
       await downloadCanvas(canvas, filename, fmt);
+
+      // Confirm actual completion of download export to decrement quota atomically (Phase 3.0B-S)
+      try {
+        await fetch(getApiUrl('/api/complete-download-export'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser?.email,
+            downloadToken: preflightToken,
+            downloadRequestId,
+            exportSuccess: true,
+            cardId: card?.id,
+            isBonus: isBonusCard,
+          }),
+        });
+      } catch (completeErr) {
+        console.warn('Could not report download export completion:', completeErr);
+      }
 
       // Automatically record in Project History
       try {

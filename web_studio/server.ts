@@ -10089,13 +10089,12 @@ export function saveAiFeaturesConfig(cfg: any): boolean {
 }
 
 export function getHeadlineRegenCoinCost(tier: string, role?: string): number {
-  const cleanRole = (role || "").toLowerCase().trim();
-  if (cleanRole === "admin" || cleanRole === "superadmin") return 0;
   const t = (tier || "basic").toLowerCase().trim().replace(/[\-_]/g, " ");
+  // VIP DESK tier exclusively receives 0 coin cost for headline regeneration (admin status alone does not grant free regeneration if on Basic tier)
   if (t === "ultra" || t === "vip desk" || t === "vip" || t === "vip dash") return 0;
   if (t === "professional" || t === "pro") return 25;
   if (t === "advanced" || t === "advance" || t === "basic advanced" || t === "advance plus") return 50;
-  return 100; // Basic / default
+  return 100; // Basic / default (including admin on basic tier)
 }
 
 export function isRegenerateAllowed(config: any, effectiveTier: string): boolean {
@@ -15619,7 +15618,64 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       }
     }
 
+    // Distributed Firestore-backed atomic lock (Phase 3.0B-S distributed safety)
+    let lockId = "";
+    if (draftId && centralDb) {
+      const lockAcquisition = await centralDb.acquireDraftRegenerationLock(
+        draftId,
+        walletKey,
+        generationRequestId
+      );
+
+      if (!lockAcquisition.success) {
+        if (lockAcquisition.alreadyUsed) {
+          return res.status(409).json({
+            success: false,
+            alreadyUsed: true,
+            error: lockAcquisition.error || "इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।"
+          });
+        }
+        if (lockAcquisition.inFlight) {
+          return res.status(409).json({
+            success: false,
+            inFlight: true,
+            error: lockAcquisition.error || "इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।"
+          });
+        }
+        return res.status(409).json({
+          success: false,
+          conflict: true,
+          error: lockAcquisition.error || "ड्राफ्ट लॉक प्राप्त करने में त्रुटि।"
+        });
+      }
+
+      if (lockAcquisition.idempotentReplay && Array.isArray(lockAcquisition.headlines)) {
+        const savedHeadlines = lockAcquisition.headlines;
+        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
+        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        return res.json({
+          success: true,
+          actualProvider: "idempotent-cache",
+          headlines: savedHeadlines,
+          headlineOptions: savedHeadlines,
+          totalHeadlineOptions: combinedSaved,
+          headline: savedHeadlines[0] || "",
+          coinsDeducted: 0,
+          remainingCoins: currentBalance,
+          draftId: draftId || undefined,
+          alreadyRegenerated: true,
+          regenerationUsed: true,
+          message: "इस ड्राफ्ट के लिए पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाए गए हैं।"
+        });
+      }
+
+      lockId = lockAcquisition.lockId || "";
+    }
+
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
+      if (draftId && lockId && centralDb) {
+        await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+      }
       return res.status(400).json({
         success: false,
         insufficientCoins: true,
@@ -15820,10 +15876,24 @@ JSON Output Schema:
       sourceLoc
     );
 
-    // Atomic coin billing upon successful generation per Part 8
+    // Atomic coin billing upon successful generation per Part 8 and Phase 3.0B-S distributed lock
     let coinsDeducted = 0;
     let remainingCoins = currentBalance;
-    if (requiredCoins > 0 && walletKey) {
+
+    if (draftId && lockId && centralDb) {
+      const compRes = await centralDb.completeDraftRegenerationLock(
+        draftId,
+        lockId,
+        walletKey,
+        requiredCoins,
+        finalOptions,
+        generationRequestId
+      );
+      if (compRes.success) {
+        coinsDeducted = compRes.coinsDeducted || 0;
+        remainingCoins = compRes.newBalance !== undefined ? compRes.newBalance : currentBalance;
+      }
+    } else if (requiredCoins > 0 && walletKey) {
       rDb.wallets[walletKey].coinBalance = Math.max(0, (rDb.wallets[walletKey].coinBalance || 0) - requiredCoins);
       coinsDeducted = requiredCoins;
       remainingCoins = rDb.wallets[walletKey].coinBalance;
@@ -15904,6 +15974,9 @@ JSON Output Schema:
 
     return res.json(responsePayload);
   } catch (err: any) {
+    if (draftId && lockId && centralDb) {
+      await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+    }
     if (draftId && rejectInFlight) {
       (rejectInFlight as any)(err);
     }
@@ -18791,6 +18864,142 @@ function saveDailyDownloadsDatabase(data: Record<string, { date: string; count: 
 const dailyDownloadsTracker = new Map<string, { date: string; count: number }>();
 const recentDownloadRequests = new Map<string, number>();
 
+// In-memory token cache with 10-minute TTL for verified export completions (Phase 3.0B-S)
+interface DownloadTokenRecord {
+  token: string;
+  userKey: string;
+  dateStr: string;
+  downloadRequestId: string;
+  cardId: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+const activeDownloadTokens = new Map<string, DownloadTokenRecord>();
+const consumedDownloadTokens = new Set<string>();
+
+function generateDownloadToken(userKey: string, dateStr: string, downloadRequestId: string, cardId: string = ""): string {
+  const now = Date.now();
+  const expiresAt = now + (10 * 60 * 1000); // Strict 10-minute validity
+  const cleanUserKey = (userKey || "").toLowerCase().trim();
+  const cleanReqId = (downloadRequestId || "").trim();
+  const cleanCardId = (cardId || "").trim();
+  const nonce = crypto.randomBytes(16).toString("hex");
+
+  // HMAC-SHA256 signature binding userKey, dateStr, downloadRequestId, cardId, expiresAt, and cryptographically secure nonce
+  const payload = `${cleanUserKey}:${dateStr}:${cleanReqId}:${cleanCardId}:${expiresAt}:${nonce}`;
+  const sig = crypto.createHmac("sha256", AUTH_SECRET).update(payload).digest("hex");
+  const token = `dlt.${expiresAt}.${nonce}.${sig}`;
+
+  activeDownloadTokens.set(token, {
+    token,
+    userKey: cleanUserKey,
+    dateStr,
+    downloadRequestId: cleanReqId,
+    cardId: cleanCardId,
+    issuedAt: now,
+    expiresAt,
+  });
+
+  if (activeDownloadTokens.size > 2000) {
+    for (const [k, v] of activeDownloadTokens.entries()) {
+      if (now > v.expiresAt) activeDownloadTokens.delete(k);
+    }
+  }
+  if (consumedDownloadTokens.size > 5000) {
+    consumedDownloadTokens.clear();
+  }
+
+  return token;
+}
+
+function verifyAndConsumeDownloadToken(
+  token: string,
+  userKey: string,
+  cardId: string = "",
+  downloadRequestId: string = ""
+): { valid: boolean; reason?: string } {
+  if (!token) return { valid: false, reason: "Missing download token" };
+
+  // Replay Attack Prevention: Single-use only!
+  if (consumedDownloadTokens.has(token)) {
+    return { valid: false, reason: "Token already consumed (replay detected)" };
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 4 || parts[0] !== "dlt") {
+    return { valid: false, reason: "Malformed download token format" };
+  }
+
+  const expiresAt = parseInt(parts[1], 10);
+  const nonce = parts[2];
+  const providedSig = parts[3];
+
+  if (isNaN(expiresAt) || Date.now() > expiresAt) {
+    activeDownloadTokens.delete(token);
+    return { valid: false, reason: "Download token has expired (10m TTL)" };
+  }
+
+  const record = activeDownloadTokens.get(token);
+  const cleanUserKey = (userKey || "").toLowerCase().trim();
+  const cleanCardId = (cardId || "").trim();
+  const cleanReqId = (downloadRequestId || "").trim();
+
+  // Validate identity bindings
+  if (record) {
+    if (cleanUserKey && record.userKey && record.userKey !== cleanUserKey) {
+      return { valid: false, reason: "Token user mismatch" };
+    }
+    if (cleanCardId && record.cardId && record.cardId !== cleanCardId) {
+      return { valid: false, reason: "Token card/draft mismatch" };
+    }
+    if (cleanReqId && record.downloadRequestId && record.downloadRequestId !== cleanReqId) {
+      return { valid: false, reason: "Token request ID mismatch" };
+    }
+  }
+
+  // Cryptographic HMAC-SHA256 verification (resilient across instances)
+  const boundUserKey = record ? record.userKey : cleanUserKey;
+  const candidateDates = [record?.dateStr, getAsiaKolkataDateAndExpiry().dateStr, ""];
+  const candidateReqs = [record?.downloadRequestId, cleanReqId, ""];
+  const candidateCards = [record?.cardId, cleanCardId, ""];
+
+  let sigValid = false;
+  for (const d of candidateDates) {
+    if (d === undefined) continue;
+    for (const r of candidateReqs) {
+      if (r === undefined) continue;
+      for (const c of candidateCards) {
+        if (c === undefined) continue;
+        const candidatePayload = `${boundUserKey}:${d}:${r}:${c}:${expiresAt}:${nonce}`;
+        const expectedSig = crypto.createHmac("sha256", AUTH_SECRET).update(candidatePayload).digest("hex");
+        try {
+          if (crypto.timingSafeEqual(Buffer.from(providedSig, "hex"), Buffer.from(expectedSig, "hex"))) {
+            sigValid = true;
+            break;
+          }
+        } catch {}
+      }
+      if (sigValid) break;
+    }
+    if (sigValid) break;
+  }
+
+  if (!sigValid) {
+    return { valid: false, reason: "Invalid cryptographic token signature" };
+  }
+
+  // SINGLE-USE CONSUMPTION: Invalidate token permanently
+  activeDownloadTokens.delete(token);
+  consumedDownloadTokens.add(token);
+
+  return { valid: true };
+}
+
+// Backward-compatible alias for existing consumers
+function verifyDownloadToken(token: string, userKey: string): boolean {
+  return verifyAndConsumeDownloadToken(token, userKey).valid;
+}
+
 app.get("/api/user-download-status", (req, res) => {
   try {
     const email = (req.query.email || "").toString().toLowerCase().trim();
@@ -18798,7 +19007,7 @@ app.get("/api/user-download-status", (req, res) => {
       return res.json({ allowed: true, maxAllowed: 10, dailyQuota: 10, downloadsToday: 0, remainingToday: 10, remainingDownloads: 10, unlimited: false });
     }
     if (isProtectedAdminAccount(email)) {
-      return res.json({ allowed: true, plan: "ultra", planName: "VIP DESK", maxAllowed: 99999, dailyQuota: 99999, downloadsToday: 0, remainingToday: 99999, remainingDownloads: 99999, unlimited: true });
+      return res.json({ allowed: true, plan: "admin", planName: "MASTER ADMIN", role: "admin", maxAllowed: 99999, dailyQuota: 99999, downloadsToday: 0, remainingToday: 99999, remainingDownloads: 99999, unlimited: true });
     }
     const users = loadUsersMasterDatabase();
     const matchedUser = users.find(u =>
@@ -18890,8 +19099,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     if (cleanEmail && isAdminAccount) {
       return res.json({
         allowed: true,
-        plan: "ultra",
-        planName: "VIP DESK",
+        plan: "admin",
+        planName: "MASTER ADMIN",
         role: "admin",
         remainingToday: 99999,
         unlimited: true,
@@ -18994,6 +19203,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
         error: "आपकी आज की ग्राफिक डाउनलोड सीमा पूरी हो चुकी है। कृपया अगली दैनिक सीमा रीसेट होने तक प्रतीक्षा करें।",
+        message: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।",
         quotaExceeded: true,
         maxAllowed,
         downloadsToday,
@@ -19017,6 +19227,10 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       }
     }
 
+    // Issue verified download token for complete-download-export lifecycle (Phase 3.0B-S/T)
+    const cardIdStr = card?.id ? String(card.id) : (req.body?.cardId ? String(req.body.cardId) : "");
+    const downloadToken = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr);
+
     if (!checkOnly && isAlreadyProcessed) {
       return res.json({
         allowed: true,
@@ -19024,6 +19238,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
         maxAllowed,
         downloadsToday,
         remainingToday: Math.max(0, maxAllowed - downloadsToday),
+        downloadToken,
+        downloadRequestId: downloadRequestId || undefined,
         unlimited: false,
         idempotent: true,
       });
@@ -19066,7 +19282,144 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       maxAllowed,
       downloadsToday,
       remainingToday: Math.max(0, maxAllowed - downloadsToday),
+      downloadToken,
+      downloadRequestId: downloadRequestId || undefined,
       unlimited: false,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// POST /api/complete-download-export - Distributed transactional completion of canvas download (Phase 3.0B-S)
+app.post("/api/complete-download-export", async (req, res) => {
+  try {
+    const { email, downloadToken, downloadRequestId, exportSuccess, cardId, isBonus } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+
+    if (!exportSuccess) {
+      // If canvas rendering failed or export aborted, 0 quota is deducted!
+      return res.json({
+        success: false,
+        quotaDeducted: 0,
+        message: "एक्सपोर्ट निरस्त या असफल होने के कारण कोई कोटा नहीं घटाया गया।",
+      });
+    }
+
+    if (isBonus) {
+      return res.json({
+        success: true,
+        quotaDeducted: 0,
+        isBonus: true,
+        remainingToday: 99999,
+        unlimited: true,
+      });
+    }
+
+    const allProfiles = loadProfilesDatabase();
+    const prof: any = allProfiles[cleanEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
+    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === 'admin' || prof.role === 'superadmin';
+    if (cleanEmail && isAdminAccount) {
+      return res.json({
+        success: true,
+        quotaDeducted: 0,
+        plan: "admin",
+        planName: "MASTER ADMIN",
+        role: "admin",
+        remainingToday: 99999,
+        unlimited: true,
+      });
+    }
+
+    const users = loadUsersMasterDatabase();
+    const matchedUser = users.find(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+      (cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail)
+    );
+    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    const catalog = loadPlansCatalogDatabase();
+    const planDetail = catalog.find(p => p.id === tier);
+    const isVipTier = tier === 'ultra' || tier === 'vip' || tier === 'vip_desk';
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined
+      ? planDetail.maxGraphicsPerDay
+      : (isVipTier ? 75 : tier === 'professional' ? 40 : tier === 'advanced' ? 25 : 10);
+
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const userKey = cleanEmail || req.ip || "anon";
+    const reqId = downloadRequestId || `req_${userKey}_${cardId || Date.now()}_${dateStr}`;
+    const cardIdStr = cardId ? String(cardId) : "";
+
+    const tokenInfo = downloadToken ? {
+      token: downloadToken,
+      userKey: cleanEmail,
+      cardId: cardIdStr,
+      downloadRequestId: reqId,
+      authSecret: AUTH_SECRET,
+    } : {};
+
+    let txResult: any = null;
+    if (centralDb) {
+      txResult = await centralDb.transactDailyGraphicDownload(
+        userKey,
+        dateStr,
+        reqId,
+        maxAllowed,
+        { cardId: cardIdStr, tokenInfo }
+      );
+    } else {
+      const persisted = loadDailyDownloadsDatabase();
+      const recordKey = `${userKey}_${dateStr}`;
+      const rec = persisted[recordKey] || { count: 0, date: dateStr, processedRequestIds: [] };
+      const currentCount = rec.count || 0;
+      const ids = rec.processedRequestIds || [];
+      if (ids.includes(reqId)) {
+        txResult = { success: true, idempotent: true, count: currentCount, remaining: Math.max(0, maxAllowed - currentCount) };
+      } else if (currentCount >= maxAllowed) {
+        txResult = { success: false, quotaExceeded: true, count: currentCount, remaining: 0, error: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।" };
+      } else {
+        const newCount = currentCount + 1;
+        ids.push(reqId);
+        persisted[recordKey] = { date: dateStr, count: newCount, processedRequestIds: ids.slice(-100), updatedAt: Date.now() };
+        saveDailyDownloadsDatabase(persisted);
+        txResult = { success: true, idempotent: false, count: newCount, remaining: Math.max(0, maxAllowed - newCount) };
+      }
+    }
+
+    if (!txResult.success) {
+      if (txResult.replayDetected || txResult.invalidToken || txResult.invalidSignature || txResult.expired) {
+        return res.status(403).json({
+          success: false,
+          invalidToken: true,
+          replayDetected: Boolean(txResult.replayDetected),
+          reason: txResult.reason || txResult.error,
+          error: `डाउनलोड टोकन अमान्य, समाप्त या पहले ही उपयोग किया जा चुका है (${txResult.reason || txResult.error || "अमान्य"}). कृपया पुनः प्रयास करें।`,
+        });
+      }
+      return res.status(403).json({
+        success: false,
+        quotaExceeded: true,
+        error: txResult.error || "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।",
+        downloadsToday: txResult.count,
+        remainingToday: 0,
+      });
+    }
+
+    if (downloadToken) {
+      consumedDownloadTokens.add(downloadToken);
+      activeDownloadTokens.delete(downloadToken);
+    }
+    dailyDownloadsTracker.set(userKey, { date: dateStr, count: txResult.count });
+    recentDownloadRequests.set(reqId, Date.now());
+
+    return res.json({
+      success: true,
+      quotaDeducted: txResult.idempotent ? 0 : 1,
+      idempotent: Boolean(txResult.idempotent),
+      downloadsToday: txResult.count,
+      remainingToday: txResult.remaining,
+      maxAllowed,
+      plan: tier,
+      dateStr,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

@@ -1600,8 +1600,14 @@ var require_firestore_database_service = __commonJS({
     var https = require("https");
     var fs2 = require("fs");
     var path2 = require("path");
+    var crypto2 = require("crypto");
     var adapter = require_server_firestore_adapter();
     var httpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 20,
+      keepAliveMsecs: 6e4
+    });
+    var httpAgent = new http.Agent({
       keepAlive: true,
       maxSockets: 20,
       keepAliveMsecs: 6e4
@@ -1610,7 +1616,7 @@ var require_firestore_database_service = __commonJS({
       constructor(options = {}) {
         this.projectId = options.projectId || process.env.FIREBASE_PROJECT_ID || adapter.PROJECT_ID || "ai-news-maker-app";
         this.databaseId = options.databaseId || options.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID || adapter.DATABASE_ID || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
-        this.useFirestore = options.useFirestore !== void 0 ? options.useFirestore : process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE;
+        this.useFirestore = options.useFirestore !== void 0 ? options.useFirestore : process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE || Boolean(process.env.FIRESTORE_EMULATOR_HOST);
         this.cache = {
           users: /* @__PURE__ */ new Map(),
           news: /* @__PURE__ */ new Map(),
@@ -1676,122 +1682,184 @@ var require_firestore_database_service = __commonJS({
         if (!ts) return false;
         return Date.now() - ts < ttl;
       }
+      _getTransportInfo() {
+        const emu = process.env.FIRESTORE_EMULATOR_HOST;
+        if (emu) {
+          const parts = emu.split(":");
+          return {
+            isEmulator: true,
+            transport: http,
+            host: parts[0] || "127.0.0.1",
+            port: parts[1] ? parseInt(parts[1], 10) : 8080,
+            agent: httpAgent
+          };
+        }
+        return {
+          isEmulator: false,
+          transport: https,
+          host: "firestore.googleapis.com",
+          port: 443,
+          agent: httpsAgent
+        };
+      }
       async getAccessToken() {
+        if (process.env.FIRESTORE_EMULATOR_HOST) return "owner";
         return adapter.getMetadataAccessToken();
+      }
+      async _requestFirestore({ method = "GET", path: path3, body = null, headers = {}, timeout = 6e3 }) {
+        const transportInfo = this._getTransportInfo();
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const reqHeaders = {
+          Authorization: `Bearer ${token}`,
+          ...headers
+        };
+        if (body) {
+          reqHeaders["Content-Type"] = "application/json";
+          reqHeaders["Content-Length"] = Buffer.byteLength(body);
+        }
+        return new Promise((resolve) => {
+          const req = transportInfo.transport.request(
+            {
+              host: transportInfo.host,
+              port: transportInfo.port,
+              path: path3,
+              method,
+              headers: reqHeaders,
+              agent: transportInfo.agent,
+              timeout
+            },
+            (res) => {
+              let resBody = "";
+              res.on("data", (d) => resBody += d);
+              res.on("end", () => {
+                resolve({
+                  success: res.statusCode >= 200 && res.statusCode < 300,
+                  statusCode: res.statusCode,
+                  body: resBody
+                });
+              });
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, statusCode: 408, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          if (body) req.write(body);
+          req.end();
+        });
+      }
+      async _execFirestoreGet(docPath) {
+        const res = await this._requestFirestore({
+          method: "GET",
+          path: docPath,
+          timeout: 6e3
+        });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            return { success: true, doc: parsed, updateTime: parsed.updateTime };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        } else if (res.statusCode === 404) {
+          return { success: true, notFound: true };
+        } else {
+          return { success: false, statusCode: res.statusCode, error: res.body };
+        }
+      }
+      // Authoritative transactional document read via batchGet POST body
+      async _readDocInTransaction(collection, docId, transactionId) {
+        const docName = `projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${docId}`;
+        const path3 = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:batchGet`;
+        const payload = JSON.stringify({
+          documents: [docName],
+          transaction: transactionId
+        });
+        const res = await this._requestFirestore({
+          method: "POST",
+          path: path3,
+          body: payload,
+          timeout: 6e3
+        });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const entry = parsed[0];
+              if (entry.found) {
+                return {
+                  success: true,
+                  doc: entry.found,
+                  data: this._fromFirestoreDoc(entry.found),
+                  updateTime: entry.found.updateTime
+                };
+              } else if (entry.missing) {
+                return { success: true, notFound: true };
+              }
+            }
+            return { success: true, notFound: true };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        }
+        return { success: false, statusCode: res.statusCode, error: res.body };
       }
       // Begin Firestore REST atomic transaction (Task 3)
       async beginTransaction() {
         if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:beginTransaction`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json"
-              },
-              agent: httpsAgent,
-              timeout: 6e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(body);
-                    resolve({ success: true, transaction: parsed.transaction });
-                  } catch (e) {
-                    resolve({ success: false, error: e.message });
-                  }
-                } else {
-                  resolve({ success: false, error: `beginTransaction failed (${res.statusCode}): ${body}` });
-                }
-              });
-            }
-          );
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.write(JSON.stringify({ options: { readWrite: {} } }));
-          req.end();
+        const res = await this._requestFirestore({
+          method: "POST",
+          path: docPath,
+          body: JSON.stringify({ options: { readWrite: {} } }),
+          timeout: 6e3
         });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            return { success: true, transaction: parsed.transaction };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        }
+        return { success: false, error: `beginTransaction failed (${res.statusCode}): ${res.body}` };
       }
       // Commit Firestore REST atomic transaction (Task 3)
       async commitTransaction(transactionId, writes = []) {
         if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:commit`;
         const payload = JSON.stringify({
           transaction: transactionId,
           writes
         });
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload)
-              },
-              agent: httpsAgent,
-              timeout: 8e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(body);
-                    resolve({ success: true, data: parsed });
-                  } catch (e) {
-                    resolve({ success: true });
-                  }
-                } else {
-                  resolve({ success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${body}` });
-                }
-              });
-            }
-          );
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.write(payload);
-          req.end();
+        const res = await this._requestFirestore({
+          method: "POST",
+          path: docPath,
+          body: payload,
+          timeout: 8e3
         });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            return { success: true, data: parsed };
+          } catch (e) {
+            return { success: true };
+          }
+        }
+        return { success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${res.body}` };
       }
       // Rollback Firestore REST atomic transaction (Task 3)
       async rollbackTransaction(transactionId) {
         if (!this.useFirestore || !transactionId) return;
-        const token = await this.getAccessToken();
-        if (!token) return;
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:rollback`;
         const payload = JSON.stringify({ transaction: transactionId });
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload)
-              },
-              agent: httpsAgent,
-              timeout: 4e3
-            },
-            () => resolve()
-          );
-          req.on("error", () => resolve());
-          req.write(payload);
-          req.end();
+        await this._requestFirestore({
+          method: "POST",
+          path: docPath,
+          body: payload,
+          timeout: 4e3
         });
       }
       // Generic document read
@@ -1799,132 +1867,60 @@ var require_firestore_database_service = __commonJS({
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled" };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "GET",
-              headers: { Authorization: `Bearer ${token}` },
-              agent: httpsAgent,
-              timeout: 5e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(body);
-                    const data = this._fromFirestoreDoc(parsed);
-                    resolve({ success: true, data, statusCode: res.statusCode });
-                  } catch (err) {
-                    resolve({ success: false, error: err.message, statusCode: res.statusCode });
-                  }
-                } else {
-                  resolve({ success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` });
-                }
-              });
-            }
-          );
-          req.on("timeout", () => {
-            req.destroy();
-            resolve({ success: false, error: "Request timeout" });
-          });
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.end();
+        const res = await this._requestFirestore({
+          method: "GET",
+          path: docPath,
+          timeout: 5e3
         });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            const data = this._fromFirestoreDoc(parsed);
+            return { success: true, data, statusCode: res.statusCode };
+          } catch (err) {
+            return { success: false, error: err.message, statusCode: res.statusCode };
+          }
+        }
+        return { success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` };
       }
       // Generic document write
       async writeDoc(collection, docId, data) {
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled" };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available" };
         const fields = {};
         for (const [k, v] of Object.entries(data)) {
           if (v !== void 0) fields[k] = this._toFirestoreField(v);
         }
         const payload = JSON.stringify({ fields });
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "PATCH",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload)
-              },
-              agent: httpsAgent,
-              timeout: 5e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  resolve({ success: true, statusCode: res.statusCode });
-                } else {
-                  resolve({ success: false, statusCode: res.statusCode, error: body });
-                }
-              });
-            }
-          );
-          req.on("timeout", () => {
-            req.destroy();
-            resolve({ success: false, error: "Request timeout" });
-          });
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.write(payload);
-          req.end();
+        const res = await this._requestFirestore({
+          method: "PATCH",
+          path: docPath,
+          body: payload,
+          timeout: 5e3
         });
+        return { success: res.success, statusCode: res.statusCode, error: res.success ? void 0 : res.body };
       }
       // Generic document delete
       async deleteDoc(collection, docId) {
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled" };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${token}` },
-              agent: httpsAgent,
-              timeout: 5e3
-            },
-            (res) => {
-              res.on("data", () => {
-              });
-              res.on("end", () => resolve({ success: res.statusCode >= 200 && res.statusCode < 300 }));
-            }
-          );
-          req.on("timeout", () => {
-            req.destroy();
-            resolve({ success: false, error: "Request timeout" });
-          });
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.end();
+        const res = await this._requestFirestore({
+          method: "DELETE",
+          path: docPath,
+          timeout: 5e3
         });
+        return { success: res.success, statusCode: res.statusCode };
       }
       // Generic list documents with complete nextPageToken pagination loop (Task 5)
       async listDocs(collection, pageSize = 300) {
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled", documents: [] };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available", documents: [] };
         const allDocuments = [];
         const seenIds = /* @__PURE__ */ new Set();
         let pageToken = "";
@@ -1934,61 +1930,33 @@ var require_firestore_database_service = __commonJS({
           if (pageToken) {
             docPath += `&pageToken=${encodeURIComponent(pageToken)}`;
           }
-          const pageRes = await new Promise((resolve) => {
-            const req = https.request(
-              {
-                host: "firestore.googleapis.com",
-                path: docPath,
-                method: "GET",
-                headers: { Authorization: `Bearer ${token}` },
-                agent: httpsAgent,
-                timeout: 1e4
-              },
-              (res) => {
-                let body = "";
-                res.on("data", (d) => body += d);
-                res.on("end", () => {
-                  if (res.statusCode >= 200 && res.statusCode < 300) {
-                    try {
-                      const parsed = JSON.parse(body);
-                      const docs = (parsed.documents || []).map((d) => {
-                        const docId = d.name ? d.name.split("/").pop() : "";
-                        const data = this._fromFirestoreDoc(d);
-                        return { id: docId, docId, ...data };
-                      });
-                      resolve({
-                        success: true,
-                        documents: docs,
-                        nextPageToken: parsed.nextPageToken || "",
-                        statusCode: res.statusCode
-                      });
-                    } catch (err) {
-                      resolve({ success: false, error: err.message, documents: [] });
-                    }
-                  } else {
-                    resolve({ success: false, error: `List failed (${res.statusCode})`, documents: [] });
-                  }
-                });
-              }
-            );
-            req.on("timeout", () => {
-              req.destroy();
-              resolve({ success: false, error: "Request timeout", documents: [] });
-            });
-            req.on("error", (e) => resolve({ success: false, error: e.message, documents: [] }));
-            req.end();
+          const res = await this._requestFirestore({
+            method: "GET",
+            path: docPath,
+            timeout: 1e4
           });
-          if (!pageRes.success) {
-            if (allDocuments.length > 0) break;
-            return pageRes;
-          }
-          for (const doc of pageRes.documents) {
-            if (doc.id && !seenIds.has(doc.id)) {
-              seenIds.add(doc.id);
-              allDocuments.push(doc);
+          if (res.success) {
+            try {
+              const parsed = JSON.parse(res.body);
+              const docs = (parsed.documents || []).map((d) => {
+                const docId = d.name ? d.name.split("/").pop() : "";
+                const data = this._fromFirestoreDoc(d);
+                return { id: docId, docId, ...data };
+              });
+              for (const doc of docs) {
+                if (doc.id && !seenIds.has(doc.id)) {
+                  seenIds.add(doc.id);
+                  allDocuments.push(doc);
+                }
+              }
+              pageToken = parsed.nextPageToken || "";
+            } catch (err) {
+              pageToken = "";
             }
+          } else {
+            if (allDocuments.length > 0) break;
+            return { success: false, error: `List failed (${res.statusCode})`, documents: [] };
           }
-          pageToken = pageRes.nextPageToken || "";
         } while (pageToken);
         return { success: true, documents: allDocuments, totalCount: allDocuments.length };
       }
@@ -2222,40 +2190,7 @@ var require_firestore_database_service = __commonJS({
               break;
             }
             const transactionId = txRes.transaction;
-            const token = await this.getAccessToken();
-            const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}?transaction=${encodeURIComponent(transactionId)}`;
-            const docRes = await new Promise((resolve) => {
-              const req = https.request(
-                {
-                  host: "firestore.googleapis.com",
-                  path: docPath,
-                  method: "GET",
-                  headers: { Authorization: `Bearer ${token}` },
-                  agent: httpsAgent,
-                  timeout: 6e3
-                },
-                (res) => {
-                  let body = "";
-                  res.on("data", (d) => body += d);
-                  res.on("end", () => {
-                    if (res.statusCode >= 200 && res.statusCode < 300) {
-                      try {
-                        const parsed = JSON.parse(body);
-                        resolve({ success: true, doc: parsed, updateTime: parsed.updateTime });
-                      } catch (e) {
-                        resolve({ success: false, error: e.message });
-                      }
-                    } else if (res.statusCode === 404) {
-                      resolve({ success: true, notFound: true });
-                    } else {
-                      resolve({ success: false, statusCode: res.statusCode, error: body });
-                    }
-                  });
-                }
-              );
-              req.on("error", (e) => resolve({ success: false, error: e.message }));
-              req.end();
-            });
+            const docRes = await this._readDocInTransaction("wallets", cleanKey, transactionId);
             let currentWallet = { walletKey: cleanKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
             let updateTime = null;
             if (docRes.success && docRes.doc) {
@@ -2308,14 +2243,14 @@ var require_firestore_database_service = __commonJS({
             const writes = [
               {
                 update: {
-                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}`,
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${cleanKey}`,
                   fields: walletFields
                 },
                 currentDocument: updateTime ? { updateTime } : { exists: false }
               },
               {
                 update: {
-                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${encodeURIComponent(txId2)}`,
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${txId2}`,
                   fields: txFields
                 },
                 currentDocument: { exists: false }
@@ -2591,6 +2526,812 @@ var require_firestore_database_service = __commonJS({
           this._saveLocalJson("drafts_database.json", drafts);
           return { success: true };
         }
+      }
+      // --- DISTRIBUTED HEADLINE REGENERATION LOCK (Task A / Phase 3.0B-S) ---
+      /**
+       * Atomically acquires a distributed lock for draft headline regeneration.
+       * Ensures that:
+       * 1. If draft was already regenerated (status === 'completed'), rejects unless matching generationRequestId for idempotent replay.
+       * 2. If another instance is currently regenerating (status === 'in_progress' and now < leaseExpiresAt), rejects with 409 Conflict.
+       * 3. If lock is expired (leaseExpiresAt <= now), allows takeover.
+       * 4. Acquires lease with unique lockId and 60-second TTL.
+       */
+      async acquireDraftRegenerationLock(draftId2, userId, generationRequestId = "") {
+        if (!draftId2) return { success: false, error: "draftId is required" };
+        const cleanDraftId = String(draftId2).trim();
+        const cleanUserId = String(userId || "").trim();
+        const cleanReqId = String(generationRequestId || "").trim();
+        const now = Date.now();
+        const leaseDurationMs = 6e4;
+        const newLockId = `lock_${cleanDraftId}_${now}_${Math.random().toString(36).slice(2, 8)}`;
+        if (this.useFirestore) {
+          const maxRetries = 5;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            const transactionId = txRes.transaction;
+            const docRes = await this._readDocInTransaction("draft_regeneration_locks", cleanDraftId, transactionId);
+            if (!docRes.success) {
+              await this.rollbackTransaction(transactionId);
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            let existingLock = null;
+            let updateTime = null;
+            if (docRes.doc) {
+              existingLock = this._fromFirestoreDoc(docRes.doc);
+              updateTime = docRes.updateTime;
+            }
+            if (existingLock) {
+              if (existingLock.status === "completed" || existingLock.regenerationUsed) {
+                await this.rollbackTransaction(transactionId);
+                if (cleanReqId && existingLock.generationRequestId === cleanReqId && Array.isArray(existingLock.headlines)) {
+                  return {
+                    success: true,
+                    idempotentReplay: true,
+                    headlines: existingLock.headlines,
+                    lockId: existingLock.lockId
+                  };
+                }
+                return {
+                  success: false,
+                  alreadyUsed: true,
+                  conflict: true,
+                  error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+                };
+              }
+              const leaseExpiresAt = Number(existingLock.leaseExpiresAt) || 0;
+              if (existingLock.status === "in_progress" && now < leaseExpiresAt) {
+                await this.rollbackTransaction(transactionId);
+                return {
+                  success: false,
+                  inFlight: true,
+                  conflict: true,
+                  error: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+                };
+              }
+            }
+            const lockPayload = {
+              draftId: cleanDraftId,
+              userId: cleanUserId,
+              generationRequestId: cleanReqId,
+              lockId: newLockId,
+              status: "in_progress",
+              acquiredAt: now,
+              leaseExpiresAt: now + leaseDurationMs,
+              updatedAt: now
+            };
+            const fields = {};
+            for (const [k, v] of Object.entries(lockPayload)) {
+              if (v !== void 0) fields[k] = this._toFirestoreField(v);
+            }
+            const writes = [
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/draft_regeneration_locks/${cleanDraftId}`,
+                  fields
+                },
+                currentDocument: updateTime ? { updateTime } : { exists: false }
+              }
+            ];
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              return { success: true, lockId: newLockId, leaseExpiresAt: now + leaseDurationMs };
+            } else if (commitRes.statusCode === 409 || commitRes.statusCode === 400 || commitRes.error && (commitRes.error.includes("ABORTED") || commitRes.error.includes("FAILED_PRECONDITION") || commitRes.error.includes("ALREADY_EXISTS") || commitRes.error.includes("conflict"))) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            } else {
+              return { success: false, error: commitRes.error || "Lock acquisition failed" };
+            }
+          }
+          return {
+            success: false,
+            conflict: true,
+            inFlight: true,
+            error: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+          };
+        } else {
+          const locksDb = this._loadLocalJson("draft_regeneration_locks_db.json", {});
+          const existing = locksDb[cleanDraftId];
+          if (existing) {
+            if (existing.status === "completed" || existing.regenerationUsed) {
+              if (cleanReqId && existing.generationRequestId === cleanReqId && Array.isArray(existing.headlines)) {
+                return {
+                  success: true,
+                  idempotentReplay: true,
+                  headlines: existing.headlines,
+                  lockId: existing.lockId
+                };
+              }
+              return {
+                success: false,
+                alreadyUsed: true,
+                conflict: true,
+                error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+              };
+            }
+            const leaseExpiresAt = Number(existing.leaseExpiresAt) || 0;
+            if (existing.status === "in_progress" && now < leaseExpiresAt) {
+              return {
+                success: false,
+                inFlight: true,
+                conflict: true,
+                error: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+              };
+            }
+          }
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          const existingDraft = drafts.find((d) => d.id === cleanDraftId);
+          if (existingDraft && existingDraft.regenerationUsed) {
+            if (cleanReqId && existingDraft.generationRequestId === cleanReqId && Array.isArray(existingDraft.regeneratedHeadlines)) {
+              return {
+                success: true,
+                idempotentReplay: true,
+                headlines: existingDraft.regeneratedHeadlines,
+                lockId: existingDraft.id
+              };
+            }
+            return {
+              success: false,
+              alreadyUsed: true,
+              conflict: true,
+              error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+            };
+          }
+          locksDb[cleanDraftId] = {
+            draftId: cleanDraftId,
+            userId: cleanUserId,
+            generationRequestId: cleanReqId,
+            lockId: newLockId,
+            status: "in_progress",
+            acquiredAt: now,
+            leaseExpiresAt: now + leaseDurationMs,
+            updatedAt: now
+          };
+          this._saveLocalJson("draft_regeneration_locks_db.json", locksDb);
+          return { success: true, lockId: newLockId, leaseExpiresAt: now + leaseDurationMs };
+        }
+      }
+      /**
+       * Completes a draft headline regeneration.
+       * Atomically validates lockId ownership, debits requiredCoins, marks lock as completed,
+       * and persists headlines.
+       */
+      async completeDraftRegenerationLock(draftId2, lockId2, walletKey, requiredCoins, generatedHeadlines, generationRequestId = "") {
+        if (!draftId2 || !lockId2) return { success: false, error: "draftId and lockId are required" };
+        const cleanDraftId = String(draftId2).trim();
+        const cleanLockId = String(lockId2).trim();
+        const cleanWalletKey = String(walletKey || "").toLowerCase().trim();
+        const numCoins = Math.max(0, Number(requiredCoins) || 0);
+        const now = Date.now();
+        if (this.useFirestore) {
+          const maxRetries = 5;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            const transactionId = txRes.transaction;
+            const lockRes = await this._readDocInTransaction("draft_regeneration_locks", cleanDraftId, transactionId);
+            if (!lockRes.success) {
+              await this.rollbackTransaction(transactionId);
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            let existingLock = lockRes.doc ? this._fromFirestoreDoc(lockRes.doc) : null;
+            let lockUpdateTime = lockRes.updateTime;
+            if (!existingLock || existingLock.lockId !== cleanLockId) {
+              await this.rollbackTransaction(transactionId);
+              return { success: false, error: "Lock ID mismatch; ownership lost" };
+            }
+            if (existingLock.status === "completed" || existingLock.regenerationUsed) {
+              await this.rollbackTransaction(transactionId);
+              if (generationRequestId && existingLock.generationRequestId === generationRequestId && Array.isArray(existingLock.headlines)) {
+                return {
+                  success: true,
+                  idempotentReplay: true,
+                  headlines: existingLock.headlines,
+                  lockId: existingLock.lockId,
+                  coinsDeducted: 0
+                };
+              }
+              return {
+                success: false,
+                alreadyUsed: true,
+                conflict: true,
+                error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+              };
+            }
+            let currentBalance = 0;
+            let walletUpdateTime = null;
+            let currentWallet = { walletKey: cleanWalletKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+            if (numCoins > 0 && cleanWalletKey) {
+              const walletRes = await this._readDocInTransaction("wallets", cleanWalletKey, transactionId);
+              if (!walletRes.success) {
+                await this.rollbackTransaction(transactionId);
+                await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+                continue;
+              }
+              if (walletRes.doc) {
+                currentWallet = this._fromFirestoreDoc(walletRes.doc);
+                walletUpdateTime = walletRes.updateTime;
+              }
+              currentBalance = Number(currentWallet.coinBalance) || 0;
+              if (currentBalance < numCoins) {
+                await this.rollbackTransaction(transactionId);
+                await this.releaseDraftRegenerationLock(cleanDraftId, cleanLockId);
+                return {
+                  success: false,
+                  insufficientCoins: true,
+                  currentBalance,
+                  requiredCoins: numCoins,
+                  error: `\u0938\u093F\u0915\u094D\u0915\u0947 \u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0939\u0948\u0902 (\u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${currentBalance}, \u0906\u0935\u0936\u094D\u092F\u0915: ${numCoins})`
+                };
+              }
+            }
+            const draftRes = await this._readDocInTransaction("user_drafts", cleanDraftId, transactionId);
+            let draftData = draftRes.doc ? this._fromFirestoreDoc(draftRes.doc) : null;
+            let draftUpdateTime = draftRes.updateTime;
+            const newBalance = Math.max(0, currentBalance - numCoins);
+            const txId = `tx_regen_${cleanDraftId}_${now}`;
+            const lockPayload = {
+              draftId: cleanDraftId,
+              lockId: cleanLockId,
+              status: "completed",
+              regenerationUsed: true,
+              generationRequestId: String(generationRequestId || ""),
+              headlines: generatedHeadlines,
+              coinsDeducted: numCoins,
+              completedAt: now,
+              updatedAt: now
+            };
+            const lockFields = {};
+            for (const [k, v] of Object.entries(lockPayload)) {
+              if (v !== void 0) lockFields[k] = this._toFirestoreField(v);
+            }
+            const writes = [
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/draft_regeneration_locks/${cleanDraftId}`,
+                  fields: lockFields
+                },
+                currentDocument: lockUpdateTime ? { updateTime: lockUpdateTime } : { exists: true }
+              }
+            ];
+            if (numCoins > 0 && cleanWalletKey) {
+              currentWallet.coinBalance = newBalance;
+              currentWallet.updatedAt = now;
+              const walletFields = {};
+              for (const [k, v] of Object.entries(currentWallet)) {
+                if (v !== void 0) walletFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${cleanWalletKey}`,
+                  fields: walletFields
+                },
+                currentDocument: walletUpdateTime ? { updateTime: walletUpdateTime } : { exists: false }
+              });
+              const txPayload = {
+                id: txId,
+                transactionId: txId,
+                userId: cleanWalletKey,
+                userEmail: cleanWalletKey,
+                newsItemId: cleanDraftId,
+                newsTitle: "5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938",
+                description: `5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u091C\u0928\u0930\u0947\u0936\u0928 (Single-Use Draft ${cleanDraftId}): -${numCoins} \u0915\u0949\u0907\u0928\u094D\u0938`,
+                type: "debit",
+                amount: numCoins,
+                coins: numCoins,
+                balanceAfter: newBalance,
+                timestamp: now,
+                createdAt: new Date(now).toISOString(),
+                status: "completed"
+              };
+              const txFields = {};
+              for (const [k, v] of Object.entries(txPayload)) {
+                if (v !== void 0) txFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${txId}`,
+                  fields: txFields
+                },
+                currentDocument: { exists: false }
+              });
+            }
+            if (draftData) {
+              draftData.regenerationUsed = true;
+              draftData.regeneratedHeadlines = generatedHeadlines;
+              draftData.generationRequestId = String(generationRequestId || "");
+              draftData.updatedAt = now;
+              const draftFields = {};
+              for (const [k, v] of Object.entries(draftData)) {
+                if (v !== void 0) draftFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/user_drafts/${cleanDraftId}`,
+                  fields: draftFields
+                },
+                currentDocument: draftUpdateTime ? { updateTime: draftUpdateTime } : { exists: true }
+              });
+            }
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              return {
+                success: true,
+                newBalance,
+                coinsDeducted: numCoins,
+                headlines: generatedHeadlines,
+                transactionId: txId
+              };
+            } else if (commitRes.statusCode === 409 || commitRes.statusCode === 400 || commitRes.error && (commitRes.error.includes("ABORTED") || commitRes.error.includes("FAILED_PRECONDITION") || commitRes.error.includes("conflict"))) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            } else {
+              return { success: false, error: commitRes.error || "Commit failed during draft completion" };
+            }
+          }
+          return { success: false, error: "Transaction contention during draft completion" };
+        } else {
+          const locksDb = this._loadLocalJson("draft_regeneration_locks_db.json", {});
+          const existing = locksDb[cleanDraftId];
+          if (existing && existing.lockId && existing.lockId !== cleanLockId) {
+            return { success: false, error: "Lock ID mismatch; ownership lost" };
+          }
+          let newBalance = 0;
+          if (numCoins > 0 && cleanWalletKey) {
+            const rDb = this._loadLocalJson("rewards_database.json", { wallets: {}, transactions: [] });
+            if (!rDb.wallets) rDb.wallets = {};
+            if (!rDb.wallets[cleanWalletKey]) {
+              rDb.wallets[cleanWalletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+            }
+            const currentBal = rDb.wallets[cleanWalletKey].coinBalance || 0;
+            if (currentBal < numCoins) {
+              await this.releaseDraftRegenerationLock(cleanDraftId, cleanLockId);
+              return {
+                success: false,
+                insufficientCoins: true,
+                currentBalance: currentBal,
+                requiredCoins: numCoins,
+                error: `\u0938\u093F\u0915\u094D\u0915\u0947 \u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0939\u0948\u0902 (\u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${currentBal}, \u0906\u0935\u0936\u094D\u092F\u0915: ${numCoins})`
+              };
+            }
+            newBalance = currentBal - numCoins;
+            rDb.wallets[cleanWalletKey].coinBalance = newBalance;
+            const txId = `tx_regen_${cleanDraftId}_${now}`;
+            if (!Array.isArray(rDb.transactions)) rDb.transactions = [];
+            rDb.transactions.unshift({
+              id: txId,
+              transactionId: txId,
+              userId: cleanWalletKey,
+              userEmail: cleanWalletKey,
+              newsItemId: cleanDraftId,
+              newsTitle: "5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938",
+              description: `5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u091C\u0928\u0930\u0947\u0936\u0928: -${numCoins} \u0915\u0949\u0907\u0928\u094D\u0938`,
+              type: "debit",
+              amount: numCoins,
+              coins: numCoins,
+              balanceAfter: newBalance,
+              timestamp: now,
+              createdAt: new Date(now).toISOString(),
+              status: "completed"
+            });
+            this._saveLocalJson("rewards_database.json", rDb);
+          }
+          locksDb[cleanDraftId] = {
+            draftId: cleanDraftId,
+            lockId: cleanLockId,
+            status: "completed",
+            regenerationUsed: true,
+            generationRequestId: String(generationRequestId || ""),
+            headlines: generatedHeadlines,
+            coinsDeducted: numCoins,
+            completedAt: now,
+            updatedAt: now
+          };
+          this._saveLocalJson("draft_regeneration_locks_db.json", locksDb);
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          const d = drafts.find((x) => x.id === cleanDraftId);
+          if (d) {
+            d.regenerationUsed = true;
+            d.regeneratedHeadlines = generatedHeadlines;
+            d.generationRequestId = generationRequestId;
+            d.updatedAt = now;
+            this._saveLocalJson("drafts_database.json", drafts);
+          }
+          return {
+            success: true,
+            newBalance,
+            coinsDeducted: numCoins,
+            headlines: generatedHeadlines
+          };
+        }
+      }
+      /**
+       * Releases an acquired lock if the regeneration failed or encountered an error.
+       * Ensures the user is NOT locked out and ZERO coins are deducted.
+       */
+      async releaseDraftRegenerationLock(draftId2, lockId2) {
+        if (!draftId2) return;
+        const cleanDraftId = String(draftId2).trim();
+        const cleanLockId = String(lockId2 || "").trim();
+        if (this.useFirestore) {
+          try {
+            const read = await this.readDoc("draft_regeneration_locks", cleanDraftId);
+            if (read.success && read.data) {
+              if (!cleanLockId || read.data.lockId === cleanLockId) {
+                if (read.data.status === "in_progress") {
+                  await this.deleteDoc("draft_regeneration_locks", cleanDraftId);
+                }
+              }
+            }
+          } catch {
+          }
+        } else {
+          const locksDb = this._loadLocalJson("draft_regeneration_locks_db.json", {});
+          const existing = locksDb[cleanDraftId];
+          if (existing && (!cleanLockId || existing.lockId === cleanLockId)) {
+            if (existing.status === "in_progress") {
+              delete locksDb[cleanDraftId];
+              this._saveLocalJson("draft_regeneration_locks_db.json", locksDb);
+            }
+          }
+        }
+      }
+      // --- DAILY GRAPHIC DOWNLOAD TRANSACTION (Task B / Phase 3.0B-S) ---
+      /**
+       * PHASE 3.0B-U: Unified Atomic Download Token Consumption and Daily Graphic Quota Deduction
+       * 
+       * Atomically in ONE Firestore Transaction:
+       * 1. Checks download_tokens/${tokenHash}:
+       *    - If consumed: checks if downloadRequestId matches (idempotent retry). If not, aborts with replayDetected: true.
+       * 2. Checks token signature, expiry (10m TTL), and user bindings.
+       * 3. Checks daily_graphic_downloads/${userKey}_${dateStr}:
+       *    - If downloadRequestId already in processedRequestIds: returns idempotent: true.
+       *    - If count >= maxAllowed: aborts with quotaExceeded: true.
+       * 4. Atomically commits in a SINGLE Firestore REST commit:
+       *    - download_tokens/${tokenHash} with status: 'consumed', precondition { exists: false }.
+       *    - daily_graphic_downloads/${userKey}_${dateStr} with count: count + 1, processedRequestIds.
+       * 
+       * Guarantees 100% replay immunity across independent instances, and zero quota decrement on failure.
+       */
+      async transactCompleteDownloadExport(userKey, dateStr, downloadRequestId = "", maxAllowed = 10, tokenInfo = {}, downloadDetails = {}) {
+        const cleanKey = String(userKey || "").toLowerCase().trim();
+        const cleanDate = String(dateStr || "").trim();
+        const cleanReqId = String(downloadRequestId || "").trim() || `req_${cleanKey}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const limit = Math.max(1, Number(maxAllowed) || 10);
+        const docId = `${cleanKey}_${cleanDate}`;
+        const now = Date.now();
+        const rawToken = typeof tokenInfo === "string" ? tokenInfo : tokenInfo?.token || downloadDetails?.token || "";
+        const cleanToken = String(rawToken || "").trim();
+        const cleanCard = String(tokenInfo?.cardId || downloadDetails?.cardId || "").trim();
+        const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+        let tokenHash = "";
+        let tokenExpiresAt = now + 10 * 60 * 1e3;
+        if (cleanToken) {
+          const parts = cleanToken.split(".");
+          if (parts.length !== 4 || parts[0] !== "dlt") {
+            return {
+              success: false,
+              invalidToken: true,
+              reason: "Malformed download token format",
+              error: "Malformed download token format"
+            };
+          }
+          tokenExpiresAt = parseInt(parts[1], 10);
+          const nonce = parts[2];
+          const providedSig = parts[3];
+          if (isNaN(tokenExpiresAt) || now > tokenExpiresAt) {
+            return {
+              success: false,
+              expired: true,
+              reason: "Download token has expired (10m TTL)",
+              error: "Download token has expired (10m TTL)"
+            };
+          }
+          tokenHash = crypto2.createHash("sha256").update(cleanToken).digest("hex");
+        }
+        const verifyTokenSig = () => {
+          if (!cleanToken) return true;
+          const parts = cleanToken.split(".");
+          const nonce = parts[2];
+          const providedSig = parts[3];
+          const candidateDates = [cleanDate, ""];
+          const candidateReqs = [cleanReqId, ""];
+          const candidateCards = [cleanCard, ""];
+          for (const d of candidateDates) {
+            for (const r of candidateReqs) {
+              for (const c of candidateCards) {
+                const payload = `${cleanKey}:${d}:${r}:${c}:${tokenExpiresAt}:${nonce}`;
+                const expSig = crypto2.createHmac("sha256", authSecret).update(payload).digest("hex");
+                try {
+                  if (crypto2.timingSafeEqual(Buffer.from(providedSig, "hex"), Buffer.from(expSig, "hex"))) {
+                    return true;
+                  }
+                } catch {
+                }
+              }
+            }
+          }
+          return false;
+        };
+        if (this.useFirestore) {
+          const maxRetries = 5;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+              continue;
+            }
+            const transactionId = txRes.transaction;
+            let tokenDocRes = null;
+            if (tokenHash) {
+              tokenDocRes = await this._readDocInTransaction("download_tokens", tokenHash, transactionId);
+              if (!tokenDocRes.success) {
+                await this.rollbackTransaction(transactionId);
+                const jitter = Math.floor(Math.random() * 80);
+                await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+                continue;
+              }
+            }
+            const quotaDocRes = await this._readDocInTransaction("daily_graphic_downloads", docId, transactionId);
+            if (!quotaDocRes.success) {
+              await this.rollbackTransaction(transactionId);
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+              continue;
+            }
+            if (tokenDocRes && tokenDocRes.doc) {
+              const tokenData = this._fromFirestoreDoc(tokenDocRes.doc);
+              if (tokenData.status === "consumed") {
+                if (cleanReqId && tokenData.downloadRequestId === cleanReqId) {
+                  await this.rollbackTransaction(transactionId);
+                  const curCount = quotaDocRes.doc ? Number(this._fromFirestoreDoc(quotaDocRes.doc).count) || 0 : 0;
+                  return {
+                    success: true,
+                    idempotent: true,
+                    count: curCount,
+                    remaining: Math.max(0, limit - curCount),
+                    dateStr: cleanDate,
+                    tokenHash
+                  };
+                }
+                await this.rollbackTransaction(transactionId);
+                return {
+                  success: false,
+                  replayDetected: true,
+                  reason: "Token already consumed (replay detected)",
+                  error: "Token already consumed (replay detected)",
+                  tokenHash
+                };
+              }
+            }
+            if (cleanToken && !verifyTokenSig()) {
+              await this.rollbackTransaction(transactionId);
+              return {
+                success: false,
+                invalidSignature: true,
+                reason: "Invalid cryptographic token signature",
+                error: "Invalid cryptographic token signature"
+              };
+            }
+            let existingRecord = { userKey: cleanKey, date: cleanDate, count: 0, processedRequestIds: [] };
+            let updateTime = null;
+            if (quotaDocRes.doc) {
+              existingRecord = this._fromFirestoreDoc(quotaDocRes.doc);
+              updateTime = quotaDocRes.updateTime;
+            }
+            const currentCount = Number(existingRecord.count) || 0;
+            const reqList = Array.isArray(existingRecord.processedRequestIds) ? [...existingRecord.processedRequestIds] : [];
+            if (cleanReqId && reqList.includes(cleanReqId)) {
+              await this.rollbackTransaction(transactionId);
+              return {
+                success: true,
+                idempotent: true,
+                count: currentCount,
+                remaining: Math.max(0, limit - currentCount),
+                dateStr: cleanDate,
+                tokenHash
+              };
+            }
+            if (currentCount >= limit) {
+              await this.rollbackTransaction(transactionId);
+              return {
+                success: false,
+                quotaExceeded: true,
+                count: currentCount,
+                remaining: 0,
+                dateStr: cleanDate,
+                error: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964",
+                tokenHash
+              };
+            }
+            const newCount = currentCount + 1;
+            if (cleanReqId) reqList.push(cleanReqId);
+            const writes = [];
+            if (tokenHash) {
+              const tokenRecord = {
+                tokenHash,
+                userKey: cleanKey,
+                dateStr: cleanDate,
+                downloadRequestId: cleanReqId,
+                cardId: cleanCard,
+                expiresAt: tokenExpiresAt,
+                consumedAt: now,
+                status: "consumed",
+                updatedAt: now
+              };
+              const tokenFields = {};
+              for (const [k, v] of Object.entries(tokenRecord)) {
+                if (v !== void 0) tokenFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/download_tokens/${tokenHash}`,
+                  fields: tokenFields
+                },
+                currentDocument: { exists: false }
+              });
+            }
+            const newRecord = {
+              userKey: cleanKey,
+              date: cleanDate,
+              count: newCount,
+              processedRequestIds: reqList.slice(-100),
+              lastDownloadAt: now,
+              updatedAt: now,
+              ...downloadDetails || {}
+            };
+            const fields = {};
+            for (const [k, v] of Object.entries(newRecord)) {
+              if (v !== void 0 && k !== "token" && k !== "tokenInfo") fields[k] = this._toFirestoreField(v);
+            }
+            writes.push({
+              update: {
+                name: `projects/${this.projectId}/databases/${this.databaseId}/documents/daily_graphic_downloads/${docId}`,
+                fields
+              },
+              currentDocument: updateTime ? { updateTime } : { exists: false }
+            });
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              return {
+                success: true,
+                idempotent: false,
+                count: newCount,
+                remaining: Math.max(0, limit - newCount),
+                dateStr: cleanDate,
+                tokenHash
+              };
+            } else if (commitRes.statusCode === 409 || commitRes.statusCode === 400 || commitRes.error && (commitRes.error.includes("ABORTED") || commitRes.error.includes("ALREADY_EXISTS") || commitRes.error.includes("FAILED_PRECONDITION") || commitRes.error.includes("already exists") || commitRes.error.includes("conflict"))) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+              continue;
+            } else {
+              return { success: false, error: commitRes.error || "Download transaction failed" };
+            }
+          }
+          return { success: false, error: "Download transaction aborted due to contention" };
+        } else {
+          const tokensDb = this._loadLocalJson("download_tokens_database.json", {});
+          const dailyDb = this._loadLocalJson("daily_downloads_database.json", {});
+          if (tokenHash) {
+            const existingToken = tokensDb[tokenHash];
+            if (existingToken && existingToken.status === "consumed") {
+              if (cleanReqId && existingToken.downloadRequestId === cleanReqId) {
+                const curCount = dailyDb[docId]?.count || 0;
+                return {
+                  success: true,
+                  idempotent: true,
+                  count: curCount,
+                  remaining: Math.max(0, limit - curCount),
+                  dateStr: cleanDate,
+                  tokenHash
+                };
+              }
+              return {
+                success: false,
+                replayDetected: true,
+                reason: "Token already consumed (replay detected)",
+                error: "Token already consumed (replay detected)",
+                tokenHash
+              };
+            }
+          }
+          if (cleanToken && !verifyTokenSig()) {
+            return {
+              success: false,
+              invalidSignature: true,
+              reason: "Invalid cryptographic token signature",
+              error: "Invalid cryptographic token signature"
+            };
+          }
+          const existingQuota = dailyDb[docId] || { userKey: cleanKey, date: cleanDate, count: 0, processedRequestIds: [] };
+          const currentCount = Number(existingQuota.count) || 0;
+          const reqList = Array.isArray(existingQuota.processedRequestIds) ? [...existingQuota.processedRequestIds] : [];
+          if (cleanReqId && reqList.includes(cleanReqId)) {
+            return {
+              success: true,
+              idempotent: true,
+              count: currentCount,
+              remaining: Math.max(0, limit - currentCount),
+              dateStr: cleanDate,
+              tokenHash
+            };
+          }
+          if (currentCount >= limit) {
+            return {
+              success: false,
+              quotaExceeded: true,
+              count: currentCount,
+              remaining: 0,
+              dateStr: cleanDate,
+              error: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964",
+              tokenHash
+            };
+          }
+          const newCount = currentCount + 1;
+          if (cleanReqId) reqList.push(cleanReqId);
+          if (tokenHash) {
+            tokensDb[tokenHash] = {
+              tokenHash,
+              userKey: cleanKey,
+              dateStr: cleanDate,
+              downloadRequestId: cleanReqId,
+              cardId: cleanCard,
+              expiresAt: tokenExpiresAt,
+              consumedAt: now,
+              status: "consumed",
+              updatedAt: now
+            };
+            this._saveLocalJson("download_tokens_database.json", tokensDb);
+          }
+          dailyDb[docId] = {
+            userKey: cleanKey,
+            date: cleanDate,
+            count: newCount,
+            processedRequestIds: reqList.slice(-100),
+            lastDownloadAt: now,
+            updatedAt: now,
+            ...downloadDetails || {}
+          };
+          this._saveLocalJson("daily_downloads_database.json", dailyDb);
+          return {
+            success: true,
+            idempotent: false,
+            count: newCount,
+            remaining: Math.max(0, limit - newCount),
+            dateStr: cleanDate,
+            tokenHash
+          };
+        }
+      }
+      /**
+       * Transactionally checks and records a daily graphic download quota usage.
+       * Backward-compatible wrapper delegating to transactCompleteDownloadExport.
+       */
+      async transactDailyGraphicDownload(userKey, dateStr, downloadRequestId = "", maxAllowed = 10, downloadDetails = {}) {
+        return this.transactCompleteDownloadExport(
+          userKey,
+          dateStr,
+          downloadRequestId,
+          maxAllowed,
+          downloadDetails?.tokenInfo || downloadDetails?.token || {},
+          downloadDetails
+        );
       }
       // --- AUDIT LOGGING ---
       async logAdminAction(action, adminEmail2, details = {}) {
@@ -2927,8 +3668,14 @@ var require_firestore_database_service2 = __commonJS({
     var https = require("https");
     var fs2 = require("fs");
     var path2 = require("path");
+    var crypto2 = require("crypto");
     var adapter = require_server_firestore_adapter2();
     var httpsAgent = new https.Agent({
+      keepAlive: true,
+      maxSockets: 20,
+      keepAliveMsecs: 6e4
+    });
+    var httpAgent = new http.Agent({
       keepAlive: true,
       maxSockets: 20,
       keepAliveMsecs: 6e4
@@ -2937,7 +3684,7 @@ var require_firestore_database_service2 = __commonJS({
       constructor(options = {}) {
         this.projectId = options.projectId || process.env.FIREBASE_PROJECT_ID || adapter.PROJECT_ID || "ai-news-maker-app";
         this.databaseId = options.databaseId || options.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID || adapter.DATABASE_ID || "ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd";
-        this.useFirestore = options.useFirestore !== void 0 ? options.useFirestore : process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE;
+        this.useFirestore = options.useFirestore !== void 0 ? options.useFirestore : process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE || Boolean(process.env.FIRESTORE_EMULATOR_HOST);
         this.cache = {
           users: /* @__PURE__ */ new Map(),
           news: /* @__PURE__ */ new Map(),
@@ -3003,122 +3750,184 @@ var require_firestore_database_service2 = __commonJS({
         if (!ts) return false;
         return Date.now() - ts < ttl;
       }
+      _getTransportInfo() {
+        const emu = process.env.FIRESTORE_EMULATOR_HOST;
+        if (emu) {
+          const parts = emu.split(":");
+          return {
+            isEmulator: true,
+            transport: http,
+            host: parts[0] || "127.0.0.1",
+            port: parts[1] ? parseInt(parts[1], 10) : 8080,
+            agent: httpAgent
+          };
+        }
+        return {
+          isEmulator: false,
+          transport: https,
+          host: "firestore.googleapis.com",
+          port: 443,
+          agent: httpsAgent
+        };
+      }
       async getAccessToken() {
+        if (process.env.FIRESTORE_EMULATOR_HOST) return "owner";
         return adapter.getMetadataAccessToken();
+      }
+      async _requestFirestore({ method = "GET", path: path3, body = null, headers = {}, timeout = 6e3 }) {
+        const transportInfo = this._getTransportInfo();
+        const token = await this.getAccessToken();
+        if (!token) return { success: false, error: "No access token available" };
+        const reqHeaders = {
+          Authorization: `Bearer ${token}`,
+          ...headers
+        };
+        if (body) {
+          reqHeaders["Content-Type"] = "application/json";
+          reqHeaders["Content-Length"] = Buffer.byteLength(body);
+        }
+        return new Promise((resolve) => {
+          const req = transportInfo.transport.request(
+            {
+              host: transportInfo.host,
+              port: transportInfo.port,
+              path: path3,
+              method,
+              headers: reqHeaders,
+              agent: transportInfo.agent,
+              timeout
+            },
+            (res) => {
+              let resBody = "";
+              res.on("data", (d) => resBody += d);
+              res.on("end", () => {
+                resolve({
+                  success: res.statusCode >= 200 && res.statusCode < 300,
+                  statusCode: res.statusCode,
+                  body: resBody
+                });
+              });
+            }
+          );
+          req.on("timeout", () => {
+            req.destroy();
+            resolve({ success: false, statusCode: 408, error: "Request timeout" });
+          });
+          req.on("error", (e) => resolve({ success: false, error: e.message }));
+          if (body) req.write(body);
+          req.end();
+        });
+      }
+      async _execFirestoreGet(docPath) {
+        const res = await this._requestFirestore({
+          method: "GET",
+          path: docPath,
+          timeout: 6e3
+        });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            return { success: true, doc: parsed, updateTime: parsed.updateTime };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        } else if (res.statusCode === 404) {
+          return { success: true, notFound: true };
+        } else {
+          return { success: false, statusCode: res.statusCode, error: res.body };
+        }
+      }
+      // Authoritative transactional document read via batchGet POST body
+      async _readDocInTransaction(collection, docId, transactionId) {
+        const docName = `projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${docId}`;
+        const path3 = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:batchGet`;
+        const payload = JSON.stringify({
+          documents: [docName],
+          transaction: transactionId
+        });
+        const res = await this._requestFirestore({
+          method: "POST",
+          path: path3,
+          body: payload,
+          timeout: 6e3
+        });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const entry = parsed[0];
+              if (entry.found) {
+                return {
+                  success: true,
+                  doc: entry.found,
+                  data: this._fromFirestoreDoc(entry.found),
+                  updateTime: entry.found.updateTime
+                };
+              } else if (entry.missing) {
+                return { success: true, notFound: true };
+              }
+            }
+            return { success: true, notFound: true };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        }
+        return { success: false, statusCode: res.statusCode, error: res.body };
       }
       // Begin Firestore REST atomic transaction (Task 3)
       async beginTransaction() {
         if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:beginTransaction`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json"
-              },
-              agent: httpsAgent,
-              timeout: 6e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(body);
-                    resolve({ success: true, transaction: parsed.transaction });
-                  } catch (e) {
-                    resolve({ success: false, error: e.message });
-                  }
-                } else {
-                  resolve({ success: false, error: `beginTransaction failed (${res.statusCode}): ${body}` });
-                }
-              });
-            }
-          );
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.write(JSON.stringify({ options: { readWrite: {} } }));
-          req.end();
+        const res = await this._requestFirestore({
+          method: "POST",
+          path: docPath,
+          body: JSON.stringify({ options: { readWrite: {} } }),
+          timeout: 6e3
         });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            return { success: true, transaction: parsed.transaction };
+          } catch (e) {
+            return { success: false, error: e.message };
+          }
+        }
+        return { success: false, error: `beginTransaction failed (${res.statusCode}): ${res.body}` };
       }
       // Commit Firestore REST atomic transaction (Task 3)
       async commitTransaction(transactionId, writes = []) {
         if (!this.useFirestore) return { success: false, error: "Firestore disabled" };
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:commit`;
         const payload = JSON.stringify({
           transaction: transactionId,
           writes
         });
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload)
-              },
-              agent: httpsAgent,
-              timeout: 8e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(body);
-                    resolve({ success: true, data: parsed });
-                  } catch (e) {
-                    resolve({ success: true });
-                  }
-                } else {
-                  resolve({ success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${body}` });
-                }
-              });
-            }
-          );
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.write(payload);
-          req.end();
+        const res = await this._requestFirestore({
+          method: "POST",
+          path: docPath,
+          body: payload,
+          timeout: 8e3
         });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            return { success: true, data: parsed };
+          } catch (e) {
+            return { success: true };
+          }
+        }
+        return { success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${res.body}` };
       }
       // Rollback Firestore REST atomic transaction (Task 3)
       async rollbackTransaction(transactionId) {
         if (!this.useFirestore || !transactionId) return;
-        const token = await this.getAccessToken();
-        if (!token) return;
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:rollback`;
         const payload = JSON.stringify({ transaction: transactionId });
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload)
-              },
-              agent: httpsAgent,
-              timeout: 4e3
-            },
-            () => resolve()
-          );
-          req.on("error", () => resolve());
-          req.write(payload);
-          req.end();
+        await this._requestFirestore({
+          method: "POST",
+          path: docPath,
+          body: payload,
+          timeout: 4e3
         });
       }
       // Generic document read
@@ -3126,132 +3935,60 @@ var require_firestore_database_service2 = __commonJS({
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled" };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "GET",
-              headers: { Authorization: `Bearer ${token}` },
-              agent: httpsAgent,
-              timeout: 5e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(body);
-                    const data = this._fromFirestoreDoc(parsed);
-                    resolve({ success: true, data, statusCode: res.statusCode });
-                  } catch (err) {
-                    resolve({ success: false, error: err.message, statusCode: res.statusCode });
-                  }
-                } else {
-                  resolve({ success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` });
-                }
-              });
-            }
-          );
-          req.on("timeout", () => {
-            req.destroy();
-            resolve({ success: false, error: "Request timeout" });
-          });
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.end();
+        const res = await this._requestFirestore({
+          method: "GET",
+          path: docPath,
+          timeout: 5e3
         });
+        if (res.success) {
+          try {
+            const parsed = JSON.parse(res.body);
+            const data = this._fromFirestoreDoc(parsed);
+            return { success: true, data, statusCode: res.statusCode };
+          } catch (err) {
+            return { success: false, error: err.message, statusCode: res.statusCode };
+          }
+        }
+        return { success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` };
       }
       // Generic document write
       async writeDoc(collection, docId, data) {
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled" };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available" };
         const fields = {};
         for (const [k, v] of Object.entries(data)) {
           if (v !== void 0) fields[k] = this._toFirestoreField(v);
         }
         const payload = JSON.stringify({ fields });
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "PATCH",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload)
-              },
-              agent: httpsAgent,
-              timeout: 5e3
-            },
-            (res) => {
-              let body = "";
-              res.on("data", (d) => body += d);
-              res.on("end", () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  resolve({ success: true, statusCode: res.statusCode });
-                } else {
-                  resolve({ success: false, statusCode: res.statusCode, error: body });
-                }
-              });
-            }
-          );
-          req.on("timeout", () => {
-            req.destroy();
-            resolve({ success: false, error: "Request timeout" });
-          });
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.write(payload);
-          req.end();
+        const res = await this._requestFirestore({
+          method: "PATCH",
+          path: docPath,
+          body: payload,
+          timeout: 5e3
         });
+        return { success: res.success, statusCode: res.statusCode, error: res.success ? void 0 : res.body };
       }
       // Generic document delete
       async deleteDoc(collection, docId) {
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled" };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available" };
         const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-        return new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: "firestore.googleapis.com",
-              path: docPath,
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${token}` },
-              agent: httpsAgent,
-              timeout: 5e3
-            },
-            (res) => {
-              res.on("data", () => {
-              });
-              res.on("end", () => resolve({ success: res.statusCode >= 200 && res.statusCode < 300 }));
-            }
-          );
-          req.on("timeout", () => {
-            req.destroy();
-            resolve({ success: false, error: "Request timeout" });
-          });
-          req.on("error", (e) => resolve({ success: false, error: e.message }));
-          req.end();
+        const res = await this._requestFirestore({
+          method: "DELETE",
+          path: docPath,
+          timeout: 5e3
         });
+        return { success: res.success, statusCode: res.statusCode };
       }
       // Generic list documents with complete nextPageToken pagination loop (Task 5)
       async listDocs(collection, pageSize = 300) {
         if (!this.useFirestore) {
           return { success: false, error: "Firestore is disabled", documents: [] };
         }
-        const token = await this.getAccessToken();
-        if (!token) return { success: false, error: "No access token available", documents: [] };
         const allDocuments = [];
         const seenIds = /* @__PURE__ */ new Set();
         let pageToken = "";
@@ -3261,61 +3998,33 @@ var require_firestore_database_service2 = __commonJS({
           if (pageToken) {
             docPath += `&pageToken=${encodeURIComponent(pageToken)}`;
           }
-          const pageRes = await new Promise((resolve) => {
-            const req = https.request(
-              {
-                host: "firestore.googleapis.com",
-                path: docPath,
-                method: "GET",
-                headers: { Authorization: `Bearer ${token}` },
-                agent: httpsAgent,
-                timeout: 1e4
-              },
-              (res) => {
-                let body = "";
-                res.on("data", (d) => body += d);
-                res.on("end", () => {
-                  if (res.statusCode >= 200 && res.statusCode < 300) {
-                    try {
-                      const parsed = JSON.parse(body);
-                      const docs = (parsed.documents || []).map((d) => {
-                        const docId = d.name ? d.name.split("/").pop() : "";
-                        const data = this._fromFirestoreDoc(d);
-                        return { id: docId, docId, ...data };
-                      });
-                      resolve({
-                        success: true,
-                        documents: docs,
-                        nextPageToken: parsed.nextPageToken || "",
-                        statusCode: res.statusCode
-                      });
-                    } catch (err) {
-                      resolve({ success: false, error: err.message, documents: [] });
-                    }
-                  } else {
-                    resolve({ success: false, error: `List failed (${res.statusCode})`, documents: [] });
-                  }
-                });
-              }
-            );
-            req.on("timeout", () => {
-              req.destroy();
-              resolve({ success: false, error: "Request timeout", documents: [] });
-            });
-            req.on("error", (e) => resolve({ success: false, error: e.message, documents: [] }));
-            req.end();
+          const res = await this._requestFirestore({
+            method: "GET",
+            path: docPath,
+            timeout: 1e4
           });
-          if (!pageRes.success) {
-            if (allDocuments.length > 0) break;
-            return pageRes;
-          }
-          for (const doc of pageRes.documents) {
-            if (doc.id && !seenIds.has(doc.id)) {
-              seenIds.add(doc.id);
-              allDocuments.push(doc);
+          if (res.success) {
+            try {
+              const parsed = JSON.parse(res.body);
+              const docs = (parsed.documents || []).map((d) => {
+                const docId = d.name ? d.name.split("/").pop() : "";
+                const data = this._fromFirestoreDoc(d);
+                return { id: docId, docId, ...data };
+              });
+              for (const doc of docs) {
+                if (doc.id && !seenIds.has(doc.id)) {
+                  seenIds.add(doc.id);
+                  allDocuments.push(doc);
+                }
+              }
+              pageToken = parsed.nextPageToken || "";
+            } catch (err) {
+              pageToken = "";
             }
+          } else {
+            if (allDocuments.length > 0) break;
+            return { success: false, error: `List failed (${res.statusCode})`, documents: [] };
           }
-          pageToken = pageRes.nextPageToken || "";
         } while (pageToken);
         return { success: true, documents: allDocuments, totalCount: allDocuments.length };
       }
@@ -3549,40 +4258,7 @@ var require_firestore_database_service2 = __commonJS({
               break;
             }
             const transactionId = txRes.transaction;
-            const token = await this.getAccessToken();
-            const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}?transaction=${encodeURIComponent(transactionId)}`;
-            const docRes = await new Promise((resolve) => {
-              const req = https.request(
-                {
-                  host: "firestore.googleapis.com",
-                  path: docPath,
-                  method: "GET",
-                  headers: { Authorization: `Bearer ${token}` },
-                  agent: httpsAgent,
-                  timeout: 6e3
-                },
-                (res) => {
-                  let body = "";
-                  res.on("data", (d) => body += d);
-                  res.on("end", () => {
-                    if (res.statusCode >= 200 && res.statusCode < 300) {
-                      try {
-                        const parsed = JSON.parse(body);
-                        resolve({ success: true, doc: parsed, updateTime: parsed.updateTime });
-                      } catch (e) {
-                        resolve({ success: false, error: e.message });
-                      }
-                    } else if (res.statusCode === 404) {
-                      resolve({ success: true, notFound: true });
-                    } else {
-                      resolve({ success: false, statusCode: res.statusCode, error: body });
-                    }
-                  });
-                }
-              );
-              req.on("error", (e) => resolve({ success: false, error: e.message }));
-              req.end();
-            });
+            const docRes = await this._readDocInTransaction("wallets", cleanKey, transactionId);
             let currentWallet = { walletKey: cleanKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
             let updateTime = null;
             if (docRes.success && docRes.doc) {
@@ -3635,14 +4311,14 @@ var require_firestore_database_service2 = __commonJS({
             const writes = [
               {
                 update: {
-                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}`,
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${cleanKey}`,
                   fields: walletFields
                 },
                 currentDocument: updateTime ? { updateTime } : { exists: false }
               },
               {
                 update: {
-                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${encodeURIComponent(txId2)}`,
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${txId2}`,
                   fields: txFields
                 },
                 currentDocument: { exists: false }
@@ -3918,6 +4594,812 @@ var require_firestore_database_service2 = __commonJS({
           this._saveLocalJson("drafts_database.json", drafts);
           return { success: true };
         }
+      }
+      // --- DISTRIBUTED HEADLINE REGENERATION LOCK (Task A / Phase 3.0B-S) ---
+      /**
+       * Atomically acquires a distributed lock for draft headline regeneration.
+       * Ensures that:
+       * 1. If draft was already regenerated (status === 'completed'), rejects unless matching generationRequestId for idempotent replay.
+       * 2. If another instance is currently regenerating (status === 'in_progress' and now < leaseExpiresAt), rejects with 409 Conflict.
+       * 3. If lock is expired (leaseExpiresAt <= now), allows takeover.
+       * 4. Acquires lease with unique lockId and 60-second TTL.
+       */
+      async acquireDraftRegenerationLock(draftId2, userId, generationRequestId = "") {
+        if (!draftId2) return { success: false, error: "draftId is required" };
+        const cleanDraftId = String(draftId2).trim();
+        const cleanUserId = String(userId || "").trim();
+        const cleanReqId = String(generationRequestId || "").trim();
+        const now = Date.now();
+        const leaseDurationMs = 6e4;
+        const newLockId = `lock_${cleanDraftId}_${now}_${Math.random().toString(36).slice(2, 8)}`;
+        if (this.useFirestore) {
+          const maxRetries = 5;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            const transactionId = txRes.transaction;
+            const docRes = await this._readDocInTransaction("draft_regeneration_locks", cleanDraftId, transactionId);
+            if (!docRes.success) {
+              await this.rollbackTransaction(transactionId);
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            let existingLock = null;
+            let updateTime = null;
+            if (docRes.doc) {
+              existingLock = this._fromFirestoreDoc(docRes.doc);
+              updateTime = docRes.updateTime;
+            }
+            if (existingLock) {
+              if (existingLock.status === "completed" || existingLock.regenerationUsed) {
+                await this.rollbackTransaction(transactionId);
+                if (cleanReqId && existingLock.generationRequestId === cleanReqId && Array.isArray(existingLock.headlines)) {
+                  return {
+                    success: true,
+                    idempotentReplay: true,
+                    headlines: existingLock.headlines,
+                    lockId: existingLock.lockId
+                  };
+                }
+                return {
+                  success: false,
+                  alreadyUsed: true,
+                  conflict: true,
+                  error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+                };
+              }
+              const leaseExpiresAt = Number(existingLock.leaseExpiresAt) || 0;
+              if (existingLock.status === "in_progress" && now < leaseExpiresAt) {
+                await this.rollbackTransaction(transactionId);
+                return {
+                  success: false,
+                  inFlight: true,
+                  conflict: true,
+                  error: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+                };
+              }
+            }
+            const lockPayload = {
+              draftId: cleanDraftId,
+              userId: cleanUserId,
+              generationRequestId: cleanReqId,
+              lockId: newLockId,
+              status: "in_progress",
+              acquiredAt: now,
+              leaseExpiresAt: now + leaseDurationMs,
+              updatedAt: now
+            };
+            const fields = {};
+            for (const [k, v] of Object.entries(lockPayload)) {
+              if (v !== void 0) fields[k] = this._toFirestoreField(v);
+            }
+            const writes = [
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/draft_regeneration_locks/${cleanDraftId}`,
+                  fields
+                },
+                currentDocument: updateTime ? { updateTime } : { exists: false }
+              }
+            ];
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              return { success: true, lockId: newLockId, leaseExpiresAt: now + leaseDurationMs };
+            } else if (commitRes.statusCode === 409 || commitRes.statusCode === 400 || commitRes.error && (commitRes.error.includes("ABORTED") || commitRes.error.includes("FAILED_PRECONDITION") || commitRes.error.includes("ALREADY_EXISTS") || commitRes.error.includes("conflict"))) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            } else {
+              return { success: false, error: commitRes.error || "Lock acquisition failed" };
+            }
+          }
+          return {
+            success: false,
+            conflict: true,
+            inFlight: true,
+            error: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+          };
+        } else {
+          const locksDb = this._loadLocalJson("draft_regeneration_locks_db.json", {});
+          const existing = locksDb[cleanDraftId];
+          if (existing) {
+            if (existing.status === "completed" || existing.regenerationUsed) {
+              if (cleanReqId && existing.generationRequestId === cleanReqId && Array.isArray(existing.headlines)) {
+                return {
+                  success: true,
+                  idempotentReplay: true,
+                  headlines: existing.headlines,
+                  lockId: existing.lockId
+                };
+              }
+              return {
+                success: false,
+                alreadyUsed: true,
+                conflict: true,
+                error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+              };
+            }
+            const leaseExpiresAt = Number(existing.leaseExpiresAt) || 0;
+            if (existing.status === "in_progress" && now < leaseExpiresAt) {
+              return {
+                success: false,
+                inFlight: true,
+                conflict: true,
+                error: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+              };
+            }
+          }
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          const existingDraft = drafts.find((d) => d.id === cleanDraftId);
+          if (existingDraft && existingDraft.regenerationUsed) {
+            if (cleanReqId && existingDraft.generationRequestId === cleanReqId && Array.isArray(existingDraft.regeneratedHeadlines)) {
+              return {
+                success: true,
+                idempotentReplay: true,
+                headlines: existingDraft.regeneratedHeadlines,
+                lockId: existingDraft.id
+              };
+            }
+            return {
+              success: false,
+              alreadyUsed: true,
+              conflict: true,
+              error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+            };
+          }
+          locksDb[cleanDraftId] = {
+            draftId: cleanDraftId,
+            userId: cleanUserId,
+            generationRequestId: cleanReqId,
+            lockId: newLockId,
+            status: "in_progress",
+            acquiredAt: now,
+            leaseExpiresAt: now + leaseDurationMs,
+            updatedAt: now
+          };
+          this._saveLocalJson("draft_regeneration_locks_db.json", locksDb);
+          return { success: true, lockId: newLockId, leaseExpiresAt: now + leaseDurationMs };
+        }
+      }
+      /**
+       * Completes a draft headline regeneration.
+       * Atomically validates lockId ownership, debits requiredCoins, marks lock as completed,
+       * and persists headlines.
+       */
+      async completeDraftRegenerationLock(draftId2, lockId2, walletKey, requiredCoins, generatedHeadlines, generationRequestId = "") {
+        if (!draftId2 || !lockId2) return { success: false, error: "draftId and lockId are required" };
+        const cleanDraftId = String(draftId2).trim();
+        const cleanLockId = String(lockId2).trim();
+        const cleanWalletKey = String(walletKey || "").toLowerCase().trim();
+        const numCoins = Math.max(0, Number(requiredCoins) || 0);
+        const now = Date.now();
+        if (this.useFirestore) {
+          const maxRetries = 5;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            const transactionId = txRes.transaction;
+            const lockRes = await this._readDocInTransaction("draft_regeneration_locks", cleanDraftId, transactionId);
+            if (!lockRes.success) {
+              await this.rollbackTransaction(transactionId);
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            let existingLock = lockRes.doc ? this._fromFirestoreDoc(lockRes.doc) : null;
+            let lockUpdateTime = lockRes.updateTime;
+            if (!existingLock || existingLock.lockId !== cleanLockId) {
+              await this.rollbackTransaction(transactionId);
+              return { success: false, error: "Lock ID mismatch; ownership lost" };
+            }
+            if (existingLock.status === "completed" || existingLock.regenerationUsed) {
+              await this.rollbackTransaction(transactionId);
+              if (generationRequestId && existingLock.generationRequestId === generationRequestId && Array.isArray(existingLock.headlines)) {
+                return {
+                  success: true,
+                  idempotentReplay: true,
+                  headlines: existingLock.headlines,
+                  lockId: existingLock.lockId,
+                  coinsDeducted: 0
+                };
+              }
+              return {
+                success: false,
+                alreadyUsed: true,
+                conflict: true,
+                error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+              };
+            }
+            let currentBalance = 0;
+            let walletUpdateTime = null;
+            let currentWallet = { walletKey: cleanWalletKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+            if (numCoins > 0 && cleanWalletKey) {
+              const walletRes = await this._readDocInTransaction("wallets", cleanWalletKey, transactionId);
+              if (!walletRes.success) {
+                await this.rollbackTransaction(transactionId);
+                await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+                continue;
+              }
+              if (walletRes.doc) {
+                currentWallet = this._fromFirestoreDoc(walletRes.doc);
+                walletUpdateTime = walletRes.updateTime;
+              }
+              currentBalance = Number(currentWallet.coinBalance) || 0;
+              if (currentBalance < numCoins) {
+                await this.rollbackTransaction(transactionId);
+                await this.releaseDraftRegenerationLock(cleanDraftId, cleanLockId);
+                return {
+                  success: false,
+                  insufficientCoins: true,
+                  currentBalance,
+                  requiredCoins: numCoins,
+                  error: `\u0938\u093F\u0915\u094D\u0915\u0947 \u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0939\u0948\u0902 (\u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${currentBalance}, \u0906\u0935\u0936\u094D\u092F\u0915: ${numCoins})`
+                };
+              }
+            }
+            const draftRes = await this._readDocInTransaction("user_drafts", cleanDraftId, transactionId);
+            let draftData = draftRes.doc ? this._fromFirestoreDoc(draftRes.doc) : null;
+            let draftUpdateTime = draftRes.updateTime;
+            const newBalance = Math.max(0, currentBalance - numCoins);
+            const txId = `tx_regen_${cleanDraftId}_${now}`;
+            const lockPayload = {
+              draftId: cleanDraftId,
+              lockId: cleanLockId,
+              status: "completed",
+              regenerationUsed: true,
+              generationRequestId: String(generationRequestId || ""),
+              headlines: generatedHeadlines,
+              coinsDeducted: numCoins,
+              completedAt: now,
+              updatedAt: now
+            };
+            const lockFields = {};
+            for (const [k, v] of Object.entries(lockPayload)) {
+              if (v !== void 0) lockFields[k] = this._toFirestoreField(v);
+            }
+            const writes = [
+              {
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/draft_regeneration_locks/${cleanDraftId}`,
+                  fields: lockFields
+                },
+                currentDocument: lockUpdateTime ? { updateTime: lockUpdateTime } : { exists: true }
+              }
+            ];
+            if (numCoins > 0 && cleanWalletKey) {
+              currentWallet.coinBalance = newBalance;
+              currentWallet.updatedAt = now;
+              const walletFields = {};
+              for (const [k, v] of Object.entries(currentWallet)) {
+                if (v !== void 0) walletFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${cleanWalletKey}`,
+                  fields: walletFields
+                },
+                currentDocument: walletUpdateTime ? { updateTime: walletUpdateTime } : { exists: false }
+              });
+              const txPayload = {
+                id: txId,
+                transactionId: txId,
+                userId: cleanWalletKey,
+                userEmail: cleanWalletKey,
+                newsItemId: cleanDraftId,
+                newsTitle: "5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938",
+                description: `5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u091C\u0928\u0930\u0947\u0936\u0928 (Single-Use Draft ${cleanDraftId}): -${numCoins} \u0915\u0949\u0907\u0928\u094D\u0938`,
+                type: "debit",
+                amount: numCoins,
+                coins: numCoins,
+                balanceAfter: newBalance,
+                timestamp: now,
+                createdAt: new Date(now).toISOString(),
+                status: "completed"
+              };
+              const txFields = {};
+              for (const [k, v] of Object.entries(txPayload)) {
+                if (v !== void 0) txFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${txId}`,
+                  fields: txFields
+                },
+                currentDocument: { exists: false }
+              });
+            }
+            if (draftData) {
+              draftData.regenerationUsed = true;
+              draftData.regeneratedHeadlines = generatedHeadlines;
+              draftData.generationRequestId = String(generationRequestId || "");
+              draftData.updatedAt = now;
+              const draftFields = {};
+              for (const [k, v] of Object.entries(draftData)) {
+                if (v !== void 0) draftFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/user_drafts/${cleanDraftId}`,
+                  fields: draftFields
+                },
+                currentDocument: draftUpdateTime ? { updateTime: draftUpdateTime } : { exists: true }
+              });
+            }
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              return {
+                success: true,
+                newBalance,
+                coinsDeducted: numCoins,
+                headlines: generatedHeadlines,
+                transactionId: txId
+              };
+            } else if (commitRes.statusCode === 409 || commitRes.statusCode === 400 || commitRes.error && (commitRes.error.includes("ABORTED") || commitRes.error.includes("FAILED_PRECONDITION") || commitRes.error.includes("conflict"))) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            } else {
+              return { success: false, error: commitRes.error || "Commit failed during draft completion" };
+            }
+          }
+          return { success: false, error: "Transaction contention during draft completion" };
+        } else {
+          const locksDb = this._loadLocalJson("draft_regeneration_locks_db.json", {});
+          const existing = locksDb[cleanDraftId];
+          if (existing && existing.lockId && existing.lockId !== cleanLockId) {
+            return { success: false, error: "Lock ID mismatch; ownership lost" };
+          }
+          let newBalance = 0;
+          if (numCoins > 0 && cleanWalletKey) {
+            const rDb = this._loadLocalJson("rewards_database.json", { wallets: {}, transactions: [] });
+            if (!rDb.wallets) rDb.wallets = {};
+            if (!rDb.wallets[cleanWalletKey]) {
+              rDb.wallets[cleanWalletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+            }
+            const currentBal = rDb.wallets[cleanWalletKey].coinBalance || 0;
+            if (currentBal < numCoins) {
+              await this.releaseDraftRegenerationLock(cleanDraftId, cleanLockId);
+              return {
+                success: false,
+                insufficientCoins: true,
+                currentBalance: currentBal,
+                requiredCoins: numCoins,
+                error: `\u0938\u093F\u0915\u094D\u0915\u0947 \u0905\u092A\u0930\u094D\u092F\u093E\u092A\u094D\u0924 \u0939\u0948\u0902 (\u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${currentBal}, \u0906\u0935\u0936\u094D\u092F\u0915: ${numCoins})`
+              };
+            }
+            newBalance = currentBal - numCoins;
+            rDb.wallets[cleanWalletKey].coinBalance = newBalance;
+            const txId = `tx_regen_${cleanDraftId}_${now}`;
+            if (!Array.isArray(rDb.transactions)) rDb.transactions = [];
+            rDb.transactions.unshift({
+              id: txId,
+              transactionId: txId,
+              userId: cleanWalletKey,
+              userEmail: cleanWalletKey,
+              newsItemId: cleanDraftId,
+              newsTitle: "5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938",
+              description: `5 \u0928\u0908 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u091C\u0928\u0930\u0947\u0936\u0928: -${numCoins} \u0915\u0949\u0907\u0928\u094D\u0938`,
+              type: "debit",
+              amount: numCoins,
+              coins: numCoins,
+              balanceAfter: newBalance,
+              timestamp: now,
+              createdAt: new Date(now).toISOString(),
+              status: "completed"
+            });
+            this._saveLocalJson("rewards_database.json", rDb);
+          }
+          locksDb[cleanDraftId] = {
+            draftId: cleanDraftId,
+            lockId: cleanLockId,
+            status: "completed",
+            regenerationUsed: true,
+            generationRequestId: String(generationRequestId || ""),
+            headlines: generatedHeadlines,
+            coinsDeducted: numCoins,
+            completedAt: now,
+            updatedAt: now
+          };
+          this._saveLocalJson("draft_regeneration_locks_db.json", locksDb);
+          const drafts = this._loadLocalJson("drafts_database.json", []);
+          const d = drafts.find((x) => x.id === cleanDraftId);
+          if (d) {
+            d.regenerationUsed = true;
+            d.regeneratedHeadlines = generatedHeadlines;
+            d.generationRequestId = generationRequestId;
+            d.updatedAt = now;
+            this._saveLocalJson("drafts_database.json", drafts);
+          }
+          return {
+            success: true,
+            newBalance,
+            coinsDeducted: numCoins,
+            headlines: generatedHeadlines
+          };
+        }
+      }
+      /**
+       * Releases an acquired lock if the regeneration failed or encountered an error.
+       * Ensures the user is NOT locked out and ZERO coins are deducted.
+       */
+      async releaseDraftRegenerationLock(draftId2, lockId2) {
+        if (!draftId2) return;
+        const cleanDraftId = String(draftId2).trim();
+        const cleanLockId = String(lockId2 || "").trim();
+        if (this.useFirestore) {
+          try {
+            const read = await this.readDoc("draft_regeneration_locks", cleanDraftId);
+            if (read.success && read.data) {
+              if (!cleanLockId || read.data.lockId === cleanLockId) {
+                if (read.data.status === "in_progress") {
+                  await this.deleteDoc("draft_regeneration_locks", cleanDraftId);
+                }
+              }
+            }
+          } catch {
+          }
+        } else {
+          const locksDb = this._loadLocalJson("draft_regeneration_locks_db.json", {});
+          const existing = locksDb[cleanDraftId];
+          if (existing && (!cleanLockId || existing.lockId === cleanLockId)) {
+            if (existing.status === "in_progress") {
+              delete locksDb[cleanDraftId];
+              this._saveLocalJson("draft_regeneration_locks_db.json", locksDb);
+            }
+          }
+        }
+      }
+      // --- DAILY GRAPHIC DOWNLOAD TRANSACTION (Task B / Phase 3.0B-S) ---
+      /**
+       * PHASE 3.0B-U: Unified Atomic Download Token Consumption and Daily Graphic Quota Deduction
+       * 
+       * Atomically in ONE Firestore Transaction:
+       * 1. Checks download_tokens/${tokenHash}:
+       *    - If consumed: checks if downloadRequestId matches (idempotent retry). If not, aborts with replayDetected: true.
+       * 2. Checks token signature, expiry (10m TTL), and user bindings.
+       * 3. Checks daily_graphic_downloads/${userKey}_${dateStr}:
+       *    - If downloadRequestId already in processedRequestIds: returns idempotent: true.
+       *    - If count >= maxAllowed: aborts with quotaExceeded: true.
+       * 4. Atomically commits in a SINGLE Firestore REST commit:
+       *    - download_tokens/${tokenHash} with status: 'consumed', precondition { exists: false }.
+       *    - daily_graphic_downloads/${userKey}_${dateStr} with count: count + 1, processedRequestIds.
+       * 
+       * Guarantees 100% replay immunity across independent instances, and zero quota decrement on failure.
+       */
+      async transactCompleteDownloadExport(userKey, dateStr, downloadRequestId = "", maxAllowed = 10, tokenInfo = {}, downloadDetails = {}) {
+        const cleanKey = String(userKey || "").toLowerCase().trim();
+        const cleanDate = String(dateStr || "").trim();
+        const cleanReqId = String(downloadRequestId || "").trim() || `req_${cleanKey}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const limit = Math.max(1, Number(maxAllowed) || 10);
+        const docId = `${cleanKey}_${cleanDate}`;
+        const now = Date.now();
+        const rawToken = typeof tokenInfo === "string" ? tokenInfo : tokenInfo?.token || downloadDetails?.token || "";
+        const cleanToken = String(rawToken || "").trim();
+        const cleanCard = String(tokenInfo?.cardId || downloadDetails?.cardId || "").trim();
+        const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+        let tokenHash = "";
+        let tokenExpiresAt = now + 10 * 60 * 1e3;
+        if (cleanToken) {
+          const parts = cleanToken.split(".");
+          if (parts.length !== 4 || parts[0] !== "dlt") {
+            return {
+              success: false,
+              invalidToken: true,
+              reason: "Malformed download token format",
+              error: "Malformed download token format"
+            };
+          }
+          tokenExpiresAt = parseInt(parts[1], 10);
+          const nonce = parts[2];
+          const providedSig = parts[3];
+          if (isNaN(tokenExpiresAt) || now > tokenExpiresAt) {
+            return {
+              success: false,
+              expired: true,
+              reason: "Download token has expired (10m TTL)",
+              error: "Download token has expired (10m TTL)"
+            };
+          }
+          tokenHash = crypto2.createHash("sha256").update(cleanToken).digest("hex");
+        }
+        const verifyTokenSig = () => {
+          if (!cleanToken) return true;
+          const parts = cleanToken.split(".");
+          const nonce = parts[2];
+          const providedSig = parts[3];
+          const candidateDates = [cleanDate, ""];
+          const candidateReqs = [cleanReqId, ""];
+          const candidateCards = [cleanCard, ""];
+          for (const d of candidateDates) {
+            for (const r of candidateReqs) {
+              for (const c of candidateCards) {
+                const payload = `${cleanKey}:${d}:${r}:${c}:${tokenExpiresAt}:${nonce}`;
+                const expSig = crypto2.createHmac("sha256", authSecret).update(payload).digest("hex");
+                try {
+                  if (crypto2.timingSafeEqual(Buffer.from(providedSig, "hex"), Buffer.from(expSig, "hex"))) {
+                    return true;
+                  }
+                } catch {
+                }
+              }
+            }
+          }
+          return false;
+        };
+        if (this.useFirestore) {
+          const maxRetries = 5;
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const txRes = await this.beginTransaction();
+            if (!txRes.success || !txRes.transaction) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+              continue;
+            }
+            const transactionId = txRes.transaction;
+            let tokenDocRes = null;
+            if (tokenHash) {
+              tokenDocRes = await this._readDocInTransaction("download_tokens", tokenHash, transactionId);
+              if (!tokenDocRes.success) {
+                await this.rollbackTransaction(transactionId);
+                const jitter = Math.floor(Math.random() * 80);
+                await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+                continue;
+              }
+            }
+            const quotaDocRes = await this._readDocInTransaction("daily_graphic_downloads", docId, transactionId);
+            if (!quotaDocRes.success) {
+              await this.rollbackTransaction(transactionId);
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+              continue;
+            }
+            if (tokenDocRes && tokenDocRes.doc) {
+              const tokenData = this._fromFirestoreDoc(tokenDocRes.doc);
+              if (tokenData.status === "consumed") {
+                if (cleanReqId && tokenData.downloadRequestId === cleanReqId) {
+                  await this.rollbackTransaction(transactionId);
+                  const curCount = quotaDocRes.doc ? Number(this._fromFirestoreDoc(quotaDocRes.doc).count) || 0 : 0;
+                  return {
+                    success: true,
+                    idempotent: true,
+                    count: curCount,
+                    remaining: Math.max(0, limit - curCount),
+                    dateStr: cleanDate,
+                    tokenHash
+                  };
+                }
+                await this.rollbackTransaction(transactionId);
+                return {
+                  success: false,
+                  replayDetected: true,
+                  reason: "Token already consumed (replay detected)",
+                  error: "Token already consumed (replay detected)",
+                  tokenHash
+                };
+              }
+            }
+            if (cleanToken && !verifyTokenSig()) {
+              await this.rollbackTransaction(transactionId);
+              return {
+                success: false,
+                invalidSignature: true,
+                reason: "Invalid cryptographic token signature",
+                error: "Invalid cryptographic token signature"
+              };
+            }
+            let existingRecord = { userKey: cleanKey, date: cleanDate, count: 0, processedRequestIds: [] };
+            let updateTime = null;
+            if (quotaDocRes.doc) {
+              existingRecord = this._fromFirestoreDoc(quotaDocRes.doc);
+              updateTime = quotaDocRes.updateTime;
+            }
+            const currentCount = Number(existingRecord.count) || 0;
+            const reqList = Array.isArray(existingRecord.processedRequestIds) ? [...existingRecord.processedRequestIds] : [];
+            if (cleanReqId && reqList.includes(cleanReqId)) {
+              await this.rollbackTransaction(transactionId);
+              return {
+                success: true,
+                idempotent: true,
+                count: currentCount,
+                remaining: Math.max(0, limit - currentCount),
+                dateStr: cleanDate,
+                tokenHash
+              };
+            }
+            if (currentCount >= limit) {
+              await this.rollbackTransaction(transactionId);
+              return {
+                success: false,
+                quotaExceeded: true,
+                count: currentCount,
+                remaining: 0,
+                dateStr: cleanDate,
+                error: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964",
+                tokenHash
+              };
+            }
+            const newCount = currentCount + 1;
+            if (cleanReqId) reqList.push(cleanReqId);
+            const writes = [];
+            if (tokenHash) {
+              const tokenRecord = {
+                tokenHash,
+                userKey: cleanKey,
+                dateStr: cleanDate,
+                downloadRequestId: cleanReqId,
+                cardId: cleanCard,
+                expiresAt: tokenExpiresAt,
+                consumedAt: now,
+                status: "consumed",
+                updatedAt: now
+              };
+              const tokenFields = {};
+              for (const [k, v] of Object.entries(tokenRecord)) {
+                if (v !== void 0) tokenFields[k] = this._toFirestoreField(v);
+              }
+              writes.push({
+                update: {
+                  name: `projects/${this.projectId}/databases/${this.databaseId}/documents/download_tokens/${tokenHash}`,
+                  fields: tokenFields
+                },
+                currentDocument: { exists: false }
+              });
+            }
+            const newRecord = {
+              userKey: cleanKey,
+              date: cleanDate,
+              count: newCount,
+              processedRequestIds: reqList.slice(-100),
+              lastDownloadAt: now,
+              updatedAt: now,
+              ...downloadDetails || {}
+            };
+            const fields = {};
+            for (const [k, v] of Object.entries(newRecord)) {
+              if (v !== void 0 && k !== "token" && k !== "tokenInfo") fields[k] = this._toFirestoreField(v);
+            }
+            writes.push({
+              update: {
+                name: `projects/${this.projectId}/databases/${this.databaseId}/documents/daily_graphic_downloads/${docId}`,
+                fields
+              },
+              currentDocument: updateTime ? { updateTime } : { exists: false }
+            });
+            const commitRes = await this.commitTransaction(transactionId, writes);
+            if (commitRes.success) {
+              return {
+                success: true,
+                idempotent: false,
+                count: newCount,
+                remaining: Math.max(0, limit - newCount),
+                dateStr: cleanDate,
+                tokenHash
+              };
+            } else if (commitRes.statusCode === 409 || commitRes.statusCode === 400 || commitRes.error && (commitRes.error.includes("ABORTED") || commitRes.error.includes("ALREADY_EXISTS") || commitRes.error.includes("FAILED_PRECONDITION") || commitRes.error.includes("already exists") || commitRes.error.includes("conflict"))) {
+              const jitter = Math.floor(Math.random() * 80);
+              await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+              continue;
+            } else {
+              return { success: false, error: commitRes.error || "Download transaction failed" };
+            }
+          }
+          return { success: false, error: "Download transaction aborted due to contention" };
+        } else {
+          const tokensDb = this._loadLocalJson("download_tokens_database.json", {});
+          const dailyDb = this._loadLocalJson("daily_downloads_database.json", {});
+          if (tokenHash) {
+            const existingToken = tokensDb[tokenHash];
+            if (existingToken && existingToken.status === "consumed") {
+              if (cleanReqId && existingToken.downloadRequestId === cleanReqId) {
+                const curCount = dailyDb[docId]?.count || 0;
+                return {
+                  success: true,
+                  idempotent: true,
+                  count: curCount,
+                  remaining: Math.max(0, limit - curCount),
+                  dateStr: cleanDate,
+                  tokenHash
+                };
+              }
+              return {
+                success: false,
+                replayDetected: true,
+                reason: "Token already consumed (replay detected)",
+                error: "Token already consumed (replay detected)",
+                tokenHash
+              };
+            }
+          }
+          if (cleanToken && !verifyTokenSig()) {
+            return {
+              success: false,
+              invalidSignature: true,
+              reason: "Invalid cryptographic token signature",
+              error: "Invalid cryptographic token signature"
+            };
+          }
+          const existingQuota = dailyDb[docId] || { userKey: cleanKey, date: cleanDate, count: 0, processedRequestIds: [] };
+          const currentCount = Number(existingQuota.count) || 0;
+          const reqList = Array.isArray(existingQuota.processedRequestIds) ? [...existingQuota.processedRequestIds] : [];
+          if (cleanReqId && reqList.includes(cleanReqId)) {
+            return {
+              success: true,
+              idempotent: true,
+              count: currentCount,
+              remaining: Math.max(0, limit - currentCount),
+              dateStr: cleanDate,
+              tokenHash
+            };
+          }
+          if (currentCount >= limit) {
+            return {
+              success: false,
+              quotaExceeded: true,
+              count: currentCount,
+              remaining: 0,
+              dateStr: cleanDate,
+              error: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964",
+              tokenHash
+            };
+          }
+          const newCount = currentCount + 1;
+          if (cleanReqId) reqList.push(cleanReqId);
+          if (tokenHash) {
+            tokensDb[tokenHash] = {
+              tokenHash,
+              userKey: cleanKey,
+              dateStr: cleanDate,
+              downloadRequestId: cleanReqId,
+              cardId: cleanCard,
+              expiresAt: tokenExpiresAt,
+              consumedAt: now,
+              status: "consumed",
+              updatedAt: now
+            };
+            this._saveLocalJson("download_tokens_database.json", tokensDb);
+          }
+          dailyDb[docId] = {
+            userKey: cleanKey,
+            date: cleanDate,
+            count: newCount,
+            processedRequestIds: reqList.slice(-100),
+            lastDownloadAt: now,
+            updatedAt: now,
+            ...downloadDetails || {}
+          };
+          this._saveLocalJson("daily_downloads_database.json", dailyDb);
+          return {
+            success: true,
+            idempotent: false,
+            count: newCount,
+            remaining: Math.max(0, limit - newCount),
+            dateStr: cleanDate,
+            tokenHash
+          };
+        }
+      }
+      /**
+       * Transactionally checks and records a daily graphic download quota usage.
+       * Backward-compatible wrapper delegating to transactCompleteDownloadExport.
+       */
+      async transactDailyGraphicDownload(userKey, dateStr, downloadRequestId = "", maxAllowed = 10, downloadDetails = {}) {
+        return this.transactCompleteDownloadExport(
+          userKey,
+          dateStr,
+          downloadRequestId,
+          maxAllowed,
+          downloadDetails?.tokenInfo || downloadDetails?.token || {},
+          downloadDetails
+        );
       }
       // --- AUDIT LOGGING ---
       async logAdminAction(action, adminEmail2, details = {}) {
@@ -12638,8 +14120,6 @@ function saveAiFeaturesConfig(cfg) {
   }
 }
 function getHeadlineRegenCoinCost(tier, role) {
-  const cleanRole = (role || "").toLowerCase().trim();
-  if (cleanRole === "admin" || cleanRole === "superadmin") return 0;
   const t = (tier || "basic").toLowerCase().trim().replace(/[\-_]/g, " ");
   if (t === "ultra" || t === "vip desk" || t === "vip" || t === "vip dash") return 0;
   if (t === "professional" || t === "pro") return 25;
@@ -16689,7 +18169,59 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
         });
       }
     }
+    let lockId2 = "";
+    if (draftId2 && centralDb) {
+      const lockAcquisition = await centralDb.acquireDraftRegenerationLock(
+        draftId2,
+        walletKey,
+        generationRequestId
+      );
+      if (!lockAcquisition.success) {
+        if (lockAcquisition.alreadyUsed) {
+          return res.status(409).json({
+            success: false,
+            alreadyUsed: true,
+            error: lockAcquisition.error || "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+          });
+        }
+        if (lockAcquisition.inFlight) {
+          return res.status(409).json({
+            success: false,
+            inFlight: true,
+            error: lockAcquisition.error || "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
+          });
+        }
+        return res.status(409).json({
+          success: false,
+          conflict: true,
+          error: lockAcquisition.error || "\u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0932\u0949\u0915 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F\u0964"
+        });
+      }
+      if (lockAcquisition.idempotentReplay && Array.isArray(lockAcquisition.headlines)) {
+        const savedHeadlines = lockAcquisition.headlines;
+        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
+        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        return res.json({
+          success: true,
+          actualProvider: "idempotent-cache",
+          headlines: savedHeadlines,
+          headlineOptions: savedHeadlines,
+          totalHeadlineOptions: combinedSaved,
+          headline: savedHeadlines[0] || "",
+          coinsDeducted: 0,
+          remainingCoins: currentBalance,
+          draftId: draftId2 || void 0,
+          alreadyRegenerated: true,
+          regenerationUsed: true,
+          message: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u0947 \u0932\u093F\u090F \u092A\u0942\u0930\u094D\u0935-\u091C\u0928\u0930\u0947\u091F\u0947\u0921 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0932\u094C\u091F\u093E\u090F \u0917\u090F \u0939\u0948\u0902\u0964"
+        });
+      }
+      lockId2 = lockAcquisition.lockId || "";
+    }
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
+      if (draftId2 && lockId2 && centralDb) {
+        await centralDb.releaseDraftRegenerationLock(draftId2, lockId2);
+      }
       return res.status(400).json({
         success: false,
         insufficientCoins: true,
@@ -16872,7 +18404,20 @@ JSON Output Schema:
     );
     let coinsDeducted = 0;
     let remainingCoins = currentBalance;
-    if (requiredCoins > 0 && walletKey) {
+    if (draftId2 && lockId2 && centralDb) {
+      const compRes = await centralDb.completeDraftRegenerationLock(
+        draftId2,
+        lockId2,
+        walletKey,
+        requiredCoins,
+        finalOptions,
+        generationRequestId
+      );
+      if (compRes.success) {
+        coinsDeducted = compRes.coinsDeducted || 0;
+        remainingCoins = compRes.newBalance !== void 0 ? compRes.newBalance : currentBalance;
+      }
+    } else if (requiredCoins > 0 && walletKey) {
       rDb.wallets[walletKey].coinBalance = Math.max(0, (rDb.wallets[walletKey].coinBalance || 0) - requiredCoins);
       coinsDeducted = requiredCoins;
       remainingCoins = rDb.wallets[walletKey].coinBalance;
@@ -16946,6 +18491,9 @@ JSON Output Schema:
     }
     return res.json(responsePayload);
   } catch (err) {
+    if (draftId && lockId && centralDb) {
+      await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+    }
     if (draftId && rejectInFlight) {
       rejectInFlight(err);
     }
@@ -19366,6 +20914,37 @@ function saveDailyDownloadsDatabase(data) {
 }
 var dailyDownloadsTracker = /* @__PURE__ */ new Map();
 var recentDownloadRequests = /* @__PURE__ */ new Map();
+var activeDownloadTokens = /* @__PURE__ */ new Map();
+var consumedDownloadTokens = /* @__PURE__ */ new Set();
+function generateDownloadToken(userKey, dateStr, downloadRequestId, cardId = "") {
+  const now = Date.now();
+  const expiresAt = now + 10 * 60 * 1e3;
+  const cleanUserKey = (userKey || "").toLowerCase().trim();
+  const cleanReqId = (downloadRequestId || "").trim();
+  const cleanCardId = (cardId || "").trim();
+  const nonce = import_crypto.default.randomBytes(16).toString("hex");
+  const payload = `${cleanUserKey}:${dateStr}:${cleanReqId}:${cleanCardId}:${expiresAt}:${nonce}`;
+  const sig = import_crypto.default.createHmac("sha256", AUTH_SECRET).update(payload).digest("hex");
+  const token = `dlt.${expiresAt}.${nonce}.${sig}`;
+  activeDownloadTokens.set(token, {
+    token,
+    userKey: cleanUserKey,
+    dateStr,
+    downloadRequestId: cleanReqId,
+    cardId: cleanCardId,
+    issuedAt: now,
+    expiresAt
+  });
+  if (activeDownloadTokens.size > 2e3) {
+    for (const [k, v] of activeDownloadTokens.entries()) {
+      if (now > v.expiresAt) activeDownloadTokens.delete(k);
+    }
+  }
+  if (consumedDownloadTokens.size > 5e3) {
+    consumedDownloadTokens.clear();
+  }
+  return token;
+}
 app.get("/api/user-download-status", (req, res) => {
   try {
     const email = (req.query.email || "").toString().toLowerCase().trim();
@@ -19373,7 +20952,7 @@ app.get("/api/user-download-status", (req, res) => {
       return res.json({ allowed: true, maxAllowed: 10, dailyQuota: 10, downloadsToday: 0, remainingToday: 10, remainingDownloads: 10, unlimited: false });
     }
     if (isProtectedAdminAccount(email)) {
-      return res.json({ allowed: true, plan: "ultra", planName: "VIP DESK", maxAllowed: 99999, dailyQuota: 99999, downloadsToday: 0, remainingToday: 99999, remainingDownloads: 99999, unlimited: true });
+      return res.json({ allowed: true, plan: "admin", planName: "MASTER ADMIN", role: "admin", maxAllowed: 99999, dailyQuota: 99999, downloadsToday: 0, remainingToday: 99999, remainingDownloads: 99999, unlimited: true });
     }
     const users = loadUsersMasterDatabase();
     const matchedUser = users.find(
@@ -19453,8 +21032,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     if (cleanEmail && isAdminAccount) {
       return res.json({
         allowed: true,
-        plan: "ultra",
-        planName: "VIP DESK",
+        plan: "admin",
+        planName: "MASTER ADMIN",
         role: "admin",
         remainingToday: 99999,
         unlimited: true
@@ -19535,6 +21114,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
         error: "\u0906\u092A\u0915\u0940 \u0906\u091C \u0915\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0940 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E \u0930\u0940\u0938\u0947\u091F \u0939\u094B\u0928\u0947 \u0924\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964",
+        message: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964",
         quotaExceeded: true,
         maxAllowed,
         downloadsToday
@@ -19554,6 +21134,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
         }
       }
     }
+    const cardIdStr = card?.id ? String(card.id) : req.body?.cardId ? String(req.body.cardId) : "";
+    const downloadToken = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr);
     if (!checkOnly && isAlreadyProcessed) {
       return res.json({
         allowed: true,
@@ -19561,6 +21143,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
         maxAllowed,
         downloadsToday,
         remainingToday: Math.max(0, maxAllowed - downloadsToday),
+        downloadToken,
+        downloadRequestId: downloadRequestId || void 0,
         unlimited: false,
         idempotent: true
       });
@@ -19598,7 +21182,128 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       maxAllowed,
       downloadsToday,
       remainingToday: Math.max(0, maxAllowed - downloadsToday),
+      downloadToken,
+      downloadRequestId: downloadRequestId || void 0,
       unlimited: false
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/complete-download-export", async (req, res) => {
+  try {
+    const { email, downloadToken, downloadRequestId, exportSuccess, cardId, isBonus } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (!exportSuccess) {
+      return res.json({
+        success: false,
+        quotaDeducted: 0,
+        message: "\u090F\u0915\u094D\u0938\u092A\u094B\u0930\u094D\u091F \u0928\u093F\u0930\u0938\u094D\u0924 \u092F\u093E \u0905\u0938\u092B\u0932 \u0939\u094B\u0928\u0947 \u0915\u0947 \u0915\u093E\u0930\u0923 \u0915\u094B\u0908 \u0915\u094B\u091F\u093E \u0928\u0939\u0940\u0902 \u0918\u091F\u093E\u092F\u093E \u0917\u092F\u093E\u0964"
+      });
+    }
+    if (isBonus) {
+      return res.json({
+        success: true,
+        quotaDeducted: 0,
+        isBonus: true,
+        remainingToday: 99999,
+        unlimited: true
+      });
+    }
+    const allProfiles = loadProfilesDatabase();
+    const prof = allProfiles[cleanEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
+    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === "admin" || prof.role === "superadmin";
+    if (cleanEmail && isAdminAccount) {
+      return res.json({
+        success: true,
+        quotaDeducted: 0,
+        plan: "admin",
+        planName: "MASTER ADMIN",
+        role: "admin",
+        remainingToday: 99999,
+        unlimited: true
+      });
+    }
+    const users = loadUsersMasterDatabase();
+    const matchedUser = users.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail
+    );
+    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    const catalog = loadPlansCatalogDatabase();
+    const planDetail = catalog.find((p) => p.id === tier);
+    const isVipTier = tier === "ultra" || tier === "vip" || tier === "vip_desk";
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 75 : tier === "professional" ? 40 : tier === "advanced" ? 25 : 10;
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const userKey = cleanEmail || req.ip || "anon";
+    const reqId = downloadRequestId || `req_${userKey}_${cardId || Date.now()}_${dateStr}`;
+    const cardIdStr = cardId ? String(cardId) : "";
+    const tokenInfo = downloadToken ? {
+      token: downloadToken,
+      userKey: cleanEmail,
+      cardId: cardIdStr,
+      downloadRequestId: reqId,
+      authSecret: AUTH_SECRET
+    } : {};
+    let txResult = null;
+    if (centralDb) {
+      txResult = await centralDb.transactDailyGraphicDownload(
+        userKey,
+        dateStr,
+        reqId,
+        maxAllowed,
+        { cardId: cardIdStr, tokenInfo }
+      );
+    } else {
+      const persisted = loadDailyDownloadsDatabase();
+      const recordKey = `${userKey}_${dateStr}`;
+      const rec = persisted[recordKey] || { count: 0, date: dateStr, processedRequestIds: [] };
+      const currentCount = rec.count || 0;
+      const ids = rec.processedRequestIds || [];
+      if (ids.includes(reqId)) {
+        txResult = { success: true, idempotent: true, count: currentCount, remaining: Math.max(0, maxAllowed - currentCount) };
+      } else if (currentCount >= maxAllowed) {
+        txResult = { success: false, quotaExceeded: true, count: currentCount, remaining: 0, error: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964" };
+      } else {
+        const newCount = currentCount + 1;
+        ids.push(reqId);
+        persisted[recordKey] = { date: dateStr, count: newCount, processedRequestIds: ids.slice(-100), updatedAt: Date.now() };
+        saveDailyDownloadsDatabase(persisted);
+        txResult = { success: true, idempotent: false, count: newCount, remaining: Math.max(0, maxAllowed - newCount) };
+      }
+    }
+    if (!txResult.success) {
+      if (txResult.replayDetected || txResult.invalidToken || txResult.invalidSignature || txResult.expired) {
+        return res.status(403).json({
+          success: false,
+          invalidToken: true,
+          replayDetected: Boolean(txResult.replayDetected),
+          reason: txResult.reason || txResult.error,
+          error: `\u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u091F\u094B\u0915\u0928 \u0905\u092E\u093E\u0928\u094D\u092F, \u0938\u092E\u093E\u092A\u094D\u0924 \u092F\u093E \u092A\u0939\u0932\u0947 \u0939\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948 (${txResult.reason || txResult.error || "\u0905\u092E\u093E\u0928\u094D\u092F"}). \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`
+        });
+      }
+      return res.status(403).json({
+        success: false,
+        quotaExceeded: true,
+        error: txResult.error || "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964",
+        downloadsToday: txResult.count,
+        remainingToday: 0
+      });
+    }
+    if (downloadToken) {
+      consumedDownloadTokens.add(downloadToken);
+      activeDownloadTokens.delete(downloadToken);
+    }
+    dailyDownloadsTracker.set(userKey, { date: dateStr, count: txResult.count });
+    recentDownloadRequests.set(reqId, Date.now());
+    return res.json({
+      success: true,
+      quotaDeducted: txResult.idempotent ? 0 : 1,
+      idempotent: Boolean(txResult.idempotent),
+      downloadsToday: txResult.count,
+      remainingToday: txResult.remaining,
+      maxAllowed,
+      plan: tier,
+      dateStr
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

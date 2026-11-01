@@ -14,9 +14,16 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const adapter = require('./server_firestore_adapter.cjs');
 
 const httpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 20,
+  keepAliveMsecs: 60000,
+});
+
+const httpAgent = new http.Agent({
   keepAlive: true,
   maxSockets: 20,
   keepAliveMsecs: 60000,
@@ -28,7 +35,7 @@ class CentralFirestoreDatabaseService {
     this.databaseId = options.databaseId || options.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID || adapter.DATABASE_ID || 'ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd';
     this.useFirestore = options.useFirestore !== undefined 
       ? options.useFirestore 
-      : (process.env.USE_FIRESTORE === 'true' || adapter.USE_FIRESTORE);
+      : (process.env.USE_FIRESTORE === 'true' || adapter.USE_FIRESTORE || Boolean(process.env.FIRESTORE_EMULATOR_HOST));
     
     // In-memory live cache for ultra-fast reads & synchronous backward compatibility
     this.cache = {
@@ -104,129 +111,195 @@ class CentralFirestoreDatabaseService {
     return (Date.now() - ts) < ttl;
   }
 
+  _getTransportInfo() {
+    const emu = process.env.FIRESTORE_EMULATOR_HOST;
+    if (emu) {
+      const parts = emu.split(':');
+      return {
+        isEmulator: true,
+        transport: http,
+        host: parts[0] || '127.0.0.1',
+        port: parts[1] ? parseInt(parts[1], 10) : 8080,
+        agent: httpAgent,
+      };
+    }
+    return {
+      isEmulator: false,
+      transport: https,
+      host: 'firestore.googleapis.com',
+      port: 443,
+      agent: httpsAgent,
+    };
+  }
+
   async getAccessToken() {
+    if (process.env.FIRESTORE_EMULATOR_HOST) return 'owner';
     return adapter.getMetadataAccessToken();
+  }
+
+  async _requestFirestore({ method = 'GET', path, body = null, headers = {}, timeout = 6000 }) {
+    const transportInfo = this._getTransportInfo();
+    const token = await this.getAccessToken();
+    if (!token) return { success: false, error: 'No access token available' };
+
+    const reqHeaders = {
+      Authorization: `Bearer ${token}`,
+      ...headers,
+    };
+    if (body) {
+      reqHeaders['Content-Type'] = 'application/json';
+      reqHeaders['Content-Length'] = Buffer.byteLength(body);
+    }
+
+    return new Promise((resolve) => {
+      const req = transportInfo.transport.request(
+        {
+          host: transportInfo.host,
+          port: transportInfo.port,
+          path,
+          method,
+          headers: reqHeaders,
+          agent: transportInfo.agent,
+          timeout,
+        },
+        (res) => {
+          let resBody = '';
+          res.on('data', (d) => (resBody += d));
+          res.on('end', () => {
+            resolve({
+              success: res.statusCode >= 200 && res.statusCode < 300,
+              statusCode: res.statusCode,
+              body: resBody,
+            });
+          });
+        }
+      );
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ success: false, statusCode: 408, error: 'Request timeout' });
+      });
+      req.on('error', (e) => resolve({ success: false, error: e.message }));
+      if (body) req.write(body);
+      req.end();
+    });
+  }
+
+  async _execFirestoreGet(docPath) {
+    const res = await this._requestFirestore({
+      method: 'GET',
+      path: docPath,
+      timeout: 6000,
+    });
+    if (res.success) {
+      try {
+        const parsed = JSON.parse(res.body);
+        return { success: true, doc: parsed, updateTime: parsed.updateTime };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    } else if (res.statusCode === 404) {
+      return { success: true, notFound: true };
+    } else {
+      return { success: false, statusCode: res.statusCode, error: res.body };
+    }
+  }
+
+  // Authoritative transactional document read via batchGet POST body
+  async _readDocInTransaction(collection, docId, transactionId) {
+    const docName = `projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${docId}`;
+    const path = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:batchGet`;
+    const payload = JSON.stringify({
+      documents: [docName],
+      transaction: transactionId,
+    });
+
+    const res = await this._requestFirestore({
+      method: 'POST',
+      path,
+      body: payload,
+      timeout: 6000,
+    });
+
+    if (res.success) {
+      try {
+        const parsed = JSON.parse(res.body);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const entry = parsed[0];
+          if (entry.found) {
+            return {
+              success: true,
+              doc: entry.found,
+              data: this._fromFirestoreDoc(entry.found),
+              updateTime: entry.found.updateTime,
+            };
+          } else if (entry.missing) {
+            return { success: true, notFound: true };
+          }
+        }
+        return { success: true, notFound: true };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }
+    return { success: false, statusCode: res.statusCode, error: res.body };
   }
 
   // Begin Firestore REST atomic transaction (Task 3)
   async beginTransaction() {
     if (!this.useFirestore) return { success: false, error: 'Firestore disabled' };
-    const token = await this.getAccessToken();
-    if (!token) return { success: false, error: 'No access token' };
-
     const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:beginTransaction`;
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          host: 'firestore.googleapis.com',
-          path: docPath,
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          agent: httpsAgent,
-          timeout: 6000,
-        },
-        (res) => {
-          let body = '';
-          res.on('data', (d) => (body += d));
-          res.on('end', () => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              try {
-                const parsed = JSON.parse(body);
-                resolve({ success: true, transaction: parsed.transaction });
-              } catch (e) {
-                resolve({ success: false, error: e.message });
-              }
-            } else {
-              resolve({ success: false, error: `beginTransaction failed (${res.statusCode}): ${body}` });
-            }
-          });
-        }
-      );
-      req.on('error', (e) => resolve({ success: false, error: e.message }));
-      req.write(JSON.stringify({ options: { readWrite: {} } }));
-      req.end();
+    const res = await this._requestFirestore({
+      method: 'POST',
+      path: docPath,
+      body: JSON.stringify({ options: { readWrite: {} } }),
+      timeout: 6000,
     });
+    if (res.success) {
+      try {
+        const parsed = JSON.parse(res.body);
+        return { success: true, transaction: parsed.transaction };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+    }
+    return { success: false, error: `beginTransaction failed (${res.statusCode}): ${res.body}` };
   }
 
   // Commit Firestore REST atomic transaction (Task 3)
   async commitTransaction(transactionId, writes = []) {
     if (!this.useFirestore) return { success: false, error: 'Firestore disabled' };
-    const token = await this.getAccessToken();
-    if (!token) return { success: false, error: 'No access token' };
-
     const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:commit`;
     const payload = JSON.stringify({
       transaction: transactionId,
       writes,
     });
-
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          host: 'firestore.googleapis.com',
-          path: docPath,
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload),
-          },
-          agent: httpsAgent,
-          timeout: 8000,
-        },
-        (res) => {
-          let body = '';
-          res.on('data', (d) => (body += d));
-          res.on('end', () => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              try {
-                const parsed = JSON.parse(body);
-                resolve({ success: true, data: parsed });
-              } catch (e) {
-                resolve({ success: true });
-              }
-            } else {
-              resolve({ success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${body}` });
-            }
-          });
-        }
-      );
-      req.on('error', (e) => resolve({ success: false, error: e.message }));
-      req.write(payload);
-      req.end();
+    const res = await this._requestFirestore({
+      method: 'POST',
+      path: docPath,
+      body: payload,
+      timeout: 8000,
     });
+    if (res.success) {
+      try {
+        const parsed = JSON.parse(res.body);
+        return { success: true, data: parsed };
+      } catch (e) {
+        return { success: true };
+      }
+    }
+    return { success: false, statusCode: res.statusCode, error: `commit failed (${res.statusCode}): ${res.body}` };
   }
 
   // Rollback Firestore REST atomic transaction (Task 3)
   async rollbackTransaction(transactionId) {
     if (!this.useFirestore || !transactionId) return;
-    const token = await this.getAccessToken();
-    if (!token) return;
-
     const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:rollback`;
     const payload = JSON.stringify({ transaction: transactionId });
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          host: 'firestore.googleapis.com',
-          path: docPath,
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload),
-          },
-          agent: httpsAgent,
-          timeout: 4000,
-        },
-        () => resolve()
-      );
-      req.on('error', () => resolve());
-      req.write(payload);
-      req.end();
+    await this._requestFirestore({
+      method: 'POST',
+      path: docPath,
+      body: payload,
+      timeout: 4000,
     });
   }
 
@@ -235,45 +308,22 @@ class CentralFirestoreDatabaseService {
     if (!this.useFirestore) {
       return { success: false, error: 'Firestore is disabled' };
     }
-    const token = await this.getAccessToken();
-    if (!token) return { success: false, error: 'No access token available' };
-
     const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          host: 'firestore.googleapis.com',
-          path: docPath,
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
-          agent: httpsAgent,
-          timeout: 5000,
-        },
-        (res) => {
-          let body = '';
-          res.on('data', (d) => (body += d));
-          res.on('end', () => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              try {
-                const parsed = JSON.parse(body);
-                const data = this._fromFirestoreDoc(parsed);
-                resolve({ success: true, data, statusCode: res.statusCode });
-              } catch (err) {
-                resolve({ success: false, error: err.message, statusCode: res.statusCode });
-              }
-            } else {
-              resolve({ success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` });
-            }
-          });
-        }
-      );
-      req.on('timeout', () => {
-        req.destroy();
-        resolve({ success: false, error: 'Request timeout' });
-      });
-      req.on('error', (e) => resolve({ success: false, error: e.message }));
-      req.end();
+    const res = await this._requestFirestore({
+      method: 'GET',
+      path: docPath,
+      timeout: 5000,
     });
+    if (res.success) {
+      try {
+        const parsed = JSON.parse(res.body);
+        const data = this._fromFirestoreDoc(parsed);
+        return { success: true, data, statusCode: res.statusCode };
+      } catch (err) {
+        return { success: false, error: err.message, statusCode: res.statusCode };
+      }
+    }
+    return { success: false, statusCode: res.statusCode, error: `Doc not found or error (${res.statusCode})` };
   }
 
   // Generic document write
@@ -281,50 +331,19 @@ class CentralFirestoreDatabaseService {
     if (!this.useFirestore) {
       return { success: false, error: 'Firestore is disabled' };
     }
-    const token = await this.getAccessToken();
-    if (!token) return { success: false, error: 'No access token available' };
-
     const fields = {};
     for (const [k, v] of Object.entries(data)) {
       if (v !== undefined) fields[k] = this._toFirestoreField(v);
     }
     const payload = JSON.stringify({ fields });
     const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          host: 'firestore.googleapis.com',
-          path: docPath,
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload),
-          },
-          agent: httpsAgent,
-          timeout: 5000,
-        },
-        (res) => {
-          let body = '';
-          res.on('data', (d) => (body += d));
-          res.on('end', () => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              resolve({ success: true, statusCode: res.statusCode });
-            } else {
-              resolve({ success: false, statusCode: res.statusCode, error: body });
-            }
-          });
-        }
-      );
-      req.on('timeout', () => {
-        req.destroy();
-        resolve({ success: false, error: 'Request timeout' });
-      });
-      req.on('error', (e) => resolve({ success: false, error: e.message }));
-      req.write(payload);
-      req.end();
+    const res = await this._requestFirestore({
+      method: 'PATCH',
+      path: docPath,
+      body: payload,
+      timeout: 5000,
     });
+    return { success: res.success, statusCode: res.statusCode, error: res.success ? undefined : res.body };
   }
 
   // Generic document delete
@@ -332,32 +351,13 @@ class CentralFirestoreDatabaseService {
     if (!this.useFirestore) {
       return { success: false, error: 'Firestore is disabled' };
     }
-    const token = await this.getAccessToken();
-    if (!token) return { success: false, error: 'No access token available' };
-
     const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${encodeURIComponent(docId)}`;
-    return new Promise((resolve) => {
-      const req = https.request(
-        {
-          host: 'firestore.googleapis.com',
-          path: docPath,
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-          agent: httpsAgent,
-          timeout: 5000,
-        },
-        (res) => {
-          res.on('data', () => {});
-          res.on('end', () => resolve({ success: res.statusCode >= 200 && res.statusCode < 300 }));
-        }
-      );
-      req.on('timeout', () => {
-        req.destroy();
-        resolve({ success: false, error: 'Request timeout' });
-      });
-      req.on('error', (e) => resolve({ success: false, error: e.message }));
-      req.end();
+    const res = await this._requestFirestore({
+      method: 'DELETE',
+      path: docPath,
+      timeout: 5000,
     });
+    return { success: res.success, statusCode: res.statusCode };
   }
 
   // Generic list documents with complete nextPageToken pagination loop (Task 5)
@@ -365,9 +365,6 @@ class CentralFirestoreDatabaseService {
     if (!this.useFirestore) {
       return { success: false, error: 'Firestore is disabled', documents: [] };
     }
-    const token = await this.getAccessToken();
-    if (!token) return { success: false, error: 'No access token available', documents: [] };
-
     const allDocuments = [];
     const seenIds = new Set();
     let pageToken = '';
@@ -379,64 +376,34 @@ class CentralFirestoreDatabaseService {
         docPath += `&pageToken=${encodeURIComponent(pageToken)}`;
       }
 
-      const pageRes = await new Promise((resolve) => {
-        const req = https.request(
-          {
-            host: 'firestore.googleapis.com',
-            path: docPath,
-            method: 'GET',
-            headers: { Authorization: `Bearer ${token}` },
-            agent: httpsAgent,
-            timeout: 10000,
-          },
-          (res) => {
-            let body = '';
-            res.on('data', (d) => (body += d));
-            res.on('end', () => {
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                try {
-                  const parsed = JSON.parse(body);
-                  const docs = (parsed.documents || []).map((d) => {
-                    const docId = d.name ? d.name.split('/').pop() : '';
-                    const data = this._fromFirestoreDoc(d);
-                    return { id: docId, docId, ...data };
-                  });
-                  resolve({
-                    success: true,
-                    documents: docs,
-                    nextPageToken: parsed.nextPageToken || '',
-                    statusCode: res.statusCode,
-                  });
-                } catch (err) {
-                  resolve({ success: false, error: err.message, documents: [] });
-                }
-              } else {
-                resolve({ success: false, error: `List failed (${res.statusCode})`, documents: [] });
-              }
-            });
-          }
-        );
-        req.on('timeout', () => {
-          req.destroy();
-          resolve({ success: false, error: 'Request timeout', documents: [] });
-        });
-        req.on('error', (e) => resolve({ success: false, error: e.message, documents: [] }));
-        req.end();
+      const res = await this._requestFirestore({
+        method: 'GET',
+        path: docPath,
+        timeout: 10000,
       });
 
-      if (!pageRes.success) {
-        if (allDocuments.length > 0) break;
-        return pageRes;
-      }
-
-      for (const doc of pageRes.documents) {
-        if (doc.id && !seenIds.has(doc.id)) {
-          seenIds.add(doc.id);
-          allDocuments.push(doc);
+      if (res.success) {
+        try {
+          const parsed = JSON.parse(res.body);
+          const docs = (parsed.documents || []).map((d) => {
+            const docId = d.name ? d.name.split('/').pop() : '';
+            const data = this._fromFirestoreDoc(d);
+            return { id: docId, docId, ...data };
+          });
+          for (const doc of docs) {
+            if (doc.id && !seenIds.has(doc.id)) {
+              seenIds.add(doc.id);
+              allDocuments.push(doc);
+            }
+          }
+          pageToken = parsed.nextPageToken || '';
+        } catch (err) {
+          pageToken = '';
         }
+      } else {
+        if (allDocuments.length > 0) break;
+        return { success: false, error: `List failed (${res.statusCode})`, documents: [] };
       }
-
-      pageToken = pageRes.nextPageToken || '';
     } while (pageToken);
 
     return { success: true, documents: allDocuments, totalCount: allDocuments.length };
@@ -712,41 +679,7 @@ class CentralFirestoreDatabaseService {
         }
 
         const transactionId = txRes.transaction;
-        const token = await this.getAccessToken();
-        const docPath = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}?transaction=${encodeURIComponent(transactionId)}`;
-
-        const docRes = await new Promise((resolve) => {
-          const req = https.request(
-            {
-              host: 'firestore.googleapis.com',
-              path: docPath,
-              method: 'GET',
-              headers: { Authorization: `Bearer ${token}` },
-              agent: httpsAgent,
-              timeout: 6000,
-            },
-            (res) => {
-              let body = '';
-              res.on('data', (d) => (body += d));
-              res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                  try {
-                    const parsed = JSON.parse(body);
-                    resolve({ success: true, doc: parsed, updateTime: parsed.updateTime });
-                  } catch (e) {
-                    resolve({ success: false, error: e.message });
-                  }
-                } else if (res.statusCode === 404) {
-                  resolve({ success: true, notFound: true });
-                } else {
-                  resolve({ success: false, statusCode: res.statusCode, error: body });
-                }
-              });
-            }
-          );
-          req.on('error', (e) => resolve({ success: false, error: e.message }));
-          req.end();
-        });
+        const docRes = await this._readDocInTransaction('wallets', cleanKey, transactionId);
 
         let currentWallet = { walletKey: cleanKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
         let updateTime = null;
@@ -807,14 +740,14 @@ class CentralFirestoreDatabaseService {
         const writes = [
           {
             update: {
-              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${encodeURIComponent(cleanKey)}`,
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${cleanKey}`,
               fields: walletFields,
             },
             currentDocument: updateTime ? { updateTime } : { exists: false },
           },
           {
             update: {
-              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${encodeURIComponent(txId)}`,
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${txId}`,
               fields: txFields,
             },
             currentDocument: { exists: false },
@@ -1115,6 +1048,933 @@ class CentralFirestoreDatabaseService {
       this._saveLocalJson('drafts_database.json', drafts);
       return { success: true };
     }
+  }
+
+  // --- DISTRIBUTED HEADLINE REGENERATION LOCK (Task A / Phase 3.0B-S) ---
+  /**
+   * Atomically acquires a distributed lock for draft headline regeneration.
+   * Ensures that:
+   * 1. If draft was already regenerated (status === 'completed'), rejects unless matching generationRequestId for idempotent replay.
+   * 2. If another instance is currently regenerating (status === 'in_progress' and now < leaseExpiresAt), rejects with 409 Conflict.
+   * 3. If lock is expired (leaseExpiresAt <= now), allows takeover.
+   * 4. Acquires lease with unique lockId and 60-second TTL.
+   */
+  async acquireDraftRegenerationLock(draftId, userId, generationRequestId = '') {
+    if (!draftId) return { success: false, error: 'draftId is required' };
+    const cleanDraftId = String(draftId).trim();
+    const cleanUserId = String(userId || '').trim();
+    const cleanReqId = String(generationRequestId || '').trim();
+    const now = Date.now();
+    const leaseDurationMs = 60000; // 60 seconds lease
+    const newLockId = `lock_${cleanDraftId}_${now}_${Math.random().toString(36).slice(2, 8)}`;
+
+    if (this.useFirestore) {
+      const maxRetries = 5;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const txRes = await this.beginTransaction();
+        if (!txRes.success || !txRes.transaction) {
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        }
+
+        const transactionId = txRes.transaction;
+        const docRes = await this._readDocInTransaction('draft_regeneration_locks', cleanDraftId, transactionId);
+
+        if (!docRes.success) {
+          await this.rollbackTransaction(transactionId);
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        }
+
+        let existingLock = null;
+        let updateTime = null;
+        if (docRes.doc) {
+          existingLock = this._fromFirestoreDoc(docRes.doc);
+          updateTime = docRes.updateTime;
+        }
+
+        if (existingLock) {
+          if (existingLock.status === 'completed' || existingLock.regenerationUsed) {
+            await this.rollbackTransaction(transactionId);
+            if (cleanReqId && existingLock.generationRequestId === cleanReqId && Array.isArray(existingLock.headlines)) {
+              return {
+                success: true,
+                idempotentReplay: true,
+                headlines: existingLock.headlines,
+                lockId: existingLock.lockId,
+              };
+            }
+            return {
+              success: false,
+              alreadyUsed: true,
+              conflict: true,
+              error: 'इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।',
+            };
+          }
+
+          const leaseExpiresAt = Number(existingLock.leaseExpiresAt) || 0;
+          if (existingLock.status === 'in_progress' && now < leaseExpiresAt) {
+            await this.rollbackTransaction(transactionId);
+            return {
+              success: false,
+              inFlight: true,
+              conflict: true,
+              error: 'इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।',
+            };
+          }
+        }
+
+        const lockPayload = {
+          draftId: cleanDraftId,
+          userId: cleanUserId,
+          generationRequestId: cleanReqId,
+          lockId: newLockId,
+          status: 'in_progress',
+          acquiredAt: now,
+          leaseExpiresAt: now + leaseDurationMs,
+          updatedAt: now,
+        };
+
+        const fields = {};
+        for (const [k, v] of Object.entries(lockPayload)) {
+          if (v !== undefined) fields[k] = this._toFirestoreField(v);
+        }
+
+        const writes = [
+          {
+            update: {
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/draft_regeneration_locks/${cleanDraftId}`,
+              fields,
+            },
+            currentDocument: updateTime ? { updateTime } : { exists: false },
+          },
+        ];
+
+        const commitRes = await this.commitTransaction(transactionId, writes);
+        if (commitRes.success) {
+          return { success: true, lockId: newLockId, leaseExpiresAt: now + leaseDurationMs };
+        } else if (
+          commitRes.statusCode === 409 ||
+          commitRes.statusCode === 400 ||
+          (commitRes.error &&
+            (commitRes.error.includes('ABORTED') ||
+              commitRes.error.includes('FAILED_PRECONDITION') ||
+              commitRes.error.includes('ALREADY_EXISTS') ||
+              commitRes.error.includes('conflict')))
+        ) {
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        } else {
+          return { success: false, error: commitRes.error || 'Lock acquisition failed' };
+        }
+      }
+
+      return {
+        success: false,
+        conflict: true,
+        inFlight: true,
+        error: 'इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।',
+      };
+    } else {
+      // Local dev & test fallback using draft_regeneration_locks_db.json
+      const locksDb = this._loadLocalJson('draft_regeneration_locks_db.json', {});
+      const existing = locksDb[cleanDraftId];
+
+      if (existing) {
+        if (existing.status === 'completed' || existing.regenerationUsed) {
+          if (cleanReqId && existing.generationRequestId === cleanReqId && Array.isArray(existing.headlines)) {
+            return {
+              success: true,
+              idempotentReplay: true,
+              headlines: existing.headlines,
+              lockId: existing.lockId,
+            };
+          }
+          return {
+            success: false,
+            alreadyUsed: true,
+            conflict: true,
+            error: 'इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।',
+          };
+        }
+
+        const leaseExpiresAt = Number(existing.leaseExpiresAt) || 0;
+        if (existing.status === 'in_progress' && now < leaseExpiresAt) {
+          return {
+            success: false,
+            inFlight: true,
+            conflict: true,
+            error: 'इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।',
+          };
+        }
+      }
+
+      // Check local drafts_database.json for existing draft single-use status
+      const drafts = this._loadLocalJson('drafts_database.json', []);
+      const existingDraft = drafts.find((d) => d.id === cleanDraftId);
+      if (existingDraft && existingDraft.regenerationUsed) {
+        if (cleanReqId && existingDraft.generationRequestId === cleanReqId && Array.isArray(existingDraft.regeneratedHeadlines)) {
+          return {
+            success: true,
+            idempotentReplay: true,
+            headlines: existingDraft.regeneratedHeadlines,
+            lockId: existingDraft.id,
+          };
+        }
+        return {
+          success: false,
+          alreadyUsed: true,
+          conflict: true,
+          error: 'इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।',
+        };
+      }
+
+      locksDb[cleanDraftId] = {
+        draftId: cleanDraftId,
+        userId: cleanUserId,
+        generationRequestId: cleanReqId,
+        lockId: newLockId,
+        status: 'in_progress',
+        acquiredAt: now,
+        leaseExpiresAt: now + leaseDurationMs,
+        updatedAt: now,
+      };
+      this._saveLocalJson('draft_regeneration_locks_db.json', locksDb);
+      return { success: true, lockId: newLockId, leaseExpiresAt: now + leaseDurationMs };
+    }
+  }
+
+  /**
+   * Completes a draft headline regeneration.
+   * Atomically validates lockId ownership, debits requiredCoins, marks lock as completed,
+   * and persists headlines.
+   */
+  async completeDraftRegenerationLock(draftId, lockId, walletKey, requiredCoins, generatedHeadlines, generationRequestId = '') {
+    if (!draftId || !lockId) return { success: false, error: 'draftId and lockId are required' };
+    const cleanDraftId = String(draftId).trim();
+    const cleanLockId = String(lockId).trim();
+    const cleanWalletKey = String(walletKey || '').toLowerCase().trim();
+    const numCoins = Math.max(0, Number(requiredCoins) || 0);
+    const now = Date.now();
+
+    if (this.useFirestore) {
+      const maxRetries = 5;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const txRes = await this.beginTransaction();
+        if (!txRes.success || !txRes.transaction) {
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        }
+
+        const transactionId = txRes.transaction;
+
+        // 1. Read lock document inside transaction
+        const lockRes = await this._readDocInTransaction('draft_regeneration_locks', cleanDraftId, transactionId);
+        if (!lockRes.success) {
+          await this.rollbackTransaction(transactionId);
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        }
+
+        let existingLock = lockRes.doc ? this._fromFirestoreDoc(lockRes.doc) : null;
+        let lockUpdateTime = lockRes.updateTime;
+
+        if (!existingLock || existingLock.lockId !== cleanLockId) {
+          await this.rollbackTransaction(transactionId);
+          return { success: false, error: 'Lock ID mismatch; ownership lost' };
+        }
+
+        if (existingLock.status === 'completed' || existingLock.regenerationUsed) {
+          await this.rollbackTransaction(transactionId);
+          if (generationRequestId && existingLock.generationRequestId === generationRequestId && Array.isArray(existingLock.headlines)) {
+            return {
+              success: true,
+              idempotentReplay: true,
+              headlines: existingLock.headlines,
+              lockId: existingLock.lockId,
+              coinsDeducted: 0,
+            };
+          }
+          return {
+            success: false,
+            alreadyUsed: true,
+            conflict: true,
+            error: 'इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।',
+          };
+        }
+
+        // 2. Read wallet document inside transaction if coins need to be deducted
+        let currentBalance = 0;
+        let walletUpdateTime = null;
+        let currentWallet = { walletKey: cleanWalletKey, coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+
+        if (numCoins > 0 && cleanWalletKey) {
+          const walletRes = await this._readDocInTransaction('wallets', cleanWalletKey, transactionId);
+          if (!walletRes.success) {
+            await this.rollbackTransaction(transactionId);
+            await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+            continue;
+          }
+          if (walletRes.doc) {
+            currentWallet = this._fromFirestoreDoc(walletRes.doc);
+            walletUpdateTime = walletRes.updateTime;
+          }
+          currentBalance = Number(currentWallet.coinBalance) || 0;
+          if (currentBalance < numCoins) {
+            await this.rollbackTransaction(transactionId);
+            await this.releaseDraftRegenerationLock(cleanDraftId, cleanLockId);
+            return {
+              success: false,
+              insufficientCoins: true,
+              currentBalance,
+              requiredCoins: numCoins,
+              error: `सिक्के अपर्याप्त हैं (वर्तमान: ${currentBalance}, आवश्यक: ${numCoins})`,
+            };
+          }
+        }
+
+        // 3. Read draft document inside transaction (optional existence check)
+        const draftRes = await this._readDocInTransaction('user_drafts', cleanDraftId, transactionId);
+        let draftData = draftRes.doc ? this._fromFirestoreDoc(draftRes.doc) : null;
+        let draftUpdateTime = draftRes.updateTime;
+
+        // Prepare writes for single atomic commit
+        const newBalance = Math.max(0, currentBalance - numCoins);
+        const txId = `tx_regen_${cleanDraftId}_${now}`;
+
+        // Write 1: Update draft_regeneration_locks to status='completed'
+        const lockPayload = {
+          draftId: cleanDraftId,
+          lockId: cleanLockId,
+          status: 'completed',
+          regenerationUsed: true,
+          generationRequestId: String(generationRequestId || ''),
+          headlines: generatedHeadlines,
+          coinsDeducted: numCoins,
+          completedAt: now,
+          updatedAt: now,
+        };
+        const lockFields = {};
+        for (const [k, v] of Object.entries(lockPayload)) {
+          if (v !== undefined) lockFields[k] = this._toFirestoreField(v);
+        }
+
+        const writes = [
+          {
+            update: {
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/draft_regeneration_locks/${cleanDraftId}`,
+              fields: lockFields,
+            },
+            currentDocument: lockUpdateTime ? { updateTime: lockUpdateTime } : { exists: true },
+          },
+        ];
+
+        // Write 2 & 3: Debit wallet and add wallet_transactions in the same commit
+        if (numCoins > 0 && cleanWalletKey) {
+          currentWallet.coinBalance = newBalance;
+          currentWallet.updatedAt = now;
+          const walletFields = {};
+          for (const [k, v] of Object.entries(currentWallet)) {
+            if (v !== undefined) walletFields[k] = this._toFirestoreField(v);
+          }
+          writes.push({
+            update: {
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallets/${cleanWalletKey}`,
+              fields: walletFields,
+            },
+            currentDocument: walletUpdateTime ? { updateTime: walletUpdateTime } : { exists: false },
+          });
+
+          const txPayload = {
+            id: txId,
+            transactionId: txId,
+            userId: cleanWalletKey,
+            userEmail: cleanWalletKey,
+            newsItemId: cleanDraftId,
+            newsTitle: '5 नई हेडलाइन्स',
+            description: `5 नई हेडलाइन्स जनरेशन (Single-Use Draft ${cleanDraftId}): -${numCoins} कॉइन्स`,
+            type: 'debit',
+            amount: numCoins,
+            coins: numCoins,
+            balanceAfter: newBalance,
+            timestamp: now,
+            createdAt: new Date(now).toISOString(),
+            status: 'completed',
+          };
+          const txFields = {};
+          for (const [k, v] of Object.entries(txPayload)) {
+            if (v !== undefined) txFields[k] = this._toFirestoreField(v);
+          }
+          writes.push({
+            update: {
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/wallet_transactions/${txId}`,
+              fields: txFields,
+            },
+            currentDocument: { exists: false },
+          });
+        }
+
+        // Write 4: Mark draft regenerationUsed if user_drafts exists
+        if (draftData) {
+          draftData.regenerationUsed = true;
+          draftData.regeneratedHeadlines = generatedHeadlines;
+          draftData.generationRequestId = String(generationRequestId || '');
+          draftData.updatedAt = now;
+          const draftFields = {};
+          for (const [k, v] of Object.entries(draftData)) {
+            if (v !== undefined) draftFields[k] = this._toFirestoreField(v);
+          }
+          writes.push({
+            update: {
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/user_drafts/${cleanDraftId}`,
+              fields: draftFields,
+            },
+            currentDocument: draftUpdateTime ? { updateTime: draftUpdateTime } : { exists: true },
+          });
+        }
+
+        // SINGLE ATOMIC COMMIT OF ALL 4 OPERATIONS
+        const commitRes = await this.commitTransaction(transactionId, writes);
+        if (commitRes.success) {
+          return {
+            success: true,
+            newBalance,
+            coinsDeducted: numCoins,
+            headlines: generatedHeadlines,
+            transactionId: txId,
+          };
+        } else if (
+          commitRes.statusCode === 409 ||
+          commitRes.statusCode === 400 ||
+          (commitRes.error &&
+            (commitRes.error.includes('ABORTED') ||
+              commitRes.error.includes('FAILED_PRECONDITION') ||
+              commitRes.error.includes('conflict')))
+        ) {
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        } else {
+          return { success: false, error: commitRes.error || 'Commit failed during draft completion' };
+        }
+      }
+
+      return { success: false, error: 'Transaction contention during draft completion' };
+    } else {
+      const locksDb = this._loadLocalJson('draft_regeneration_locks_db.json', {});
+      const existing = locksDb[cleanDraftId];
+      if (existing && existing.lockId && existing.lockId !== cleanLockId) {
+        return { success: false, error: 'Lock ID mismatch; ownership lost' };
+      }
+
+      let newBalance = 0;
+      if (numCoins > 0 && cleanWalletKey) {
+        const rDb = this._loadLocalJson('rewards_database.json', { wallets: {}, transactions: [] });
+        if (!rDb.wallets) rDb.wallets = {};
+        if (!rDb.wallets[cleanWalletKey]) {
+          rDb.wallets[cleanWalletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+        }
+        const currentBal = rDb.wallets[cleanWalletKey].coinBalance || 0;
+        if (currentBal < numCoins) {
+          await this.releaseDraftRegenerationLock(cleanDraftId, cleanLockId);
+          return {
+            success: false,
+            insufficientCoins: true,
+            currentBalance: currentBal,
+            requiredCoins: numCoins,
+            error: `सिक्के अपर्याप्त हैं (वर्तमान: ${currentBal}, आवश्यक: ${numCoins})`,
+          };
+        }
+        newBalance = currentBal - numCoins;
+        rDb.wallets[cleanWalletKey].coinBalance = newBalance;
+        const txId = `tx_regen_${cleanDraftId}_${now}`;
+        if (!Array.isArray(rDb.transactions)) rDb.transactions = [];
+        rDb.transactions.unshift({
+          id: txId,
+          transactionId: txId,
+          userId: cleanWalletKey,
+          userEmail: cleanWalletKey,
+          newsItemId: cleanDraftId,
+          newsTitle: '5 नई हेडलाइन्स',
+          description: `5 नई हेडलाइन्स जनरेशन: -${numCoins} कॉइन्स`,
+          type: 'debit',
+          amount: numCoins,
+          coins: numCoins,
+          balanceAfter: newBalance,
+          timestamp: now,
+          createdAt: new Date(now).toISOString(),
+          status: 'completed',
+        });
+        this._saveLocalJson('rewards_database.json', rDb);
+      }
+
+      locksDb[cleanDraftId] = {
+        draftId: cleanDraftId,
+        lockId: cleanLockId,
+        status: 'completed',
+        regenerationUsed: true,
+        generationRequestId: String(generationRequestId || ''),
+        headlines: generatedHeadlines,
+        coinsDeducted: numCoins,
+        completedAt: now,
+        updatedAt: now,
+      };
+      this._saveLocalJson('draft_regeneration_locks_db.json', locksDb);
+
+      const drafts = this._loadLocalJson('drafts_database.json', []);
+      const d = drafts.find((x) => x.id === cleanDraftId);
+      if (d) {
+        d.regenerationUsed = true;
+        d.regeneratedHeadlines = generatedHeadlines;
+        d.generationRequestId = generationRequestId;
+        d.updatedAt = now;
+        this._saveLocalJson('drafts_database.json', drafts);
+      }
+
+      return {
+        success: true,
+        newBalance,
+        coinsDeducted: numCoins,
+        headlines: generatedHeadlines,
+      };
+    }
+  }
+
+  /**
+   * Releases an acquired lock if the regeneration failed or encountered an error.
+   * Ensures the user is NOT locked out and ZERO coins are deducted.
+   */
+  async releaseDraftRegenerationLock(draftId, lockId) {
+    if (!draftId) return;
+    const cleanDraftId = String(draftId).trim();
+    const cleanLockId = String(lockId || '').trim();
+
+    if (this.useFirestore) {
+      try {
+        const read = await this.readDoc('draft_regeneration_locks', cleanDraftId);
+        if (read.success && read.data) {
+          if (!cleanLockId || read.data.lockId === cleanLockId) {
+            if (read.data.status === 'in_progress') {
+              await this.deleteDoc('draft_regeneration_locks', cleanDraftId);
+            }
+          }
+        }
+      } catch {}
+    } else {
+      const locksDb = this._loadLocalJson('draft_regeneration_locks_db.json', {});
+      const existing = locksDb[cleanDraftId];
+      if (existing && (!cleanLockId || existing.lockId === cleanLockId)) {
+        if (existing.status === 'in_progress') {
+          delete locksDb[cleanDraftId];
+          this._saveLocalJson('draft_regeneration_locks_db.json', locksDb);
+        }
+      }
+    }
+  }
+
+  // --- DAILY GRAPHIC DOWNLOAD TRANSACTION (Task B / Phase 3.0B-S) ---
+  /**
+   * PHASE 3.0B-U: Unified Atomic Download Token Consumption and Daily Graphic Quota Deduction
+   * 
+   * Atomically in ONE Firestore Transaction:
+   * 1. Checks download_tokens/${tokenHash}:
+   *    - If consumed: checks if downloadRequestId matches (idempotent retry). If not, aborts with replayDetected: true.
+   * 2. Checks token signature, expiry (10m TTL), and user bindings.
+   * 3. Checks daily_graphic_downloads/${userKey}_${dateStr}:
+   *    - If downloadRequestId already in processedRequestIds: returns idempotent: true.
+   *    - If count >= maxAllowed: aborts with quotaExceeded: true.
+   * 4. Atomically commits in a SINGLE Firestore REST commit:
+   *    - download_tokens/${tokenHash} with status: 'consumed', precondition { exists: false }.
+   *    - daily_graphic_downloads/${userKey}_${dateStr} with count: count + 1, processedRequestIds.
+   * 
+   * Guarantees 100% replay immunity across independent instances, and zero quota decrement on failure.
+   */
+  async transactCompleteDownloadExport(userKey, dateStr, downloadRequestId = '', maxAllowed = 10, tokenInfo = {}, downloadDetails = {}) {
+    const cleanKey = String(userKey || '').toLowerCase().trim();
+    const cleanDate = String(dateStr || '').trim();
+    const cleanReqId = String(downloadRequestId || '').trim() || `req_${cleanKey}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const limit = Math.max(1, Number(maxAllowed) || 10);
+    const docId = `${cleanKey}_${cleanDate}`;
+    const now = Date.now();
+
+    const rawToken = typeof tokenInfo === 'string' ? tokenInfo : (tokenInfo?.token || downloadDetails?.token || '');
+    const cleanToken = String(rawToken || '').trim();
+    const cleanCard = String(tokenInfo?.cardId || downloadDetails?.cardId || '').trim();
+    const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || 'ainewsmaker_prod_sec_token_9669802408_2026';
+
+    let tokenHash = '';
+    let tokenExpiresAt = now + (10 * 60 * 1000);
+
+    if (cleanToken) {
+      const parts = cleanToken.split('.');
+      if (parts.length !== 4 || parts[0] !== 'dlt') {
+        return {
+          success: false,
+          invalidToken: true,
+          reason: 'Malformed download token format',
+          error: 'Malformed download token format',
+        };
+      }
+      tokenExpiresAt = parseInt(parts[1], 10);
+      const nonce = parts[2];
+      const providedSig = parts[3];
+
+      if (isNaN(tokenExpiresAt) || now > tokenExpiresAt) {
+        return {
+          success: false,
+          expired: true,
+          reason: 'Download token has expired (10m TTL)',
+          error: 'Download token has expired (10m TTL)',
+        };
+      }
+
+      tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
+    }
+
+    const verifyTokenSig = () => {
+      if (!cleanToken) return true;
+      const parts = cleanToken.split('.');
+      const nonce = parts[2];
+      const providedSig = parts[3];
+      const candidateDates = [cleanDate, ''];
+      const candidateReqs = [cleanReqId, ''];
+      const candidateCards = [cleanCard, ''];
+
+      for (const d of candidateDates) {
+        for (const r of candidateReqs) {
+          for (const c of candidateCards) {
+            const payload = `${cleanKey}:${d}:${r}:${c}:${tokenExpiresAt}:${nonce}`;
+            const expSig = crypto.createHmac('sha256', authSecret).update(payload).digest('hex');
+            try {
+              if (crypto.timingSafeEqual(Buffer.from(providedSig, 'hex'), Buffer.from(expSig, 'hex'))) {
+                return true;
+              }
+            } catch {}
+          }
+        }
+      }
+      return false;
+    };
+
+    if (this.useFirestore) {
+      const maxRetries = 5;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const txRes = await this.beginTransaction();
+        if (!txRes.success || !txRes.transaction) {
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+          continue;
+        }
+
+        const transactionId = txRes.transaction;
+
+        // 1. Read token document if token is provided
+        let tokenDocRes = null;
+        if (tokenHash) {
+          tokenDocRes = await this._readDocInTransaction('download_tokens', tokenHash, transactionId);
+          if (!tokenDocRes.success) {
+            await this.rollbackTransaction(transactionId);
+            const jitter = Math.floor(Math.random() * 80);
+            await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+            continue;
+          }
+        }
+
+        // 2. Read daily graphic downloads document
+        const quotaDocRes = await this._readDocInTransaction('daily_graphic_downloads', docId, transactionId);
+        if (!quotaDocRes.success) {
+          await this.rollbackTransaction(transactionId);
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+          continue;
+        }
+
+        // 3. Evaluate Token State in transaction (Check replay before signature to catch all replayed tokens)
+        if (tokenDocRes && tokenDocRes.doc) {
+          const tokenData = this._fromFirestoreDoc(tokenDocRes.doc);
+          if (tokenData.status === 'consumed') {
+            // Check for idempotent retry by the same request ID
+            if (cleanReqId && tokenData.downloadRequestId === cleanReqId) {
+              await this.rollbackTransaction(transactionId);
+              const curCount = quotaDocRes.doc ? (Number(this._fromFirestoreDoc(quotaDocRes.doc).count) || 0) : 0;
+              return {
+                success: true,
+                idempotent: true,
+                count: curCount,
+                remaining: Math.max(0, limit - curCount),
+                dateStr: cleanDate,
+                tokenHash,
+              };
+            }
+            // Replay attack detected across instances/sessions
+            await this.rollbackTransaction(transactionId);
+            return {
+              success: false,
+              replayDetected: true,
+              reason: 'Token already consumed (replay detected)',
+              error: 'Token already consumed (replay detected)',
+              tokenHash,
+            };
+          }
+        }
+
+        // 4. Verify cryptographic signature if token not yet consumed
+        if (cleanToken && !verifyTokenSig()) {
+          await this.rollbackTransaction(transactionId);
+          return {
+            success: false,
+            invalidSignature: true,
+            reason: 'Invalid cryptographic token signature',
+            error: 'Invalid cryptographic token signature',
+          };
+        }
+
+        // 5. Evaluate Quota State in transaction
+        let existingRecord = { userKey: cleanKey, date: cleanDate, count: 0, processedRequestIds: [] };
+        let updateTime = null;
+        if (quotaDocRes.doc) {
+          existingRecord = this._fromFirestoreDoc(quotaDocRes.doc);
+          updateTime = quotaDocRes.updateTime;
+        }
+
+        const currentCount = Number(existingRecord.count) || 0;
+        const reqList = Array.isArray(existingRecord.processedRequestIds) ? [...existingRecord.processedRequestIds] : [];
+
+        // Check request ID idempotency
+        if (cleanReqId && reqList.includes(cleanReqId)) {
+          await this.rollbackTransaction(transactionId);
+          return {
+            success: true,
+            idempotent: true,
+            count: currentCount,
+            remaining: Math.max(0, limit - currentCount),
+            dateStr: cleanDate,
+            tokenHash,
+          };
+        }
+
+        // Check quota ceiling
+        if (currentCount >= limit) {
+          await this.rollbackTransaction(transactionId);
+          return {
+            success: false,
+            quotaExceeded: true,
+            count: currentCount,
+            remaining: 0,
+            dateStr: cleanDate,
+            error: 'आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।',
+            tokenHash,
+          };
+        }
+
+        // 6. Build Unified Atomic Writes
+        const newCount = currentCount + 1;
+        if (cleanReqId) reqList.push(cleanReqId);
+
+        const writes = [];
+
+        // Write A: Download Token (preconditioned on NOT existing to strictly enforce single consumption)
+        if (tokenHash) {
+          const tokenRecord = {
+            tokenHash,
+            userKey: cleanKey,
+            dateStr: cleanDate,
+            downloadRequestId: cleanReqId,
+            cardId: cleanCard,
+            expiresAt: tokenExpiresAt,
+            consumedAt: now,
+            status: 'consumed',
+            updatedAt: now,
+          };
+          const tokenFields = {};
+          for (const [k, v] of Object.entries(tokenRecord)) {
+            if (v !== undefined) tokenFields[k] = this._toFirestoreField(v);
+          }
+          writes.push({
+            update: {
+              name: `projects/${this.projectId}/databases/${this.databaseId}/documents/download_tokens/${tokenHash}`,
+              fields: tokenFields,
+            },
+            currentDocument: { exists: false },
+          });
+        }
+
+        // Write B: Daily Graphic Downloads Quota
+        const newRecord = {
+          userKey: cleanKey,
+          date: cleanDate,
+          count: newCount,
+          processedRequestIds: reqList.slice(-100),
+          lastDownloadAt: now,
+          updatedAt: now,
+          ...(downloadDetails || {}),
+        };
+        const fields = {};
+        for (const [k, v] of Object.entries(newRecord)) {
+          if (v !== undefined && k !== 'token' && k !== 'tokenInfo') fields[k] = this._toFirestoreField(v);
+        }
+        writes.push({
+          update: {
+            name: `projects/${this.projectId}/databases/${this.databaseId}/documents/daily_graphic_downloads/${docId}`,
+            fields,
+          },
+          currentDocument: updateTime ? { updateTime } : { exists: false },
+        });
+
+        // 7. Commit Transaction Atomically
+        const commitRes = await this.commitTransaction(transactionId, writes);
+        if (commitRes.success) {
+          return {
+            success: true,
+            idempotent: false,
+            count: newCount,
+            remaining: Math.max(0, limit - newCount),
+            dateStr: cleanDate,
+            tokenHash,
+          };
+        } else if (
+          commitRes.statusCode === 409 ||
+          commitRes.statusCode === 400 ||
+          (commitRes.error &&
+            (commitRes.error.includes('ABORTED') ||
+              commitRes.error.includes('ALREADY_EXISTS') ||
+              commitRes.error.includes('FAILED_PRECONDITION') ||
+              commitRes.error.includes('already exists') ||
+              commitRes.error.includes('conflict')))
+        ) {
+          const jitter = Math.floor(Math.random() * 80);
+          await new Promise((r) => setTimeout(r, 50 * (attempt + 1) + jitter));
+          continue;
+        } else {
+          return { success: false, error: commitRes.error || 'Download transaction failed' };
+        }
+      }
+
+      return { success: false, error: 'Download transaction aborted due to contention' };
+    } else {
+      // Local fallback using persistent JSON stores
+      const tokensDb = this._loadLocalJson('download_tokens_database.json', {});
+      const dailyDb = this._loadLocalJson('daily_downloads_database.json', {});
+
+      if (tokenHash) {
+        const existingToken = tokensDb[tokenHash];
+        if (existingToken && existingToken.status === 'consumed') {
+          if (cleanReqId && existingToken.downloadRequestId === cleanReqId) {
+            const curCount = dailyDb[docId]?.count || 0;
+            return {
+              success: true,
+              idempotent: true,
+              count: curCount,
+              remaining: Math.max(0, limit - curCount),
+              dateStr: cleanDate,
+              tokenHash,
+            };
+          }
+          return {
+            success: false,
+            replayDetected: true,
+            reason: 'Token already consumed (replay detected)',
+            error: 'Token already consumed (replay detected)',
+            tokenHash,
+          };
+        }
+      }
+
+      // Verify cryptographic signature if token not yet consumed
+      if (cleanToken && !verifyTokenSig()) {
+        return {
+          success: false,
+          invalidSignature: true,
+          reason: 'Invalid cryptographic token signature',
+          error: 'Invalid cryptographic token signature',
+        };
+      }
+
+      const existingQuota = dailyDb[docId] || { userKey: cleanKey, date: cleanDate, count: 0, processedRequestIds: [] };
+      const currentCount = Number(existingQuota.count) || 0;
+      const reqList = Array.isArray(existingQuota.processedRequestIds) ? [...existingQuota.processedRequestIds] : [];
+
+      if (cleanReqId && reqList.includes(cleanReqId)) {
+        return {
+          success: true,
+          idempotent: true,
+          count: currentCount,
+          remaining: Math.max(0, limit - currentCount),
+          dateStr: cleanDate,
+          tokenHash,
+        };
+      }
+
+      if (currentCount >= limit) {
+        return {
+          success: false,
+          quotaExceeded: true,
+          count: currentCount,
+          remaining: 0,
+          dateStr: cleanDate,
+          error: 'आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।',
+          tokenHash,
+        };
+      }
+
+      const newCount = currentCount + 1;
+      if (cleanReqId) reqList.push(cleanReqId);
+
+      if (tokenHash) {
+        tokensDb[tokenHash] = {
+          tokenHash,
+          userKey: cleanKey,
+          dateStr: cleanDate,
+          downloadRequestId: cleanReqId,
+          cardId: cleanCard,
+          expiresAt: tokenExpiresAt,
+          consumedAt: now,
+          status: 'consumed',
+          updatedAt: now,
+        };
+        this._saveLocalJson('download_tokens_database.json', tokensDb);
+      }
+
+      dailyDb[docId] = {
+        userKey: cleanKey,
+        date: cleanDate,
+        count: newCount,
+        processedRequestIds: reqList.slice(-100),
+        lastDownloadAt: now,
+        updatedAt: now,
+        ...(downloadDetails || {}),
+      };
+      this._saveLocalJson('daily_downloads_database.json', dailyDb);
+
+      return {
+        success: true,
+        idempotent: false,
+        count: newCount,
+        remaining: Math.max(0, limit - newCount),
+        dateStr: cleanDate,
+        tokenHash,
+      };
+    }
+  }
+
+  /**
+   * Transactionally checks and records a daily graphic download quota usage.
+   * Backward-compatible wrapper delegating to transactCompleteDownloadExport.
+   */
+  async transactDailyGraphicDownload(userKey, dateStr, downloadRequestId = '', maxAllowed = 10, downloadDetails = {}) {
+    return this.transactCompleteDownloadExport(
+      userKey,
+      dateStr,
+      downloadRequestId,
+      maxAllowed,
+      downloadDetails?.tokenInfo || downloadDetails?.token || {},
+      downloadDetails
+    );
   }
 
   // --- AUDIT LOGGING ---

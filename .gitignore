@@ -69,6 +69,9 @@ dist/*api_key*
 *sub_users_db*.json
 *registered_users*.json
 *user_profiles_db*.json
+*daily_downloads_database*.json
+*download_tokens_database*.json
+*draft_regeneration_locks_db*.json
 **/*auth_credentials*.json
 **/*users_master_database*.json
 **/*users_accounts_db*.json
@@ -77,6 +80,9 @@ dist/*api_key*
 **/*sub_users_db*.json
 **/*registered_users*.json
 **/*user_profiles_db*.json
+**/*daily_downloads_database*.json
+**/*download_tokens_database*.json
+**/*draft_regeneration_locks_db*.json
 
 # Keep important config templates
 !.env.example
@@ -117,3 +123,4 @@ web_studio/deleted_users_tombstones.json
 
 scripts/*
 test_*.cjs
+!scripts/test_headline_regen_coin_pricing.cjs
