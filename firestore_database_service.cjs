@@ -165,9 +165,10 @@ class CentralFirestoreDatabaseService {
           timeout,
         },
         (res) => {
-          let resBody = '';
-          res.on('data', (d) => (resBody += d));
+          const chunks = [];
+          res.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
           res.on('end', () => {
+            const resBody = Buffer.concat(chunks).toString('utf8');
             resolve({
               success: res.statusCode >= 200 && res.statusCode < 300,
               statusCode: res.statusCode,

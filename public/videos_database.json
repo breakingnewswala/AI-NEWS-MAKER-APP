@@ -2,137 +2,137 @@
   {
     "id": "vid-curated-reels-01",
     "docId": "vid-curated-reels-01",
-    "category": "राजनीति",
-    "createdAt": 1793508025825,
-    "cropRegion": {
-      "aspectRatio": "9:16",
-      "x": 0,
-      "height": 0.8,
-      "y": 0.1,
-      "width": 1
-    },
-    "caption": "देश भर के पत्रकारों और डिजिटल मीडिया संपादकों के लिए ऐतिहासिक सुरक्षा कानून को संसद में मंजूरी।",
     "title": "संसद में डिजिटल मीडिया व पत्रकार सुरक्षा कानून पारित",
-    "views": "3.4K देखा गया",
-    "compatibleFrameIds": [
-      "frame-custom-full-9-16",
-      "frame-custom-3line-4-5"
-    ],
-    "sourceDimensions": {
-      "width": 1080,
-      "height": 1920
-    },
-    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    "isFullVisibilityAvailable": true,
-    "updatedAt": 1793512154157,
-    "rewardCoins": 50,
     "channel": "BREAKING NEWS WALA",
-    "isOnly4_5": false,
-    "duration": "00:45",
-    "isBonus": true,
-    "thumbnailUrl": "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
-    "aspectRatio": "9:16",
     "headlineVariants": [
       "संसद में डिजिटल मीडिया व पत्रकार सुरक्षा कानून पारित",
       "डिजिटल संपादकों के लिए नए प्रेस ��ियम जारी",
       "देश भर में डिजिटल मीडिया कानून को मंजूरी"
-    ]
-  },
-  {
-    "id": "vid-curated-report-02",
-    "docId": "vid-curated-report-02",
-    "duration": "01:15",
-    "compatibleFrameIds": [
-      "frame-custom-3line-4-5"
     ],
-    "updatedAt": 1793512154157,
-    "isOnly4_5": true,
-    "isBonus": false,
-    "aspectRatio": "4:5",
-    "headlineVariants": [
-      "विशेष ग्राउंड रिपोर्ट: नए हाईवे व एक्सप्रेसवे का विस्तार",
-      "एक्सप्रेसवे नेटवर्क से बदलेगी प्रदेश की रफ्तार"
-    ],
-    "channel": "BREAKING NEWS WALA",
-    "category": "राष्ट्रीय",
-    "createdAt": 1793504425825,
-    "isFullVisibilityAvailable": false,
-    "caption": "पूर्वांचल व बुंदेलखंड एक्सप्रेसवे पर कनेक्टिविटी का ��या नेटवर्क, ���्राउंड रिपोर्ट।",
-    "thumbnailUrl": "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
-    "views": "2.1K देखा गया",
-    "title": "विशेष ग्राउंड रिपोर्ट: नए हाईवे व एक्सप्रेसवे का विस्तार",
-    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    "sourceDimensions": {
-      "height": 1350,
-      "width": 1080
-    }
-  },
-  {
-    "id": "vid-curated-bulletin-03",
-    "docId": "vid-curated-bulletin-03",
-    "createdAt": 1793500825826,
-    "isFullVisibilityAvailable": true,
-    "aspectRatio": "16:9",
-    "category": "राष्ट्रीय",
-    "caption": "देश और राज्यों की 10 सबसे बड़ी खबरें सीधे नेशनल न्यूज़ रूम से लाइव।",
-    "thumbnailUrl": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop",
-    "rewardCoins": 50,
-    "sourceDimensions": {
-      "height": 1080,
-      "width": 1920
-    },
-    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-    "title": "आज का नेशनल वीडियो बुलेटिन: 10 बड़ी खबरें",
-    "views": "5.8K देखा गया",
-    "duration": "02:10",
-    "updatedAt": 1793512154157,
-    "isOnly4_5": false,
-    "headlineVariants": [
-      "आज का नेशनल वीडियो बुलेटिन: 10 बड़ी खबरें",
-      "देश-दुनिया की टॉप 10 हेडलाइ���स"
-    ],
-    "isBonus": true,
-    "compatibleFrameIds": [
-      "frame-custom-16-9",
-      "frame-custom-full-9-16"
-    ],
-    "channel": "BREAKING NEWS WALA"
-  },
-  {
-    "id": "vid-curated-reels-04",
-    "docId": "vid-curated-reels-04",
-    "title": "मौसम विभाग की भारी बारिश और आंधी की चेतावनी",
-    "views": "4.2K देखा गया",
-    "sourceDimensions": {
-      "height": 1920,
-      "width": 1080
-    },
-    "updatedAt": 1793512154157,
-    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    "isOnly4_5": false,
-    "thumbnailUrl": "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&auto=format&fit=crop",
+    "aspectRatio": "9:16",
+    "views": "3.4K देखा गया",
+    "caption": "देश भर के पत्रकारों और डिजिटल मीडिया संपादकों के लिए ऐतिहासिक सुरक्षा कानून को संसद में मंजूरी।",
+    "createdAt": 1793508025825,
+    "duration": "00:45",
     "compatibleFrameIds": [
       "frame-custom-full-9-16",
       "frame-custom-3line-4-5"
     ],
     "cropRegion": {
+      "aspectRatio": "9:16",
       "y": 0.1,
+      "x": 0,
       "height": 0.8,
+      "width": 1
+    },
+    "isOnly4_5": false,
+    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    "updatedAt": 1793515086373,
+    "rewardCoins": 50,
+    "thumbnailUrl": "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
+    "isFullVisibilityAvailable": true,
+    "sourceDimensions": {
+      "height": 1920,
+      "width": 1080
+    },
+    "isBonus": true,
+    "category": "राजनीति"
+  },
+  {
+    "id": "vid-curated-report-02",
+    "docId": "vid-curated-report-02",
+    "headlineVariants": [
+      "विशेष ग्राउंड रिपोर्ट: नए हाईवे व एक्सप्रेसवे का विस्तार",
+      "एक्सप्रेसवे नेटवर्क से बदलेगी प्रदेश की रफ्तार"
+    ],
+    "caption": "पूर्वांचल व बुंदेलखंड एक्सप्रेसवे पर कनेक्टिविटी का ��या नेटवर्क, ���्राउंड रिपोर्ट।",
+    "channel": "BREAKING NEWS WALA",
+    "aspectRatio": "4:5",
+    "duration": "01:15",
+    "thumbnailUrl": "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
+    "createdAt": 1793504425825,
+    "isFullVisibilityAvailable": false,
+    "category": "राष्ट्रीय",
+    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    "views": "2.1K देखा गया",
+    "sourceDimensions": {
+      "width": 1080,
+      "height": 1350
+    },
+    "updatedAt": 1793515086373,
+    "isOnly4_5": true,
+    "isBonus": false,
+    "title": "विशेष ग्राउंड रिपोर्ट: नए हाईवे व एक्सप्रेसवे का विस्तार",
+    "compatibleFrameIds": [
+      "frame-custom-3line-4-5"
+    ]
+  },
+  {
+    "id": "vid-curated-bulletin-03",
+    "docId": "vid-curated-bulletin-03",
+    "title": "आज का नेशनल वीडियो बुलेटिन: 10 बड़ी खबरें",
+    "compatibleFrameIds": [
+      "frame-custom-16-9",
+      "frame-custom-full-9-16"
+    ],
+    "rewardCoins": 50,
+    "views": "5.8K देखा गया",
+    "createdAt": 1793500825826,
+    "isBonus": true,
+    "headlineVariants": [
+      "आज का नेशनल वीडियो बुलेटिन: 10 बड़ी खबरें",
+      "देश-दुनिया की टॉप 10 हेडलाइ���स"
+    ],
+    "duration": "02:10",
+    "thumbnailUrl": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop",
+    "aspectRatio": "16:9",
+    "caption": "देश और राज्यों की 10 सबसे बड़ी खबरें सीधे नेशनल न्यूज़ रूम से लाइव।",
+    "updatedAt": 1793515086373,
+    "isOnly4_5": false,
+    "sourceDimensions": {
+      "width": 1920,
+      "height": 1080
+    },
+    "channel": "BREAKING NEWS WALA",
+    "category": "राष्ट्रीय",
+    "isFullVisibilityAvailable": true,
+    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4"
+  },
+  {
+    "id": "vid-curated-reels-04",
+    "docId": "vid-curated-reels-04",
+    "isBonus": false,
+    "updatedAt": 1793515086373,
+    "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    "isOnly4_5": false,
+    "isFullVisibilityAvailable": true,
+    "views": "4.2K देखा गया",
+    "category": "मौसम",
+    "title": "मौसम विभाग की भारी बारिश और आंधी की चेत���वनी",
+    "sourceDimensions": {
+      "width": 1080,
+      "height": 1920
+    },
+    "compatibleFrameIds": [
+      "frame-custom-full-9-16",
+      "frame-custom-3line-4-5"
+    ],
+    "duration": "00:35",
+    "createdAt": 1793497225826,
+    "cropRegion": {
+      "height": 0.8,
+      "y": 0.1,
       "x": 0,
       "width": 1,
       "aspectRatio": "9:16"
     },
-    "caption": "उत्तर भारत के कई राज्यों में अगले 48 घंटे भारी बारिश और तेज हवाओं का रेड अलर्ट।",
-    "category": "मौसम",
-    "channel": "BREAKING NEWS WALA",
-    "createdAt": 1793497225826,
     "headlineVariants": [
       "मौसम विभाग की भारी बारिश और आंधी की चेतावनी",
       "अगले 48 घंटे इन राज्यों में भारी बारिश का अलर्ट"
     ],
-    "isBonus": false,
+    "caption": "उत्तर भारत के कई राज्यों में अगले 48 घंटे भारी बारिश और तेज हवाओं का रेड अलर्ट।",
     "aspectRatio": "9:16",
-    "isFullVisibilityAvailable": true,
-    "duration": "00:35"
+    "channel": "BREAKING NEWS WALA",
+    "thumbnailUrl": "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&auto=format&fit=crop"
   }
 ]

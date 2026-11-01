@@ -207,9 +207,10 @@ var require_server_firestore_adapter = __commonJS({
             timeout: 4e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 resolve({ success: true, statusCode: res.statusCode });
               } else {
@@ -243,9 +244,10 @@ var require_server_firestore_adapter = __commonJS({
             timeout: 4e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const parsed = JSON.parse(body);
@@ -289,9 +291,10 @@ var require_server_firestore_adapter = __commonJS({
             timeout: 8e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const parsed = JSON.parse(body);
@@ -383,9 +386,10 @@ var require_server_firestore_adapter = __commonJS({
             timeout: 4e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 resolve({ success: true, statusCode: res.statusCode });
               } else {
@@ -418,9 +422,10 @@ var require_server_firestore_adapter = __commonJS({
             timeout: 5e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const parsed = JSON.parse(body);
@@ -656,9 +661,10 @@ var require_cloud_storage_service = __commonJS({
                 timeout: 3e4
               },
               (res) => {
-                let body = "";
-                res.on("data", (d) => body += d);
+                const chunks = [];
+                res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
                 res.on("end", () => {
+                  const body = Buffer.concat(chunks).toString("utf8");
                   if (res.statusCode >= 200 && res.statusCode < 300) {
                     try {
                       const parsed = JSON.parse(body);
@@ -989,9 +995,10 @@ var require_server_firestore_adapter2 = __commonJS({
             timeout: 4e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 resolve({ success: true, statusCode: res.statusCode });
               } else {
@@ -1025,9 +1032,10 @@ var require_server_firestore_adapter2 = __commonJS({
             timeout: 4e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const parsed = JSON.parse(body);
@@ -1071,9 +1079,10 @@ var require_server_firestore_adapter2 = __commonJS({
             timeout: 8e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const parsed = JSON.parse(body);
@@ -1165,9 +1174,10 @@ var require_server_firestore_adapter2 = __commonJS({
             timeout: 4e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 resolve({ success: true, statusCode: res.statusCode });
               } else {
@@ -1200,9 +1210,10 @@ var require_server_firestore_adapter2 = __commonJS({
             timeout: 5e3
           },
           (res) => {
-            let body = "";
-            res.on("data", (d) => body += d);
+            const chunks = [];
+            res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
             res.on("end", () => {
+              const body = Buffer.concat(chunks).toString("utf8");
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 try {
                   const parsed = JSON.parse(body);
@@ -1438,9 +1449,10 @@ var require_cloud_storage_service2 = __commonJS({
                 timeout: 3e4
               },
               (res) => {
-                let body = "";
-                res.on("data", (d) => body += d);
+                const chunks = [];
+                res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
                 res.on("end", () => {
+                  const body = Buffer.concat(chunks).toString("utf8");
                   if (res.statusCode >= 200 && res.statusCode < 300) {
                     try {
                       const parsed = JSON.parse(body);
@@ -1732,9 +1744,10 @@ var require_firestore_database_service = __commonJS({
               timeout
             },
             (res) => {
-              let resBody = "";
-              res.on("data", (d) => resBody += d);
+              const chunks = [];
+              res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
               res.on("end", () => {
+                const resBody = Buffer.concat(chunks).toString("utf8");
                 resolve({
                   success: res.statusCode >= 200 && res.statusCode < 300,
                   statusCode: res.statusCode,
@@ -3940,9 +3953,10 @@ var require_firestore_database_service2 = __commonJS({
               timeout
             },
             (res) => {
-              let resBody = "";
-              res.on("data", (d) => resBody += d);
+              const chunks = [];
+              res.on("data", (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
               res.on("end", () => {
+                const resBody = Buffer.concat(chunks).toString("utf8");
                 resolve({
                   success: res.statusCode >= 200 && res.statusCode < 300,
                   statusCode: res.statusCode,
@@ -7352,7 +7366,7 @@ function loadNewsDatabase() {
         const raw = import_fs.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.filter((p) => p && p.id && !String(p.id).startsWith("live-post-"));
+          const cleaned = parsed.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
           if (cleaned.length > 0) {
             diskPosts = cleaned;
             break;
@@ -7369,7 +7383,7 @@ function loadNewsDatabase() {
       });
     }
     const list = Array.from(centralDb.cache.news.values());
-    const cleaned = list.filter((p) => p && p.id && !String(p.id).startsWith("live-post-"));
+    const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
     if (diskPosts.length > 0) {
       for (const dp of diskPosts) {
         if (!centralDb.cache.news.has(dp.id)) {
@@ -7613,8 +7627,8 @@ app.get("/api/news-posts", (req, res) => {
   const dynamicPosts = activePosts.map((p) => {
     const ed = editorialDb[p.id];
     const headlines = ed && Array.isArray(ed.headlines) && ed.headlines.length > 0 ? ed.headlines : p.headlineOptions && Array.isArray(p.headlineOptions) && p.headlineOptions.length > 0 ? p.headlineOptions : p.approvedHeadlines && Array.isArray(p.approvedHeadlines) && p.approvedHeadlines.length > 0 ? p.approvedHeadlines : p.title ? [p.title] : [];
-    const rawTitle = p.title || (headlines[0] || "\u0938\u092E\u093E\u091A\u093E\u0930");
-    const rawSummary = (ed?.captionDetailed || p.summary || p.fullContent || rawTitle).trim();
+    const rawTitle = decodeHtmlEntities(p.title || (headlines[0] || "\u0938\u092E\u093E\u091A\u093E\u0930"));
+    const rawSummary = decodeHtmlEntities((ed?.captionDetailed || p.summary || p.fullContent || rawTitle).trim());
     const defaultBullets = `\u2022 ${rawTitle}\u0964
 \u2022 ${rawSummary.slice(0, 140)}\u0964
 
@@ -7622,15 +7636,17 @@ app.get("/api/news-posts", (req, res) => {
     const defaultShort = `${rawTitle}
 
 #BreakingNews #AINewsMaker`;
-    const capDetailed = ed?.captionDetailed || p.captionDetailed || p.approvedCaptionDetailed || rawSummary;
-    const capBullets = ed?.captionBullets || p.captionBullets || p.approvedCaptionBullets || defaultBullets;
-    const capShort = ed?.captionShort || p.captionShort || p.approvedCaptionShort || defaultShort;
+    const capDetailed = decodeHtmlEntities(ed?.captionDetailed || p.captionDetailed || p.approvedCaptionDetailed || rawSummary);
+    const capBullets = decodeHtmlEntities(ed?.captionBullets || p.captionBullets || p.approvedCaptionBullets || defaultBullets);
+    const capShort = decodeHtmlEntities(ed?.captionShort || p.captionShort || p.approvedCaptionShort || defaultShort);
+    const cleanedHeadlines = headlines.map((h) => decodeHtmlEntities(h));
     return {
       ...p,
+      title: rawTitle,
       publishedTime: p.timestamp ? formatRelativeTime(p.timestamp) : p.publishedTime,
-      headlineOptions: headlines,
-      approvedHeadlines: headlines,
-      approvedHeadline: ed?.approvedHeadline || headlines[0] || rawTitle,
+      headlineOptions: cleanedHeadlines,
+      approvedHeadlines: cleanedHeadlines,
+      approvedHeadline: decodeHtmlEntities(ed?.approvedHeadline || cleanedHeadlines[0] || rawTitle),
       captionDetailed: capDetailed,
       captionBullets: capBullets,
       captionShort: capShort,
@@ -11726,10 +11742,21 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
 }
 function decodeHtmlEntities(str) {
   if (!str) return "";
-  return str.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&#([0-9]{1,6});/gi, (_match, numStr) => {
-    const num = parseInt(numStr, 10);
-    return String.fromCharCode(num);
-  }).trim();
+  return str.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&ndash;/g, "\u2013").replace(/&mdash;/g, "\u2014").replace(/&lsquo;/g, "\u2018").replace(/&rsquo;/g, "\u2019").replace(/&ldquo;/g, "\u201C").replace(/&rdquo;/g, "\u201D").replace(/&hellip;/g, "...").replace(/&#x([0-9a-fA-F]{1,6});/gi, (_match, hexStr) => {
+    try {
+      const code = parseInt(hexStr, 16);
+      return String.fromCodePoint(code);
+    } catch {
+      return "";
+    }
+  }).replace(/&#([0-9]{1,7});/gi, (_match, numStr) => {
+    try {
+      const num = parseInt(numStr, 10);
+      return String.fromCodePoint(num);
+    } catch {
+      return "";
+    }
+  }).replace(/\uFFFD+/g, " ").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/\s+/g, " ").trim();
 }
 async function parseRssItemsFromXml(xmlText, source) {
   const posts = [];
@@ -11737,12 +11764,12 @@ async function parseRssItemsFromXml(xmlText, source) {
   const items = xmlText.match(itemRegex) || [];
   for (const itemXml of items.slice(0, 15)) {
     const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
-    const rawTitle = titleMatch ? (titleMatch[1] || titleMatch[2] || "").trim() : "";
+    const rawTitle = titleMatch ? decodeHtmlEntities(titleMatch[1] || titleMatch[2] || "") : "";
     if (!rawTitle) continue;
     const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) || itemXml.match(/<link\s+href=["']([^"']+)["']/i);
     const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
     const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) || itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
-    const rawDesc = descMatch ? (descMatch[1] || descMatch[2] || "").trim() : "";
+    const rawDesc = descMatch ? decodeHtmlEntities(descMatch[1] || descMatch[2] || "") : "";
     const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) || itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
     const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
     let timestamp = Date.now();
@@ -12720,6 +12747,22 @@ app.post("/api/user-profile", async (req, res) => {
     if (isMasterAdminEmail) {
       allProfiles["breakingnewswala.com@gmail.com"] = updated;
       allProfiles["usr_627265616b69"] = { ...updated, userId: "usr_627265616b69", uid: "usr_627265616b69" };
+      try {
+        saveAdminBranding({
+          channelNameHi: updated.channelNameHi || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u095B \u0935\u093E\u0932\u093E",
+          channelNameEn: updated.channelNameEn || "BREAKING NEWS WALA",
+          channelLogoUrl: updated.channelLogoUrl || "",
+          websiteUrl: updated.websiteUrl || "",
+          mobileNumber: updated.mobileNumber || "",
+          customHeaderPng: updated.customHeaderPng,
+          customFooterPng: updated.customFooterPng,
+          showMobileNumber: Boolean(updated.mobileNumber),
+          activeSocialIcons: updated.socialIcons || [],
+          updatedAt: Date.now()
+        });
+      } catch (brErr) {
+        console.warn("Error syncing admin branding:", brErr);
+      }
     } else if (updated.email) {
       const em = updated.email.toLowerCase().trim();
       for (const [k, p] of Object.entries(allProfiles)) {
@@ -21034,9 +21077,15 @@ app.post("/api/package-coupons/validate", (req, res) => {
     return res.status(500).json({ valid: false, error: cleanErrorMessage(err) });
   }
 });
+function getCashfreeCredentials() {
+  const appId = (process.env.CASHFREE_APP_ID || "").trim();
+  const secretKey = (process.env.CASHFREE_SECRET_KEY || "").trim();
+  const env = (process.env.CASHFREE_ENVIRONMENT || "PRODUCTION").toUpperCase();
+  const hasKeys = Boolean(appId && secretKey && !appId.includes("your_cashfree"));
+  return { appId, secretKey, env, hasKeys };
+}
 app.get("/api/cashfree/config", (_req, res) => {
-  const env = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
-  const hasKeys = Boolean(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY);
+  const { env, hasKeys } = getCashfreeCredentials();
   return res.json({
     success: true,
     enabled: true,
@@ -21082,19 +21131,16 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     const orderId = `order_ainm_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
     const reqHost = req.get("host") || "ainewsmaker.online";
     const isLocal = reqHost.includes("localhost") || reqHost.includes("127.0.0.1");
-    const proto = isLocal ? req.protocol || "http" : "https";
-    const baseSiteUrl = `${proto}://${reqHost}`;
-    const effectiveReturnUrl = returnUrl && String(returnUrl).startsWith("https://") ? String(returnUrl) : `${baseSiteUrl}/?cf_order_id=${orderId}`;
-    const effectiveNotifyUrl = `${baseSiteUrl}/api/cashfree/webhook`;
-    const appId = process.env.CASHFREE_APP_ID;
-    const secretKey = process.env.CASHFREE_SECRET_KEY;
-    const cfEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
+    const { appId, secretKey, env: cfEnv, hasKeys } = getCashfreeCredentials();
     const baseUrl = cfEnv === "PRODUCTION" ? "https://api.cashfree.com/pg/orders" : "https://sandbox.cashfree.com/pg/orders";
+    const safeHost = isLocal ? "ainewsmaker.online" : reqHost;
+    const effectiveReturnUrl = returnUrl && String(returnUrl).startsWith("https://") ? String(returnUrl) : `https://${safeHost}/?cf_order_id=${orderId}`;
+    const effectiveNotifyUrl = `https://${safeHost}/api/cashfree/webhook`;
     let paymentSessionId = `session_mock_${orderId}`;
     let cfOrderId = `cf_${orderId}`;
     let orderStatus = "ACTIVE";
     let isLiveGateway = false;
-    if (appId && secretKey && !appId.includes("your_cashfree")) {
+    if (hasKeys) {
       try {
         const cfRes = await fetch(baseUrl, {
           method: "POST",
@@ -21203,10 +21249,8 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
     const existingOrder = orderIndex >= 0 ? allPayments[orderIndex] : null;
     let isPaid = false;
     let gatewayStatus = existingOrder?.orderStatus || "PENDING";
-    const appId = process.env.CASHFREE_APP_ID;
-    const secretKey = process.env.CASHFREE_SECRET_KEY;
-    const cfEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
-    if (appId && secretKey && !appId.includes("your_cashfree")) {
+    const { appId, secretKey, env: cfEnv, hasKeys } = getCashfreeCredentials();
+    if (hasKeys) {
       try {
         const verifyUrl = cfEnv === "PRODUCTION" ? `https://api.cashfree.com/pg/orders/${orderId}` : `https://sandbox.cashfree.com/pg/orders/${orderId}`;
         const cfRes = await fetch(verifyUrl, {
@@ -21389,9 +21433,7 @@ app.get("/api/user-payments", async (req, res) => {
   return res.status(401).json({ success: false, error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948", payments: [] });
 });
 app.get("/api/payment/gateways-status", (_req, res) => {
-  const cashfreeAppId = process.env.CASHFREE_APP_ID || "";
-  const cashfreeSecret = process.env.CASHFREE_SECRET_KEY || "";
-  const cashfreeEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
+  const { appId: cashfreeAppId, secretKey: cashfreeSecret, env: cashfreeEnv, hasKeys } = getCashfreeCredentials();
   const razorpayKeyId = process.env.RAZORPAY_KEY_ID || "";
   const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || "";
   return res.json({
@@ -21401,11 +21443,11 @@ app.get("/api/payment/gateways-status", (_req, res) => {
       cashfree: {
         id: "cashfree",
         name: "Cashfree Payments (UPI, Cards, NetBanking)",
-        isConfigured: Boolean(cashfreeAppId && cashfreeSecret && !cashfreeAppId.includes("your_cashfree")),
+        isConfigured: hasKeys,
         environment: cashfreeEnv,
         appIdMasked: cashfreeAppId ? `${cashfreeAppId.slice(0, 4)}...${cashfreeAppId.slice(-4)}` : "NOT_CONFIGURED",
         webhookConfigured: true,
-        mode: cashfreeAppId ? "live/sandbox" : "test_sandbox"
+        mode: cashfreeEnv === "PRODUCTION" ? "live_production" : "test_sandbox"
       },
       razorpay: {
         id: "razorpay",

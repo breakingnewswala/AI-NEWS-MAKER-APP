@@ -38,6 +38,7 @@ import {
   Download,
   Flag,
   ExternalLink,
+  BarChart3,
   Coins,
   Gift,
   Film,
@@ -1401,57 +1402,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       {/* Admin Filter Bar */}
       {canModerate && (
         <>
-          {/* Mobile-Only Admin Layout (Phase 9): Row 1 & Row 2 */}
-          <div className="sm:hidden px-3 pt-3 pb-1 space-y-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 backdrop-blur-md">
-            {/* Row 1: Refresh Button, Raw News, Pending RSS */}
-            <div className="grid grid-cols-3 gap-1.5 w-full">
-              <button
-                type="button"
-                disabled={isSyncingNews}
-                onClick={() => {
-                  if (onRefreshLiveNews && !isSyncingNews) onRefreshLiveNews();
-                }}
-                className="py-2 px-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-center flex flex-col items-center justify-center gap-0.5 active:scale-95 transition shadow-xs cursor-pointer"
-                title="लाइव फ़ीड रीफ्रेश करें"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${isSyncingNews ? 'animate-spin text-amber-500' : ''}`} />
-                <span className="text-[10px] font-black text-slate-800 dark:text-slate-200">{isSyncingNews ? 'रिफ्रेश...' : 'रिफ्रेश'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsRawNewsModalOpen(true)}
-                className="py-2 px-1 bg-gradient-to-r from-red-600 to-amber-600 text-white rounded-xl text-center flex flex-col items-center justify-center gap-0.5 active:scale-95 transition shadow-sm cursor-pointer"
-                title="रॉ न्यूज़ जोड़ें"
-              >
-                <PlusCircle className="w-3.5 h-3.5 shrink-0" />
-                <span className="text-[10px] font-black">+ रॉ न्यूज़</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminPendingOnly(!adminPendingOnly);
-                  if (!adminPendingOnly) setAdminPublishedOnly(false);
-                }}
-                className={`py-2 px-1 rounded-xl text-center flex flex-col items-center justify-center gap-0.5 active:scale-95 transition shadow-xs cursor-pointer border ${
-                  adminPendingOnly
-                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
-                    : 'bg-slate-50 dark:bg-slate-950 text-amber-700 dark:text-amber-300 border-slate-200 dark:border-slate-800'
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5 shrink-0" />
-                <span className="text-[10px] font-bold">पेंडिंग ({pendingRssCount})</span>
-              </button>
-            </div>
-
-            {/* Row 2: Channels List, Published News, Bonus News in one horizontal row */}
-            <div className="grid grid-cols-3 gap-1.5 w-full pb-1">
+          {/* Mobile-Only Admin Layout (Part 6): Single Clean Row with 4 Buttons */}
+          <div className="sm:hidden px-3 pt-2.5 pb-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 backdrop-blur-md">
+            <div className="grid grid-cols-4 gap-1.5 w-full">
               <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-1 py-1.5 flex items-center justify-center shadow-xs">
                 <select
                   value={adminFilterChannel}
                   onChange={(e) => setAdminFilterChannel(e.target.value)}
-                  className="bg-transparent text-amber-700 dark:text-amber-300 text-[10.5px] font-bold outline-none cursor-pointer w-full text-center truncate"
+                  className="bg-transparent text-amber-700 dark:text-amber-300 text-[10px] font-bold outline-none cursor-pointer w-full text-center truncate"
                 >
                   <option value="" className="bg-slate-900 text-white">सभी चैनल</option>
                   {savedChannels.map((c: any, idx) => {
@@ -1492,6 +1450,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               >
                 <Coins className="w-3 h-3 text-amber-500 shrink-0" />
                 <span className="truncate">बोनस ({bonusCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (onNavigateToTab) onNavigateToTab('profile', { subTab: 'analytics', analyticsTab: 'news' });
+                  window.dispatchEvent(new CustomEvent('ai_news_open_admin_analytics', { detail: { targetTab: 'news' } }));
+                }}
+                className="py-1.5 px-1 rounded-xl text-center flex items-center justify-center gap-1 active:scale-95 transition shadow-xs cursor-pointer border text-[10px] truncate bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border-blue-500 font-bold"
+                title="न्यूज़ एनालिटिक्स देखें"
+              >
+                <BarChart3 className="w-3 h-3 text-white shrink-0" />
+                <span className="truncate">एनालिटिक्स</span>
               </button>
             </div>
           </div>
@@ -2016,20 +1987,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             [चैनल: {cleanViewerChannel(post.sourceChannel)}]
                           </span>
                         )}
-                        {canModerate && post.sourceUrl && <span>•</span>}
-                        {post.sourceUrl && (
-                          <a
-                            href={post.sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-blue-300 text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 border border-slate-700"
-                            title="मूल वेबसाइट पर खबर देखें"
-                          >
-                            <ExternalLink className="w-2.5 h-2.5" />
-                            <span>वेबसाइट पर जाएँ</span>
-                          </a>
-                        )}
                         {canModerate && (post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                           <button
                             type="button"
@@ -2163,22 +2120,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                   : `खबर से ग्राफिक बनाएं · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`)}
                           </span>
                         </button>
-                      )}
-
-                      {/* Admin View: वेबसाइट पर जाएँ */}
-                      {canModerate && (
-                        post.sourceUrl ? (
-                          <a
-                            href={post.sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="py-1.5 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-700 cursor-pointer shrink-0"
-                            title="मूल वेबसाइट पर खबर देखें"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                            <span>वेबसाइट</span>
-                          </a>
-                        ) : null
                       )}
 
                       {/* Ordinary User: प्रमुख रिपोर्ट करें बटन */}
@@ -2611,30 +2552,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                   : `खबर से ग्राफिक बनाएं · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`)}
                           </span>
                         </button>
-                      )}
-
-                      {/* Admin: 'वेबसाइट पर जाएँ' moved to position previously occupied by 'पूरी खबर पढ़ें' */}
-                      {canModerate && (
-                        post.sourceUrl ? (
-                          <a
-                            href={post.sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700/80 transition-colors font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
-                            title="मूल वेबसाइट पर खबर देखें"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                            <span>वेबसाइट पर जाएँ</span>
-                          </a>
-                        ) : (
-                          <span
-                            className="py-2 px-2.5 rounded-xl bg-slate-800/50 text-slate-500 border border-slate-800 font-bold text-xs flex items-center justify-center gap-1 shrink-0 cursor-not-allowed"
-                            title="वेबसाइट लिंक उपलब्ध नहीं है"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <span>वेबसाइट</span>
-                          </span>
-                        )
                       )}
 
                       {/* Ordinary User: Prominent, clearly visible 'रिपोर्ट करें' button with icon and readable label */}

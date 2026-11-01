@@ -1516,6 +1516,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
           'x-admin-key': 'master-admin',
           'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
           'x-admin-email': cleanEmail,

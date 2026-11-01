@@ -321,6 +321,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     }
   }, [subTab]);
 
+  useEffect(() => {
+    const handleOpenAnalytics = (e) => {
+      const tab = e?.detail?.targetTab || 'news';
+      setSubTab('analytics');
+      setAnalyticsTab(tab);
+      fetchAnalytics();
+      setTimeout(() => {
+        const el = document.getElementById('section-analytics');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    };
+    window.addEventListener('ai_news_open_admin_analytics', handleOpenAnalytics);
+    return () => window.removeEventListener('ai_news_open_admin_analytics', handleOpenAnalytics);
+  }, []);
+
   const [userSub, setUserSub] = useState(() => getUserSubscription());
 
   // Admin Notification Panel State (Phase 5)

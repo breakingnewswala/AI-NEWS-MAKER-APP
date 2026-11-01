@@ -878,16 +878,9 @@ export default function App() {
           if (parsed && (parsed.email || parsed.username)) return parsed;
         }
       }
-      // Default to Master Admin session (breakingnewswala.com@gmail.com) so preview screen opens Master Admin directly
-      try {
-        localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
-        localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
-        localStorage.setItem('is_onboarding_completed', 'true');
-        localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
-      } catch {}
-      return DEFAULT_REPORTER_USER;
+      return null;
     } catch {
-      return DEFAULT_REPORTER_USER;
+      return null;
     }
   });
 
@@ -901,24 +894,28 @@ export default function App() {
     try {
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
       if (explicitLogout === 'true') return false;
+      const rawUser = localStorage.getItem('reporter_auth_session');
+      if (!rawUser) return false;
       const flag = localStorage.getItem('is_onboarding_completed');
       if (flag === 'false') return false;
       return true;
     } catch {
-      return true;
+      return false;
     }
   });
 
-  // Welcome flow - show primary AuthWelcomeScreen with Google Login only if explicitly logged out or unauthenticated
+  // Welcome flow - show primary AuthWelcomeScreen with Google Login for unauthenticated visitors
   const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
     try {
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
       if (explicitLogout === 'true') return true;
+      const rawUser = localStorage.getItem('reporter_auth_session');
+      if (!rawUser) return true;
       const flag = localStorage.getItem('show_auth_welcome_screen');
       if (flag === 'true') return true;
       return false;
     } catch {
-      return false;
+      return true;
     }
   });
 

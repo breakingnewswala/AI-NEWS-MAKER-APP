@@ -197,9 +197,10 @@ async function firestoreWriteDoc(collection, docId, data) {
         timeout: 4000,
       },
       (res) => {
-        let body = '';
-        res.on('data', (d) => (body += d));
+        const chunks = [];
+        res.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
         res.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve({ success: true, statusCode: res.statusCode });
           } else {
@@ -236,9 +237,10 @@ async function firestoreReadDoc(collection, docId) {
         timeout: 4000,
       },
       (res) => {
-        let body = '';
-        res.on('data', (d) => (body += d));
+        const chunks = [];
+        res.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
         res.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const parsed = JSON.parse(body);
@@ -288,9 +290,10 @@ async function uploadToFirebaseStorage(destinationPath, buffer, contentType = 'i
         timeout: 8000,
       },
       (res) => {
-        let body = '';
-        res.on('data', (d) => (body += d));
+        const chunks = [];
+        res.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
         res.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const parsed = JSON.parse(body);
@@ -393,9 +396,10 @@ async function firestoreDeleteDoc(collection, docId) {
         timeout: 4000,
       },
       (res) => {
-        let body = '';
-        res.on('data', (d) => (body += d));
+        const chunks = [];
+        res.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
         res.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve({ success: true, statusCode: res.statusCode });
           } else {
@@ -431,9 +435,10 @@ async function firestoreListDocs(collection, pageSize = 100) {
         timeout: 5000,
       },
       (res) => {
-        let body = '';
-        res.on('data', (d) => (body += d));
+        const chunks = [];
+        res.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
         res.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const parsed = JSON.parse(body);

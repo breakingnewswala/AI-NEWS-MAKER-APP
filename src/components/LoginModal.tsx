@@ -391,11 +391,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             },
           });
           if (window.self === window.top) {
-            (window as any).google.accounts.id.prompt((notification: any) => {
-              if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
-                setLoading(false);
-              }
-            });
+            setLoading(false);
             return;
           }
         } catch (gsiErr) {

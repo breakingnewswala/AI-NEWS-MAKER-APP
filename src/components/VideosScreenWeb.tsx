@@ -28,12 +28,14 @@ import {
   Download,
   Lock,
   Layers,
+  BarChart3,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
 import { getApiBaseUrl, getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
+import { DEFAULT_PRESET_CATEGORIES } from '../lib/categoryManager';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -454,7 +456,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [adminSourceDimensions, setAdminSourceDimensions] = useState<{ width: number; height: number }>({ width: 1080, height: 1920 });
 
   const [adminChannel] = useState(currentUser?.channelName || 'एडमिन वायरल डेस्क');
-  const [adminCategory] = useState('breaking');
+  const [adminCategory, setAdminCategory] = useState<string>('breaking');
   const [adminIsBonus, setAdminIsBonus] = useState(false);
   const [adminRewardCoins, setAdminRewardCoins] = useState(50);
 
@@ -1189,24 +1191,42 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
           {/* MOBILE CONTROLS (Row 1: 3 Centered Controls, Row 2: Full-width Admin Upload) */}
           <div className="flex sm:hidden flex-col gap-2 w-full mt-1">
-            {/* Mobile 3-Card Summary Row (Part 1.2: Coins, Remaining Videos, Refresh with Part 7 tactile motion) */}
+            {/* Mobile 3-Card Summary Row (Part 7: Video Analytics for Admin / Coins for Normal User) */}
             <div className="grid grid-cols-3 gap-2 w-full mb-1">
-              {/* Card 1: Coins */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (onNavigateToTab) onNavigateToTab('profile');
-                  window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
-                }}
-                className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 active:scale-95 transition-all duration-150 motion-reduce:transform-none cursor-pointer text-center"
-                title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
-              >
-                <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-black text-sm">
-                  <Coins className="w-4 h-4 shrink-0 text-amber-500" />
-                  <span>{typeof walletCoins === 'number' ? walletCoins : 0}</span>
-                </div>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कॉइन बैलेंस</span>
-              </button>
+              {/* Card 1: Video Analytics for Admin / Coins for Normal User */}
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onNavigateToTab) onNavigateToTab('profile', { subTab: 'analytics', analyticsTab: 'video' });
+                    window.dispatchEvent(new CustomEvent('ai_news_open_admin_analytics', { detail: { targetTab: 'video' } }));
+                  }}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-500/40 shadow-xs hover:border-blue-500/70 active:scale-95 transition-all duration-150 cursor-pointer text-center"
+                  title="वीडियो एनालिटिक्स देखें"
+                >
+                  <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400 font-black text-sm">
+                    <BarChart3 className="w-4 h-4 shrink-0 text-blue-500" />
+                    <span>एनालिटिक्स</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">Video Analytics</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onNavigateToTab) onNavigateToTab('profile');
+                    window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
+                  }}
+                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 active:scale-95 transition-all duration-150 motion-reduce:transform-none cursor-pointer text-center"
+                  title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
+                >
+                  <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-black text-sm">
+                    <Coins className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span>{typeof walletCoins === 'number' ? walletCoins : 0}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कॉइन बैलेंस</span>
+                </button>
+              )}
 
               {/* Card 2: Remaining Videos for normal users / Video Category Manager for Admin */}
               {isAdmin ? (
@@ -1754,6 +1774,28 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Step 7B: Video Category Selection (Part 7A) */}
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <label className="text-xs font-black text-amber-400 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-400" />
+                  <span>वीडियो की श्रेणी (Category) चुनें: *</span>
+                </label>
+                <select
+                  value={adminCategory}
+                  onChange={(e) => setAdminCategory(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                >
+                  {DEFAULT_PRESET_CATEGORIES.map((cat) => (
+                    <option key={cat.id} value={cat.id} className="bg-slate-900 text-white font-bold">
+                      {cat.name} ({cat.id})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400">
+                  चयनित श्रेणी में यह वीडियो होम फ़ीड और वीडियो सेक्शन में प्रदर्शित होगा।
+                </p>
               </div>
 
               {/* Step 8: Bonus Video Toggle */}
