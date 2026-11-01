@@ -44,11 +44,32 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
   const [couponMsg, setCouponMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [gatewayConfig, setGatewayConfig] = useState<{ hasCredentials?: boolean; environment?: string } | null>(null);
 
+  const loadCashfreeSdk = (): Promise<any> => {
+    if (typeof window === 'undefined') return Promise.resolve(null);
+    if ((window as any).Cashfree) return Promise.resolve((window as any).Cashfree);
+
+    return new Promise((resolve) => {
+      const existing = document.querySelector('script[src*="cashfree.js"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve((window as any).Cashfree));
+        existing.addEventListener('error', () => resolve(null));
+        if ((window as any).Cashfree) return resolve((window as any).Cashfree);
+      }
+      const script = document.createElement('script');
+      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+      script.async = true;
+      script.onload = () => resolve((window as any).Cashfree);
+      script.onerror = () => resolve(null);
+      document.head.appendChild(script);
+    });
+  };
+
   React.useEffect(() => {
     fetch('/api/cashfree/config')
       .then((r) => r.json())
       .then((d) => setGatewayConfig(d))
       .catch(() => {});
+    loadCashfreeSdk().catch(() => {});
   }, []);
 
   if (!isOpen || !plan) return null;
@@ -137,7 +158,11 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
       const { orderId, paymentSessionId, isLiveGateway, environment } = orderData;
 
       // 2. If Cashfree JS SDK is available and live credentials active
-      const cashfreeSdk = (window as any).Cashfree;
+      let cashfreeSdk = (window as any).Cashfree;
+      if (!cashfreeSdk) {
+        cashfreeSdk = await loadCashfreeSdk();
+      }
+
       if (cashfreeSdk && isLiveGateway && paymentSessionId && !paymentSessionId.startsWith('session_mock_')) {
         try {
           const cashfree = cashfreeSdk({
@@ -157,13 +182,25 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
           });
           return;
         } catch (sdkErr: any) {
-          console.warn('Cashfree SDK modal fallback to server verification:', sdkErr.message);
+          console.warn('Cashfree SDK modal checkout failed, attempting self redirect:', sdkErr.message);
+          try {
+            const cashfree = cashfreeSdk({
+              mode: environment === 'PRODUCTION' ? 'production' : 'sandbox',
+            });
+            cashfree.checkout({
+              paymentSessionId,
+              redirectTarget: '_self',
+            });
+            return;
+          } catch (redirectErr: any) {
+            console.error('Cashfree redirect error:', redirectErr);
+          }
         }
       }
 
       // 3. Check live gateway credentials before verification
       if (!isLiveGateway) {
-        setError('लाइव पेमेंट गेटवे क्रेडेंशियल्स (Cashfree App ID व Secret Key) सर्वर पर अभी कॉन्फ़िगर नहीं हैं। कृपया सहायता टीम से संपर्क करें।');
+        setError('लाइव पेमेंट गेटवे क्रेडेंशियल्स (Cashfree App ID व Secret Key) सर्वर पर अभी सक्रिय नहीं हैं। कृपया सहायता टीम से संपर्क करें।');
         setLoading(false);
         return;
       }

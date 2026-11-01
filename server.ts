@@ -39,6 +39,7 @@ try {
 }
 
 const app = express();
+app.set("trust proxy", true);
 const PORT = parseInt(process.env.PORT || "8080", 10);
 
 // Security Headers & Safe CORS Middleware
@@ -18728,7 +18729,17 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     const cleanCustomerId = `cust_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 30)}`;
 
     const orderId = `order_ainm_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
-    const effectiveReturnUrl = returnUrl || `${req.protocol}://${req.get("host")}/?cf_order_id=${orderId}`;
+
+    const reqHost = req.get("host") || "ainewsmaker.online";
+    const isLocal = reqHost.includes("localhost") || reqHost.includes("127.0.0.1");
+    // Ensure HTTPS protocol is used for production domains (required by Cashfree PG)
+    const proto = isLocal ? (req.protocol || "http") : "https";
+    const baseSiteUrl = `${proto}://${reqHost}`;
+
+    const effectiveReturnUrl = (returnUrl && String(returnUrl).startsWith("https://"))
+      ? String(returnUrl)
+      : `${baseSiteUrl}/?cf_order_id=${orderId}`;
+    const effectiveNotifyUrl = `${baseSiteUrl}/api/cashfree/webhook`;
 
     const appId = process.env.CASHFREE_APP_ID;
     const secretKey = process.env.CASHFREE_SECRET_KEY;
@@ -18762,7 +18773,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
             },
             order_meta: {
               return_url: effectiveReturnUrl,
-              notify_url: `${req.protocol}://${req.get("host")}/api/cashfree/webhook`,
+              notify_url: effectiveNotifyUrl,
             },
             order_note: `AI News Maker - ${planName} Plan Subscription`,
           }),
@@ -18775,10 +18786,21 @@ app.post("/api/cashfree/create-order", async (req, res) => {
           orderStatus = cfData.order_status || "ACTIVE";
           isLiveGateway = true;
         } else {
-          console.warn("Cashfree live order creation notice:", cfData);
+          console.error("Cashfree live order creation notice:", cfRes.status, cfData);
+          if (!cfRes.ok) {
+            return res.status(cfRes.status || 400).json({
+              success: false,
+              error: `Cashfree त्रुटि: ${cfData.message || cfData.code || "ऑर्डर जनरेट नहीं हो सका"}`,
+              details: cfData,
+            });
+          }
         }
       } catch (cfErr: any) {
-        console.warn("Cashfree live API call error:", cfErr.message);
+        console.error("Cashfree live API call error:", cfErr.message);
+        return res.status(502).json({
+          success: false,
+          error: `Cashfree API कनेक्टिविटी त्रुटि: ${cfErr.message}`,
+        });
       }
     }
 

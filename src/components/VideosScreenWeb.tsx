@@ -27,6 +27,7 @@ import {
   Coins,
   Download,
   Lock,
+  Layers,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';

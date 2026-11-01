@@ -6255,6 +6255,7 @@ try {
   }
 }
 var app = (0, import_express.default)();
+app.set("trust proxy", true);
 var PORT = parseInt(process.env.PORT || "8080", 10);
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -21079,7 +21080,12 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     const cleanName = (customerName || "Member Reporter").trim();
     const cleanCustomerId = `cust_${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 30)}`;
     const orderId = `order_ainm_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
-    const effectiveReturnUrl = returnUrl || `${req.protocol}://${req.get("host")}/?cf_order_id=${orderId}`;
+    const reqHost = req.get("host") || "ainewsmaker.online";
+    const isLocal = reqHost.includes("localhost") || reqHost.includes("127.0.0.1");
+    const proto = isLocal ? req.protocol || "http" : "https";
+    const baseSiteUrl = `${proto}://${reqHost}`;
+    const effectiveReturnUrl = returnUrl && String(returnUrl).startsWith("https://") ? String(returnUrl) : `${baseSiteUrl}/?cf_order_id=${orderId}`;
+    const effectiveNotifyUrl = `${baseSiteUrl}/api/cashfree/webhook`;
     const appId = process.env.CASHFREE_APP_ID;
     const secretKey = process.env.CASHFREE_SECRET_KEY;
     const cfEnv = (process.env.CASHFREE_ENVIRONMENT || "SANDBOX").toUpperCase();
@@ -21110,7 +21116,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
             },
             order_meta: {
               return_url: effectiveReturnUrl,
-              notify_url: `${req.protocol}://${req.get("host")}/api/cashfree/webhook`
+              notify_url: effectiveNotifyUrl
             },
             order_note: `AI News Maker - ${planName} Plan Subscription`
           })
@@ -21122,10 +21128,21 @@ app.post("/api/cashfree/create-order", async (req, res) => {
           orderStatus = cfData.order_status || "ACTIVE";
           isLiveGateway = true;
         } else {
-          console.warn("Cashfree live order creation notice:", cfData);
+          console.error("Cashfree live order creation notice:", cfRes.status, cfData);
+          if (!cfRes.ok) {
+            return res.status(cfRes.status || 400).json({
+              success: false,
+              error: `Cashfree \u0924\u094D\u0930\u0941\u091F\u093F: ${cfData.message || cfData.code || "\u0911\u0930\u094D\u0921\u0930 \u091C\u0928\u0930\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E"}`,
+              details: cfData
+            });
+          }
         }
       } catch (cfErr) {
-        console.warn("Cashfree live API call error:", cfErr.message);
+        console.error("Cashfree live API call error:", cfErr.message);
+        return res.status(502).json({
+          success: false,
+          error: `Cashfree API \u0915\u0928\u0947\u0915\u094D\u091F\u093F\u0935\u093F\u091F\u0940 \u0924\u094D\u0930\u0941\u091F\u093F: ${cfErr.message}`
+        });
       }
     }
     const orderRecord = {
