@@ -99,24 +99,50 @@ export const WhatsAppIcon = () => (
 );
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 
-// Central HTML entity decoder for RSS and feed content (resolves &#039;, &quot;, &amp;, etc.)
+// Central HTML entity decoder for RSS and feed content (resolves &#039;, &quot;, &amp;, hex, numeric & strips \uFFFD replacement diamonds)
 export function decodeHtmlEntities(str?: string): string {
   if (!str) return '';
-  return str
-    .replace(/&#039;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&ldquo;/g, '“')
-    .replace(/&rdquo;/g, '”')
-    .replace(/&lsquo;/g, '‘')
-    .replace(/&rsquo;/g, '’')
+  let res = str;
+  // Handle double-encoded entities (e.g. &amp;#039;)
+  res = res.replace(/&amp;(#?[a-zA-Z0-9]+;)/g, '&$1');
+  res = res
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/&ndash;/g, '–')
     .replace(/&mdash;/g, '—')
-    .replace(/&hellip;/g, '…');
+    .replace(/&lsquo;/g, '‘')
+    .replace(/&rsquo;/g, '’')
+    .replace(/&ldquo;/g, '“')
+    .replace(/&rdquo;/g, '”')
+    .replace(/&hellip;/g, '…')
+    .replace(/&#x([0-9a-fA-F]{1,6});/gi, (_match, hexStr) => {
+      try {
+        const code = parseInt(hexStr, 16);
+        return String.fromCodePoint(code);
+      } catch {
+        return '';
+      }
+    })
+    .replace(/&#([0-9]{1,7});/gi, (_match, numStr) => {
+      try {
+        const num = parseInt(numStr, 10);
+        return String.fromCodePoint(num);
+      } catch {
+        return '';
+      }
+    })
+    .replace(/\uFFFD+/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return res;
 }
 import {
   getActiveRssNewsPosts,
@@ -197,6 +223,8 @@ export function cleanViewerHeadline(rawTitle: string): string {
   const decoded = decodeHtmlEntities(rawTitle);
   return decoded
     .replace(/^(RSS\s*\|\s*|Web\s*\|\s*|RSS\s*:\s*|Web\s*:\s*|\[RSS\]\s*|\[Web\]\s*|RSS Feed\s*\|\s*|Web Source\s*\|\s*)/i, '')
+    .replace(/\uFFFD+/g, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
     .trim();
 }
 
@@ -260,6 +288,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [speakingPostId, setSpeakingPostId] = useState<string | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [isNewsAnalyticsOpen, setIsNewsAnalyticsOpen] = useState<boolean>(false);
   const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
 
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
@@ -1454,10 +1483,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
               <button
                 type="button"
-                onClick={() => {
-                  if (onNavigateToTab) onNavigateToTab('profile', { subTab: 'analytics', analyticsTab: 'news' });
-                  window.dispatchEvent(new CustomEvent('ai_news_open_admin_analytics', { detail: { targetTab: 'news' } }));
-                }}
+                onClick={() => setIsNewsAnalyticsOpen(true)}
                 className="py-1.5 px-1 rounded-xl text-center flex items-center justify-center gap-1 active:scale-95 transition shadow-xs cursor-pointer border text-[10px] truncate bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border-blue-500 font-bold"
                 title="न्यूज़ एनालिटिक्स देखें"
               >
@@ -1682,6 +1708,37 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </>
           )}
         </div>
+
+        {/* User Mobile Category Strip (below the 3 cards) */}
+        {!canModerate && feedCategories.length > 0 && (
+          <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1 rounded-full text-[11px] font-bold shrink-0 transition cursor-pointer ${
+                selectedCategory === 'all'
+                  ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              सभी खबरें
+            </button>
+            {feedCategories.slice(0, 10).map((cat) => (
+              <button
+                key={cat.id || cat.name}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id || cat.name)}
+                className={`px-3 py-1 rounded-full text-[11px] font-bold shrink-0 transition cursor-pointer ${
+                  selectedCategory === (cat.id || cat.name)
+                    ? 'bg-amber-400 text-slate-950 font-black shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800'
+                }`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Approved Center-Aligned Tagline & Subtitle */}
         <div className="text-center py-1 sm:py-2 select-none">
@@ -4274,6 +4331,66 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               className="text-xs text-neutral-400 hover:text-white underline cursor-pointer pt-1"
             >
               बंद करें
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* In-Screen News Analytics Modal (Part 12) */}
+      {isNewsAnalyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border-2 border-blue-500/70 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-blue-400 font-black text-base">
+                <BarChart3 className="w-5 h-5" />
+                <span>लाइव न्यूज़ एनालिटिक्स (IST)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewsAnalyticsOpen(false)}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+                <span className="text-slate-400 font-bold">दिनांक (IST):</span>
+                <span className="font-mono font-bold text-white">
+                  {new Date().toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 font-bold block mb-1">कुल खबरें</span>
+                  <span className="text-lg font-black text-white font-mono">{posts.length}</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-emerald-400 font-bold block mb-1">प्रकाशित</span>
+                  <span className="text-lg font-black text-emerald-400 font-mono">{publishedCount}</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-amber-400 font-bold block mb-1">लंबित</span>
+                  <span className="text-lg font-black text-amber-400 font-mono">{pendingRssCount}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">बोनस खबरें (फ्री):</span>
+                  <span className="font-mono font-bold text-amber-300">{bonusCount}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">सक्रिय RSS स्रोत:</span>
+                  <span className="font-mono font-bold text-white">39 स्रोत</span>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsNewsAnalyticsOpen(false)}
+              className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl cursor-pointer"
+            >
+              ठीक है
             </button>
           </div>
         </div>

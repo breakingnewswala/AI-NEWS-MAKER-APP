@@ -41,6 +41,7 @@ import {
   MapPin,
   Image as ImageIcon,
   Loader2,
+  CreditCard,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
@@ -740,6 +741,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [mobileError, setMobileError] = useState<string>('');
   const [planSuccessMsg, setPlanSuccessMsg] = useState<string>('');
   const [cashfreeModalPlan, setCashfreeModalPlan] = useState<any>(null);
+  const [userPayments, setUserPayments] = useState<any[]>([]);
+  const [isLoadingUserPayments, setIsLoadingUserPayments] = useState(false);
+
+  useEffect(() => {
+    const email = (currentUser?.email || '').trim().toLowerCase();
+    if (!email) return;
+    setIsLoadingUserPayments(true);
+    fetch(`/api/user-payments?email=${encodeURIComponent(email)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && Array.isArray(d.payments)) {
+          setUserPayments(d.payments);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingUserPayments(false));
+  }, [currentUser?.email]);
 
   // User Promo Code Redemption State
   const [userPromoInput, setUserPromoInput] = useState<string>('');
@@ -1907,6 +1925,74 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                   );
                 })}
+              </div>
+
+              {/* User Payment History Section */}
+              <div className="mt-8 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-amber-400" />
+                    <h4 className="text-sm sm:text-base font-black text-white">
+                      भुगतान इतिहास (Payment History)
+                    </h4>
+                  </div>
+                  <span className="text-xs text-slate-400 font-mono">
+                    कुल लेनदेन: {userPayments.length}
+                  </span>
+                </div>
+
+                {isLoadingUserPayments ? (
+                  <div className="text-center py-6 text-xs text-slate-400 flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                    <span>भुगतान रिकॉर्ड लोड हो रहे हैं...</span>
+                  </div>
+                ) : userPayments.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-slate-400 space-y-1">
+                    <p>अभी तक कोई ऑनलाइन भुगतान रिकॉर्ड नहीं मिला।</p>
+                    <p className="text-[11px] text-slate-500">Cashfree PG के माध्यम से किए गए सभी प्लान भुगतान यहाँ रसीद सहित दिखेंगे।</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
+                          <th className="py-2 px-3">दिनांक</th>
+                          <th className="py-2 px-3">प्लान</th>
+                          <th className="py-2 px-3">राशि</th>
+                          <th className="py-2 px-3">ऑर्डर ID</th>
+                          <th className="py-2 px-3">स्थिति</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {userPayments.map((p, idx) => {
+                          const dateStr = p.createdAt
+                            ? new Date(p.createdAt).toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
+                            : 'हाल ही में';
+                          const isPaid = p.orderStatus === 'PAID';
+                          return (
+                            <tr key={p.orderId || idx} className="hover:bg-slate-800/40 transition">
+                              <td className="py-2.5 px-3 text-slate-300">{dateStr}</td>
+                              <td className="py-2.5 px-3 font-bold text-amber-300 font-sans">{p.planName || p.planKey || 'ADVANCE'}</td>
+                              <td className="py-2.5 px-3 font-bold text-white">₹{p.orderAmount || 0}</td>
+                              <td className="py-2.5 px-3 text-[11px] text-slate-400 truncate max-w-[140px]">{p.orderId}</td>
+                              <td className="py-2.5 px-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase font-sans ${
+                                  isPaid
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                                    : p.orderStatus === 'ACTIVE' || p.orderStatus === 'PENDING'
+                                    ? 'bg-amber-950 text-amber-300 border border-amber-500/50'
+                                    : 'bg-rose-950 text-rose-300 border border-rose-500/50'
+                                }`}>
+                                  {isPaid ? 'सफल (PAID)' : (p.orderStatus || 'PENDING')}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </div>

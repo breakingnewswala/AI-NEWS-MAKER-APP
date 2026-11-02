@@ -36,6 +36,7 @@ import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/
 import { getApiBaseUrl, getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 import { DEFAULT_PRESET_CATEGORIES } from '../lib/categoryManager';
+import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -417,6 +418,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   };
 
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
+  const [isVideoTemplateControlOpen, setIsVideoTemplateControlOpen] = useState<boolean>(false);
+  const [isVideoAnalyticsOpen, setIsVideoAnalyticsOpen] = useState<boolean>(false);
 
   // Floating Back to Top state
   const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
@@ -842,12 +845,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     });
   }, [activeVideos, selectedRatioFilter, isBonusOnlyFilter]);
 
-  // Role-based Admin check: Super Admin and Admin have access to video upload controls
-  const isAdmin =
-    isEffectiveAdmin(currentUser) ||
-    isUserSuperAdmin(currentUser) ||
-    currentUser?.role === 'admin' ||
-    currentUser?.role === 'superadmin';
+  // Role-based Admin check: Strictly respect isEffectiveAdmin so Test Mode cleanly simulates regular user view (Part 14)
+  const isAdmin = isEffectiveAdmin(currentUser);
 
   const getAspectRatioClass = (ratio?: string) => {
     switch (ratio) {
@@ -1197,10 +1196,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               {isAdmin ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (onNavigateToTab) onNavigateToTab('profile', { subTab: 'analytics', analyticsTab: 'video' });
-                    window.dispatchEvent(new CustomEvent('ai_news_open_admin_analytics', { detail: { targetTab: 'video' } }));
-                  }}
+                  onClick={() => setIsVideoAnalyticsOpen(true)}
                   className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-500/40 shadow-xs hover:border-blue-500/70 active:scale-95 transition-all duration-150 cursor-pointer text-center"
                   title="वीडियो एनालिटिक्स देखें"
                 >
@@ -1232,9 +1228,9 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               {isAdmin ? (
                 <button
                   type="button"
-                  onClick={() => setIsAdminPanelOpen(true)}
+                  onClick={() => setIsVideoTemplateControlOpen(true)}
                   className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-purple-500/30 shadow-xs hover:border-purple-500/60 active:scale-95 transition-all duration-150 text-center cursor-pointer"
-                  title="वीडियो श्रेणियाँ व अपलोड कंट्रोल"
+                  title="वीडियो श्रेणियाँ व टेम्पलेट कंट्रोल"
                 >
                   <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-black text-sm">
                     <Layers className="w-4 h-4 shrink-0 text-purple-500" />
@@ -2431,6 +2427,94 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <span>{videoCoinSaving ? 'सेव हो रहा है...' : 'सेव करें'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Video Template & Category Control Modal (Part 11) */}
+      {isVideoTemplateControlOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
+          <div className="bg-slate-900 border-2 border-purple-500/70 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-purple-400 font-black text-base">
+                <Layers className="w-5 h-5" />
+                <span>वीडियो श्रेणियाँ, एस्पेक्ट रेश्यो व टेम्पलेट सेटिंग्स</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVideoTemplateControlOpen(false)}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+            <AdminVideoTemplateControl
+              onOpenStudioWithVideoFrame={() => {
+                setIsVideoTemplateControlOpen(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* In-Screen Video Analytics Modal (Part 12) */}
+      {isVideoAnalyticsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border-2 border-blue-500/70 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-blue-400 font-black text-base">
+                <BarChart3 className="w-5 h-5" />
+                <span>लाइव वीडियो एनालिटिक्स (IST)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVideoAnalyticsOpen(false)}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold cursor-pointer"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+                <span className="text-slate-400 font-bold">दिनांक (IST):</span>
+                <span className="font-mono font-bold text-white">
+                  {new Date().toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-slate-400 font-bold block mb-1">कुल वीडियो रिपोर्ट्स</span>
+                  <span className="text-xl font-black text-emerald-400 font-mono">{videos.length}</span>
+                </div>
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                  <span className="text-[10px] text-slate-400 font-bold block mb-1">बोनस वीडियो</span>
+                  <span className="text-xl font-black text-amber-400 font-mono">
+                    {videos.filter((v: any) => v.isBonus).length}
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">9:16 रील्स / शॉर्ट्स:</span>
+                  <span className="font-mono font-bold text-white">{videos.filter((v: any) => v.aspectRatio === '9:16' || !v.aspectRatio).length}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">16:9 लैंडस्केप वीडियो:</span>
+                  <span className="font-mono font-bold text-white">{videos.filter((v: any) => v.aspectRatio === '16:9').length}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">1:1 चौकोर वीडियो:</span>
+                  <span className="font-mono font-bold text-white">{videos.filter((v: any) => v.aspectRatio === '1:1').length}</span>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsVideoAnalyticsOpen(false)}
+              className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl cursor-pointer"
+            >
+              ठीक है
+            </button>
           </div>
         </div>
       )}

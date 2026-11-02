@@ -850,7 +850,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         trimEnd: parseFloat(String(initialVideo?.duration || '60')) || 60,
       }]);
       if (initialHeadline || initialVideo?.title) {
-        setHeadlines([initialHeadline || initialVideo?.title || '']);
+        const h = initialHeadline || initialVideo?.title || '';
+        setHeadline(h);
+        setHeadlineVariants([h]);
       }
       if (initialVideo?.aspectRatio) {
         const ar = initialVideo.aspectRatio === '16:9' ? '4:3' : (initialVideo.aspectRatio as VideoAspect);

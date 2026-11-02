@@ -68,8 +68,6 @@ export function getAdminRssSources(): AdminRssSource[] {
   // Strictly adhere to No Default RSS Policy: only admin-added feeds exist
   const cleaned = (list || []).filter((s) => {
     if (!s || !s.url || deletedIds.has(s.id)) return false;
-    const u = String(s.url).toLowerCase();
-    if (u.includes('amarujala.com') || u.includes('bbci.co.uk') || u.includes('bbc.com')) return false;
     return true;
   });
   memoryRssSources = cleaned;

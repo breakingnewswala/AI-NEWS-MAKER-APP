@@ -10,9 +10,12 @@ import {
   ListOrdered,
   Layout,
   CheckCircle2,
+  Film,
+  Search,
+  Layers,
 } from 'lucide-react';
 
-export type BrandedLoaderMode = 'ai_generation' | 'graphic_preparation' | 'approved_presentation';
+export type BrandedLoaderMode = 'ai_generation' | 'graphic_preparation' | 'approved_presentation' | 'video_render';
 
 export interface BrandedNewsLoadingModalProps {
   isOpen: boolean;
@@ -41,6 +44,16 @@ const NEWSROOM_STAGES = [
   { id: 2, label: '5 हेडलाइन्स', detail: 'संतुलित विकल्प चयन', icon: ListOrdered },
   { id: 3, label: 'लेआउट मैपिंग', detail: 'फोटो व ब्रांडिंग व्यवस्था', icon: Layout },
   { id: 4, label: 'न्यूज़ कार्ड', detail: 'प्रकाशन-योग्य अंतिम कार्ड', icon: CheckCircle2 },
+];
+
+// 6-step video newsroom activity stages (Part 10)
+const VIDEO_NEWSROOM_STAGES = [
+  { id: 1, label: 'वीडियो स्रोत जाँच', detail: 'वीडियो लिंक व मीडिया विश्लेषण', icon: Film },
+  { id: 2, label: 'कंटेंट विश्लेषण', detail: 'AI द्वारा मुख्य तथ्यों की पहचान', icon: Search },
+  { id: 3, label: 'न्यूज़ हेडलाइंस', detail: '5 संतुलित विकल्प तैयार हो रहे हैं', icon: ListOrdered },
+  { id: 4, label: 'कट व सेगमेंट मैपिंग', detail: 'टाइमलाइन व कट का निर्धारण', icon: Layers },
+  { id: 5, label: 'कार्ड लेआउट', detail: 'ओवरले, रिबन व ब्रांडिंग सेटिंग', icon: Layout },
+  { id: 6, label: 'वीडियो स्टूडियो', detail: 'अंतिम स्टूडियो लोड हो रहा है', icon: CheckCircle2 },
 ];
 
 export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = ({
@@ -118,6 +131,10 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
             setTimeout(() => {
               onComplete();
             }, 60);
+          } else if (onCancel) {
+            setTimeout(() => {
+              onCancel();
+            }, 60);
           }
           return durationSeconds;
         }
@@ -128,16 +145,21 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [isOpen, error, durationSeconds, onComplete]);
+  }, [isOpen, error, durationSeconds, onComplete, onCancel]);
 
   if (!isOpen) return null;
 
+  const activeStages = mode === 'video_render' ? VIDEO_NEWSROOM_STAGES : NEWSROOM_STAGES;
+
   // Operation-Specific Main Loading Message:
+  // For video render: “आपका वीडियो स्टूडियो तैयार किया जा रहा है...”
   // For actual AI headline generation: “अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...”
   // For pre-approved editorial presentation: “संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...”
   // For graphic preparation: “ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...”
   const defaultTitle =
-    mode === 'ai_generation'
+    mode === 'video_render'
+      ? 'आपका वीडियो स्टूडियो तैयार किया जा रहा है...'
+      : mode === 'ai_generation'
       ? 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
       : mode === 'approved_presentation'
       ? 'संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...'
@@ -151,12 +173,12 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
     ? Math.min(100, Math.round((elapsedSeconds / durationSeconds) * 100))
     : null;
 
-  // Determine current active newsroom step (0 to 3) based on elapsed time or loop
+  // Determine current active newsroom step based on elapsed time or loop
   const activeStepIndex = durationSeconds && durationSeconds > 0
-    ? Math.min(3, Math.floor((elapsedSeconds / durationSeconds) * 4))
-    : Math.floor((Date.now() / 2500) % 4);
+    ? Math.min(activeStages.length - 1, Math.floor((elapsedSeconds / durationSeconds) * activeStages.length))
+    : Math.floor((Date.now() / 2500) % activeStages.length);
 
-  const CurrentStageIcon = NEWSROOM_STAGES[activeStepIndex]?.icon || FileText;
+  const CurrentStageIcon = activeStages[activeStepIndex]?.icon || (mode === 'video_render' ? Film : FileText);
 
   const modalContent = (
     <div
@@ -224,9 +246,9 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
             </div>
           </div>
 
-          {/* 4 Newsroom Activity Steps Tracker */}
-          <div className="grid grid-cols-4 gap-1.5 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800">
-            {NEWSROOM_STAGES.map((stg, idx) => {
+          {/* Newsroom Activity Steps Tracker */}
+          <div className={`grid gap-1.5 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800 ${mode === 'video_render' ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-4'}`}>
+            {activeStages.map((stg, idx) => {
               const isActive = idx === activeStepIndex;
               const isPassed = idx < activeStepIndex;
               const IconComp = stg.icon;

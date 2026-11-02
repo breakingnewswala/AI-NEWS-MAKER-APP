@@ -15,6 +15,9 @@ export function cleanHeadlineText(text: any): string {
     : (Array.isArray(text) ? text.filter(Boolean).map((x) => typeof x === 'string' ? x : JSON.stringify(x)).join(' । ') : String(text || ''));
   if (!cleaned || typeof cleaned.replace !== 'function') return '';
 
+  // 0. Remove Unicode replacement characters (\uFFFD / diamond question marks) and non-printable control characters
+  cleaned = cleaned.replace(/\uFFFD+/g, '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+
   // 1. Remove UI status / loading text
   cleaned = cleaned
     .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, '')

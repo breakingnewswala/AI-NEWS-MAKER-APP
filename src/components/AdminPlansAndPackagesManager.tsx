@@ -181,6 +181,28 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [couponActionMsg, setCouponActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isEditingCoupon, setIsEditingCoupon] = useState<boolean>(false);
 
+  // Admin Payment History State
+  const [adminPayments, setAdminPayments] = useState<any[]>([]);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [paymentPlanFilter, setPaymentPlanFilter] = useState('ALL');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('ALL');
+
+  useEffect(() => {
+    if (subTab === 'plans') {
+      setIsLoadingPayments(true);
+      fetch('/api/user-payments', { headers: getAdminAuthHeaders() })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d && Array.isArray(d.payments)) {
+            setAdminPayments(d.payments);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsLoadingPayments(false));
+    }
+  }, [subTab]);
+
   const fetchPackageCoupons = async () => {
     setIsLoadingCoupons(true);
     try {
@@ -1849,6 +1871,155 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 </div>
               );
             })}
+          </div>
+
+          {/* Admin Payment History Table (Part 20) */}
+          <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h4 className="text-sm sm:text-base font-black text-white">
+                    सभी यूज़र भुगतान एवं सदस्यता लेनदेन (Payment Transactions)
+                  </h4>
+                  <p className="text-xs text-slate-400">Cashfree PG के जरिए आए सभी सफल व लंबित भुगतानों का लाइव रिकॉर्ड</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLoadingPayments(true);
+                  fetch('/api/user-payments', { headers: getAdminAuthHeaders() })
+                    .then((r) => r.json())
+                    .then((d) => {
+                      if (d && Array.isArray(d.payments)) setAdminPayments(d.payments);
+                    })
+                    .catch(() => {})
+                    .finally(() => setIsLoadingPayments(false));
+                }}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingPayments ? 'animate-spin text-amber-400' : ''}`} />
+                <span>रीफ्रेश</span>
+              </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <input
+                type="text"
+                placeholder="खोजें: नाम / ईमेल / मोबाइल / ऑर्डर ID"
+                value={paymentSearch}
+                onChange={(e) => setPaymentSearch(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              />
+              <select
+                value={paymentPlanFilter}
+                onChange={(e) => setPaymentPlanFilter(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="ALL">सभी प्लान (All Plans)</option>
+                <option value="ADVANCE">ADVANCE (एडवांस)</option>
+                <option value="PRO">PRO (प्रो)</option>
+                <option value="VIP">VIP DESK (अल्ट्रा)</option>
+              </select>
+              <select
+                value={paymentStatusFilter}
+                onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+              >
+                <option value="ALL">सभी स्थिति (All Statuses)</option>
+                <option value="PAID">सफल (PAID)</option>
+                <option value="ACTIVE">सक्रिय (ACTIVE / PENDING)</option>
+                <option value="FAILED">असफल (FAILED)</option>
+              </select>
+            </div>
+
+            {/* Transactions List */}
+            {isLoadingPayments ? (
+              <div className="text-center py-8 text-xs text-slate-400 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                <span>भुगतान रिकॉर्ड लोड हो रहे हैं...</span>
+              </div>
+            ) : (() => {
+              const q = paymentSearch.trim().toLowerCase();
+              const filtered = adminPayments.filter((p) => {
+                if (q) {
+                  const matchName = (p.customerName || '').toLowerCase().includes(q);
+                  const matchEmail = (p.customerEmail || '').toLowerCase().includes(q);
+                  const matchPhone = (p.customerPhone || '').includes(q);
+                  const matchOrder = (p.orderId || '').toLowerCase().includes(q);
+                  if (!matchName && !matchEmail && !matchPhone && !matchOrder) return false;
+                }
+                if (paymentPlanFilter !== 'ALL') {
+                  const pKey = (p.planKey || p.planName || p.planId || '').toUpperCase();
+                  if (!pKey.includes(paymentPlanFilter)) return false;
+                }
+                if (paymentStatusFilter !== 'ALL') {
+                  if (paymentStatusFilter === 'PAID' && p.orderStatus !== 'PAID') return false;
+                  if (paymentStatusFilter === 'ACTIVE' && p.orderStatus !== 'ACTIVE' && p.orderStatus !== 'PENDING') return false;
+                  if (paymentStatusFilter === 'FAILED' && (p.orderStatus === 'PAID' || p.orderStatus === 'ACTIVE')) return false;
+                }
+                return true;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="text-center py-8 text-xs text-slate-400">
+                    कोई भुगतान रिकॉर्ड नहीं मिला।
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
+                        <th className="py-2.5 px-3">दिनांक</th>
+                        <th className="py-2.5 px-3">ग्राहक / ईमेल</th>
+                        <th className="py-2.5 px-3">प्लान</th>
+                        <th className="py-2.5 px-3">राशि</th>
+                        <th className="py-2.5 px-3">ऑर्डर ID</th>
+                        <th className="py-2.5 px-3">स्थिति</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-mono">
+                      {filtered.map((p, idx) => {
+                        const dateStr = p.createdAt
+                          ? new Date(p.createdAt).toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
+                          : 'हाल ही में';
+                        const isPaid = p.orderStatus === 'PAID';
+                        return (
+                          <tr key={p.orderId || idx} className="hover:bg-slate-800/40 transition">
+                            <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">{dateStr}</td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-sans font-bold text-white text-xs">{p.customerName || 'यूज़र'}</div>
+                              <div className="text-[11px] text-slate-400 font-mono truncate max-w-[180px]">{p.customerEmail || ''}</div>
+                              {p.customerPhone && <div className="text-[10px] text-slate-500 font-mono">{p.customerPhone}</div>}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-amber-300 font-sans">{p.planName || p.planKey || 'ADVANCE'}</td>
+                            <td className="py-2.5 px-3 font-bold text-white whitespace-nowrap">₹{p.orderAmount || 0}</td>
+                            <td className="py-2.5 px-3 text-[11px] text-slate-400 truncate max-w-[150px]">{p.orderId}</td>
+                            <td className="py-2.5 px-3">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase font-sans ${
+                                isPaid
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
+                                  : p.orderStatus === 'ACTIVE' || p.orderStatus === 'PENDING'
+                                  ? 'bg-amber-950 text-amber-300 border border-amber-500/50'
+                                  : 'bg-rose-950 text-rose-300 border border-rose-500/50'
+                              }`}>
+                                {isPaid ? 'सफल (PAID)' : (p.orderStatus || 'PENDING')}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
             </div>

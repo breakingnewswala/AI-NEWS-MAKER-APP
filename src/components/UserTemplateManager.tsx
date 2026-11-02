@@ -378,10 +378,10 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
                 <span>2. कस्टम हेडर PNG (Header)</span>
-                {assignHeaderPng && (
+                {assignHeaderUrl && (
                   <button
                     type="button"
-                    onClick={() => setAssignHeaderPng('')}
+                    onClick={() => setAssignHeaderUrl('')}
                     className="text-[10px] text-rose-400 hover:underline"
                   >
                     हटाएं
@@ -401,11 +401,11 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   className="flex-1 px-3 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-300 font-semibold cursor-pointer flex items-center justify-center gap-1.5 truncate transition"
                 >
                   <Upload className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span className="truncate">{assignHeaderPng ? 'हेडर बदला गया' : 'हेडर PNG चुनें'}</span>
+                  <span className="truncate">{assignHeaderUrl ? 'हेडर बदला गया' : 'हेडर PNG चुनें'}</span>
                 </label>
-                {assignHeaderPng && (
+                {assignHeaderUrl && (
                   <div className="w-10 h-9 bg-slate-950 border border-purple-500/50 rounded-lg overflow-hidden flex items-center justify-center p-0.5 shrink-0">
-                    <img src={assignHeaderPng} alt="Header" className="w-full h-full object-contain" />
+                    <img src={assignHeaderUrl} alt="Header" className="w-full h-full object-contain" />
                   </div>
                 )}
               </div>
@@ -415,10 +415,10 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-200 mb-1.5 flex items-center justify-between">
                 <span>3. कस्टम फुटर PNG (Footer)</span>
-                {assignFooterPng && (
+                {assignFooterUrl && (
                   <button
                     type="button"
-                    onClick={() => setAssignFooterPng('')}
+                    onClick={() => setAssignFooterUrl('')}
                     className="text-[10px] text-rose-400 hover:underline"
                   >
                     हटाएं
@@ -438,11 +438,11 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   className="flex-1 px-3 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-300 font-semibold cursor-pointer flex items-center justify-center gap-1.5 truncate transition"
                 >
                   <Upload className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                  <span className="truncate">{assignFooterPng ? 'फुटर बदला गया' : 'फुटर PNG चुनें'}</span>
+                  <span className="truncate">{assignFooterUrl ? 'फुटर बदला गया' : 'फुटर PNG चुनें'}</span>
                 </label>
-                {assignFooterPng && (
+                {assignFooterUrl && (
                   <div className="w-10 h-9 bg-slate-950 border border-indigo-500/50 rounded-lg overflow-hidden flex items-center justify-center p-0.5 shrink-0">
-                    <img src={assignFooterPng} alt="Footer" className="w-full h-full object-contain" />
+                    <img src={assignFooterUrl} alt="Footer" className="w-full h-full object-contain" />
                   </div>
                 )}
               </div>
