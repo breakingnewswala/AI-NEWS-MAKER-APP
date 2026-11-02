@@ -2437,7 +2437,9 @@ var require_firestore_database_service = __commonJS({
       async recordPayment(orderId, paymentData) {
         if (!orderId) return { success: false, error: "OrderId required" };
         const cleanId = String(orderId).trim();
+        const existing = this.cache.payments.get(cleanId) || {};
         const payload = {
+          ...existing,
           ...paymentData,
           orderId: cleanId,
           docId: cleanId,
@@ -2449,7 +2451,9 @@ var require_firestore_database_service = __commonJS({
           return res;
         } else {
           const payments = this._loadLocalJson("payments_transactions_db.json", []);
-          payments.unshift(payload);
+          const idx = payments.findIndex((p) => p.orderId === cleanId);
+          if (idx >= 0) payments[idx] = payload;
+          else payments.unshift(payload);
           this._saveLocalJson("payments_transactions_db.json", payments);
           return { success: true };
         }
@@ -4646,7 +4650,9 @@ var require_firestore_database_service2 = __commonJS({
       async recordPayment(orderId, paymentData) {
         if (!orderId) return { success: false, error: "OrderId required" };
         const cleanId = String(orderId).trim();
+        const existing = this.cache.payments.get(cleanId) || {};
         const payload = {
+          ...existing,
           ...paymentData,
           orderId: cleanId,
           docId: cleanId,
@@ -4658,7 +4664,9 @@ var require_firestore_database_service2 = __commonJS({
           return res;
         } else {
           const payments = this._loadLocalJson("payments_transactions_db.json", []);
-          payments.unshift(payload);
+          const idx = payments.findIndex((p) => p.orderId === cleanId);
+          if (idx >= 0) payments[idx] = payload;
+          else payments.unshift(payload);
           this._saveLocalJson("payments_transactions_db.json", payments);
           return { success: true };
         }
@@ -8731,6 +8739,64 @@ app.post("/api/analytics/track", (req, res) => {
     }
     saveAnalyticsDatabase(aDb);
     return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/analytics/feed-summary", (req, res) => {
+  try {
+    const feedType = (req.query.type || "news").toString().toLowerCase();
+    const aDb = loadAnalyticsDatabase();
+    const newsDb = loadNewsDatabase();
+    const videosDb = loadVideosDatabase();
+    const rssDb = loadRssSourcesDatabase();
+    const activeRssSources = rssDb.filter((s) => s.isActive).length;
+    const totalPosts = newsDb.length;
+    const publishedPosts = newsDb.filter((p) => p.status === "published" || !p.status || p.status === "approved").length;
+    const pendingPosts = newsDb.filter((p) => p.status === "pending" || p.status === "draft").length;
+    const totalVideos = videosDb.length;
+    const publishedVideos = videosDb.filter((v) => v.status === "published" || !v.status || v.status === "approved").length;
+    const pendingVideos = videosDb.filter((v) => v.status === "pending" || v.status === "draft").length;
+    const graphicDownloads = aDb.news?.downloads || 0;
+    const videoDownloads = aDb.video?.downloads || 0;
+    const uniqueNewsUsers = aDb.news?.uniqueUsers?.length || 0;
+    const uniqueVideoUsers = aDb.video?.uniqueUsers?.length || 0;
+    const recentDownloads = [];
+    if (aDb.userGraphics) {
+      for (const [userKey, uRec] of Object.entries(aDb.userGraphics)) {
+        if (uRec.graphics) {
+          for (const [gId, g] of Object.entries(uRec.graphics)) {
+            if (g.hasDownloaded) {
+              recentDownloads.push({
+                graphicId: gId,
+                headline: g.title || g.newsId || "\u0938\u092E\u093E\u091A\u093E\u0930 \u0917\u094D\u0930\u093E\u092B\u093F\u0915",
+                userName: uRec.userName || userKey.split("@")[0],
+                userEmail: uRec.userEmail || userKey,
+                membershipPlan: uRec.membershipPlan || "BASIC",
+                timestamp: g.updatedAt || Date.now(),
+                type: feedType === "video" ? "video" : "graphic"
+              });
+            }
+          }
+        }
+      }
+    }
+    recentDownloads.sort((a, b) => b.timestamp - a.timestamp);
+    return res.json({
+      success: true,
+      feedType,
+      activeRssSources,
+      totalPosts,
+      publishedPosts,
+      pendingPosts,
+      totalVideos,
+      publishedVideos,
+      pendingVideos,
+      graphicDownloads,
+      videoDownloads,
+      uniqueUsers: feedType === "video" ? uniqueVideoUsers : uniqueNewsUsers,
+      recentDownloads: recentDownloads.slice(0, 15)
+    });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -13878,7 +13944,7 @@ app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => 
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/delete-user", requireMasterAdminMiddleware, (req, res) => {
+app.post("/api/admin/delete-user", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const isMaster = isAuthorizedMasterAdmin(req);
     if (!isMaster) {
@@ -13889,6 +13955,25 @@ app.post("/api/admin/delete-user", requireMasterAdminMiddleware, (req, res) => {
     if (!identifier) return res.status(400).json({ error: "userId or email is required" });
     if (isProtectedAdminAccount(identifier)) {
       return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    }
+    if (firebaseAdminAuth) {
+      try {
+        if (targetUser?.uid) {
+          await firebaseAdminAuth.deleteUser(targetUser.uid);
+        } else if (targetUserIdClean && !targetUserIdClean.includes("@")) {
+          await firebaseAdminAuth.deleteUser(targetUserIdClean);
+        }
+      } catch (authErr) {
+        if (targetEmailClean) {
+          try {
+            const userRec = await firebaseAdminAuth.getUserByEmail(targetEmailClean);
+            if (userRec && userRec.uid) {
+              await firebaseAdminAuth.deleteUser(userRec.uid);
+            }
+          } catch {
+          }
+        }
+      }
     }
     let users = loadUsersMasterDatabase();
     const targetUser = users.find(
@@ -14017,6 +14102,20 @@ app.post("/api/admin/delete-user", requireMasterAdminMiddleware, (req, res) => {
         if (import_fs.default.existsSync(p2)) import_fs.default.unlinkSync(p2);
       }
     } catch {
+    }
+    if (centralDb) {
+      try {
+        const delKeys = [targetEmailClean, targetUserIdClean, identifier, targetUser?.uid].filter(Boolean);
+        for (const k of delKeys) {
+          await centralDb.deleteUser(k).catch(() => {
+          });
+          centralDb.cache.users.delete(k);
+          centralDb.cache.wallets.delete(k);
+          centralDb.cache.profiles.delete(k);
+        }
+      } catch (cErr) {
+        console.warn("[centralDb User Delete Error]:", cErr.message);
+      }
     }
     try {
       const adapter = require_server_firestore_adapter();
@@ -20930,7 +21029,6 @@ function savePaymentsDatabase(data) {
       centralDb.recordPayment(orderId, p).catch(() => {
       });
     }
-    return;
   }
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
@@ -21187,6 +21285,46 @@ app.post("/api/cashfree/create-order", async (req, res) => {
           appliedCouponCode = cp.code;
           discountAmount = Math.min(orderAmount - 1, Number(cp.discountAmount) || 0);
           orderAmount = Math.max(1, orderAmount - discountAmount);
+        }
+      }
+    }
+    if (customerEmail) {
+      const cleanCustomerEmail = customerEmail.toLowerCase().trim();
+      const masterUsers = loadUsersMasterDatabase();
+      const existingUser = masterUsers.find((u) => u.email && u.email.toLowerCase().trim() === cleanCustomerEmail);
+      if (existingUser) {
+        const currentTier = (existingUser.tier || "basic").toLowerCase().trim();
+        const targetId = (planKey || planId || "").toLowerCase().trim();
+        const tierRank = {
+          basic: 1,
+          starter: 1,
+          advance: 2,
+          advanced: 2,
+          pro: 3,
+          professional: 3,
+          ultra: 4,
+          vip: 4,
+          "vip desk": 4,
+          enterprise: 4
+        };
+        const currentRank = tierRank[currentTier] || 1;
+        const targetRank = tierRank[targetId] || 1;
+        if (targetRank < currentRank) {
+          return res.status(400).json({ error: "\u0921\u093E\u0909\u0928\u0917\u094D\u0930\u0947\u0921 \u0938\u0902\u092D\u0935 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0906\u092A \u0915\u0947\u0935\u0932 \u0909\u091A\u094D\u091A\u0924\u0930 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+        }
+        if (targetRank > currentRank && existingUser.hasActivePaidPlan) {
+          const now = Date.now();
+          const expiresAt = existingUser.expiresAt ? Number(existingUser.expiresAt) : 0;
+          const remainingMs = Math.max(0, expiresAt - now);
+          const remainingDays = Math.min(30, Math.ceil(remainingMs / 864e5));
+          if (remainingDays > 0) {
+            const allPayments2 = loadPaymentsDatabase();
+            const userPayments = allPayments2.filter((p) => (p.customerEmail || "").toLowerCase().trim() === cleanCustomerEmail && p.orderStatus === "PAID");
+            const lastPayment = userPayments[userPayments.length - 1];
+            const paidAmount = Number(lastPayment?.paidAmount || lastPayment?.orderAmount || 0);
+            const remainingCredit = paidAmount > 0 ? Math.floor(paidAmount * remainingDays / 30) : 0;
+            orderAmount = Math.max(1, orderAmount - remainingCredit);
+          }
         }
       }
     }
@@ -21524,14 +21662,23 @@ app.post("/api/cashfree/webhook", async (req, res) => {
         order.paidAmount = paymentAmount || order.orderAmount || 0;
         savePaymentsDatabase(allPayments);
       }
+      const mergedPayment = {
+        ...order || {},
+        orderId,
+        orderStatus: "PAID",
+        paymentStatus: "SUCCESS",
+        paidAmount: paymentAmount || order?.orderAmount || 0,
+        paidAt: Date.now(),
+        customerEmail: customerEmail || order?.customerEmail || "",
+        customerName: payload.data?.customer_details?.customer_name || order?.customerName || "\u092F\u0942\u091C\u093C\u0930",
+        customerPhone: payload.data?.customer_details?.customer_phone || order?.customerPhone || "",
+        orderAmount: order?.orderAmount || paymentAmount || 0,
+        planId: order?.planId || "advanced",
+        planKey: order?.planKey || "ADVANCE",
+        planName: order?.planName || "ADVANCE"
+      };
       if (centralDb.useFirestore) {
-        await centralDb.recordPayment(orderId, {
-          orderId,
-          orderStatus: "PAID",
-          paymentStatus: "SUCCESS",
-          paidAmount: paymentAmount,
-          paidAt: Date.now()
-        });
+        await centralDb.recordPayment(orderId, mergedPayment);
       }
       const customerEmail = (payload.data?.customer_details?.customer_email || order?.customerEmail || "").toLowerCase().trim();
       const rawPlanTag = payload.data?.order?.order_tags?.plan || order?.planKey || order?.planId || order?.planName;
@@ -21667,6 +21814,208 @@ app.get("/api/payment/gateways-status", (_req, res) => {
       }
     }
   });
+});
+var DAILY_GRAPHIC_CREATIONS_DB_FILE = import_path.default.join(process.cwd(), "daily_graphic_creations_db.json");
+function loadDailyGraphicCreationsDatabase() {
+  try {
+    if (import_fs.default.existsSync(DAILY_GRAPHIC_CREATIONS_DB_FILE)) {
+      const raw = import_fs.default.readFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {
+  }
+  return {};
+}
+function saveDailyGraphicCreationsDatabase(data) {
+  try {
+    import_fs.default.writeFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[DailyGraphicCreations] Save failed:", err.message);
+  }
+}
+function getDailyGraphicLimitForTier(tier = "basic") {
+  const clean = (tier || "basic").toLowerCase().trim();
+  if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) return 75;
+  if (clean.includes("pro") || clean.includes("professional")) return 40;
+  if (clean.includes("advance") || clean.includes("advanced")) return 25;
+  return 10;
+}
+app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
+  try {
+    const { email, userEmail, userId, requestId, postId } = req.body || {};
+    const cleanEmail = (email || userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || "").toString().trim();
+    const userKey = cleanEmail || cleanUserId;
+    if (!userKey) {
+      return res.status(400).json({ error: "User identity required" });
+    }
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.userId && u.userId.toLowerCase().trim() === cleanUserId
+    );
+    const userRole = (targetUser?.role || "").toLowerCase();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === "admin" || userRole === "superadmin";
+    if (isMaster) {
+      return res.json({
+        success: true,
+        unlimited: true,
+        limit: 999999,
+        usedToday: 0,
+        remainingToday: 999999,
+        message: "\u090F\u0921\u092E\u093F\u0928/\u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928: \u0905\u0938\u0940\u092E\u093F\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0928\u093F\u0930\u094D\u092E\u093E\u0923"
+      });
+    }
+    const tier = targetUser?.tier || "basic";
+    const dailyLimit = getDailyGraphicLimitForTier(tier);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const db = loadDailyGraphicCreationsDatabase();
+    if (!db[dateStr]) db[dateStr] = {};
+    if (!db[dateStr][userKey]) {
+      db[dateStr][userKey] = { count: 0, processedRequestIds: [], updatedAt: Date.now() };
+    }
+    const userEntry = db[dateStr][userKey];
+    if (!userEntry.processedRequestIds) userEntry.processedRequestIds = [];
+    const cleanReqId = (requestId || "").trim();
+    if (cleanReqId && userEntry.processedRequestIds.includes(cleanReqId)) {
+      return res.json({
+        success: true,
+        unlimited: false,
+        limit: dailyLimit,
+        usedToday: userEntry.count,
+        remainingToday: Math.max(0, dailyLimit - userEntry.count),
+        deduplicated: true
+      });
+    }
+    if (userEntry.count >= dailyLimit) {
+      return res.status(403).json({
+        success: false,
+        exhausted: true,
+        limit: dailyLimit,
+        usedToday: userEntry.count,
+        remainingToday: 0,
+        error: `\u0906\u091C \u0915\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0928\u093F\u0930\u094D\u092E\u093E\u0923 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E (${dailyLimit}/${dailyLimit}) \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`
+      });
+    }
+    userEntry.count += 1;
+    if (cleanReqId) userEntry.processedRequestIds.push(cleanReqId);
+    userEntry.updatedAt = Date.now();
+    saveDailyGraphicCreationsDatabase(db);
+    return res.json({
+      success: true,
+      unlimited: false,
+      limit: dailyLimit,
+      usedToday: userEntry.count,
+      remainingToday: Math.max(0, dailyLimit - userEntry.count)
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/user/graphic-creation-quota", (req, res) => {
+  try {
+    const cleanEmail = (req.query.email || req.query.userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (req.query.userId || "").toString().trim();
+    const userKey = cleanEmail || cleanUserId;
+    if (!userKey) {
+      return res.status(400).json({ error: "User identity required" });
+    }
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.userId && u.userId.toLowerCase().trim() === cleanUserId
+    );
+    const userRole = (targetUser?.role || "").toLowerCase();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === "admin" || userRole === "superadmin";
+    if (isMaster) {
+      return res.json({
+        success: true,
+        unlimited: true,
+        limit: 999999,
+        usedToday: 0,
+        remainingToday: 999999
+      });
+    }
+    const tier = targetUser?.tier || "basic";
+    const dailyLimit = getDailyGraphicLimitForTier(tier);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const db = loadDailyGraphicCreationsDatabase();
+    const userEntry = db[dateStr]?.[userKey] || { count: 0 };
+    const usedToday = userEntry.count || 0;
+    return res.json({
+      success: true,
+      unlimited: false,
+      limit: dailyLimit,
+      usedToday,
+      remainingToday: Math.max(0, dailyLimit - usedToday),
+      isExhausted: usedToday >= dailyLimit
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/membership/calculate-upgrade", (req, res) => {
+  try {
+    const { email, targetPlanId } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (!cleanEmail || !targetPlanId) {
+      return res.status(400).json({ error: "Email and targetPlanId are required" });
+    }
+    const masterUsers = loadUsersMasterDatabase();
+    const user = masterUsers.find((u) => u.email && u.email.toLowerCase().trim() === cleanEmail);
+    const currentTier = (user?.tier || "basic").toLowerCase().trim();
+    const targetId = String(targetPlanId).toLowerCase().trim();
+    const tierRank = {
+      basic: 1,
+      starter: 1,
+      advance: 2,
+      advanced: 2,
+      pro: 3,
+      professional: 3,
+      ultra: 4,
+      vip: 4,
+      "vip desk": 4,
+      enterprise: 4
+    };
+    const currentRank = tierRank[currentTier] || 1;
+    const targetRank = tierRank[targetId] || 1;
+    if (targetRank <= currentRank) {
+      return res.status(400).json({
+        allowed: false,
+        error: "\u0921\u093E\u0909\u0928\u0917\u094D\u0930\u0947\u0921 \u0938\u0902\u092D\u0935 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0906\u092A \u0915\u0947\u0935\u0932 \u0909\u091A\u094D\u091A\u0924\u0930 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+      });
+    }
+    const catalog = loadPlansCatalogDatabase();
+    const targetPlan = catalog.find((p) => p.id?.toLowerCase() === targetId || p.planKey?.toLowerCase() === targetId);
+    if (!targetPlan) {
+      return res.status(404).json({ allowed: false, error: "\u0932\u0915\u094D\u0937\u093F\u0924 \u092A\u094D\u0932\u093E\u0928 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const now = Date.now();
+    const expiresAt = user?.expiresAt ? Number(user.expiresAt) : now + 30 * 864e5;
+    const remainingMs = Math.max(0, expiresAt - now);
+    const remainingDays = Math.min(30, Math.ceil(remainingMs / 864e5));
+    const totalDays = 30;
+    const allPayments = loadPaymentsDatabase();
+    const userPayments = allPayments.filter((p) => (p.customerEmail || "").toLowerCase().trim() === cleanEmail && p.orderStatus === "PAID");
+    const lastPayment = userPayments[userPayments.length - 1];
+    const paidAmount = Number(lastPayment?.paidAmount || lastPayment?.orderAmount || 0);
+    const remainingValue = remainingDays > 0 && paidAmount > 0 ? Math.floor(paidAmount * remainingDays / totalDays) : 0;
+    const targetPrice = targetPlan.priceNum || 2499;
+    const upgradePayable = Math.max(1, targetPrice - remainingValue);
+    return res.json({
+      allowed: true,
+      currentTier,
+      currentPlanName: user?.planName || currentTier.toUpperCase(),
+      targetTier: targetId,
+      targetPlanName: targetPlan.nameHi || targetPlan.name,
+      targetPrice,
+      remainingDays,
+      totalDays,
+      currentPaidAmount: paidAmount,
+      remainingValue,
+      upgradePayable
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
 });
 var DAILY_DOWNLOADS_DB_FILE = import_path.default.join(process.cwd(), "daily_downloads_database.json");
 function loadDailyDownloadsDatabase() {

@@ -358,7 +358,7 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
               type="text"
               value={couponCodeInput}
               onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
-              placeholder="उदा. LAUNCH200"
+              placeholder="यहाँ कूपन कोड दर्ज करें"
               disabled={loading || !!appliedCoupon}
               className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white font-mono uppercase font-bold focus:border-amber-500 focus:outline-none disabled:opacity-50 text-xs"
             />

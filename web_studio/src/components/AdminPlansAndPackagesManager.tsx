@@ -15,6 +15,7 @@ import {
   Zap,
   Star,
   Clock,
+  Calendar,
   CheckCircle2,
   XCircle,
   AlertCircle,

@@ -946,7 +946,9 @@ class CentralFirestoreDatabaseService {
   async recordPayment(orderId, paymentData) {
     if (!orderId) return { success: false, error: 'OrderId required' };
     const cleanId = String(orderId).trim();
+    const existing = this.cache.payments.get(cleanId) || {};
     const payload = {
+      ...existing,
       ...paymentData,
       orderId: cleanId,
       docId: cleanId,
@@ -959,7 +961,9 @@ class CentralFirestoreDatabaseService {
       return res;
     } else {
       const payments = this._loadLocalJson('payments_transactions_db.json', []);
-      payments.unshift(payload);
+      const idx = payments.findIndex(p => p.orderId === cleanId);
+      if (idx >= 0) payments[idx] = payload;
+      else payments.unshift(payload);
       this._saveLocalJson('payments_transactions_db.json', payments);
       return { success: true };
     }

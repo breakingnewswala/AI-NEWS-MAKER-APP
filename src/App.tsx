@@ -3364,23 +3364,74 @@ export default function App() {
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
               {/* ============================================================== */}
               <div className="lg:hidden w-full flex flex-col min-h-screen">
-                {/* 🔒 STICKY / FROZEN STUDIO HEADER (Part 16: Centered Preview Canvas + Action Strip + 7-Step Navigation) */}
+                {/* 🔒 STICKY / FROZEN STUDIO HEADER (70/30 Preview & Steps + Live Preview Action Strip) */}
                 <div
                   id="mobile-studio-sticky-header"
                   className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2.5 pt-2 pb-1.5 transition-all"
                 >
-                  {/* Centered Live Preview Canvas (Part 16: Full clear width, uncompressed) */}
-                  <div className="w-full max-w-[340px] sm:max-w-md mx-auto aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-slate-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
-                    <CardPreview
-                      card={card}
-                      className="w-full h-full"
-                      showSafeZone={showSafeZone}
-                      onChange={handleUpdateCard}
-                    />
+                  {/* Row 2: Balanced 70/30 Split (Left ~70%: 4:5 Preview | Right ~30%: 7 Editor Steps) */}
+                  <div className="flex flex-row items-stretch gap-2.5 max-w-md mx-auto w-full">
+                    {/* Left Column: ~70% width for 4:5 Graphic Preview */}
+                    <div className="w-[69%] min-w-0 flex flex-col justify-start">
+                      <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1 truncate">
+                        4:5 PREVIEW SPACE — 70% WIDTH
+                      </div>
+                      <div className="w-full aspect-[4/5] max-h-[300px] rounded-xl sm:rounded-2xl overflow-hidden ring-1 ring-slate-800 shadow-2xl bg-black flex items-center justify-center relative">
+                        <CardPreview
+                          card={card}
+                          className="w-full h-full"
+                          showSafeZone={showSafeZone}
+                          onChange={handleUpdateCard}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Column: ~30% width for 7 Editor Steps (Text only, exact order) */}
+                    <div className="w-[31%] min-w-0 flex flex-col justify-between py-0.5">
+                      <div className="text-[11px] sm:text-xs font-black text-amber-400 tracking-wide mb-1 text-center truncate flex items-center justify-center gap-1">
+                        <span>एडिटर स्टेप्स</span>
+                        <span className="text-[9.5px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                          {calculateEditorProgress(card, activeStep).percentage}%
+                        </span>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-between gap-1">
+                        {[
+                          { step: 1, label: 'टेम्पलेट्स' },
+                          { step: 2, label: 'एआई टूल्स' },
+                          { step: 3, label: 'हेडलाइन' },
+                          { step: 4, label: 'फोटो व वॉटरमार्क' },
+                          { step: 5, label: 'स्थान व दिनांक' },
+                          { step: 6, label: 'हेडर व फुटर' },
+                          { step: 7, label: 'डाउनलोड व कैप्शन' },
+                        ].map((s) => {
+                          const isActive = activeStep === s.step;
+                          return (
+                            <button
+                              key={s.step}
+                              type="button"
+                              onClick={() => {
+                                setActiveStep(s.step);
+                                const el = document.getElementById('mobile-active-step-commands');
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }
+                              }}
+                              className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all text-center truncate cursor-pointer select-none ${
+                                isActive
+                                  ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                                  : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 border border-slate-800/80'
+                              }`}
+                            >
+                              {s.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Live Preview Action Strip (Draft / Refresh) */}
-                  <div className="flex items-center justify-between w-full max-w-md mx-auto py-1 px-1 border-t border-b border-slate-800/80 my-1">
+                  {/* Row 3: Live Preview Action Strip */}
+                  <div className="flex items-center justify-between w-full max-w-md mx-auto pt-2 pb-0.5 border-t border-slate-800/80 mt-1.5">
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse motion-reduce:animate-none shadow-sm" />
                       <span className="text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-slate-200">
@@ -3406,49 +3457,6 @@ export default function App() {
                         <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
                         <span>REFRESH</span>
                       </button>
-                    </div>
-                  </div>
-
-                  {/* Horizontal / Grid 7-Step Navigation (Part 16: Clean accessible tap targets) */}
-                  <div className="w-full max-w-md mx-auto my-1">
-                    <div className="flex items-center justify-between text-[11px] font-black text-amber-400 px-1 mb-1">
-                      <span>एडिटर स्टेप्स (1-7)</span>
-                      <span className="text-[9.5px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
-                        प्रगति: {calculateEditorProgress(card, activeStep).percentage}%
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-4 sm:grid-cols-7 gap-1">
-                      {[
-                        { step: 1, label: '1. टेम्पलेट्स' },
-                        { step: 2, label: '2. एआई टूल्स' },
-                        { step: 3, label: '3. हेडलाइन' },
-                        { step: 4, label: '4. फोटो' },
-                        { step: 5, label: '5. स्थान' },
-                        { step: 6, label: '6. हेडर/फुटर' },
-                        { step: 7, label: '7. डाउनलोड' },
-                      ].map((s) => {
-                        const isActive = activeStep === s.step;
-                        return (
-                          <button
-                            key={s.step}
-                            type="button"
-                            onClick={() => {
-                              setActiveStep(s.step);
-                              const el = document.getElementById('mobile-active-step-commands');
-                              if (el) {
-                                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                              }
-                            }}
-                            className={`py-1.5 px-1 rounded-lg text-[10px] font-bold transition-all text-center truncate cursor-pointer select-none ${
-                              isActive
-                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                                : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
-                            }`}
-                          >
-                            {s.label}
-                          </button>
-                        );
-                      })}
                     </div>
                   </div>
                 </div>

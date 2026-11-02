@@ -420,6 +420,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
   const [isVideoTemplateControlOpen, setIsVideoTemplateControlOpen] = useState<boolean>(false);
   const [isVideoAnalyticsOpen, setIsVideoAnalyticsOpen] = useState<boolean>(false);
+  const [videoAnalyticsData, setVideoAnalyticsData] = useState<any>(null);
 
   // Floating Back to Top state
   const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
@@ -1196,7 +1197,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               {isAdmin ? (
                 <button
                   type="button"
-                  onClick={() => setIsVideoAnalyticsOpen(true)}
+                  onClick={() => {
+                    fetch(getApiUrl('/api/analytics/feed-summary?type=video'))
+                      .then(r => r.json())
+                      .then(d => { if (d.success) setVideoAnalyticsData(d); })
+                      .catch(() => {});
+                    setIsVideoAnalyticsOpen(true);
+                  }}
                   className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-500/40 shadow-xs hover:border-blue-500/70 active:scale-95 transition-all duration-150 cursor-pointer text-center"
                   title="वीडियो एनालिटिक्स देखें"
                 >

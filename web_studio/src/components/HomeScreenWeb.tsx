@@ -11,6 +11,9 @@ import {
   Check,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
+  FolderTree,
+  Search,
   FileText,
   TrendingUp,
   Megaphone,
@@ -284,11 +287,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   onNavigateToTab,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [speakingPostId, setSpeakingPostId] = useState<string | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [isNewsAnalyticsOpen, setIsNewsAnalyticsOpen] = useState<boolean>(false);
+  const [newsAnalyticsData, setNewsAnalyticsData] = useState<any>(null);
   const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
 
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
@@ -655,11 +661,49 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     } catch {}
   };
 
-  const handleOpenStudioSafe = (post: NewsFeedPost) => {
-    if (downloadStatus?.isExhausted && !post.isBonus && !isEffectiveAdmin(currentUser)) {
-      setShowLimitExhaustedModal(true);
+  const handleOpenStudioSafe = async (post: NewsFeedPost) => {
+    if (!currentUser?.email) {
+      onOpenStudioWithNews(post);
       return;
     }
+
+    if (isEffectiveAdmin(currentUser)) {
+      onOpenStudioWithNews(post);
+      return;
+    }
+
+    try {
+      const requestId = `req_create_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const res = await fetch(getApiUrl('/api/user/consume-graphic-creation-quota'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.email,
+          userId: currentUser.userId,
+          requestId,
+          postId: post.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.status === 403 || data.exhausted) {
+        alert(data.error || 'आज की ग्राफिक निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।');
+        return;
+      }
+
+      if (data && typeof data.remainingToday === 'number') {
+        setDailyQuotaStatus((prev: any) => ({
+          ...(prev || {}),
+          remainingToday: data.remainingToday,
+          usedToday: data.usedToday,
+          limit: data.limit,
+          isExhausted: data.remainingToday <= 0,
+        }));
+      }
+    } catch (e) {
+      console.warn('Quota consumption network error, proceeding safely:', e);
+    }
+
     onOpenStudioWithNews(post);
   };
 
@@ -1483,7 +1527,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
               <button
                 type="button"
-                onClick={() => setIsNewsAnalyticsOpen(true)}
+                onClick={() => {
+                  fetch(getApiUrl('/api/analytics/feed-summary?type=news'))
+                    .then(r => r.json())
+                    .then(d => { if (d.success) setNewsAnalyticsData(d); })
+                    .catch(() => {});
+                  setIsNewsAnalyticsOpen(true);
+                }}
                 className="py-1.5 px-1 rounded-xl text-center flex items-center justify-center gap-1 active:scale-95 transition shadow-xs cursor-pointer border text-[10px] truncate bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border-blue-500 font-bold"
                 title="न्यूज़ एनालिटिक्स देखें"
               >
@@ -1770,7 +1820,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div
                 key={currentTickerPost.id}
                 className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-900 dark:text-amber-300 truncate animate-in fade-in slide-in-from-bottom-2 duration-300 cursor-pointer hover:text-red-600 dark:hover:text-white"
-                onClick={() => onOpenStudioWithNews(currentTickerPost)}
+                onClick={() => handleOpenStudioSafe(currentTickerPost)}
                 title="क्लिक करके स्टूडियो में कार्ड बनाएं"
               >
                 
@@ -2272,36 +2322,48 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
 
 
-        {/* 4. Category Filter Chips (Single Source of Truth from Category Manager) */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-          <button
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
-              selectedCategory === 'all'
-                ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-400/25 font-black scale-105'
-                : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xs'
-            }`}
-          >
-            <span>सभी</span>
-          </button>
+                {/* 4. Category Selector Bar (Replaced horizontal scroll with clean Popup Selector) */}
+        {(() => {
+          const selectedCatObj = selectedCategory === 'all' ? null : feedCategories.find((c) => c.id === selectedCategory || c.name === selectedCategory);
+          const selectedCatName = selectedCatObj ? selectedCatObj.name : 'सभी खबरें (समस्त श्रेणियाँ)';
+          return (
+            <div className="flex items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-sm">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+                  <FolderTree className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
+                    सक्रिय श्रेणी (Active Category)
+                  </div>
+                  <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
+                    {selectedCategory === 'all' ? 'सभी खबरें (समस्त श्रेणियाँ)' : selectedCatName}
+                  </div>
+                </div>
+              </div>
 
-          {feedCategories.map((cat) => {
-            const active = selectedCategory === cat.id;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
-                  active
-                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-400/25 font-black scale-105'
-                    : 'bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-2xs'
-                }`}
-              >
-                <span>{cat.name}</span>
-              </button>
-            );
-          })}
-        </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedCategory !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory('all')}
+                    className="px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition cursor-pointer"
+                  >
+                    रीसेट (सभी)
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(true)}
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                >
+                  <span>श्रेणी चुनें</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 5. Main News Grid */}
         <div className="space-y-4">
@@ -4337,10 +4399,102 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       )}
 
       {/* In-Screen News Analytics Modal (Part 12) */}
+      {/* Category Selector Modal Popup (Vertical Scroll, Search, Clean Full List) */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border-2 border-amber-500/60 rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <div className="flex items-center gap-2 text-white font-black text-base">
+                <FolderTree className="w-5 h-5 text-amber-400" />
+                <span>समाचार श्रेणी चुनें</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Category Search Filter */}
+            <div className="relative shrink-0">
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="श्रेणी खोजें..."
+                value={categorySearchQuery}
+                onChange={(e) => setCategorySearchQuery(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              />
+            </div>
+
+            {/* Vertical Scrollable Category List */}
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 no-scrollbar">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategory('all');
+                  setIsCategoryModalOpen(false);
+                }}
+                className={`w-full p-2.5 rounded-xl text-left text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                  selectedCategory === 'all'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                    : 'bg-slate-950/80 hover:bg-slate-800 text-slate-200 border border-slate-800/80'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🌐</span>
+                  <span>सभी खबरें (समस्त श्रेणियाँ)</span>
+                </div>
+                {selectedCategory === 'all' && <Check className="w-4 h-4 text-slate-950" />}
+              </button>
+
+              {feedCategories
+                .filter((cat) => !categorySearchQuery.trim() || cat.name.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+                .map((cat) => {
+                  const isActive = selectedCategory === cat.id || selectedCategory === cat.name;
+                  return (
+                    <button
+                      key={cat.id || cat.name}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(cat.id || cat.name);
+                        setIsCategoryModalOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl text-left text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                        isActive
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                          : 'bg-slate-950/80 hover:bg-slate-800 text-slate-200 border border-slate-800/80'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-base">{cat.icon || '📁'}</span>
+                        <span className="truncate">{cat.name}</span>
+                      </div>
+                      {isActive && <Check className="w-4 h-4 text-slate-950 shrink-0" />}
+                    </button>
+                  );
+                })}
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                बंद करें
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isNewsAnalyticsOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-slate-900 border-2 border-blue-500/70 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="bg-slate-900 border-2 border-blue-500/70 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
               <div className="flex items-center gap-2 text-blue-400 font-black text-base">
                 <BarChart3 className="w-5 h-5" />
                 <span>लाइव न्यूज़ एनालिटिक्स (IST)</span>
@@ -4353,8 +4507,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 ✕ बंद करें
               </button>
             </div>
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
+            <div className="space-y-3 text-xs flex-1 overflow-y-auto no-scrollbar pr-1">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center shrink-0">
                 <span className="text-slate-400 font-bold">दिनांक (IST):</span>
                 <span className="font-mono font-bold text-white">
                   {new Date().toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
@@ -4362,18 +4516,35 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 font-bold block mb-1">कुल खबरें</span>
-                  <span className="text-lg font-black text-white font-mono">{posts.length}</span>
+                  <span className="text-[10px] text-slate-400 font-bold block mb-1">कुल प्राप्त खबरें</span>
+                  <span className="text-lg font-black text-white font-mono">{newsAnalyticsData?.totalPosts ?? posts.length}</span>
                 </div>
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-emerald-400 font-bold block mb-1">प्रकाशित</span>
-                  <span className="text-lg font-black text-emerald-400 font-mono">{publishedCount}</span>
+                  <span className="text-[10px] text-emerald-400 font-bold block mb-1">कुल प्रकाशित</span>
+                  <span className="text-lg font-black text-emerald-400 font-mono">{newsAnalyticsData?.publishedPosts ?? publishedCount}</span>
                 </div>
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-amber-400 font-bold block mb-1">लंबित</span>
-                  <span className="text-lg font-black text-amber-400 font-mono">{pendingRssCount}</span>
+                  <span className="text-[10px] text-amber-400 font-bold block mb-1">कुल लंबित</span>
+                  <span className="text-lg font-black text-amber-400 font-mono">{newsAnalyticsData?.pendingPosts ?? pendingRssCount}</span>
                 </div>
               </div>
+
+              {/* Downloads & Unique Users Summary */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-blue-900/40">
+                  <span className="text-[10px] text-blue-400 font-bold block mb-1">ग्राफिक डाउनलोड्स</span>
+                  <span className="text-lg font-black text-blue-300 font-mono">{newsAnalyticsData?.graphicDownloads ?? 0}</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-purple-900/40">
+                  <span className="text-[10px] text-purple-400 font-bold block mb-1">वीडियो डाउनलोड्स</span>
+                  <span className="text-lg font-black text-purple-300 font-mono">{newsAnalyticsData?.videoDownloads ?? 0}</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-emerald-900/40">
+                  <span className="text-[10px] text-emerald-400 font-bold block mb-1">Unique डाउनलोडर्स</span>
+                  <span className="text-lg font-black text-emerald-300 font-mono">{newsAnalyticsData?.uniqueUsers ?? 0}</span>
+                </div>
+              </div>
+
               <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400">बोनस खबरें (फ्री):</span>
@@ -4381,14 +4552,36 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400">सक्रिय RSS स्रोत:</span>
-                  <span className="font-mono font-bold text-white">39 स्रोत</span>
+                  <span className="font-mono font-bold text-white">{newsAnalyticsData?.activeRssSources ?? 0} स्रोत</span>
                 </div>
+              </div>
+
+              {/* Recent Download Logs */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-slate-300 block">हाल के सफल डाउनलोड रिकॉर्ड्स:</span>
+                {(!newsAnalyticsData?.recentDownloads || newsAnalyticsData.recentDownloads.length === 0) ? (
+                  <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 text-center text-slate-500 text-[11px]">
+                    अभी कोई डाउनलोड रिकॉर्ड दर्ज नहीं हुआ है।
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto no-scrollbar">
+                    {newsAnalyticsData.recentDownloads.map((d: any, idx: number) => (
+                      <div key={idx} className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between text-slate-400 font-mono text-[10px]">
+                          <span className="text-amber-400 font-bold">{d.userName || 'यूज़र'} ({d.userEmail || ''})</span>
+                          <span>{new Date(d.timestamp).toLocaleTimeString('hi-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <div className="text-white font-bold truncate">{d.headline}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsNewsAnalyticsOpen(false)}
-              className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl cursor-pointer"
+              className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl cursor-pointer shrink-0"
             >
               ठीक है
             </button>

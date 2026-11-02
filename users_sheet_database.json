@@ -55,15 +55,17 @@
     "email": "riturajtomarorchha@gmail.com",
     "name": "ऋतुराज तोमर (ओरछा)",
     "role": "user",
-    "tier": "basic",
-    "planName": "BASIC",
+    "tier": "advanced",
+    "planName": "ADVANCE",
     "channelName": "ओरछा बुंदेलखंड न्यूज़",
     "channelLogoUrl": "/assets/ai_news_maker_logo.png",
     "mobile": "9876543211",
     "isProfileLocked": false,
     "activatedAt": 1791892712618,
-    "expiresAt": 1792497512618,
+    "expiresAt": 1796255999000,
     "activatedVia": "Free 7-Day VIP Trial",
-    "username": "riturajtomarorchha"
+    "username": "riturajtomarorchha",
+    "isTrialExpired": false,
+    "hasActivePaidPlan": true
   }
 ]

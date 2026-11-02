@@ -1615,8 +1615,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   };
 
   // Handle Plan Upgrade & Payment Gateway Checkout
-  const handleUpgradePlan = (tier: UserPlanTier) => {
+  const handleUpgradePlan = async (tier: UserPlanTier) => {
+    const tierRankMap: Record<string, number> = {
+      basic: 1, starter: 1, advanced: 2, advance: 2, professional: 3, pro: 3, ultra: 4, vip: 4, 'vip desk': 4, enterprise: 4,
+    };
+    const curRank = tierRankMap[(subscription.tier || 'basic').toLowerCase()] || 1;
+    const tgtRank = tierRankMap[(tier || '').toLowerCase()] || 1;
+
+    if (tgtRank < curRank) {
+      alert('डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।');
+      return;
+    }
+
     if (tier === 'basic') {
+      if (curRank > 1) {
+        alert('डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।');
+        return;
+      }
       setUserPlanTier('basic');
       const updated = getUserSubscription();
       setSubscription(updated);
@@ -1677,69 +1692,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   const renderMembershipUpgradeSection = () => (
     <div className="space-y-6 animate-in fade-in duration-200">
-      {/* PROMO CODE REDEMPTION BOX (USER ONLY - HIDDEN IN ADMIN MODE) */}
-            {!isAdmin && (
-              <div className="bg-gradient-to-r from-amber-500/15 via-slate-900 to-amber-500/15 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
-                      <Ticket className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-black text-white flex items-center gap-2">
-                        <span>🎁 प्रोमो कोड रिडीम करें (Redeem Promo Code)</span>
-                        <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded uppercase">
-                          Instant Activation
-                        </span>
-                      </h3>
-                      <p className="text-xs text-slate-300">
-                        यदि आपने ऑफ़लाइन/UPI पेमेंट किया है या आपके पास प्रोमो कोड है, तो यहाँ दर्ज करके तुरंत अपना प्लान एक्टिवेट करें।
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Input Form */}
-                <form onSubmit={handleRedeemPromoCode} className="flex flex-col sm:flex-row gap-2.5 pt-1">
-                  <input
-                    type="text"
-                    value={userPromoInput}
-                    onChange={(e) => setUserPromoInput(e.target.value.toUpperCase())}
-                    placeholder="उदा. PRO2026 या PRO-RIT2026-001"
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm font-mono font-black text-amber-300 uppercase tracking-widest focus:outline-hidden focus:border-amber-500 shadow-inner"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isRedeemingPromo || !userPromoInput.trim()}
-                    className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>{isRedeemingPromo ? 'वेरीफाई हो रहा है...' : 'प्रोमो कोड अप्लाई करें'}</span>
-                  </button>
-                </form>
-
-                {promoRedeemResult && (
-                  <div
-                    className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
-                      promoRedeemResult.success
-                        ? 'bg-emerald-950/90 border border-emerald-500 text-emerald-300'
-                        : 'bg-red-950/90 border border-red-500 text-red-300'
-                    }`}
-                  >
-                    {promoRedeemResult.success ? (
-                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-                    )}
-                    <span>{promoRedeemResult.message}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-
-
-            {/* SECTION 2: 4-TIER PLANS & UPGRADE (Basic, Advanced, Professional, Ultra) */}
+      {/* SECTION 2: 4-TIER PLANS & UPGRADE (Basic, Advanced, Professional, Ultra) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
               <div className="border-b border-slate-800 pb-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1918,7 +1871,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             }`}
                           >
                             <Zap className="w-3.5 h-3.5" />
-                            <span>{plan.id === 'basic' ? 'बेसिक पर स्विच करें' : 'अपग्रेड व सक्रिय करें'}</span>
+                            <span><span>अपग्रेड करें</span></span>
                           </button>
                         )}
                       </div>
@@ -1926,6 +1879,63 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   );
                 })}
               </div>
+
+              {/* PROMO CODE REDEMPTION BOX (USER ONLY - HIDDEN IN ADMIN MODE) */}
+            {!isAdmin && (
+              <div className="bg-gradient-to-r from-amber-500/15 via-slate-900 to-amber-500/15 border-2 border-amber-500/60 rounded-2xl p-5 shadow-2xl space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
+                      <Ticket className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-white flex items-center gap-2">
+                        <span>🎁 प्रोमो कोड रिडीम करें</span>
+                      </h3>
+                      <p className="text-xs text-slate-300">
+                        यदि आपने ऑफ़लाइन/UPI पेमेंट किया है या आपके पास प्रोमो कोड है, तो यहाँ दर्ज करके तुरंत अपना प्लान एक्टिवेट करें।
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Input Form */}
+                <form onSubmit={handleRedeemPromoCode} className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                  <input
+                    type="text"
+                    value={userPromoInput}
+                    onChange={(e) => setUserPromoInput(e.target.value.toUpperCase())}
+                    placeholder="यहाँ प्रोमो कोड दर्ज करें"
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm font-mono font-black text-amber-300 uppercase tracking-widest focus:outline-hidden focus:border-amber-500 shadow-inner"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isRedeemingPromo || !userPromoInput.trim()}
+                    className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>{isRedeemingPromo ? 'सत्यापित हो रहा है...' : 'प्रोमो कोड लागू करें'}</span>
+                  </button>
+                </form>
+
+                {promoRedeemResult && (
+                  <div
+                    className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+                      promoRedeemResult.success
+                        ? 'bg-emerald-950/90 border border-emerald-500 text-emerald-300'
+                        : 'bg-red-950/90 border border-red-500 text-red-300'
+                    }`}
+                  >
+                    {promoRedeemResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                    )}
+                    <span>{promoRedeemResult.message}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
               {/* User Payment History Section */}
               <div className="mt-8 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">

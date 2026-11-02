@@ -2881,6 +2881,12 @@
     "user_wallet_1793391037107": {
       "walletKey": "user_wallet_1793391037107",
       "coinBalance": 75
+    },
+    "riturajtomarorchha@gmail.com": {
+      "userId": "usr_rituraj_102",
+      "email": "riturajtomarorchha@gmail.com",
+      "coins": 5000,
+      "updatedAt": 1793635484335
     }
   },
   "welcomeRewards": {
