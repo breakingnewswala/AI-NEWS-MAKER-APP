@@ -87,49 +87,17 @@ export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[
     if (res.ok) {
       const data = await res.json();
       const serverSources = (data && data.success && Array.isArray(data.sources)) ? data.sources : [];
-      const localSources = getAdminRssSources();
 
-      // Non-destructive bidirectional merge:
-      // Map by URL or ID so neither client nor server ever silently deletes the admin's sources
-      const sourceMap = new Map<string, AdminRssSource>();
+      // Server is the SINGLE AUTHORITATIVE SOURCE OF TRUTH.
+      // Do NOT resurrect deleted sources from localStorage back to the server.
+      const cleaned = serverSources.filter((s: AdminRssSource) => s && s.url && !deletedIds.has(s.id));
 
-      // 1. Add valid server sources (not explicitly deleted by user)
-      serverSources.forEach((s: AdminRssSource) => {
-        if (s && s.url && !deletedIds.has(s.id)) {
-          sourceMap.set(s.url.trim(), s);
-        }
-      });
-
-      // 2. Add local sources not already in server
-      let hasLocalUnsynced = false;
-      localSources.forEach((s: AdminRssSource) => {
-        if (s && s.url && !deletedIds.has(s.id)) {
-          const key = s.url.trim();
-          if (!sourceMap.has(key)) {
-            sourceMap.set(key, s);
-            hasLocalUnsynced = true;
-          }
-        }
-      });
-
-      let merged = Array.from(sourceMap.values());
-      if (merged.length === 0 && deletedIds.size === 0) {
-        merged = DEFAULT_RSS_SOURCES;
-        hasLocalUnsynced = true;
-      }
-
-      memoryRssSources = merged;
+      memoryRssSources = cleaned;
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(merged));
-        window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: merged }));
+        localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(cleaned));
+        window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: cleaned }));
       }
-
-      // If local storage had sources missing from server (e.g. after a redeploy/update), restore them to backend
-      if (hasLocalUnsynced) {
-        saveAdminRssSources(merged);
-      }
-
-      return merged;
+      return cleaned;
     }
   } catch (err) {
     console.warn('Failed to fetch RSS sources from backend, preserving local sources:', err);

@@ -1,25 +1,5 @@
 [
   {
-    "id": "rss-src_legacy_unauthorized_source-art999",
-    "title": "Old Legacy News From Nai Dunia Or Aaj Tak",
-    "summary": "Should be suppressed completely",
-    "sourceChannel": "Legacy Channel",
-    "sourceUrl": "https://example.com/legacy-old.xml",
-    "category": "national",
-    "categoryName": "ब्रेकिंग न्यूज़",
-    "publishedTime": "अभी-अभी",
-    "imageUrl": "",
-    "breaking": false,
-    "isExclusive": false,
-    "fullContent": "Should be suppressed completely",
-    "district": "",
-    "location": "",
-    "timestamp": 1793704672759,
-    "status": "APPROVED",
-    "isApproved": true,
-    "isPrePublished": false
-  },
-  {
     "id": "editorial-seed-4KSu4KWM4KS4",
     "docId": "editorial-seed-4KSu4KWM4KS4",
     "isApproved": true,

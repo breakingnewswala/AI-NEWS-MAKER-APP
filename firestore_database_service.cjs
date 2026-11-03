@@ -704,23 +704,22 @@ class CentralFirestoreDatabaseService {
   async listUsers() {
     if (this.useFirestore) {
       let docs = [];
-      if (this.cache.users.size > 0) {
-        // Return unique documents from cache
-        const unique = new Map();
-        for (const u of this.cache.users.values()) {
-          const isMA = this._isMasterAdminIdentifier(u.email) || this._isMasterAdminIdentifier(u.userId) || this._isMasterAdminIdentifier(u.id);
-          const key = isMA ? 'breakingnewswala.com@gmail.com' : (u.id || u.docId || u.email || u.userId);
-          if (key && !unique.has(key)) {
-            unique.set(key, u);
-          } else if (isMA && unique.has(key)) {
-            unique.set(key, { ...unique.get(key), ...u });
-          }
+      const rawList = this.cache.users.size > 0 
+        ? Array.from(this.cache.users.values()) 
+        : ((await this.listDocs('users', 300)).documents || []);
+      
+      const unique = new Map();
+      for (const u of rawList) {
+        const email = (u?.email || '').toLowerCase().trim();
+        const isMA = this._isMasterAdminIdentifier(email) || this._isMasterAdminIdentifier(u?.userId) || this._isMasterAdminIdentifier(u?.id);
+        const key = isMA ? 'breakingnewswala.com@gmail.com' : (email || u?.id || u?.docId || u?.userId);
+        if (key && !unique.has(key)) {
+          unique.set(key, u);
+        } else if (isMA && unique.has(key)) {
+          unique.set(key, { ...unique.get(key), ...u });
         }
-        docs = Array.from(unique.values());
-      } else {
-        const res = await this.listDocs('users', 300);
-        docs = res.documents || [];
       }
+      docs = Array.from(unique.values());
       const tombstones = this.cache.tombstones || new Set();
       return docs.filter(u => {
         const uEmail = (u.email || '').toLowerCase().trim();

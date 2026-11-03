@@ -2218,22 +2218,19 @@ var require_firestore_database_service = __commonJS({
       async listUsers() {
         if (this.useFirestore) {
           let docs = [];
-          if (this.cache.users.size > 0) {
-            const unique = /* @__PURE__ */ new Map();
-            for (const u of this.cache.users.values()) {
-              const isMA = this._isMasterAdminIdentifier(u.email) || this._isMasterAdminIdentifier(u.userId) || this._isMasterAdminIdentifier(u.id);
-              const key = isMA ? "breakingnewswala.com@gmail.com" : u.id || u.docId || u.email || u.userId;
-              if (key && !unique.has(key)) {
-                unique.set(key, u);
-              } else if (isMA && unique.has(key)) {
-                unique.set(key, { ...unique.get(key), ...u });
-              }
+          const rawList = this.cache.users.size > 0 ? Array.from(this.cache.users.values()) : (await this.listDocs("users", 300)).documents || [];
+          const unique = /* @__PURE__ */ new Map();
+          for (const u of rawList) {
+            const email = (u?.email || "").toLowerCase().trim();
+            const isMA = this._isMasterAdminIdentifier(email) || this._isMasterAdminIdentifier(u?.userId) || this._isMasterAdminIdentifier(u?.id);
+            const key = isMA ? "breakingnewswala.com@gmail.com" : email || u?.id || u?.docId || u?.userId;
+            if (key && !unique.has(key)) {
+              unique.set(key, u);
+            } else if (isMA && unique.has(key)) {
+              unique.set(key, { ...unique.get(key), ...u });
             }
-            docs = Array.from(unique.values());
-          } else {
-            const res = await this.listDocs("users", 300);
-            docs = res.documents || [];
           }
+          docs = Array.from(unique.values());
           const tombstones = this.cache.tombstones || /* @__PURE__ */ new Set();
           return docs.filter((u) => {
             const uEmail = (u.email || "").toLowerCase().trim();
@@ -4491,22 +4488,19 @@ var require_firestore_database_service2 = __commonJS({
       async listUsers() {
         if (this.useFirestore) {
           let docs = [];
-          if (this.cache.users.size > 0) {
-            const unique = /* @__PURE__ */ new Map();
-            for (const u of this.cache.users.values()) {
-              const isMA = this._isMasterAdminIdentifier(u.email) || this._isMasterAdminIdentifier(u.userId) || this._isMasterAdminIdentifier(u.id);
-              const key = isMA ? "breakingnewswala.com@gmail.com" : u.id || u.docId || u.email || u.userId;
-              if (key && !unique.has(key)) {
-                unique.set(key, u);
-              } else if (isMA && unique.has(key)) {
-                unique.set(key, { ...unique.get(key), ...u });
-              }
+          const rawList = this.cache.users.size > 0 ? Array.from(this.cache.users.values()) : (await this.listDocs("users", 300)).documents || [];
+          const unique = /* @__PURE__ */ new Map();
+          for (const u of rawList) {
+            const email = (u?.email || "").toLowerCase().trim();
+            const isMA = this._isMasterAdminIdentifier(email) || this._isMasterAdminIdentifier(u?.userId) || this._isMasterAdminIdentifier(u?.id);
+            const key = isMA ? "breakingnewswala.com@gmail.com" : email || u?.id || u?.docId || u?.userId;
+            if (key && !unique.has(key)) {
+              unique.set(key, u);
+            } else if (isMA && unique.has(key)) {
+              unique.set(key, { ...unique.get(key), ...u });
             }
-            docs = Array.from(unique.values());
-          } else {
-            const res = await this.listDocs("users", 300);
-            docs = res.documents || [];
           }
+          docs = Array.from(unique.values());
           const tombstones = this.cache.tombstones || /* @__PURE__ */ new Set();
           return docs.filter((u) => {
             const uEmail = (u.email || "").toLowerCase().trim();
@@ -7587,10 +7581,13 @@ function saveNewsDatabase(posts) {
       centralDb.cache.news.set(post.id, post);
       centralDb.saveNewsPost(post.id, post).catch((e) => console.warn("[Firestore News Sync Error]", e.message));
     }
-    for (const id of centralDb.cache.news.keys()) {
-      if (!activeIds.has(id)) {
-        centralDb.deleteNewsPost(id).catch(() => {
-        });
+    if (centralDb.cache?.news) {
+      for (const id of Array.from(centralDb.cache.news.keys())) {
+        if (!activeIds.has(String(id))) {
+          centralDb.deleteNewsPost(String(id)).catch(() => {
+          });
+          centralDb.cache.news.delete(id);
+        }
       }
     }
     return true;
@@ -9847,10 +9844,22 @@ function loadUsersMasterDatabase() {
 }
 function saveUsersMasterDatabase(users) {
   if (centralDb && centralDb.useFirestore) {
+    const activeKeys = new Set(users.map((u) => (u.email || u.userId || u.id || "").toLowerCase().trim()));
     for (const u of users) {
       const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
       if (key) {
         centralDb.saveUser(key, u).catch((e) => console.warn("[Firestore User Sync Error]", e.message));
+      }
+    }
+    if (centralDb.cache?.users) {
+      for (const [k, u] of Array.from(centralDb.cache.users.entries())) {
+        const uEmail = (u?.email || "").toLowerCase().trim();
+        const uId = (u?.userId || u?.id || u?.uid || "").toLowerCase().trim();
+        if (!activeKeys.has(k) && !activeKeys.has(uEmail) && !activeKeys.has(uId)) {
+          centralDb.deleteDoc("users", k).catch(() => {
+          });
+          centralDb.cache.users.delete(k);
+        }
       }
     }
     return true;
@@ -11751,10 +11760,20 @@ function loadRssSourcesDatabase() {
 function saveRssSourcesDatabase(sources) {
   const cleaned = sources.filter((s) => Boolean(s && s.url));
   if (centralDb && centralDb.useFirestore) {
+    const activeIds = new Set(cleaned.map((s) => String(s.id)));
     for (const s of cleaned) {
       if (s && s.id) {
         centralDb.saveRssSource(s.id, s).catch(() => {
         });
+      }
+    }
+    if (centralDb.cache?.rssSources) {
+      for (const id of Array.from(centralDb.cache.rssSources.keys())) {
+        if (!activeIds.has(String(id))) {
+          centralDb.deleteDoc("rss_sources", String(id)).catch(() => {
+          });
+          centralDb.cache.rssSources.delete(id);
+        }
       }
     }
     return true;

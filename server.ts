@@ -1576,9 +1576,12 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
       centralDb.cache.news.set(post.id, post);
       centralDb.saveNewsPost(post.id, post).catch((e: any) => console.warn("[Firestore News Sync Error]", e.message));
     }
-    for (const id of centralDb.cache.news.keys()) {
-      if (!activeIds.has(id)) {
-        centralDb.deleteNewsPost(id).catch(() => {});
+    if (centralDb.cache?.news) {
+      for (const id of Array.from(centralDb.cache.news.keys())) {
+        if (!activeIds.has(String(id))) {
+          centralDb.deleteNewsPost(String(id)).catch(() => {});
+          centralDb.cache.news.delete(id);
+        }
       }
     }
     return true;
@@ -4409,10 +4412,21 @@ function loadUsersMasterDatabase(): AuthoritativeUser[] {
 
 function saveUsersMasterDatabase(users: AuthoritativeUser[]): boolean {
   if (centralDb && centralDb.useFirestore) {
+    const activeKeys = new Set(users.map(u => (u.email || u.userId || (u as any).id || '').toLowerCase().trim()));
     for (const u of users) {
       const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
       if (key) {
         centralDb.saveUser(key, u).catch((e: any) => console.warn("[Firestore User Sync Error]", e.message));
+      }
+    }
+    if (centralDb.cache?.users) {
+      for (const [k, u] of Array.from(centralDb.cache.users.entries())) {
+        const uEmail = (u?.email || '').toLowerCase().trim();
+        const uId = (u?.userId || u?.id || u?.uid || '').toLowerCase().trim();
+        if (!activeKeys.has(k) && !activeKeys.has(uEmail) && !activeKeys.has(uId)) {
+          centralDb.deleteDoc("users", k).catch(() => {});
+          centralDb.cache.users.delete(k);
+        }
       }
     }
     return true;
@@ -6608,9 +6622,18 @@ function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
   const cleaned = sources.filter((s: any) => Boolean(s && s.url));
 
   if (centralDb && centralDb.useFirestore) {
+    const activeIds = new Set(cleaned.map((s) => String(s.id)));
     for (const s of cleaned) {
       if (s && s.id) {
         centralDb.saveRssSource(s.id, s).catch(() => {});
+      }
+    }
+    if (centralDb.cache?.rssSources) {
+      for (const id of Array.from(centralDb.cache.rssSources.keys())) {
+        if (!activeIds.has(String(id))) {
+          centralDb.deleteDoc("rss_sources", String(id)).catch(() => {});
+          centralDb.cache.rssSources.delete(id);
+        }
       }
     }
     return true;
