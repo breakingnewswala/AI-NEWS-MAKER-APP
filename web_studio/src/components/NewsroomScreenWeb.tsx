@@ -36,7 +36,7 @@ import { InstallPwaModal } from './InstallPwaModal';
 import { NewsDraft } from '../types';
 import { getSavedDrafts, deleteDraft } from '../lib/draftsManager';
 import { ReporterUser } from './LoginModal';
-import { isEffectiveAdmin } from '../lib/userPlanManager';
+import { isEffectiveAdmin, unblockUserAuthoritative } from '../lib/userPlanManager';
 import {
   SupportInquiry,
   getSupportInquiries,
@@ -134,7 +134,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
 
   // Support Inbox state
   const [inquiries, setInquiries] = useState<SupportInquiry[]>(() => getSupportInquiries());
-  const [supportFilterStatus, setSupportFilterStatus] = useState<'all' | 'pending' | 'in_progress' | 'resolved'>('all');
+  const [supportFilterStatus, setSupportFilterStatus] = useState<'all' | 'pending' | 'in_progress' | 'resolved' | 'review_blocked'>('all');
   const [supportSearchQuery, setSupportSearchQuery] = useState('');
   const [isRefreshingInquiries, setIsRefreshingInquiries] = useState(false);
 
@@ -389,7 +389,10 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
 
   // Inquiries filter
   const filteredInquiries = inquiries.filter((inq) => {
-    if (supportFilterStatus !== 'all' && inq.status !== supportFilterStatus) {
+    if (supportFilterStatus === 'review_blocked') {
+      const isReview = inq.reportType === 'review_blocked' || inq.message?.includes('[ब्लॉक समीक्षा अनुरोध');
+      if (!isReview) return false;
+    } else if (supportFilterStatus !== 'all' && inq.status !== supportFilterStatus) {
       return false;
     }
     if (supportSearchQuery) {
@@ -692,7 +695,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
               {/* Search, Filter & Refresh Controls */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-                  {(['all', 'pending', 'in_progress', 'resolved'] as const).map((st) => (
+                  {(['all', 'pending', 'in_progress', 'resolved', 'review_blocked'] as const).map((st) => (
                     <button
                       key={st}
                       type="button"
@@ -709,7 +712,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         ? 'लंबित'
                         : st === 'in_progress'
                         ? 'प्रक्रियाधीन'
-                        : 'हल किया गया'}
+                        : st === 'resolved'
+                        ? 'हल किया गया'
+                        : '🔒 ब्लॉक समीक्षा अनुरोध'}
                     </button>
                   ))}
                 </div>
@@ -754,16 +759,26 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
                           <div className="flex items-center gap-2">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                              isResolved
+                              inq.status === 'approved_for_unblock' || inq.status === 'resolved'
                                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                : isInProgress
+                                : inq.status === 'in_progress'
                                 ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                : inq.status === 'rejected'
+                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                : inq.status === 'closed'
+                                ? 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
                                 : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                             }`}>
-                              {inq.status === 'resolved'
+                              {inq.status === 'approved_for_unblock'
+                                ? '🔓 अनब्लॉक स्वीकृत'
+                                : inq.status === 'resolved'
                                 ? 'हल किया गया'
                                 : inq.status === 'in_progress'
                                 ? 'प्रक्रियाधीन'
+                                : inq.status === 'rejected'
+                                ? '❌ अस्वीकृत'
+                                : inq.status === 'closed'
+                                ? '🔒 बंद'
                                 : 'लंबित'}
                             </span>
                             <span className="text-[11px] text-slate-400 font-mono">
@@ -868,7 +883,85 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
 
                         {/* Admin Moderation Actions (Only for Admin) */}
                         {isAdmin && (
-                          <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                          <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                            {/* If Block Review Request: Show Dedicated Action Bar */}
+                            {(inq.reportType === 'review_blocked' || inq.message?.includes('[ब्लॉक समीक्षा अनुरोध')) && (
+                              <div className="p-3 bg-slate-950 rounded-xl border border-rose-900/40 space-y-2">
+                                <div className="text-[11px] font-bold text-rose-300 flex items-center gap-1.5">
+                                  <span>🛡️ ब्लॉक खाता समीक्षा कार्रवाइयाँ:</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {/* 1. Unblock Button */}
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (window.confirm(`क्या आप उपयोगकर्ता "${inq.userEmail}" का खाता अनब्लॉक करना चाहते हैं?`)) {
+                                        try {
+                                          const res = await unblockUserAuthoritative(inq.userId || inq.userEmail, currentUser?.email || 'Admin');
+                                          if (res.success) {
+                                            updateInquiryStatus(inq.id, 'approved_for_unblock', 'अनुरोध स्वीकृत: खाता अनब्लॉक कर दिया गया है।');
+                                            setInquiries(getSupportInquiries());
+                                            alert('खाता सफलतापूर्वक अनब्लॉक कर दिया गया है!');
+                                          } else {
+                                            alert(res.error || 'खाता अनब्लॉक करने में त्रुटि');
+                                          }
+                                        } catch (err: any) {
+                                          alert('त्रुटि: ' + err.message);
+                                        }
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                  >
+                                    <span>🔓 खाता अनब्लॉक करें</span>
+                                  </button>
+
+                                  {/* 2. Reject Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const reason = window.prompt('अस्वीकार करने का कारण दर्ज करें:', 'नियमों के उल्लंघन की पुष्टि के कारण खाता अनब्लॉक नहीं किया जा सकता।');
+                                      if (reason !== null) {
+                                        updateInquiryStatus(inq.id, 'rejected', reason.trim() || 'अस्वीकृत');
+                                        setInquiries(getSupportInquiries());
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800 text-rose-200 border border-rose-700/50 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition"
+                                  >
+                                    <span>❌ अस्वीकार करें</span>
+                                  </button>
+
+                                  {/* 3. Internal Note */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const note = window.prompt('आंतरिक नोट / समाधान दर्ज करें:', inq.adminResponse || '');
+                                      if (note !== null) {
+                                        updateInquiryStatus(inq.id, inq.status, note.trim());
+                                        setInquiries(getSupportInquiries());
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition"
+                                  >
+                                    <span>📝 आंतरिक नोट</span>
+                                  </button>
+
+                                  {/* 4. Close Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm('क्या आप इस अनुरोध को बंद (Close) करना चाहते हैं?')) {
+                                        updateInquiryStatus(inq.id, 'closed');
+                                        setInquiries(getSupportInquiries());
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition"
+                                  >
+                                    <span>🔒 बंद करें</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-bold text-slate-400">स्थिति बदलें:</span>
@@ -877,7 +970,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                   onChange={(e) =>
                                     handleAdminUpdateStatus(
                                       inq.id,
-                                      e.target.value as 'pending' | 'in_progress' | 'resolved'
+                                      e.target.value as any
                                     )
                                   }
                                   className="px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-amber-400"
@@ -885,6 +978,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                   <option value="pending">लंबित</option>
                                   <option value="in_progress">प्रक्रियाधीन</option>
                                   <option value="resolved">हल किया गया</option>
+                                  <option value="approved_for_unblock">अनब्लॉक स्वीकृत</option>
+                                  <option value="rejected">अस्वीकृत</option>
+                                  <option value="closed">बंद</option>
                                 </select>
                               </div>
                             </div>

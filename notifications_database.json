@@ -1,5 +1,71 @@
 [
   {
+    "id": "notif_warn_user_usr_1793391037093_1793736637095",
+    "title": "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
+    "message": "नमस्ते यूज़र, आपका 7-दिवसीय फ्री ट्रायल कल (4 नव॰ 2026, 01:40 am) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।",
+    "time": "अभी",
+    "timestamp": 1793694949424,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "reporter_1793391037093@testprofile.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_admin_usr_1793391037093_1793736637095",
+    "title": "🔔 ट्रायल चेतावनी: यूज़र",
+    "message": "उपयोगकर्ता 'यूज़र' (reporter_1793391037093@testprofile.com) का 7-दिवसीय फ्री ट्रायल 24 घंटे में समाप्त होने वाला है। समाप्ति समय: 4 नव॰ 2026, 01:40 am।",
+    "time": "अभी",
+    "timestamp": 1793694949424,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_user_usr_1793460174871_ynxw_1793736637091",
+    "title": "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
+    "message": "नमस्ते यूज़र, आपका 7-दिवसीय फ्री ट्रायल कल (4 नव॰ 2026, 01:40 am) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।",
+    "time": "अभी",
+    "timestamp": 1793694949424,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "reporter_1793391037090@testworkflow.com",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_admin_usr_1793460174871_ynxw_1793736637091",
+    "title": "🔔 ट्रायल चेतावनी: यूज़र",
+    "message": "उपयोगकर्ता 'यूज़र' (reporter_1793391037090@testworkflow.com) का 7-दिवसीय फ्री ट्रायल 24 घंटे में समाप्त होने वाला है। समाप्ति समय: 4 नव॰ 2026, 01:40 am।",
+    "time": "अभी",
+    "timestamp": 1793694949424,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_exp_user_usr_cashfree_reviewer_777_1793515338766",
+    "title": "🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है",
+    "message": "नमस्ते कैशफ्री मर्चेंट रिव्यूअर (Cashfree Reviewer), आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए प्लान चुनें।",
+    "time": "अभी",
+    "timestamp": 1793694949424,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "cashfree.reviewer@ainewsmaker.online",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_exp_admin_usr_cashfree_reviewer_777_1793515338766",
+    "title": "🚫 ट्रायल समाप्त: कैशफ्री मर्चेंट रिव्यूअर (Cashfree Reviewer)",
+    "message": "उपयोगकर्ता 'कैशफ्री मर्चेंट रिव्यूअर (Cashfree Reviewer)' (cashfree.reviewer@ainewsmaker.online) का 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है और प्लान-प्रतिबंधित सुविधाएं लॉक कर दी गई हैं।",
+    "time": "अभी",
+    "timestamp": 1793694949424,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
     "id": "notif_news_rss-src_aajtak_live-1793378834849",
     "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
     "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",

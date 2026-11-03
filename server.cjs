@@ -1647,7 +1647,8 @@ var require_firestore_database_service = __commonJS({
           notifications: /* @__PURE__ */ new Map(),
           auditLogs: [],
           drafts: /* @__PURE__ */ new Map(),
-          credentials: /* @__PURE__ */ new Map()
+          credentials: /* @__PURE__ */ new Map(),
+          tombstones: /* @__PURE__ */ new Set()
         };
         this.isInitialized = false;
         this.initializationPromise = null;
@@ -1999,6 +2000,15 @@ var require_firestore_database_service = __commonJS({
             });
             console.log(`  \u2713 Loaded ${uRes.documents.length} users into live cache`);
           }
+          const tRes = await this.listDocs("tombstoned_users", 500);
+          if (tRes.success) {
+            if (!this.cache.tombstones) this.cache.tombstones = /* @__PURE__ */ new Set();
+            this.cache.tombstones.clear();
+            tRes.documents.forEach((t) => {
+              if (t.identifier) this.cache.tombstones.add(t.identifier.toLowerCase().trim());
+              if (t.id) this.cache.tombstones.add(t.id.toLowerCase().trim());
+            });
+          }
           const nRes = await this.listDocs("news_posts", 300);
           if (nRes.success) {
             this.cache.news.clear();
@@ -2160,6 +2170,51 @@ var require_firestore_database_service = __commonJS({
           return { success: true };
         }
       }
+      async deleteUser(idOrEmail) {
+        if (!idOrEmail) return { success: false, error: "User identifier required" };
+        const clean = idOrEmail.toLowerCase().trim();
+        if (this._isMasterAdminIdentifier(clean)) {
+          return { success: false, error: "Cannot delete master admin" };
+        }
+        if (!this.cache.tombstones) this.cache.tombstones = /* @__PURE__ */ new Set();
+        this.cache.tombstones.add(clean);
+        if (this.useFirestore) {
+          const keysToDelete = [];
+          for (const [k, u] of this.cache.users.entries()) {
+            const uEmail = (u.email || "").toLowerCase().trim();
+            const uId = (u.userId || u.id || u.uid || "").toLowerCase().trim();
+            const uDocId = (u.docId || "").toLowerCase().trim();
+            if (k === clean || uEmail === clean || uId === clean || uDocId === clean) {
+              keysToDelete.push(k);
+              if (uDocId) keysToDelete.push(uDocId);
+              if (uId) keysToDelete.push(uId);
+              if (uEmail) keysToDelete.push(uEmail);
+            }
+          }
+          keysToDelete.push(clean);
+          const uniqueKeys = Array.from(new Set(keysToDelete));
+          for (const k of uniqueKeys) {
+            this.cache.users.delete(k);
+            await this.deleteDoc("users", k).catch(() => {
+            });
+          }
+          const cleanTombKey = `tomb_${clean.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+          const tombstonePayload = {
+            identifier: clean,
+            deletedAt: Date.now(),
+            docId: cleanTombKey
+          };
+          await this.writeDoc("tombstoned_users", cleanTombKey, tombstonePayload).catch(() => {
+          });
+          this.cacheTimestamps.set("users", Date.now());
+          return { success: true };
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          delete profiles[clean];
+          this._saveLocalJson("user_profiles_db.json", profiles);
+          return { success: true };
+        }
+      }
       async listUsers() {
         if (this.useFirestore) {
           let docs = [];
@@ -2179,7 +2234,12 @@ var require_firestore_database_service = __commonJS({
             const res = await this.listDocs("users", 300);
             docs = res.documents || [];
           }
-          return docs;
+          const tombstones = this.cache.tombstones || /* @__PURE__ */ new Set();
+          return docs.filter((u) => {
+            const uEmail = (u.email || "").toLowerCase().trim();
+            const uId = (u.userId || u.id || u.uid || "").toLowerCase().trim();
+            return !tombstones.has(uEmail) && !tombstones.has(uId);
+          });
         } else {
           const profiles = this._loadLocalJson("user_profiles_db.json", {});
           return Object.values(profiles);
@@ -3860,7 +3920,8 @@ var require_firestore_database_service2 = __commonJS({
           notifications: /* @__PURE__ */ new Map(),
           auditLogs: [],
           drafts: /* @__PURE__ */ new Map(),
-          credentials: /* @__PURE__ */ new Map()
+          credentials: /* @__PURE__ */ new Map(),
+          tombstones: /* @__PURE__ */ new Set()
         };
         this.isInitialized = false;
         this.initializationPromise = null;
@@ -4212,6 +4273,15 @@ var require_firestore_database_service2 = __commonJS({
             });
             console.log(`  \u2713 Loaded ${uRes.documents.length} users into live cache`);
           }
+          const tRes = await this.listDocs("tombstoned_users", 500);
+          if (tRes.success) {
+            if (!this.cache.tombstones) this.cache.tombstones = /* @__PURE__ */ new Set();
+            this.cache.tombstones.clear();
+            tRes.documents.forEach((t) => {
+              if (t.identifier) this.cache.tombstones.add(t.identifier.toLowerCase().trim());
+              if (t.id) this.cache.tombstones.add(t.id.toLowerCase().trim());
+            });
+          }
           const nRes = await this.listDocs("news_posts", 300);
           if (nRes.success) {
             this.cache.news.clear();
@@ -4373,6 +4443,51 @@ var require_firestore_database_service2 = __commonJS({
           return { success: true };
         }
       }
+      async deleteUser(idOrEmail) {
+        if (!idOrEmail) return { success: false, error: "User identifier required" };
+        const clean = idOrEmail.toLowerCase().trim();
+        if (this._isMasterAdminIdentifier(clean)) {
+          return { success: false, error: "Cannot delete master admin" };
+        }
+        if (!this.cache.tombstones) this.cache.tombstones = /* @__PURE__ */ new Set();
+        this.cache.tombstones.add(clean);
+        if (this.useFirestore) {
+          const keysToDelete = [];
+          for (const [k, u] of this.cache.users.entries()) {
+            const uEmail = (u.email || "").toLowerCase().trim();
+            const uId = (u.userId || u.id || u.uid || "").toLowerCase().trim();
+            const uDocId = (u.docId || "").toLowerCase().trim();
+            if (k === clean || uEmail === clean || uId === clean || uDocId === clean) {
+              keysToDelete.push(k);
+              if (uDocId) keysToDelete.push(uDocId);
+              if (uId) keysToDelete.push(uId);
+              if (uEmail) keysToDelete.push(uEmail);
+            }
+          }
+          keysToDelete.push(clean);
+          const uniqueKeys = Array.from(new Set(keysToDelete));
+          for (const k of uniqueKeys) {
+            this.cache.users.delete(k);
+            await this.deleteDoc("users", k).catch(() => {
+            });
+          }
+          const cleanTombKey = `tomb_${clean.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+          const tombstonePayload = {
+            identifier: clean,
+            deletedAt: Date.now(),
+            docId: cleanTombKey
+          };
+          await this.writeDoc("tombstoned_users", cleanTombKey, tombstonePayload).catch(() => {
+          });
+          this.cacheTimestamps.set("users", Date.now());
+          return { success: true };
+        } else {
+          const profiles = this._loadLocalJson("user_profiles_db.json", {});
+          delete profiles[clean];
+          this._saveLocalJson("user_profiles_db.json", profiles);
+          return { success: true };
+        }
+      }
       async listUsers() {
         if (this.useFirestore) {
           let docs = [];
@@ -4392,7 +4507,12 @@ var require_firestore_database_service2 = __commonJS({
             const res = await this.listDocs("users", 300);
             docs = res.documents || [];
           }
-          return docs;
+          const tombstones = this.cache.tombstones || /* @__PURE__ */ new Set();
+          return docs.filter((u) => {
+            const uEmail = (u.email || "").toLowerCase().trim();
+            const uId = (u.userId || u.id || u.uid || "").toLowerCase().trim();
+            return !tombstones.has(uEmail) && !tombstones.has(uId);
+          });
         } else {
           const profiles = this._loadLocalJson("user_profiles_db.json", {});
           return Object.values(profiles);
@@ -7433,7 +7553,18 @@ function loadNewsDatabase() {
     const list = Array.from(centralDb.cache.news.values());
     const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
     if (diskPosts.length > 0) {
+      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
+      const activeSourceIds = new Set(activeSources.map((s) => s.id));
+      const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
       for (const dp of diskPosts) {
+        const isFeed = String(dp.id).startsWith("rss-") || String(dp.id).startsWith("web-");
+        if (isFeed) {
+          if (activeSources.length === 0) continue;
+          const parts = String(dp.id).split("-");
+          const srcId = parts.length >= 2 ? parts[1] : "";
+          const matchesUrl = dp.sourceUrl && activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase());
+          if (!srcId || !activeSourceIds.has(srcId) && !matchesUrl) continue;
+        }
         if (!centralDb.cache.news.has(dp.id)) {
           centralDb.cache.news.set(dp.id, dp);
           cleaned.unshift(dp);
@@ -7608,19 +7739,16 @@ app.get("/api/news-posts", (req, res) => {
   const activePosts = posts.filter((p) => {
     if (p.status === "REJECTED") return false;
     if (String(p.id).startsWith("live-post-")) return false;
-    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
-    if (isApprovedStory) {
-      return true;
-    }
-    const postTime = p.timestamp || now;
-    const expiresAt = p.expiresAt || postTime + THREE_DAYS_MS;
-    if (now > expiresAt) return false;
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
+      if (activeSources.length === 0) {
+        return false;
+      }
       const parts = String(p.id).split("-");
       const srcId = parts.length >= 2 ? parts[1] : "";
       const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
-      if (srcId && !activeSourceIds.has(srcId) && !matchesUrl && role !== "admin" && role !== "superadmin" && !includePending) {
+      const hasActiveSource = Boolean(srcId && activeSourceIds.has(srcId) || matchesUrl);
+      if (!hasActiveSource) {
         return false;
       }
       if (p.status !== "APPROVED") {
@@ -7629,6 +7757,13 @@ app.get("/api/news-posts", (req, res) => {
         }
       }
     }
+    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+    if (isApprovedStory) {
+      return true;
+    }
+    const postTime = p.timestamp || now;
+    const expiresAt = p.expiresAt || postTime + THREE_DAYS_MS;
+    if (now > expiresAt) return false;
     if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
       return false;
     }
@@ -7642,6 +7777,20 @@ app.get("/api/news-posts", (req, res) => {
     const backfillCandidates = posts.filter((p) => {
       if (String(p.id).startsWith("live-post-")) return false;
       if (activeIds.has(p.id)) return false;
+      const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
+      if (isFeedSource) {
+        if (activeSources.length === 0) return false;
+        const parts = String(p.id).split("-");
+        const srcId = parts.length >= 2 ? parts[1] : "";
+        const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
+        const hasActiveSource = Boolean(srcId && activeSourceIds.has(srcId) || matchesUrl);
+        if (!hasActiveSource) {
+          return false;
+        }
+        if (p.status !== "APPROVED") {
+          if (role !== "admin" && role !== "superadmin" && !includePending) return false;
+        }
+      }
       const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
       if (isApprovedStory) return true;
       if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
@@ -7652,18 +7801,6 @@ app.get("/api/news-posts", (req, res) => {
       }
       if (p.status !== "APPROVED" && role !== "admin" && role !== "superadmin" && !includePending) {
         return false;
-      }
-      const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
-      if (isFeedSource) {
-        const parts = String(p.id).split("-");
-        const srcId = parts.length >= 2 ? parts[1] : "";
-        const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
-        if (srcId && !activeSourceIds.has(srcId) && !matchesUrl) {
-          return false;
-        }
-        if (p.status !== "APPROVED") {
-          if (role !== "admin" && role !== "superadmin" && !includePending) return false;
-        }
       }
       return true;
     });
@@ -10135,17 +10272,9 @@ function isUserTombstoned(identifier) {
   if (!identifier) return false;
   const clean = identifier.toLowerCase().trim();
   if (!clean) return false;
-  if (isProtectedAdminAccount(clean)) return false;
-  try {
-    const master = loadUsersMasterDatabase();
-    const activeMasterUser = master.find((u) => {
-      const uEmail = (u.email || "").toLowerCase().trim();
-      const uId = (u.userId || "").toLowerCase().trim();
-      const uUser = (u.username || "").toLowerCase().trim();
-      return (uEmail === clean || uId === clean || uUser === clean) && !u.isDeleted;
-    });
-    if (activeMasterUser) return false;
-  } catch {
+  if (isProtectedAdminAccount(clean) || clean === "breakingnewswala.com@gmail.com" || clean === "admin@breakingnewswala.com") return false;
+  if (centralDb && centralDb.cache?.tombstones && centralDb.cache.tombstones.has(clean)) {
+    return true;
   }
   const tombstones = loadDeletedUsersTombstones();
   const matchTombstone = tombstones.some((t) => {
@@ -11565,7 +11694,7 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
 });
 var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
 function loadRssSourcesDatabase() {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.rssSources.size > 0) {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
     const list = Array.from(centralDb.cache.rssSources.values());
     const valid = list.filter((s) => Boolean(s && s.url));
     return valid;
@@ -13853,18 +13982,25 @@ app.post("/api/admin/reset-user-logo", requireAdminMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
+app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    const caller = getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const { userId, userEmail, blockedBy, reason } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
     }
-    if (isProtectedAdminAccount(identifier)) {
-      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    if (isProtectedAdminAccount(identifier) || identifier === "breakingnewswala.com@gmail.com" || identifier === "admin@breakingnewswala.com") {
+      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    }
+    if (callerEmail && identifier === callerEmail) {
+      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u0905\u092A\u0928\u0947 \u0938\u094D\u0935\u092F\u0902 \u0915\u0947 \u0916\u093E\u0924\u0947 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u093E" });
     }
     const users = loadUsersMasterDatabase();
     const idx = users.findIndex(
@@ -13873,18 +14009,28 @@ app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
     if (idx === -1) {
       return res.status(404).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
     }
-    if (isProtectedAdminAccount(users[idx].email) || users[idx].role === "superadmin" || users[idx].role === "admin") {
-      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u094B\u0902 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u0940 \u0905\u0928\u0941\u092E\u0924\u093F \u0928\u0939\u0940\u0902 \u0939\u0948" });
+    if (isProtectedAdminAccount(users[idx].email) || users[idx].role === "superadmin") {
+      return res.status(403).json({ error: "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    }
+    if (!isMaster && (users[idx].role === "admin" || isProtectedAdminAccount(users[idx].email))) {
+      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u093E" });
     }
     const blockedReasonText = reason || "\u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0928\u0940\u0924\u093F \u0909\u0932\u094D\u0932\u0902\u0918\u0928 \u0905\u0925\u0935\u093E \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0917\u0924\u093F\u0935\u093F\u0927\u093F \u0915\u0947 \u0915\u093E\u0930\u0923 \u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964";
     users[idx].isBlocked = true;
     users[idx].blockedAt = Date.now();
-    users[idx].blockedBy = blockedBy || "Admin";
+    users[idx].blockedBy = blockedBy || callerEmail || "Admin";
     users[idx].blockedReason = blockedReasonText;
     users[idx].unblockedAt = null;
     users[idx].unblockedBy = null;
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+    if (centralDb) {
+      try {
+        centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {
+        });
+      } catch {
+      }
+    }
     try {
       let accounts = loadUsersDatabase();
       const aIdx = accounts.findIndex(
@@ -13903,10 +14049,14 @@ app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => {
+app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    const caller = getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const { userId, userEmail, unblockedBy } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
@@ -13923,9 +14073,16 @@ app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => 
     users[idx].isBlocked = false;
     users[idx].blockedReason = null;
     users[idx].unblockedAt = Date.now();
-    users[idx].unblockedBy = unblockedBy || "Admin";
+    users[idx].unblockedBy = unblockedBy || callerEmail || "Admin";
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+    if (centralDb) {
+      try {
+        centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {
+        });
+      } catch {
+      }
+    }
     try {
       let accounts = loadUsersDatabase();
       const aIdx = accounts.findIndex(
@@ -13944,24 +14101,41 @@ app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => 
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/delete-user", requireMasterAdminMiddleware, async (req, res) => {
+app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
   try {
+    const caller = getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || "").toLowerCase().trim();
     const isMaster = isAuthorizedMasterAdmin(req);
-    if (!isMaster) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const { userId, userEmail, targetEmail, targetUserId } = req.body;
     const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) return res.status(400).json({ error: "userId or email is required" });
-    if (isProtectedAdminAccount(identifier)) {
-      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
+    if (isProtectedAdminAccount(identifier) || identifier === "breakingnewswala.com@gmail.com" || identifier === "admin@breakingnewswala.com") {
+      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
     }
+    if (callerEmail && (identifier === callerEmail || targetEmail?.toLowerCase().trim() === callerEmail || targetUserId?.toLowerCase().trim() === callerEmail)) {
+      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u0905\u092A\u0928\u0947 \u0938\u094D\u0935\u092F\u0902 \u0915\u0947 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u093E" });
+    }
+    let users = loadUsersMasterDatabase();
+    const targetUser = users.find(
+      (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
+    );
+    if (!isMaster) {
+      if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === "superadmin" || targetUser.role === "admin")) {
+        return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u093E" });
+      }
+    }
+    const targetEmailClean = (targetUser?.email || (identifier.includes("@") ? identifier : "")).toLowerCase().trim();
+    const targetUserIdClean = (targetUser?.userId || (!identifier.includes("@") ? identifier : "")).toLowerCase().trim();
+    const targetUsernameClean = (targetUser?.username || "").toLowerCase().trim();
     if (firebaseAdminAuth) {
       try {
-        if (targetUser?.uid) {
-          await firebaseAdminAuth.deleteUser(targetUser.uid);
-        } else if (targetUserIdClean && !targetUserIdClean.includes("@")) {
-          await firebaseAdminAuth.deleteUser(targetUserIdClean);
+        const uidToDelete = targetUser?.uid || (targetUserIdClean && !targetUserIdClean.includes("@") ? targetUserIdClean : null);
+        if (uidToDelete) {
+          await firebaseAdminAuth.deleteUser(uidToDelete);
         }
       } catch (authErr) {
         if (targetEmailClean) {
@@ -13975,16 +14149,6 @@ app.post("/api/admin/delete-user", requireMasterAdminMiddleware, async (req, res
         }
       }
     }
-    let users = loadUsersMasterDatabase();
-    const targetUser = users.find(
-      (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
-    );
-    if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === "superadmin")) {
-      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });
-    }
-    const targetEmailClean = (targetUser?.email || (identifier.includes("@") ? identifier : "")).toLowerCase().trim();
-    const targetUserIdClean = (targetUser?.userId || (!identifier.includes("@") ? identifier : "")).toLowerCase().trim();
-    const targetUsernameClean = (targetUser?.username || "").toLowerCase().trim();
     users = users.filter((u) => {
       const uEmail = (u.email || "").toLowerCase().trim();
       const uId = (u.userId || "").toLowerCase().trim();

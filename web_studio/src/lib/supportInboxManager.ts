@@ -11,7 +11,10 @@ export interface SupportInquiry {
   voiceTranscript?: string;
   attachmentUrl?: string;
   attachmentName?: string;
-  status: 'pending' | 'in_progress' | 'resolved';
+  status: 'pending' | 'in_progress' | 'resolved' | 'approved_for_unblock' | 'rejected' | 'closed' | 'approved_for_unblock' | 'rejected' | 'closed';
+  reportType?: string;
+  requestId?: string;
+  internalNote?: string;
   createdAt: number;
   adminResponse?: string;
 }

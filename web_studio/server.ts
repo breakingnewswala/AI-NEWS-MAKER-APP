@@ -1537,9 +1537,21 @@ function loadNewsDatabase(): StoredNewsPost[] {
     }
     const list = Array.from(centralDb.cache.news.values()) as StoredNewsPost[];
     const cleaned = list.filter((p: any) => p && p.id && p.id !== '[object Object]' && p.title && !String(p.id).startsWith("live-post-"));
-    // Merge any new/offline posts from disk that are not yet in Firestore cache
+    // Merge any new/offline posts from disk that are not yet in Firestore cache (excluding orphan feed items)
     if (diskPosts.length > 0) {
+      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
+      const activeSourceIds = new Set(activeSources.map((s) => s.id));
+      const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
+
       for (const dp of diskPosts) {
+        const isFeed = String(dp.id).startsWith("rss-") || String(dp.id).startsWith("web-");
+        if (isFeed) {
+          if (activeSources.length === 0) continue;
+          const parts = String(dp.id).split("-");
+          const srcId = parts.length >= 2 ? parts[1] : "";
+          const matchesUrl = dp.sourceUrl && activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase());
+          if (!srcId || (!activeSourceIds.has(srcId) && !matchesUrl)) continue;
+        }
         if (!centralDb.cache.news.has(dp.id)) {
           centralDb.cache.news.set(dp.id, dp);
           cleaned.unshift(dp);
@@ -1809,24 +1821,18 @@ app.get("/api/news-posts", (req, res) => {
     // 1. Never show obsolete live-post seeds
     if (String(p.id).startsWith("live-post-")) return false;
 
-    // Check if story is already approved or pre-published by admin
-    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
-    if (isApprovedStory) {
-      return true;
-    }
-
-    // 2. 3-day expiration rule
-    const postTime = p.timestamp || now;
-    const expiresAt = p.expiresAt || (postTime + THREE_DAYS_MS);
-    if (now > expiresAt) return false;
-
-    // 3. Strict RSS & Web Workflow: Check source eligibility against authoritative configured sources
+    // 2. Strict RSS & Web Workflow: Check source eligibility against authoritative configured sources FIRST
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
+      // If no active sources are configured, completely suppress all RSS/web feed items
+      if (activeSources.length === 0) {
+        return false;
+      }
       const parts = String(p.id).split("-");
       const srcId = parts.length >= 2 ? parts[1] : "";
       const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
-      if (srcId && !activeSourceIds.has(srcId) && !matchesUrl && role !== "admin" && role !== "superadmin" && !includePending) {
+      const hasActiveSource = Boolean((srcId && activeSourceIds.has(srcId)) || matchesUrl);
+      if (!hasActiveSource) {
         return false;
       }
 
@@ -1836,6 +1842,18 @@ app.get("/api/news-posts", (req, res) => {
         }
       }
     }
+
+    // 3. Check if story is already approved or pre-published by admin
+    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+    if (isApprovedStory) {
+      return true;
+    }
+
+    // 4. 3-day expiration rule for pending/unapproved
+    const postTime = p.timestamp || now;
+    const expiresAt = p.expiresAt || (postTime + THREE_DAYS_MS);
+    if (now > expiresAt) return false;
+
     if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
       return false;
     }
@@ -1846,12 +1864,27 @@ app.get("/api/news-posts", (req, res) => {
     return true;
   });
 
-  // 3b. Backfill safeguard: If fewer than 20 active posts remain due to 3-day time window, backfill from latest approved posts so live feed is NEVER empty
+  // 3b. Backfill safeguard: If fewer than 20 active posts remain due to 3-day time window, backfill from latest approved posts
   if (activePosts.length < 20) {
     const activeIds = new Set(activePosts.map((p) => p.id));
     const backfillCandidates = posts.filter((p) => {
       if (String(p.id).startsWith("live-post-")) return false;
       if (activeIds.has(p.id)) return false;
+
+      const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
+      if (isFeedSource) {
+        if (activeSources.length === 0) return false;
+        const parts = String(p.id).split("-");
+        const srcId = parts.length >= 2 ? parts[1] : "";
+        const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
+        const hasActiveSource = Boolean((srcId && activeSourceIds.has(srcId)) || matchesUrl);
+        if (!hasActiveSource) {
+          return false;
+        }
+        if (p.status !== "APPROVED") {
+          if (role !== "admin" && role !== "superadmin" && !includePending) return false;
+        }
+      }
 
       const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
       if (isApprovedStory) return true;
@@ -1867,18 +1900,6 @@ app.get("/api/news-posts", (req, res) => {
         return false;
       }
 
-      const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
-      if (isFeedSource) {
-        const parts = String(p.id).split("-");
-        const srcId = parts.length >= 2 ? parts[1] : "";
-        const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
-        if (srcId && !activeSourceIds.has(srcId) && !matchesUrl) {
-          return false;
-        }
-        if (p.status !== "APPROVED") {
-          if (role !== "admin" && role !== "superadmin" && !includePending) return false;
-        }
-      }
       return true;
     });
     backfillCandidates.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
@@ -4870,20 +4891,14 @@ function isUserTombstoned(identifier?: string | null): boolean {
   if (!identifier) return false;
   const clean = identifier.toLowerCase().trim();
   if (!clean) return false;
-  if (isProtectedAdminAccount(clean)) return false;
+  if (isProtectedAdminAccount(clean) || clean === 'breakingnewswala.com@gmail.com' || clean === 'admin@breakingnewswala.com') return false;
 
-  // Active non-deleted users in the master database are never tombstoned
-  try {
-    const master = loadUsersMasterDatabase();
-    const activeMasterUser = master.find(u => {
-      const uEmail = (u.email || '').toLowerCase().trim();
-      const uId = (u.userId || '').toLowerCase().trim();
-      const uUser = (u.username || '').toLowerCase().trim();
-      return (uEmail === clean || uId === clean || uUser === clean) && !u.isDeleted;
-    });
-    if (activeMasterUser) return false;
-  } catch {}
+  // 1. Check in-memory Firestore cache tombstones
+  if (centralDb && (centralDb as any).cache?.tombstones && (centralDb as any).cache.tombstones.has(clean)) {
+    return true;
+  }
 
+  // 2. Check persistent disk tombstones
   const tombstones = loadDeletedUsersTombstones();
   const matchTombstone = tombstones.some(t => {
     const tEmail = (t.email || "").toLowerCase().trim();
@@ -6539,7 +6554,7 @@ interface AdminRssSourceRecord {
 const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.rssSources.size > 0) {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
     const list = Array.from(centralDb.cache.rssSources.values()) as AdminRssSourceRecord[];
     const valid = list.filter((s: any) => Boolean(s && s.url));
     return valid;
@@ -9399,18 +9414,25 @@ app.post("/api/admin/reset-user-logo", requireAdminMiddleware, (req, res) => {
 
 // Duplicate endpoint consolidated into primary /api/admin/update-user
 
-app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
+app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को ब्लॉक कर सकते हैं।" });
+    const caller = getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
+      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को ब्लॉक कर सकते हैं।" });
     }
     const { userId, userEmail, blockedBy, reason } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी अनिवार्य है" });
     }
-    if (isProtectedAdminAccount(identifier)) {
-      return res.status(403).json({ error: "सुरक्षित एडमिन खाते को ब्लॉक नहीं किया जा सकता" });
+    if (isProtectedAdminAccount(identifier) || identifier === 'breakingnewswala.com@gmail.com' || identifier === 'admin@breakingnewswala.com') {
+      return res.status(403).json({ error: "सुरक्षित मास्टर एडमिन खाते को ब्लॉक नहीं किया जा सकता" });
+    }
+    if (callerEmail && identifier === callerEmail) {
+      return res.status(403).json({ error: "एडमिन अपने स्वयं के खाते को ब्लॉक नहीं कर सकता" });
     }
 
     const users = loadUsersMasterDatabase();
@@ -9424,20 +9446,30 @@ app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
       return res.status(404).json({ error: "उपयोगकर्ता नहीं मिला" });
     }
 
-    if (isProtectedAdminAccount(users[idx].email) || users[idx].role === 'superadmin' || users[idx].role === 'admin') {
-      return res.status(403).json({ error: "एडमिन खातों को ब्लॉक करने की अनुमति नहीं है" });
+    if (isProtectedAdminAccount(users[idx].email) || users[idx].role === 'superadmin') {
+      return res.status(403).json({ error: "सुपर एडमिन खाते को ब्लॉक नहीं किया जा सकता" });
+    }
+    if (!isMaster && (users[idx].role === 'admin' || isProtectedAdminAccount(users[idx].email))) {
+      return res.status(403).json({ error: "एडमिन किसी अन्य एडमिन खाते को ब्लॉक नहीं कर सकता" });
     }
 
     const blockedReasonText = reason || "व्यवस्थापक नीति उल्लंघन अथवा अनधिकृत गतिविधि के कारण आपका खाता ब्लॉक किया गया है।";
     users[idx].isBlocked = true;
     users[idx].blockedAt = Date.now();
-    users[idx].blockedBy = blockedBy || 'Admin';
+    users[idx].blockedBy = blockedBy || callerEmail || 'Admin';
     users[idx].blockedReason = blockedReasonText;
     users[idx].unblockedAt = null;
     users[idx].unblockedBy = null;
 
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+
+    // Also update Firestore users collection
+    if (centralDb) {
+      try {
+        centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {});
+      } catch {}
+    }
 
     // Also update users_accounts_db.json
     try {
@@ -9460,10 +9492,14 @@ app.post("/api/admin/block-user", requireMasterAdminMiddleware, (req, res) => {
   }
 });
 
-app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => {
+app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
   try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को अनब्लॉक कर सकते हैं।" });
+    const caller = getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
+      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को अनब्लॉक कर सकते हैं।" });
     }
     const { userId, userEmail, unblockedBy } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
@@ -9485,10 +9521,17 @@ app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => 
     users[idx].isBlocked = false;
     users[idx].blockedReason = null;
     users[idx].unblockedAt = Date.now();
-    users[idx].unblockedBy = unblockedBy || 'Admin';
+    users[idx].unblockedBy = unblockedBy || callerEmail || 'Admin';
 
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
+
+    // Also update Firestore users collection
+    if (centralDb) {
+      try {
+        centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {});
+      } catch {}
+    }
 
     // Also update users_accounts_db.json
     try {
@@ -9511,26 +9554,53 @@ app.post("/api/admin/unblock-user", requireMasterAdminMiddleware, (req, res) => 
   }
 });
 
-app.post("/api/admin/delete-user", requireMasterAdminMiddleware, async (req, res) => {
+app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
   try {
+    const caller = getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || "").toLowerCase().trim();
     const isMaster = isAuthorizedMasterAdmin(req);
-    if (!isMaster) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स को डिलीट कर सकते हैं।" });
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
+      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को डिलीट कर सकते हैं।" });
     }
+
     const { userId, userEmail, targetEmail, targetUserId } = req.body;
     const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) return res.status(400).json({ error: "userId or email is required" });
-    if (isProtectedAdminAccount(identifier)) {
-      return res.status(403).json({ error: "सुरक्षित एडमिन खाते को डिलीट नहीं किया जा सकता" });
+
+    // 1. Role Protection: Master Admin accounts can NEVER be deleted
+    if (isProtectedAdminAccount(identifier) || identifier === 'breakingnewswala.com@gmail.com' || identifier === 'admin@breakingnewswala.com') {
+      return res.status(403).json({ error: "सुरक्षित मास्टर एडमिन खाते को डिलीट नहीं किया जा सकता" });
     }
+
+    // 2. Role Protection: Caller cannot delete themselves
+    if (callerEmail && (identifier === callerEmail || targetEmail?.toLowerCase().trim() === callerEmail || targetUserId?.toLowerCase().trim() === callerEmail)) {
+      return res.status(403).json({ error: "एडमिन अपने स्वयं के खाते को डिलीट नहीं कर सकता" });
+    }
+
+    let users = loadUsersMasterDatabase();
+    const targetUser = users.find(u =>
+      (u.email && u.email.toLowerCase().trim() === identifier) ||
+      (u.userId && u.userId.toLowerCase().trim() === identifier)
+    );
+
+    // 3. Role Protection: Regular Admin cannot delete another Admin or Super Admin
+    if (!isMaster) {
+      if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === 'superadmin' || targetUser.role === 'admin')) {
+        return res.status(403).json({ error: "एडमिन किसी अन्य एडमिन या सुपर एडमिन खाते को डिलीट नहीं कर सकता" });
+      }
+    }
+
+    const targetEmailClean = (targetUser?.email || (identifier.includes('@') ? identifier : '')).toLowerCase().trim();
+    const targetUserIdClean = (targetUser?.userId || (!identifier.includes('@') ? identifier : '')).toLowerCase().trim();
+    const targetUsernameClean = (targetUser?.username || '').toLowerCase().trim();
 
     // 0. Delete from Firebase Authentication
     if (firebaseAdminAuth) {
       try {
-        if (targetUser?.uid) {
-          await firebaseAdminAuth.deleteUser(targetUser.uid);
-        } else if (targetUserIdClean && !targetUserIdClean.includes('@')) {
-          await firebaseAdminAuth.deleteUser(targetUserIdClean);
+        const uidToDelete = targetUser?.uid || (targetUserIdClean && !targetUserIdClean.includes('@') ? targetUserIdClean : null);
+        if (uidToDelete) {
+          await firebaseAdminAuth.deleteUser(uidToDelete);
         }
       } catch (authErr: any) {
         if (targetEmailClean) {
@@ -9543,20 +9613,6 @@ app.post("/api/admin/delete-user", requireMasterAdminMiddleware, async (req, res
         }
       }
     }
-
-    let users = loadUsersMasterDatabase();
-    const targetUser = users.find(u =>
-      (u.email && u.email.toLowerCase().trim() === identifier) ||
-      (u.userId && u.userId.toLowerCase().trim() === identifier)
-    );
-
-    if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === 'superadmin')) {
-      return res.status(403).json({ error: "सुरक्षित सुपर एडमिन खाते को डिलीट नहीं किया जा सकता" });
-    }
-
-    const targetEmailClean = (targetUser?.email || (identifier.includes('@') ? identifier : '')).toLowerCase().trim();
-    const targetUserIdClean = (targetUser?.userId || (!identifier.includes('@') ? identifier : '')).toLowerCase().trim();
-    const targetUsernameClean = (targetUser?.username || '').toLowerCase().trim();
 
     // 1. Delete from users_master_database.json across all locations
     users = users.filter(u => {

@@ -1919,13 +1919,34 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
 
 export async function blockUserAuthoritative(
   userEmailOrId: string,
-  blockedBy?: string
+  blockedBy?: string,
+  reason?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.email) headers['x-user-email'] = parsed.email;
+        if (parsed?.role) headers['x-user-role'] = parsed.role;
+        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
+      }
+      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      if (directToken && !headers['authorization']) {
+        headers['authorization'] = `Bearer ${directToken}`;
+      }
+    } catch {}
+
     const res = await fetch(getApiUrl('/api/admin/block-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, blockedBy: blockedBy || 'Admin' }),
+      headers,
+      body: JSON.stringify({
+        userEmail: userEmailOrId,
+        userId: userEmailOrId,
+        blockedBy: blockedBy || 'Admin',
+        reason: reason || 'नियमों के उल्लंघन के कारण खाता ब्लॉक किया गया',
+      }),
     });
     const json = await res.json();
     if (json.success) {
@@ -1944,10 +1965,29 @@ export async function unblockUserAuthoritative(
   unblockedBy?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.email) headers['x-user-email'] = parsed.email;
+        if (parsed?.role) headers['x-user-role'] = parsed.role;
+        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
+      }
+      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      if (directToken && !headers['authorization']) {
+        headers['authorization'] = `Bearer ${directToken}`;
+      }
+    } catch {}
+
     const res = await fetch(getApiUrl('/api/admin/unblock-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, unblockedBy: unblockedBy || 'Admin' }),
+      headers,
+      body: JSON.stringify({
+        userEmail: userEmailOrId,
+        userId: userEmailOrId,
+        unblockedBy: unblockedBy || 'Admin',
+      }),
     });
     const json = await res.json();
     if (json.success) {

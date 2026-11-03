@@ -2374,8 +2374,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredPosts.map((post, postIndex) => {
+          {filteredPosts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center bg-slate-900/60 border border-slate-800/80 rounded-2xl shadow-inner my-4">
+              <div className="w-16 h-16 rounded-full bg-slate-800/80 flex items-center justify-center mb-4 text-slate-400">
+                <TrendingUp className="w-8 h-8 opacity-40" />
+              </div>
+              <h4 className="text-base sm:text-lg font-bold text-slate-200 mb-2">
+                अभी कोई खबर उपलब्ध नहीं है।
+              </h4>
+              <p className="text-sm text-slate-400 max-w-lg leading-relaxed">
+                Admin द्वारा खबरें जोड़ने या अधिकृत RSS स्रोत सक्रिय करने के बाद खबरें यहाँ दिखाई देंगी।
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredPosts.map((post, postIndex) => {
               const promoConfig = (() => {
                 if (postIndex === 5) return { layoutRatio: '16:9' as PromoLayoutRatio, startFeatureIndex: 0 };
                 if (postIndex === 12) return { layoutRatio: 'carousel' as PromoLayoutRatio, startFeatureIndex: 5 };
@@ -2913,7 +2926,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               </React.Fragment>
             );
           })}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Footer Note */}

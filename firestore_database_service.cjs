@@ -57,6 +57,7 @@ class CentralFirestoreDatabaseService {
       auditLogs: [],
       drafts: new Map(),
       credentials: new Map(),
+      tombstones: new Set(),
     };
 
     this.isInitialized = false;
@@ -440,6 +441,17 @@ class CentralFirestoreDatabaseService {
         console.log(`  ✓ Loaded ${uRes.documents.length} users into live cache`);
       }
 
+      // 1.5 Tombstoned Users (Permanent Deletion Protection)
+      const tRes = await this.listDocs('tombstoned_users', 500);
+      if (tRes.success) {
+        if (!this.cache.tombstones) this.cache.tombstones = new Set();
+        this.cache.tombstones.clear();
+        tRes.documents.forEach((t) => {
+          if (t.identifier) this.cache.tombstones.add(t.identifier.toLowerCase().trim());
+          if (t.id) this.cache.tombstones.add(t.id.toLowerCase().trim());
+        });
+      }
+
       // 2. News Posts
       const nRes = await this.listDocs('news_posts', 300);
       if (nRes.success) {
@@ -640,6 +652,56 @@ class CentralFirestoreDatabaseService {
     }
   }
 
+  async deleteUser(idOrEmail) {
+    if (!idOrEmail) return { success: false, error: 'User identifier required' };
+    const clean = idOrEmail.toLowerCase().trim();
+    if (this._isMasterAdminIdentifier(clean)) {
+      return { success: false, error: 'Cannot delete master admin' };
+    }
+
+    if (!this.cache.tombstones) this.cache.tombstones = new Set();
+    this.cache.tombstones.add(clean);
+
+    if (this.useFirestore) {
+      const keysToDelete = [];
+      for (const [k, u] of this.cache.users.entries()) {
+        const uEmail = (u.email || '').toLowerCase().trim();
+        const uId = (u.userId || u.id || u.uid || '').toLowerCase().trim();
+        const uDocId = (u.docId || '').toLowerCase().trim();
+        if (k === clean || uEmail === clean || uId === clean || uDocId === clean) {
+          keysToDelete.push(k);
+          if (uDocId) keysToDelete.push(uDocId);
+          if (uId) keysToDelete.push(uId);
+          if (uEmail) keysToDelete.push(uEmail);
+        }
+      }
+      keysToDelete.push(clean);
+      const uniqueKeys = Array.from(new Set(keysToDelete));
+
+      for (const k of uniqueKeys) {
+        this.cache.users.delete(k);
+        await this.deleteDoc('users', k).catch(() => {});
+      }
+
+      // Record tombstone in Firestore
+      const cleanTombKey = `tomb_${clean.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      const tombstonePayload = {
+        identifier: clean,
+        deletedAt: Date.now(),
+        docId: cleanTombKey,
+      };
+      await this.writeDoc('tombstoned_users', cleanTombKey, tombstonePayload).catch(() => {});
+
+      this.cacheTimestamps.set('users', Date.now());
+      return { success: true };
+    } else {
+      const profiles = this._loadLocalJson('user_profiles_db.json', {});
+      delete profiles[clean];
+      this._saveLocalJson('user_profiles_db.json', profiles);
+      return { success: true };
+    }
+  }
+
   async listUsers() {
     if (this.useFirestore) {
       let docs = [];
@@ -660,7 +722,12 @@ class CentralFirestoreDatabaseService {
         const res = await this.listDocs('users', 300);
         docs = res.documents || [];
       }
-      return docs;
+      const tombstones = this.cache.tombstones || new Set();
+      return docs.filter(u => {
+        const uEmail = (u.email || '').toLowerCase().trim();
+        const uId = (u.userId || u.id || u.uid || '').toLowerCase().trim();
+        return !tombstones.has(uEmail) && !tombstones.has(uId);
+      });
     } else {
       const profiles = this._loadLocalJson('user_profiles_db.json', {});
       return Object.values(profiles);

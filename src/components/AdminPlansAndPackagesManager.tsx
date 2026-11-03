@@ -1032,14 +1032,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       alert('सुरक्षित सुपर एडमिन खाते को ब्लॉक नहीं किया जा सकता!');
       return;
     }
-    if (!window.confirm(`क्या आप यूजर "${u.name || u.email}" को ${actionText} करना चाहते हैं?\n${isCurrentlyBlocked ? 'अनब्लॉक करने पर उपयोगकर्ता की सेवाएं पुनः सक्रिय हो जाएंगी।' : 'ब्लॉक करने पर उपयोगकर्ता तुरंत किसी भी टूल व फीचर का उपयोग नहीं कर सकेगा।'}`)) {
-      return;
+    let reason = '';
+    if (!isCurrentlyBlocked) {
+      const enteredReason = window.prompt("यूज़र को ब्लॉक करने का कारण दर्ज करें:", "नियमों के उल्लंघन के कारण खाता ब्लॉक किया गया है।");
+      if (enteredReason === null) return;
+      reason = enteredReason.trim() || "प्रशासक द्वारा ब्लॉक किया गया";
+    } else {
+      if (!window.confirm(`क्या आप यूजर "${u.name || u.email}" को अनब्लॉक करना चाहते हैं?\nअनब्लॉक करने पर उपयोगकर्ता की सेवाएं पुनः सक्रिय हो जाएंगी।`)) {
+        return;
+      }
     }
     try {
       setIsSyncingUsers(true);
       const res = isCurrentlyBlocked
         ? await unblockUserAuthoritative(u.userId || u.email, currentUser?.email || 'Admin')
-        : await blockUserAuthoritative(u.userId || u.email, currentUser?.email || 'Admin');
+        : await blockUserAuthoritative(u.userId || u.email, currentUser?.email || 'Admin', reason);
       if (res.success) {
         await handleSyncUsers();
       } else {
@@ -1302,7 +1309,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   // Branding Editor Handlers
   
   const handleDeleteUser = async (email: string, name?: string, userId?: string) => {
-    if (window.confirm(`क्या आप निश्चित रूप से यूज़र "${name || email}" का प्रोफाइल/अकाउंट हमेशा के लिए डिलीट करना चाहते हैं?`)) {
+    if (window.confirm("यह कार्रवाई User Account को स्थायी रूप से हटाएगी। यह प्रक्रिया वापस नहीं की जा सकेगी।")) {
       adminDeleteUserRecord(email);
       await adminDeleteCloudUser(email, userId).catch(() => {});
       setPlanUsers(getPlanUsers());
@@ -3710,7 +3717,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                   type="button"
                                   disabled={isSuper}
                                   onClick={async () => {
-                                    if (window.confirm(`क्या आप यूजर "${u.name || u.email}" का प्रोफाइल व पूरा डेटाबेस हमेशा के लिए हटाना चाहते हैं?`)) {
+                                    if (window.confirm("यह कार्रवाई User Account को स्थायी रूप से हटाएगी। यह प्रक्रिया वापस नहीं की जा सकेगी।")) {
                                       adminDeleteUserRecord(u.email);
                                       await adminDeleteCloudUser(u.email, u.userId).catch(() => {});
                                       setPlanUsers(getPlanUsers());
