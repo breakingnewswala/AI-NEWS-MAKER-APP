@@ -5570,10 +5570,17 @@ function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
   try {
     if (centralDb && centralDb.useFirestore) {
       if (!centralDb.cache.videos) centralDb.cache.videos = new Map();
+      const activeVideoIds = new Set(videos.map(v => v.id));
       for (const v of videos) {
         if (v && v.id) {
           centralDb.cache.videos.set(v.id, v);
           centralDb.saveVideo(v).catch((e: any) => console.warn("[Firestore Video Sync Error]", e.message));
+        }
+      }
+      for (const id of Array.from(centralDb.cache.videos.keys())) {
+        if (!activeVideoIds.has(id)) {
+          centralDb.deleteDoc("videos", id).catch(() => {});
+          centralDb.cache.videos.delete(id);
         }
       }
     }
@@ -5738,6 +5745,18 @@ app.delete("/api/admin/videos/:id", requireAdminMiddleware, async (req, res) => 
   try {
     const videoId = req.params.id;
     saveDeletedVideoId(videoId); // mark permanently deleted
+    if (centralDb) {
+      try {
+        await centralDb.deleteDoc("videos", videoId).catch(() => {});
+        if (centralDb.cache?.videos) centralDb.cache.videos.delete(videoId);
+      } catch {}
+    }
+    try {
+      const adapter = require("./server_firestore_adapter.cjs");
+      if (adapter && typeof adapter.firestoreDeleteDoc === 'function') {
+        await adapter.firestoreDeleteDoc("videos", videoId).catch(() => {});
+      }
+    } catch {}
     const currentVideos = loadVideosDatabase();
     const toDelete = currentVideos.find((v) => v.id === videoId);
     if (toDelete && cloudStorage) {
@@ -9595,7 +9614,7 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
   }
 });
 
-app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
+app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/api/admin/delete-user/:id"], requireAdminMiddleware, async (req, res) => {
   try {
     const caller = getAuthenticatedUser(req);
     const callerEmail = (caller?.email || "").toLowerCase().trim();
@@ -9605,8 +9624,9 @@ app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
       return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को डिलीट कर सकते हैं।" });
     }
 
-    const { userId, userEmail, targetEmail, targetUserId } = req.body;
-    const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
+    const paramId = (req.params as any)?.id;
+    const { userId, userEmail, targetEmail, targetUserId } = req.body || {};
+    const identifier = (paramId || targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) return res.status(400).json({ error: "userId or email is required" });
 
     // 1. Role Protection: Master Admin accounts can NEVER be deleted

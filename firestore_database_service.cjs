@@ -532,7 +532,6 @@ class CentralFirestoreDatabaseService {
     const clean = String(id).toLowerCase().trim();
     return clean === 'breakingnewswala.com@gmail.com' ||
            clean === 'usr_627265616b69' ||
-           clean === 'admin.ainewsmaker@gmail.com' ||
            clean === 'admin';
   }
 

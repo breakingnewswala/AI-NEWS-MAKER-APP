@@ -772,20 +772,10 @@ export default function App() {
               setToastMessage('🎬 नया वीडियो फ़ीड में जारी हुआ!');
             }
           }
-          setVideos((prev) => {
-            const map = new Map<string, any>();
-            cleanList.forEach((v: any) => map.set(v.id, v));
-            prev.forEach((v: any) => {
-              if (!map.has(v.id) && !deletedSet.has(v.id) && !isDummyVideo(v)) {
-                map.set(v.id, v);
-              }
-            });
-            const merged = Array.from(map.values());
-            try {
-              localStorage.setItem('app_admin_videos', JSON.stringify(merged));
-            } catch {}
-            return merged;
-          });
+          setVideos(cleanList);
+          try {
+            localStorage.setItem('app_admin_videos', JSON.stringify(cleanList));
+          } catch {}
         }
       }
     } catch (err) {

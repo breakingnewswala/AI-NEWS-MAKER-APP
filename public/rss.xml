@@ -6,16 +6,17 @@
     <description>AI News Maker - रियल-टाइम ब्रेकिंग न्यूज़, वीडियो और ग्राफिक्स लाइव RSS फ़ीड</description>
     <language>hi</language>
     <copyright>© 2026 AI News Maker</copyright>
-    <lastBuildDate>Tue, 03 Nov 2026 10:12:05 GMT</lastBuildDate>
+    <lastBuildDate>Tue, 03 Nov 2026 11:17:31 GMT</lastBuildDate>
     <atom:link href="https://www.ainewsmaker.online/rss.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title><![CDATA[चंद्रयान 4 मिशन की तैयारी तेज, 2028 में लॉन्च की योजना]]></title>
-      <link>https://www.ainewsmaker.online/#home</link>
-      <guid isPermaLink="false">news_1793391037097</guid>
-      <pubDate>Tue, 03 Nov 2026 10:12:05 GMT</pubDate>
-      <description><![CDATA[]]></description>
-      <category>science</category>
-      <source url="https://www.ainewsmaker.online/#home">AI News Maker</source>
+      <title><![CDATA[मौसम विभाग का नया पूर्वानुमान: उत्तर भारत के कई राज्यों में तापमान में गिरावट जारी]]></title>
+      <link>https://www.aajtak.in/</link>
+      <guid isPermaLink="false">editorial-seed-4KSu4KWM4KS4</guid>
+      <pubDate>Thu, 29 Oct 2026 19:43:05 GMT</pubDate>
+      <description><![CDATA[भारतीय मौसम विज्ञान विभाग के अनुसार आगामी दिनों में उत्तर भारत के मैदानी इलाकों में ठंड का असर बढ़ेगा। सुबह के समय हल्की धुंध रहने की संभावना है।]]></description>
+      <category>देश / राष्ट्रीय</category>
+      <source url="https://www.aajtak.in/">आज तक (Aaj Tak)</source>
+      <enclosure url="https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&amp;auto=format&amp;fit=crop" length="0" type="image/jpeg" />
     </item>
     <item>
       <title><![CDATA[सुप्रीम कोर्ट का चुनाव आयोग से सवाल: पहले से वोटर रहे लोगों से दोबारा फॉर्म 6 क्यों भरवाया जा रहा]]></title>
@@ -28,6 +29,15 @@
       <enclosure url="https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&amp;auto=format&amp;fit=crop" length="0" type="image/jpeg" />
     </item>
     <item>
+      <title><![CDATA[चंद्रयान 4 मिशन की तैयारी तेज, 2028 में लॉन्च की योजना]]></title>
+      <link>https://www.ainewsmaker.online/#home</link>
+      <guid isPermaLink="false">news_1793391037097</guid>
+      <pubDate>Tue, 03 Nov 2026 11:17:31 GMT</pubDate>
+      <description><![CDATA[]]></description>
+      <category>science</category>
+      <source url="https://www.ainewsmaker.online/#home">AI News Maker</source>
+    </item>
+    <item>
       <title><![CDATA[मध्य प्रदेश में विकास को नई रफ्तार: कैबिनेट बैठक में 5 महत्वपूर्ण प्रस्तावों को मिली मंजूरी]]></title>
       <link>https://www.aajtak.in/</link>
       <guid isPermaLink="false">editorial-seed-4KSu4KSn4KWN</guid>
@@ -38,26 +48,6 @@
       <enclosure url="https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&amp;auto=format&amp;fit=crop" length="0" type="image/jpeg" />
     </item>
     <item>
-      <title><![CDATA[भारत में डिजिटल न्यूज़ और AI टूल्स का विस्तार, पत्रकारों के लिए बने नए अवसर]]></title>
-      <link>https://www.aajtak.in/</link>
-      <guid isPermaLink="false">editorial-seed-4KSt4KS-4KSw</guid>
-      <pubDate>Thu, 29 Oct 2026 20:43:05 GMT</pubDate>
-      <description><![CDATA[डिजिटल मीडिया और ऑटोमेशन के दौर में हिंदी न्यूज़ मेकर्स के लिए आधुनिक ग्राफिक टूल्स और वीडियो प्रोडक्शन प्लेटफॉर्म तेजी से लोकप्रिय हो रहे हैं।]]></description>
-      <category>देश / राष्ट्रीय</category>
-      <source url="https://www.aajtak.in/">आज तक (Aaj Tak)</source>
-      <enclosure url="https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&amp;auto=format&amp;fit=crop" length="0" type="image/jpeg" />
-    </item>
-    <item>
-      <title><![CDATA[मौसम विभाग का नया पूर्वानुमान: उत्तर भारत के कई राज्यों में तापमान में गिरावट जारी]]></title>
-      <link>https://www.aajtak.in/</link>
-      <guid isPermaLink="false">editorial-seed-4KSu4KWM4KS4</guid>
-      <pubDate>Thu, 29 Oct 2026 19:43:05 GMT</pubDate>
-      <description><![CDATA[भारतीय मौसम विज्ञान विभाग के अनुसार आगामी दिनों में उत्तर भारत के मैदानी इलाकों में ठंड का असर बढ़ेगा। सुबह के समय हल्की धुंध रहने की संभावना है।]]></description>
-      <category>देश / राष्ट्रीय</category>
-      <source url="https://www.aajtak.in/">आज तक (Aaj Tak)</source>
-      <enclosure url="https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&amp;auto=format&amp;fit=crop" length="0" type="image/jpeg" />
-    </item>
-    <item>
       <title><![CDATA[शेयर बाजार में मजबूती: सेंसेक्स और निफ्टी में बढ़त के साथ खुला कारोबारी सत्र]]></title>
       <link>https://www.aajtak.in/</link>
       <guid isPermaLink="false">editorial-seed-4KS24KWH4KSv</guid>
@@ -66,6 +56,16 @@
       <category>कारोबार व व्यापार</category>
       <source url="https://www.aajtak.in/">आज तक (Aaj Tak)</source>
       <enclosure url="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&amp;auto=format&amp;fit=crop" length="0" type="image/jpeg" />
+    </item>
+    <item>
+      <title><![CDATA[भारत में डिजिटल न्यूज़ और AI टूल्स का विस्तार, पत्रकारों के लिए बने नए अवसर]]></title>
+      <link>https://www.aajtak.in/</link>
+      <guid isPermaLink="false">editorial-seed-4KSt4KS-4KSw</guid>
+      <pubDate>Thu, 29 Oct 2026 20:43:05 GMT</pubDate>
+      <description><![CDATA[डिजिटल मीडिया और ऑटोमेशन के दौर में हिंदी न्यूज़ मेकर्स के लिए आधुनिक ग्राफिक टूल्स और वीडियो प्रोडक्शन प्लेटफॉर्म तेजी से लोकप्रिय हो रहे हैं।]]></description>
+      <category>देश / राष्ट्रीय</category>
+      <source url="https://www.aajtak.in/">आज तक (Aaj Tak)</source>
+      <enclosure url="https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&amp;auto=format&amp;fit=crop" length="0" type="image/jpeg" />
     </item>
   </channel>
 </rss>

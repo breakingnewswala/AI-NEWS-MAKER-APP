@@ -2072,7 +2072,7 @@ var require_firestore_database_service = __commonJS({
       _isMasterAdminIdentifier(id) {
         if (!id) return false;
         const clean = String(id).toLowerCase().trim();
-        return clean === "breakingnewswala.com@gmail.com" || clean === "usr_627265616b69" || clean === "admin.ainewsmaker@gmail.com" || clean === "admin";
+        return clean === "breakingnewswala.com@gmail.com" || clean === "usr_627265616b69" || clean === "admin";
       }
       async getUser(idOrEmail) {
         if (!idOrEmail) return null;
@@ -4345,7 +4345,7 @@ var require_firestore_database_service2 = __commonJS({
       _isMasterAdminIdentifier(id) {
         if (!id) return false;
         const clean = String(id).toLowerCase().trim();
-        return clean === "breakingnewswala.com@gmail.com" || clean === "usr_627265616b69" || clean === "admin.ainewsmaker@gmail.com" || clean === "admin";
+        return clean === "breakingnewswala.com@gmail.com" || clean === "usr_627265616b69" || clean === "admin";
       }
       async getUser(idOrEmail) {
         if (!idOrEmail) return null;
@@ -10850,10 +10850,18 @@ function saveVideosDatabase(videos) {
   try {
     if (centralDb && centralDb.useFirestore) {
       if (!centralDb.cache.videos) centralDb.cache.videos = /* @__PURE__ */ new Map();
+      const activeVideoIds = new Set(videos.map((v) => v.id));
       for (const v of videos) {
         if (v && v.id) {
           centralDb.cache.videos.set(v.id, v);
           centralDb.saveVideo(v).catch((e) => console.warn("[Firestore Video Sync Error]", e.message));
+        }
+      }
+      for (const id of Array.from(centralDb.cache.videos.keys())) {
+        if (!activeVideoIds.has(id)) {
+          centralDb.deleteDoc("videos", id).catch(() => {
+          });
+          centralDb.cache.videos.delete(id);
         }
       }
     }
@@ -10991,6 +10999,22 @@ app.delete("/api/admin/videos/:id", requireAdminMiddleware, async (req, res) => 
   try {
     const videoId = req.params.id;
     saveDeletedVideoId(videoId);
+    if (centralDb) {
+      try {
+        await centralDb.deleteDoc("videos", videoId).catch(() => {
+        });
+        if (centralDb.cache?.videos) centralDb.cache.videos.delete(videoId);
+      } catch {
+      }
+    }
+    try {
+      const adapter = require_server_firestore_adapter();
+      if (adapter && typeof adapter.firestoreDeleteDoc === "function") {
+        await adapter.firestoreDeleteDoc("videos", videoId).catch(() => {
+        });
+      }
+    } catch {
+    }
     const currentVideos = loadVideosDatabase();
     const toDelete = currentVideos.find((v) => v.id === videoId);
     if (toDelete && cloudStorage) {
@@ -14139,7 +14163,7 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
+app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/api/admin/delete-user/:id"], requireAdminMiddleware, async (req, res) => {
   try {
     const caller = getAuthenticatedUser(req);
     const callerEmail = (caller?.email || "").toLowerCase().trim();
@@ -14148,8 +14172,9 @@ app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
     if (!isAdmin && !isMaster) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
-    const { userId, userEmail, targetEmail, targetUserId } = req.body;
-    const identifier = (targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
+    const paramId = req.params?.id;
+    const { userId, userEmail, targetEmail, targetUserId } = req.body || {};
+    const identifier = (paramId || targetEmail || targetUserId || userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) return res.status(400).json({ error: "userId or email is required" });
     if (isProtectedAdminAccount(identifier) || identifier === "breakingnewswala.com@gmail.com" || identifier === "admin@breakingnewswala.com") {
       return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u0947 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E" });

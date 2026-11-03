@@ -2011,17 +2011,17 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const renderProfileOnlyContent = () => (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* SECTION: CHANNEL & LOGO BRANDING */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 transition-colors">
-              <div className="border-b border-slate-200 dark:border-slate-800 pb-3 flex items-center justify-between">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 transition-colors">
+              <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-amber-500 dark:text-amber-400">
+                  <div className="p-2 bg-slate-800 rounded-lg text-amber-400">
                     <Sliders className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    <h3 className="text-sm font-black text-white">
                       चैनल व लोगो विवरण
                     </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <p className="text-xs text-slate-400">
                       यह विवरण सीधे ग्राफिक डिजाइनिंग स्टूडियो के फुटर और कार्ड्स में सिंक होगा
                     </p>
                   </div>
@@ -2935,7 +2935,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : ''));
 
           return (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors">
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left w-full sm:w-auto">
                 {/* User Avatar / Channel Logo (Hidden on Mobile per Part 5) */}
                 <div className="hidden sm:flex w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-600 p-1 items-center justify-center text-slate-950 font-black shadow-lg overflow-hidden shrink-0">
@@ -3001,12 +3001,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
               {/* 7-DAY FREE TRIAL / ACTIVE PLAN BOX (Replaced Right Side Mobile Badge) */}
               <div className="flex items-center justify-center sm:justify-end gap-2.5 w-full sm:w-auto mt-2 sm:mt-0">
-                <div className="w-full sm:w-72 bg-slate-50 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm flex flex-col gap-2.5 relative overflow-hidden transition-colors">
+                <div className="w-full sm:w-72 bg-slate-950 border-2 border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm flex flex-col gap-2.5 relative overflow-hidden transition-colors">
                   <div className="absolute -right-6 -top-6 w-20 h-20 bg-amber-500/10 rounded-full blur-xl pointer-events-none" />
 
                   {/* Header & Status Badge */}
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
-                    <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-slate-900 dark:text-white">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-white">
                       <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>
                         {subscription.hasActivePaidPlan || subscription.tier !== 'basic'
@@ -3124,63 +3124,63 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         ) : (
           <div className="space-y-3.5">
             {/* OPTION 1: प्रोफाइल व चैनल विवरण */}
-            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'profile' ? 'border-amber-500 bg-white dark:bg-slate-900/95 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'}`}>
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'profile' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
                 onClick={() => setNormalUserTab(normalUserTab === 'profile' ? '' : 'profile')}
-                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'profile' ? 'bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-850'}`}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'profile' ? 'bg-slate-800/80 border-b border-slate-800/80' : 'hover:bg-slate-800/60'}`}
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
                     <User className="w-5 h-5 text-slate-950" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white block truncate">
+                    <span className="text-sm sm:text-base font-black text-white block truncate">
                       प्रोफाइल व चैनल विवरण
                     </span>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
                       चैनल लोगो, नाम, प्राइमरी नंबर, सोशल लिंक्स व ब्रांडिंग विवरण
                     </p>
                   </div>
                 </div>
-                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'profile' ? 'rotate-180 text-amber-500 dark:text-amber-400' : ''}`} />
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'profile' ? 'rotate-180 text-amber-400' : ''}`} />
               </button>
               {normalUserTab === 'profile' && (
-                <div className="p-3 sm:p-5 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
                   {renderProfileOnlyContent()}
                 </div>
               )}
             </div>
 
             {/* OPTION 2: मेंबरशिप प्लान व अपग्रेड */}
-            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'membership' ? 'border-amber-500 bg-white dark:bg-slate-900/95 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'}`}>
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'membership' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
                 onClick={() => setNormalUserTab(normalUserTab === 'membership' ? '' : 'membership')}
-                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'membership' ? 'bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-850'}`}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'membership' ? 'bg-slate-800/80 border-b border-slate-800/80' : 'hover:bg-slate-800/60'}`}
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
                     <Crown className="w-5 h-5 text-slate-950" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white block truncate">
+                    <span className="text-sm sm:text-base font-black text-white block truncate">
                       मेंबरशिप प्लान व अपग्रेड
                     </span>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
                       वर्तमान प्लान, 7-डे फ्री ट्रायल, प्रोमो कोड रिडीम व अपग्रेड
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
-                  <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-950 text-amber-700 dark:text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-800">
+                  <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
                     {activePlanDetail.nameHi}
                   </span>
-                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'membership' ? 'rotate-180 text-amber-500 dark:text-amber-400' : ''}`} />
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'membership' ? 'rotate-180 text-amber-400' : ''}`} />
                 </div>
               </button>
               {normalUserTab === 'membership' && (
-                <div className="p-3 sm:p-5 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
                   {renderMembershipUpgradeSection()}
                 </div>
               )}
@@ -3188,11 +3188,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
             {/* OPTION 3: रिवॉर्ड्स व पॉइंट्स वॉलेट (Rewards & Points Wallet - Non-Admin Users Only) */}
             {!isAdmin && (
-            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'rewards_wallet' ? 'border-amber-500 bg-white dark:bg-slate-900/95 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'}`}>
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'rewards_wallet' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
                 onClick={() => setNormalUserTab(normalUserTab === 'rewards_wallet' ? '' : 'rewards_wallet')}
-                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'rewards_wallet' ? 'bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-850'}`}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'rewards_wallet' ? 'bg-slate-800/80 border-b border-slate-800/80' : 'hover:bg-slate-800/60'}`}
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
@@ -3200,15 +3200,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
-                        <Coins className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0 inline" />
+                      <span className="text-sm sm:text-base font-black text-white flex items-center gap-1.5 truncate">
+                        <Coins className="w-4 h-4 text-amber-400 shrink-0 inline" />
                         <span>रिवॉर्ड्स व पॉइंट्स वॉलेट</span>
                       </span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black rounded uppercase">
                         Rewards Wallet
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
                       बोनस न्यूज़ शेयर करें, स्क्रीनशॉट अपलोड करें और कॉइन्स कमाएं
                     </p>
                   </div>
@@ -3484,7 +3484,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             )}
 
             {/* OPTION: सब-यूज़र प्रबंधन (Sub-Users Management - Section 10) */}
-            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'sub_users' ? 'border-cyan-500 bg-white dark:bg-slate-900/95 ring-2 ring-cyan-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'}`}>
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'sub_users' ? 'border-cyan-400 bg-slate-900/95 ring-2 ring-cyan-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
                 onClick={() => {
@@ -3494,7 +3494,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     fetchSubUsers();
                   }
                 }}
-                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'sub_users' ? 'bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-850'}`}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'sub_users' ? 'bg-slate-800/80 border-b border-slate-800/80' : 'hover:bg-slate-800/60'}`}
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
@@ -3502,29 +3502,29 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white block truncate">
+                      <span className="text-sm sm:text-base font-black text-white block truncate">
                         सब-यूज़र प्रबंधन (Sub-Users Management)
                       </span>
                       <span className="px-2 py-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 text-[10px] font-black rounded uppercase">
                         PRO (1) & VIP DESK (3)
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
                       अपने न्यूज़ चैनल / डेस्क के लिए अधिकृत सब-रिपोर्टर ईमेल जोड़ें व प्रबंधित करें
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
                   {subUsersList.length > 0 && (
-                    <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-950 text-cyan-600 dark:text-cyan-300 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-800">
+                    <span className="px-2.5 py-1 bg-slate-950 text-cyan-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
                       {subUsersList.length} सक्रिय
                     </span>
                   )}
-                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'sub_users' ? 'rotate-180 text-cyan-500 dark:text-cyan-400' : ''}`} />
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'sub_users' ? 'rotate-180 text-cyan-400' : ''}`} />
                 </div>
               </button>
               {normalUserTab === 'sub_users' && (
-                <div className="p-4 sm:p-6 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-5">
+                <div className="p-4 sm:p-6 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-5">
                   {/* Parent account notice if current user is a linked sub-user */}
                   {subUserParentEmail && (
                     <div className="p-3 bg-blue-950/60 border border-blue-800 rounded-xl text-xs text-blue-200 flex items-center gap-2">
@@ -3733,34 +3733,34 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             )}
 
             {/* OPTION 4: सहायता एवं नीतियाँ */}
-            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'policies' ? 'border-amber-500 bg-white dark:bg-slate-900/95 ring-2 ring-amber-500/20' : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'}`}>
+            <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'policies' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
                 onClick={() => setNormalUserTab(normalUserTab === 'policies' ? '' : 'policies')}
-                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'policies' ? 'bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800/80' : 'hover:bg-slate-50 dark:hover:bg-slate-850'}`}
+                className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${normalUserTab === 'policies' ? 'bg-slate-850 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
               >
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
                     <ShieldCheck className="w-5 h-5 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white block truncate">
+                    <span className="text-sm sm:text-base font-black text-white block truncate">
                       सहायता एवं नीतियाँ
                     </span>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
                       प्राइवेसी पॉलिसी, नियम एवं शर्तें, पेमेंट्स व प्लान्स नीतियाँ
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
-                  <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-950 text-amber-700 dark:text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-800">
+                  <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
                     3 नीतियां
                   </span>
-                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'policies' ? 'rotate-180 text-amber-500 dark:text-amber-400' : ''}`} />
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'policies' ? 'rotate-180 text-amber-400' : ''}`} />
                 </div>
               </button>
               {normalUserTab === 'policies' && (
-                <div className="p-3 sm:p-5 border-t border-slate-200 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
                   <HelpAndPoliciesView />
                 </div>
               )}
