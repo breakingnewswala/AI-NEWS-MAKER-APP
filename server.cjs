@@ -11960,7 +11960,7 @@ app.get("/api/user-subscription", (req, res) => {
       success: true,
       subscription: {
         tier: match.tier || "basic",
-        planName: match.planName || "BASIC",
+        planName: match.tier === "advanced" || match.tier === "advance" ? "ADVANCE" : match.tier === "pro" || match.tier === "professional" ? "PRO" : match.tier === "ultra" || match.tier === "vip" ? "VIP DESK" : match.planName || "BASIC",
         trialStartedAt: match.trialStartedAt,
         trialEndsAt: match.trialEndsAt,
         isTrialActive: trialFields.isTrialActive,
