@@ -213,8 +213,10 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
 
     res.sendStatus(200);
     for (const message of messages) {
+      const messageId = String(message?.id || "");
+      if (!messageId) continue;
       void processInboundMessage(message).then(async () => {
-        if (messageId && centralDb?.useFirestore) {
+        if (centralDb?.useFirestore) {
           await centralDb.writeDoc("whatsapp_webhook_events", sha256(messageId), {
             messageId, status: "processed", processedAt: Date.now(),
           });
