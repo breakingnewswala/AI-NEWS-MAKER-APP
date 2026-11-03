@@ -297,15 +297,16 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
         const eventId = sha256(messageId);
         const existing = await centralDb.readDoc("whatsapp_webhook_events", eventId);
         if (existing?.success && existing.data?.status === "processed") continue;
-        if (existing?.success && existing.data?.status === "queued") continue;
+        if (existing?.success && (existing.data?.status === "queued" || existing.data?.status === "processing")) continue;
 
         // Persist before enqueueing. If enqueue fails, return 503 so Meta retries.
         await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
           messageId, status: "enqueueing", receivedAt: Number(message.timestamp || Math.floor(Date.now() / 1000)) * 1000,
         });
         await enqueueMessage(message);
+        // Do not overwrite processing/processed: a fast task may finish before this request returns.
         await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
-          messageId, status: "queued", queuedAt: Date.now(),
+          messageId, queuedAt: Date.now(),
         });
       }
       return res.sendStatus(200);
