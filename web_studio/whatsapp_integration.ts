@@ -203,7 +203,8 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       if (!messageId) continue;
       const eventId = sha256(messageId);
       const existing = await centralDb?.readDoc?.("whatsapp_webhook_events", eventId);
-      if (existing?.success && existing.data) continue;
+      if (existing?.success && existing.data?.status === "processed") continue;
+      if (existing?.success && existing.data?.status === "processing" && Date.now() - Number(existing.data?.receivedAt || 0) < 5 * 60 * 1000) continue;
       const saved = await centralDb?.writeDoc?.("whatsapp_webhook_events", eventId, {
         messageId, status: "received", receivedAt: Date.now(),
       });
@@ -212,7 +213,13 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
 
     res.sendStatus(200);
     for (const message of messages) {
-      void processInboundMessage(message).catch(async (error: any) => {
+      void processInboundMessage(message).then(async () => {
+        if (messageId && centralDb?.useFirestore) {
+          await centralDb.writeDoc("whatsapp_webhook_events", sha256(messageId), {
+            messageId, status: "processed", processedAt: Date.now(),
+          });
+        }
+      }).catch(async (error: any) => {
         console.error("[WhatsApp] Inbound processing failed:", String(error?.message || error).slice(0, 240));
         const messageId = String(message?.id || "");
         if (messageId && centralDb?.useFirestore) {
