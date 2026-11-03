@@ -43,3 +43,47 @@ env:
     value: "PRODUCTION"
     availability:
       - RUNTIME
+  - variable: WHATSAPP_TASK_QUEUE_LOCATION
+    value: "asia-east1"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_TASK_QUEUE
+    value: "whatsapp-inbound-v2"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_TASK_SERVICE_ACCOUNT
+    value: "whatsapp-task-worker@ai-news-maker-app.iam.gserviceaccount.com"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_TASK_BASE_URL
+    value: "https://ainewsmakerapp--ai-news-maker-app.asia-east1.hosted.app"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_PHONE_NUMBER_ID
+    value: "1474022642460639"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_GRAPH_API_VERSION
+    value: "v21.0"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_GEMINI_MODEL
+    value: "gemini-3.5-flash"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_AI_ENABLED
+    value: "true"
+    availability:
+      - RUNTIME
+  - variable: META_APP_SECRET
+    secret: META_APP_SECRET
+    availability:
+      - RUNTIME
+  - variable: META_WEBHOOK_VERIFY_TOKEN
+    secret: META_WEBHOOK_VERIFY_TOKEN
+    availability:
+      - RUNTIME
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+    availability:
+      - RUNTIME

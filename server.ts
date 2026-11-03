@@ -15,6 +15,11 @@ const safeDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(
 
 dotenv.config();
 
+// Ensure both GEMINI_API_KEY and hyphenated GEMINI_API-KEY from Cloud Run secrets are recognized
+if (!process.env.GEMINI_API_KEY && process.env["GEMINI_API-KEY"]) {
+  process.env.GEMINI_API_KEY = process.env["GEMINI_API-KEY"];
+}
+
 // Central Firestore Database Service
 // Centralized Google Cloud Storage Service
 let cloudStorage: any = null;

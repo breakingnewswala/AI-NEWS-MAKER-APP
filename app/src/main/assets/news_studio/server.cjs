@@ -6427,6 +6427,12 @@ var import_crypto = require("crypto");
 var import_genai = require("@google/genai");
 var import_tasks = require("@google-cloud/tasks");
 var import_google_auth_library = require("google-auth-library");
+var maskWaId = (id) => {
+  const str = String(id || "").trim();
+  if (!str) return "[unknown]";
+  if (str.length <= 4) return str;
+  return `...${str.slice(-4)}`;
+};
 function registerWhatsAppIntegration(app2, centralDb2) {
   const webhookPath = "/api/whatsapp/webhook";
   const safeEqual = (a, b) => {
@@ -6485,67 +6491,140 @@ function registerWhatsAppIntegration(app2, centralDb2) {
     return safeEqual(signature, expected);
   };
   const sendWhatsAppText = async (to, body) => {
-    const token = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639";
-    const version = process.env.WHATSAPP_GRAPH_API_VERSION;
-    if (!token || !phoneNumberId || !version) {
-      throw new Error("WhatsApp Cloud API credentials are not configured");
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const maskedTo = maskWaId(to);
+    if (!token) {
+      console.error("[WhatsApp:Outbound] CONFIG_MISSING: WHATSAPP_ACCESS_TOKEN is not configured in server environment");
+      throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
     }
-    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: { preview_url: false, body: String(body).slice(0, 4e3) }
-      })
-    });
+    if (!phoneNumberId) {
+      console.error("[WhatsApp:Outbound] CONFIG_MISSING: WHATSAPP_PHONE_NUMBER_ID is not configured");
+      throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
+    }
+    console.log(`[WhatsApp:Outbound] WhatsApp outbound request started to ${maskedTo} via Graph API ${version}`);
+    let response;
+    try {
+      response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "text",
+          text: { preview_url: false, body: String(body).slice(0, 4e3) }
+        })
+      });
+    } catch (networkErr) {
+      console.error("[WhatsApp:Outbound] WHATSAPP_API_ERROR: Network request failed:", String(networkErr?.message || networkErr).slice(0, 200));
+      throw networkErr;
+    }
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = result?.error?.message || `WhatsApp API request failed (${response.status})`;
-      throw new Error(error);
+      const errorMsg = result?.error?.message || `WhatsApp API request failed (${response.status})`;
+      console.error(`[WhatsApp:Outbound] WHATSAPP_API_ERROR: HTTP ${response.status} - ${errorMsg}`);
+      throw new Error(`WHATSAPP_API_ERROR: ${errorMsg}`);
     }
+    console.log(`[WhatsApp:Outbound] WhatsApp API response received: messageId=${result?.messages?.[0]?.id || "unknown"}`);
     return result;
   };
   const getKnowledgeContext = async () => {
-    if (!centralDb2?.useFirestore) return "";
-    const result = await centralDb2.listDocs("whatsapp_knowledge_base", 100);
-    if (!result?.success || !Array.isArray(result.documents)) return "";
-    return result.documents.filter((item) => item && item.isActive !== false && item.status !== "disabled").map((item) => {
+    if (!centralDb2?.useFirestore) {
+      console.warn("[WhatsApp:KnowledgeBase] FIRESTORE_CONNECTION_ERROR: Firestore is disabled on centralDb");
+      return { context: "", count: 0, errorCategory: "FIRESTORE_CONNECTION_ERROR" };
+    }
+    console.log(`[WhatsApp:KnowledgeBase] Firestore database ID verified: ${centralDb2.databaseId || "default"}`);
+    console.log("[WhatsApp:KnowledgeBase] Knowledge Base query started on collection: whatsapp_knowledge_base");
+    let result;
+    try {
+      result = await centralDb2.listDocs("whatsapp_knowledge_base", 100);
+    } catch (err) {
+      console.error("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR:", String(err?.message || err).slice(0, 200));
+      return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_READ_ERROR" };
+    }
+    if (!result?.success || !Array.isArray(result.documents)) {
+      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR: listDocs returned failure or non-array");
+      return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_READ_ERROR" };
+    }
+    console.log(`[WhatsApp:KnowledgeBase] Knowledge Base documents retrieved: ${result.documents.length}`);
+    const activeDocs = result.documents.filter((item) => item && item.isActive !== false && item.status !== "disabled");
+    console.log(`[WhatsApp:KnowledgeBase] Number of active FAQ documents: ${activeDocs.length}`);
+    if (activeDocs.length === 0) {
+      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_EMPTY: No active FAQ documents found in whatsapp_knowledge_base");
+      return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_EMPTY" };
+    }
+    const context = activeDocs.map((item) => {
       const title = String(item.title || item.question || "").trim();
       const content = String(item.content || item.answer || item.description || "").trim();
       return title && content ? `\u092A\u094D\u0930\u0936\u094D\u0928/\u0935\u093F\u0937\u092F: ${title}
 \u0909\u0924\u094D\u0924\u0930/\u091C\u093E\u0928\u0915\u093E\u0930\u0940: ${content}` : content || title;
     }).filter(Boolean).join("\n\n").slice(0, 14e3);
+    console.log(`[WhatsApp:KnowledgeBase] Knowledge context generated (${context.length} chars)`);
+    return { context, count: activeDocs.length };
   };
   const generateSupportReply = async (userMessage) => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    const model = process.env.WHATSAPP_GEMINI_MODEL;
-    if (!apiKey || !model) return null;
-    const knowledge = await getKnowledgeContext();
-    if (!knowledge) return null;
-    const ai = new import_genai.GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model,
-      contents: [
-        "\u0906\u092A BREAKING NEWS WALA / AI NEWS MAKER \u0915\u0947 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0938\u0939\u093E\u092F\u0915 \u0939\u0948\u0902\u0964 \u0915\u0947\u0935\u0932 \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930 \u0938\u0947 \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0902\u0964 \u0915\u094B\u0908 \u0924\u0925\u094D\u092F, \u092E\u0942\u0932\u094D\u092F, \u0938\u0941\u0935\u093F\u0927\u093E, \u0938\u094D\u0925\u093F\u0924\u093F, \u0938\u092E\u092F-\u0938\u0940\u092E\u093E \u092F\u093E \u0928\u0940\u0924\u093F \u0928 \u0917\u0922\u093C\u0947\u0902\u0964 \u092F\u0926\u093F \u0909\u0924\u094D\u0924\u0930 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930 \u092E\u0947\u0902 \u0928\u0939\u0940\u0902 \u0939\u0948, \u0924\u094B \u092C\u093F\u0932\u094D\u0915\u0941\u0932 HUMAN_HANDOFF \u0932\u093F\u0916\u0947\u0902\u0964 \u0909\u0924\u094D\u0924\u0930 \u0936\u0941\u0926\u094D\u0927, \u0938\u0930\u0932 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 2-5 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0939\u094B\u0964 \u092A\u093E\u0938\u0935\u0930\u094D\u0921, OTP, \u092D\u0941\u0917\u0924\u093E\u0928 \u0915\u093E\u0930\u094D\u0921, API token \u092F\u093E \u0917\u094B\u092A\u0928\u0940\u092F \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u092D\u0940 \u0928 \u092E\u093E\u0901\u0917\u0947\u0902\u0964 \u0917\u094D\u0930\u093E\u0939\u0915 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u092D\u0941\u0917\u0924\u093E\u0928, \u0930\u093F\u092B\u0902\u0921, \u0916\u093E\u0924\u093E \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u092F\u093E \u0915\u094B\u0908 \u0938\u0902\u0935\u0947\u0926\u0928\u0936\u0940\u0932 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0938\u094D\u0935\u092F\u0902 \u0928 \u0915\u0930\u0947\u0902\u0964",
-        "\u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930:\n" + knowledge,
-        "\u0917\u094D\u0930\u093E\u0939\u0915 \u0915\u093E \u0938\u0902\u0926\u0947\u0936:\n" + userMessage
-      ].join("\n\n")
-    });
-    const answer = String(response.text || "").trim();
-    if (!answer || answer.includes("HUMAN_HANDOFF")) return null;
-    return answer.slice(0, 3500);
+    const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
+    const configuredModel = (process.env.WHATSAPP_GEMINI_MODEL || "gemini-3.5-flash").trim();
+    const model = configuredModel === "gemini-2.5-flash" || configuredModel === "gemini-2.0-flash" ? "gemini-3.5-flash" : configuredModel;
+    if (!apiKey) {
+      console.warn("[WhatsApp:Gemini] CONFIG_MISSING: Neither GEMINI_API_KEY nor GEMINI_API-KEY is set");
+      return { reply: null, reason: "gemini_key_missing", errorCategory: "CONFIG_MISSING" };
+    }
+    if (!model) {
+      console.warn("[WhatsApp:Gemini] CONFIG_MISSING: WHATSAPP_GEMINI_MODEL is not configured");
+      return { reply: null, reason: "gemini_model_missing", errorCategory: "CONFIG_MISSING" };
+    }
+    const { context: knowledge, errorCategory: kbErr } = await getKnowledgeContext();
+    if (kbErr || !knowledge) {
+      return { reply: null, reason: kbErr === "KNOWLEDGE_BASE_EMPTY" ? "knowledge_gap" : "kb_read_error", errorCategory: kbErr || "KNOWLEDGE_BASE_EMPTY" };
+    }
+    console.log(`[WhatsApp:Gemini] Gemini API request started with model: ${model}`);
+    try {
+      const ai = new import_genai.GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model,
+        contents: [
+          "\u0906\u092A BREAKING NEWS WALA / AI NEWS MAKER \u0915\u0947 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0938\u0939\u093E\u092F\u0915 \u0939\u0948\u0902\u0964 \u0915\u0947\u0935\u0932 \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930 \u0938\u0947 \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0902\u0964 \u0915\u094B\u0908 \u0924\u0925\u094D\u092F, \u092E\u0942\u0932\u094D\u092F, \u0938\u0941\u0935\u093F\u0927\u093E, \u0938\u094D\u0925\u093F\u0924\u093F, \u0938\u092E\u092F-\u0938\u0940\u092E\u093E \u092F\u093E \u0928\u0940\u0924\u093F \u0928 \u0917\u0922\u093C\u0947\u0902\u0964 \u092F\u0926\u093F \u0909\u0924\u094D\u0924\u0930 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930 \u092E\u0947\u0902 \u0928\u0939\u0940\u0902 \u0939\u0948, \u0924\u094B \u092C\u093F\u0932\u094D\u0915\u0941\u0932 HUMAN_HANDOFF \u0932\u093F\u0916\u0947\u0902\u0964 \u0909\u0924\u094D\u0924\u0930 \u0936\u0941\u0926\u094D\u0927, \u0938\u0930\u0932 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 2-5 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0939\u094B\u0964 \u092A\u093E\u0938\u0935\u0930\u094D\u0921, OTP, \u092D\u0941\u0917\u0924\u093E\u0928 \u0915\u093E\u0930\u094D\u0921, API token \u092F\u093E \u0917\u094B\u092A\u0928\u0940\u092F \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u092D\u0940 \u0928 \u092E\u093E\u0901\u0917\u0947\u0902\u0964 \u0917\u094D\u0930\u093E\u0939\u0915 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u092D\u0941\u0917\u0924\u093E\u0928, \u0930\u093F\u092B\u0902\u0921, \u0916\u093E\u0924\u093E \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u092F\u093E \u0915\u094B\u0908 \u0938\u0902\u0935\u0947\u0926\u0928\u0936\u0940\u0932 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0938\u094D\u0935\u092F\u0902 \u0928 \u0915\u0930\u0947\u0902\u0964",
+          "\u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930:\n" + knowledge,
+          "\u0917\u094D\u0930\u093E\u0939\u0915 \u0915\u093E \u0938\u0902\u0926\u0947\u0936:\n" + userMessage
+        ].join("\n\n")
+      });
+      console.log("[WhatsApp:Gemini] Gemini API response received");
+      const answer = String(response.text || "").trim();
+      if (!answer) {
+        console.warn("[WhatsApp:Gemini] GEMINI_EMPTY_RESPONSE: Model returned empty text");
+        return { reply: null, reason: "gemini_empty_response", errorCategory: "GEMINI_EMPTY_RESPONSE" };
+      }
+      if (answer.includes("HUMAN_HANDOFF")) {
+        console.log("[WhatsApp:Gemini] Human handoff triggered: model signaled question outside knowledge base");
+        return { reply: null, reason: "knowledge_gap" };
+      }
+      console.log(`[WhatsApp:Gemini] AI reply generated (${answer.length} chars)`);
+      return { reply: answer.slice(0, 3500) };
+    } catch (error) {
+      const errMsg = String(error?.message || error);
+      console.error("[WhatsApp:Gemini] GEMINI_API_ERROR:", errMsg.slice(0, 200));
+      return { reply: null, reason: "gemini_api_error", errorCategory: "GEMINI_API_ERROR" };
+    }
   };
   const processInboundMessage = async (message) => {
     const waId = String(message.from || "").trim();
     const messageId = String(message.id || "").trim();
-    if (!waId || !messageId || !centralDb2?.useFirestore) return;
+    if (!waId || !messageId) {
+      console.warn("[WhatsApp:Inbound] CONFIG_MISSING: Inbound message missing from or id");
+      return;
+    }
+    if (!centralDb2?.useFirestore) {
+      console.error("[WhatsApp:Inbound] FIRESTORE_CONNECTION_ERROR: Central Firestore is unavailable");
+      throw new Error("FIRESTORE_CONNECTION_ERROR: Central Firestore is unavailable");
+    }
+    const maskedWa = maskWaId(waId);
+    console.log(`[WhatsApp:Inbound] Inbound message received: id=${messageId}, from=${maskedWa}, type=${message.type || "unknown"}`);
     const textBody = message.type === "text" ? String(message.text?.body || "").trim() : "";
     const messageDocId = sha256(messageId);
     const conversationId = sha256(waId);
@@ -6570,6 +6649,7 @@ function registerWhatsAppIntegration(app2, centralDb2) {
       updatedAt: now
     });
     if (textBody.toUpperCase() === "STOP" || textBody.toUpperCase() === "UNSUBSCRIBE") {
+      console.log(`[WhatsApp:Inbound] STOP/UNSUBSCRIBE received from ${maskedWa}`);
       await requireWrite("whatsapp_subscribers", conversationId, {
         waId,
         newsAlertsConsent: false,
@@ -6578,7 +6658,8 @@ function registerWhatsAppIntegration(app2, centralDb2) {
       });
       const optOutReply = "\u0906\u092A\u0915\u0940 WhatsApp \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0942\u091A\u0928\u093E\u090F\u0901 \u092C\u0902\u0926 \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0902\u0964 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0906\u092A \u0939\u092E\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964";
       const sent2 = await sendWhatsAppText(waId, optOutReply);
-      await requireWrite("whatsapp_messages", sha256(String(sent2?.messages?.[0]?.id || `out-${messageId}`)), {
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -6586,20 +6667,24 @@ function registerWhatsAppIntegration(app2, centralDb2) {
         timestamp: now,
         status: "sent"
       });
+      console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId2}`);
       return;
     }
     const wantsHuman = /\b(agent|human|person|support)\b|मानव|व्यक्ति|प्रतिनिधि|कस्टमर केयर|सहायता टीम/i.test(textBody);
     if (wantsHuman) {
+      console.log("[WhatsApp:Inbound] Human handoff triggered, with exact reason: user_request");
       await requireWrite("whatsapp_conversations", conversationId, {
         waId,
         status: "human_requested",
         humanHandoff: true,
         handoffRequestedAt: now,
+        handoffReason: "user_request",
         updatedAt: now
       });
       const handoffReply = "\u0906\u092A\u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0939\u092E\u093E\u0930\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u094B \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092F\u0939\u0940\u0902 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902, \u091F\u0940\u092E \u0915\u093E \u0938\u0926\u0938\u094D\u092F \u0906\u092A\u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u093E\u0964";
       const sent2 = await sendWhatsAppText(waId, handoffReply);
-      await requireWrite("whatsapp_messages", sha256(String(sent2?.messages?.[0]?.id || `out-${messageId}`)), {
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -6607,27 +6692,38 @@ function registerWhatsAppIntegration(app2, centralDb2) {
         timestamp: now,
         status: "sent"
       });
+      console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId2}`);
       return;
     }
-    if (process.env.WHATSAPP_AI_ENABLED !== "true" || !textBody) return;
-    let reply = null;
-    try {
-      reply = await generateSupportReply(textBody);
-    } catch (error) {
-      console.error("[WhatsApp] Gemini support response failed:", String(error?.message || error).slice(0, 240));
+    if (process.env.WHATSAPP_AI_ENABLED !== "true") {
+      console.log("[WhatsApp:Inbound] WHATSAPP_AI_ENABLED is not 'true'; skipping AI reply");
+      return;
     }
+    if (!textBody) {
+      console.log("[WhatsApp:Inbound] Message has no text body; skipping AI reply");
+      return;
+    }
+    const aiResult = await generateSupportReply(textBody);
+    let reply = aiResult.reply;
     if (!reply) {
+      const handoffReason = aiResult.reason || "knowledge_gap";
+      console.log(`[WhatsApp:Inbound] Human handoff triggered, with exact reason: ${handoffReason}`);
       await requireWrite("whatsapp_conversations", conversationId, {
         waId,
         status: "human_requested",
         humanHandoff: true,
-        handoffReason: "knowledge_gap",
+        handoffReason,
         updatedAt: Date.now()
       });
-      reply = "\u0906\u092A\u0915\u093E \u092A\u094D\u0930\u0936\u094D\u0928 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948, \u0932\u0947\u0915\u093F\u0928 \u0907\u0938\u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0939\u092E\u093E\u0930\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u0939\u093E\u092F\u0924\u093E-\u091C\u094D\u091E\u093E\u0928 \u0938\u0947 \u0928\u0939\u0940\u0902 \u0939\u094B \u092A\u093E \u0930\u0939\u0940 \u0939\u0948\u0964 \u0939\u092E\u0928\u0947 \u0907\u0938\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u0947 \u0932\u093F\u090F \u091A\u093F\u0928\u094D\u0939\u093F\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0939\u0948\u0964";
+      if (handoffReason === "knowledge_gap") {
+        reply = "\u0906\u092A\u0915\u093E \u092A\u094D\u0930\u0936\u094D\u0928 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948, \u0932\u0947\u0915\u093F\u0928 \u0907\u0938\u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0939\u092E\u093E\u0930\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u0939\u093E\u092F\u0924\u093E-\u091C\u094D\u091E\u093E\u0928 \u0938\u0947 \u0928\u0939\u0940\u0902 \u0939\u094B \u092A\u093E \u0930\u0939\u0940 \u0939\u0948\u0964 \u0939\u092E\u0928\u0947 \u0907\u0938\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u0947 \u0932\u093F\u090F \u091A\u093F\u0928\u094D\u0939\u093F\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0939\u0948\u0964";
+      } else {
+        reply = "\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u093E \u0938\u0902\u0926\u0947\u0936 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948\u0964 \u0939\u092E\u093E\u0930\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u091C\u0932\u094D\u0926 \u0939\u0940 \u0906\u092A\u0938\u0947 \u092F\u0939\u093E\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u0940\u0964";
+      }
     }
     const sent = await sendWhatsAppText(waId, reply);
-    await requireWrite("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
+    const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+    await requireWrite("whatsapp_messages", sha256(outMsgId), {
       conversationId,
       waId,
       direction: "outbound",
@@ -6635,6 +6731,7 @@ function registerWhatsAppIntegration(app2, centralDb2) {
       timestamp: Date.now(),
       status: "sent"
     });
+    console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
   };
   app2.get(webhookPath, (req, res) => {
     const mode = String(req.query["hub.mode"] || "");
@@ -6702,35 +6799,54 @@ function registerWhatsAppIntegration(app2, centralDb2) {
     }
   };
   app2.post(taskPath, async (req, res) => {
-    if (!await verifyTaskRequest(req)) return res.sendStatus(401);
+    console.log("[WhatsApp:TaskAuth] Task processor invocation received");
+    if (!await verifyTaskRequest(req)) {
+      console.warn("[WhatsApp:TaskAuth] Unauthorized task request: OIDC verification failed");
+      return res.sendStatus(401);
+    }
+    console.log("[WhatsApp:TaskAuth] Cloud Task authenticated successfully");
     const message = req.body?.message;
     const messageId = String(req.body?.messageId || "");
     if (!message || !messageId || String(message.id || "") !== messageId) return res.sendStatus(400);
     if (!centralDb2?.useFirestore) return res.sendStatus(503);
     const eventId = sha256(messageId);
+    console.log(`[WhatsApp:Tasks] Cloud Task processing started for event ${eventId.slice(0, 10)}... (messageId=${messageId})`);
     try {
       const claim = await claimInboundEvent(eventId, messageId);
-      if (claim === "processed") return res.sendStatus(200);
-      if (claim === "busy") return res.sendStatus(503);
+      if (claim === "processed") {
+        console.log(`[WhatsApp:Tasks] Event ${eventId.slice(0, 10)} already processed; skipping duplicate`);
+        return res.sendStatus(200);
+      }
+      if (claim === "busy") {
+        console.log(`[WhatsApp:Tasks] Event ${eventId.slice(0, 10)} currently leased; returning 503 for backoff`);
+        return res.sendStatus(503);
+      }
       await processInboundMessage(message);
       await requireWrite("whatsapp_webhook_events", eventId, {
         messageId,
         status: "processed",
         processedAt: Date.now()
       });
+      console.log(`[WhatsApp:Tasks] Cloud Task processing completed successfully for event ${eventId.slice(0, 10)}`);
       return res.sendStatus(200);
     } catch (error) {
-      console.error("[WhatsApp] Durable task processing failed:", String(error?.message || error).slice(0, 240));
+      const errMsg = String(error?.message || error);
+      console.error("[WhatsApp:Tasks] Durable task processing failed:", errMsg.slice(0, 240));
       await centralDb2.writeDoc("whatsapp_webhook_events", eventId, {
         messageId,
         status: "retryable",
-        lastErrorAt: Date.now()
+        lastErrorAt: Date.now(),
+        lastError: errMsg.slice(0, 200)
       }).catch(() => void 0);
       return res.sendStatus(500);
     }
   });
   app2.post(webhookPath, async (req, res) => {
-    if (!verifySignature(req)) return res.sendStatus(401);
+    if (!verifySignature(req)) {
+      console.warn("[WhatsApp:Inbound] Webhook signature verification failed");
+      return res.sendStatus(401);
+    }
+    console.log("[WhatsApp:Inbound] Webhook signature verified successfully");
     if (req.body?.object !== "whatsapp_business_account") return res.sendStatus(404);
     if (!centralDb2?.useFirestore || !getTaskConfig()) return res.sendStatus(503);
     const messages = [];
@@ -6753,10 +6869,11 @@ function registerWhatsAppIntegration(app2, centralDb2) {
           receivedAt: Number(message.timestamp || Math.floor(Date.now() / 1e3)) * 1e3
         });
         await enqueueMessage(message);
+        console.log(`[WhatsApp:Inbound] Cloud Task enqueued for message: ${messageId}`);
       }
       return res.sendStatus(200);
     } catch (error) {
-      console.error("[WhatsApp] Could not enqueue inbound webhook:", String(error?.message || error).slice(0, 240));
+      console.error("[WhatsApp:Inbound] Could not enqueue inbound webhook:", String(error?.message || error).slice(0, 240));
       return res.sendStatus(503);
     }
   });
@@ -6768,6 +6885,9 @@ var import_auth = require("firebase-admin/auth");
 var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd();
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
 import_dotenv.default.config();
+if (!process.env.GEMINI_API_KEY && process.env["GEMINI_API-KEY"]) {
+  process.env.GEMINI_API_KEY = process.env["GEMINI_API-KEY"];
+}
 var cloudStorage = null;
 try {
   const csMod = require_cloud_storage_service();
