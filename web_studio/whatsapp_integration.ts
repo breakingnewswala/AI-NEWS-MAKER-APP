@@ -30,6 +30,45 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     return result;
   };
 
+  // Atomically claim an inbound event so concurrent Cloud Tasks retries
+  // cannot process the same WhatsApp message at the same time.
+  const claimInboundEvent = async (eventId: string, messageId: string) => {
+    const tx = await centralDb.beginTransaction();
+    if (!tx?.success || !tx.transaction) throw new Error("Could not start Firestore transaction");
+    try {
+      const current = await centralDb._readDocInTransaction("whatsapp_webhook_events", eventId, tx.transaction);
+      if (!current?.success) throw new Error("Could not read WhatsApp event in transaction");
+      const now = Date.now();
+      if (current.data?.status === "processed") {
+        await centralDb.rollbackTransaction(tx.transaction);
+        return "processed";
+      }
+      if (current.data?.status === "processing" && Number(current.data?.leaseUntil || 0) > now) {
+        await centralDb.rollbackTransaction(tx.transaction);
+        return "busy";
+      }
+      const record = {
+        messageId,
+        status: "processing",
+        processingAt: now,
+        leaseUntil: now + 5 * 60 * 1000,
+      };
+      const fields: any = {};
+      for (const [key, value] of Object.entries(record)) fields[key] = centralDb._toFirestoreField(value);
+      const name = `projects/${centralDb.projectId}/databases/${centralDb.databaseId}/documents/whatsapp_webhook_events/${eventId}`;
+      const write: any = { update: { name, fields } };
+      write.currentDocument = current.updateTime
+        ? { updateTime: current.updateTime }
+        : { exists: false };
+      const committed = await centralDb.commitTransaction(tx.transaction, [write]);
+      if (!committed?.success) throw new Error("Could not claim WhatsApp event transactionally");
+      return "claimed";
+    } catch (error) {
+      await centralDb.rollbackTransaction(tx.transaction);
+      throw error;
+    }
+  };
+
   const verifySignature = (req: any) => {
     const appSecret = process.env.META_APP_SECRET;
     const signature = String(req.headers["x-hub-signature-256"] || "");
@@ -265,13 +304,10 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     if (!centralDb?.useFirestore) return res.sendStatus(503);
 
     const eventId = sha256(messageId);
-    const existing = await centralDb.readDoc("whatsapp_webhook_events", eventId);
-    if (existing?.success && existing.data?.status === "processed") return res.sendStatus(200);
-
-    await requireWrite("whatsapp_webhook_events", eventId, {
-      messageId, status: "processing", processingAt: Date.now(),
-    });
     try {
+      const claim = await claimInboundEvent(eventId, messageId);
+      if (claim === "processed") return res.sendStatus(200);
+      if (claim === "busy") return res.sendStatus(503);
       await processInboundMessage(message);
       await requireWrite("whatsapp_webhook_events", eventId, {
         messageId, status: "processed", processedAt: Date.now(),
