@@ -23,8 +23,7 @@ import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
-import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges, formatCaptionVariants, countHeadlineVisibleCharacters } from '../lib/speakerUtils';
-import { getRegenCoinCostForPlan, FIVE_HEADLINE_TIERS } from '../lib/aiCoreRules';
+import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges } from '../lib/speakerUtils';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
 import { scrapeNewsUrlClient } from '../lib/clientScraper';
@@ -240,21 +239,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   const [headlineOptions, setHeadlineOptions] = useState<string[]>(() => {
     const s = getSavedAiSession();
-    const sourceOpts = (s?.headlineOptions && s.headlineOptions.length > 0)
-      ? s.headlineOptions
-      : (card.headlineOptions && card.headlineOptions.length > 0 ? card.headlineOptions : null);
-
-    if (sourceOpts && sourceOpts.length >= 5) {
-      return sourceOpts.slice(0, 5);
+    if (s?.headlineOptions && s.headlineOptions.length > 0) {
+      return s.headlineOptions;
     }
-
-    const base = cleanHeadlineText(sourceOpts?.[0] || card.headline || '');
-    if (base) {
-      const factSentences = (card.summary || base)
-        .split(/[।\n]+|\.\s+/)
-        .map((x: string) => cleanHeadlineText(x).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-        .filter((x: string) => x.length > 15 && /[\u0900-\u097F]/.test(x));
-      return fitHeadlinesTo5TierRanges(sourceOpts || [base], factSentences, base, card.location || '').slice(0, 5);
+    if (card.headline && card.headline.trim()) {
+      return [cleanHeadlineText(card.headline)];
     }
     return [];
   });
@@ -270,29 +259,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   });
   const [isRegenerating, setIsRegenerating] = useState<boolean>(false);
   const [regenSuccessMsg, setRegenSuccessMsg] = useState<string | null>(null);
-  const [walletBalance, setWalletBalance] = useState<number>(0);
-
-  useEffect(() => {
-    const email = currentUser?.email || '';
-    const uid = currentUser?.userId || currentUser?.uid || '';
-    if (email || uid) {
-      fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(uid)}`))
-        .then((res) => res.json())
-        .then((d) => {
-          if (d?.success && d?.wallet) setWalletBalance(d.wallet.coinBalance ?? 0);
-        })
-        .catch(() => {});
-    }
-    const onWalletUpdated = (e: any) => {
-      if (e?.detail?.coinBalance !== undefined) setWalletBalance(e.detail.coinBalance);
-    };
-    window.addEventListener('ai_news_wallet_updated', onWalletUpdated);
-    window.addEventListener('wallet_balance_updated', onWalletUpdated);
-    return () => {
-      window.removeEventListener('ai_news_wallet_updated', onWalletUpdated);
-      window.removeEventListener('wallet_balance_updated', onWalletUpdated);
-    };
-  }, [currentUser]);
 
   // AI Photo state inside result
   const [generatingAiPhoto, setGeneratingAiPhoto] = useState<boolean>(false);
@@ -488,13 +454,32 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     locationText: string = '',
     sourceTitle: string = ''
   ): string[] => {
-    const cleanList = (existing || []).map((h) => cleanHeadlineText(h)).filter(Boolean);
-    const prime = cleanHeadlineText(cleanList[0] || baseH || sourceTitle || 'ताज़ा समाचार');
-    const factSentences = (summaryText || prime)
-      .split(/[।\n]+|\.\s+/)
-      .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-      .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-    return fitHeadlinesTo5TierRanges(cleanList.length > 0 ? cleanList : [prime], factSentences, prime, locationText).slice(0, 5);
+    const combined: string[] = [];
+    if (existing && Array.isArray(existing)) {
+      for (const h of existing) {
+        const clean = cleanHeadlineText(h).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+        if (clean && !combined.includes(clean)) {
+          combined.push(clean);
+        }
+      }
+    }
+    const prime = cleanHeadlineText(combined[0] || baseH || sourceTitle || 'ताज़ा समाचार').replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+    if (combined.length === 0 && prime) {
+      combined.push(prime);
+    }
+    if (combined.length < 5) {
+      const factSentences = (summaryText || prime)
+        .split(/[।\n]+|\.\s+/)
+        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      const supp = generate5BalancedHeadlineOptions(prime, factSentences, locationText);
+      const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, prime, locationText);
+      for (const f of fitted) {
+        if (combined.length >= 5) break;
+        if (!combined.includes(f)) combined.push(f);
+      }
+    }
+    return combined.slice(0, 5);
   };
 
 
@@ -653,39 +638,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
     // Approved Editorial Content: apply 5 approved headlines and captions directly without AI API calls
     if (autoFillNews.isApproved && Array.isArray(autoFillNews.approvedHeadlines) && autoFillNews.approvedHeadlines.length > 0) {
+      const approvedOpts = autoFillNews.approvedHeadlines.slice(0, 5);
+      const topHeadline = approvedOpts[0] || autoFillNews.title || '';
+      
       const channelUsername = getActiveCaptionUsername(card, currentUser);
       const userHashtag = channelUsername ? `#${channelUsername}` : '';
-      const baseTitle = cleanHeadlineText(autoFillNews.approvedHeadlines[0] || autoFillNews.title || 'ताज़ा समाचार');
-      const factSentences = (autoFillNews.summary || rawContent || baseTitle)
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-
-      const approvedOpts = fitHeadlinesTo5TierRanges(
-        autoFillNews.approvedHeadlines,
-        factSentences,
-        baseTitle,
-        autoFillNews.location || card.location || ''
-      ).slice(0, 5);
-      const topHeadline = approvedOpts[0] || baseTitle;
-
-      let detailedCaption = autoFillNews.captionDetailed || autoFillNews.summary || rawContent || topHeadline;
-      let bulletsCaption = autoFillNews.captionBullets || '';
-      let shortCaption = autoFillNews.captionShort || '';
-
-      if (!detailedCaption || !bulletsCaption || !shortCaption) {
-        const variants = formatCaptionVariants(
-          topHeadline,
-          autoFillNews.location || card.location || 'मध्य प्रदेश',
-          detailedCaption || autoFillNews.title,
-          channelUsername
-        );
-        if (!detailedCaption) detailedCaption = variants.captionDetailed;
-        if (!bulletsCaption) bulletsCaption = variants.captionBullets;
-        if (!shortCaption) shortCaption = variants.captionShort;
-      }
-
-      let formattedCaption = detailedCaption;
+      let formattedCaption = autoFillNews.captionDetailed || autoFillNews.summary || rawContent;
       if (userHashtag && formattedCaption.includes('#')) {
         if (!formattedCaption.toLowerCase().includes(userHashtag.toLowerCase())) {
           formattedCaption = formattedCaption.replace(/(#[^\s#]+)/, `${userHashtag} $1`);
@@ -705,9 +663,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         location: cleanLocationField(autoFillNews.location || card.location || ''),
         category: cleanCategoryField(autoFillNews.category || card.category || ''),
         summary: formattedCaption,
-        captionDetailed: detailedCaption,
-        captionBullets: bulletsCaption,
-        captionShort: shortCaption,
+        captionDetailed: formattedCaption,
+        captionBullets: autoFillNews.captionBullets,
+        captionShort: autoFillNews.captionShort,
         tags: autoFillNews.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'],
       };
       setResult(editorialResult);
@@ -715,7 +673,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: topHeadline,
         formattedHeadline: topHeadline,
-        headlineOptions: approvedOpts,
         location: editorialResult.location,
         category: editorialResult.category,
         summary: formattedCaption,
@@ -932,21 +889,27 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         opts.push(cleanHeadlineText(res.headline));
       }
 
-      const baseTitle = cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार');
-      const sourceText = extraData?.fullNews || extraData?.summary || res.summary || '';
-      const sourceLoc = cleanLocationField(res.location || extraData?.location || '');
-      const factSentences = (sourceText || baseTitle)
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      if (opts.length < 5) {
+        const baseTitle = cleanHeadlineText(opts[0] || res.headline || extraData?.title || 'ताज़ा समाचार');
+        const sourceText = extraData?.fullNews || extraData?.summary || res.summary || '';
+        const sourceLoc = cleanLocationField(res.location || extraData?.location || '');
+        const factSentences = (sourceText || baseTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const finalOpts = fitHeadlinesTo5TierRanges(opts, factSentences, baseTitle, sourceLoc);
-      setHeadlineOptions(finalOpts);
+        const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, sourceLoc);
+        fitted.forEach((h) => {
+          if (opts.length < 5 && !opts.includes(h)) opts.push(h);
+        });
+      }
+      setHeadlineOptions(opts.slice(0, 5));
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
 
       // Selected headline for graphic: Option 1 directly from AI
-      const finalHeadline = cleanHeadlineText(finalOpts[0] || res.headline || '');
+      const finalHeadline = cleanHeadlineText(opts[0] || res.headline || '');
       const finalLoc = cleanLocationField(res.location || extraData?.location || '');
       const safeProxy = (u?: string) => {
         if (!u || !u.trim()) return '';
@@ -1001,7 +964,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
-        headlineOptions: finalOpts,
         highlightWords: res.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -1027,7 +989,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         new CustomEvent('ai_tools_state_synced', {
           detail: {
             result: res,
-            headlineOptions: finalOpts,
+            headlineOptions: opts.slice(0, 5),
             selectedHeadlineIndex: 0,
             linkUrl: effectiveLink || url,
             inputText: effectiveText,
@@ -1149,7 +1111,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: finalHeadline,
         formattedHeadline: fallbackResult.formattedHeadline || finalHeadline,
-        headlineOptions: finalOpts.slice(0, 5),
         highlightWords: fallbackResult.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -1312,20 +1273,26 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         rawOpts.push(cleanHeadlineText(res.headline));
       }
 
-      const baseTitle = cleanHeadlineText(rawOpts[0] || res.headline || 'ताज़ा समाचार');
-      const sourceText = res.summary || inputText || '';
-      const sourceLoc = cleanLocationField(res.location || '');
-      const factSentences = (sourceText || baseTitle)
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      if (rawOpts.length < 5) {
+        const baseTitle = cleanHeadlineText(rawOpts[0] || res.headline || 'ताज़ा समाचार');
+        const sourceText = res.summary || inputText || '';
+        const sourceLoc = cleanLocationField(res.location || '');
+        const factSentences = (sourceText || baseTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const finalOpts = fitHeadlinesTo5TierRanges(rawOpts, factSentences, baseTitle, sourceLoc);
-      setHeadlineOptions(finalOpts);
+        const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, sourceLoc);
+        fitted.forEach((h) => {
+          if (rawOpts.length < 5 && !rawOpts.includes(h)) rawOpts.push(h);
+        });
+      }
+      setHeadlineOptions(rawOpts.slice(0, 5));
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main);
 
-      const finalHeadline = cleanHeadlineText(finalOpts[0] || res.headline || '');
+      const finalHeadline = cleanHeadlineText(rawOpts[0] || res.headline || '');
       const finalLoc = cleanLocationField(res.location || '');
       const finalImage = res.pickedImages?.main || card.images.main;
 
@@ -1341,7 +1308,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       onChange({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
-        headlineOptions: finalOpts,
         highlightWords: res.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -1523,29 +1489,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
   };
 
-  // Regenerate 5 brand new headline options from the same canonical news context (Part 8 Single-Use Coin Engine)
+  // Regenerate 5 brand new headline options from the same canonical news context
   const handleRegenerateHeadlines = async () => {
     if (isRegenerating || loading) return;
-
-    const userRole = (currentUser?.role || '').toLowerCase();
-    const rawTier = (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
-    const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
-
-    if (card.regenerationUsed || (result && (result as any).regenerationUsed)) {
-      setError('इस ड्राफ्ट के लिए अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।');
+    if (!isVipDeskUser) {
+      setError('अतिरिक्त हेडलाइन रीजेनरेशन केवल VIP DESK व अधिकृत एडमिन के लिए उपलब्ध है।');
       return;
     }
-
-    if (regenCost > 0 && walletBalance < regenCost) {
-      setError(`अपर्याप्त कॉइन बैलेंस! 5 नई हेडलाइन बनाने के लिए ${regenCost} कॉइन्स आवश्यक हैं, जबकि आपके पास केवल ${walletBalance} कॉइन्स उपलब्ध हैं।`);
-      return;
-    }
-
     if (aiProvider === 'openai' && !canUseOpenAi) {
       setError('यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।');
       return;
     }
-
     setIsRegenerating(true);
     setError(null);
     setRegenSuccessMsg(null);
@@ -1558,20 +1512,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       category: result?.category || card.category || '',
     };
 
-    const activeDraftId = card.draftId || card.id || card.sourceNewsId || autoFillNews?.newsId || (result as any)?.draftId || `draft-${Date.now()}`;
-
     try {
       const payload = {
-        draftId: activeDraftId,
-        generationRequestId: `req-regen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         canonicalContext: activeCtx,
         sourceHeadline: result?.headline || card.headline || '',
         summary: inputText || result?.summary || card.summary || '',
         location: result?.location || card.location || '',
-        previousHeadlines: headlineOptions.slice(0, 5),
+        previousHeadlines: headlineOptions,
         template_id: card.templateId || 'graphic_001',
         channelUsername: card.socialHandle || currentUser?.username || '',
-        userTier: rawTier,
+        userTier: userPlan || currentUser?.tier || 'pro',
         email: currentUser?.email || 'admin.ainewsmaker@gmail.com',
         userId: currentUser?.userId || currentUser?.uid || 'reporter-admin-01',
         aiProvider,
@@ -1597,57 +1547,54 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             data = null;
           }
         }
-
-        if (res.status === 409 || data?.alreadyUsed) {
-          setError('इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।');
-          setIsRegenerating(false);
-          return;
-        }
-
-        if (res.status === 400 && data?.insufficientCoins) {
-          setError(data.error || 'अपर्याप्त कॉइन बैलेंस!');
-          setIsRegenerating(false);
-          return;
-        }
       } catch (fetchErr) {
         console.warn('Network or endpoint fetch error in regenerate-headlines:', fetchErr);
         data = null;
       }
 
-      let rawNew: string[] = [];
+      let newOptions: string[] = [];
       if (data && data.success && Array.isArray(data.headlineOptions) && data.headlineOptions.length > 0) {
-        rawNew = data.headlineOptions.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
+        newOptions = data.headlineOptions.map((h: string) => cleanHeadlineText(h)).filter(Boolean).slice(0, 5);
       } else if (data && data.success && Array.isArray(data.headlines) && data.headlines.length > 0) {
-        rawNew = data.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
+        newOptions = data.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean).slice(0, 5);
       } else if (data && data.success && Array.isArray(data.options) && data.options.length > 0) {
-        rawNew = data.options.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
+        newOptions = data.options.map((h: string) => cleanHeadlineText(h)).filter(Boolean).slice(0, 5);
       }
 
-      const sourceTitle = cleanHeadlineText(activeCtx.title || result?.headline || card.headline || 'ताज़ा समाचार');
-      const sourceText = activeCtx.articleText || inputText || result?.summary || card.summary || '';
-      const sourceLoc = cleanLocationField(activeCtx.location || result?.location || card.location || '');
-      const articleSentences = (sourceText || sourceTitle)
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      // If backend was unreachable, returned HTML (404/502), or failed, execute resilient client-side 5-tier generator
+      if (newOptions.length === 0) {
+        const sourceTitle = cleanHeadlineText(activeCtx.title || result?.headline || card.headline || 'ताज़ा समाचार');
+        const sourceText = activeCtx.articleText || inputText || result?.summary || card.summary || '';
+        const sourceLoc = cleanLocationField(activeCtx.location || result?.location || card.location || '');
+        const articleSentences = (sourceText || sourceTitle)
+          .split(/[।\n]+|\.\s+/)
+          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const new5Options = fitHeadlinesTo5TierRanges(rawNew, articleSentences, sourceTitle, sourceLoc).slice(0, 5);
+        const generated = generate5BalancedHeadlineOptions(sourceTitle, articleSentences, sourceLoc);
+        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc);
+        newOptions = fitted.filter((h) => !headlineOptions.includes(h)).slice(0, 5);
+        if (newOptions.length < 5) {
+          fitted.forEach((h) => {
+            if (newOptions.length < 5 && !newOptions.includes(h)) newOptions.push(h);
+          });
+        }
+        if (newOptions.length === 0) {
+          newOptions = generated.slice(0, 5);
+        }
+      }
 
-      if (new5Options.length > 0) {
-        const initial5 = headlineOptions.slice(0, 5);
-        const combined10 = [...initial5, ...new5Options].slice(0, 10);
-        setHeadlineOptions(combined10);
-        setSelectedHeadlineIndex(initial5.length); // Auto-select the first new option (index 5)
-        const topH = new5Options[0];
+      if (newOptions.length > 0) {
+        setHeadlineOptions(newOptions);
+        setSelectedHeadlineIndex(0);
+        const topH = newOptions[0];
         setResult((prev) =>
           prev
             ? {
                 ...prev,
                 headline: topH,
                 formattedHeadline: topH,
-                headlineOptions: combined10,
-                regenerationUsed: true,
-                regeneratedHeadlines: new5Options,
+                headlineOptions: newOptions,
                 canonicalContext: (data && data.canonicalContext) || activeCtx,
               }
             : null
@@ -1655,22 +1602,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         if (data && data.actualProvider) {
           setActiveGeneratedProvider(data.actualProvider);
         }
-        onChange({
-          headline: topH,
-          formattedHeadline: topH,
-          headlineOptions: combined10,
-          regenerationUsed: true,
-          regeneratedHeadlines: new5Options,
-        });
-
-        if (data && data.remainingCoins !== undefined) {
-          setWalletBalance(data.remainingCoins);
-          window.dispatchEvent(new CustomEvent('ai_news_wallet_updated', { detail: { coinBalance: data.remainingCoins } }));
-          window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { coinBalance: data.remainingCoins } }));
-        }
-
-        setRegenSuccessMsg(`✓ 5 नए संतुलित हेडलाइन विकल्प सफलतापूर्वक जोड़े गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
-        setTimeout(() => setRegenSuccessMsg(null), 4000);
+        onChange({ headline: topH, formattedHeadline: topH });
+        setRegenSuccessMsg('5 नए संतुलित हेडलाइन विकल्प सफलतापूर्वक तैयार किए गए!');
+        setTimeout(() => setRegenSuccessMsg(null), 3500);
       } else {
         setError('हेडलाइन्स के नए विकल्प तैयार नहीं हो सके। कृपया समाचार टेक्स्ट जांचें।');
       }
@@ -1685,17 +1619,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
           .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
         const generated = generate5BalancedHeadlineOptions(sourceTitle, articleSentences, sourceLoc);
-        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc).slice(0, 5);
+        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc);
         if (fitted.length > 0) {
-          const initial5 = headlineOptions.slice(0, 5);
-          const combined10 = [...initial5, ...fitted].slice(0, 10);
-          setHeadlineOptions(combined10);
-          setSelectedHeadlineIndex(initial5.length);
+          setHeadlineOptions(fitted.slice(0, 5));
+          setSelectedHeadlineIndex(0);
           const topH = fitted[0];
-          setResult((prev) => (prev ? { ...prev, headline: topH, formattedHeadline: topH, headlineOptions: combined10, regenerationUsed: true } : null));
-          onChange({ headline: topH, formattedHeadline: topH, headlineOptions: combined10, regenerationUsed: true });
-          setRegenSuccessMsg(`✓ 5 नए संतुलित हेडलाइन विकल्प तैयार किए गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
-          setTimeout(() => setRegenSuccessMsg(null), 4000);
+          setResult((prev) => (prev ? { ...prev, headline: topH, formattedHeadline: topH, headlineOptions: fitted } : null));
+          onChange({ headline: topH, formattedHeadline: topH });
+          setRegenSuccessMsg('5 नए संतुलित हेडलाइन विकल्प तैयार किए गए!');
+          setTimeout(() => setRegenSuccessMsg(null), 3500);
           return;
         }
       } catch {}
@@ -1904,6 +1836,40 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <span className="hidden sm:inline">क्लाउड/API</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              if (currentAbortControllerRef.current) {
+                currentAbortControllerRef.current.abort();
+                currentAbortControllerRef.current = null;
+              }
+              isExecutingRef.current = false;
+              isResetRef.current = true;
+              activeNewsIdRef.current = '';
+              lastTriggerPayloadRef.current = '';
+              cleanAiToolsMemory();
+              setLoading(false);
+              setResult(null);
+              setHeadlineOptions([]);
+              setSelectedHeadlineIndex(0);
+              setLinkUrl('');
+              setInputText('');
+              setCustomPrompt('');
+              setGeneratedAiImageUrl(null);
+              setError(null);
+              setAiPhotoPrompt('');
+              setIsManualInputMode(false);
+              if ((window as any).showAppToast) {
+                (window as any).showAppToast('AI टूल्स की मेमोरी और डेटा पूरी तरह साफ़ कर दिया गया है।');
+              }
+            }}
+            className="flex items-center gap-1 text-[11px] font-bold text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/80 px-2 py-1 rounded-lg transition-all cursor-pointer"
+            title="AI टूल्स मेमोरी और डेटा क्लीन करें"
+          >
+            <Trash2 className="w-3 h-3 text-rose-400" />
+            <span>मेमोरी क्लीन करें</span>
+          </button>
         </div>
       </div>
 
@@ -1961,22 +1927,38 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         </div>
       )}
 
-      {/* 3. Automated Entry Top Bar (when result is present) */}
-      {isAutomatedEntry && !loading && result && (
+      {/* 3. Automated Entry Top Bar (when result is present and manual inputs are collapsed) */}
+      {isAutomatedEntry && !loading && result && !isManualInputMode && (
         <div className="flex items-center justify-between text-xs px-3 py-2 bg-neutral-900/80 rounded-xl border border-neutral-800">
           <div className="flex items-center gap-1.5 text-amber-300 font-medium text-xs">
             <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>होम फ़ीड से लोड की गई खबर</span>
           </div>
-          <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-            ऑटोमैटिक मोड
-          </span>
+          <button
+            type="button"
+            onClick={() => setIsManualInputMode(true)}
+            className="text-[11px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+          >
+            <span>✏️ मैन्युअल इनपुट बॉक्स दिखाएँ</span>
+          </button>
         </div>
       )}
 
-      {/* 4. Normal / Manual Input Workflow (Visible ONLY when NOT automated) */}
-      {!isAutomatedEntry && !loading && (
+      {/* 4. Normal / Manual Input Workflow (Visible when NOT automated or when manually toggled) */}
+      {(!isAutomatedEntry || isManualInputMode) && !loading && (
         <div className="space-y-3">
+          {isAutomatedEntry && isManualInputMode && (
+            <div className="flex items-center justify-between text-xs pb-1">
+              <span className="text-[11px] text-neutral-400">मैन्युअल इनपुट मोड सक्रिय</span>
+              <button
+                type="button"
+                onClick={() => setIsManualInputMode(false)}
+                className="text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer underline"
+              >
+                ▲ इनपुट बॉक्स छिपाएँ
+              </button>
+            </div>
+          )}
 
           {/* Tab Selector: Two Clear Action Boxes (Module 3) */}
           <div className="grid grid-cols-2 gap-2 bg-neutral-950 p-1.5 rounded-xl border border-neutral-800">
@@ -1994,7 +1976,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               }`}
             >
               <LinkIcon className="w-3.5 h-3.5" />
-              <span>लिंक से खबर बनाएं</span>
+              <span>बॉक्स 1: 'लिंक से खबर बनाएं'</span>
             </button>
 
             <button
@@ -2011,7 +1993,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               }`}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>कच्ची खबर / वॉइस कमांड से खबर बनाएं</span>
+              <span>बॉक्स 2: 'कच्ची खबर या वॉइस कमांड से खबर बनाएं'</span>
             </button>
           </div>
 
@@ -2023,7 +2005,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
                     <LinkIcon className="w-3.5 h-3.5 text-blue-400" />
-                    <span>वेबसाइट का न्यूज़ लिंक (URL) डालें:</span>
+                    <span>बॉक्स 1: वेबसाइट का न्यूज़ लिंक (URL) डालें (ऑटोमैटिक फोटो एक्सट्रैक्शन):</span>
                   </label>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -2062,7 +2044,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   className="w-full bg-neutral-900 border border-neutral-700 focus:border-blue-400 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="text-[11px] text-neutral-400 leading-snug">
-                  💡 लिंक से सीधे ताजा समाचार, मुख्य शीर्षक और प्रेस फोटो पढ़कर आपके कार्ड के लिए 5 विकल्प देता है।
+                  💡 AI लिंक से सीधे ताज़ा समाचार, मुख्य शीर्षक व प्रेस फोटो पढ़कर कार्ड में सेट करेगा।
                 </p>
               </div>
             ) : (
@@ -2071,7 +2053,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-yellow-300 flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-yellow-400" />
-                    <span>कच्चा समाचार / व्हाट्सएप प्रेस नोट / वॉइस कमांड से खबर बनाएं:</span>
+                    <span>बॉक्स 2: कच्चा समाचार / व्हाट्सएप प्रेस नोट / वॉइस कमांड से खबर बनाएं:</span>
                   </label>
                   <div className="flex items-center gap-1.5">
                     <VoiceInputButton
@@ -2129,7 +2111,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                 onClick={() => setShowPromptBox(!showPromptBox)}
                 className="text-[11px] font-bold text-neutral-400 hover:text-yellow-400 flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <span>{showPromptBox ? '▼' : '▶'} AI को विशेष निर्देश दें (वैकल्पिक)</span>
+                <span>{showPromptBox ? '▼' : '▶'} निर्देश / प्रॉम्प्ट बॉक्स (वैकल्पिक)</span>
               </button>
 
               {showPromptBox && (
@@ -2160,7 +2142,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               onClick={() => handleProcess()}
               disabled={loading}
               className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 ${
-                activeTab === 'link' ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white'
+                activeTab === 'link'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white'
                   : 'bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-neutral-950'
               }`}
             >
@@ -2236,95 +2219,84 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </button>
           </div>
 
-          {(() => {
-            const userRole = (currentUser?.role || '').toLowerCase();
-            const rawTier = (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
-            const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
-            const isRegenUsed = Boolean(card.regenerationUsed || (result && (result as any).regenerationUsed));
-
-            return (
-              <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
-                <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
-                  <Check className="w-4 h-4 text-green-400" />
-                  <span>
-                    तैयार AI हेडलाइन्स ({headlineOptions.length} विकल्प उपलब्ध)
-                  </span>
-                </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleRegenerateHeadlines}
-                    disabled={isRegenerating || loading || isRegenUsed}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
-                      isRegenUsed
-                        ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-80'
-                        : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black'
-                    }`}
-                    title={isRegenUsed ? 'इस ड्राफ्ट पर अतिरिक्त हेडलाइन रीजेनरेशन का उपयोग हो चुका है' : `उसी खबर के लिए 5 नई हेडलाइन बनाएं (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
-                    <span>
-                      {isRegenerating
-                        ? 'नई हेडलाइन्स बन रही हैं...'
-                        : isRegenUsed
-                        ? '✓ 5 अतिरिक्त हेडलाइन्स जोड़ी गईं'
-                        : `🔄 पाँच नई हेडलाइन बनाएँ (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
-                    </span>
-                  </button>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
-                    📍 {result.location || card.location || 'मध्य प्रदेश'}
-                  </span>
+          <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
+            <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-green-400" />
+              <span>
+                तैयार AI हेडलाइन ({headlineOptions.length || 5} विकल्प उपलब्ध)
+              </span>
+            </span>
+            <div className="flex items-center gap-2">
+              {isVipDeskUser ? (
+                <button
+                  type="button"
+                  onClick={handleRegenerateHeadlines}
+                  disabled={isRegenerating || loading}
+                  className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer"
+                  title="उसी खबर के लिए 5 नए संतुलित हेडलाइन विकल्प बनाएं"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
+                  <span>{isRegenerating ? 'नई हेडलाइन्स बन रही हैं...' : '🔄 पाँच नई हेडलाइन बनाएँ'}</span>
+                </button>
+              ) : (
+                <div
+                  className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center gap-1 cursor-not-allowed select-none"
+                  title="अतिरिक्त हेडलाइन रीजेनरेशन केवल VIP DESK व एडमिन के लिए उपलब्ध है"
+                >
+                  <span>👑</span>
+                  <span>पाँच नई हेडलाइन बनाएँ (VIP DESK)</span>
                 </div>
-              </div>
-            );
-          })()}
+              )}
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
+                📍 {result.location || card.location || 'मध्य प्रदेश'}
+              </span>
+            </div>
+          </div>
 
           {regenSuccessMsg && (
-            <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
-              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div className="p-2 rounded bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-400" />
               <span>{regenSuccessMsg}</span>
             </div>
           )}
 
-          {/* Headline Options: Up to 10 Options (Initial 5 + 5 Regenerated) with 5-Tier Graduated Bounds */}
+          {/* Headline Options: Exactly 5 Simple Numbered Options with Word and Character Counts (Available to All Plans on Initial Generation) */}
+          {/* Headline Options: Exactly 5 Simple Numbered Options with Radio Buttons and Character Counts */}
           {headlineOptions.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-neutral-300 font-bold flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
-                  <span>
-                    {headlineOptions.length > 5
-                      ? `तैयार संतुलित AI हेडलाइन्स (कुल ${headlineOptions.length} विकल्प - कोई एक चुनें):`
-                      : 'तैयार 5 संतुलित AI हेडलाइन विकल्प (रेडियो बटन से चुनें):'}
-                  </span>
+                  <span>तैयार 5 संतुलित AI हेडलाइन विकल्प (रेडियो बटन से चुनें):</span>
                 </span>
-                <span className="text-[10px] text-amber-300/90 font-mono bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
-                  5-टियर श्रेणीबद्ध वर्ण सीमा
-                </span>
+                <span className="text-[10px] text-amber-300/80 font-mono">100-150 वर्ण सीमा</span>
               </div>
               <div className="space-y-1.5" role="radiogroup" aria-label="हेडलाइन विकल्प">
-                {headlineOptions.slice(0, 10).map((opt, idx) => {
+                {headlineOptions.slice(0, 5).map((opt, idx) => {
                   const isSelected = selectedHeadlineIndex === idx;
                   const displayText = isSelected && result?.headline ? result.headline : opt;
                   const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                   const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
                   const charCount = cleanDisplay.length;
-                  const tierRule = FIVE_HEADLINE_TIERS[idx % 5];
-                  const isRegeneratedOption = idx >= 5;
+                  const angleNames = [
+                    'मुख्य घटना (Core Event)',
+                    'पात्र/व्यक्ति कोण (Actor/Authority)',
+                    'कार्रवाई/परिणाम (Action/Consequence)',
+                    'मुख्य बिंदु/तथ्य (Key Detail/Quote)',
+                    'सारगर्भित (High-Impact)',
+                  ];
 
                   return (
                     <label
                       key={idx}
                       onClick={() => handleSelectHeadline(opt, idx)}
-                      className={`p-2.5 rounded-xl border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1.5 ${
+                      className={`p-2.5 rounded-lg border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1.5 ${
                         isSelected
-                          ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-md ring-1 ring-yellow-400/40'
-                          : isRegeneratedOption
-                          ? 'bg-neutral-900/90 border-amber-900/40 text-neutral-300 hover:border-amber-700/60 hover:text-white'
+                          ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                           : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <input
                             type="radio"
@@ -2334,19 +2306,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                             className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
-                            {isRegeneratedOption ? `अतिरिक्त विकल्प ${idx + 1} (रीजेनरेटेड)` : `विकल्प ${idx + 1}`}
+                            विकल्प {idx + 1}
                           </span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            ({tierRule.angle})
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-950 text-neutral-400 border border-neutral-800">
+                            {angleNames[idx] || `कोण ${idx + 1}`}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                             <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
                             <span className="text-neutral-600">•</span>
-                            <span className={charCount < tierRule.min || charCount > tierRule.max ? 'text-amber-400' : 'text-emerald-400 font-bold'}>
-                              {charCount} अक्षर (लक्ष्य: {tierRule.min}-{tierRule.max})
-                            </span>
+                            <span className={charCount > 150 ? 'text-red-400' : 'text-neutral-300'}>{charCount} अक्षर</span>
                           </span>
                           {isSelected && (
                             <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold shrink-0">
@@ -2380,7 +2350,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       .filter(Boolean).length} शब्द
                   </span>
                   <span className="text-neutral-600">|</span>
-                  <span>{countHeadlineVisibleCharacters(result.headline || '')} / 200 अक्षर (टियर 1-5)</span>
+                  <span>{(result.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, '').trim().length} / 150 अक्षर</span>
                 </span>
               </div>
               <VoiceInputButton
@@ -2414,8 +2384,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
 
 
-          {/* AI Generated Social Media Caption with 3 Style Switchers (Hidden in automated entry - available in Step 7) */}
-          {!isAutomatedEntry && (
+          {/* AI Generated Social Media Caption with 3 Style Switchers */}
           <div className="p-3 bg-neutral-900/90 rounded-xl border border-neutral-800 space-y-2.5">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-1.5">
@@ -2501,7 +2470,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               )}
             </div>
           </div>
-          )}
 
           {/* Website Photo Picked (if URL mode) */}
           {result.pickedImages?.main && (
@@ -2559,8 +2527,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* AI Photo Generation Section with ON/OFF Control (Hidden in automated entry) */}
-          {!isAutomatedEntry && (
+          {/* AI Photo Generation Section with ON/OFF Control */}
           <div className="p-3 bg-neutral-900/90 rounded-lg border border-neutral-800 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
@@ -2633,7 +2600,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               </div>
             )}
           </div>
-          )}
 
           {/* Admin Pre-Publish Editorial Action per Section 1.1 */}
           {isAdminOrSuperAdmin && (
@@ -2680,8 +2646,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Primary Action Button: Apply and Go to Step 3 (Hidden in automated entry - auto-applied) */}
-          {!isAutomatedEntry && (
+          {/* Primary Action Button: Apply and Go to Step 3 */}
           <div className="pt-2 space-y-2">
             <button
               type="button"
@@ -2728,7 +2693,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <span>नया लिंक या खबर डालने के लिए रीसेट करें</span>
             </button>
           </div>
-          )}
         </div>
       )}
     </div>

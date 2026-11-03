@@ -1570,16 +1570,8 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
       }
     }
     return true;
-  }
   try {
-    // Safeguard: Never wipe out an existing populated database with an empty array
-    if (cleaned.length === 0) {
-      const existing = loadNewsDatabase();
-      if (existing.length > 0) {
-        console.warn("Safeguard: Refusing to overwrite populated news_database with empty array");
-        return true;
-      }
-    }
+    // Allow saving empty array when admin clears/deletes all news
 
     const locations = resolveAllDatabaseLocations("news_database.json");
     for (const loc of locations) {
@@ -1846,44 +1838,7 @@ app.get("/api/news-posts", (req, res) => {
     return true;
   });
 
-  // 3b. Backfill safeguard: If fewer than 20 active posts remain due to 3-day time window, backfill from latest approved posts so live feed is NEVER empty
-  if (activePosts.length < 20) {
-    const activeIds = new Set(activePosts.map((p) => p.id));
-    const backfillCandidates = posts.filter((p) => {
-      if (String(p.id).startsWith("live-post-")) return false;
-      if (activeIds.has(p.id)) return false;
-
-      const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
-      if (isApprovedStory) return true;
-
-      // Ensure pending and rejected posts are NEVER used for backfill for regular users
-      if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
-        return false;
-      }
-      if ((p.status === "REJECTED" || (p as any).status === "rejected") && role !== "admin" && role !== "superadmin") {
-        return false;
-      }
-      if (p.status !== "APPROVED" && role !== "admin" && role !== "superadmin" && !includePending) {
-        return false;
-      }
-
-      const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
-      if (isFeedSource) {
-        const parts = String(p.id).split("-");
-        const srcId = parts.length >= 2 ? parts[1] : "";
-        const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
-        if (srcId && !activeSourceIds.has(srcId) && !matchesUrl) {
-          return false;
-        }
-        if (p.status !== "APPROVED") {
-          if (role !== "admin" && role !== "superadmin" && !includePending) return false;
-        }
-      }
-      return true;
-    });
-    backfillCandidates.sort((a, b) => (Number(b.timestamp) || 0) - (Number(a.timestamp) || 0));
-    activePosts.push(...backfillCandidates.slice(0, 30 - activePosts.length));
-  }
+  // Only return authoritative active posts added by admin / approved sources without forced backfill
 
   // 4. Sort newest-first: newest approved/published news at the top, older progressively lower
   activePosts.sort((a, b) => {
@@ -2401,6 +2356,13 @@ app.delete("/api/news-posts/:id", (req, res) => {
     existing = existing.filter((p) => p.id !== id);
     saveNewsDatabase(existing);
     saveDeletedNewsId(id);
+    try {
+      const edDb = loadApprovedEditorialDatabase();
+      if (edDb && edDb[id]) {
+        delete edDb[id];
+        saveApprovedEditorialDatabase(edDb);
+      }
+    } catch {}
     if (centralDb && centralDb.isInitialized) {
       centralDb.deleteNewsPost(id).catch(() => {});
     }
@@ -4639,6 +4601,10 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       mobileNumber: u.mobileNumber || u.mobile || '',
       websiteUrl: u.websiteUrl || '',
       socialIcons: u.socialIcons || (allProfiles[cleanKey] && allProfiles[cleanKey].socialIcons) || undefined,
+      isBlocked: Boolean(u.isBlocked),
+      blockedAt: u.blockedAt || null,
+      blockedReason: u.blockedReason || null,
+      unblockedAt: u.unblockedAt || null,
       updatedAt: Date.now(),
     };
     // Purge duplicate aliases for the same email in user_profiles_db
@@ -4994,8 +4960,10 @@ function reconcileAllUsers() {
           socialIcons: p.socialIcons,
           role: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'superadmin' : ((p.role as any) || 'user')),
           tier: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'ultra' : ((p.tier as any) || 'basic')),
-          planName: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'VIP DESK' : (p.tier === 'ultra' ? 'VIP DESK' : 'BASIC')),
-          isBlocked: false,
+          isBlocked: (userMap.get(email)?.isBlocked !== undefined ? Boolean(userMap.get(email)?.isBlocked) : Boolean((p as any).isBlocked)),
+          blockedAt: userMap.get(email)?.blockedAt || (p as any).blockedAt || null,
+          blockedReason: userMap.get(email)?.blockedReason || (p as any).blockedReason || null,
+          unblockedAt: userMap.get(email)?.unblockedAt || (p as any).unblockedAt || null,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
           trialEndsAt: (p.updatedAt || Date.now()) + SEVEN_DAYS_MS,
@@ -5073,111 +5041,7 @@ function reconcileAllUsers() {
       lastLoginAt: existingAdmin?.lastLoginAt || Date.now(),
     });
 
-    // 4. Guaranteed Active Regular Users (Only if not tombstoned / deleted)
-    const seedUser1 = 'khabridasnews@gmail.com';
-    if (!isUserTombstoned(seedUser1) && !userMap.has(seedUser1)) {
-      const p1 = profiles[seedUser1];
-      userMap.set(seedUser1, {
-        userId: p1?.userId || 'usr_khabridas_101',
-        email: seedUser1,
-        name: p1?.fullName || 'खबरिदास न्यूज़ (Khabridas News)',
-        fullName: p1?.fullName || 'खबरिदास न्यूज़ (Khabridas News)',
-        username: p1?.username || 'khabridasnews',
-        role: 'user',
-        tier: 'basic',
-        planName: 'BASIC',
-        channelName: p1?.channelNameHi || 'खबरिदास न्यूज़',
-        channelNameHi: p1?.channelNameHi || 'खबरिदास न्यूज़',
-        channelNameEn: p1?.channelNameEn || 'Khabridas News',
-        channelLogoUrl: p1?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoPngUrl: p1?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoGifUrl: '',
-        channelLogoType: 'png',
-        mobile: p1?.mobileNumber || '9876543210',
-        mobileNumber: p1?.mobileNumber || '9876543210',
-        district: p1?.district || 'ग्वालियर',
-        websiteUrl: p1?.websiteUrl || 'https://khabridasnews.com',
-        isBlocked: false,
-        isProfileLocked: false,
-        createdAt: 1791892712618,
-        trialStartedAt: 1791892712618,
-        trialEndsAt: 1792497512618,
-        activatedAt: 1791892712618,
-        expiresAt: 1792497512618,
-        activatedVia: 'Free 7-Day VIP Trial',
-        lastLoginAt: 1791892712618,
-      });
-    }
-
-    const seedUser2 = 'riturajtomarorchha@gmail.com';
-    if (!isUserTombstoned(seedUser2) && !userMap.has(seedUser2)) {
-      const p2 = profiles[seedUser2];
-      userMap.set(seedUser2, {
-        userId: p2?.userId || 'usr_rituraj_102',
-        email: seedUser2,
-        name: p2?.fullName || 'ऋतुराज तोमर (ओरछा)',
-        fullName: p2?.fullName || 'ऋतुराज तोमर (ओरछा)',
-        username: p2?.username || 'riturajtomarorchha',
-        role: 'user',
-        tier: 'basic',
-        planName: 'BASIC',
-        channelName: p2?.channelNameHi || 'ओरछा बुंदेलखंड न्यूज़',
-        channelNameHi: p2?.channelNameHi || 'ओरछा बुंदेलखंड न्यूज़',
-        channelNameEn: p2?.channelNameEn || 'Orchha Bundelkhand News',
-        channelLogoUrl: p2?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoPngUrl: p2?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoGifUrl: '',
-        channelLogoType: 'png',
-        mobile: p2?.mobileNumber || '9876543211',
-        mobileNumber: p2?.mobileNumber || '9876543211',
-        district: p2?.district || 'ओरछा / निवाड़ी',
-        websiteUrl: p2?.websiteUrl || 'ainewsmaker.online',
-        isBlocked: false,
-        isProfileLocked: false,
-        createdAt: 1791892712618,
-        trialStartedAt: 1791892712618,
-        trialEndsAt: 1792497512618,
-        activatedAt: 1791892712618,
-        expiresAt: 1792497512618,
-        activatedVia: 'Free 7-Day VIP Trial',
-        lastLoginAt: 1791892712618,
-      });
-    }
-
-    const seedUser3 = 'digital.anmolsandesh@gmail.com';
-    if (!isUserTombstoned(seedUser3) && !userMap.has(seedUser3)) {
-      const p3 = profiles[seedUser3];
-      userMap.set(seedUser3, {
-        userId: p3?.userId || 'usr_anmolsandesh_103',
-        email: seedUser3,
-        name: p3?.fullName || 'Anmol Sandesh',
-        fullName: p3?.fullName || 'Anmol Sandesh',
-        username: p3?.username || 'anmolsandesh',
-        role: 'user',
-        tier: 'basic',
-        planName: 'BASIC',
-        channelName: p3?.channelNameHi || 'अनमोल संदेश',
-        channelNameHi: p3?.channelNameHi || 'अनमोल संदेश',
-        channelNameEn: p3?.channelNameEn || 'Anmol Sandesh',
-        channelLogoUrl: p3?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoPngUrl: p3?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoGifUrl: '',
-        channelLogoType: 'png',
-        mobile: p3?.mobileNumber || '9425000998',
-        mobileNumber: p3?.mobileNumber || '9425000998',
-        district: p3?.district || 'सेंट्रल डेस्क',
-        websiteUrl: p3?.websiteUrl || 'anmolsandesh.com',
-        isBlocked: false,
-        isProfileLocked: false,
-        createdAt: 1791892712618,
-        trialStartedAt: 1791892712618,
-        trialEndsAt: 1792497512618,
-        activatedAt: 1791892712618,
-        expiresAt: 1792497512618,
-        activatedVia: 'Free 7-Day VIP Trial',
-        lastLoginAt: 1791892712618,
-      });
-    }
+    // 4. Authoritative users list (reconciled from master database, profiles, and admin actions)
 
     const reconciledList = Array.from(userMap.values()).filter(u => !isUserTombstoned(u.email) && !isUserTombstoned(u.userId));
     saveUsersMasterDatabase(reconciledList);
@@ -6566,12 +6430,19 @@ function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
   const cleaned = sources.filter((s: any) => Boolean(s && s.url));
 
   if (centralDb && centralDb.useFirestore) {
+    const activeIds = new Set(cleaned.map((s) => s.id));
     for (const s of cleaned) {
       if (s && s.id) {
         centralDb.saveRssSource(s.id, s).catch(() => {});
+        centralDb.cache.rssSources.set(s.id, s);
       }
     }
-    return true;
+    for (const id of Array.from(centralDb.cache.rssSources.keys())) {
+      if (!activeIds.has(id)) {
+        centralDb.cache.rssSources.delete(id);
+        centralDb.writeDoc("rss_sources", id, null).catch(() => {});
+      }
+    }
   }
 
   try {
@@ -9524,6 +9395,20 @@ app.post("/api/admin/delete-user", requireMasterAdminMiddleware, async (req, res
       return res.status(403).json({ error: "सुरक्षित एडमिन खाते को डिलीट नहीं किया जा सकता" });
     }
 
+    let users = loadUsersMasterDatabase();
+    const targetUser = users.find(u =>
+      (u.email && u.email.toLowerCase().trim() === identifier) ||
+      (u.userId && u.userId.toLowerCase().trim() === identifier)
+    );
+
+    if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === 'superadmin')) {
+      return res.status(403).json({ error: "सुरक्षित सुपर एडमिन खाते को डिलीट नहीं किया जा सकता" });
+    }
+
+    const targetEmailClean = (targetUser?.email || (identifier.includes('@') ? identifier : '')).toLowerCase().trim();
+    const targetUserIdClean = (targetUser?.userId || (!identifier.includes('@') ? identifier : '')).toLowerCase().trim();
+    const targetUsernameClean = (targetUser?.username || '').toLowerCase().trim();
+
     // 0. Delete from Firebase Authentication
     if (firebaseAdminAuth) {
       try {
@@ -9543,20 +9428,6 @@ app.post("/api/admin/delete-user", requireMasterAdminMiddleware, async (req, res
         }
       }
     }
-
-    let users = loadUsersMasterDatabase();
-    const targetUser = users.find(u =>
-      (u.email && u.email.toLowerCase().trim() === identifier) ||
-      (u.userId && u.userId.toLowerCase().trim() === identifier)
-    );
-
-    if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === 'superadmin')) {
-      return res.status(403).json({ error: "सुरक्षित सुपर एडमिन खाते को डिलीट नहीं किया जा सकता" });
-    }
-
-    const targetEmailClean = (targetUser?.email || (identifier.includes('@') ? identifier : '')).toLowerCase().trim();
-    const targetUserIdClean = (targetUser?.userId || (!identifier.includes('@') ? identifier : '')).toLowerCase().trim();
-    const targetUsernameClean = (targetUser?.username || '').toLowerCase().trim();
 
     // 1. Delete from users_master_database.json across all locations
     users = users.filter(u => {

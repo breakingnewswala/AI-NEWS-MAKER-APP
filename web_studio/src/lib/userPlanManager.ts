@@ -191,17 +191,17 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
     badge: 'पत्रकार व चैनल चॉइस',
-    tagline: 'फुल ग्राफिक + वीडियो डिज़ाइन स्टूडियो — 40 कार्ड प्रतिदिन',
+    tagline: 'फुल ग्राफिक + वीडियो डिज़ाइन स्टूडियो — 50 कार्ड प्रतिदिन',
     hasWatermark: false,
     graphicExportResolution: '1080p',
-    maxGraphicsPerDay: 40,
+    maxGraphicsPerDay: 50,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
       '🚫 100% वॉटरमार्क रहित (No Watermark)',
-      '⚡ 40 ग्राफिक डाउनलोड प्रतिदिन',
+      '⚡ 50 ग्राफिक डाउनलोड प्रतिदिन',
       '🎨 पूर्ण स्टैंडर्ड फ़ॉन्ट कलेक्शन व प्राइमरी कलर हाइलाइट',
       '🔍 इंटरनेट इमेज सर्च व सभी मल्टी-ग्रिड फोटो लेआउट्स',
       '🔤 कस्टम टेक्स्ट वॉटरमार्क व सभी फुटर कलर्स',
@@ -221,18 +221,18 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     durationDays: 30,
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
-    badge: 'वीआईपी पावर',
-    tagline: 'मल्टी-रिपोर्टर नेटवर्क, 4K एक्सपोर्ट व 75 दैनिक डाउनलोड्स',
+    badge: 'असीमित पावर',
+    tagline: 'मल्टी-रिपोर्टर नेटवर्क, 4K एक्सपोर्ट व असीमित डाउनलोड्स',
     hasWatermark: false,
     graphicExportResolution: '4K',
-    maxGraphicsPerDay: 75,
+    maxGraphicsPerDay: 99999,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: true,
     isActive: true,
     features: [
       '🚫 100% वॉटरमार्क रहित (No Watermark)',
-      '👑 75 दैनिक ग्राफिक डाउनलोड्स (75 Downloads / Day)',
+      '👑 असीमित (Unlimited) दैनिक ग्राफिक डाउनलोड्स',
       '🔤 कस्टम फ़ॉन्ट अपलोड (.ttf / .woff2) सुविधा',
       '🎨 कस्टम हाइलाइट व फुटर बैकग्राउंड कलर पिकर',
       '📱 प्रति-ग्राफिक WhatsApp नंबर ओवरराइड इनपुट',
@@ -257,16 +257,15 @@ const STORAGE_KEY_ADMIN_TEST_PLAN = 'ai_news_maker_admin_test_plan_tier'; // 'ba
 // 1. PLANS CATALOG MANAGEMENT (FOR ADMIN)
 // ==========================================
 export async function syncPlansCatalogFromBackend(): Promise<PlanFeatureDetail[]> {
-  if (typeof window === 'undefined') return sortPlansByCanonicalOrder(DEFAULT_PLAN_DETAILS);
+  if (typeof window === 'undefined') return DEFAULT_PLAN_DETAILS;
   try {
     const res = await fetch('/api/plans');
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.plans) && data.plans.length >= 4) {
-        const ordered = sortPlansByCanonicalOrder(data.plans);
-        localStorage.setItem(STORAGE_KEY_PLANS_CONFIG, JSON.stringify(ordered));
+        localStorage.setItem(STORAGE_KEY_PLANS_CONFIG, JSON.stringify(data.plans));
         window.dispatchEvent(new CustomEvent('ai_news_plans_updated'));
-        return ordered;
+        return data.plans;
       }
     }
   } catch (err) {
@@ -309,7 +308,7 @@ export async function fetchUserDailyDownloadStatus(email?: string): Promise<User
   }
 
   const sub = getUserSubscription();
-  const max = sub.planKey === 'VIP DESK' ? 75 : sub.planKey === 'PRO' ? 40 : sub.planKey === 'ADVANCE' ? 25 : 10;
+  const max = sub.planKey === 'VIP DESK' ? 99999 : sub.planKey === 'PRO' ? 50 : sub.planKey === 'ADVANCE' ? 25 : 10;
   const fallbackStatus: UserDailyDownloadStatus = {
     success: true,
     plan: sub.tier,
@@ -319,7 +318,7 @@ export async function fetchUserDailyDownloadStatus(email?: string): Promise<User
     remainingToday: max,
     remainingDownloads: max,
     isExhausted: false,
-    unlimited: false,
+    unlimited: max >= 99999,
     dateStr: new Date().toISOString().slice(0, 10),
   };
   cachedDownloadStatus = fallbackStatus;
@@ -337,41 +336,20 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export const CANONICAL_PLAN_ORDER_MAP: Record<string, number> = {
-  basic: 1,
-  advanced: 2,
-  advance: 2,
-  professional: 3,
-  pro: 3,
-  ultra: 4,
-  vip: 4,
-  enterprise: 4,
-};
-
-export function sortPlansByCanonicalOrder<T extends { id?: string; planKey?: string }>(plans: T[]): T[] {
-  return [...plans].sort((a, b) => {
-    const keyA = (a.id || a.planKey || '').toLowerCase();
-    const keyB = (b.id || b.planKey || '').toLowerCase();
-    const orderA = CANONICAL_PLAN_ORDER_MAP[keyA] || 99;
-    const orderB = CANONICAL_PLAN_ORDER_MAP[keyB] || 99;
-    return orderA - orderB;
-  });
-}
-
 export function getPlansCatalog(): PlanFeatureDetail[] {
-  if (typeof window === 'undefined') return sortPlansByCanonicalOrder(DEFAULT_PLAN_DETAILS);
+  if (typeof window === 'undefined') return DEFAULT_PLAN_DETAILS;
   try {
     const saved = localStorage.getItem(STORAGE_KEY_PLANS_CONFIG);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length >= 4) {
-        return sortPlansByCanonicalOrder(parsed);
+        return parsed;
       }
     }
   } catch (e) {
     console.warn('Error reading plans catalog:', e);
   }
-  return sortPlansByCanonicalOrder(DEFAULT_PLAN_DETAILS);
+  return DEFAULT_PLAN_DETAILS;
 }
 
 export function savePlansCatalog(plans: PlanFeatureDetail[]): void {
@@ -906,30 +884,6 @@ export function assignPlanToUserManually(
     expiresAt,
     activatedVia,
   });
-
-  // Authoritatively persist upgrade to Backend Database (Part 7)
-  try {
-    fetch(getApiUrl('/api/admin/update-user'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-key': 'master-admin',
-      },
-      body: JSON.stringify({
-        userId: userEmail.trim(),
-        updates: {
-          email: userEmail.trim(),
-          tier,
-          planName: planDetail.planKey,
-          expiresAt,
-          activatedAt: now,
-          activatedVia,
-          isTrialExpired: false,
-          hasActivePaidPlan: true,
-        },
-      }),
-    }).catch((err) => console.warn('Could not sync user upgrade to backend:', err));
-  } catch {}
 }
 
 export function adminUpdateUserRecord(
@@ -951,27 +905,6 @@ export function adminUpdateUserRecord(
         tier: newTier,
         planName: planDetail.planKey,
       };
-
-      // Authoritatively persist update to Backend Database (Part 7)
-      try {
-        fetch(getApiUrl('/api/admin/update-user'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-admin-key': 'master-admin',
-          },
-          body: JSON.stringify({
-            userId: cleanEmail,
-            updates: {
-              ...updates,
-              email: cleanEmail,
-              tier: newTier,
-              planName: planDetail.planKey,
-              isTrialExpired: false,
-            },
-          }),
-        }).catch((err) => console.warn('Could not sync user update to backend:', err));
-      } catch {}
       if (updates.isLocked !== undefined) {
         users[idx].isProfileLocked = updates.isLocked;
         if (updates.isLocked) {
@@ -1063,14 +996,6 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     return parsed && !isNaN(parsed) ? parsed : (matchedUser?.createdAt || now);
   })();
 
-  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
-  const isUpgradedPlan =
-    (storedTier && storedTier !== 'basic') ||
-    (matchedUser?.tier && matchedUser.tier !== 'basic') ||
-    Boolean(promoUsed) ||
-    Boolean(matchedUser?.hasActivePaidPlan) ||
-    Boolean(matchedUser?.planName && matchedUser.planName !== 'BASIC' && matchedUser.planName !== 'TRIAL');
-
   const planDetail = getPlanDetail(storedTier);
   let expiresAt = (matchedUser?.expiresAt && matchedUser.expiresAt > 0)
     ? matchedUser.expiresAt
@@ -1080,58 +1005,20 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
         return parsed && !isNaN(parsed) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
       })());
 
-  // Priority Rule: Admin Upgrade > Paid Membership > Trial > Expired
-  if (isUpgradedPlan) {
-    if (!expiresAt || expiresAt <= now) {
-      expiresAt = now + 365 * 24 * 60 * 60 * 1000;
-    }
-    const msRemaining = Math.max(0, expiresAt - now);
-    const daysRemaining = Math.max(1, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
-    const hoursRemaining = Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
-    const minutesRemaining = Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
-
-    const effectiveTier: UserPlanTier = (matchedUser?.tier && matchedUser.tier !== 'basic') ? matchedUser.tier : (storedTier !== 'basic' ? storedTier : 'pro');
-    const effectivePlanName: PlanKeyName = effectiveTier === 'ultra'
-      ? 'VIP DESK'
-      : (PLAN_KEY_MAP[effectiveTier] || matchedUser?.planName || 'PRO');
-
-    const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
-    const isMobileLocked = Boolean(primaryMobile.trim());
-
-    return {
-      tier: effectiveTier,
-      planName: effectivePlanName,
-      trialStartedAt: startTime,
-      trialEndsAt: expiresAt,
-      isTrialActive: false,
-      isTrialExpired: false,
-      isPlanExpired: false,
-      daysRemaining,
-      hoursRemaining,
-      minutesRemaining,
-      hasActivePaidPlan: true,
-      isBlocked,
-      blockedAt: matchedUser?.blockedAt,
-      blockedBy: matchedUser?.blockedBy,
-      blockedReason: (matchedUser as any)?.blockedReason || (activeEmail ? localStorage.getItem(`user_blocked_reason_${activeEmail}`) : null) || 'व्यवस्थापक नीति उल्लंघन अथवा अनधिकृत गतिविधि के कारण आपका खाता ब्लॉक किया गया है।',
-      primaryMobile: primaryMobile.trim() || undefined,
-      isMobileLocked,
-      expiresAt,
-      activatedViaPromoCode: promoUsed,
-    };
-  }
-
   const msRemaining = Math.max(0, expiresAt - now);
   const isExpired = msRemaining <= 0;
   const daysRemaining = isExpired ? 0 : Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
   const hoursRemaining = isExpired ? 0 : Math.floor((msRemaining % (24 * 3600 * 1000)) / (3600 * 1000));
   const minutesRemaining = isExpired ? 0 : Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
 
-  const hasPaidPlan = false;
-  const isTrialActive = !isExpired;
+  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
+  const hasPaidPlan = storedTier !== 'basic' || Boolean(promoUsed) || Boolean(matchedUser?.expiresAt && matchedUser.expiresAt > now);
+  const isTrialActive = !isExpired && !hasPaidPlan;
 
-  const effectiveTier: UserPlanTier = 'basic';
-  const effectivePlanName: PlanKeyName = 'BASIC';
+  const effectiveTier: UserPlanTier = storedTier;
+  const effectivePlanName: PlanKeyName = storedTier === 'ultra'
+    ? 'VIP DESK'
+    : (PLAN_KEY_MAP[storedTier] || matchedUser?.planName || 'BASIC');
 
   const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
   const isMobileLocked = Boolean(primaryMobile.trim());
@@ -1142,12 +1029,12 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
-    isTrialExpired: isExpired,
+    isTrialExpired: isExpired && !hasPaidPlan,
     isPlanExpired: isExpired,
     daysRemaining,
     hoursRemaining,
     minutesRemaining,
-    hasActivePaidPlan: false,
+    hasActivePaidPlan: hasPaidPlan && !isExpired,
     isBlocked,
     blockedAt: matchedUser?.blockedAt,
     blockedBy: matchedUser?.blockedBy,
@@ -1265,14 +1152,7 @@ export function isUserAdmin(user: any): boolean {
     email = (user.email || user.username || '').replace(/\s+/g, '').toLowerCase().trim();
   }
   if (UNAUTHORIZED_ADMIN_EMAILS.includes(email)) return false;
-  if (email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL) return true;
-  if (typeof user === 'object' && user !== null) {
-    const role = (user.role || user.userRole || '').toString().toLowerCase().trim();
-    if (role === 'admin' || role === 'superadmin' || user.isAdmin === true) {
-      return true;
-    }
-  }
-  return false;
+  return email === MASTER_ADMIN_EMAIL || email === REGULAR_ADMIN_EMAIL;
 }
 
 /**
@@ -1466,10 +1346,7 @@ export function checkAccountUniqueness(input: {
   try {
     const users = getPlanUsers();
     for (const u of users) {
-      const uEmail = (u.email || '').toLowerCase().trim();
-      const isSameUser = (cleanEmail && uEmail && (uEmail === cleanEmail || cleanEmail.replace(/\s+/g, '') === uEmail.replace(/\s+/g, ''))) ||
-        (isPrivileged && (uEmail.includes('admin') || uEmail.includes('breakingnews') || u.userId === 'usr_627265616b69' || u.id === 'usr_627265616b69'));
-      if (isSameUser) {
+      if (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail) {
         continue;
       }
       if (cleanUsername && u.username && u.username.toLowerCase().replace(/^@/, '') === cleanUsername) {
@@ -1885,11 +1762,18 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
         if (data && Array.isArray(data.users)) {
           const map = new Map<string, PlanUserRecord>();
           DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => map.set(u.email.toLowerCase().trim(), u));
+          getPlanUsers().forEach((u) => {
+            if (u && u.email) map.set(u.email.toLowerCase().trim(), u);
+          });
           data.users.forEach((u: PlanUserRecord) => {
             if (u && u.email) {
               const key = u.email.toLowerCase().trim();
               const existing = map.get(key);
-              map.set(key, { ...existing, ...u });
+              map.set(key, {
+                ...existing,
+                ...u,
+                isBlocked: Boolean(u.isBlocked !== undefined ? u.isBlocked : existing?.isBlocked),
+              });
             }
           });
           const merged = Array.from(map.values()).sort((a, b) => {
@@ -1917,14 +1801,46 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
   return syncInFlight;
 }
 
+function getEnterpriseAdminHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed?.email) headers['x-user-email'] = parsed.email;
+      if (parsed?.role) headers['x-user-role'] = parsed.role;
+      if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
+    }
+    const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('reporter_auth_token');
+    if (directToken && !headers['authorization']) {
+      headers['authorization'] = `Bearer ${directToken}`;
+    }
+    headers['x-admin-key'] = 'master-admin';
+  } catch {}
+  return headers;
+}
+
 export async function blockUserAuthoritative(
   userEmailOrId: string,
   blockedBy?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const cleanId = (userEmailOrId || '').toLowerCase().trim();
+    const currentUsers = getPlanUsers();
+    const uIdx = currentUsers.findIndex(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanId) ||
+      (u.userId && u.userId.toLowerCase().trim() === cleanId)
+    );
+    if (uIdx >= 0) {
+      currentUsers[uIdx].isBlocked = true;
+      currentUsers[uIdx].blockedAt = Date.now();
+      localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(currentUsers));
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    }
+
     const res = await fetch(getApiUrl('/api/admin/block-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getEnterpriseAdminHeaders(),
       body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, blockedBy: blockedBy || 'Admin' }),
     });
     const json = await res.json();
@@ -1944,9 +1860,22 @@ export async function unblockUserAuthoritative(
   unblockedBy?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const cleanId = (userEmailOrId || '').toLowerCase().trim();
+    const currentUsers = getPlanUsers();
+    const uIdx = currentUsers.findIndex(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanId) ||
+      (u.userId && u.userId.toLowerCase().trim() === cleanId)
+    );
+    if (uIdx >= 0) {
+      currentUsers[uIdx].isBlocked = false;
+      currentUsers[uIdx].unblockedAt = Date.now();
+      localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(currentUsers));
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    }
+
     const res = await fetch(getApiUrl('/api/admin/unblock-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getEnterpriseAdminHeaders(),
       body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, unblockedBy: unblockedBy || 'Admin' }),
     });
     const json = await res.json();
@@ -1966,22 +1895,7 @@ export async function adminUpdateCloudUser(
   updates: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-      headers['x-admin-key'] = 'master-admin';
-    } catch {}
-
+    const headers = getEnterpriseAdminHeaders();
     const res = await fetch(getApiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers,
@@ -1992,33 +1906,27 @@ export async function adminUpdateCloudUser(
       adminUpdateUserRecord(userId, updates);
       await syncCloudUsers();
       return json;
-    } else {
-      const json = await res.json().catch(() => ({}));
-      return { success: false, error: json.error || 'अपडेट विफल रहा' };
     }
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'नेटवर्क त्रुटि' };
-  }
+  } catch {}
+  adminUpdateUserRecord(userId, updates);
+  return { success: true };
 }
 
 export async function adminDeleteCloudUser(userEmailOrId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-      headers['x-admin-key'] = 'master-admin';
-    } catch {}
+    const cleanEmail = (userEmailOrId || '').toLowerCase().trim();
+    const cleanId = (userId || userEmailOrId || '').toLowerCase().trim();
+    const remaining = getPlanUsers().filter(u => {
+      const uEmail = (u.email || '').toLowerCase().trim();
+      const uId = (u.userId || '').toLowerCase().trim();
+      if (cleanEmail && uEmail === cleanEmail) return false;
+      if (cleanId && uId === cleanId) return false;
+      return true;
+    });
+    localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(remaining));
+    window.dispatchEvent(new Event('ai_news_plan_users_changed'));
 
+    const headers = getEnterpriseAdminHeaders();
     const res = await fetch(getApiUrl('/api/admin/delete-user'), {
       method: 'POST',
       headers,
@@ -2089,36 +1997,6 @@ export async function fetchAuthoritativeSubscription(email?: string): Promise<Us
         } else {
           localStorage.removeItem(`user_blocked_${cleanEmail}`);
         }
-
-        // Authoritative synchronization with local state
-        if (sub.tier && sub.tier !== 'basic') {
-          localStorage.setItem(STORAGE_KEY_TIER, sub.tier);
-          const exp = sub.expiresAt && sub.expiresAt > Date.now() ? sub.expiresAt : (Date.now() + 365 * 86400000);
-          localStorage.setItem('ai_news_maker_plan_expires_at', exp.toString());
-
-          try {
-            const raw = localStorage.getItem(STORAGE_KEY_ASSIGNED_USERS);
-            const users: PlanUserRecord[] = raw ? JSON.parse(raw) : [];
-            const idx = users.findIndex(u => u.email && u.email.toLowerCase().trim() === cleanEmail);
-            if (idx >= 0) {
-              users[idx].tier = sub.tier;
-              users[idx].planName = sub.planName;
-              users[idx].expiresAt = exp;
-            } else {
-              users.push({
-                email: cleanEmail,
-                tier: sub.tier,
-                planName: sub.planName,
-                expiresAt: exp,
-                assignedAt: Date.now(),
-              });
-            }
-            localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(users));
-          } catch {}
-
-          window.dispatchEvent(new CustomEvent('ai_news_user_plan_updated', { detail: sub }));
-        }
-
         return sub;
       }
     }

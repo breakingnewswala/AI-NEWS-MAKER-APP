@@ -17,12 +17,6 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isActivating, setIsActivating] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const [isDenied, setIsDenied] = useState<boolean>(() => {
-    if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
-      return Notification.permission === 'denied';
-    }
-    return false;
-  });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -54,12 +48,6 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
     try {
       // 1. Request Browser System Notification Permission
       const perm = await requestNotificationPermission();
-      if (perm === 'denied') {
-        setIsDenied(true);
-        unlockAudioPlayback(true);
-        setIsActivating(false);
-        return;
-      }
 
       // 2. Unlock AudioContext & play test chime on user click (Crucial for Mobile Chrome & Safari)
       unlockAudioPlayback(true);
@@ -118,41 +106,7 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
           <X className="w-5 h-5" />
         </button>
 
-        {isDenied ? (
-          <div className="py-4 space-y-3 animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/20 border-2 border-amber-500 flex items-center justify-center text-amber-400 text-xl">
-              🔔
-            </div>
-            <h3 className="text-base sm:text-lg font-black text-white text-center">ब्राउज़र में नोटिफिकेशन ब्लॉक है</h3>
-            <div className="bg-slate-950/90 border border-slate-800 p-3.5 rounded-2xl text-xs text-slate-300 space-y-2">
-              <p className="font-bold text-amber-300">ध्वनि व लाइव अलर्ट्स चालू करने के आसान चरण:</p>
-              <ol className="list-decimal pl-4 space-y-1 text-slate-300">
-                <li>ऊपर एड्रेस बार में <b>ताला (🔒) या ट्यून आइकन</b> दबाएँ।</li>
-                <li><b>'Notifications' / 'अनुमतियाँ'</b> पर टैप करके <b>'Allow'</b> करें।</li>
-                <li>नीचे दिए गए बटन पर टैप करके रीलोड करें।</li>
-              </ol>
-            </div>
-            <div className="space-y-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  unlockAudioPlayback(true);
-                  if (typeof window !== 'undefined') window.location.reload();
-                }}
-                className="w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer"
-              >
-                🔄 सेटिंग्स बदलने के बाद पेज रीलोड करें
-              </button>
-              <button
-                type="button"
-                onClick={handleDismiss}
-                className="w-full py-1.5 text-center text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
-              >
-                बाद में करेंगे
-              </button>
-            </div>
-          </div>
-        ) : isSuccess ? (
+        {isSuccess ? (
           <div className="py-6 text-center space-y-3 animate-in zoom-in-95 duration-200">
             <div className="w-16 h-16 mx-auto rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center text-emerald-400">
               <CheckCircle2 className="w-8 h-8" />

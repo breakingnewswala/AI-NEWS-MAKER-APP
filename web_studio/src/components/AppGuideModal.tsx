@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   X,
   Layers,
@@ -160,7 +159,7 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
 
   const currentSteps = activeGuideTab === 'graphic' ? graphicSteps : videoSteps;
 
-  const modalContent = (
+  return (
     <div className="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl bg-neutral-900 border border-neutral-800 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
         {/* Modal Header */}
@@ -319,9 +318,4 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
       </div>
     </div>
   );
-
-  if (typeof document !== 'undefined') {
-    return createPortal(modalContent, document.body);
-  }
-  return modalContent;
 };

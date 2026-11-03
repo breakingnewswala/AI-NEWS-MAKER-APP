@@ -568,6 +568,13 @@ export default function App() {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
             } catch {}
             loaded = true;
+          } else {
+            // Authoritative server response: 0 active posts
+            setPosts([]);
+            try {
+              localStorage.setItem('app_news_posts_v2', JSON.stringify([]));
+            } catch {}
+            loaded = true;
           }
         }
       }

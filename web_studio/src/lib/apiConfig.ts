@@ -240,35 +240,66 @@ export function getAdminAuthHeaders(): Record<string, string> {
 
 // Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated
 if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-  const originalFetch = window.fetch;
-  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
-    const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
-    if (urlStr.includes('/api/')) {
-      let token = getAuthToken();
-      if (!token && (urlStr.includes('/api/admin') || urlStr.includes('/api/process-news') || urlStr.includes('/api/generate-video'))) {
+  try {
+    const originalFetch = window.fetch.bind(window);
+    const customFetch = async function (this: any, input: RequestInfo | URL, init?: RequestInit) {
+      try {
+        const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
+        if (urlStr.includes('/api/')) {
+          let token = getAuthToken();
+          if (!token && (urlStr.includes('/api/admin') || urlStr.includes('/api/process-news') || urlStr.includes('/api/generate-video'))) {
+            try {
+              token = await ensureAuthToken();
+            } catch {}
+          }
+          if (token) {
+            init = init || {};
+            if (init.headers instanceof Headers) {
+              if (!init.headers.has('Authorization')) {
+                init.headers.set('Authorization', `Bearer ${token}`);
+              }
+            } else if (Array.isArray(init.headers)) {
+              const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
+              if (!hasAuth) {
+                init.headers.push(['Authorization', `Bearer ${token}`]);
+              }
+            } else {
+              init.headers = {
+                ...(init.headers || {}),
+                Authorization: (init.headers as any)?.Authorization || `Bearer ${token}`,
+              };
+            }
+          }
+        }
+      } catch {}
+      return originalFetch.apply(this, [input, init]);
+    };
+
+    try {
+      Object.defineProperty(window, 'fetch', {
+        value: customFetch,
+        writable: true,
+        configurable: true,
+      });
+    } catch {
+      try {
+        if (typeof Window !== 'undefined' && Window.prototype) {
+          Object.defineProperty(Window.prototype, 'fetch', {
+            value: customFetch,
+            writable: true,
+            configurable: true,
+          });
+        }
+      } catch {
         try {
-          token = await ensureAuthToken();
-        } catch {}
-      }
-      if (token) {
-        init = init || {};
-        if (init.headers instanceof Headers) {
-          if (!init.headers.has('Authorization')) {
-            init.headers.set('Authorization', `Bearer ${token}`);
-          }
-        } else if (Array.isArray(init.headers)) {
-          const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
-          if (!hasAuth) {
-            init.headers.push(['Authorization', `Bearer ${token}`]);
-          }
-        } else {
-          init.headers = {
-            ...(init.headers || {}),
-            Authorization: (init.headers as any)?.Authorization || `Bearer ${token}`,
-          };
+          (window as any).fetch = customFetch;
+        } catch {
+          // Window.fetch is protected / read-only in this host sandbox
         }
       }
     }
-    return originalFetch.call(this, input, init);
-  };
+  } catch (err) {
+    console.warn('[AUTH] Automatic token fetch interceptor skipped:', err);
+  }
 }
+

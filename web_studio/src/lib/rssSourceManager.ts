@@ -9,24 +9,42 @@ export interface AdminRssSource {
   category: string;
   isActive: boolean;
   createdAt: number;
-  addedAt?: number;
-  addedDateFormatted?: string;
   lastFetchedAt?: number;
   itemsFetchedCount?: number;
-}
-
-export function formatHindiDate(timestamp?: number | string | null): string {
-  if (!timestamp) return 'पूर्व में जोड़ा गया (Legacy)';
-  const date = new Date(typeof timestamp === 'string' ? (isNaN(Number(timestamp)) ? timestamp : Number(timestamp)) : timestamp);
-  if (isNaN(date.getTime()) || date.getFullYear() < 2024) return 'पूर्व में जोड़ा गया (Legacy)';
-  const monthsHindi = ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'];
-  return `${date.getDate()} ${monthsHindi[date.getMonth()]} ${date.getFullYear()}`;
 }
 
 const STORAGE_KEY_RSS_SOURCES = 'ai_news_admin_rss_sources_v1';
 const STORAGE_KEY_DELETED_SOURCE_IDS = 'ai_news_admin_deleted_rss_source_ids_v1';
 
-export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [];
+export const DEFAULT_RSS_SOURCES: AdminRssSource[] = [
+  {
+    id: "src_aajtak_live",
+    name: "आज तक (Aaj Tak) - ब्रेकिंग न्यूज़",
+    url: "https://feeds.feedburner.com/aajtak/top",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000000000
+  },
+  {
+    id: "src_ndtv_live",
+    name: "NDTV इंडिया - लाइव समाचार",
+    url: "https://feeds.feedburner.com/ndtvkhabar",
+    type: "rss",
+    category: "देश",
+    isActive: true,
+    createdAt: 1726000002000
+  },
+  {
+    id: "src_nbt_live",
+    name: "नवभारत टाइम्स (NBT)",
+    url: "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
+    type: "rss",
+    category: "राज्य",
+    isActive: true,
+    createdAt: 1726000004000
+  }
+];
 
 export function getDeletedSourceIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -65,11 +83,12 @@ export function getAdminRssSources(): AdminRssSource[] {
     }
   }
 
-  // Strictly adhere to No Default RSS Policy: only admin-added feeds exist
-  const cleaned = (list || []).filter((s) => {
-    if (!s || !s.url || deletedIds.has(s.id)) return false;
-    return true;
-  });
+  // If memory and local storage are both empty, provide default reliable sources
+  if ((!list || list.length === 0) && deletedIds.size === 0) {
+    list = DEFAULT_RSS_SOURCES;
+  }
+
+  const cleaned = (list || []).filter((s) => s && s.url && !deletedIds.has(s.id));
   memoryRssSources = cleaned;
 
   if (typeof window !== 'undefined') {
@@ -186,8 +205,6 @@ export function addAdminRssSource(
     category: category || 'देश',
     isActive: true,
     createdAt: Date.now(),
-    addedAt: Date.now(),
-    addedDateFormatted: formatHindiDate(Date.now()),
     itemsFetchedCount: 0,
   };
   const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id && s.url !== newSource.url)];
@@ -464,8 +481,10 @@ export const DEFAULT_PRESET_CHANNELS: string[] = [
   'आज तक (Aaj Tak)',
   'एबीपी न्यूज़ (ABP News)',
   'NDTV इंडिया (NDTV India)',
+  'बीबीसी हिंदी (BBC Hindi)',
   'ज़ी न्यूज़ (Zee News)',
   'दैनिक भास्कर (Dainik Bhaskar)',
+  'अमर उजाला (Amar Ujala)',
   'नवभारत टाइम्स (NBT)',
   'प्रेस सूचना ब्यूरो (PIB)',
   'न्यूज़18 इंडिया (News18)',

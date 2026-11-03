@@ -3,7 +3,7 @@ import { RefreshCw, X, Link as LinkIcon, Send, Sparkles, Check, AlertCircle, Loa
 import { AIAnalysisResult } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
-import { cleanHeadlineText, cleanLocationField, generate5BalancedHeadlineOptions, fitHeadlinesTo5TierRanges, countHeadlineVisibleCharacters, HEADLINE_5_TIER_RANGES, HEADLINE_MAX_CHARACTER_LIMIT } from '../lib/speakerUtils';
+import { cleanHeadlineText, cleanLocationField, generate5BalancedHeadlineOptions, fitHeadlinesTo5TierRanges } from '../lib/speakerUtils';
 import { scrapeNewsUrlClient } from '../lib/clientScraper';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 
@@ -309,16 +309,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       }
 
       if (newOpts.length > 0) {
-        const combined = [...headlineOptions, ...newOpts].slice(0, 10);
-        setHeadlineOptions(combined);
-        setSelectedHeadlineIndex(headlineOptions.length);
+        setHeadlineOptions(newOpts);
+        setSelectedHeadlineIndex(0);
         setResult((prev) =>
           prev
             ? {
                 ...prev,
                 headline: newOpts[0],
                 formattedHeadline: newOpts[0],
-                headlineOptions: combined,
               }
             : null
         );
@@ -688,13 +686,11 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    {headlineOptions.slice(0, 10).map((opt, idx) => {
+                    {headlineOptions.slice(0, 5).map((opt, idx) => {
                       const isSelected = result.headline === opt;
                       const cleanOpt = opt.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                       const wordCount = cleanOpt.split(/\s+/).filter(Boolean).length;
-                      const charLen = countHeadlineVisibleCharacters(opt);
-                      const tier = HEADLINE_5_TIER_RANGES[idx % 5] || { min: 80, max: 200, label: '' };
-                      const isCompliant = charLen >= tier.min && charLen <= tier.max;
+                      const charLen = cleanOpt.length;
                       return (
                         <div
                           key={idx}
@@ -713,9 +709,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                               <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                                 <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
                                 <span className="text-neutral-600">•</span>
-                                <span className={isCompliant ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
-                                  {charLen} अक्षर ({tier.min}-{tier.max})
-                                </span>
+                                <span>{charLen} अक्षर</span>
                               </span>
                             </div>
                             {isSelected && (
@@ -750,7 +744,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       </span>
                       <span className="text-neutral-600">|</span>
                       <span>
-                        {countHeadlineVisibleCharacters(result.headline || '')} / {HEADLINE_MAX_CHARACTER_LIMIT} अक्षर
+                        {(result.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, '').trim().length} / 150 अक्षर
                       </span>
                     </span>
                   </div>

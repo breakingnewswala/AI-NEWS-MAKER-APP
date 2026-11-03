@@ -27,16 +27,12 @@ import {
   Coins,
   Download,
   Lock,
-  Layers,
-  BarChart3,
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
 import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
-import { getApiBaseUrl, getApiUrl, getAuthHeaders } from '../lib/apiConfig';
+import { getApiBaseUrl, getApiUrl } from '../lib/apiConfig';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
-import { DEFAULT_PRESET_CATEGORIES } from '../lib/categoryManager';
-import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
 
 interface VideosScreenWebProps {
   videos: VideoFeedItem[];
@@ -82,87 +78,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [videoCoinCost, setVideoCoinCost] = useState<number>(50);
   const [videoCoinPlans, setVideoCoinPlans] = useState<string[]>(['Basic']);
   const [videoCoinSaving, setVideoCoinSaving] = useState<boolean>(false);
-
-  // User Subscription & Creation limits
-  const userSub = getUserSubscription(currentUser?.email);
-  const isVipDesk = userSub?.tier === 'ultra' || userSub?.tier === 'vip';
-  const hasVideoPlan = Boolean(userSub?.hasActivePaidPlan && (userSub?.tier === 'pro' || isVipDesk));
-
-  // Wallet Coin Balance for Authenticated Users (Real-time sync)
-  const [walletCoins, setWalletCoins] = useState<number | null>(() => {
-    try {
-      const saved = localStorage.getItem('ai_news_user_wallet_coins');
-      return saved ? parseInt(saved, 10) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const [isSyncingVideos, setIsSyncingVideos] = useState<boolean>(false);
-
-  useEffect(() => {
-    const email = (currentUser?.email || '').toLowerCase().trim();
-    const userId = (currentUser?.userId || (currentUser as any)?.uid || email).trim();
-    if (!email && !userId) return;
-
-    const fetchBalance = () => {
-      fetch(getApiUrl(`/api/user/wallet?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(userId)}`))
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.success && data?.wallet) {
-            const bal = typeof data.wallet.coinBalance === 'number'
-              ? data.wallet.coinBalance
-              : (typeof data.wallet.balance === 'number' ? data.wallet.balance : 0);
-            setWalletCoins(bal);
-            try {
-              localStorage.setItem('ai_news_user_wallet_coins', String(bal));
-            } catch {}
-          }
-        })
-        .catch(() => {});
-    };
-
-    fetchBalance();
-    const handleWalletUpdated = (e: any) => {
-      const b = typeof e?.detail?.coinBalance === 'number'
-        ? e.detail.coinBalance
-        : (typeof e?.detail?.balance === 'number' ? e.detail.balance : null);
-      if (b !== null) {
-        setWalletCoins(b);
-      } else {
-        fetchBalance();
-      }
-    };
-    window.addEventListener('ai_news_wallet_updated', handleWalletUpdated);
-    window.addEventListener('wallet_balance_updated', handleWalletUpdated);
-    window.addEventListener('storage', fetchBalance);
-    return () => {
-      window.removeEventListener('ai_news_wallet_updated', handleWalletUpdated);
-      window.removeEventListener('wallet_balance_updated', handleWalletUpdated);
-      window.removeEventListener('storage', fetchBalance);
-    };
-  }, [currentUser?.email]);
-
-  // Part 6: Auto-refresh video feed every 15s when active, visible and online
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine && !isSyncingVideos) {
-        handleRefreshVideos();
-      }
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [isSyncingVideos]);
-
-  const handleRefreshVideos = async () => {
-    if (isSyncingVideos) return;
-    setIsSyncingVideos(true);
-    try {
-      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-    } catch {}
-    setTimeout(() => {
-      setIsSyncingVideos(false);
-    }, 700);
-  };
 
   useEffect(() => {
     if (!currentUser?.email) return;
@@ -213,7 +128,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     }
     const cost = vid.coinCost || vid.coinValue || 0;
     if (cost <= 0) {
-      handlePlayOrOpenVideo(vid);
+      setInlinePlayingId(vid.id);
       return;
     }
     const confirmUnlock = window.confirm(`क्या आप ${cost} कॉइन खर्च करके यह वीडियो अनलॉक करना चाहते हैं?`);
@@ -246,7 +161,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         });
         window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
         alert(`🎉 बधाई! ${cost} कॉइन में वीडियो अनलॉक हो गया।`);
-        handlePlayOrOpenVideo(vid);
+        setInlinePlayingId(vid.id);
       } else {
         alert(data.error || 'अनलॉक विफल रहा। कृपया पर्याप्त कॉइन बैलेंस सुनिश्चित करें।');
       }
@@ -418,9 +333,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   };
 
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
-  const [isVideoTemplateControlOpen, setIsVideoTemplateControlOpen] = useState<boolean>(false);
-  const [isVideoAnalyticsOpen, setIsVideoAnalyticsOpen] = useState<boolean>(false);
-  const [videoAnalyticsData, setVideoAnalyticsData] = useState<any>(null);
 
   // Floating Back to Top state
   const [showBackToTop, setShowBackToTop] = useState<boolean>(false);
@@ -460,7 +372,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [adminSourceDimensions, setAdminSourceDimensions] = useState<{ width: number; height: number }>({ width: 1080, height: 1920 });
 
   const [adminChannel] = useState(currentUser?.channelName || 'एडमिन वायरल डेस्क');
-  const [adminCategory, setAdminCategory] = useState<string>('breaking');
+  const [adminCategory] = useState('breaking');
   const [adminIsBonus, setAdminIsBonus] = useState(false);
   const [adminRewardCoins, setAdminRewardCoins] = useState(50);
 
@@ -664,7 +576,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       const baseUrl = getApiBaseUrl();
       const res = await fetch(`${baseUrl}/api/generate-video-headlines`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           caption: adminCaption.trim(),
           title: adminTitle.trim(),
@@ -846,8 +758,12 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     });
   }, [activeVideos, selectedRatioFilter, isBonusOnlyFilter]);
 
-  // Role-based Admin check: Strictly respect isEffectiveAdmin so Test Mode cleanly simulates regular user view (Part 14)
-  const isAdmin = isEffectiveAdmin(currentUser);
+  // Role-based Admin check: Super Admin and Admin have access to video upload controls
+  const isAdmin =
+    isEffectiveAdmin(currentUser) ||
+    isUserSuperAdmin(currentUser) ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'superadmin';
 
   const getAspectRatioClass = (ratio?: string) => {
     switch (ratio) {
@@ -866,11 +782,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     }
   };
 
-  const handlePlayOrOpenVideo = (vid: VideoFeedItem) => {
-    setActiveVideo(vid);
-    setInlinePlayingId(vid.id);
-  };
-
   const renderVideoCard = (vid: VideoFeedItem, isHorizontal = false) => {
     const isPlaying = inlinePlayingId === vid.id;
     const ratioClass = getAspectRatioClass(vid.aspectRatio);
@@ -878,10 +789,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     return (
       <div
         key={vid.id}
-        className={`bg-white dark:bg-slate-900 border rounded-2xl overflow-hidden transition-all flex flex-col justify-between group ${
+        className={`bg-slate-900 border rounded-2xl overflow-hidden transition-all flex flex-col justify-between group ${
           vid.isBonus
             ? 'border-amber-500/50 hover:border-amber-400 shadow-lg shadow-amber-950/20 ring-1 ring-amber-500/30'
-            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm hover:shadow-xl'
+            : 'border-slate-800 hover:border-slate-700'
         } ${isHorizontal ? 'w-64 sm:w-72 shrink-0 snap-start' : 'break-inside-avoid mb-6 w-full hover:shadow-xl'}`}
       >
         <div>
@@ -914,7 +825,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               </div>
             ) : (
               <div
-                onClick={() => handlePlayOrOpenVideo(vid)}
+                onClick={() => setInlinePlayingId(vid.id)}
                 className="w-full h-full relative cursor-pointer group"
               >
                 <img
@@ -972,14 +883,14 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </div>
 
             <h3
-              onClick={() => handlePlayOrOpenVideo(vid)}
-              className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
+              onClick={() => setInlinePlayingId(vid.id)}
+              className="text-base font-bold text-white group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
             >
               {vid.title}
             </h3>
 
             {vid.caption && (
-              <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
+              <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                 {vid.caption}
               </p>
             )}
@@ -988,7 +899,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
         {/* Admin Editing Controls (Edit Info, Caption, Ratio, Coin Value, Toggle Bonus & Delete) */}
         {isAdmin && (
-          <div className="px-4 py-2 bg-slate-50 dark:bg-slate-950/80 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap">
+          <div className="px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between gap-1.5 flex-wrap">
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
                 type="button"
@@ -1018,7 +929,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 className={`px-2 py-1 rounded-lg text-[11px] font-black flex items-center gap-1 cursor-pointer transition active:scale-95 border ${
                   vid.isBonus
                     ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
                 }`}
                 title="बोनस वीडियो स्थिति बदलें"
               >
@@ -1067,7 +978,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
           <button
             type="button"
-            onClick={() => handlePlayOrOpenVideo(vid)}
+            onClick={() => setInlinePlayingId(vid.id)}
             className={`py-2.5 px-3.5 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 border transition-colors cursor-pointer active:scale-95 shrink-0 ${
               isPlaying
                 ? 'bg-red-600 text-white border-red-500'
@@ -1092,9 +1003,9 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#070D1E] text-slate-100 pb-24 transition-colors">
+    <div className="min-h-screen bg-slate-950 text-white pb-24">
       {/* Top Header */}
-      <div className="bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md text-slate-900 dark:text-white">
+      <div className="bg-gradient-to-r from-red-950 via-slate-900 to-slate-950 border-b border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-red-600 rounded-xl text-white shadow-lg shrink-0">
@@ -1191,89 +1102,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
           {/* MOBILE CONTROLS (Row 1: 3 Centered Controls, Row 2: Full-width Admin Upload) */}
           <div className="flex sm:hidden flex-col gap-2 w-full mt-1">
-            {/* Mobile 3-Card Summary Row (Part 7: Video Analytics for Admin / Coins for Normal User) */}
-            <div className="grid grid-cols-3 gap-2 w-full mb-1">
-              {/* Card 1: Video Analytics for Admin / Coins for Normal User */}
-              {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    fetch(getApiUrl('/api/analytics/feed-summary?type=video'))
-                      .then(r => r.json())
-                      .then(d => { if (d.success) setVideoAnalyticsData(d); })
-                      .catch(() => {});
-                    setIsVideoAnalyticsOpen(true);
-                  }}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-500/40 shadow-xs hover:border-blue-500/70 active:scale-95 transition-all duration-150 cursor-pointer text-center"
-                  title="वीडियो एनालिटिक्स देखें"
-                >
-                  <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400 font-black text-sm">
-                    <BarChart3 className="w-4 h-4 shrink-0 text-blue-500" />
-                    <span>एनालिटिक्स</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">Video Analytics</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onNavigateToTab) onNavigateToTab('profile');
-                    window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
-                  }}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/30 shadow-xs hover:border-amber-500/60 active:scale-95 transition-all duration-150 motion-reduce:transform-none cursor-pointer text-center"
-                  title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
-                >
-                  <div className="flex items-center gap-1 text-amber-500 dark:text-amber-400 font-black text-sm">
-                    <Coins className="w-4 h-4 shrink-0 text-amber-500" />
-                    <span>{typeof walletCoins === 'number' ? walletCoins : 0}</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कॉइन बैलेंस</span>
-                </button>
-              )}
-
-              {/* Card 2: Remaining Videos for normal users / Video Category Manager for Admin */}
-              {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => setIsVideoTemplateControlOpen(true)}
-                  className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-purple-500/30 shadow-xs hover:border-purple-500/60 active:scale-95 transition-all duration-150 text-center cursor-pointer"
-                  title="वीडियो श्रेणियाँ व टेम्पलेट कंट्रोल"
-                >
-                  <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-black text-sm">
-                    <Layers className="w-4 h-4 shrink-0 text-purple-500" />
-                    <span>कंट्रोल</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">कैटेगरी व अपलोड</span>
-                </button>
-              ) : (
-                <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
-                  <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
-                    <Film className="w-4 h-4 shrink-0 text-red-500" />
-                    <span>{isVipDesk ? 'असीमित' : (hasVideoPlan ? 50 : 0)}</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">शेष वीडियो</span>
-                </div>
-              )}
-
-              {/* Card 3: Refresh Button */}
-              <button
-                type="button"
-                disabled={isSyncingVideos}
-                onClick={handleRefreshVideos}
-                className={`flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800/80 active:scale-95 transition-all duration-150 motion-reduce:transform-none text-center cursor-pointer ${isSyncingVideos ? 'opacity-70 cursor-not-allowed' : ''}`}
-                title="वीडियो फ़ीड रीफ्रेश करें"
-              >
-                <div className="flex items-center gap-1 text-blue-500 dark:text-blue-400 font-black text-sm">
-                  <RefreshCw className={`w-4 h-4 shrink-0 ${isSyncingVideos ? 'animate-spin text-amber-500' : ''}`} />
-                  <span>{isSyncingVideos ? 'रिफ्रेश...' : 'रिफ्रेश'}</span>
-                </div>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">लाइव फ़ीड</span>
-              </button>
-            </div>
-            {/* Row 1: Three balanced, centered controls (Theme-aware for Light & Dark mode) */}
+            {/* Row 1: Three balanced, centered controls */}
             <div className="grid grid-cols-3 gap-1.5 w-full items-center">
               {/* 1. Video Count */}
-              <div className="py-2 px-1 bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-700/50 text-red-700 dark:text-red-300 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 text-center truncate">
+              <div className="py-2 px-1 bg-red-950/80 border border-red-700/50 text-red-300 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 text-center truncate">
                 <Flame className="w-3 h-3 text-red-500 shrink-0" />
                 <span className="truncate">{activeVideos.length} वीडियो</span>
               </div>
@@ -1283,14 +1115,14 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsRatioDropdownOpen(!isRatioDropdownOpen)}
-                  className="w-full py-2 px-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer truncate shadow-xs"
+                  className="w-full py-2 px-1 bg-slate-900 border border-slate-700 text-white text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer truncate shadow"
                   title="अनुपात फ़िल्टर"
                 >
                   <span className="truncate">{ratioOptions.find((o) => o.id === selectedRatioFilter)?.label || 'सभी अनुपात'}</span>
-                  <ChevronDown className={`w-3 h-3 text-amber-500 dark:text-amber-400 shrink-0 transition-transform ${isRatioDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`w-3 h-3 text-amber-400 shrink-0 transition-transform ${isRatioDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {isRatioDropdownOpen && (
-                  <div className="absolute left-0 mt-1 w-40 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl p-1 z-50 space-y-1">
+                  <div className="absolute left-0 mt-1 w-40 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1 z-50 space-y-1">
                     {ratioOptions.map((opt) => (
                       <button
                         key={opt.id}
@@ -1302,7 +1134,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center justify-between ${
                           selectedRatioFilter === opt.id
                             ? 'bg-amber-400 text-slate-950 font-black'
-                            : 'text-slate-700 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
+                            : 'text-slate-300 hover:text-white hover:bg-slate-800'
                         }`}
                       >
                         <span>{opt.label}</span>
@@ -1320,7 +1152,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 className={`w-full py-2 px-1 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 border transition truncate cursor-pointer ${
                   isBonusOnlyFilter
                     ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 border-amber-300 font-black shadow'
-                    : 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-300 border-amber-500/40'
+                    : 'bg-slate-900 text-amber-300 border-amber-500/40'
                 }`}
                 title="केवल बोनस वीडियो दिखाएं"
               >
@@ -1406,7 +1238,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                       1
                     </span>
-                    <span>वीडियो फाइल चयन एवं अपलोड:*</span>
+                    <span>वीडियो फाइल चयन एवं अपलोड (MP4 / WebM / MOV):*</span>
                   </label>
                   {adminVideoUrl ? (
                     <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
@@ -1476,7 +1308,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                     2
                   </span>
-                  <span>वीडियो आस्पेक्ट रेशियो:*</span>
+                  <span>वीडियो आस्पेक्ट रेशियो (Project Display Ratio):*</span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
                   {[
@@ -1509,7 +1341,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                       3
                     </span>
-                    <span>वीडियो शीर्षक / मुख्य हेडलाइन:*</span>
+                    <span>वीडियो शीर्षक / मुख्य हेडलाइन (Title):*</span>
                   </span>
                   <span className="text-[10px] text-slate-400 font-normal">
                     {adminTitle.length}/120 अक्षर
@@ -1533,7 +1365,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                     <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                       4
                     </span>
-                    <span>वीडियो कैप्शन एवं संदर्भ:</span>
+                    <span>वीडियो कैप्शन एवं संदर्भ (Video Studio ट्रांसफर हेतु):*</span>
                   </span>
                   <span className="text-[10px] text-slate-400 font-normal">
                     AI हेडलाइन व स्क्रिप्ट तैयार करने हेतु
@@ -1708,7 +1540,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
                           <div className="space-y-1">
                             <div className="flex items-center justify-between text-[11px] text-slate-400">
-                              <span>वर्टिकल अलाइनमेंट:</span>
+                              <span>वर्टिकल अलाइनमेंट (Vertical Offset):</span>
                               <span className="text-amber-400 font-mono font-bold">{adminCropY}%</span>
                             </div>
                             <input
@@ -1779,34 +1611,12 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Step 7B: Video Category Selection (Part 7A) */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <label className="text-xs font-black text-amber-400 flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-amber-400" />
-                  <span>वीडियो की श्रेणी (Category) चुनें: *</span>
-                </label>
-                <select
-                  value={adminCategory}
-                  onChange={(e) => setAdminCategory(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
-                >
-                  {DEFAULT_PRESET_CATEGORIES.map((cat) => (
-                    <option key={cat.id} value={cat.id} className="bg-slate-900 text-white font-bold">
-                      {cat.name} ({cat.id})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-slate-400">
-                  चयनित श्रेणी में यह वीडियो होम फ़ीड और वीडियो सेक्शन में प्रदर्शित होगा।
-                </p>
-              </div>
-
               {/* Step 8: Bonus Video Toggle */}
               <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
                   <label htmlFor="admin-is-bonus" className="text-xs font-black text-amber-400 flex items-center gap-2 cursor-pointer">
                     <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>बोनस वीडियो के रूप में प्रकाशित करें:</span>
+                    <span>बोनस वीडियो के रूप में प्रकाशित करें (Bonus Video):</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1827,7 +1637,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[11px] font-black">
                     9
                   </span>
-                  <span>सत्यापन चेकलिस्ट:</span>
+                  <span>सत्यापन चेकलिस्ट (Live Validation):</span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
@@ -2102,7 +1912,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
                 <Edit3 className="w-4 h-4" />
-                <span>वीडियो विवरण व रेशियो एडिट करें</span>
+                <span>वीडियो विवरण व रेशियो एडिट करें (Admin Edit)</span>
               </div>
               <button
                 type="button"
@@ -2115,7 +1925,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
             <form onSubmit={handleSaveVideoEdit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">वीडियो शीर्षक:</label>
+                <label className="text-xs font-bold text-slate-300 block">वीडियो शीर्षक (Title):</label>
                 <input
                   type="text"
                   value={editTitle}
@@ -2126,7 +1936,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">वीडियो कैप्शन:</label>
+                <label className="text-xs font-bold text-slate-300 block">वीडियो कैप्शन (Caption):</label>
                 <textarea
                   value={editCaption}
                   onChange={(e) => setEditCaption(e.target.value)}
@@ -2137,7 +1947,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">आस्पेक्ट रेशियो बदलें:</label>
+                <label className="text-xs font-bold text-slate-300 block">आस्पेक्ट रेशियो बदलें (Aspect Ratio):</label>
                 <div className="grid grid-cols-4 gap-2">
                   {(['9:16', '16:9', '1:1', '4:5'] as const).map((r) => (
                     <button
@@ -2159,7 +1969,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
                 <label htmlFor="edit-is-bonus" className="text-xs font-bold text-amber-300 flex items-center gap-2 cursor-pointer">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>बोनस वीडियो स्थिति:</span>
+                  <span>बोनस वीडियो स्थिति (Bonus Video):</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -2434,94 +2244,6 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <span>{videoCoinSaving ? 'सेव हो रहा है...' : 'सेव करें'}</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Admin Video Template & Category Control Modal (Part 11) */}
-      {isVideoTemplateControlOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in">
-          <div className="bg-slate-900 border-2 border-purple-500/70 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-purple-400 font-black text-base">
-                <Layers className="w-5 h-5" />
-                <span>वीडियो श्रेणियाँ, एस्पेक्ट रेश्यो व टेम्पलेट सेटिंग्स</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsVideoTemplateControlOpen(false)}
-                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold cursor-pointer"
-              >
-                ✕ बंद करें
-              </button>
-            </div>
-            <AdminVideoTemplateControl
-              onOpenStudioWithVideoFrame={() => {
-                setIsVideoTemplateControlOpen(false);
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* In-Screen Video Analytics Modal (Part 12) */}
-      {isVideoAnalyticsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-slate-900 border-2 border-blue-500/70 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-blue-400 font-black text-base">
-                <BarChart3 className="w-5 h-5" />
-                <span>लाइव वीडियो एनालिटिक्स (IST)</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsVideoAnalyticsOpen(false)}
-                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold cursor-pointer"
-              >
-                ✕ बंद करें
-              </button>
-            </div>
-            <div className="space-y-3 text-xs">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center">
-                <span className="text-slate-400 font-bold">दिनांक (IST):</span>
-                <span className="font-mono font-bold text-white">
-                  {new Date().toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[10px] text-slate-400 font-bold block mb-1">कुल वीडियो रिपोर्ट्स</span>
-                  <span className="text-xl font-black text-emerald-400 font-mono">{videos.length}</span>
-                </div>
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
-                  <span className="text-[10px] text-slate-400 font-bold block mb-1">बोनस वीडियो</span>
-                  <span className="text-xl font-black text-amber-400 font-mono">
-                    {videos.filter((v: any) => v.isBonus).length}
-                  </span>
-                </div>
-              </div>
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400">9:16 रील्स / शॉर्ट्स:</span>
-                  <span className="font-mono font-bold text-white">{videos.filter((v: any) => v.aspectRatio === '9:16' || !v.aspectRatio).length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400">16:9 लैंडस्केप वीडियो:</span>
-                  <span className="font-mono font-bold text-white">{videos.filter((v: any) => v.aspectRatio === '16:9').length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400">1:1 चौकोर वीडियो:</span>
-                  <span className="font-mono font-bold text-white">{videos.filter((v: any) => v.aspectRatio === '1:1').length}</span>
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsVideoAnalyticsOpen(false)}
-              className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl cursor-pointer"
-            >
-              ठीक है
-            </button>
           </div>
         </div>
       )}

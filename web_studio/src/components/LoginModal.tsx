@@ -212,8 +212,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           const data = await res.json();
           if (data.success && data.user) {
             user.role = data.user.role || user.role;
-            user.planTier = data.user.tier || data.user.planTier || user.planTier;
-            user.tier = data.user.tier || user.tier;
+            user.planTier = data.user.tier || user.planTier;
             user.channelName = data.user.channelNameHi || user.channelName;
             user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
             if (data.user.username && !data.user.username.includes('@')) {
@@ -238,15 +237,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         localStorage.setItem('reporter_auth_session', JSON.stringify(user));
 
         try {
-          const effectiveTier = isSuper || isAdmin ? 'ultra' : (user.planTier || user.tier || 'basic');
-          const tierPlanNames: Record<string, string> = { basic: 'BASIC', advanced: 'ADVANCE', professional: 'PRO', ultra: 'VIP DESK' };
           registerOrUpdateUser({
             email: cleanEmail,
             name: user.name,
             username: user.username,
             role: user.role,
-            tier: effectiveTier,
-            planName: isSuper || isAdmin ? 'VIP DESK' : (tierPlanNames[effectiveTier] || 'BASIC'),
+            tier: isSuper || isAdmin ? 'ultra' : 'basic',
             isLocked: !isAdmin && !isSuper,
           });
         } catch (gRegErr) {
@@ -299,16 +295,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      signInWithPopup(auth, provider).then(async (userCredential) => {
+      signInWithPopup(auth, provider).then((userCredential) => {
         if (userCredential?.user?.email) {
-          try {
-            const idToken = await userCredential.user.getIdToken();
-            if (idToken) {
-              safeLocalStorageSet('reporter_auth_token', idToken);
-            }
-          } catch (tokenErr) {
-            console.warn('Could not retrieve Firebase ID token:', tokenErr);
-          }
           processGoogleUser(
             userCredential.user.email,
             userCredential.user.displayName || undefined
@@ -391,7 +379,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             },
           });
           if (window.self === window.top) {
-            setLoading(false);
+            (window as any).google.accounts.id.prompt((notification: any) => {
+              if (notification?.isNotDisplayed?.() || notification?.isSkippedMoment?.()) {
+                setLoading(false);
+              }
+            });
             return;
           }
         } catch (gsiErr) {

@@ -15,7 +15,6 @@ import {
   Zap,
   Star,
   Clock,
-  Calendar,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -55,13 +54,7 @@ import {
   Music,
   User,
   Bell,
-  BarChart3,
-  Activity,
-  Eye,
-  TrendingUp,
-  Tag,
 } from 'lucide-react';
-import { PackageCoupon } from '../types';
 import {
   isUserMasterAdmin,
   isUserSuperAdmin,
@@ -107,14 +100,13 @@ import {
   getSavedNewsChannels,
   saveNewsChannel,
   deleteSavedNewsChannel,
-  formatHindiDate,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { UserTemplateManager } from './UserTemplateManager';
 import { AdminMusicLibraryManager } from './AdminMusicLibraryManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { getApiUrl, getAdminAuthHeaders } from '../lib/apiConfig';
+import { getApiUrl } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -151,214 +143,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onDeleteCategory,
 }) => {
   // Sub-tabs: main accordions in exact order - initially closed per requirement
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'package_coupons' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | 'analytics' | ''>('');
-  const [analyticsTab, setAnalyticsTab] = useState<'news' | 'video' | 'users'>('news');
-  const [analyticsData, setAnalyticsData] = useState<any>(null);
-    const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
-
-  // Package Coupons Management State (Master Admin Only)
-  const [packageCoupons, setPackageCoupons] = useState<PackageCoupon[]>([]);
-  const [isLoadingCoupons, setIsLoadingCoupons] = useState<boolean>(false);
-  const [couponForm, setCouponForm] = useState<{
-    id?: string;
-    code: string;
-    name: string;
-    discountAmount: number;
-    applicablePackage: string;
-    expiryDate: string;
-    maxUsageLimit: string;
-    perUserLimit: number;
-    isActive: boolean;
-  }>({
-    code: '',
-    name: '',
-    discountAmount: 200,
-    applicablePackage: 'ALL',
-    expiryDate: '',
-    maxUsageLimit: '',
-    perUserLimit: 1,
-    isActive: true,
-  });
-  const [couponActionMsg, setCouponActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isEditingCoupon, setIsEditingCoupon] = useState<boolean>(false);
-
-  // Admin Payment History State
-  const [adminPayments, setAdminPayments] = useState<any[]>([]);
-  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
-  const [paymentSearch, setPaymentSearch] = useState('');
-  const [paymentPlanFilter, setPaymentPlanFilter] = useState('ALL');
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState('ALL');
-
-  useEffect(() => {
-    if (subTab === 'plans') {
-      setIsLoadingPayments(true);
-      fetch('/api/user-payments', { headers: getAdminAuthHeaders() })
-        .then((r) => r.json())
-        .then((d) => {
-          if (d && Array.isArray(d.payments)) {
-            setAdminPayments(d.payments);
-          }
-        })
-        .catch(() => {})
-        .finally(() => setIsLoadingPayments(false));
-    }
-  }, [subTab]);
-
-  const fetchPackageCoupons = async () => {
-    setIsLoadingCoupons(true);
-    try {
-      const res = await fetch('/api/admin/package-coupons', {
-        headers: {
-          ...getAdminAuthHeaders(),
-        },
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setPackageCoupons(data.coupons || []);
-      }
-    } catch {
-      // Ignore
-    } finally {
-      setIsLoadingCoupons(false);
-    }
-  };
-
-  useEffect(() => {
-    if (subTab === 'package_coupons') {
-      fetchPackageCoupons();
-    }
-  }, [subTab]);
-
-  const handleSaveCoupon = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!couponForm.code.trim()) {
-      setCouponActionMsg({ type: 'error', text: 'कृपया कूपन कोड दर्ज करें।' });
-      return;
-    }
-    if (!couponForm.discountAmount || couponForm.discountAmount <= 0) {
-      setCouponActionMsg({ type: 'error', text: 'कृपया वैध छूट राशि (₹) दर्ज करें।' });
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/admin/package-coupons', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeaders(),
-        },
-        body: JSON.stringify({
-          id: couponForm.id,
-          code: couponForm.code.trim().toUpperCase(),
-          name: (couponForm.name.trim() || couponForm.code.trim().toUpperCase()),
-          discountAmount: Number(couponForm.discountAmount),
-          applicablePackage: couponForm.applicablePackage || 'ALL',
-          expiryDate: couponForm.expiryDate || undefined,
-          maxUsageLimit: couponForm.maxUsageLimit ? Number(couponForm.maxUsageLimit) : undefined,
-          perUserLimit: couponForm.perUserLimit || 1,
-          isActive: couponForm.isActive,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setCouponActionMsg({ type: 'success', text: data.message || 'कूपन सफलतापूर्वक सेव हुआ!' });
-        setCouponForm({
-          code: '',
-          name: '',
-          discountAmount: 200,
-          applicablePackage: 'ALL',
-          expiryDate: '',
-          maxUsageLimit: '',
-          perUserLimit: 1,
-          isActive: true,
-        });
-        setIsEditingCoupon(false);
-        fetchPackageCoupons();
-      } else {
-        setCouponActionMsg({ type: 'error', text: data.error || 'कूपन सेव करने में त्रुटि आई।' });
-      }
-    } catch {
-      setCouponActionMsg({ type: 'error', text: 'सर्वर से संपर्क नहीं हो सका।' });
-    }
-  };
-
-  const handleDeleteCoupon = async (id: string, code: string) => {
-    if (!window.confirm(`क्या आप वाकई कूपन '${code}' को हटाना चाहते हैं?`)) return;
-    try {
-      const res = await fetch(`/api/admin/package-coupons/${id}`, {
-        method: 'DELETE',
-        headers: {
-          ...getAdminAuthHeaders(),
-        },
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setCouponActionMsg({ type: 'success', text: `कूपन '${code}' सफलतापूर्वक हटाया गया!` });
-        fetchPackageCoupons();
-      } else {
-        setCouponActionMsg({ type: 'error', text: data.error || 'कूपन हटाने में समस्या आई।' });
-      }
-    } catch {
-      setCouponActionMsg({ type: 'error', text: 'सर्वर त्रुटि।' });
-    }
-  };
-
-  const handleToggleCouponStatus = async (coupon: PackageCoupon) => {
-    try {
-      const res = await fetch('/api/admin/package-coupons', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAdminAuthHeaders(),
-        },
-        body: JSON.stringify({
-          ...coupon,
-          isActive: !coupon.isActive,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        fetchPackageCoupons();
-      }
-    } catch {}
-  };
-
-  const fetchAnalytics = async () => {
-    setIsLoadingAnalytics(true);
-    try {
-      const res = await fetch('/api/admin/analytics/summary', {
-        headers: { 'x-user-email': currentUser?.email || '' },
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAnalyticsData(data);
-      }
-    } catch {}
-    setIsLoadingAnalytics(false);
-  };
-
-  useEffect(() => {
-    if (subTab === 'analytics') {
-      fetchAnalytics();
-    }
-  }, [subTab]);
-
-  useEffect(() => {
-    const handleOpenAnalytics = (e) => {
-      const tab = e?.detail?.targetTab || 'news';
-      setSubTab('analytics');
-      setAnalyticsTab(tab);
-      fetchAnalytics();
-      setTimeout(() => {
-        const el = document.getElementById('section-analytics');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    };
-    window.addEventListener('ai_news_open_admin_analytics', handleOpenAnalytics);
-    return () => window.removeEventListener('ai_news_open_admin_analytics', handleOpenAnalytics);
-  }, []);
-
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | ''>('');
   const [userSub, setUserSub] = useState(() => getUserSubscription());
 
   // Admin Notification Panel State (Phase 5)
@@ -489,62 +274,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     }
   };
 
-  const handlePublishRssNews = async (rawId: string, eventId: string) => {
-    if (!rawId) return;
-    try {
-      const res = await fetch(getApiUrl('/api/admin/news/publish-rss'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-role': 'superadmin',
-          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
-          'x-user-email': currentUser?.email || 'admin@ainewsmaker.online',
-        },
-        body: JSON.stringify({ id: rawId }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAdminNotifActionMsg('✅ RSS खबर मुख्य होम फ़ीड में सफलतापूर्वक प्रकाशित कर दी गई!');
-        setAdminNotifications((prev) => prev.map((n) => n.id === eventId ? { ...n, unread: false, isPublished: true, status: 'APPROVED' } : n));
-        setAdminNotifCounts((prev) => ({ ...prev, rss: Math.max(0, prev.rss - 1), all: Math.max(0, prev.all - 1) }));
-        setTimeout(() => setAdminNotifActionMsg(''), 4000);
-      } else {
-        alert(data.error || 'खबर प्रकाशित करने में त्रुटि आई।');
-      }
-    } catch {
-      alert('नेटवर्क त्रुटि: खबर प्रकाशित नहीं की जा सकी।');
-    }
-  };
-
-  const handleResolveSupportRequest = async (rawId: string, eventId: string, category: string) => {
-    if (!rawId) return;
-    try {
-      const res = await fetch(getApiUrl('/api/admin/support/update-status'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-role': 'superadmin',
-          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
-          'x-user-email': currentUser?.email || 'admin@ainewsmaker.online',
-        },
-        body: JSON.stringify({ id: rawId, type: category, status: 'resolved' }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setAdminNotifActionMsg('✅ सपोर्ट अनुरोध स्थिति सफलतापूर्वक Resolved मार्क की गई!');
-        setAdminNotifications((prev) => prev.map((n) => n.id === eventId ? { ...n, unread: false, status: 'resolved' } : n));
-        setAdminNotifCounts((prev) => ({ ...prev, support: Math.max(0, prev.support - 1), all: Math.max(0, prev.all - 1) }));
-        setTimeout(() => setAdminNotifActionMsg(''), 4000);
-      } else {
-        alert(data.error || 'स्थिति अपडेट करने में त्रुटि आई।');
-      }
-    } catch {
-      alert('नेटवर्क त्रुटि: स्थिति अपडेट नहीं की जा सकी।');
-    }
-  };
-
   useEffect(() => {
     fetchAdminRewards();
     fetchAdminNotifications();
@@ -611,7 +340,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   // Module C Security: Regular admin cannot view or access the 5 restricted tabs
   useEffect(() => {
-    if (!isSuperAdminUser && (subTab === 'plans' || subTab === 'templates' || subTab === 'promocodes' || subTab === 'package_coupons' || subTab === 'users' || subTab === 'restricted')) {
+    if (!isSuperAdminUser && (subTab === 'plans' || subTab === 'templates' || subTab === 'promocodes' || subTab === 'users' || subTab === 'restricted')) {
       setSubTab('');
     }
   }, [isSuperAdminUser, subTab]);
@@ -1342,31 +1071,17 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     adminUpdateUserRecord(editingBrandingUser.email, updates);
     try {
       await adminUpdateCloudUser(editingBrandingUser.userId || editingBrandingUser.email, updates);
-      const res = await fetch(getApiUrl('/api/user-profile'), {
+      await fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-role': 'superadmin',
-          'x-admin-email': currentUser?.email || editingBrandingUser.email,
-          'x-user-email': currentUser?.email || editingBrandingUser.email,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: editingBrandingUser.userId || editingBrandingUser.email,
-          uid: editingBrandingUser.userId || editingBrandingUser.email,
           email: editingBrandingUser.email,
           ...updates,
         }),
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        setEditBrandMsg(`⚠️ ${errData.error || 'सर्वर पर ब्रांडिंग सुरक्षित करने में त्रुटि।'}`);
-        return;
-      }
     } catch (e) {
       console.warn('Error saving user branding to server:', e);
-      setEditBrandMsg(`⚠️ नेटवर्क त्रुटि: ${e?.message || 'ब्रांडिंग सुरक्षित नहीं हो सकी।'}`);
-      return;
     }
     setPlanUsers(getPlanUsers());
     setEditBrandMsg('✅ यूज़र ब्रांडिंग विवरण सफलतापूर्वक सुरक्षित हो गया!');
@@ -1873,155 +1588,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               );
             })}
           </div>
-
-          {/* Admin Payment History Table (Part 20) */}
-          <div className="mt-8 bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h4 className="text-sm sm:text-base font-black text-white">
-                    सभी यूज़र भुगतान एवं सदस्यता लेनदेन (Payment Transactions)
-                  </h4>
-                  <p className="text-xs text-slate-400">Cashfree PG के जरिए आए सभी सफल व लंबित भुगतानों का लाइव रिकॉर्ड</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsLoadingPayments(true);
-                  fetch('/api/user-payments', { headers: getAdminAuthHeaders() })
-                    .then((r) => r.json())
-                    .then((d) => {
-                      if (d && Array.isArray(d.payments)) setAdminPayments(d.payments);
-                    })
-                    .catch(() => {})
-                    .finally(() => setIsLoadingPayments(false));
-                }}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingPayments ? 'animate-spin text-amber-400' : ''}`} />
-                <span>रीफ्रेश</span>
-              </button>
-            </div>
-
-            {/* Filter Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <input
-                type="text"
-                placeholder="खोजें: नाम / ईमेल / मोबाइल / ऑर्डर ID"
-                value={paymentSearch}
-                onChange={(e) => setPaymentSearch(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-              />
-              <select
-                value={paymentPlanFilter}
-                onChange={(e) => setPaymentPlanFilter(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-              >
-                <option value="ALL">सभी प्लान (All Plans)</option>
-                <option value="ADVANCE">ADVANCE (एडवांस)</option>
-                <option value="PRO">PRO (प्रो)</option>
-                <option value="VIP">VIP DESK (अल्ट्रा)</option>
-              </select>
-              <select
-                value={paymentStatusFilter}
-                onChange={(e) => setPaymentStatusFilter(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-              >
-                <option value="ALL">सभी स्थिति (All Statuses)</option>
-                <option value="PAID">सफल (PAID)</option>
-                <option value="ACTIVE">सक्रिय (ACTIVE / PENDING)</option>
-                <option value="FAILED">असफल (FAILED)</option>
-              </select>
-            </div>
-
-            {/* Transactions List */}
-            {isLoadingPayments ? (
-              <div className="text-center py-8 text-xs text-slate-400 flex items-center justify-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                <span>भुगतान रिकॉर्ड लोड हो रहे हैं...</span>
-              </div>
-            ) : (() => {
-              const q = paymentSearch.trim().toLowerCase();
-              const filtered = adminPayments.filter((p) => {
-                if (q) {
-                  const matchName = (p.customerName || '').toLowerCase().includes(q);
-                  const matchEmail = (p.customerEmail || '').toLowerCase().includes(q);
-                  const matchPhone = (p.customerPhone || '').includes(q);
-                  const matchOrder = (p.orderId || '').toLowerCase().includes(q);
-                  if (!matchName && !matchEmail && !matchPhone && !matchOrder) return false;
-                }
-                if (paymentPlanFilter !== 'ALL') {
-                  const pKey = (p.planKey || p.planName || p.planId || '').toUpperCase();
-                  if (!pKey.includes(paymentPlanFilter)) return false;
-                }
-                if (paymentStatusFilter !== 'ALL') {
-                  if (paymentStatusFilter === 'PAID' && p.orderStatus !== 'PAID') return false;
-                  if (paymentStatusFilter === 'ACTIVE' && p.orderStatus !== 'ACTIVE' && p.orderStatus !== 'PENDING') return false;
-                  if (paymentStatusFilter === 'FAILED' && (p.orderStatus === 'PAID' || p.orderStatus === 'ACTIVE')) return false;
-                }
-                return true;
-              });
-
-              if (filtered.length === 0) {
-                return (
-                  <div className="text-center py-8 text-xs text-slate-400">
-                    कोई भुगतान रिकॉर्ड नहीं मिला।
-                  </div>
-                );
-              }
-
-              return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
-                        <th className="py-2.5 px-3">दिनांक</th>
-                        <th className="py-2.5 px-3">ग्राहक / ईमेल</th>
-                        <th className="py-2.5 px-3">प्लान</th>
-                        <th className="py-2.5 px-3">राशि</th>
-                        <th className="py-2.5 px-3">ऑर्डर ID</th>
-                        <th className="py-2.5 px-3">स्थिति</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono">
-                      {filtered.map((p, idx) => {
-                        const dateStr = p.createdAt
-                          ? new Date(p.createdAt).toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
-                          : 'हाल ही में';
-                        const isPaid = p.orderStatus === 'PAID';
-                        return (
-                          <tr key={p.orderId || idx} className="hover:bg-slate-800/40 transition">
-                            <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">{dateStr}</td>
-                            <td className="py-2.5 px-3">
-                              <div className="font-sans font-bold text-white text-xs">{p.customerName || 'यूज़र'}</div>
-                              <div className="text-[11px] text-slate-400 font-mono truncate max-w-[180px]">{p.customerEmail || ''}</div>
-                              {p.customerPhone && <div className="text-[10px] text-slate-500 font-mono">{p.customerPhone}</div>}
-                            </td>
-                            <td className="py-2.5 px-3 font-bold text-amber-300 font-sans">{p.planName || p.planKey || 'ADVANCE'}</td>
-                            <td className="py-2.5 px-3 font-bold text-white whitespace-nowrap">₹{p.orderAmount || 0}</td>
-                            <td className="py-2.5 px-3 text-[11px] text-slate-400 truncate max-w-[150px]">{p.orderId}</td>
-                            <td className="py-2.5 px-3">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase font-sans ${
-                                isPaid
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50'
-                                  : p.orderStatus === 'ACTIVE' || p.orderStatus === 'PENDING'
-                                  ? 'bg-amber-950 text-amber-300 border border-amber-500/50'
-                                  : 'bg-rose-950 text-rose-300 border border-rose-500/50'
-                              }`}>
-                                {isPaid ? 'सफल (PAID)' : (p.orderStatus || 'PENDING')}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
         </div>
             </div>
           )}
@@ -2489,306 +2055,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
         )}
 
-
-        {/* ========================================================================= */}
-        {/* STEP 6.5: पैकेज कूपन कोड (PACKAGE COUPONS) - Master Admin Only           */}
-        {/* ========================================================================= */}
-        {isSuperAdminUser && (
-        <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'package_coupons' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
-          <button
-            type="button"
-            onClick={() => setSubTab(subTab === 'package_coupons' ? '' : 'package_coupons')}
-            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'package_coupons' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-amber-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <Tag className="w-5 h-5 text-white" />
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-base font-black text-white flex items-center gap-2">
-                  <span>पैकेज कूपन कोड</span>
-
-                </h4>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  कैशफ्री गेटवे हेतु पैकेज डिस्काउंट कूपन बनाएं, छूट राशि तय करें व उपयोग सीमा प्रबंधित करें
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
-                {`${packageCoupons.length} कूपन`}
-              </span>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'package_coupons' ? 'rotate-180 text-amber-400' : ''}`} />
-            </div>
-          </button>
-          {subTab === 'package_coupons' && (
-            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-5">
-              {/* Notification Message */}
-              {couponActionMsg && (
-                <div className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between ${couponActionMsg.type === 'success' ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300' : 'bg-rose-950/80 border-rose-500 text-rose-300'}`}>
-                  <span>{couponActionMsg.text}</span>
-                  <button type="button" onClick={() => setCouponActionMsg(null)} className="text-slate-400 hover:text-white cursor-pointer">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
-              {/* Add / Edit Form Card */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Plus className="w-4 h-4 text-amber-400" />
-                    <h5 className="text-sm font-black text-white">
-                      {isEditingCoupon ? 'पैकेज कूपन संपादित करें' : 'नया पैकेज कूपन कोड बनाएं'}
-                    </h5>
-                  </div>
-                  {isEditingCoupon && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsEditingCoupon(false);
-                        setCouponForm({
-                          code: '',
-                          name: '',
-                          discountAmount: 200,
-                          applicablePackage: 'ALL',
-                          expiryDate: '',
-                          maxUsageLimit: '',
-                          perUserLimit: 1,
-                          isActive: true,
-                        });
-                      }}
-                      className="text-xs text-slate-400 hover:text-white cursor-pointer"
-                    >
-                      रद्द करें
-                    </button>
-                  )}
-                </div>
-
-                <form onSubmit={handleSaveCoupon} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">कूपन कोड *</label>
-                      <input
-                        type="text"
-                        value={couponForm.code}
-                        onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase() })}
-                        placeholder="उदा. LAUNCH200"
-                        required
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono uppercase font-bold focus:border-amber-400 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">कूपन का नाम</label>
-                      <input
-                        type="text"
-                        value={couponForm.name}
-                        onChange={(e) => setCouponForm({ ...couponForm, name: e.target.value })}
-                        placeholder="उदा. लॉन्च ₹200 विशेष छूट"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-medium focus:border-amber-400 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">छूट राशि (₹ में) *</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={couponForm.discountAmount}
-                        onChange={(e) => setCouponForm({ ...couponForm, discountAmount: Number(e.target.value) })}
-                        placeholder="200"
-                        required
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-amber-400 font-mono font-bold focus:border-amber-400 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">लागू पैकेज</label>
-                      <select
-                        value={couponForm.applicablePackage}
-                        onChange={(e) => setCouponForm({ ...couponForm, applicablePackage: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-medium focus:border-amber-400 focus:outline-none"
-                      >
-                        <option value="ALL">सभी पैकेज (All Packages)</option>
-                        <option value="BASIC">केवल Basic पैकेज</option>
-                        <option value="ADVANCE">केवल Advance पैकेज</option>
-                        <option value="PRO">केवल Pro पैकेज</option>
-                        <option value="VIP DESK">केवल VIP Desk पैकेज</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">समाप्ति तिथि (वैकल्पिक)</label>
-                      <input
-                        type="date"
-                        value={couponForm.expiryDate}
-                        onChange={(e) => setCouponForm({ ...couponForm, expiryDate: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">कुल उपयोग सीमा (वैकल्पिक)</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={couponForm.maxUsageLimit}
-                        onChange={(e) => setCouponForm({ ...couponForm, maxUsageLimit: e.target.value })}
-                        placeholder="उदा. 500 (असीमित हेतु खाली छोड़ें)"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-300 font-bold block mb-1">प्रति यूज़र सीमा</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={couponForm.perUserLimit}
-                        onChange={(e) => setCouponForm({ ...couponForm, perUserLimit: Number(e.target.value) })}
-                        placeholder="1"
-                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex flex-col justify-end">
-                      <label className="text-slate-300 font-bold block mb-2">स्थिति (Status)</label>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer text-xs text-white">
-                          <input
-                            type="checkbox"
-                            checked={couponForm.isActive}
-                            onChange={(e) => setCouponForm({ ...couponForm, isActive: e.target.checked })}
-                            className="w-4 h-4 rounded text-amber-500 focus:ring-0 cursor-pointer"
-                          />
-                          <span>{couponForm.isActive ? 'सक्रिय (Active)' : 'निष्क्रिय (Inactive)'}</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end pt-2">
-                    <button
-                      type="submit"
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-black transition cursor-pointer shadow-md flex items-center gap-1.5"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>{isEditingCoupon ? 'अपडेट सेव करें' : 'कूपन सेव करें'}</span>
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-              {/* Coupons List Table */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-amber-400" />
-                    <h5 className="text-sm font-black text-white">सक्रिय व ऐतिहासिक पैकेज कूपन</h5>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={fetchPackageCoupons}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                    title="ताज़ा करें"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingCoupons ? 'animate-spin text-amber-400' : ''}`} />
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto rounded-xl border border-slate-800">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-black tracking-wider border-b border-slate-800">
-                      <tr>
-                        <th className="p-3">कूपन कोड व नाम</th>
-                        <th className="p-3">छूट राशि (₹)</th>
-                        <th className="p-3">लागू पैकेज</th>
-                        <th className="p-3">उपयोग / सीमा</th>
-                        <th className="p-3">समाप्ति</th>
-                        <th className="p-3 text-center">स्थिति</th>
-                        <th className="p-3 text-right">कार्रवाई</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                      {packageCoupons.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
-                            कोई पैकेज कूपन नहीं मिला। ऊपर दिए गए फॉर्म से नया कूपन बनाएं।
-                          </td>
-                        </tr>
-                      ) : (
-                        packageCoupons.map((coupon) => (
-                          <tr key={coupon.id} className="hover:bg-slate-800/40 transition">
-                            <td className="p-3">
-                              <span className="font-mono font-bold text-amber-400 text-sm block">
-                                {coupon.code}
-                              </span>
-                              <span className="text-[11px] text-slate-400 block">{coupon.name}</span>
-                            </td>
-                            <td className="p-3 font-mono font-black text-emerald-400 text-sm">
-                              ₹{coupon.discountAmount}
-                            </td>
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold uppercase">
-                                {coupon.applicablePackage}
-                              </span>
-                            </td>
-                            <td className="p-3 font-mono text-[11px]">
-                              {coupon.usageCount || 0} / {coupon.maxUsageLimit ? coupon.maxUsageLimit : '∞'}
-                            </td>
-                            <td className="p-3 text-slate-400 font-mono text-[11px]">
-                              {coupon.expiryDate ? coupon.expiryDate : 'कोई सीमा नहीं'}
-                            </td>
-                            <td className="p-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleCouponStatus(coupon)}
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer ${coupon.isActive ? 'bg-emerald-950 text-emerald-400 border-emerald-600/40' : 'bg-slate-800 text-slate-400 border-slate-700'}`}
-                              >
-                                {coupon.isActive ? 'सक्रिय' : 'निष्क्रिय'}
-                              </button>
-                            </td>
-                            <td className="p-3 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setIsEditingCoupon(true);
-                                    setCouponForm({
-                                      id: coupon.id,
-                                      code: coupon.code,
-                                      name: coupon.name,
-                                      discountAmount: coupon.discountAmount,
-                                      applicablePackage: coupon.applicablePackage || 'ALL',
-                                      expiryDate: coupon.expiryDate || '',
-                                      maxUsageLimit: coupon.maxUsageLimit ? String(coupon.maxUsageLimit) : '',
-                                      perUserLimit: coupon.perUserLimit || 1,
-                                      isActive: coupon.isActive,
-                                    });
-                                  }}
-                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                                  title="एडिट करें"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteCoupon(coupon.id, coupon.code)}
-                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/70 text-slate-400 hover:text-rose-400 transition cursor-pointer"
-                                  title="डिलीट करें"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        )}
 
         {/* ========================================================================= */}
         {/* STEP 7: यूज़र्स प्रबंधन (USERS MANAGER) - Master Admin Only                */}
@@ -3302,116 +2568,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 फिलहाल कोई यूज़र रिकॉर्ड नहीं है। नए यूज़र्स के लॉगिन करने पर वे यहाँ स्वतः दिखेंगे।
               </div>
             ) : (
-              <>
-              {/* Mobile Registered Users Cards (Phase 6) */}
-              <div className="sm:hidden space-y-3">
-                {planUsers
-                  .filter((u) => {
-                    if (userTierCategory !== 'ALL') {
-                      const normTier = (u.tier || 'basic').toLowerCase();
-                      if (userTierCategory === 'BASIC' && normTier !== 'basic') return false;
-                      if (userTierCategory === 'ADVANCED' && normTier !== 'advanced') return false;
-                      if (userTierCategory === 'PRO' && normTier !== 'professional' && normTier !== 'pro') return false;
-                      if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
-                    }
-                    if (userStatusFilter === 'active' && u.isBlocked) return false;
-                    if (userStatusFilter === 'blocked' && !u.isBlocked) return false;
-                    if (userStatusFilter === 'trial_active') {
-                      if (u.isBlocked || u.isTrialExpired || (u.daysRemaining !== undefined && u.daysRemaining <= 0)) return false;
-                    }
-                    if (userStatusFilter === 'trial_expired') {
-                      if (!u.isTrialExpired && (u.daysRemaining === undefined || u.daysRemaining > 0)) return false;
-                    }
-                    if (!userSearch.trim()) return true;
-                    const s = userSearch.toLowerCase();
-                    return (
-                      u.email.toLowerCase().includes(s) ||
-                      (u.name && u.name.toLowerCase().includes(s)) ||
-                      (u.channelName && u.channelName.toLowerCase().includes(s)) ||
-                      (u.mobile && u.mobile.includes(s))
-                    );
-                  })
-                  .map((u) => (
-                    <div key={u.userId || u.email} className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2.5 shadow-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center font-black text-slate-950 text-xs shrink-0 overflow-hidden">
-                            {u.channelLogoUrl ? <img src={u.channelLogoUrl} alt={u.name} className="w-full h-full object-contain" /> : (u.name ? u.name[0].toUpperCase() : '👤')}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-black text-white truncate">{u.name || u.fullName || 'यूज़र'}</div>
-                            <div className="text-[10px] text-slate-400 font-mono truncate">{u.email}</div>
-                          </div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                          u.tier === 'ultra' ? 'bg-purple-900/80 text-purple-300 border border-purple-600' :
-                          u.tier === 'professional' ? 'bg-amber-900/80 text-amber-300 border border-amber-600' :
-                          u.tier === 'advanced' ? 'bg-blue-900/80 text-blue-300 border border-blue-600' :
-                          'bg-slate-800 text-slate-300 border border-slate-700'
-                        }`}>
-                          {u.planName || u.tier || 'BASIC'}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-950/60 p-2 rounded-lg border border-slate-800/60">
-                        <div>
-                          <span className="text-slate-500">चैनल: </span>
-                          <span className="font-bold text-slate-200 truncate">{u.channelName || 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">फोन: </span>
-                          <span className="font-mono text-emerald-400 font-bold">{u.mobile ? `+91 ${u.mobile}` : 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">स्थिति: </span>
-                          <span className={u.isBlocked ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
-                            {u.isBlocked ? 'ब्लॉक' : 'सक्रिय'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500">दैनिक कोटा: </span>
-                          <span className="font-mono text-amber-300 font-bold">
-                            {u.tier === 'ultra' ? '75/दिन' : u.tier === 'professional' ? '40/दिन' : u.tier === 'advanced' ? '25/दिन' : '10/दिन'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-800/60">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextTier = u.tier === 'basic' ? 'advanced' : u.tier === 'advanced' ? 'professional' : u.tier === 'professional' ? 'ultra' : 'basic';
-                            adminUpdateUserRecord(u.email, { tier: nextTier });
-                            adminUpdateCloudUser(u.userId, { tier: nextTier });
-                            setPlanUsers(getPlanUsers());
-                          }}
-                          className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold rounded-lg cursor-pointer hover:bg-amber-500/30 active:scale-95 transition"
-                        >
-                          प्लान बदलें
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nextBlocked = !u.isBlocked;
-                            adminUpdateUserRecord(u.email, { isBlocked: nextBlocked });
-                            adminUpdateCloudUser(u.userId, { isBlocked: nextBlocked });
-                            setPlanUsers(getPlanUsers());
-                          }}
-                          className={`px-2.5 py-1 text-[10px] font-bold rounded-lg cursor-pointer active:scale-95 transition border ${
-                            u.isBlocked
-                              ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                              : 'bg-rose-950 text-rose-300 border-rose-700'
-                          }`}
-                        >
-                          {u.isBlocked ? 'अनब्लॉक' : 'ब्लॉक'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-
-              {/* Desktop Registered Users Table */}
-              <div className="hidden sm:block w-full max-w-[calc(100vw-2rem)] sm:max-w-full overflow-x-auto touch-pan-x scrollbar-thin pb-2">
+              <div className="w-full max-w-[calc(100vw-2rem)] sm:max-w-full overflow-x-auto touch-pan-x scrollbar-thin pb-2">
                 <table className="w-full min-w-[720px] text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-400 font-bold bg-slate-950/60">
@@ -3730,7 +2887,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </tbody>
                 </table>
               </div>
-              </>
             )}
           </div>
 
@@ -4401,76 +3557,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               </button>
                             </div>
                           ) : claim.status === 'approved' ? (
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-bold rounded-lg shadow-xs">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                <span>स्वीकृत (कॉइन्स क्रेडिटेड)</span>
-                              </div>
-                              <button
-                                type="button"
-                                disabled={isProcessingRewardAction}
-                                onClick={async () => {
-                                  if (confirm(`क्या आप "${claim.userName || claim.userEmail}" का यह क्लेम रिकॉर्ड हटाना चाहते हैं?`)) {
-                                    setIsProcessingRewardAction(true);
-                                    try {
-                                      const res = await fetch(`/api/admin/rewards/claims/${claim.id || claim.claimId}`, {
-                                        method: 'DELETE',
-                                        headers: { 'Content-Type': 'application/json', 'x-user-email': currentUser?.email || '' },
-                                      });
-                                      if (res.ok) {
-                                        fetchAdminRewardClaims();
-                                        showToast('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
-                                      } else {
-                                        showToast('❌ क्लेम हटाने में समस्या आई।');
-                                      }
-                                    } catch (e: any) {
-                                      showToast('❌ त्रुटि: ' + e.message);
-                                    } finally {
-                                      setIsProcessingRewardAction(false);
-                                    }
-                                  }
-                                }}
-                                className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
-                                title="क्लेम डिलीट करें"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-bold rounded-lg shadow-xs">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span>स्वीकृत (कॉइन्स क्रेडिटेड)</span>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1.5 px-3 py-1 bg-red-950/80 border border-red-700 text-red-300 text-xs font-bold rounded-lg shadow-xs">
-                                <AlertCircle className="w-4 h-4 text-red-400" />
-                                <span>अस्वीकृत</span>
-                              </div>
-                              <button
-                                type="button"
-                                disabled={isProcessingRewardAction}
-                                onClick={async () => {
-                                  if (confirm(`क्या आप "${claim.userName || claim.userEmail}" का यह क्लेम रिकॉर्ड हटाना चाहते हैं?`)) {
-                                    setIsProcessingRewardAction(true);
-                                    try {
-                                      const res = await fetch(`/api/admin/rewards/claims/${claim.id || claim.claimId}`, {
-                                        method: 'DELETE',
-                                        headers: { 'Content-Type': 'application/json', 'x-user-email': currentUser?.email || '' },
-                                      });
-                                      if (res.ok) {
-                                        fetchAdminRewardClaims();
-                                        showToast('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
-                                      } else {
-                                        showToast('❌ क्लेम हटाने में समस्या आई।');
-                                      }
-                                    } catch (e: any) {
-                                      showToast('❌ त्रुटि: ' + e.message);
-                                    } finally {
-                                      setIsProcessingRewardAction(false);
-                                    }
-                                  }
-                                }}
-                                className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
-                                title="क्लेम डिलीट करें"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-red-950/80 border border-red-700 text-red-300 text-xs font-bold rounded-lg shadow-xs">
+                              <AlertCircle className="w-4 h-4 text-red-400" />
+                              <span>अस्वीकृत</span>
                             </div>
                           )}
                         </div>
@@ -4916,7 +4010,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <tr>
                     <th className="p-3">चैनल नाम</th>
                     <th className="p-3">श्रेणी</th>
-                    <th className="p-3">जोड़ी गई तारीख</th>
                     <th className="p-3">RSS XML URL</th>
                     <th className="p-3 text-center">स्थिति</th>
                     <th className="p-3 text-right">एक्शन</th>
@@ -4932,12 +4025,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3">
                         <span className="px-2 py-0.5 bg-slate-800 text-amber-300 rounded font-bold text-[10px]">
                           {s.category}
-                        </span>
-                      </td>
-                      <td className="p-3 text-[11px] text-amber-300 font-bold whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
-                          <Calendar className="w-3 h-3 text-amber-400" />
-                          <span>{s.addedDateFormatted || formatHindiDate(s.addedAt || s.createdAt)}</span>
                         </span>
                       </td>
                       <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
@@ -5463,7 +4550,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <tr>
                     <th className="p-3">पोर्टल / आर्टिकल नाम</th>
                     <th className="p-3">श्रेणी</th>
-                    <th className="p-3">जोड़ी गई तारीख</th>
                     <th className="p-3">वेब URL</th>
                     <th className="p-3 text-center">स्थिति</th>
                     <th className="p-3 text-right">एक्शन</th>
@@ -5479,12 +4565,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3">
                         <span className="px-2 py-0.5 bg-slate-800 text-cyan-300 rounded font-bold text-[10px]">
                           {s.category}
-                        </span>
-                      </td>
-                      <td className="p-3 text-[11px] text-cyan-300 font-bold whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300">
-                          <Calendar className="w-3 h-3 text-cyan-400" />
-                          <span>{s.addedDateFormatted || formatHindiDate(s.addedAt || s.createdAt)}</span>
                         </span>
                       </td>
                       <td className="p-3 font-mono text-[11px] text-slate-400 max-w-xs truncate">
@@ -5792,62 +4872,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </span>
             </div>
 
-            {/* Mobile Restricted Channels Cards (Phase 8) */}
-            <div className="sm:hidden space-y-2.5">
-              {restrictedList
-                .filter((c) => {
-                  if (!restrictedSearch) return true;
-                  const q = restrictedSearch.toLowerCase();
-                  return (
-                    c.channelName.toLowerCase().includes(q) ||
-                    c.websiteUrl.toLowerCase().includes(q) ||
-                    c.username.toLowerCase().includes(q) ||
-                    (c.reason && c.reason.toLowerCase().includes(q))
-                  );
-                })
-                .map((item) => (
-                  <div key={item.id} className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {item.logoUrl ? (
-                          <img src={item.logoUrl} alt={item.channelName} className="w-8 h-8 rounded-lg object-contain bg-slate-950 p-0.5 border border-slate-800 shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-xs font-black flex items-center justify-center shrink-0">
-                            🛡️
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <span className="font-bold text-white text-xs block truncate">{item.channelName}</span>
-                          <span className="font-mono text-[10px] text-amber-300 truncate">@{item.username}</span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(`क्या आप चैनल "${item.channelName}" को प्रतिबंधित सूची से हटाना चाहते हैं?`)) {
-                            deleteRestrictedChannel(item.id);
-                            setRestrictedList(getRestrictedChannels());
-                            setRestrictedMsg({ type: 'success', text: `चैनल "${item.channelName}" को प्रतिबंधित सूची से हटा दिया गया।` });
-                          }
-                        }}
-                        className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
-                        title="प्रतिबंध हटाएं"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 text-[10px] pt-1 border-t border-slate-800/60">
-                      <span className="text-blue-300 font-mono truncate">{item.websiteUrl}</span>
-                      <span className="px-1.5 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-500/30 font-bold shrink-0">
-                        {item.reason || 'प्रतिबंधित'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-            </div>
-
-            {/* Desktop Restricted Channels Table */}
-            <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-800">
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-black border-b border-slate-800">
                   <tr>
@@ -5964,7 +4989,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
-
+              <span className="px-2.5 py-1 bg-slate-950 text-indigo-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
+                मास्टर एडमिन
+              </span>
               <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'api_keys' ? 'rotate-180 text-amber-400' : ''}`} />
             </div>
           </button>
@@ -6159,72 +5186,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                 {n.message}
                               </p>
                             )}
-                            {/* Meta & Request details */}
                             {n.meta && (
-                              <div className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-lg text-[11px] text-slate-300 space-y-1 mt-1">
-                                {n.category === 'rss' ? (
-                                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-amber-400 font-bold">स्रोत: {n.meta.channelName || n.meta.source || 'RSS Feed'}</span>
-                                      {n.meta.location && <span className="text-slate-400">| {n.meta.location}</span>}
-                                    </div>
-                                    {n.meta.sourceUrl && (
-                                      <a
-                                        href={n.meta.sourceUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-amber-300 hover:underline text-[10px] font-mono"
-                                      >
-                                        मूल लिंक देखें ↗
-                                      </a>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
-                                    <div><strong className="text-amber-400 font-bold">यूज़र:</strong> {n.meta.userName || 'संपादक'}</div>
-                                    <div><strong className="text-amber-400 font-bold">ईमेल:</strong> {n.meta.userEmail || n.meta.email || 'N/A'}</div>
-                                    {n.meta.userMobile && <div><strong className="text-amber-400 font-bold">मोबाइल:</strong> {n.meta.userMobile}</div>}
-                                    <div><strong className="text-amber-400 font-bold">स्थिति:</strong> <span className={n.status === 'resolved' || n.status === 'approved' ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>{n.status === 'resolved' || n.status === 'approved' ? '✓ Resolved' : '⏳ Pending'}</span></div>
-                                    {n.meta.channelName && <div><strong className="text-amber-400 font-bold">चैनल:</strong> {n.meta.channelName}</div>}
-                                    {n.meta.newLogoUrl && (
-                                      <div className="sm:col-span-2 flex items-center gap-2 pt-1">
-                                        <strong className="text-amber-400 font-bold">नया लोगो:</strong>
-                                        <img src={n.meta.newLogoUrl} alt="Logo" className="w-7 h-7 object-contain bg-black rounded border border-slate-700" />
-                                        <a href={n.meta.newLogoUrl} target="_blank" rel="noreferrer" className="text-xs text-amber-300 underline">लोगो डाउनलोड</a>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                              <div className="flex items-center gap-3 text-[10px] text-slate-400 pt-0.5">
+                                {n.meta.email && <span>ईमेल: {n.meta.email}</span>}
+                                {n.meta.source && <span>स्रोत: {n.meta.source}</span>}
                               </div>
                             )}
                           </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          {/* Direct Action: Publish RSS News */}
-                          {n.category === 'rss' && !n.isPublished && n.status !== 'APPROVED' && (
-                            <button
-                              type="button"
-                              onClick={() => handlePublishRssNews(n.rawId, n.id)}
-                              className="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-emerald-400/40"
-                              title="इस RSS खबर को तुरंत मुख्य होम फ़ीड में प्रकाशित करें"
-                            >
-                              <span>📰 प्रकाशित करें</span>
-                            </button>
-                          )}
-
-                          {/* Direct Action: Resolve Support Request */}
-                          {n.category !== 'rss' && n.status !== 'resolved' && n.status !== 'approved' && (
-                            <button
-                              type="button"
-                              onClick={() => handleResolveSupportRequest(n.rawId, n.id, n.category)}
-                              className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] font-bold rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-blue-400/40"
-                              title="इस सपोर्ट अनुरोध को Resolved मार्क करें"
-                            >
-                              <span>✓ Resolve करें</span>
-                            </button>
-                          )}
-
                           {n.unread && (
                             <button
                               type="button"
@@ -6263,298 +5234,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
         )}
-
-        {/* ========================================================================= */}
-        {/* STEP 11D: एनालिटिक्स बोर्ड (ADMIN ANALYTICS BOARD - NEWS & VIDEO ANALYTICS) */}
-        {/* ========================================================================= */}
-        <div id="section-analytics" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'analytics' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
-          <button
-            type="button"
-            onClick={() => {
-              const next = subTab === 'analytics' ? '' : 'analytics';
-              setSubTab(next);
-              if (next === 'analytics') fetchAnalytics();
-            }}
-            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'analytics' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-amber-500 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <BarChart3 className="w-5 h-5 text-white" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm sm:text-base font-black text-white block truncate">
-                    एनालिटिक्स बोर्ड (समाचार व वीडियो विश्लेषण)
-                  </span>
-                  <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 text-[10px] font-black rounded uppercase border border-indigo-500/30">
-                    लाइव डेटा
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  खबरों और वीडियो के व्यूज, ग्राफिक निर्माण, पूर्णता, डाउनलोड्स और ड्रॉप-ऑफ्स का विश्लेषण
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
-                2 सेक्शन्स
-              </span>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'analytics' ? 'rotate-180 text-amber-400' : ''}`} />
-            </div>
-          </button>
-
-          {subTab === 'analytics' && (
-            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-5">
-              {/* Top Sub-Nav & Refresh */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsTab('news')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
-                      analyticsTab === 'news'
-                        ? 'bg-amber-500 text-slate-950 shadow-md'
-                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    <span>📰 समाचार विश्लेषण (News Analytics)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAnalyticsTab('video')}
-                    className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
-                      analyticsTab === 'video'
-                        ? 'bg-purple-600 text-white shadow-md'
-                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    <span>🎬 वीडियो विश्लेषण (Video Analytics)</span>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={fetchAnalytics}
-                  disabled={isLoadingAnalytics}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer self-start sm:self-auto"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAnalytics ? 'animate-spin text-amber-400' : ''}`} />
-                  <span>{isLoadingAnalytics ? 'लोड हो रहा है...' : 'रीफ्रेश डेटा'}</span>
-                </button>
-              </div>
-
-              {isLoadingAnalytics ? (
-                <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                  <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-                  <p className="text-xs">एनालिटिक्स डेटा लोड हो रहा है...</p>
-                </div>
-              ) : analyticsTab === 'news' ? (
-                /* SECTION A: समाचार विश्लेषण (NEWS ANALYTICS) */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
-                        <span>खबरें देखीं</span>
-                        <Eye className="w-3.5 h-3.5 text-blue-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-white mt-1">
-                        {analyticsData?.news?.totalViews ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">कुल रीडर व्यूज</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-amber-400 text-[11px] font-bold">
-                        <span>ग्राफिक क्लिक</span>
-                        <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-amber-400 mt-1">
-                        {analyticsData?.news?.clickCreate ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">"खबर से ग्राफिक बनाएं"</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-indigo-400 text-[11px] font-bold">
-                        <span>प्रक्रिया शुरू</span>
-                        <Activity className="w-3.5 h-3.5 text-indigo-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-indigo-300 mt-1">
-                        {analyticsData?.news?.generationStarts ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">एडिटर में खोला गया</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
-                        <span>ग्राफिक पूर्ण</span>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 mt-1">
-                        {analyticsData?.news?.generationSuccess ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">सफलतापूर्वक बना</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-cyan-400 text-[11px] font-bold">
-                        <span>डाउनलोड्स</span>
-                        <Download className="w-3.5 h-3.5 text-cyan-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-cyan-400 mt-1">
-                        {analyticsData?.news?.downloads ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">सफल कार्ड सेव</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-rose-400 text-[11px] font-bold">
-                        <span>अधूरी छोड़ी</span>
-                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-rose-400 mt-1">
-                        {Math.max(0, (analyticsData?.news?.generationStarts ?? 0) - (analyticsData?.news?.generationSuccess ?? 0))}
-                      </div>
-                      <span className="text-[10px] text-slate-500">ड्रॉप-ऑफ प्रक्रिया</span>
-                    </div>
-                  </div>
-
-                  {/* Top News Stories Table */}
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                      <h4 className="text-xs font-black text-white flex items-center gap-1.5">
-                        <TrendingUp className="w-4 h-4 text-amber-400" />
-                        <span>शीर्ष सक्रिय समाचार (Top News Cards Analysis)</span>
-                      </h4>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        यूनीक रीडर्स: {analyticsData?.news?.uniqueUsers ?? 0}
-                      </span>
-                    </div>
-
-                    {!analyticsData?.news?.trending || analyticsData.news.trending.length === 0 ? (
-                      <p className="text-xs text-slate-500 py-3 text-center">
-                        वर्तमान में समाचार इंटरैक्शन का वास्तविक डेटा एकत्रित हो रहा है।
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {analyticsData.news.trending.map((item: any, idx: number) => (
-                          <div
-                            key={item.id || idx}
-                            className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl flex items-center justify-between gap-3 text-xs"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className="w-6 h-6 rounded bg-amber-500/10 text-amber-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
-                                #{idx + 1}
-                              </span>
-                              <span className="text-slate-200 font-bold truncate">
-                                {item.title || item.id}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
-                              <span className="text-blue-300">👁️ {item.views} व्यूज</span>
-                              <span className="text-amber-400">🎨 {item.creates} ग्राफिक</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* SECTION B: वीडियो विश्लेषण (VIDEO ANALYTICS) */
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
-                        <span>वीडियो देखे</span>
-                        <Eye className="w-3.5 h-3.5 text-blue-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-white mt-1">
-                        {analyticsData?.video?.totalViews ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">कुल वीडियो व्यूज</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-purple-400 text-[11px] font-bold">
-                        <span>वीडियो का उपयोग</span>
-                        <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-purple-300 mt-1">
-                        {analyticsData?.video?.clickCreate ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">स्टूडियो में उपयोग</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
-                        <span>कार्य पूरे किए</span>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 mt-1">
-                        {analyticsData?.video?.generationSuccess ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">सफल रेंडरिंग/एडिट</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-cyan-400 text-[11px] font-bold">
-                        <span>डाउनलोड्स</span>
-                        <Download className="w-3.5 h-3.5 text-cyan-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-cyan-400 mt-1">
-                        {analyticsData?.video?.downloads ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">सफल वीडियो डाउनलोड्स</span>
-                    </div>
-                  </div>
-
-                  {/* Top Videos Table */}
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                      <h4 className="text-xs font-black text-white flex items-center gap-1.5">
-                        <TrendingUp className="w-4 h-4 text-purple-400" />
-                        <span>शीर्ष सक्रिय वीडियो (Top Video Analysis)</span>
-                      </h4>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        यूनीक दर्शक: {analyticsData?.video?.uniqueUsers ?? 0}
-                      </span>
-                    </div>
-
-                    {!analyticsData?.video?.trending || analyticsData.video.trending.length === 0 ? (
-                      <p className="text-xs text-slate-500 py-3 text-center">
-                        वर्तमान में वीडियो इंटरैक्शन का वास्तविक डेटा एकत्रित हो रहा है।
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {analyticsData.video.trending.map((item: any, idx: number) => (
-                          <div
-                            key={item.id || idx}
-                            className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-xl flex items-center justify-between gap-3 text-xs"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className="w-6 h-6 rounded bg-purple-500/10 text-purple-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
-                                #{idx + 1}
-                              </span>
-                              <span className="text-slate-200 font-bold truncate">
-                                {item.title || item.id}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
-                              <span className="text-blue-300">👁️ {item.views} व्यूज</span>
-                              <span className="text-purple-300">🎬 {item.creates} उपयोग</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
 
         {/* ========================================================================= */}
         {/* STEP 12: सहायता एवं नीतियाँ (HELP & POLICIES)                               */}

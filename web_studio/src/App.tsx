@@ -24,19 +24,12 @@ import { InstallPwaModal } from './components/InstallPwaModal';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
-import { getApiUrl, getApiBaseUrl, ensureAuthToken } from './lib/apiConfig';
+import { getApiUrl, getApiBaseUrl } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
 import { validateCardBeforeDownload } from './lib/canonicalLayoutEngine';
-import {
-  extractLeaderFromHeadline,
-  generate5BalancedHeadlineOptions,
-  fitHeadlinesTo5TierRanges,
-  cleanHeadlineText,
-  formatCaptionVariants,
-} from './lib/speakerUtils';
-import { calculateEditorProgress } from './lib/aiCoreRules';
+import { extractLeaderFromHeadline } from './lib/speakerUtils';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
@@ -144,12 +137,12 @@ type AppTab =
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
 export const STUDIO_STEPS = [
-  { step: 1, id: 'step-frame', label: 'टेम्पलेट्स', name: 'टेम्पलेट्स', icon: '🖼️', title: 'टेम्पलेट्स' },
+  { step: 1, id: 'step-frame', label: 'फ्रेम्स', name: 'फ्रेम्स', icon: '🖼️', title: 'फ्रेम टेम्पलेट्स' },
   { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'एआई ऑटोमेशन टूल्स' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
   { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क' },
   { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक' },
-  { step: 6, id: 'step-header-footer', label: 'हेडर व फुटर', name: 'हेडर व फुटर', icon: '📜', title: 'हेडर व फुटर' },
+  { step: 6, id: 'step-header-footer', label: 'हैडर और फुटर', name: 'हैडर-फुटर', icon: '📜', title: 'हेडर, फुटर व लोगो' },
   { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
 ];
 
@@ -480,7 +473,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return (INITIAL_NEWS_POSTS && INITIAL_NEWS_POSTS.length > 0) ? INITIAL_NEWS_POSTS : [];
+    return [];
   });
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
@@ -566,6 +559,13 @@ export default function App() {
             setPosts(cleanApi);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
+            } catch {}
+            loaded = true;
+          } else {
+            // Authoritative server response: 0 active posts
+            setPosts([]);
+            try {
+              localStorage.setItem('app_news_posts_v2', JSON.stringify([]));
             } catch {}
             loaded = true;
           }
@@ -878,44 +878,46 @@ export default function App() {
           if (parsed && (parsed.email || parsed.username)) return parsed;
         }
       }
-      return null;
+      // Default to Master Admin session (breakingnewswala.com@gmail.com) so preview screen opens Master Admin directly
+      try {
+        localStorage.setItem('reporter_auth_session', JSON.stringify(DEFAULT_REPORTER_USER));
+        localStorage.setItem('user_channel_profile', JSON.stringify(DEFAULT_CHANNEL_PROFILE));
+        localStorage.setItem('is_onboarding_completed', 'true');
+        localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
+      } catch {}
+      return DEFAULT_REPORTER_USER;
     } catch {
-      return null;
+      return DEFAULT_REPORTER_USER;
     }
   });
 
   useEffect(() => {
     fetchLiveNews();
-    ensureAuthToken().catch(() => {});
-  }, [currentUser?.role, currentUser?.email]);
+  }, [currentUser?.role]);
 
   // Onboarding completion status (Login -> Details setup -> App)
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
       if (explicitLogout === 'true') return false;
-      const rawUser = localStorage.getItem('reporter_auth_session');
-      if (!rawUser) return false;
       const flag = localStorage.getItem('is_onboarding_completed');
       if (flag === 'false') return false;
       return true;
     } catch {
-      return false;
+      return true;
     }
   });
 
-  // Welcome flow - show primary AuthWelcomeScreen with Google Login for unauthenticated visitors
+  // Welcome flow - show primary AuthWelcomeScreen with Google Login only if explicitly logged out or unauthenticated
   const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
     try {
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
       if (explicitLogout === 'true') return true;
-      const rawUser = localStorage.getItem('reporter_auth_session');
-      if (!rawUser) return true;
       const flag = localStorage.getItem('show_auth_welcome_screen');
       if (flag === 'true') return true;
       return false;
     } catch {
-      return true;
+      return false;
     }
   });
 
@@ -1138,34 +1140,6 @@ export default function App() {
     window.addEventListener('channel_profile_updated', handleProfileUpdated);
     return () => window.removeEventListener('channel_profile_updated', handleProfileUpdated);
   }, []);
-
-  // User profile photo/logo and channel name synchronization with Graphic Photo Studio (Part 4)
-  useEffect(() => {
-    if (!currentUser?.email) return;
-    const activeEmail = currentUser.email.toLowerCase().trim();
-    let savedProfile: any = null;
-    try {
-      const perUserRaw = localStorage.getItem(`user_profile_${activeEmail}`);
-      if (perUserRaw) savedProfile = JSON.parse(perUserRaw);
-    } catch {}
-    if (!savedProfile) {
-      try {
-        const raw = localStorage.getItem('user_channel_profile');
-        if (raw) savedProfile = JSON.parse(raw);
-      } catch {}
-    }
-    if (savedProfile) {
-      const primaryLogo = savedProfile.channelLogoPngUrl || (savedProfile.channelLogoUrl?.endsWith('.gif') ? '' : savedProfile.channelLogoUrl);
-      if (primaryLogo) {
-        setCard((prev) => ({
-          ...prev,
-          customLogoUrl: primaryLogo,
-          brandName: savedProfile.channelNameHi || prev.brandName,
-          channelNameHi: savedProfile.channelNameHi || prev.channelNameHi,
-        }));
-      }
-    }
-  }, [currentUser?.email]);
 
   // Handle saving channel profile
   const handleSaveProfile = (profile: ChannelProfile, redirectAfterSave: boolean = false) => {
@@ -1416,7 +1390,6 @@ export default function App() {
   const [blockReviewMobile, setBlockReviewMobile] = useState('');
   const [isSubmittingBlockReview, setIsSubmittingBlockReview] = useState(false);
   const [blockReviewSubmitted, setBlockReviewSubmitted] = useState(false);
-  const [blockRequestId, setBlockRequestId] = useState('');
 
   const [isExpiredModalDismissed, setIsExpiredModalDismissed] = useState<boolean>(() => {
     try {
@@ -1992,41 +1965,24 @@ export default function App() {
 
   const handleDownload = async (formatOverride?: 'png' | 'jpeg') => {
     if (downloading) return;
-    const progress = calculateEditorProgress(card, activeStep);
-    if (!progress.is100Percent) {
-      showToast(`⚠️ JPG डाउनलोड के लिए कृपया सभी 7 स्टेप पूरे करें (वर्तमान: ${progress.percentage}% पूर्ण)।`);
-      return;
-    }
     const isBonusCard = Boolean(card?.isBonus);
     if (isActionLocked && !isBonusCard) {
       showToast('⚠️ आपका 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कार्ड डाउनलोड करने के लिए कृपया मेंबरशिप प्लान चुनें।');
       setCurrentTab('profile');
       return;
     }
-    // Verify entitlement with server (pre-flight check, checkOnly: true)
-    let preflightToken = '';
-    const downloadRequestId = `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Verify entitlement with server
     try {
       const verifyRes = await fetch(getApiUrl('/api/verify-download-entitlement'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: currentUser?.email,
-          isBonus: isBonusCard,
-          card,
-          checkOnly: true,
-          downloadRequestId,
-        }),
+        body: JSON.stringify({ email: currentUser?.email, isBonus: isBonusCard }),
       });
-      if (verifyRes.status === 403 || verifyRes.status === 400) {
+      if (verifyRes.status === 403) {
         const data = await verifyRes.json();
         showToast(`⚠️ ${data.error || 'ट्रायल समाप्त हो चुका है। कृपया प्लान चुनें।'}`);
-        if (verifyRes.status === 403) setCurrentTab('profile');
+        setCurrentTab('profile');
         return;
-      }
-      const verifyData = await verifyRes.json();
-      if (verifyData && verifyData.downloadToken) {
-        preflightToken = verifyData.downloadToken;
       }
     } catch {}
 
@@ -2071,24 +2027,6 @@ export default function App() {
       const filename = `${baseFilename}${ext}`;
 
       await downloadCanvas(canvas, filename, fmt);
-
-      // Confirm actual completion of download export to decrement quota atomically (Phase 3.0B-S)
-      try {
-        await fetch(getApiUrl('/api/complete-download-export'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: currentUser?.email,
-            downloadToken: preflightToken,
-            downloadRequestId,
-            exportSuccess: true,
-            cardId: card?.id,
-            isBonus: isBonusCard,
-          }),
-        });
-      } catch (completeErr) {
-        console.warn('Could not report download export completion:', completeErr);
-      }
 
       // Automatically record in Project History
       try {
@@ -2375,40 +2313,15 @@ export default function App() {
           };
         }
 
-        const rawHeadlines = Array.isArray(approvedData.headlines) && approvedData.headlines.length > 0
-          ? approvedData.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean)
-          : [cleanHeadlineText(post.title)];
-
-        const baseTitle = cleanHeadlineText(rawHeadlines[0] || post.title || 'ताज़ा समाचार');
-        const factSentences = (post.summary || (post as any).fullContent || baseTitle)
-          .split(/[।\n]+|\.\s+/)
-          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-
-        const approvedHeadlines = fitHeadlinesTo5TierRanges(rawHeadlines, factSentences, baseTitle, effectiveLoc);
+        const approvedHeadlines = Array.isArray(approvedData.headlines) && approvedData.headlines.length > 0
+          ? approvedData.headlines
+          : [post.title];
         const initialHeadline = approvedHeadlines[0] || post.title;
 
         // Caption personalization: append username to first hashtag only, leave remaining content and final #AINewsMaker unchanged
         const savedProf = getSavedChannelProfile();
         const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '';
-
-        let finalDetailed = approvedData.captionDetailed || post.summary || post.title;
-        let finalBullets = approvedData.captionBullets || '';
-        let finalShort = approvedData.captionShort || '';
-
-        if (!finalDetailed || !finalBullets || !finalShort) {
-          const variants = formatCaptionVariants(
-            initialHeadline,
-            effectiveLoc || 'मध्य प्रदेश',
-            finalDetailed || post.title,
-            savedProf?.username
-          );
-          if (!finalDetailed) finalDetailed = variants.captionDetailed;
-          if (!finalBullets) finalBullets = variants.captionBullets;
-          if (!finalShort) finalShort = variants.captionShort;
-        }
-
-        let formattedCaption = finalDetailed;
+        let formattedCaption = approvedData.captionDetailed || post.summary || post.title;
         if (userTag && formattedCaption.includes('#')) {
           if (!formattedCaption.toLowerCase().includes(userTag.toLowerCase())) {
             formattedCaption = formattedCaption.replace(/(#[^\s#]+)/, `${userTag} $1`);
@@ -2427,7 +2340,6 @@ export default function App() {
           showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
           headline: initialHeadline,
           formattedHeadline: initialHeadline,
-          headlineOptions: approvedHeadlines,
           location: effectiveLoc,
           category: post.categoryName,
           summary: formattedCaption,
@@ -2465,8 +2377,8 @@ export default function App() {
             approvedHeadlines,
             headlineOptions: approvedHeadlines,
             captionDetailed: formattedCaption,
-            captionBullets: finalBullets,
-            captionShort: finalShort,
+            captionBullets: approvedData.captionBullets,
+            captionShort: approvedData.captionShort,
             tags: approvedData.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'],
           });
 
@@ -2495,15 +2407,6 @@ export default function App() {
         error: null,
       });
 
-      const baseTitle = cleanHeadlineText(post.title || 'ताज़ा समाचार');
-      const factSentences = (post.summary || (post as any).fullContent || baseTitle)
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-      const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, effectiveLoc);
-      const initialFiveHeadlines = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, effectiveLoc).slice(0, 5);
-      const topHeadline = initialFiveHeadlines[0] || post.title;
-
       setCard((prev) => ({
         ...prev,
         sourceNewsId: post.id,
@@ -2514,12 +2417,10 @@ export default function App() {
         showDate: false,
         showWatermark: false,
         showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
-        headline: topHeadline,
-        formattedHeadline: topHeadline,
-        headlineOptions: initialFiveHeadlines,
+        headline: '',
         location: effectiveLoc,
         category: post.categoryName,
-        summary: post.summary || '',
+        summary: '',
         images: {
           ...prev.images,
           main: primaryPhoto,
@@ -2539,7 +2440,6 @@ export default function App() {
         imageUrl: targetImageForStudio,
         location: effectiveLoc,
         category: post.categoryName,
-        headlineOptions: initialFiveHeadlines,
         autoTrigger: true,
         timestamp: Date.now(),
         additionalPhotos: articlePhotos,
@@ -2567,13 +2467,6 @@ export default function App() {
         main: vid.thumbnailUrl || prev.images.main,
       },
     }));
-    setBrandedLoader({
-      isOpen: true,
-      mode: 'video_render',
-      title: 'आपका वीडियो स्टूडियो तैयार किया जा रहा है...',
-      durationSeconds: 10,
-      error: null,
-    });
     navigateToTab('studio');
     setActiveStep(1);
     setToastMessage('वीडियो न्यूज़ स्टूडियो में लोड हो गया है!');
@@ -2661,7 +2554,7 @@ export default function App() {
     setToastMessage('खबर सफलतापूर्वक अपडेट हुई!');
   };
 
-  const handleDeleteNews = async (postId: string) => {
+  const handleDeleteNews = (postId: string) => {
     const updated = posts.filter((p) => p.id !== postId);
     setPosts(updated);
     try {
@@ -2672,14 +2565,6 @@ export default function App() {
       localStorage.setItem('app_deleted_news_ids_v1', JSON.stringify(Array.from(set)));
     } catch {
       // ignore
-    }
-    try {
-      await fetch(getApiUrl(`/api/news-posts/${encodeURIComponent(postId)}`), {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-    } catch (err) {
-      console.warn('Backend news delete warning:', err);
     }
     syncPostsToServer(updated);
     setToastMessage('खबर सफलतापूर्वक हटाई गई!');
@@ -2716,7 +2601,7 @@ export default function App() {
   // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
   if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
-      <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
+      <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
         {toastMessage && (
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-slate-950 px-4 py-2 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
             <Sparkles className="w-4 h-4 text-slate-950" />
@@ -2785,134 +2670,8 @@ export default function App() {
     );
   }
 
-  // Permanent Full-Screen Lock for Blocked Accounts (Part 3)
-  if (isUserBlocked) {
-    return (
-      <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col items-center justify-center p-4 font-sans select-none">
-        <div className="bg-slate-900 border-2 border-rose-600 rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-6 text-center animate-in zoom-in-95">
-          <div className="w-20 h-20 rounded-2xl bg-rose-950/80 border-2 border-rose-500 text-rose-400 mx-auto flex items-center justify-center text-4xl shadow-xl">
-            🚫
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-xl sm:text-2xl font-black text-white">
-              आपकी प्रोफ़ाइल अस्थायी रूप से ब्लॉक की गई है
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-              आपका अकाउंट Admin द्वारा प्रतिबंधित किया गया है। अधिक जानकारी या पुनः सक्रिय करने के लिए Admin को Request भेजें।
-            </p>
-          </div>
-
-          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs text-left">
-            <div className="flex justify-between items-center text-slate-400">
-              <span>ईमेल आईडी:</span>
-              <span className="font-mono text-white font-bold">{currentUser?.email || 'अनाम यूज़र'}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-400">
-              <span>स्थिति:</span>
-              <span className="text-rose-400 font-black">अस्थाई रूप से निलंबित (Blocked)</span>
-            </div>
-          </div>
-
-          {blockReviewSubmitted ? (
-            <div className="p-4 bg-emerald-950/80 border border-emerald-500 rounded-2xl text-emerald-200 text-xs sm:text-sm font-bold text-center space-y-2">
-              <div className="text-2xl">✅</div>
-              <div>आपकी समीक्षा रिक्वेस्ट Admin को सफलतापूर्वक भेज दी गई है!</div>
-              <div className="text-xs text-emerald-300 font-mono">अनुरोध आईडी: {blockRequestId || `REQ-${Date.now()}`}</div>
-              <div className="text-xs text-amber-300 bg-amber-950/50 p-2 rounded-xl border border-amber-500/30">
-                वर्तमान स्थिति: <strong>लंबित (Pending Review)</strong>
-              </div>
-            </div>
-          ) : (
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!blockReviewMessage.trim()) {
-                  alert('कृपया समीक्षा अनुरोध का विवरण दर्ज करें!');
-                  return;
-                }
-                setIsSubmittingBlockReview(true);
-                const generatedReqId = `REQ-${Date.now()}`;
-                try {
-                  await fetch(getApiUrl('/api/support/requests'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      userId: currentUser?.userId || '',
-                      userName: currentUser?.name || 'संपादक',
-                      userEmail: currentUser?.email || '',
-                      userMobile: blockReviewMobile || '',
-                      message: `[ब्लॉक समीक्षा अनुरोध ${generatedReqId}]: ${blockReviewMessage}`,
-                      reportType: 'review_blocked',
-                      requestId: generatedReqId,
-                    }),
-                  });
-                  setBlockRequestId(generatedReqId);
-                  setBlockReviewSubmitted(true);
-                } catch (err) {
-                  alert('अनुरोध भेजने में समस्या आई। कृपया पुनः प्रयास करें।');
-                } finally {
-                  setIsSubmittingBlockReview(false);
-                }
-              }}
-              className="space-y-3 text-left"
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  ब्लॉक समीक्षा अनुरोध विवरण / स्पष्टीकरण *
-                </label>
-                <textarea
-                  rows={3}
-                  value={blockReviewMessage}
-                  onChange={(e) => setBlockReviewMessage(e.target.value)}
-                  placeholder="कृपया अपने चैनल का विवरण या अनुरोध लिखें..."
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-rose-400 outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  संपर्क मोबाइल / व्हाट्सएप नंबर
-                </label>
-                <input
-                  type="tel"
-                  value={blockReviewMobile}
-                  onChange={(e) => setBlockReviewMobile(e.target.value)}
-                  placeholder="10 अंकों का मोबाइल नंबर"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-rose-400 outline-none"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isSubmittingBlockReview}
-                className="w-full py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 text-white font-black text-xs sm:text-sm rounded-xl transition shadow-xl cursor-pointer"
-              >
-                {isSubmittingBlockReview ? 'अनुरोध भेजा जा रहा है...' : 'Admin को Request भेजें'}
-              </button>
-            </form>
-          )}
-
-          <div className="pt-2 border-t border-slate-800 flex justify-center">
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  localStorage.removeItem('reporter_auth_session');
-                  sessionStorage.clear();
-                } catch {}
-                window.location.reload();
-              }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition cursor-pointer"
-            >
-              लॉगआउट करें
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#070D1E] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-neutral-950 px-4 py-2.5 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
@@ -2948,7 +2707,7 @@ export default function App() {
       )}
 
       {/* Top Bar Navigation - Always visible in Home, Video, Newsroom, Control Room. In Studio: visible ONLY on Desktop (hidden md:block), preserving mobile & APK layout unchanged */}
-      <div className={`sticky top-0 z-50 bg-[#0B132B]/95 backdrop-blur-md shadow-md transition-colors ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
+      <div className={`sticky top-0 z-50 bg-white/95 dark:bg-[#0B132B]/95 backdrop-blur-md shadow-sm dark:shadow-md transition-colors ${(currentTab === 'studio' || currentTab === 'generator') ? 'hidden md:block' : ''}`}>
         <AppTopBarWeb
           currentTab={currentTab}
           currentUser={currentUser}
@@ -3217,45 +2976,40 @@ export default function App() {
         </div>
       )}
 
-      {/* 1. Home Feed Tab */}
-      {currentTab === 'home' && (
-        <div className="w-full">
-          {showSoundNoticeBanner && (
-            <div className="max-w-4xl mx-auto my-3 px-3">
-              <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border border-amber-400/40 text-slate-900 dark:text-slate-100 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-amber-400/20 text-amber-500 shrink-0 mt-0.5">
-                    <Volume2 className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-xs sm:text-sm font-semibold leading-relaxed">
-                      नई खबर आने पर आपको मोबाइल पर साउंड नोटिफिकेशन सुनाई देगा। ब्रेकिंग न्यूज़ और सामान्य खबरों के लिए अलग-अलग साउंड हो सकती हैं। साउंड सुनने के लिए आवश्यक अनुमति दें।
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      हर 15 सेकंड में लाइव फ़ीड स्वतः अपडेट होता है।
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                  <button
-                    onClick={handleEnableSound}
-                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow transition cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Volume2 className="w-3.5 h-3.5" />
-                    <span>साउंड चालू करें / अनुमति दें</span>
-                  </button>
-                  <button
-                    onClick={handleDismissSoundNotice}
-                    className="px-2 py-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold transition cursor-pointer"
-                    title="बंद करें"
-                  >
-                    ✕
-                  </button>
-                </div>
+      {/* Feed Sound Notification Educational Banner (one-time dismissible) */}
+      {showSoundNoticeBanner && (
+        <div className="w-full max-w-7xl mx-auto px-4 pt-2">
+          <div className="bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 border border-amber-500/40 rounded-xl p-3 flex items-center justify-between gap-3 shadow-lg backdrop-blur-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                <Volume2 className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm font-bold text-amber-200">
+                  🔔 फ़ीड साउंड नोटिफ़िकेशन सक्रिय है (15 सेकंड ऑटो-रिफ़्रेश)
+                </p>
+                <p className="text-[11px] text-slate-300">
+                  नई सामान्य खबर आने पर बीप, ब्रेकिंग न्यूज़ पर अलर्ट टोन, और वीडियो फ़ीड पर मीडिया चाइम सुनाई देगा। किसी भी बटन पर क्लिक करने से ब्राउज़र ऑडियो अनलॉक हो जाता है।
+                </p>
               </div>
             </div>
-          )}
-          <HomeScreenWeb
+            <button
+              type="button"
+              onClick={() => {
+                dismissSoundNotice();
+                setShowSoundNoticeBanner(false);
+              }}
+              className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs whitespace-nowrap transition cursor-pointer shadow-sm"
+            >
+              समझ गया (Dismiss)
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 1. Home Feed Tab */}
+      {currentTab === 'home' && (
+        <HomeScreenWeb
           posts={posts}
           currentUser={currentUser}
           onOpenStudioWithNews={handleOpenStudioWithNews}
@@ -3277,15 +3031,14 @@ export default function App() {
           }}
           onNavigateToTab={navigateToTab}
         />
-        </div>
       )}
 
       {/* 2. News Generator / Studio Tab */}
       {(currentTab === 'generator' || currentTab === 'studio') && (
         <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में समस्या आई">
           <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900 dark:text-slate-100 transition-colors">
-          {/* Studio Type Selector: On desktop shows both Graphic & Video; on mobile it is integrated into the sticky header */}
-          <div className={`hidden lg:block w-full transition-all duration-300 ease-in-out overflow-hidden ${
+          {/* Studio Type Selector: On desktop shows both Graphic & Video; on mobile only shows Graphic unless opened via 'इस वीडियो को बनाएँ' */}
+          <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${
             isStudioSelectorVisible && (!studioInitialItem ? 'max-h-20 opacity-100 mb-3' : 'max-h-20 opacity-100 mb-3')
           }`}>
             <div className="flex items-center justify-between bg-white dark:bg-neutral-900 border border-slate-200 dark:border-neutral-800 rounded-xl p-1 shadow-sm dark:shadow-lg max-w-lg mx-auto">
@@ -3317,36 +3070,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Universal Mobile Studio Mode Switcher (visible on mobile in both graphic and video studio modes) */}
-          <div className="lg:hidden w-full bg-slate-950 px-2.5 pt-2 pb-1">
-            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-1 max-w-md mx-auto">
-              <button
-                type="button"
-                onClick={() => updateStudioMode('graphic')}
-                className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  studioMode === 'graphic'
-                    ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 shadow-md font-black'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <Palette className="w-3.5 h-3.5 text-slate-950" />
-                <span>ग्राफिक फोटो न्यूज़</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => updateStudioMode('video')}
-                className={`flex-1 py-1.5 px-2 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
-                  studioMode === 'video'
-                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-md font-black'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <Film className="w-3.5 h-3.5 text-white" />
-                <span>वीडियो न्यूज़</span>
-              </button>
-            </div>
-          </div>
-
           {studioMode === 'video' ? (
             <div className="w-full">
               <VideoStudioWeb
@@ -3364,89 +3087,35 @@ export default function App() {
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
               {/* ============================================================== */}
               <div className="lg:hidden w-full flex flex-col min-h-screen">
-                {/* 🔒 STICKY / FROZEN STUDIO HEADER (70/30 Preview & Steps + Live Preview Action Strip) */}
                 <div
-                  id="mobile-studio-sticky-header"
-                  className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2.5 pt-2 pb-1.5 transition-all"
+                  id="mobile-studio-workspace"
+                  className="w-full bg-white/95 dark:bg-slate-950/95 p-2 shadow-sm dark:shadow-2xl transition-all flex flex-col items-center max-w-lg mx-auto"
                 >
-                  {/* Row 2: Balanced 70/30 Split (Left ~70%: 4:5 Preview | Right ~30%: 7 Editor Steps) */}
-                  <div className="flex flex-row items-stretch gap-2.5 max-w-md mx-auto w-full">
-                    {/* Left Column: ~70% width for 4:5 Graphic Preview */}
-                    <div className="w-[69%] min-w-0 flex flex-col justify-start">
-                      <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1 truncate">
-                        4:5 PREVIEW SPACE — 70% WIDTH
-                      </div>
-                      <div className="w-full aspect-[4/5] max-h-[300px] rounded-xl sm:rounded-2xl overflow-hidden ring-1 ring-slate-800 shadow-2xl bg-black flex items-center justify-center relative">
-                        <CardPreview
-                          card={card}
-                          className="w-full h-full"
-                          showSafeZone={showSafeZone}
-                          onChange={handleUpdateCard}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Right Column: ~30% width for 7 Editor Steps (Text only, exact order) */}
-                    <div className="w-[31%] min-w-0 flex flex-col justify-between py-0.5">
-                      <div className="text-[11px] sm:text-xs font-black text-amber-400 tracking-wide mb-1 text-center truncate flex items-center justify-center gap-1">
-                        <span>एडिटर स्टेप्स</span>
-                        <span className="text-[9.5px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                          {calculateEditorProgress(card, activeStep).percentage}%
-                        </span>
-                      </div>
-                      <div className="flex-1 flex flex-col justify-between gap-1">
-                        {[
-                          { step: 1, label: 'टेम्पलेट्स' },
-                          { step: 2, label: 'एआई टूल्स' },
-                          { step: 3, label: 'हेडलाइन' },
-                          { step: 4, label: 'फोटो व वॉटरमार्क' },
-                          { step: 5, label: 'स्थान व दिनांक' },
-                          { step: 6, label: 'हेडर व फुटर' },
-                          { step: 7, label: 'डाउनलोड व कैप्शन' },
-                        ].map((s) => {
-                          const isActive = activeStep === s.step;
-                          return (
-                            <button
-                              key={s.step}
-                              type="button"
-                              onClick={() => {
-                                setActiveStep(s.step);
-                                const el = document.getElementById('mobile-active-step-commands');
-                                if (el) {
-                                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }
-                              }}
-                              className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all text-center truncate cursor-pointer select-none ${
-                                isActive
-                                  ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                                  : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 border border-slate-800/80'
-                              }`}
-                            >
-                              {s.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                  {/* 2. Preview canvas (4:5 or selected ratio) near top */}
+                  <div className="w-full max-w-[340px] sm:max-w-[400px] aspect-[4/5] rounded-2xl overflow-hidden ring-1 ring-neutral-800 shadow-2xl bg-black flex items-center justify-center relative my-1">
+                    <CardPreview
+                      card={card}
+                      className="w-full h-full"
+                      showSafeZone={showSafeZone}
+                      onChange={handleUpdateCard}
+                    />
                   </div>
 
-                  {/* Row 3: Live Preview Action Strip */}
-                  <div className="flex items-center justify-between w-full max-w-md mx-auto pt-2 pb-0.5 border-t border-slate-800/80 mt-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse motion-reduce:animate-none shadow-sm" />
-                      <span className="text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-slate-200">
-                        LIVE PREVIEW CANVAS
-                      </span>
+                  {/* 3. Compact Refresh and Draft controls */}
+                  <div className="flex items-center justify-between w-full max-w-[340px] sm:max-w-[400px] py-1.5 px-1">
+                    <div className="flex items-center gap-1.5 text-xs text-neutral-300 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 shadow-sm" />
+                      <span className="text-red-400 font-black">लाइव कैनवास (4:5)</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleSaveDraft}
-                        className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-bold rounded-lg border border-amber-500/40 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 text-[11px] font-bold rounded-lg border border-amber-600/50 flex items-center gap-1 cursor-pointer transition active:scale-95"
                         title="ड्राफ्ट सेव करें"
                       >
-                        <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-                        <span>DRAFT</span>
+                        <Bookmark className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>ड्राफ्ट</span>
                       </button>
                       <button
                         type="button"
@@ -3455,17 +3124,84 @@ export default function App() {
                         title="नया सत्र / रीसेट"
                       >
                         <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-                        <span>REFRESH</span>
+                        <span>रिफ्रेश</span>
                       </button>
                     </div>
                   </div>
+
+                  {/* 4. Horizontal left-to-right editor steps with sticky positioning & swipe guidance */}
+                  <div className="sticky top-0 z-40 w-full bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2 sm:p-2.5 shadow-xl my-1 ring-1 ring-slate-800">
+                    <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 px-1 gap-2">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 shrink-0">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>स्टेप {activeStep}/7</span>
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full border bg-amber-400/10 text-amber-300 border-amber-400/30 flex items-center gap-1 shrink-0">
+                        <span>👉</span>
+                        <span>और चरण देखने के लिए दाईं ओर स्वाइप करें</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
+                      {STUDIO_STEPS.map((s) => {
+                        const isActive = activeStep === s.step;
+                        return (
+                          <button
+                            key={s.step}
+                            type="button"
+                            onClick={() => {
+                              setActiveStep(s.step);
+                              const el = document.getElementById('mobile-active-step-commands');
+                              if (el) {
+                                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }
+                            }}
+                            className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                              isActive
+                                ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                                : 'bg-slate-800/90 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
+                            }`}
+                          >
+                            <span
+                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                                isActive
+                                  ? 'bg-slate-950 text-amber-300'
+                                  : 'bg-amber-400 text-slate-950'
+                              }`}
+                            >
+                              {s.step}
+                            </span>
+                            <span className="text-sm shrink-0">{s.icon}</span>
+                            <span className="whitespace-nowrap font-bold">{s.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Distinct Horizontal Partition / Divider Line */}
+                  <div className="w-[100vw] relative left-[calc(-50vw+50%)] border-b-2 border-slate-800 shadow-sm" />
                 </div>
 
-                {/* 4. Selected Step Editor Content Panel - Scrolls Underneath the Sticky Upper Area */}
+                {/* 🎛️ EXPANDED EDITOR PANEL: Opens DIRECTLY below the horizontal border/divider */}
                 <div
                   id="mobile-active-step-commands"
-                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 pb-36 overflow-y-auto max-w-md mx-auto"
+                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 border-t border-slate-800 overflow-y-auto"
                 >
+                  {/* Step Title Header */}
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">
+                        {STUDIO_STEPS.find((s) => s.step === activeStep)?.icon}
+                      </span>
+                      <span className="text-xs font-black text-amber-400">
+                        {STUDIO_STEPS.find((s) => s.step === activeStep)?.title || `स्टेप ${activeStep} कंट्रोल्स`}
+                      </span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold shrink-0">
+                      स्टेप {activeStep} सक्रिय
+                    </span>
+                  </div>
+
                   <CardEditor
                     card={card}
                     onChange={handleUpdateCard}
@@ -3538,117 +3274,69 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Action Bar below Preview: 3 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट, 4. रिफ्रेश) */}
-                    {(() => {
-                      const editorProgress = calculateEditorProgress(card, activeStep);
-                      const isExportReady = editorProgress.is100Percent;
+                    {/* Action Bar below Preview: 3 Responsive Buttons Row (1. JPG डाउनलोड, 2. कैप्शन, 3. ड्राफ्ट) */}
+                    <div className="flex items-center gap-1.5 sm:gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
+                      {/* 1. JPG डाउनलोड - Priority Action */}
+                      <button
+                        type="button"
+                        onClick={() => handleDownload('jpeg')}
+                        disabled={downloading || (isActionLocked && !isCurrentCardBonus)}
+                        className={`flex-[1.5] min-w-[120px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                          isActionLocked && !isCurrentCardBonus
+                            ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 cursor-pointer disabled:opacity-50'
+                        }`}
+                        title={isActionLocked && !isCurrentCardBonus ? 'ट्रायल समाप्त — डाउनलोड लॉक' : 'कार्ड को HD JPG इमेज में डाउनलोड करें'}
+                      >
+                        {isActionLocked && !isCurrentCardBonus ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />}
+                        <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
+                      </button>
 
-                      return (
-                        <>
-                          <div className="flex items-center gap-1.5 sm:gap-2 w-full mt-1.5 pt-1.5 border-t border-neutral-800/80 shrink-0">
-                            {/* 1. JPG डाउनलोड - Locked until 100% completion */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!isExportReady) {
-                                  showToast(`⚠️ JPG डाउनलोड के लिए कृपया सभी 7 स्टेप पूरे करें (वर्तमान: ${editorProgress.percentage}% पूर्ण)।`);
-                                  return;
-                                }
-                                handleDownload('jpeg');
-                              }}
-                              disabled={downloading || !isExportReady || (isActionLocked && !isCurrentCardBonus)}
-                              className={`flex-[1.5] min-w-[120px] py-2 sm:py-2.5 px-2.5 sm:px-3 font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
-                                !isExportReady
-                                  ? 'bg-neutral-850 text-neutral-500 border border-neutral-800 opacity-65 cursor-not-allowed'
-                                  : isActionLocked && !isCurrentCardBonus
-                                  ? 'bg-neutral-800 text-neutral-500 border border-neutral-700/60 opacity-60 cursor-not-allowed'
-                                  : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 cursor-pointer disabled:opacity-50'
-                              }`}
-                              title={
-                                !isExportReady
-                                  ? `डाउनलोड लॉक: कृपया सभी 7 स्टेप पूरे करें (${editorProgress.percentage}% पूर्ण)`
-                                  : isActionLocked && !isCurrentCardBonus
-                                  ? 'ट्रायल समाप्त — डाउनलोड लॉक'
-                                  : 'कार्ड को HD JPG इमेज में डाउनलोड करें'
-                              }
-                            >
-                              {!isExportReady ? (
-                                <Lock className="w-3.5 h-3.5 shrink-0 text-amber-400/80" />
-                              ) : isActionLocked && !isCurrentCardBonus ? (
-                                <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
-                              ) : (
-                                <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
-                              )}
-                              <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
-                            </button>
+                      {/* 2. कैप्शन */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isActionLocked && !isCurrentCardBonus) {
+                            showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कैप्शन हेतु प्लान अपग्रेड करें।');
+                            setCurrentTab('profile');
+                          } else {
+                            setIsCaptionModalOpen(true);
+                          }
+                        }}
+                        disabled={isActionLocked && !isCurrentCardBonus}
+                        className={`flex-1 min-w-[80px] py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
+                          isActionLocked && !isCurrentCardBonus
+                            ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
+                            : 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 cursor-pointer'
+                        }`}
+                        title={isActionLocked && !isCurrentCardBonus ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'कैप्शन और शेयर'}
+                      >
+                        {isActionLocked && !isCurrentCardBonus ? <Lock className="w-3.5 h-3.5 shrink-0 text-neutral-400" /> : <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />}
+                        <span className="whitespace-nowrap">कैप्शन</span>
+                      </button>
 
-                            {/* 2. कैप्शन - Locked until 100% completion */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!isExportReady) {
-                                  showToast(`⚠️ कैप्शन के लिए कृपया सभी 7 स्टेप पूरे करें (वर्तमान: ${editorProgress.percentage}% पूर्ण)।`);
-                                  return;
-                                }
-                                if (isActionLocked && !isCurrentCardBonus) {
-                                  showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कैप्शन हेतु प्लान अपग्रेड करें।');
-                                  setCurrentTab('profile');
-                                } else {
-                                  setIsCaptionModalOpen(true);
-                                }
-                              }}
-                              disabled={!isExportReady || (isActionLocked && !isCurrentCardBonus)}
-                              className={`flex-1 min-w-[80px] py-2 sm:py-2.5 px-2 sm:px-3 font-semibold text-[11px] sm:text-xs rounded-xl border shadow flex items-center justify-center gap-1.5 transition-all active:scale-95 whitespace-nowrap ${
-                                !isExportReady
-                                  ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
-                                  : isActionLocked && !isCurrentCardBonus
-                                  ? 'bg-neutral-900 text-neutral-500 border-neutral-800 opacity-60 cursor-not-allowed'
-                                  : 'bg-neutral-800 hover:bg-neutral-700 text-white border-neutral-700 cursor-pointer'
-                              }`}
-                              title={!isExportReady ? 'कैप्शन लॉक: सभी 7 स्टेप पूरे करें' : 'कैप्शन और शेयर'}
-                            >
-                              {!isExportReady ? <Lock className="w-3.5 h-3.5 shrink-0 text-amber-400/80" /> : <Share2 className="w-3.5 h-3.5 shrink-0 text-amber-400" />}
-                              <span className="whitespace-nowrap">कैप्शन</span>
-                            </button>
+                      {/* 3. ड्राफ्ट */}
+                      <button
+                        type="button"
+                        onClick={handleSaveCurrentCardAsDraft}
+                        className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                        title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                        <span className="whitespace-nowrap">ड्राफ्ट</span>
+                      </button>
 
-                            {/* 3. ड्राफ्ट */}
-                            <button
-                              type="button"
-                              onClick={handleSaveCurrentCardAsDraft}
-                              className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-slate-800 hover:bg-slate-750 text-amber-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-amber-500/30 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                              title="प्रोजेक्ट को ड्राफ्ट्स में सुरक्षित करें"
-                            >
-                              <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                              <span className="whitespace-nowrap">ड्राफ्ट</span>
-                            </button>
-
-                            {/* 4. रिफ्रेश */}
-                            <button
-                              type="button"
-                              onClick={handleResetCard}
-                              className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                              title="नया ग्राफिक / रीसेट सेशन"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                              <span className="whitespace-nowrap">रिफ्रेश</span>
-                            </button>
-                          </div>
-
-                          {/* Progress Warning Banner if Steps < 100% (Part 11 Lock Requirement) */}
-                          {!isExportReady && (
-                            <div className="w-full mt-2 p-2 bg-amber-950/70 border border-amber-600/50 rounded-xl flex items-center justify-between text-[11px] text-amber-300 shadow-sm animate-in fade-in">
-                              <div className="flex items-center gap-1.5 font-bold">
-                                <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                <span>JPG डाउनलोड और कैप्शन के लिए कृपया सभी 7 स्टेप पूरे करें।</span>
-                              </div>
-                              <span className="font-mono font-black text-amber-400 bg-amber-900/80 px-2 py-0.5 rounded-md border border-amber-500/40 shrink-0">
-                                {editorProgress.percentage}% पूर्ण
-                              </span>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
+                      {/* 4. रिफ्रेश */}
+                      <button
+                        type="button"
+                        onClick={handleResetCard}
+                        className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
+                        title="नया ग्राफिक / रीसेट सेशन"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                        <span className="whitespace-nowrap">रिफ्रेश</span>
+                      </button>
+                    </div>
 
                     {/* Informative Note Card below Buttons */}
                     <div className="mt-3 p-3 bg-neutral-900/70 border border-neutral-800/80 rounded-xl flex items-start gap-2">
@@ -3673,19 +3361,6 @@ export default function App() {
                           <span>🎛️</span>
                           <span>एडिटर स्टेप्स (स्टेप {activeStep} / {STUDIO_STEPS.length})</span>
                         </span>
-                        {(() => {
-                          const progress = calculateEditorProgress(card, activeStep);
-                          return (
-                            <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-black shadow-sm flex items-center gap-1 ${
-                              progress.is100Percent
-                                ? 'bg-emerald-500 text-slate-950 ring-1 ring-emerald-300'
-                                : 'bg-amber-400 text-slate-950 ring-1 ring-amber-300'
-                            }`}>
-                              <span>📊</span>
-                              <span>{progress.percentage}% पूर्ण</span>
-                            </span>
-                          );
-                        })()}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black shadow-sm flex items-center gap-1">
@@ -3696,23 +3371,6 @@ export default function App() {
                         </span>
                       </div>
                     </div>
-
-                    {/* Progress Bar (0 to 100%) */}
-                    {(() => {
-                      const progress = calculateEditorProgress(card, activeStep);
-                      return (
-                        <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-300 ${
-                              progress.is100Percent
-                                ? 'bg-emerald-400'
-                                : 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                            }`}
-                            style={{ width: `${progress.percentage}%` }}
-                          />
-                        </div>
-                      );
-                    })()}
 
                     {/* Horizontal Scrollable Tabs: Step 1 to 8 */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">
@@ -4056,7 +3714,6 @@ export default function App() {
         durationSeconds={brandedLoader.durationSeconds}
         error={brandedLoader.error}
         onRetry={brandedLoader.onRetry}
-        onComplete={() => setBrandedLoader((prev) => ({ ...prev, isOpen: false, error: null }))}
         onCancel={() => setBrandedLoader((prev) => ({ ...prev, isOpen: false, error: null }))}
       />
 

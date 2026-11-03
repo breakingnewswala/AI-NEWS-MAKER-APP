@@ -13,7 +13,7 @@ import {
   UserCheck,
   FileSpreadsheet,
   Smartphone,
-  Coins, Palette,
+  Coins,
   LogOut,
   Volume2,
   VolumeX,
@@ -23,7 +23,7 @@ import { AppGuideModal } from './AppGuideModal';
 import { ReporterUser } from './LoginModal';
 import { ThemeToggle } from './ThemeToggle';
 import {
-  getUserSubscription, getCachedUserDailyDownloadStatus,
+  getUserSubscription,
   isUserAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
@@ -122,21 +122,6 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   }, [currentUser?.email]);
 
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
-  const [desktopRemainingQuota, setDesktopRemainingQuota] = useState<number | 'असीमित'>(() => {
-    const cached = getCachedUserDailyDownloadStatus();
-    if (cached?.unlimited) return 'असीमित';
-    return cached?.remainingToday ?? 10;
-  });
-  useEffect(() => {
-    const handleQuotaSync = (e: any) => {
-      if (e?.detail) {
-        if (e.detail.unlimited) setDesktopRemainingQuota('असीमित');
-        else if (typeof e.detail.remainingToday === 'number') setDesktopRemainingQuota(e.detail.remainingToday);
-      }
-    };
-    window.addEventListener('ai_news_download_status_updated', handleQuotaSync);
-    return () => window.removeEventListener('ai_news_download_status_updated', handleQuotaSync);
-  }, []);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isWalletLoading, setIsWalletLoading] = useState<boolean>(true);
 
@@ -230,9 +215,9 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   return (
     <>
       <header
-        className={`bg-[#0B132B]/95 backdrop-blur-md border-b border-slate-800/90 text-white ${
+        className={`bg-white/95 dark:bg-[#0B132B]/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800/90 text-slate-800 dark:text-white ${
           isAdminUser && adminSystemMode === 'test' ? 'relative' : 'sticky top-0'
-        } z-40 shadow-md transition-colors ${isStudio ? 'hidden md:block' : ''}`}
+        } z-40 shadow-sm dark:shadow-md transition-colors ${isStudio ? 'hidden md:block' : ''}`}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className={`h-14 flex items-center ${isStudio ? 'justify-center md:justify-between' : 'justify-between'} gap-2`}>
@@ -284,7 +269,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             </div>
 
             {/* Desktop Tab Links (md+) - Exact 5 Primary Options */}
-            <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0 shadow-xs">
+            <nav className="hidden md:flex items-center gap-1 bg-slate-100/90 dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-800/80 rounded-xl p-1 shrink-0 shadow-xs">
               <button
                 onClick={() => onNavigateToTab('home')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -372,19 +357,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 </button>
               )}
 
-              {/* Desktop Remaining Graphics Counter Badge (Only for regular users per Part 4 & 5) */}
-              {currentTab === 'home' && !isAdminUser && (
-                <div
-                  className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 bg-red-500/10 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30 dark:border-red-500/40 font-bold rounded-xl text-xs shadow-xs select-none"
-                  title="आज के शेष ग्राफ़िक्स"
-                >
-                  <Palette className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                  <span className="font-mono font-black">
-                    {desktopRemainingQuota}
-                  </span>
-                  <span className="text-[10px] hidden lg:inline">शेष ग्राफ़िक्स</span>
-                </div>
-              )}
+              {/* Theme Switcher Toggle (Light & Dark Mode) */}
+              <ThemeToggle />
 
               {/* Admin Mode / Test Mode Switcher: EXCLUSIVELY on Mobile Header in Control Panel */}
               {isUserAdmin(currentUser) && (

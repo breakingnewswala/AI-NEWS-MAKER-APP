@@ -1889,7 +1889,11 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
             if (u && u.email) {
               const key = u.email.toLowerCase().trim();
               const existing = map.get(key);
-              map.set(key, { ...existing, ...u });
+              map.set(key, {
+                ...existing,
+                ...u,
+                isBlocked: Boolean(u.isBlocked !== undefined ? u.isBlocked : existing?.isBlocked),
+              });
             }
           });
           const merged = Array.from(map.values()).sort((a, b) => {
@@ -1917,14 +1921,47 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
   return syncInFlight;
 }
 
+function getEnterpriseAdminHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed?.email) headers['x-user-email'] = parsed.email;
+      if (parsed?.role) headers['x-user-role'] = parsed.role;
+      if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
+    }
+    const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('reporter_auth_token');
+    if (directToken && !headers['authorization']) {
+      headers['authorization'] = `Bearer ${directToken}`;
+    }
+    headers['x-admin-key'] = 'master-admin';
+  } catch {}
+  return headers;
+}
+
 export async function blockUserAuthoritative(
   userEmailOrId: string,
   blockedBy?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // 1. Immediately update client local state to prevent UI flickers
+    const cleanId = (userEmailOrId || '').toLowerCase().trim();
+    const currentUsers = getPlanUsers();
+    const uIdx = currentUsers.findIndex(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanId) ||
+      (u.userId && u.userId.toLowerCase().trim() === cleanId)
+    );
+    if (uIdx >= 0) {
+      currentUsers[uIdx].isBlocked = true;
+      currentUsers[uIdx].blockedAt = Date.now();
+      localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(currentUsers));
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    }
+
     const res = await fetch(getApiUrl('/api/admin/block-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getEnterpriseAdminHeaders(),
       body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, blockedBy: blockedBy || 'Admin' }),
     });
     const json = await res.json();
@@ -1944,9 +1981,23 @@ export async function unblockUserAuthoritative(
   unblockedBy?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // 1. Immediately update client local state
+    const cleanId = (userEmailOrId || '').toLowerCase().trim();
+    const currentUsers = getPlanUsers();
+    const uIdx = currentUsers.findIndex(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanId) ||
+      (u.userId && u.userId.toLowerCase().trim() === cleanId)
+    );
+    if (uIdx >= 0) {
+      currentUsers[uIdx].isBlocked = false;
+      currentUsers[uIdx].unblockedAt = Date.now();
+      localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(currentUsers));
+      window.dispatchEvent(new Event('ai_news_plan_users_changed'));
+    }
+
     const res = await fetch(getApiUrl('/api/admin/unblock-user'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getEnterpriseAdminHeaders(),
       body: JSON.stringify({ userEmail: userEmailOrId, userId: userEmailOrId, unblockedBy: unblockedBy || 'Admin' }),
     });
     const json = await res.json();
@@ -1966,22 +2017,7 @@ export async function adminUpdateCloudUser(
   updates: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-      headers['x-admin-key'] = 'master-admin';
-    } catch {}
-
+    const headers = getEnterpriseAdminHeaders();
     const res = await fetch(getApiUrl('/api/admin/update-user'), {
       method: 'POST',
       headers,
@@ -2003,22 +2039,20 @@ export async function adminUpdateCloudUser(
 
 export async function adminDeleteCloudUser(userEmailOrId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-      headers['x-admin-key'] = 'master-admin';
-    } catch {}
+    // 1. Immediately delete from local state so user is removed instantly
+    const cleanEmail = (userEmailOrId || '').toLowerCase().trim();
+    const cleanId = (userId || userEmailOrId || '').toLowerCase().trim();
+    const remaining = getPlanUsers().filter(u => {
+      const uEmail = (u.email || '').toLowerCase().trim();
+      const uId = (u.userId || '').toLowerCase().trim();
+      if (cleanEmail && uEmail === cleanEmail) return false;
+      if (cleanId && uId === cleanId) return false;
+      return true;
+    });
+    localStorage.setItem(STORAGE_KEY_ASSIGNED_USERS, JSON.stringify(remaining));
+    window.dispatchEvent(new Event('ai_news_plan_users_changed'));
 
+    const headers = getEnterpriseAdminHeaders();
     const res = await fetch(getApiUrl('/api/admin/delete-user'), {
       method: 'POST',
       headers,

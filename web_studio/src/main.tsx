@@ -53,8 +53,20 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       });
     } catch {
       try {
-        (window as any).fetch = customFetch;
-      } catch {}
+        if (typeof Window !== 'undefined' && Window.prototype) {
+          Object.defineProperty(Window.prototype, 'fetch', {
+            value: customFetch,
+            writable: true,
+            configurable: true,
+          });
+        }
+      } catch {
+        try {
+          (window as any).fetch = customFetch;
+        } catch {
+          // Window.fetch is protected / read-only in this host sandbox
+        }
+      }
     }
   } catch (err) {
     console.warn('Global fetch interceptor skipped:', err);

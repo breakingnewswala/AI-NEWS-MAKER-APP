@@ -79,3 +79,23 @@ p,
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* Continuous Horizontal Breaking News Marquee */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-continuous {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 38s linear infinite;
+}
+
+.animate-marquee-continuous:hover {
+  animation-play-state: paused;
+}

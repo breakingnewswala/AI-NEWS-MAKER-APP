@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   RefreshCw,
   Layers,
-  Copy,
   CircleDot,
   Upload,
   RotateCcw,
@@ -97,15 +96,7 @@ import {
   getActiveHeaderPng,
   setActiveHeaderPng,
 } from '../lib/headerUtils';
-import {
-  extractLeaderFromHeadline,
-  getEffectiveSpeaker,
-  stripAllUrlsAndHyperlinks,
-  cleanCaptionParagraphs,
-  generate5BalancedHeadlineOptions,
-  fitHeadlinesTo5TierRanges,
-  cleanHeadlineText,
-} from '../lib/speakerUtils';
+import { extractLeaderFromHeadline, getEffectiveSpeaker, stripAllUrlsAndHyperlinks, cleanCaptionParagraphs } from '../lib/speakerUtils';
 import { CardPreview } from './CardPreview';
 import { getUserFirstHashtag, buildHashtags } from './CaptionModal';
 import { VoiceInputButton } from './VoiceInputButton';
@@ -388,21 +379,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   };
 
   // 8 Frame Categories for Step 1
-  
-  const getCategoryLabelHi = (catName: string) => {
-    const map: Record<string, string> = {
-      'Regular Frame': 'रेगुलर फ्रेम',
-      'Package Frame': 'पैकेज फ्रेम',
-      'Super Breaking Frame': 'सुपर ब्रेकिंग',
-      'Text Breaking Frame': 'टेक्स्ट ब्रेकिंग',
-      'बयानबाज़ी फ्रेम': 'बयानबाज़ी',
-      'Special Frame': 'स्पेशल फ्रेम',
-      'Bonus Frame': 'बोनस फ्रेम',
-      'Custom Frame': 'कस्टम फ्रेम',
-    };
-    return map[catName] || catName;
-  };
-
   const frameCategoryItems = React.useMemo(() => {
     return FRAME_CATEGORIES.map((catName) => {
       if (catName === 'Custom Frame') {
@@ -485,58 +461,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   const [isPreviewModalOpen, setIsPreviewModalOpen] = React.useState<boolean>(false);
   const [captionCopied, setCaptionCopied] = React.useState<boolean>(false);
-  const [step7CaptionStyle, setStep7CaptionStyle] = React.useState<'detailed' | 'bullet' | 'short'>('detailed');
-  const [step7CaptionText, setStep7CaptionText] = React.useState<string>('');
-
-  const computeCaptionForStyle = React.useCallback(
-    (style: 'detailed' | 'bullet' | 'short') => {
-      try {
-        const cleanHeadline = (card.headline || '').replace(/\[\/?yellow\]/g, '').trim();
-        let newsStory = '';
-        if (card.summary && card.summary.trim()) {
-          let rawSummary = stripAllUrlsAndHyperlinks(card.summary.trim());
-          const tagMatch = rawSummary.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
-          let existingTags = '';
-          if (tagMatch) {
-            existingTags = tagMatch[0].trim();
-            rawSummary = rawSummary.substring(0, tagMatch.index).trim();
-          }
-          newsStory = rawSummary || cleanHeadline || 'मुख्य समाचार';
-          const tagsToUse = buildHashtags(card.location, existingTags, card);
-          const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
-          const firstUserTag = getUserFirstHashtag(card);
-          return cleanCaptionParagraphs(combined, style, firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
-        } else {
-          newsStory = cleanHeadline || 'मुख्य समाचार';
-          const tagsToUse = buildHashtags(card.location, undefined, card);
-          const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
-          const firstUserTag = getUserFirstHashtag(card);
-          return cleanCaptionParagraphs(combined, style, firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
-        }
-      } catch (e) {
-        return card.summary || card.headline || '';
-      }
-    },
-    [card.headline, card.summary, card.location, card.channelNameEn, card.brandName]
-  );
-
-  React.useEffect(() => {
-    setStep7CaptionText(computeCaptionForStyle(step7CaptionStyle));
-  }, [computeCaptionForStyle, step7CaptionStyle]);
-
-  const handleCopyStep7Caption = () => {
-    try {
-      navigator.clipboard.writeText(step7CaptionText);
-      setCaptionCopied(true);
-      if ((window as any).showAppToast) {
-        (window as any).showAppToast('सोशल मीडिया कैप्शन सफलतापूर्वक कॉपी हो गया! ✓');
-      }
-      setTimeout(() => setCaptionCopied(false), 2500);
-    } catch (err) {
-      console.error('Failed to copy caption:', err);
-    }
-  };
-
 
   React.useEffect(() => {
     const handleOpenGraphicPreview = () => {
@@ -1287,9 +1211,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-yellow-400" />
-            स्टेप 1: टेम्पलेट्स
+            स्टेप 1: टेम्पलेट्स (Templates)
           </span>
-          <p className="text-[11px] text-neutral-400 mt-0.5">अपनी पसंद का ग्राफिक टेम्पलेट चुनें</p>
           <span className="text-xs text-neutral-400 font-medium">
             {currentFrameOptions.find((f) => (card.frameDesign || 'graphic_001') === f.id)?.name || 'फ्रेम स्टाइल'}
           </span>
@@ -1335,7 +1258,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
                   }`}
                 >
-                  <span>{getCategoryLabelHi(cat.id)}</span>
+                  <span>{cat.label}</span>
                   <span
                     className={`text-[9px] px-1 py-0.2 rounded-full font-bold ${
                       isActive ? 'bg-black/20 text-current' : 'bg-neutral-800 text-neutral-400'
@@ -1644,7 +1567,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Type className="w-3.5 h-3.5 text-yellow-400" />
-            स्टेप 3: हेडलाइन
+            स्टेप 3: हेडलाइन (मुख्य खबर का शीर्षक)
           </span>
           <div className="flex items-center gap-2">
             {(card.frameDesign as string) !== 'jacket-morning' && (
@@ -1804,7 +1727,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-xs text-neutral-400 font-medium">
-              हेडलाइन लिखें:
+              हिंदी समाचार हेडलाइन (आप जहां चाहें वहां <b>Enter</b> दबाकर 3 लाइनें बना सकते हैं):
             </label>
             <VoiceInputButton
               onTranscript={(transcript) => {
@@ -1942,7 +1865,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold flex-wrap gap-2">
             <div className="flex items-center gap-1.5">
               <Type className="w-3.5 h-3.5 text-yellow-400" />
-              <span>हेडलाइन फ़ॉन्ट:</span>
+              <span>हेडलाइन फ़ॉन्ट (Devanagari Font):</span>
               <span className="text-yellow-400 font-mono text-[11px] font-bold px-2 py-0.5 bg-neutral-900 rounded border border-neutral-800">
                 {currentActiveFont}
               </span>
@@ -1983,7 +1906,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             )}
           </div>
 
-          <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto no-scrollbar py-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
             {allHeadlineFontChoices.map((f) => {
               const isAllowed = isFontAllowedForTier(f.id, effectiveTier, effectiveAdmin);
               const isSel = currentActiveFont === f.id;
@@ -2026,13 +1949,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         </div>
 
         {/* Headline Font Size Slider & Alignment */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 bg-neutral-950 rounded-lg border border-neutral-800">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 bg-neutral-950 rounded-lg border border-neutral-800">
           {/* Font Size Slider */}
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold">
               <span className="flex items-center gap-1.5">
                 <Type className="w-3.5 h-3.5 text-yellow-400" />
-                <span>फ़ॉन्ट साइज:</span>
+                <span>फ़ॉन्ट साइज (Size):</span>
               </span>
               <div className="flex items-center gap-1">
                 <button
@@ -2079,68 +2002,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <span>छोटा (14px)</span>
               <span className="text-amber-400 font-bold">डिफ़ॉल्ट (20px)</span>
               <span>बड़ा (48px)</span>
-            </div>
-          </div>
-
-          {/* Column 2: Custom Font & Quick Text Tools (Part 16 Web Desktop balanced layout) */}
-          <div className="space-y-1.5 pt-2 sm:pt-0 border-t sm:border-t-0 sm:border-l border-neutral-800 sm:pl-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-xs text-neutral-300 font-semibold">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>कस्टम फ़ॉन्ट व टूल्स:</span>
-              </span>
-              <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">
-                VIP Desk
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {canUploadCustomFont ? (
-                <label className="flex-1 text-[11px] bg-yellow-400/20 hover:bg-yellow-400/30 text-yellow-300 border border-yellow-400/50 hover:border-yellow-400 px-2.5 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-sm">
-                  <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>+ फ़ॉन्ट अपलोड</span>
-                  <input
-                    type="file"
-                    accept=".ttf,.otf,.woff,.woff2,font/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        try {
-                          const fontName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-                          const newFont = await registerCustomFont(fontName, file);
-                          onChange({ headlineFontFamily: newFont.name });
-                          alert(`कस्टम फ़ॉन्ट "${fontName}" सफलतापूर्वक अपलोड व लागू किया गया!`);
-                        } catch (err: any) {
-                          alert(`फ़ॉन्ट अपलोड विफल: ${err.message || err}`);
-                        }
-                      }
-                    }}
-                  />
-                </label>
-              ) : (
-                <div
-                  className="flex-1 text-[11px] bg-neutral-900/80 text-neutral-500 border border-neutral-800 px-2.5 py-1.5 rounded-lg font-medium flex items-center justify-center gap-1 opacity-70 cursor-not-allowed select-none"
-                  title="कस्टम फ़ॉन्ट अपलोड केवल VIP Desk पैकेज में उपलब्ध है"
-                >
-                  <Lock className="w-3 h-3 text-neutral-500" />
-                  <span>+ कस्टम फ़ॉन्ट (🔒 VIP Desk)</span>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => onChange({ headlineFontSize: 20 })}
-                className="px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-[10px] font-bold rounded-lg border border-neutral-800 cursor-pointer transition active:scale-95"
-                title="डिफ़ॉल्ट 20px पर रीसेट करें"
-              >
-                20px रीसेट
-              </button>
-            </div>
-
-            <div className="flex justify-between items-center text-[9px] text-neutral-500 font-mono">
-              <span>हेडलाइन टाइपोग्राफी</span>
-              <span className="text-neutral-400">कस्टम फ़ॉन्ट सक्षम</span>
             </div>
           </div>
         </div>
@@ -2291,7 +2152,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
               <Type className="w-3.5 h-3.5 text-yellow-400" />
-              <span>कस्टम टेक्स्ट व फ़ॉन्ट टूल्स</span>
+              <span>कस्टम टेक्स्ट व फ़ॉन्ट टूल्स (Custom Text, Fonts & Colors)</span>
             </span>
             <button
               type="button"
@@ -2675,7 +2536,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               >
                 <div className="flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4 text-yellow-400" />
-                  <span>1 फोटो (सिंगल फ्रेम)</span>
+                  <span>1 इमेज (Single)</span>
                 </div>
                 <span className="text-[10px] font-normal opacity-80">सिंगल फुल स्क्रीन</span>
               </button>
@@ -2713,7 +2574,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <LayoutGrid className="w-4 h-4 text-yellow-400" />
-                    <span>2 फोटो (दो फोटो जोड़ें)</span>
+                    <span>2 इमेज (Two Photos)</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">2 फोटो अलग स्लॉट</span>
                 </button>
@@ -2757,7 +2618,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-yellow-400" />
-                    <span>मल्टी ग्रिड (3-4 तस्वीरें)</span>
+                    <span>मल्टी ग्रिड (3-4)</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">3 या 4 तस्वीरें</span>
                 </button>
@@ -3230,7 +3091,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
                 <Move className="w-3.5 h-3.5 text-yellow-400" />
-                फोटो क्रॉप व स्थिति
+                फोटो क्रॉप व स्थिति (Photo Crop & Move / Position)
               </span>
               <button
                 type="button"
@@ -3281,7 +3142,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <span>वॉटरमार्क व प्रतीकात्मक फोटो (Watermark):</span>
               </label>
               <span className="text-[10px] text-neutral-400">
-                50/50 लेआउट • प्रतीकात्मक फोटो व AI Generated
+                ऑफ • प्रतीकात्मक फोटो • AI जनरेटेड
               </span>
             </div>
 
@@ -3291,104 +3152,59 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <span>🔒 वॉटरमार्क विकल्प केवल एडवांस, प्रो और वीआईपी डेस्क में उपलब्ध हैं।</span>
               </div>
             ) : (
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Box 1: प्रतीकात्मक फोटो (50%) with ON/OFF switch */}
-              {(() => {
-                const isRepActive = card.photoDisclaimerType === 'representative';
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                {
+                  id: 'none',
+                  label: '1. ऑफ',
+                  desc: 'ऑफ (No Tag)',
+                  icon: '✕',
+                },
+                {
+                  id: 'representative',
+                  label: '2. प्रतीकात्मक फोटो',
+                  desc: 'सांकेतिक तस्वीर',
+                  icon: '📷',
+                },
+                {
+                  id: 'ai',
+                  label: '3. AI जनरेटेड',
+                  desc: 'AI जनरेटेड इमेज',
+                  icon: '✨',
+                },
+              ].map((opt) => {
+                const currentType = card.photoDisclaimerType || (card.showAiGenerated ? 'ai' : 'none');
+                const isSelected = currentType === opt.id;
                 return (
-                  <div
+                  <button
+                    key={opt.id}
+                    type="button"
                     onClick={() => {
-                      if (isRepActive) {
-                        onChange({
-                          photoDisclaimerType: 'none',
-                          showAiGenerated: false,
-                          photoWatermarkTag: undefined,
-                        });
-                      } else {
-                        onChange({
-                          photoDisclaimerType: 'representative',
-                          showAiGenerated: false,
-                          photoWatermarkTag: 'प्रतीकात्मक फोटो',
-                          representativePhotoText: card.representativePhotoText || 'प्रतीकात्मक फोटो',
-                        });
-                      }
+                      const selId = opt.id as 'none' | 'representative' | 'ai';
+                      onChange({
+                        photoDisclaimerType: selId,
+                        showAiGenerated: selId === 'ai',
+                        photoWatermarkTag: selId === 'ai' ? 'AI जनरेटेड' : selId === 'representative' ? 'प्रतीकात्मक फोटो' : undefined,
+                        representativePhotoText: selId === 'representative' ? (card.representativePhotoText || 'प्रतीकात्मक फोटो') : card.representativePhotoText,
+                        aiGeneratedText: selId === 'ai' ? (card.aiGeneratedText || 'AI जनरेटेड') : card.aiGeneratedText,
+                      });
                     }}
-                    className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all cursor-pointer active:scale-98 select-none ${
-                      isRepActive
-                        ? 'bg-amber-400/15 border-amber-400 shadow-md ring-1 ring-amber-400/50'
-                        : 'bg-neutral-900/90 border-neutral-800 hover:border-neutral-700'
+                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all cursor-pointer active:scale-95 ${
+                      isSelected
+                        ? 'bg-amber-400 text-neutral-950 font-black border-amber-300 shadow-md ring-1 ring-amber-300'
+                        : 'bg-neutral-900 hover:bg-neutral-850 text-neutral-300 border-neutral-800'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black flex items-center gap-1.5 text-neutral-200">
-                        <span>📷</span>
-                        <span>प्रतीकात्मक फोटो</span>
-                      </span>
-                      <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider transition-colors ${
-                          isRepActive
-                            ? 'bg-amber-400 text-neutral-950 shadow-sm'
-                            : 'bg-neutral-800 text-neutral-400'
-                        }`}
-                      >
-                        {isRepActive ? 'ON' : 'OFF'}
-                      </span>
-                    </div>
-                    <span className={`text-[10px] leading-tight ${isRepActive ? 'text-amber-300 font-bold' : 'text-neutral-400'}`}>
-                      सांकेतिक तस्वीर टैग
+                    <span className="text-xs font-black flex items-center gap-1">
+                      <span>{opt.icon}</span>
+                      <span>{opt.label}</span>
                     </span>
-                  </div>
-                );
-              })()}
-
-              {/* Box 2: AI Generated (50%) with ON/OFF switch */}
-              {(() => {
-                const isAiActive = card.photoDisclaimerType === 'ai' || card.showAiGenerated;
-                return (
-                  <div
-                    onClick={() => {
-                      if (isAiActive) {
-                        onChange({
-                          photoDisclaimerType: 'none',
-                          showAiGenerated: false,
-                          photoWatermarkTag: undefined,
-                        });
-                      } else {
-                        onChange({
-                          photoDisclaimerType: 'ai',
-                          showAiGenerated: true,
-                          photoWatermarkTag: 'AI जनरेटेड',
-                          aiGeneratedText: card.aiGeneratedText || 'AI जनरेटेड',
-                        });
-                      }
-                    }}
-                    className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all cursor-pointer active:scale-98 select-none ${
-                      isAiActive
-                        ? 'bg-blue-500/15 border-blue-400 shadow-md ring-1 ring-blue-400/50'
-                        : 'bg-neutral-900/90 border-neutral-800 hover:border-neutral-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black flex items-center gap-1.5 text-neutral-200">
-                        <span>✨</span>
-                        <span>AI Generated</span>
-                      </span>
-                      <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider transition-colors ${
-                          isAiActive
-                            ? 'bg-blue-400 text-neutral-950 shadow-sm'
-                            : 'bg-neutral-800 text-neutral-400'
-                        }`}
-                      >
-                        {isAiActive ? 'ON' : 'OFF'}
-                      </span>
-                    </div>
-                    <span className={`text-[10px] leading-tight ${isAiActive ? 'text-blue-300 font-bold' : 'text-neutral-400'}`}>
-                      AI जनरेटेड इमेज टैग
+                    <span className={`text-[10px] ${isSelected ? 'text-neutral-900/80 font-bold' : 'text-neutral-400'}`}>
+                      {opt.desc}
                     </span>
-                  </div>
+                  </button>
                 );
-              })()}
+              })}
             </div>
             )}
 
@@ -3425,7 +3241,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <span className="font-black text-amber-300 flex items-center gap-1.5 text-xs">
               <span>🔤</span>
-              <span>टेक्स्ट वॉटरमार्क</span>
+              <span>टेक्स्ट वॉटरमार्क (Text Watermark)</span>
             </span>
             {(effectiveTier === 'basic' || effectiveTier === 'advanced') && !effectiveAdmin ? (
               <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1">
@@ -3544,7 +3360,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-red-500" />
-              <span>स्थान / जिला:</span>
+              <span>स्थान / जिला (Location / District):</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3577,34 +3393,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             />
           </div>
 
-          {/* Quick District Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            {['भोपाल', 'इंदौर', 'जबलपुर', 'ग्वालियर', 'उज्जैन', 'दिल्ली', 'रायपुर', 'लखनऊ', 'पटना'].map((dist) => {
-              const isSel = (card.location || '').trim() === dist;
-              return (
-                <button
-                  key={dist}
-                  type="button"
-                  onClick={() => onChange({ location: dist, showLocation: true })}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
-                    isSel
-                      ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
-                      : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700'
-                  }`}
-                >
-                  {dist}
-                </button>
-              );
-            })}
-          </div>
-
-
           {/* Location Box Soft Color Selector */}
           <div className="pt-2 border-t border-neutral-800 space-y-2">
             <div className="flex items-center justify-between text-xs">
               <label className="text-neutral-300 font-bold text-[11px] flex items-center gap-1.5">
                 <span>🎨</span>
-                <span>लोकेशन बॉक्स बैकग्राउंड रंग:</span>
+                <span>लोकेशन बॉक्स बैकग्राउंड रंग (5 सॉफ्ट शेड्स):</span>
               </label>
               <span className="text-[10px] text-neutral-400 font-mono">
                 {card.locationBgColor || '#FFFFFF'}
@@ -3652,7 +3446,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
               <span>📅</span>
-              <span>दिनांक:</span>
+              <span>दिनांक (Date Stamp - कॉम्पैक्ट पोज़ीशन):</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
@@ -3714,7 +3508,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-            स्टेप 6: हेडर और फुटर
+            स्टेप 6 : हैडर और फुटर (Header & Footer)
           </span>
           <span className="text-xs text-neutral-400 font-medium">
             ब्रांडिंग व फुटर सेटिंग्स
@@ -3879,7 +3673,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between text-blue-300 font-bold">
             <span className="flex items-center gap-1.5">
               <Globe className="w-4 h-4 text-blue-400" />
-              <span>मास्टर ब्रांडिंग</span>
+              <span>मास्टर ब्रांडिंग (Master Branding)</span>
             </span>
             {canToggleMasterBranding ? (
               <button
@@ -4246,7 +4040,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               {/* Logo Resize Controls */}
               <div className="bg-neutral-900/90 border border-neutral-800 rounded-lg p-2.5 space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-neutral-300">लोगो का आकार:</span>
+                  <span className="font-bold text-neutral-300">लोगो का आकार (Logo Size छोटा-बड़ा):</span>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -4312,7 +4106,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>🎨</span>
-                    <span>फुटर बैकग्राउंड रंग:</span>
+                    <span>फुटर बैकग्राउंड रंग (Footer Background):</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerBgColor || '#FFFFFF'}
@@ -4421,7 +4215,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-neutral-300 font-bold flex items-center gap-1">
                     <span>✏️</span>
-                    <span>फुटर टेक्स्ट रंग:</span>
+                    <span>फुटर टेक्स्ट रंग (Footer Text Color - डिफ़ॉल्ट काला):</span>
                   </span>
                   <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
                     {card.footerTextColor || '#000000'}
@@ -4621,181 +4415,79 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div
           id="step-download"
           style={{ scrollMarginTop: '120px' }}
-          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3.5 sm:p-5 shadow-xl space-y-4 scroll-mt-28"
+          className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4 scroll-mt-28"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between pb-2.5 border-b border-neutral-800">
-            <div>
-              <h2 className="text-sm sm:text-base font-black text-amber-400 flex items-center gap-1.5 font-['Mukta']">
-                <Download className="w-4 h-4 text-amber-400" />
-                <span>स्टेप 7: डाउनलोड व कैप्शन</span>
+          <div className="flex flex-col sm:flex-row items-center justify-between text-center sm:text-left gap-2 pb-3 border-b border-neutral-800">
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <span className="w-7 h-7 rounded-full bg-amber-400 text-neutral-950 font-black flex items-center justify-center text-sm shadow-sm shrink-0">
+                7
+              </span>
+              <h2 className="text-base sm:text-lg font-black text-white font-['Mukta']">
+                डाउनलोड व कैप्शन (HD कार्ड एक्सपोर्ट व सोशल शेयर)
               </h2>
-              <p className="text-[11px] text-neutral-400 mt-0.5">
-                तैयार ग्राफिक डाउनलोड करें और सोशल मीडिया के लिए कैप्शन कॉपी करें
-              </p>
             </div>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30 shrink-0">
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30 shrink-0">
               1080×1350 HD
             </span>
           </div>
 
-          {/* Design Elements & Accents (Part 9 Step 7 Elements Requirement) */}
-          <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5 font-['Mukta']">
-                <span>🎨</span>
-                <span>अतिरिक्त डिज़ाइन एलिमेंट्स व बैज (Graphic Elements):</span>
-              </span>
-              <span className="text-[10px] text-neutral-400">वैकल्पिक स्टिकर्स व रिबन</span>
+          {/* 1. Prominent Live 4:5 Card Preview on Mobile & Desktop */}
+          <div className="bg-neutral-950 rounded-xl p-3 border border-neutral-800 flex flex-col items-center justify-center">
+            <div className="w-full max-w-[340px] aspect-[4/5] rounded-lg overflow-hidden shadow-2xl border border-neutral-700 flex items-center justify-center bg-black">
+              <CardPreview card={card} />
             </div>
-            
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {[
-                { label: '⚡ सुपर ब्रेकिंग', value: '⚡ सुपर ब्रेकिंग' },
-                { label: '🚨 एक्सक्लूसिव', value: '🚨 एक्सक्लूसिव' },
-                { label: '🔴 लाइव अपडेट', value: '🔴 लाइव अपडेट' },
-                { label: '🔍 स्पेशल पड़ताल', value: '🔍 स्पेशल पड़ताल' },
-                { label: 'बड़ी खबर', value: 'बड़ी खबर' },
-                { label: 'अलर्ट', value: 'अलर्ट' },
-              ].map((badge) => {
-                const isActive = card.breakingUrgencyBadge === badge.value || card.graphic004StampText === badge.value;
-                return (
-                  <button
-                    key={badge.value}
-                    type="button"
-                    onClick={() => {
-                      onChange({
-                        breakingUrgencyBadge: isActive ? '' : badge.value,
-                        graphic004StampText: isActive ? '' : badge.value,
-                        showGraphic004Stamp: !isActive,
-                      });
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                      isActive
-                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow font-black'
-                        : 'bg-neutral-900 border-neutral-750 text-neutral-300 hover:border-neutral-600'
-                    }`}
-                  >
-                    <span>{badge.label}</span>
-                    {isActive && <Check className="w-3 h-3 text-slate-950" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 1. Primary Action Button: सोशल मीडिया रेडी कार्ड डाउनलोड करें */}
-          <button
-            type="button"
-            onClick={() => onDownload?.()}
-            disabled={downloading}
-            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-650 via-red-600 to-red-700 hover:from-red-600 hover:to-red-700 text-white font-black text-xs sm:text-sm shadow-xl border border-red-400/80 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 disabled:opacity-50"
-          >
-            <Download className="w-4 h-4 text-amber-300" />
-            <span>{downloading ? 'कार्ड तैयार हो रहा है...' : 'सोशल मीडिया रेडी कार्ड डाउनलोड करें'}</span>
-          </button>
-
-          {/* 2. Caption Style Selector: 3 Options in 1 Row */}
-          <div className="space-y-1.5 pt-1">
-            <span className="text-xs font-bold text-neutral-200 flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-amber-400" />
-              <span>कैप्शन स्टाइल चुनें:</span>
+            <span className="text-[11px] text-neutral-400 mt-2 font-medium">
+              सोशल मीडिया (4:5 रेशियो) लाइव कार्ड प्रीव्यू
             </span>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setStep7CaptionStyle('detailed');
-                  setStep7CaptionText(computeCaptionForStyle('detailed'));
-                }}
-                className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
-                  step7CaptionStyle === 'detailed'
-                    ? 'border-yellow-400 bg-yellow-400 text-slate-950 font-black shadow-md ring-1 ring-yellow-400/60'
-                    : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
-                }`}
-              >
-                <span>📄</span>
-                <span>विस्तृत</span>
-                {step7CaptionStyle === 'detailed' && <Check className="w-3 h-3 text-red-600 font-black" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setStep7CaptionStyle('bullet');
-                  setStep7CaptionText(computeCaptionForStyle('bullet'));
-                }}
-                className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
-                  step7CaptionStyle === 'bullet'
-                    ? 'border-yellow-400 bg-yellow-400 text-slate-950 font-black shadow-md ring-1 ring-yellow-400/60'
-                    : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
-                }`}
-              >
-                <span>📌</span>
-                <span>बुलेट पॉइंट्स</span>
-                {step7CaptionStyle === 'bullet' && <Check className="w-3 h-3 text-red-600 font-black" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setStep7CaptionStyle('short');
-                  setStep7CaptionText(computeCaptionForStyle('short'));
-                }}
-                className={`py-2 px-1.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
-                  step7CaptionStyle === 'short'
-                    ? 'border-yellow-400 bg-yellow-400 text-slate-950 font-black shadow-md ring-1 ring-yellow-400/60'
-                    : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
-                }`}
-              >
-                <span>⚡</span>
-                <span>संक्षिप्त</span>
-                {step7CaptionStyle === 'short' && <Check className="w-3 h-3 text-red-600 font-black" />}
-              </button>
-            </div>
           </div>
 
-          {/* 3. Ready Caption Box */}
-          <div className="space-y-1.5 pt-1">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-neutral-200 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-amber-400" />
-                <span>तैयार कैप्शन:</span>
+          {/* 2. Exactly TWO Primary Side-by-Side Equal-Width Action Buttons */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {/* Left Red Button: सोशल मीडिया रेडी कार्ड डाउनलोड करें */}
+            <button
+              type="button"
+              onClick={() => onDownload?.()}
+              disabled={downloading}
+              className="py-3 px-2 sm:px-3 rounded-xl bg-gradient-to-r from-red-650 via-red-600 to-red-700 hover:from-red-600 hover:to-red-700 text-white font-black text-xs sm:text-sm shadow-lg border border-red-400 flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+            >
+              <Download className="w-5 h-5 text-amber-300" />
+              <span className="leading-tight">
+                {downloading ? 'कार्ड तैयार हो रहा है...' : 'सोशल मीडिया रेडी कार्ड डाउनलोड करें'}
               </span>
-              <span className="text-[10px] text-neutral-400 font-mono">
-                {step7CaptionText.length}/2000
-              </span>
-            </div>
-            <textarea
-              rows={5}
-              value={step7CaptionText}
-              onChange={(e) => setStep7CaptionText(e.target.value)}
-              placeholder="यहाँ आपका तैयार सोशल मीडिया कैप्शन प्रदर्शित होगा..."
-              className="w-full bg-neutral-950 border border-neutral-750 focus:border-amber-400 rounded-xl p-3 text-xs sm:text-sm text-neutral-200 focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed resize-none"
-            />
+            </button>
+
+            {/* Right Green Button: कैप्शन कॉपी करें */}
+            <button
+              type="button"
+              onClick={handleDirectCopyCaption}
+              className="py-3 px-2 sm:px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs sm:text-sm shadow-lg border border-emerald-400 flex flex-col items-center justify-center text-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            >
+              {captionCopied ? (
+                <>
+                  <Check className="w-5 h-5 text-yellow-300" />
+                  <span className="text-yellow-200 leading-tight">कैप्शन कॉपी हो गया! ✓</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-5 h-5 text-emerald-200" />
+                  <span className="leading-tight">कैप्शन कॉपी करें</span>
+                </>
+              )}
+            </button>
           </div>
 
-          {/* 4. Single Full-Width Copy Button */}
-          <button
-            type="button"
-            onClick={handleCopyStep7Caption}
-            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 hover:brightness-110 text-white font-black text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer active:scale-98 transition-all"
-          >
-            {captionCopied ? (
-              <>
-                <Check className="w-4 h-4 text-yellow-300" />
-                <span>सोशल मीडिया कैप्शन कॉपी हो गया! ✓</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4 text-white" />
-                <span>सोशल मीडिया कैप्शन कॉपी करें</span>
-              </>
-            )}
-          </button>
+          {/* 3. Secondary link to detailed caption editor modal */}
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={onOpenCaptionModal}
+              className="text-xs text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-4 flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>विस्तृत कैप्शन एडिटर व AI रीराइट खोलें</span>
+            </button>
+          </div>
 
-          {/* Step 7 Nav Buttons */}
-          {renderMobileStepNavigation(7)}
         </div>
       )}
         </>
