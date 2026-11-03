@@ -238,7 +238,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     const config = getTaskConfig();
     if (!config) return false;
     const authorization = String(req.headers.authorization || "");
-    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
     if (!match) return false;
     try {
       const ticket = await taskOidcVerifier.verifyIdToken({ idToken: match[1], audience: config.audience });
