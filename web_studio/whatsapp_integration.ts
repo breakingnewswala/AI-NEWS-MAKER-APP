@@ -1,5 +1,7 @@
 import { createHmac, createHash, timingSafeEqual } from "crypto";
 import { GoogleGenAI } from "@google/genai";
+import { CloudTasksClient } from "@google-cloud/tasks";
+import { OAuth2Client } from "google-auth-library";
 
 /**
  * WhatsApp Cloud API webhook foundation.
@@ -186,9 +188,100 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     return res.sendStatus(403);
   });
 
+  const taskClient = new CloudTasksClient();
+  const taskOidcVerifier = new OAuth2Client();
+  const taskPath = "/api/whatsapp/tasks/process";
+
+  const getTaskConfig = () => {
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || centralDb?.projectId || "";
+    const location = process.env.WHATSAPP_TASK_QUEUE_LOCATION || "";
+    const queue = process.env.WHATSAPP_TASK_QUEUE || "";
+    const serviceAccountEmail = process.env.WHATSAPP_TASK_SERVICE_ACCOUNT || "";
+    const baseUrl = String(process.env.WHATSAPP_TASK_BASE_URL || "").replace(/\\/$/, "");
+    const url = baseUrl ? baseUrl + taskPath : "";
+    const audience = process.env.WHATSAPP_TASK_AUDIENCE || url;
+    if (!projectId || !location || !queue || !serviceAccountEmail || !url || !audience) return null;
+    return { projectId, location, queue, serviceAccountEmail, url, audience };
+  };
+
+  const enqueueMessage = async (message: any) => {
+    const config = getTaskConfig();
+    if (!config) throw new Error("WhatsApp Cloud Tasks configuration is incomplete");
+    const messageId = String(message?.id || "");
+    const parent = taskClient.queuePath(config.projectId, config.location, config.queue);
+    const taskName = taskClient.taskPath(config.projectId, config.location, config.queue, "wa-" + sha256(messageId).slice(0, 32));
+    try {
+      await taskClient.createTask({
+        parent,
+        task: {
+          name: taskName,
+          dispatchDeadline: { seconds: 300 },
+          httpRequest: {
+            httpMethod: "POST",
+            url: config.url,
+            headers: { "Content-Type": "application/json" },
+            body: Buffer.from(JSON.stringify({ messageId, message })).toString("base64"),
+            oidcToken: {
+              serviceAccountEmail: config.serviceAccountEmail,
+              audience: config.audience,
+            },
+          },
+        },
+      });
+    } catch (error: any) {
+      // A deterministic task name makes concurrent Meta retries idempotent.
+      if (Number(error?.code) !== 6 && Number(error?.code) !== 409 && error?.code !== "ALREADY_EXISTS") throw error;
+    }
+  };
+
+  const verifyTaskRequest = async (req: any) => {
+    const config = getTaskConfig();
+    if (!config) return false;
+    const authorization = String(req.headers.authorization || "");
+    const match = authorization.match(/^Bearer\\s+(.+)$/i);
+    if (!match) return false;
+    try {
+      const ticket = await taskOidcVerifier.verifyIdToken({ idToken: match[1], audience: config.audience });
+      const payload = ticket.getPayload();
+      return Boolean(payload?.email_verified && payload.email === config.serviceAccountEmail);
+    } catch {
+      return false;
+    }
+  };
+
+  app.post(taskPath, async (req: any, res: any) => {
+    if (!(await verifyTaskRequest(req))) return res.sendStatus(401);
+    const message = req.body?.message;
+    const messageId = String(req.body?.messageId || "");
+    if (!message || !messageId || String(message.id || "") !== messageId) return res.sendStatus(400);
+    if (!centralDb?.useFirestore) return res.sendStatus(503);
+
+    const eventId = sha256(messageId);
+    const existing = await centralDb.readDoc("whatsapp_webhook_events", eventId);
+    if (existing?.success && existing.data?.status === "processed") return res.sendStatus(200);
+
+    await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+      messageId, status: "processing", processingAt: Date.now(),
+    });
+    try {
+      await processInboundMessage(message);
+      await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+        messageId, status: "processed", processedAt: Date.now(),
+      });
+      return res.sendStatus(200);
+    } catch (error: any) {
+      console.error("[WhatsApp] Durable task processing failed:", String(error?.message || error).slice(0, 240));
+      await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+        messageId, status: "retryable", lastErrorAt: Date.now(),
+      }).catch(() => undefined);
+      return res.sendStatus(500);
+    }
+  });
+
   app.post(webhookPath, async (req: any, res: any) => {
     if (!verifySignature(req)) return res.sendStatus(401);
     if (req.body?.object !== "whatsapp_business_account") return res.sendStatus(404);
+    if (!centralDb?.useFirestore || !getTaskConfig()) return res.sendStatus(503);
 
     const messages: any[] = [];
     for (const entry of req.body?.entry || []) {
@@ -197,41 +290,28 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       }
     }
 
-    // Persist webhook deliveries before acknowledging Meta; process only newly claimed IDs.
-    const messagesToProcess: any[] = [];
-    for (const message of messages) {
-      const messageId = String(message?.id || "");
-      if (!messageId) continue;
-      const eventId = sha256(messageId);
-      const existing = await centralDb?.readDoc?.("whatsapp_webhook_events", eventId);
-      if (existing?.success && existing.data?.status === "processed") continue;
-      if (existing?.success && existing.data?.status === "processing" && Date.now() - Number(existing.data?.receivedAt || 0) < 5 * 60 * 1000) continue;
-      const saved = await centralDb?.writeDoc?.("whatsapp_webhook_events", eventId, {
-        messageId, status: "processing", receivedAt: Date.now(),
-      });
-      if (!saved?.success) return res.sendStatus(500);
-      messagesToProcess.push(message);
-    }
-
-    res.sendStatus(200);
-    for (const message of messagesToProcess) {
-      const messageId = String(message?.id || "");
-      if (!messageId) continue;
-      void processInboundMessage(message).then(async () => {
-        if (centralDb?.useFirestore) {
-          await centralDb.writeDoc("whatsapp_webhook_events", sha256(messageId), {
-            messageId, status: "processed", processedAt: Date.now(),
-          });
-        }
-      }).catch(async (error: any) => {
-        console.error("[WhatsApp] Inbound processing failed:", String(error?.message || error).slice(0, 240));
+    try {
+      for (const message of messages) {
         const messageId = String(message?.id || "");
-        if (messageId && centralDb?.useFirestore) {
-          await centralDb.writeDoc("whatsapp_webhook_events", sha256(messageId), {
-            messageId, status: "failed", failedAt: Date.now(),
-          }).catch(() => undefined);
-        }
-      });
+        if (!messageId) continue;
+        const eventId = sha256(messageId);
+        const existing = await centralDb.readDoc("whatsapp_webhook_events", eventId);
+        if (existing?.success && existing.data?.status === "processed") continue;
+        if (existing?.success && existing.data?.status === "queued") continue;
+
+        // Persist before enqueueing. If enqueue fails, return 503 so Meta retries.
+        await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+          messageId, status: "enqueueing", receivedAt: Number(message.timestamp || Math.floor(Date.now() / 1000)) * 1000,
+        });
+        await enqueueMessage(message);
+        await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+          messageId, status: "queued", queuedAt: Date.now(),
+        });
+      }
+      return res.sendStatus(200);
+    } catch (error: any) {
+      console.error("[WhatsApp] Could not enqueue inbound webhook:", String(error?.message || error).slice(0, 240));
+      return res.sendStatus(503);
     }
   });
 }
