@@ -416,57 +416,8 @@ export interface PromoCodeItem {
   notes?: string;
 }
 
-// Default initial sample promo codes for demonstration
-const INITIAL_PROMO_CODES: PromoCodeItem[] = [
-  {
-    id: 'promo-basic-sample',
-    code: 'BASIC2026',
-    planId: 'basic',
-    planName: 'BASIC',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 7,
-    isActive: true,
-    notes: 'बेसिक सैंपल कोड',
-  },
-  {
-    id: 'promo-adv-sample',
-    code: 'ADVANCE2026',
-    planId: 'advanced',
-    planName: 'ADVANCE',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 30,
-    isActive: true,
-    notes: 'एडवांस सैंपल कोड',
-  },
-  {
-    id: 'promo-pro-sample',
-    code: 'PRO2026',
-    planId: 'professional',
-    planName: 'PRO',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 30,
-    isActive: true,
-    notes: 'प्रो सैंपल कोड',
-  },
-  {
-    id: 'promo-vip-sample',
-    code: 'VIP2026',
-    planId: 'ultra',
-    planName: 'VIP DESK',
-    usageType: 'one_time',
-    status: 'unused',
-    createdAt: Date.now() - 3600000,
-    durationDays: 30,
-    isActive: true,
-    notes: 'वीआईपी डेस्क सैंपल कोड',
-  },
-];
+// Default initial promo codes (Cleared to 0 as required by Master Production Reset)
+const INITIAL_PROMO_CODES: PromoCodeItem[] = [];
 
 export function getPromoCodes(): PromoCodeItem[] {
   if (typeof window === 'undefined') return INITIAL_PROMO_CODES;
@@ -478,19 +429,10 @@ export function getPromoCodes(): PromoCodeItem[] {
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
           (window as any).__promoCodesFetching = false;
-          if (data && Array.isArray(data.promoCodes) && data.promoCodes.length > 0) {
+          if (data && Array.isArray(data.promoCodes)) {
             const serverCodes = data.promoCodes;
-            const localCodes = (() => {
-              try {
-                const s = localStorage.getItem(STORAGE_KEY_PROMO_CODES);
-                return s ? JSON.parse(s) : [];
-              } catch { return []; }
-            })();
-            const map = new Map<string, PromoCodeItem>();
-            serverCodes.forEach((c: any) => map.set(c.code, c));
-            localCodes.forEach((c: any) => { if (!map.has(c.code)) map.set(c.code, c); });
-            const merged = Array.from(map.values());
-            localStorage.setItem(STORAGE_KEY_PROMO_CODES, JSON.stringify(merged));
+            localStorage.setItem(STORAGE_KEY_PROMO_CODES, JSON.stringify(serverCodes));
+            window.dispatchEvent(new CustomEvent('ai_news_promo_codes_changed'));
           }
         })
         .catch(() => { (window as any).__promoCodesFetching = false; });
@@ -499,7 +441,7 @@ export function getPromoCodes(): PromoCodeItem[] {
     const saved = localStorage.getItem(STORAGE_KEY_PROMO_CODES);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn('Error reading promo codes:', e);

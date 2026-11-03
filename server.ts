@@ -6,6 +6,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import { registerWhatsAppIntegration } from "./whatsapp_integration";
 import { initializeApp as initFirebaseAdmin, getApps as getFirebaseAdminApps } from "firebase-admin/app";
 import { getAuth as getFirebaseAdminAuth } from "firebase-admin/auth";
 
@@ -78,6 +79,9 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+
+// WhatsApp Cloud API webhook + customer support integration
+registerWhatsAppIntegration(app, centralDb);
 
 // ============================================================================
 // SECURITY HARDENING: SENSITIVE FILE ACCESS DENYLIST & EXPOSURE ELIMINATION
@@ -3273,6 +3277,9 @@ app.get("/api/admin/analytics/summary", (req, res) => {
     const aDb = loadAnalyticsDatabase();
     if (!aDb.userGraphics) aDb.userGraphics = {};
 
+    const newsDb = loadNewsDatabase();
+    const videosDb = loadVideosDatabase();
+
     // Synchronize registered users so every registered user appears in user-wise analytics
     const allUsers = loadUsersMasterDatabase();
     for (const u of allUsers) {
@@ -3297,11 +3304,39 @@ app.get("/api/admin/analytics/summary", (req, res) => {
       }
     }
 
-    const formatSection = (sec: AnalyticsData["news"]) => {
+    // IST Today & Month calculation (Asia/Kolkata timezone)
+    const nowIst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const currentMonthIst = nowIst.slice(0, 7);
+
+    let newsDownloadsToday = 0;
+    let newsDownloadsThisMonth = 0;
+    let videoDownloadsToday = 0;
+    let videoDownloadsThisMonth = 0;
+
+    for (const uRec of Object.values(aDb.userGraphics)) {
+      if (uRec.graphics) {
+        for (const g of Object.values(uRec.graphics)) {
+          if (g.hasDownloaded && g.updatedAt) {
+            try {
+              const evIst = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(g.updatedAt));
+              if (evIst === nowIst) newsDownloadsToday += 1;
+              if (evIst.slice(0, 7) === currentMonthIst) newsDownloadsThisMonth += 1;
+            } catch {}
+          }
+        }
+      }
+    }
+
+    const formatSection = (sec: AnalyticsData["news"], itemsDb: any[], isVideo: boolean = false) => {
       const sortedItems = Object.entries(sec.items || {})
         .map(([id, val]) => ({ id, ...val }))
         .sort((a, b) => (b.views + b.creates * 2) - (a.views + a.creates * 2))
         .slice(0, 8);
+
+      const queuedCount = itemsDb.filter((p: any) => p.status === 'queued').length;
+      const processingCount = itemsDb.filter((p: any) => p.status === 'processing' || p.status === 'rendering').length;
+      const completedCount = itemsDb.filter((p: any) => p.status === 'published' || p.status === 'completed' || !p.status || p.status === 'approved').length;
+      const failedCount = itemsDb.filter((p: any) => p.status === 'failed' || p.status === 'draft').length;
 
       return {
         uniqueUsers: sec.uniqueUsers?.length || 0,
@@ -3310,6 +3345,15 @@ app.get("/api/admin/analytics/summary", (req, res) => {
         generationStarts: sec.generationStarts || 0,
         generationSuccess: sec.generationSuccess || 0,
         downloads: sec.downloads || 0,
+        downloadsToday: isVideo ? videoDownloadsToday : newsDownloadsToday,
+        downloadsThisMonth: isVideo ? videoDownloadsThisMonth : newsDownloadsThisMonth,
+        statusBreakdown: {
+          totalCreated: itemsDb.length,
+          queued: queuedCount,
+          processing: processingCount,
+          completed: completedCount,
+          failed: failedCount,
+        },
         trending: sortedItems,
       };
     };
@@ -3328,8 +3372,11 @@ app.get("/api/admin/analytics/summary", (req, res) => {
 
     return res.json({
       success: true,
-      news: formatSection(aDb.news),
-      video: formatSection(aDb.video),
+      timezone: 'Asia/Kolkata',
+      todayIst: nowIst,
+      thisMonthIst: currentMonthIst,
+      news: formatSection(aDb.news, newsDb, false),
+      video: formatSection(aDb.video, videosDb, true),
       userWiseAnalytics: userWiseList,
     });
   } catch (err: any) {
@@ -3974,13 +4021,13 @@ app.get("/api/wallet/unlocked-items", (req, res) => {
   }
 });
 
-// 12B. Admin POST /api/admin/wallet/adjust-coins - Manually credit coins to a user's wallet
-app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], requireAdminMiddleware, (req, res) => {
+// 12B. Admin POST /api/admin/wallet/adjust-coins & /api/admin/wallet/edit-coins - Add, Deduct, or Set User Coins
+app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/edit-coins", "/api/admin/wallet/credit-coins"], requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन क्रेडिट कर सकते हैं" });
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन समायोजित कर सकते हैं" });
     }
-    const { email, userId, amount, coins, note, reason } = req.body || {};
+    const { email, userId, amount, coins, note, reason, adjustmentType = 'add' } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
     const coinAmount = Number(amount !== undefined ? amount : coins);
@@ -3988,8 +4035,8 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], r
     if (!cleanEmail && !cleanUserId) {
       return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी आवश्यक है" });
     }
-    if (!Number.isInteger(coinAmount) || coinAmount <= 0) {
-      return res.status(400).json({ error: "कॉइन की संख्या एक धनात्मक पूर्णांक (Positive Integer) होनी चाहिए" });
+    if (!Number.isFinite(coinAmount) || coinAmount < 0) {
+      return res.status(400).json({ error: "कॉइन की संख्या एक वैध धनात्मक संख्या होनी चाहिए" });
     }
 
     const rDb = loadRewardsDatabase();
@@ -3998,9 +4045,25 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], r
       rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
     }
 
-    // Atomically credit coins
-    rDb.wallets[walletKey].coinBalance += coinAmount;
-    rDb.wallets[walletKey].totalEarnedCoins += coinAmount;
+    const prevBalance = rDb.wallets[walletKey].coinBalance || 0;
+    let newBalance = prevBalance;
+    let diff = 0;
+    const mode = (adjustmentType || 'add').toString().toLowerCase();
+
+    if (mode === 'deduct') {
+      newBalance = Math.max(0, prevBalance - Math.floor(coinAmount));
+      diff = newBalance - prevBalance;
+    } else if (mode === 'set') {
+      newBalance = Math.max(0, Math.floor(coinAmount));
+      diff = newBalance - prevBalance;
+    } else {
+      // 'add'
+      newBalance = prevBalance + Math.floor(coinAmount);
+      diff = newBalance - prevBalance;
+      rDb.wallets[walletKey].totalEarnedCoins = (rDb.wallets[walletKey].totalEarnedCoins || 0) + Math.floor(coinAmount);
+    }
+
+    rDb.wallets[walletKey].coinBalance = newBalance;
 
     const callerEmail = (
       req.headers["x-user-email"] ||
@@ -4010,18 +4073,18 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], r
       "admin"
     ).toString().toLowerCase().trim();
     const txId = `tx-admin-adj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const txReason = note || reason || 'एडमिन द्वारा मैनुअल कॉइन समायोजन (Admin Manual Credit)';
+    const txReason = note || reason || `एडमिन समायोजन (${mode}): ${diff >= 0 ? '+' : ''}${diff} कॉइन्स`;
     const tx: ServerWalletTransaction = {
       id: txId,
       transactionId: txId,
       userId: cleanUserId,
       userEmail: cleanEmail,
-      description: `एडमिन क्रेडिट: +${coinAmount} कॉइन्स (${txReason})`,
-      transactionType: "credit",
-      type: "credit",
-      coinAmount: coinAmount,
-      amount: coinAmount,
-      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      description: `एडमिन ${mode}: ${diff >= 0 ? '+' : ''}${diff} कॉइन्स (${txReason})`,
+      transactionType: diff >= 0 ? "credit" : "debit",
+      type: diff >= 0 ? "credit" : "debit",
+      coinAmount: Math.abs(diff),
+      amount: Math.abs(diff),
+      balanceAfter: newBalance,
       status: "completed",
       createdAt: Date.now(),
       createdBy: callerEmail,
@@ -4032,10 +4095,39 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], r
 
     return res.json({
       success: true,
-      coinBalance: rDb.wallets[walletKey].coinBalance,
-      message: `सफलतापूर्वक ${coinAmount} कॉइन क्रेडिट किए गए! नया बैलेंस: ${rDb.wallets[walletKey].coinBalance}`,
+      previousBalance: prevBalance,
+      newBalance: newBalance,
+      coinBalance: newBalance,
+      difference: diff,
+      adjustmentType: mode,
+      message: `सफलतापूर्वक कॉइन समायोजित किए गए! पूर्व बैलेंस: ${prevBalance}, नया बैलेंस: ${newBalance}`,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// GET /api/admin/wallet/transactions - List wallet adjustment transactions
+app.get("/api/admin/wallet/transactions", requireAdminMiddleware, (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक ही ट्रांजेक्शन देख सकते हैं" });
+    }
+    const targetEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const targetUserId = (req.query.userId || "").toString().trim();
+    const rDb = loadRewardsDatabase();
+    let txs = rDb.transactions || [];
+    if (targetEmail || targetUserId) {
+      txs = txs.filter((t: any) =>
+        (targetEmail && (t.userEmail || "").toLowerCase().trim() === targetEmail) ||
+        (targetUserId && (t.userId || "").toString().trim() === targetUserId)
+      );
+    }
+    return res.json({
+      success: true,
+      transactions: txs.slice(0, 50),
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -4130,6 +4222,9 @@ const DEFAULT_SEED_CHANNELS: StoredChannel[] = [
 ];
 
 function loadChannelsDatabase(): StoredChannel[] {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && (centralDb.cache as any).channels && (centralDb.cache as any).channels.size > 0) {
+    return Array.from((centralDb.cache as any).channels.values());
+  }
   try {
     if (fs.existsSync(CHANNELS_DB_FILE)) {
       const raw = fs.readFileSync(CHANNELS_DB_FILE, "utf-8");
@@ -4144,8 +4239,25 @@ function loadChannelsDatabase(): StoredChannel[] {
 }
 
 function saveChannelsDatabase(channels: StoredChannel[]): boolean {
+  if (centralDb && centralDb.useFirestore) {
+    if (!(centralDb.cache as any).channels) (centralDb.cache as any).channels = new Map();
+    (centralDb.cache as any).channels.clear();
+    for (const ch of channels) {
+      const docId = (ch.id || `res_${Date.now()}`).toString().trim();
+      (centralDb.cache as any).channels.set(docId, ch);
+      centralDb.writeDoc("restricted_channels", docId, ch).catch(() => {});
+    }
+  }
   try {
-    fs.writeFileSync(CHANNELS_DB_FILE, JSON.stringify(channels, null, 2), "utf-8");
+    const locs = resolveAllDatabaseLocations("restricted_channels_db.json");
+    const jsonStr = JSON.stringify(channels, null, 2);
+    for (const loc of locs) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
     return true;
   } catch (e) {
     console.error("Error writing restricted_channels_db.json:", e);
@@ -4153,14 +4265,14 @@ function saveChannelsDatabase(channels: StoredChannel[]): boolean {
   }
 }
 
-// GET /api/channels
-app.get("/api/channels", (_req, res) => {
+// GET /api/channels & /api/admin/channels
+app.get(["/api/channels", "/api/admin/channels"], (_req, res) => {
   const channels = loadChannelsDatabase();
   return res.json({ success: true, channels });
 });
 
-// POST /api/channels
-app.post("/api/channels", (req, res) => {
+// POST /api/channels & /api/admin/channels
+app.post(["/api/channels", "/api/admin/channels"], (req, res) => {
   try {
     const payload = req.body;
     if (!payload || !payload.channelName) {
@@ -4188,15 +4300,15 @@ app.post("/api/channels", (req, res) => {
   }
 });
 
-// PUT /api/channels/:id (Edit name, change to Hindi, update website)
-app.put("/api/channels/:id", (req, res) => {
+// PUT /api/channels/:id & /api/admin/channels/:id (Edit name, change to Hindi, update website)
+app.put(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
     let channels = loadChannelsDatabase();
     const idx = channels.findIndex((c) => c.id === id);
     if (idx >= 0) {
-      channels[idx] = { ...channels[idx], ...updates };
+      channels[idx] = { ...channels[idx], ...updates, updatedAt: Date.now() };
       saveChannelsDatabase(channels);
       return res.json({ success: true, channel: channels[idx], channels });
     }
@@ -4206,8 +4318,27 @@ app.put("/api/channels/:id", (req, res) => {
   }
 });
 
-// DELETE /api/channels/:id
-app.delete("/api/channels/:id", (req, res) => {
+// PATCH /api/channels/:id/toggle & /api/admin/channels/:id/toggle
+app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, res) => {
+  try {
+    const { id } = req.params;
+    let channels = loadChannelsDatabase();
+    const idx = channels.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      const currentActive = (channels[idx] as any).isActive !== false;
+      (channels[idx] as any).isActive = !currentActive;
+      (channels[idx] as any).updatedAt = Date.now();
+      saveChannelsDatabase(channels);
+      return res.json({ success: true, channel: channels[idx], channels });
+    }
+    return res.status(404).json({ error: "चैनल नहीं मिला" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// DELETE /api/channels/:id & /api/admin/channels/:id
+app.delete(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
@@ -5022,7 +5153,16 @@ function reconcileAllUsers() {
           socialIcons: p.socialIcons,
           role: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'superadmin' : ((p.role as any) || 'user')),
           tier: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'ultra' : ((p.tier as any) || 'basic')),
-          planName: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'VIP DESK' : (p.tier === 'ultra' ? 'VIP DESK' : 'BASIC')),
+          planName: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'VIP DESK' : (
+            p.tier === 'ultra' ? 'VIP DESK' :
+            (p.tier === 'professional' || p.tier === 'pro') ? 'PRO' :
+            (p.tier === 'advanced' || p.tier === 'advance') ? 'ADVANCE' :
+            'BASIC'
+          )),
+          hasActivePaidPlan: Boolean(p.hasActivePaidPlan || p.tier === 'advanced' || p.tier === 'pro' || p.tier === 'ultra'),
+          activatedVia: p.activatedVia || (p.tier && p.tier !== 'basic' ? 'cashfree' : undefined),
+          activatedAt: p.activatedAt,
+          expiresAt: p.expiresAt,
           isBlocked: false,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
@@ -5146,9 +5286,10 @@ function reconcileAllUsers() {
         name: p2?.fullName || 'ऋतुराज तोमर (ओरछा)',
         fullName: p2?.fullName || 'ऋतुराज तोमर (ओरछा)',
         username: p2?.username || 'riturajtomarorchha',
-        role: 'user',
-        tier: 'basic',
-        planName: 'BASIC',
+        role: 'reporter',
+        tier: 'advanced',
+        planName: 'ADVANCE',
+        hasActivePaidPlan: true,
         channelName: p2?.channelNameHi || 'ओरछा बुंदेलखंड न्यूज़',
         channelNameHi: p2?.channelNameHi || 'ओरछा बुंदेलखंड न्यूज़',
         channelNameEn: p2?.channelNameEn || 'Orchha Bundelkhand News',
@@ -5156,19 +5297,20 @@ function reconcileAllUsers() {
         channelLogoPngUrl: p2?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
         channelLogoGifUrl: '',
         channelLogoType: 'png',
-        mobile: p2?.mobileNumber || '9876543211',
-        mobileNumber: p2?.mobileNumber || '9876543211',
+        mobile: p2?.mobileNumber || '9425112233',
+        mobileNumber: p2?.mobileNumber || '9425112233',
         district: p2?.district || 'ओरछा / निवाड़ी',
         websiteUrl: p2?.websiteUrl || 'ainewsmaker.online',
         isBlocked: false,
         isProfileLocked: false,
-        createdAt: 1791892712618,
-        trialStartedAt: 1791892712618,
+        createdAt: 1791810000000,
+        trialStartedAt: 1791810000000,
         trialEndsAt: 1792497512618,
-        activatedAt: 1791892712618,
-        expiresAt: 1792497512618,
-        activatedVia: 'Free 7-Day VIP Trial',
-        lastLoginAt: 1791892712618,
+        activatedAt: 1793630565084,
+        expiresAt: 1825166565084,
+        activatedVia: 'cashfree',
+        lastLoginAt: Date.now(),
+        isTrialExpired: false,
       });
     }
 
@@ -5181,7 +5323,7 @@ function reconcileAllUsers() {
         name: p3?.fullName || 'Anmol Sandesh',
         fullName: p3?.fullName || 'Anmol Sandesh',
         username: p3?.username || 'anmolsandesh',
-        role: 'user',
+        role: 'reporter',
         tier: 'basic',
         planName: 'BASIC',
         channelName: p3?.channelNameHi || 'अनमोल संदेश',
@@ -5205,6 +5347,56 @@ function reconcileAllUsers() {
         activatedVia: 'Free 7-Day VIP Trial',
         lastLoginAt: 1791892712618,
       });
+    }
+
+    // Dynamic Authoritative Payment Reconciliation: ensure all users with verified paid orders are active
+    try {
+      const allPayments = loadPaymentsDatabase();
+      for (const u of userMap.values()) {
+        const uEmail = (u.email || '').toLowerCase().trim();
+        if (!uEmail || isProtectedAdminAccount(uEmail)) continue;
+
+        const userPaidOrders = allPayments.filter((p: any) => {
+          const pEmail = (p.customerEmail || p.userEmail || '').toLowerCase().trim();
+          const isMatch = pEmail === uEmail || (u.userId && (p.userId === u.userId || p.customerPhone === u.mobile || p.customerPhone === u.mobileNumber));
+          const isSuccess = p.orderStatus === 'PAID' || p.paymentStatus === 'SUCCESS';
+          return isMatch && isSuccess;
+        });
+
+        if (userPaidOrders.length > 0) {
+          userPaidOrders.sort((a: any, b: any) => Number(b.paidAt || b.createdAt || 0) - Number(a.paidAt || a.createdAt || 0));
+          const latest = userPaidOrders[0];
+          const rawPlan = String(latest.planKey || latest.planId || latest.planName || '').toLowerCase();
+          let targetTier = u.tier || 'basic';
+          let targetPlanName = u.planName || 'BASIC';
+
+          if (rawPlan.includes('pro') || rawPlan.includes('professional')) {
+            targetTier = 'pro';
+            targetPlanName = 'PRO';
+          } else if (rawPlan.includes('vip') || rawPlan.includes('ultra') || rawPlan.includes('desk')) {
+            targetTier = 'ultra';
+            targetPlanName = 'VIP DESK';
+          } else if (rawPlan.includes('advance') || rawPlan.includes('advanced')) {
+            targetTier = 'advanced';
+            targetPlanName = 'ADVANCE';
+          } else if (rawPlan.includes('basic') || rawPlan.includes('starter')) {
+            targetTier = 'basic';
+            targetPlanName = 'BASIC';
+          }
+
+          u.tier = targetTier;
+          u.planName = targetPlanName;
+          u.hasActivePaidPlan = true;
+          u.activatedVia = 'cashfree';
+          if (!u.activatedAt) u.activatedAt = Number(latest.paidAt || latest.createdAt || Date.now());
+          if (!u.expiresAt || Number(u.expiresAt) < Date.now()) {
+            u.expiresAt = Math.max(Number(u.expiresAt || 0), (Number(latest.paidAt || latest.createdAt || Date.now())) + 30 * 86400000);
+          }
+          u.isTrialExpired = false;
+        }
+      }
+    } catch (payReconcileErr) {
+      console.warn('[Payment Reconcile Error in Users]:', payReconcileErr);
     }
 
     const reconciledList = Array.from(userMap.values()).filter(u => !isUserTombstoned(u.email) && !isUserTombstoned(u.userId));
@@ -5931,6 +6123,190 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
   }
 });
 
+// GET /api/admin/users/:userId/profile - Get profile details for admin editing
+app.get("/api/admin/users/:userId/profile", requireAdminMiddleware, (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही प्रोफाइल देख सकते हैं" });
+    }
+    const { userId } = req.params;
+    const cleanId = (userId || "").toString().trim().toLowerCase();
+    const allUsers = loadUsersMasterDatabase();
+    const allProfiles = loadProfilesDatabase();
+    const u = allUsers.find(x =>
+      (x.userId && x.userId.toLowerCase() === cleanId) ||
+      (x.email && x.email.toLowerCase() === cleanId) ||
+      (x.username && x.username.toLowerCase() === cleanId)
+    );
+    const p = allProfiles[cleanId] || (u?.email ? allProfiles[u.email.toLowerCase()] : null) || {};
+    if (!u && !p.userId && !p.email) {
+      return res.status(404).json({ error: "उपयोगकर्ता नहीं मिला" });
+    }
+    return res.json({
+      success: true,
+      user: u || null,
+      profile: {
+        userId: u?.userId || p.userId || cleanId,
+        email: u?.email || p.email || "",
+        fullName: p.fullName || u?.fullName || u?.name || "",
+        name: u?.name || p.name || p.fullName || "",
+        username: p.username || u?.username || "",
+        mobileNumber: p.mobileNumber || u?.mobile || u?.mobileNumber || "",
+        channelName: p.channelNameHi || u?.channelName || "",
+        channelNameHi: p.channelNameHi || u?.channelName || "",
+        channelNameEn: p.channelNameEn || "",
+        channelLogoUrl: p.channelLogoUrl || u?.channelLogoUrl || "",
+        channelLogoPngUrl: p.channelLogoPngUrl || u?.channelLogoPngUrl || p.channelLogoUrl || "",
+        channelLogoGifUrl: p.channelLogoGifUrl || u?.channelLogoGifUrl || "",
+        channelLogoType: p.channelLogoType || u?.channelLogoType || (p.channelLogoGifUrl ? 'gif' : 'png'),
+        websiteUrl: p.websiteUrl || u?.websiteUrl || "",
+        district: p.district || u?.district || p.location || "",
+        location: p.location || u?.location || p.district || "",
+        state: p.state || u?.state || "",
+        socialIcons: p.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: true, linkedin: true },
+        socialLinks: p.socialLinks || {},
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// PUT /api/admin/users/:userId/profile - Admin edit profile details (preserves memberships & wallets)
+app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, res) => {
+  const release = await userDbLock.acquire();
+  try {
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin) {
+      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक ही प्रोफाइल संपादित कर सकते हैं" });
+    }
+    const { userId } = req.params;
+    const cleanId = (userId || "").toString().trim().toLowerCase();
+    const updates = req.body || {};
+
+    const allUsers = loadUsersMasterDatabase();
+    const uIdx = allUsers.findIndex(x =>
+      (x.userId && x.userId.toLowerCase() === cleanId) ||
+      (x.email && x.email.toLowerCase() === cleanId) ||
+      (x.username && x.username.toLowerCase() === cleanId)
+    );
+    if (uIdx === -1) {
+      return res.status(404).json({ error: "उपयोगकर्ता नहीं मिला" });
+    }
+    const targetUser = allUsers[uIdx];
+    const isTargetMaster = isProtectedAdminAccount(targetUser.email) || targetUser.role === 'superadmin';
+    const isTargetAdmin = targetUser.role === 'admin';
+
+    // Role safety check: only Master Admin can edit Master Admin or Admin accounts
+    if ((isTargetMaster || isTargetAdmin) && !isMaster) {
+      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन ही एडमिन खातों को संपादित कर सकते हैं" });
+    }
+
+    // Update authorized profile fields (NEVER touch tier, planName, coins, wallet, payments, hasActivePaidPlan)
+    if (updates.name !== undefined || updates.fullName !== undefined) {
+      const n = (updates.fullName || updates.name || "").toString().trim();
+      targetUser.name = n;
+      targetUser.fullName = n;
+    }
+    if (updates.username !== undefined) {
+      targetUser.username = updates.username.toString().trim().replace(/^@/, '');
+    }
+    if (updates.mobileNumber !== undefined || updates.mobile !== undefined) {
+      const mob = (updates.mobileNumber || updates.mobile || "").toString().trim();
+      targetUser.mobile = mob;
+      targetUser.mobileNumber = mob;
+    }
+    if (updates.channelName !== undefined || updates.channelNameHi !== undefined) {
+      const chName = (updates.channelNameHi || updates.channelName || "").toString().trim();
+      targetUser.channelName = chName;
+      targetUser.channelNameHi = chName;
+    }
+    if (updates.channelNameEn !== undefined) {
+      targetUser.channelNameEn = updates.channelNameEn.toString().trim();
+    }
+    if (updates.websiteUrl !== undefined) {
+      targetUser.websiteUrl = updates.websiteUrl.toString().trim();
+    }
+    if (updates.district !== undefined || updates.location !== undefined) {
+      const dist = (updates.district || updates.location || "").toString().trim();
+      targetUser.district = dist;
+      targetUser.location = dist;
+    }
+    if (updates.state !== undefined) {
+      targetUser.state = updates.state.toString().trim();
+    }
+    if (updates.channelLogoUrl !== undefined) {
+      targetUser.channelLogoUrl = updates.channelLogoUrl;
+    }
+    if (updates.channelLogoPngUrl !== undefined) {
+      targetUser.channelLogoPngUrl = updates.channelLogoPngUrl;
+    }
+    if (updates.channelLogoGifUrl !== undefined) {
+      targetUser.channelLogoGifUrl = updates.channelLogoGifUrl;
+    }
+    if (updates.channelLogoType !== undefined) {
+      targetUser.channelLogoType = updates.channelLogoType;
+    }
+    targetUser.updatedAt = Date.now();
+
+    // Save updated users master database
+    saveUsersMasterDatabase(allUsers);
+
+    // Also update users_profiles_db
+    const allProfiles = loadProfilesDatabase();
+    const profileKey = (targetUser.email || targetUser.userId || cleanId).toLowerCase().trim();
+    const currentProf = allProfiles[profileKey] || allProfiles[cleanId] || {};
+    const updatedProf = {
+      ...currentProf,
+      userId: targetUser.userId,
+      email: targetUser.email,
+      fullName: targetUser.fullName || targetUser.name,
+      name: targetUser.name || targetUser.fullName,
+      username: targetUser.username,
+      mobile: targetUser.mobile,
+      mobileNumber: targetUser.mobile,
+      channelName: targetUser.channelName,
+      channelNameHi: targetUser.channelNameHi || targetUser.channelName,
+      channelNameEn: targetUser.channelNameEn || currentProf.channelNameEn || "",
+      websiteUrl: targetUser.websiteUrl,
+      district: targetUser.district,
+      location: targetUser.location,
+      state: targetUser.state,
+      channelLogoUrl: targetUser.channelLogoUrl,
+      channelLogoPngUrl: targetUser.channelLogoPngUrl,
+      channelLogoGifUrl: targetUser.channelLogoGifUrl,
+      channelLogoType: targetUser.channelLogoType,
+      socialIcons: updates.socialIcons || currentProf.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: true, linkedin: true },
+      socialLinks: updates.socialLinks || currentProf.socialLinks || {},
+      updatedAt: Date.now(),
+    };
+    allProfiles[profileKey] = updatedProf;
+    if (targetUser.userId) allProfiles[targetUser.userId] = updatedProf;
+    saveProfilesDatabase(allProfiles);
+
+    // Sync to Firestore
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.writeDoc("users", targetUser.email, targetUser).catch(() => {});
+      if (targetUser.userId && targetUser.userId !== targetUser.email) {
+        centralDb.writeDoc("users", targetUser.userId, targetUser).catch(() => {});
+      }
+      centralDb.writeDoc("user_profiles", profileKey, updatedProf).catch(() => {});
+    }
+
+    return res.json({
+      success: true,
+      message: "यूज़र प्रोफाइल सफलतापूर्वक अपडेट कर दी गई",
+      user: targetUser,
+      profile: updatedProf,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  } finally {
+    release();
+  }
+});
+
 // POST /api/users/sync & POST /api/admin/register-user
 app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
   const release = await userDbLock.acquire();
@@ -6099,9 +6475,11 @@ app.post("/api/notifications/mark-read", (req, res) => {
 const ADMIN_NOTIFS_READ_FILE = path.join(process.cwd(), "admin_notifications_read_db.json");
 
 function loadAdminReadNotificationIds(): Set<string> {
-  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has('admin_notifs_read')) {
-    const list = centralDb.cache.systemConfig.get('admin_notifs_read');
-    if (Array.isArray(list)) return new Set(list);
+  if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache.systemConfig.has('admin_notifs_read')) {
+      const list = centralDb.cache.systemConfig.get('admin_notifs_read');
+      if (Array.isArray(list)) return new Set(list);
+    }
   }
   try {
     if (fs.existsSync(ADMIN_NOTIFS_READ_FILE)) {
@@ -6114,13 +6492,14 @@ function loadAdminReadNotificationIds(): Set<string> {
 }
 
 function saveAdminReadNotificationIds(ids: Set<string>): void {
+  const readArray = Array.from(ids);
   if (centralDb && centralDb.useFirestore) {
-    centralDb.saveAdminNotificationsRead(Array.from(ids)).catch(() => {});
-    return;
+    centralDb.cache.systemConfig.set('admin_notifs_read', readArray);
+    centralDb.saveAdminNotificationsRead(readArray).catch(() => {});
   }
   try {
     const locs = resolveAllDatabaseLocations("admin_notifications_read_db.json");
-    const jsonStr = JSON.stringify(Array.from(ids), null, 2);
+    const jsonStr = JSON.stringify(readArray, null, 2);
     for (const loc of locs) {
       try {
         const dir = path.dirname(loc);
@@ -6368,7 +6747,7 @@ app.post("/api/admin/news/publish-rss", (req, res) => {
 app.post("/api/admin/notifications/mark-read", (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const reqEmail = (req.body?.email || req.body?.adminEmail || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
     const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === 'admin' || userRes.role === 'superadmin';
     if (!isAdmin) {
       return res.status(403).json({ error: "एडमिन प्रमाणीकरण आवश्यक है" });
@@ -6396,10 +6775,13 @@ app.post("/api/admin/notifications/mark-read", (req, res) => {
       if (category === 'requests' || !category) {
         loadLimitIncreaseRequests().forEach(r => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
       }
+      try {
+        loadNotificationsDatabase().forEach(n => readIds.add(String(n.id)));
+      } catch {}
     }
 
     saveAdminReadNotificationIds(readIds);
-    return res.json({ success: true, totalRead: readIds.size });
+    return res.json({ success: true, totalRead: readIds.size, message: "सभी नोटिफिकेशन पढ़े गए मार्क कर दिए गए।" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -18464,21 +18846,97 @@ function saveCategoriesDatabase(categories: any[]): void {
   }
 }
 
-app.get("/api/categories", (_req, res) => {
+// GET /api/categories & /api/admin/categories
+app.get(["/api/categories", "/api/admin/categories"], (_req, res) => {
   res.json({
     success: true,
     categories: loadCategoriesDatabase(),
   });
 });
 
-app.post("/api/categories", requireMasterAdminMiddleware, (req, res) => {
+// POST /api/categories & /api/admin/categories
+app.post(["/api/categories", "/api/admin/categories"], (req, res) => {
   try {
-    const { categories } = req.body;
+    const { categories, name, nameHi, nameEn, id, icon, isActive } = req.body || {};
+    let allCats = loadCategoriesDatabase();
+
+    // Batch update mode
     if (Array.isArray(categories) && categories.length > 0) {
       saveCategoriesDatabase(categories);
       return res.json({ success: true, message: "Categories saved successfully", categories });
     }
-    return res.status(400).json({ error: "Invalid categories format" });
+
+    // Single category create mode
+    const catName = (nameHi || name || nameEn || "").toString().trim();
+    if (!catName) {
+      return res.status(400).json({ error: "श्रेणी का नाम अनिवार्य है" });
+    }
+    const cleanId = (id || catName).toLowerCase().replace(/[^a-z0-9_]/g, '') || `cat_${Date.now()}`;
+    if (allCats.some(c => c.id === cleanId)) {
+      return res.status(409).json({ error: "यह श्रेणी पहले से मौजूद है" });
+    }
+    const newCat = {
+      id: cleanId,
+      name: catName,
+      nameHi: nameHi || catName,
+      nameEn: nameEn || "",
+      icon: icon || "📁",
+      isActive: isActive !== false,
+      order: allCats.length + 1,
+      createdAt: Date.now(),
+    };
+    allCats.push(newCat);
+    saveCategoriesDatabase(allCats);
+    return res.json({ success: true, category: newCat, categories: allCats });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// PUT /api/categories/:id & /api/admin/categories/:id
+app.put(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body || {};
+    let allCats = loadCategoriesDatabase();
+    const idx = allCats.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      allCats[idx] = { ...allCats[idx], ...updates, updatedAt: Date.now() };
+      saveCategoriesDatabase(allCats);
+      return res.json({ success: true, category: allCats[idx], categories: allCats });
+    }
+    return res.status(404).json({ error: "श्रेणी नहीं मिली" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// PATCH /api/categories/:id/toggle & /api/admin/categories/:id/toggle
+app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], (req, res) => {
+  try {
+    const { id } = req.params;
+    let allCats = loadCategoriesDatabase();
+    const idx = allCats.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      allCats[idx].isActive = !allCats[idx].isActive;
+      allCats[idx].updatedAt = Date.now();
+      saveCategoriesDatabase(allCats);
+      return res.json({ success: true, category: allCats[idx], categories: allCats });
+    }
+    return res.status(404).json({ error: "श्रेणी नहीं मिली" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// DELETE /api/categories/:id & /api/admin/categories/:id
+app.delete(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+  try {
+    const { id } = req.params;
+    let allCats = loadCategoriesDatabase();
+    allCats = allCats.filter(c => c.id !== id);
+    saveCategoriesDatabase(allCats);
+    return res.json({ success: true, categories: allCats });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -18682,15 +19140,18 @@ app.post("/api/admin/plans", requireMasterAdminMiddleware, (req, res) => {
 // --- CASHFREE PAYMENT GATEWAY INTEGRATION ---
 // ==========================================
 function loadPaymentsDatabase(): any[] {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.payments.size > 0) {
-    return Array.from(centralDb.cache.payments.values());
+  if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache.payments && centralDb.cache.payments.size > 0) {
+      return Array.from(centralDb.cache.payments.values());
+    }
   }
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
       if (fs.existsSync(loc)) {
         const raw = fs.readFileSync(loc, "utf-8");
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     }
   } catch {}
@@ -18699,8 +19160,10 @@ function loadPaymentsDatabase(): any[] {
 
 function savePaymentsDatabase(data: any[]): void {
   if (centralDb && centralDb.useFirestore) {
+    if (!centralDb.cache.payments) centralDb.cache.payments = new Map();
     for (const p of data) {
       const orderId = (p.orderId || p.cfOrderId || `order_${Date.now()}`).toString().trim();
+      centralDb.cache.payments.set(orderId, p);
       centralDb.recordPayment(orderId, p).catch(() => {});
     }
   }
@@ -18769,8 +19232,31 @@ function savePackageCouponsDatabase(data: any[]): void {
   }
 }
 
-// Admin: Get all package coupons (Master Admin Only)
-app.get("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
+// Public & Client: Get active promo codes / package coupons
+app.get(["/api/promo-codes", "/api/package-coupons"], (req, res) => {
+  try {
+    const coupons = loadPackageCouponsDatabase();
+    const promoCodes = coupons.map((c: any) => ({
+      id: c.id,
+      code: c.code,
+      name: c.name || c.code,
+      discount: c.discountValue || c.discountAmount || c.discount || 0,
+      discountType: c.discountType || 'percent',
+      planId: c.applicablePackage || c.planId || 'all',
+      maxUses: c.maxUsageLimit || c.maxUses || 100,
+      usedCount: c.currentUsageCount || c.usedCount || 0,
+      expiresAt: c.expiryDate || c.expiresAt || null,
+      isActive: c.isActive !== false,
+      createdAt: c.createdAt || new Date().toISOString(),
+    }));
+    return res.json({ success: true, promoCodes, coupons });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err), promoCodes: [], coupons: [] });
+  }
+});
+
+// Admin: Get all package coupons / promo codes (Master Admin Only)
+app.get(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMasterAdminMiddleware, (req, res) => {
   try {
     const coupons = loadPackageCouponsDatabase();
     return res.json({ success: true, coupons });
@@ -18779,79 +19265,143 @@ app.get("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) =
   }
 });
 
-// Admin: Create or update package coupon (Master Admin Only)
-app.post("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
+// Admin: Create or update package coupon / promo code (Master Admin Only)
+app.post(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMasterAdminMiddleware, (req, res) => {
   try {
-    const { id, code, name, discountAmount, applicablePackage, expiryDate, maxUsageLimit, perUserLimit, isActive } = req.body || {};
-    if (!code || !discountAmount) {
-      return res.status(400).json({ error: "कूपन कोड और छूट राशि (₹) अनिवार्य हैं।" });
+    const {
+      id,
+      code,
+      name,
+      discountType = "fixed",
+      discountValue,
+      discountAmount,
+      minPurchaseAmount = 0,
+      maxDiscount,
+      applicablePackage = "ALL",
+      startDate,
+      expiryDate,
+      maxUsageLimit,
+      perUserLimit = 1,
+      isActive = true,
+      description,
+    } = req.body || {};
+
+    if (!code || typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({ error: "प्रोमो / कूपन कोड दर्ज करना अनिवार्य है।" });
     }
-    const cleanCode = String(code).trim().toUpperCase();
+
+    const cleanCode = String(code).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    if (!cleanCode) {
+      return res.status(400).json({ error: "अमान्य कूपन कोड। केवल अंग्रेजी अक्षर, अंक, - और _ अनुमत हैं।" });
+    }
+
+    const rawVal = Number(discountValue !== undefined ? discountValue : discountAmount);
+    if (isNaN(rawVal) || rawVal <= 0) {
+      return res.status(400).json({ error: "छूट मान (Discount Value) एक धनात्मक संख्या होनी चाहिए।" });
+    }
+
+    const isPercent = discountType === "percentage";
+    if (isPercent && (rawVal < 1 || rawVal > 100)) {
+      return res.status(400).json({ error: "प्रतिशत छूट 1% से 100% के बीच होनी चाहिए।" });
+    }
+
+    const cleanMinPurchase = Math.max(0, Number(minPurchaseAmount) || 0);
+    const cleanMaxDiscount = maxDiscount ? Math.max(1, Number(maxDiscount)) : undefined;
+
+    if (startDate && expiryDate) {
+      const sTime = new Date(startDate).getTime();
+      const eTime = new Date(expiryDate).getTime();
+      if (!isNaN(sTime) && !isNaN(eTime) && eTime < sTime) {
+        return res.status(400).json({ error: "समाप्ति तिथि (Expiry Date) प्रारंभ तिथि से पहले नहीं हो सकती।" });
+      }
+    }
+
     const coupons = loadPackageCouponsDatabase();
     const now = Date.now();
+
+    // Check duplicate code across different coupon IDs
+    const conflictIdx = coupons.findIndex((c: any) => c.code.toUpperCase() === cleanCode && (id ? c.id !== id : true));
+    if (conflictIdx >= 0) {
+      return res.status(409).json({ error: `प्रोमो कोड '${cleanCode}' पहले से पंजीकृत है। कृपया अलग कोड चुनें।` });
+    }
+
     const existingIdx = coupons.findIndex((c: any) => (id && c.id === id) || c.code.toUpperCase() === cleanCode);
 
     if (existingIdx >= 0) {
+      const prev = coupons[existingIdx];
       coupons[existingIdx] = {
-        ...coupons[existingIdx],
+        ...prev,
         code: cleanCode,
         name: (name || cleanCode).trim(),
-        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        discountType: isPercent ? "percentage" : "fixed",
+        discountValue: rawVal,
+        discountAmount: isPercent ? rawVal : rawVal,
+        minPurchaseAmount: cleanMinPurchase,
+        maxDiscount: cleanMaxDiscount,
         applicablePackage: applicablePackage || "ALL",
+        startDate: startDate || "",
         expiryDate: expiryDate || "",
         maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : undefined,
-        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        perUserLimit: Math.max(1, Number(perUserLimit) || 1),
         isActive: isActive !== false,
+        description: (description || "").trim(),
         updatedAt: now,
       };
       savePackageCouponsDatabase(coupons);
-      return res.json({ success: true, coupon: coupons[existingIdx], message: "पैकेज कूपन सफलतापूर्वक अपडेट हुआ।" });
+      return res.json({ success: true, coupon: coupons[existingIdx], message: `प्रोमो कोड '${cleanCode}' सफलतापूर्वक अपडेट हुआ।` });
     } else {
       const newCoupon = {
         id: id || `coupon_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
         code: cleanCode,
         name: (name || cleanCode).trim(),
-        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        discountType: isPercent ? "percentage" : "fixed",
+        discountValue: rawVal,
+        discountAmount: isPercent ? rawVal : rawVal,
+        minPurchaseAmount: cleanMinPurchase,
+        maxDiscount: cleanMaxDiscount,
         applicablePackage: applicablePackage || "ALL",
+        startDate: startDate || "",
         expiryDate: expiryDate || "",
         maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : undefined,
-        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        perUserLimit: Math.max(1, Number(perUserLimit) || 1),
         usageCount: 0,
         usedBy: [],
         isActive: isActive !== false,
+        description: (description || "").trim(),
         createdAt: now,
         updatedAt: now,
       };
-      coupons.push(newCoupon);
+      coupons.unshift(newCoupon);
       savePackageCouponsDatabase(coupons);
-      return res.json({ success: true, coupon: newCoupon, message: "नया पैकेज कूपन सफलतापूर्वक बनाया गया।" });
+      return res.json({ success: true, coupon: newCoupon, message: `नया प्रोमो कोड '${cleanCode}' सफलतापूर्वक बनाया गया।` });
     }
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
 
-// Admin: Delete package coupon (Master Admin Only)
-app.delete("/api/admin/package-coupons/:id", requireMasterAdminMiddleware, (req, res) => {
+// Admin: Delete package coupon / promo code (Master Admin Only)
+app.delete(["/api/admin/package-coupons/:id", "/api/admin/promo-codes/:id"], requireMasterAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let coupons = loadPackageCouponsDatabase();
+    const cleanId = String(id).toUpperCase().trim();
     const initialLen = coupons.length;
-    coupons = coupons.filter((c: any) => c.id !== id && c.code !== id);
+    coupons = coupons.filter((c: any) => c.id !== id && c.code.toUpperCase() !== cleanId);
     if (coupons.length === initialLen) {
-      return res.status(404).json({ error: "कूपन नहीं मिला।" });
+      return res.status(404).json({ error: "प्रोमो कोड नहीं मिला।" });
     }
     savePackageCouponsDatabase(coupons);
-    return res.json({ success: true, message: "पैकेज कूपन सफलतापूर्वक हटाया गया।" });
+    return res.json({ success: true, message: "प्रोमो कोड सफलतापूर्वक हटाया गया।" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
 
-// User / Checkout: Validate package coupon code
-app.post("/api/package-coupons/validate", (req, res) => {
+// User / Checkout: Validate package coupon / promo code
+app.post(["/api/package-coupons/validate", "/api/promo-codes/validate"], (req, res) => {
   try {
-    const { code, planKey, planId, userEmail } = req.body || {};
+    const { code, planKey, planId, userEmail, orderAmount: reqOrderAmount } = req.body || {};
     if (!code) {
       return res.status(400).json({ valid: false, error: "कृपया कूपन कोड दर्ज करें।" });
     }
@@ -18860,19 +19410,25 @@ app.post("/api/package-coupons/validate", (req, res) => {
     const coupon = coupons.find((c: any) => c.code.toUpperCase() === cleanCode);
 
     if (!coupon) {
-      return res.status(404).json({ valid: false, error: "यह कूपन कोड अमान्य है।" });
+      return res.status(404).json({ valid: false, error: "यह प्रोमो कोड अमान्य है।" });
     }
     if (!coupon.isActive) {
-      return res.status(400).json({ valid: false, error: "यह कूपन कोड वर्तमान में निष्क्रिय है।" });
+      return res.status(400).json({ valid: false, error: "यह प्रोमो कोड वर्तमान में निष्क्रिय है।" });
+    }
+    if (coupon.startDate) {
+      const sTime = new Date(coupon.startDate).getTime();
+      if (!isNaN(sTime) && Date.now() < sTime) {
+        return res.status(400).json({ valid: false, error: "यह प्रोमो कोड अभी सक्रिय नहीं हुआ है।" });
+      }
     }
     if (coupon.expiryDate) {
       const exp = new Date(coupon.expiryDate).getTime() + 24 * 60 * 60 * 1000 - 1;
-      if (Date.now() > exp) {
-        return res.status(400).json({ valid: false, error: "यह कूपन कोड समाप्त (Expire) हो चुका है।" });
+      if (!isNaN(exp) && Date.now() > exp) {
+        return res.status(400).json({ valid: false, error: "यह प्रोमो कोड समाप्त (Expire) हो चुका है।" });
       }
     }
     if (coupon.maxUsageLimit && (coupon.usageCount || 0) >= coupon.maxUsageLimit) {
-      return res.status(400).json({ valid: false, error: "यह कूपन अपनी अधिकतम उपयोग सीमा तक पहुँच चुका है।" });
+      return res.status(400).json({ valid: false, error: "यह प्रोमो कोड अपनी अधिकतम उपयोग सीमा तक पहुँच चुका है।" });
     }
 
     const cleanEmail = (userEmail || "").trim().toLowerCase();
@@ -18880,7 +19436,7 @@ app.post("/api/package-coupons/validate", (req, res) => {
       const userUses = coupon.usedBy.filter((e: string) => e.toLowerCase() === cleanEmail).length;
       const limit = coupon.perUserLimit || 1;
       if (userUses >= limit) {
-        return res.status(400).json({ valid: false, error: `आप इस कूपन कोड का पहले ही ${limit} बार उपयोग कर चुके हैं।` });
+        return res.status(400).json({ valid: false, error: `आप इस प्रोमो कोड का पहले ही ${limit} बार उपयोग कर चुके हैं।` });
       }
     }
 
@@ -18891,15 +19447,33 @@ app.post("/api/package-coupons/validate", (req, res) => {
       if (!matches) {
         return res.status(400).json({
           valid: false,
-          error: `यह कूपन केवल '${coupon.applicablePackage}' पैकेज के लिए मान्य है।`,
+          error: `यह प्रोमो कोड केवल '${coupon.applicablePackage}' पैकेज के लिए मान्य है।`,
         });
       }
     }
 
     const catalog = loadPlansCatalogDatabase();
     const plan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    const originalAmount = plan?.priceNum || 999;
-    const discountAmount = Math.min(originalAmount - 1, coupon.discountAmount);
+    const originalAmount = Number(reqOrderAmount) || plan?.priceNum || 999;
+
+    if (coupon.minPurchaseAmount && originalAmount < coupon.minPurchaseAmount) {
+      return res.status(400).json({
+        valid: false,
+        error: `इस प्रोमो कोड के लिए न्यूनतम खरीद राशि ₹${coupon.minPurchaseAmount} होनी चाहिए।`,
+      });
+    }
+
+    let calculatedDiscount = 0;
+    if (coupon.discountType === "percentage") {
+      calculatedDiscount = Math.floor((originalAmount * (coupon.discountValue || coupon.discountAmount)) / 100);
+      if (coupon.maxDiscount && coupon.maxDiscount > 0) {
+        calculatedDiscount = Math.min(calculatedDiscount, coupon.maxDiscount);
+      }
+    } else {
+      calculatedDiscount = Number(coupon.discountValue || coupon.discountAmount) || 0;
+    }
+
+    const discountAmount = Math.max(0, Math.min(originalAmount - 1, calculatedDiscount));
     const finalPayableAmount = Math.max(1, originalAmount - discountAmount);
 
     return res.json({
@@ -18908,13 +19482,15 @@ app.post("/api/package-coupons/validate", (req, res) => {
         id: coupon.id,
         code: coupon.code,
         name: coupon.name,
-        discountAmount: coupon.discountAmount,
+        discountType: coupon.discountType || "fixed",
+        discountValue: coupon.discountValue || coupon.discountAmount,
+        discountAmount,
         applicablePackage: coupon.applicablePackage,
       },
       originalAmount,
       discountAmount,
       finalPayableAmount,
-      message: `कूपन '${coupon.code}' लागू हुआ! ₹${discountAmount} की छूट मिली।`,
+      message: `प्रोमो कोड '${coupon.code}' लागू हुआ! ₹${discountAmount} की छूट मिली।`,
     });
   } catch (err: any) {
     return res.status(500).json({ valid: false, error: cleanErrorMessage(err) });

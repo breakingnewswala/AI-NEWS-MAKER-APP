@@ -446,6 +446,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAdminAuthHeaders(),
           'x-admin-key': 'master-admin',
           'x-admin-email': adminEmail,
           'x-user-role': 'admin',
@@ -1066,8 +1067,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [assignCustomActive, setAssignCustomActive] = useState<boolean>(true);
   const [assignCustomMsg, setAssignCustomMsg] = useState<string>('');
 
-  // Editing branding modal for a specific user
+  // Editing profile/branding modal for a specific user
   const [editingBrandingUser, setEditingBrandingUser] = useState<PlanUserRecord | null>(null);
+  const [editUserFullName, setEditUserFullName] = useState<string>('');
+  const [editUserUsername, setEditUserUsername] = useState<string>('');
+  const [editUserDistrict, setEditUserDistrict] = useState<string>('');
+  const [editUserState, setEditUserState] = useState<string>('');
   const [editBrandNameHi, setEditBrandNameHi] = useState<string>('');
   const [editBrandNameEn, setEditBrandNameEn] = useState<string>('');
   const [editBrandWebsite, setEditBrandWebsite] = useState<string>('');
@@ -1082,8 +1087,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   });
   const [editBrandMsg, setEditBrandMsg] = useState<string>('');
 
-  // Admin Coin Credit Dialog state
+  // Admin Coin Management Dialog state (Add / Deduct / Set)
   const [coinTargetUser, setCoinTargetUser] = useState<PlanUserRecord | null>(null);
+  const [coinAdjustType, setCoinAdjustType] = useState<'add' | 'deduct' | 'set'>('add');
   const [coinAmountInput, setCoinAmountInput] = useState<string>('');
   const [coinNoteInput, setCoinNoteInput] = useState<string>('');
   const [isSubmittingCoins, setIsSubmittingCoins] = useState<boolean>(false);
@@ -1091,6 +1097,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [coinDialogSuccess, setCoinDialogSuccess] = useState<string | null>(null);
   const [targetUserBalance, setTargetUserBalance] = useState<number | null>(null);
   const [isLoadingTargetBalance, setIsLoadingTargetBalance] = useState<boolean>(false);
+
+  // Category & Channel Manager subtab state
+  const [catChanTab, setCatChanTab] = useState<'categories' | 'channels'>('categories');
 
   // Reload data on events
   // Reload data on events & Auto-sync users in real-time
@@ -1318,11 +1327,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   const handleOpenBrandingEditor = (user: PlanUserRecord) => {
     setEditingBrandingUser(user);
-    setEditBrandNameHi(user.channelName || '');
-    setEditBrandNameEn(user.channelName || '');
+    setEditUserFullName(user.fullName || user.name || '');
+    setEditUserUsername((user.username || '').replace(/^@/, ''));
+    setEditUserDistrict(user.district || (user as any).location || '');
+    setEditUserState(user.state || '');
+    setEditBrandNameHi(user.channelName || (user as any).channelNameHi || '');
+    setEditBrandNameEn((user as any).channelNameEn || user.channelName || '');
     setEditBrandWebsite(user.websiteUrl || '');
-    setEditBrandMobile(user.mobile || '');
-    setEditBrandLogoUrl(user.channelLogoUrl || '');
+    setEditBrandMobile(user.mobile || (user as any).mobileNumber || '');
+    setEditBrandLogoUrl(user.channelLogoUrl || (user as any).channelLogoPngUrl || '');
     setEditBrandSocials(
       user.socialIcons || {
         youtube: true,
@@ -1338,49 +1351,53 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const handleSaveUserBranding = async () => {
     if (!editingBrandingUser) return;
     const updates = {
+      fullName: editUserFullName.trim(),
+      name: editUserFullName.trim(),
+      username: editUserUsername.trim().replace(/^@/, ''),
+      district: editUserDistrict.trim(),
+      location: editUserDistrict.trim(),
+      state: editUserState.trim(),
       channelName: editBrandNameHi || editBrandNameEn,
       channelNameHi: editBrandNameHi || editBrandNameEn,
       channelNameEn: editBrandNameEn,
-      websiteUrl: editBrandWebsite,
-      mobile: editBrandMobile,
+      websiteUrl: editBrandWebsite.trim(),
+      mobile: editBrandMobile.trim(),
+      mobileNumber: editBrandMobile.trim(),
       channelLogoUrl: editBrandLogoUrl,
+      channelLogoPngUrl: editBrandLogoUrl,
       socialIcons: editBrandSocials,
     };
     adminUpdateUserRecord(editingBrandingUser.email, updates);
     try {
-      await adminUpdateCloudUser(editingBrandingUser.userId || editingBrandingUser.email, updates);
-      const res = await fetch(getApiUrl('/api/user-profile'), {
-        method: 'POST',
+      const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
+      const targetId = editingBrandingUser.userId || editingBrandingUser.email;
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(targetId)}/profile`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...getAdminAuthHeaders(),
           'x-admin-key': 'master-admin',
-          'x-user-role': 'superadmin',
-          'x-admin-email': currentUser?.email || editingBrandingUser.email,
-          'x-user-email': currentUser?.email || editingBrandingUser.email,
+          'x-user-role': 'admin',
+          'x-admin-email': adminEmail,
         },
-        body: JSON.stringify({
-          userId: editingBrandingUser.userId || editingBrandingUser.email,
-          uid: editingBrandingUser.userId || editingBrandingUser.email,
-          email: editingBrandingUser.email,
-          ...updates,
-        }),
+        body: JSON.stringify(updates),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        setEditBrandMsg(`⚠️ ${errData.error || 'सर्वर पर ब्रांडिंग सुरक्षित करने में त्रुटि।'}`);
+        setEditBrandMsg(`⚠️ ${errData.error || 'सर्वर पर प्रोफाइल सुरक्षित करने में त्रुटि।'}`);
         return;
       }
-    } catch (e) {
-      console.warn('Error saving user branding to server:', e);
-      setEditBrandMsg(`⚠️ नेटवर्क त्रुटि: ${e?.message || 'ब्रांडिंग सुरक्षित नहीं हो सकी।'}`);
+      setEditBrandMsg('✅ यूज़र प्रोफाइल व विवरण सफलतापूर्वक सुरक्षित हो गया!');
+      setTimeout(() => {
+        setEditingBrandingUser(null);
+        setEditBrandMsg('');
+      }, 1200);
+    } catch (e: any) {
+      console.warn('Error saving user profile to server:', e);
+      setEditBrandMsg(`⚠️ नेटवर्क त्रुटि: ${e?.message || 'प्रोफाइल सुरक्षित नहीं हो सकी।'}`);
       return;
     }
     setPlanUsers(getPlanUsers());
-    setEditBrandMsg('✅ यूज़र ब्रांडिंग विवरण सफलतापूर्वक सुरक्षित हो गया!');
-    setTimeout(() => {
-      setEditingBrandingUser(null);
-      setEditBrandMsg('');
-    }, 1500);
   };
 
   const handleOpenCoinCreditDialog = async (user: PlanUserRecord) => {
@@ -1408,8 +1425,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const handleConfirmCreditCoins = async () => {
     if (!coinTargetUser) return;
     const amount = parseInt(coinAmountInput, 10);
-    if (isNaN(amount) || amount <= 0) {
-      setCoinDialogError('कृपया एक मान्य और धनात्मक संख्या (Positive Integer) दर्ज करें।');
+    if (isNaN(amount) || amount < 0) {
+      setCoinDialogError('कृपया एक मान्य संख्या दर्ज करें।');
       return;
     }
     setIsSubmittingCoins(true);
@@ -1420,6 +1437,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAdminAuthHeaders(),
           'x-admin-email': adminEmail,
           'x-user-email': adminEmail,
         },
@@ -1428,19 +1446,20 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           email: coinTargetUser.email,
           userId: coinTargetUser.userId || coinTargetUser.email,
           amount,
-          note: coinNoteInput.trim() || 'एडमिन मैनुअल कॉइन क्रेडिट',
+          adjustmentType: coinAdjustType,
+          note: coinNoteInput.trim() || `एडमिन कॉइन समायोजन (${coinAdjustType})`,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setCoinDialogError(data.error || 'कॉइन क्रेडिट करने में विफल');
+        setCoinDialogError(data.error || 'कॉइन समायोजित करने में विफल');
         setIsSubmittingCoins(false);
         return;
       }
 
-      const newBal = data.wallet?.coinBalance ?? ((targetUserBalance || 0) + amount);
+      const newBal = data.newBalance ?? data.coinBalance ?? data.wallet?.coinBalance ?? 0;
       setTargetUserBalance(newBal);
-      setCoinDialogSuccess(`सफलतापूर्वक ${amount} कॉइन क्रेडिट किए गए! नया बैलेंस: ${newBal}`);
+      setCoinDialogSuccess(`सफलतापूर्वक कॉइन समायोजित किए गए! नया बैलेंस: ${newBal}`);
 
       // Update user in planUsers state
       setPlanUsers((prev) =>
@@ -3701,15 +3720,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                   </button>
                                 )}
 
-                                {/* Branding Edit Button */}
+                                {/* Edit Profile Button */}
                                 <button
                                   type="button"
                                   onClick={() => handleOpenBrandingEditor(u)}
-                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
-                                  title="ब्रांडिंग व लोगो संपादित करें"
+                                  className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                  title="यूज़र प्रोफाइल व विवरण संपादित करें"
                                 >
-                                  <Edit2 className="w-3 h-3" />
-                                  <span>ब्रांडिंग</span>
+                                  <Edit2 className="w-3 h-3 text-amber-400" />
+                                  <span>✏️ एडिट प्रोफाइल</span>
                                 </button>
 
                                 {/* Delete User Button */}
@@ -3749,7 +3768,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <div>
                     <h3 className="text-base font-bold text-white flex items-center gap-2">
                       <Edit2 className="w-4 h-4 text-amber-400" />
-                      <span>यूज़र ब्रांडिंग विवरण संपादित करें</span>
+                      <span>यूज़र प्रोफाइल व ब्रांडिंग विवरण संपादित करें</span>
                     </h3>
                     <p className="text-xs text-slate-400 font-mono mt-0.5">
                       {editingBrandingUser.name || editingBrandingUser.email} ({editingBrandingUser.email})
@@ -3770,9 +3789,55 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
                 )}
 
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">पूरा नाम (Full Name)</label>
+                      <input
+                        type="text"
+                        value={editUserFullName}
+                        onChange={(e) => setEditUserFullName(e.target.value)}
+                        placeholder="उदा. राहुल शर्मा"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">यूज़रनेम (Username)</label>
+                      <input
+                        type="text"
+                        value={editUserUsername}
+                        onChange={(e) => setEditUserUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                        placeholder="उदा. rahul_news"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">ज़िला / स्थान (District / City)</label>
+                      <input
+                        type="text"
+                        value={editUserDistrict}
+                        onChange={(e) => setEditUserDistrict(e.target.value)}
+                        placeholder="उदा. भोपाल"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">राज्य (State)</label>
+                      <input
+                        type="text"
+                        value={editUserState}
+                        onChange={(e) => setEditUserState(e.target.value)}
+                        placeholder="उदा. मध्य प्रदेश"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">चैनल नाम</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">चैनल / पोर्टल नाम</label>
                     <input
                       type="text"
                       value={editBrandNameHi}
@@ -3934,16 +3999,57 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   </div>
                 </div>
 
+                {/* Adjustment Mode Selector */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCoinAdjustType('add')}
+                    className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 transition cursor-pointer ${
+                      coinAdjustType === 'add'
+                        ? 'bg-amber-500/25 border-amber-400 text-amber-300 font-black'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>➕ जोड़ें (Add)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCoinAdjustType('deduct')}
+                    className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 transition cursor-pointer ${
+                      coinAdjustType === 'deduct'
+                        ? 'bg-rose-500/25 border-rose-400 text-rose-300 font-black'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>➖ घटाएं (Deduct)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCoinAdjustType('set')}
+                    className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1 transition cursor-pointer ${
+                      coinAdjustType === 'set'
+                        ? 'bg-cyan-500/25 border-cyan-400 text-cyan-300 font-black'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>⚙️ सेट करें (Set)</span>
+                  </button>
+                </div>
+
                 {/* Coin amount input */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    जोड़ने हेतु कॉइन संख्या (Coins to Add) *
+                    {coinAdjustType === 'add'
+                      ? 'जोड़ने हेतु कॉइन संख्या (Coins to Add) *'
+                      : coinAdjustType === 'deduct'
+                      ? 'घटाने हेतु कॉइन संख्या (Coins to Deduct) *'
+                      : 'नया कॉइन बैलेंस निर्धारित करें (Set New Balance) *'}
                   </label>
                   <div className="relative">
                     <Coins className="w-4 h-4 absolute left-3 top-3 text-amber-400 pointer-events-none" />
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       step="1"
                       value={coinAmountInput}
                       onChange={(e) => setCoinAmountInput(e.target.value)}
@@ -3952,7 +4058,18 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white font-bold focus:outline-hidden focus:border-amber-400 disabled:opacity-50"
                     />
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">कृपया धनात्मक पूर्णांक (Positive Integer) दर्ज करें</p>
+                  {coinAmountInput && (
+                    <div className="mt-1.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] flex items-center justify-between">
+                      <span className="text-slate-400">नया अनुमानित बैलेंस:</span>
+                      <span className="font-bold text-amber-300 font-mono">
+                        {coinAdjustType === 'add'
+                          ? (targetUserBalance ?? 0) + (parseInt(coinAmountInput, 10) || 0)
+                          : coinAdjustType === 'deduct'
+                          ? Math.max(0, (targetUserBalance ?? 0) - (parseInt(coinAmountInput, 10) || 0))
+                          : Math.max(0, parseInt(coinAmountInput, 10) || 0)} कॉइन्स
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Optional note input */}
@@ -4706,133 +4823,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             )}
 
-            {/* Flow Banner */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
-              <span className="font-bold text-amber-400">लाइव RSS डेटा प्रवाह (Live RSS Flow):</span>
-              <div className="flex items-center gap-1.5 font-mono text-slate-200">
-                <span className="px-2 py-0.5 bg-red-950/80 border border-red-600/60 rounded text-red-300 font-bold">1. LIVE RSS SOURCE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-amber-950/80 border border-amber-600/60 rounded text-amber-300 font-bold">2. PRODUCTION FETCH</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-blue-950/80 border border-blue-600/60 rounded text-blue-300 font-bold">3. XML PARSING</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">4. DATABASE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">5. HOME FEED</span>
-              </div>
-            </div>
 
-            {/* Single Category Manager for RSS & Web Links (Synchronized with Home Feed) */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <FolderTree className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-bold text-white">एकल श्रेणी प्रबंधक (Single Category Manager - RSS, Web & Home Feed)</span>
-                </div>
-                <span className="text-[10px] text-amber-300 font-bold">{feedCategories.filter((c) => c.isActive).length} श्रेणियां सक्रिय</span>
-              </div>
 
-              <form onSubmit={handleAddCategoryUnified} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newCatInput}
-                  onChange={(e) => setNewCatInput(e.target.value)}
-                  placeholder="नई श्रेणी का नाम जोड़ें (उदा. खेती-किसानी, स्वास्थ्य, क्राइम, टेक...)"
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:border-amber-400 focus:outline-hidden"
-                />
-                <button
-                  type="submit"
-                  className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1 shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>+ श्रेणी जोड़ें</span>
-                </button>
-              </form>
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                {feedCategories.map((cat) => (
-                  <div
-                    key={cat.id}
-                    className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
-                      cat.isActive
-                        ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-sm'
-                        : 'bg-slate-950/60 border-slate-800/80 text-slate-500 opacity-70'
-                    }`}
-                  >
-                    {/* Active/Inactive Toggle */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleCatStatus(cat.id)}
-                      className={`text-[9px] px-1.5 py-0.5 rounded font-black cursor-pointer transition ${
-                        cat.isActive
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                          : 'bg-slate-800 text-slate-500 border border-slate-700'
-                      }`}
-                      title={cat.isActive ? 'क्लिक करके निष्क्रिय करें' : 'क्लिक करके सक्रिय करें'}
-                    >
-                      {cat.isActive ? 'सक्रिय' : 'निष्क्रिय'}
-                    </button>
-
-                    {/* Category Name or Inline Edit Input */}
-                    {editingCatId === cat.id ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={editingCatName}
-                          onChange={(e) => setEditingCatName(e.target.value)}
-                          className="px-2 py-0.5 bg-slate-950 border border-amber-400 rounded text-xs text-white focus:outline-hidden w-28 sm:w-36"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEditCat(cat.id);
-                            if (e.key === 'Escape') setEditingCatId(null);
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEditCat(cat.id)}
-                          className="px-1.5 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded cursor-pointer"
-                        >
-                          सेव
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingCatId(null)}
-                          className="p-0.5 text-slate-400 hover:text-white"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="font-semibold">{cat.name}</span>
-                    )}
-
-                    {/* Edit Button */}
-                    {editingCatId !== cat.id && (
-                      <button
-                        type="button"
-                        onClick={() => handleStartEditCat(cat)}
-                        className="text-slate-400 hover:text-amber-400 transition cursor-pointer p-0.5"
-                        title="श्रेणी का नाम संपादित करें (Edit)"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                    )}
-
-                    {/* Delete Button */}
-                    {feedCategories.length > 1 && editingCatId !== cat.id && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteCategoryUnified(cat.id)}
-                        className="text-slate-500 hover:text-red-400 transition cursor-pointer p-0.5"
-                        title="श्रेणी हटाएं"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
 
             {/* Add New RSS Source Form */}
             <form
@@ -5306,19 +5299,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
 
-            {/* Flow Banner */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
-              <span className="font-bold text-cyan-400">लाइव वेब स्क्रैपिंग डेटा प्रवाह (Live Web Scraping Flow):</span>
-              <div className="flex items-center gap-1.5 font-mono text-slate-200">
-                <span className="px-2 py-0.5 bg-cyan-950/80 border border-cyan-600/60 rounded text-cyan-300 font-bold">1. LIVE WEB SOURCE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-blue-950/80 border border-blue-600/60 rounded text-blue-300 font-bold">2. SCRAPE & PARSE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-emerald-950/80 border border-emerald-600/60 rounded text-emerald-300 font-bold">3. DATABASE</span>
-                <span>→</span>
-                <span className="px-2 py-0.5 bg-purple-950/80 border border-purple-600/60 rounded text-purple-300 font-bold">4. HOME FEED</span>
-              </div>
-            </div>
+
 
             {/* Unified Website News Portal Manager */}
             <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 space-y-3">
@@ -5538,7 +5519,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 11: प्रतिबंधित चैनल सुरक्षा सूची (RESTRICTED CHANNELS) - Master Admin Only */}
+        {/* STEP 11: श्रेणी व चैनल मैनेजर (CATEGORY & CHANNEL MANAGER) - Master Admin Only */}
         {/* ========================================================================= */}
         {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'restricted' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
@@ -5548,21 +5529,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'restricted' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
           >
             <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-600 to-red-700 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <ShieldAlert className="w-5 h-5 text-white" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-indigo-600 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <FolderTree className="w-5 h-5 text-white" />
               </div>
               <div className="min-w-0">
                 <span className="text-sm sm:text-base font-black text-white block truncate">
-                  प्रतिबंधित चैनल सुरक्षा सूची
+                  श्रेणी व चैनल मैनेजर
                 </span>
                 <p className="text-xs text-slate-400 truncate mt-0.5">
-                  राष्ट्रीय न्यूज़ ब्रांड्स सुरक्षा सूची व लोगो अनुमति
+                  लाइव न्यूज़ श्रेणियां, आधिकारिक चैनल्स व मीडिया पोर्टल्स का केंद्रीय प्रबंधन
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2.5 shrink-0">
               <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
-                {`${restrictedList.length} चैनल्स`}
+                {`${feedCategories.length} श्रेणियां | ${restrictedList.length} चैनल्स`}
               </span>
               <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'restricted' ? 'rotate-180 text-amber-400' : ''}`} />
             </div>
@@ -5578,15 +5559,155 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 <div className="space-y-1">
                   <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण</h4>
                   <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
-                    यह सेक्शन (<strong>9. प्रतिबंधित चैनल सुरक्षा सूची</strong>) केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
+                    यह सेक्शन केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
                   </p>
-                </div>
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold">
-                  <Crown className="w-4 h-4 text-amber-400" /> केवल सुपर एडमिन ही यूज़र्स, प्रोमो कोड, प्लान्स व सुरक्षा सूची नियंत्रित कर सकते हैं
                 </div>
               </div>
             ) : (
         <div className="space-y-6">
+          {/* Subtab Selector for Category & Channel Manager */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+            <button
+              type="button"
+              onClick={() => setCatChanTab('categories')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                catChanTab === 'categories'
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-slate-950 shadow-lg'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <FolderTree className="w-4 h-4" />
+              <span>1. श्रेणी प्रबंधन (Category Manager) ({feedCategories.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCatChanTab('channels')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                catChanTab === 'channels'
+                  ? 'bg-gradient-to-r from-rose-600 to-red-700 text-white shadow-lg'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4" />
+              <span>2. चैनल व पोर्टल डायरेक्टरी (Channel & Portal Directory) ({restrictedList.length})</span>
+            </button>
+          </div>
+
+          {/* TAB 1: CATEGORY MANAGER */}
+          {catChanTab === 'categories' && (
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <FolderTree className="w-4 h-4 text-amber-400" />
+                  <h4 className="text-sm font-black text-white">केंद्रीय समाचार श्रेणी प्रबंधन (News Categories)</h4>
+                </div>
+                <span className="text-xs text-amber-300 font-bold px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  {feedCategories.filter((c) => c.isActive).length} / {feedCategories.length} श्रेणियां सक्रिय
+                </span>
+              </div>
+
+              <form onSubmit={handleAddCategoryUnified} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newCatInput}
+                  onChange={(e) => setNewCatInput(e.target.value)}
+                  placeholder="नई श्रेणी का नाम जोड़ें (उदा. खेती-किसानी, स्वास्थ्य, क्राइम, टेक...)"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-400 focus:outline-hidden"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ नई श्रेणी जोड़ें</span>
+                </button>
+              </form>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                {feedCategories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-2 transition ${
+                      cat.isActive
+                        ? 'bg-slate-900 border-slate-700 text-slate-100 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800/80 text-slate-500 opacity-60'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCatStatus(cat.id)}
+                      className={`text-[9px] px-2 py-0.5 rounded-md font-black cursor-pointer transition ${
+                        cat.isActive
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-500 border border-slate-700'
+                      }`}
+                      title={cat.isActive ? 'क्लिक करके निष्क्रिय करें' : 'क्लिक करके सक्रिय करें'}
+                    >
+                      {cat.isActive ? 'सक्रिय' : 'निष्क्रिय'}
+                    </button>
+
+                    {editingCatId === cat.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={editingCatName}
+                          onChange={(e) => setEditingCatName(e.target.value)}
+                          className="px-2 py-0.5 bg-slate-950 border border-amber-400 rounded text-xs text-white focus:outline-hidden w-28 sm:w-36"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEditCat(cat.id);
+                            if (e.key === 'Escape') setEditingCatId(null);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditCat(cat.id)}
+                          className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded cursor-pointer"
+                        >
+                          सेव
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCatId(null)}
+                          className="p-0.5 text-slate-400 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-semibold">{cat.name}</span>
+                    )}
+
+                    {editingCatId !== cat.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditCat(cat)}
+                        className="text-slate-400 hover:text-amber-400 transition cursor-pointer p-0.5"
+                        title="श्रेणी का नाम संपादित करें"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                    )}
+
+                    {feedCategories.length > 1 && editingCatId !== cat.id && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategoryUnified(cat.id)}
+                        className="text-slate-500 hover:text-red-400 transition cursor-pointer p-0.5"
+                        title="श्रेणी हटाएं"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: CHANNEL & PORTAL DIRECTORY */}
+          {catChanTab === 'channels' && (
+          <div className="space-y-6">
           {/* Top Explanation Banner */}
           <div className="bg-gradient-to-r from-red-950/80 via-slate-900 to-amber-950/80 border-2 border-red-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -5936,7 +6057,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           </div>
         </div>
-              )}
+        )}
+              </div>
+            )}
             </div>
           )}
         </div>

@@ -2044,6 +2044,16 @@ var require_firestore_database_service = __commonJS({
             this.cache.coupons.clear();
             cRes.documents.forEach((c) => this.cache.coupons.set(c.id, c));
           }
+          const payRes = await this.listDocs("payment_transactions", 500);
+          if (payRes.success) {
+            if (!this.cache.payments) this.cache.payments = /* @__PURE__ */ new Map();
+            this.cache.payments.clear();
+            payRes.documents.forEach((p) => {
+              const id = p.orderId || p.id || p.docId;
+              if (id) this.cache.payments.set(id, p);
+            });
+            console.log(`  \u2713 Loaded ${payRes.documents.length} payment transactions into live cache`);
+          }
           const catRes = await this.listDocs("news_categories", 100);
           if (catRes.success) {
             this.cache.categories.clear();
@@ -2058,6 +2068,12 @@ var require_firestore_database_service = __commonJS({
           if (sysRes.success) {
             this.cache.systemConfig.clear();
             sysRes.documents.forEach((cfg) => this.cache.systemConfig.set(cfg.id, cfg));
+          }
+          const anrRes = await this.readDoc("admin_notifications_read", "global");
+          if (anrRes.success && anrRes.data && Array.isArray(anrRes.data.readIds)) {
+            this.cache.systemConfig.set("admin_notifs_read", anrRes.data.readIds);
+            this.cacheTimestamps.set("systemConfig:admin_notifs_read", Date.now());
+            console.log(`  \u2713 Loaded ${anrRes.data.readIds.length} admin read notification IDs into live cache`);
           }
           this.isInitialized = true;
           console.log("\u2705 [CentralDB] Live Firestore Cache Ready.\n");
@@ -2517,8 +2533,21 @@ var require_firestore_database_service = __commonJS({
       }
       async getPayments(userEmail = "") {
         if (this.useFirestore) {
-          const res = await this.listDocs("payment_transactions", 300);
+          if (this.cache.payments && this.cache.payments.size > 0) {
+            const all = Array.from(this.cache.payments.values());
+            if (userEmail) {
+              const clean = userEmail.toLowerCase().trim();
+              return all.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
+            }
+            return all;
+          }
+          const res = await this.listDocs("payment_transactions", 500);
           const docs = res.documents || [];
+          if (!this.cache.payments) this.cache.payments = /* @__PURE__ */ new Map();
+          docs.forEach((p) => {
+            const id = p.orderId || p.id || p.docId;
+            if (id) this.cache.payments.set(id, p);
+          });
           if (userEmail) {
             const clean = userEmail.toLowerCase().trim();
             return docs.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
@@ -2528,7 +2557,7 @@ var require_firestore_database_service = __commonJS({
           const payments = this._loadLocalJson("payments_transactions_db.json", []);
           if (userEmail) {
             const clean = userEmail.toLowerCase().trim();
-            return payments.filter((p) => (p.userEmail || "").toLowerCase().trim() === clean);
+            return payments.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
           }
           return payments;
         }
@@ -4314,6 +4343,16 @@ var require_firestore_database_service2 = __commonJS({
             this.cache.coupons.clear();
             cRes.documents.forEach((c) => this.cache.coupons.set(c.id, c));
           }
+          const payRes = await this.listDocs("payment_transactions", 500);
+          if (payRes.success) {
+            if (!this.cache.payments) this.cache.payments = /* @__PURE__ */ new Map();
+            this.cache.payments.clear();
+            payRes.documents.forEach((p) => {
+              const id = p.orderId || p.id || p.docId;
+              if (id) this.cache.payments.set(id, p);
+            });
+            console.log(`  \u2713 Loaded ${payRes.documents.length} payment transactions into live cache`);
+          }
           const catRes = await this.listDocs("news_categories", 100);
           if (catRes.success) {
             this.cache.categories.clear();
@@ -4328,6 +4367,12 @@ var require_firestore_database_service2 = __commonJS({
           if (sysRes.success) {
             this.cache.systemConfig.clear();
             sysRes.documents.forEach((cfg) => this.cache.systemConfig.set(cfg.id, cfg));
+          }
+          const anrRes = await this.readDoc("admin_notifications_read", "global");
+          if (anrRes.success && anrRes.data && Array.isArray(anrRes.data.readIds)) {
+            this.cache.systemConfig.set("admin_notifs_read", anrRes.data.readIds);
+            this.cacheTimestamps.set("systemConfig:admin_notifs_read", Date.now());
+            console.log(`  \u2713 Loaded ${anrRes.data.readIds.length} admin read notification IDs into live cache`);
           }
           this.isInitialized = true;
           console.log("\u2705 [CentralDB] Live Firestore Cache Ready.\n");
@@ -4787,8 +4832,21 @@ var require_firestore_database_service2 = __commonJS({
       }
       async getPayments(userEmail = "") {
         if (this.useFirestore) {
-          const res = await this.listDocs("payment_transactions", 300);
+          if (this.cache.payments && this.cache.payments.size > 0) {
+            const all = Array.from(this.cache.payments.values());
+            if (userEmail) {
+              const clean = userEmail.toLowerCase().trim();
+              return all.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
+            }
+            return all;
+          }
+          const res = await this.listDocs("payment_transactions", 500);
           const docs = res.documents || [];
+          if (!this.cache.payments) this.cache.payments = /* @__PURE__ */ new Map();
+          docs.forEach((p) => {
+            const id = p.orderId || p.id || p.docId;
+            if (id) this.cache.payments.set(id, p);
+          });
           if (userEmail) {
             const clean = userEmail.toLowerCase().trim();
             return docs.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
@@ -4798,7 +4856,7 @@ var require_firestore_database_service2 = __commonJS({
           const payments = this._loadLocalJson("payments_transactions_db.json", []);
           if (userEmail) {
             const clean = userEmail.toLowerCase().trim();
-            return payments.filter((p) => (p.userEmail || "").toLowerCase().trim() === clean);
+            return payments.filter((p) => (p.userEmail || p.customerEmail || "").toLowerCase().trim() === clean);
           }
           return payments;
         }
@@ -6359,10 +6417,352 @@ module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
-var import_genai = require("@google/genai");
+var import_genai2 = require("@google/genai");
 var import_openai = __toESM(require("openai"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
-var import_crypto = __toESM(require("crypto"), 1);
+var import_crypto2 = __toESM(require("crypto"), 1);
+
+// whatsapp_integration.ts
+var import_crypto = require("crypto");
+var import_genai = require("@google/genai");
+var import_tasks = require("@google-cloud/tasks");
+var import_google_auth_library = require("google-auth-library");
+function registerWhatsAppIntegration(app2, centralDb2) {
+  const webhookPath = "/api/whatsapp/webhook";
+  const safeEqual = (a, b) => {
+    const left = Buffer.from(String(a || ""));
+    const right = Buffer.from(String(b || ""));
+    return left.length === right.length && (0, import_crypto.timingSafeEqual)(left, right);
+  };
+  const sha256 = (value) => (0, import_crypto.createHash)("sha256").update(value).digest("hex");
+  const requireWrite = async (collection, docId, data) => {
+    const result = await centralDb2.writeDoc(collection, docId, data);
+    if (!result?.success) {
+      throw new Error(`Firestore write failed for ${collection}/${docId} (${result?.statusCode || "unknown"})`);
+    }
+    return result;
+  };
+  const claimInboundEvent = async (eventId, messageId) => {
+    const tx = await centralDb2.beginTransaction();
+    if (!tx?.success || !tx.transaction) throw new Error("Could not start Firestore transaction");
+    try {
+      const current = await centralDb2._readDocInTransaction("whatsapp_webhook_events", eventId, tx.transaction);
+      if (!current?.success) throw new Error("Could not read WhatsApp event in transaction");
+      const now = Date.now();
+      if (current.data?.status === "processed") {
+        await centralDb2.rollbackTransaction(tx.transaction);
+        return "processed";
+      }
+      if (current.data?.status === "processing" && Number(current.data?.leaseUntil || 0) > now) {
+        await centralDb2.rollbackTransaction(tx.transaction);
+        return "busy";
+      }
+      const record = {
+        messageId,
+        status: "processing",
+        processingAt: now,
+        leaseUntil: now + 5 * 60 * 1e3
+      };
+      const fields = {};
+      for (const [key, value] of Object.entries(record)) fields[key] = centralDb2._toFirestoreField(value);
+      const name = `projects/${centralDb2.projectId}/databases/${centralDb2.databaseId}/documents/whatsapp_webhook_events/${eventId}`;
+      const write = { update: { name, fields } };
+      write.currentDocument = current.updateTime ? { updateTime: current.updateTime } : { exists: false };
+      const committed = await centralDb2.commitTransaction(tx.transaction, [write]);
+      if (!committed?.success) throw new Error("Could not claim WhatsApp event transactionally");
+      return "claimed";
+    } catch (error) {
+      await centralDb2.rollbackTransaction(tx.transaction);
+      throw error;
+    }
+  };
+  const verifySignature = (req) => {
+    const appSecret = process.env.META_APP_SECRET;
+    const signature = String(req.headers["x-hub-signature-256"] || "");
+    const rawBody = String(req.rawBody || "");
+    if (!appSecret || !signature.startsWith("sha256=") || !rawBody) return false;
+    const expected = "sha256=" + (0, import_crypto.createHmac)("sha256", appSecret).update(rawBody, "utf8").digest("hex");
+    return safeEqual(signature, expected);
+  };
+  const sendWhatsAppText = async (to, body) => {
+    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639";
+    const version = process.env.WHATSAPP_GRAPH_API_VERSION;
+    if (!token || !phoneNumberId || !version) {
+      throw new Error("WhatsApp Cloud API credentials are not configured");
+    }
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "text",
+        text: { preview_url: false, body: String(body).slice(0, 4e3) }
+      })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = result?.error?.message || `WhatsApp API request failed (${response.status})`;
+      throw new Error(error);
+    }
+    return result;
+  };
+  const getKnowledgeContext = async () => {
+    if (!centralDb2?.useFirestore) return "";
+    const result = await centralDb2.listDocs("whatsapp_knowledge_base", 100);
+    if (!result?.success || !Array.isArray(result.documents)) return "";
+    return result.documents.filter((item) => item && item.isActive !== false && item.status !== "disabled").map((item) => {
+      const title = String(item.title || item.question || "").trim();
+      const content = String(item.content || item.answer || item.description || "").trim();
+      return title && content ? `\u092A\u094D\u0930\u0936\u094D\u0928/\u0935\u093F\u0937\u092F: ${title}
+\u0909\u0924\u094D\u0924\u0930/\u091C\u093E\u0928\u0915\u093E\u0930\u0940: ${content}` : content || title;
+    }).filter(Boolean).join("\n\n").slice(0, 14e3);
+  };
+  const generateSupportReply = async (userMessage) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    const model = process.env.WHATSAPP_GEMINI_MODEL;
+    if (!apiKey || !model) return null;
+    const knowledge = await getKnowledgeContext();
+    if (!knowledge) return null;
+    const ai = new import_genai.GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model,
+      contents: [
+        "\u0906\u092A BREAKING NEWS WALA / AI NEWS MAKER \u0915\u0947 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0938\u0939\u093E\u092F\u0915 \u0939\u0948\u0902\u0964 \u0915\u0947\u0935\u0932 \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930 \u0938\u0947 \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0902\u0964 \u0915\u094B\u0908 \u0924\u0925\u094D\u092F, \u092E\u0942\u0932\u094D\u092F, \u0938\u0941\u0935\u093F\u0927\u093E, \u0938\u094D\u0925\u093F\u0924\u093F, \u0938\u092E\u092F-\u0938\u0940\u092E\u093E \u092F\u093E \u0928\u0940\u0924\u093F \u0928 \u0917\u0922\u093C\u0947\u0902\u0964 \u092F\u0926\u093F \u0909\u0924\u094D\u0924\u0930 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930 \u092E\u0947\u0902 \u0928\u0939\u0940\u0902 \u0939\u0948, \u0924\u094B \u092C\u093F\u0932\u094D\u0915\u0941\u0932 HUMAN_HANDOFF \u0932\u093F\u0916\u0947\u0902\u0964 \u0909\u0924\u094D\u0924\u0930 \u0936\u0941\u0926\u094D\u0927, \u0938\u0930\u0932 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 2-5 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0939\u094B\u0964 \u092A\u093E\u0938\u0935\u0930\u094D\u0921, OTP, \u092D\u0941\u0917\u0924\u093E\u0928 \u0915\u093E\u0930\u094D\u0921, API token \u092F\u093E \u0917\u094B\u092A\u0928\u0940\u092F \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u092D\u0940 \u0928 \u092E\u093E\u0901\u0917\u0947\u0902\u0964 \u0917\u094D\u0930\u093E\u0939\u0915 \u0915\u0940 \u0913\u0930 \u0938\u0947 \u092D\u0941\u0917\u0924\u093E\u0928, \u0930\u093F\u092B\u0902\u0921, \u0916\u093E\u0924\u093E \u092A\u0930\u093F\u0935\u0930\u094D\u0924\u0928 \u092F\u093E \u0915\u094B\u0908 \u0938\u0902\u0935\u0947\u0926\u0928\u0936\u0940\u0932 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0938\u094D\u0935\u092F\u0902 \u0928 \u0915\u0930\u0947\u0902\u0964",
+        "\u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091C\u094D\u091E\u093E\u0928-\u0906\u0927\u093E\u0930:\n" + knowledge,
+        "\u0917\u094D\u0930\u093E\u0939\u0915 \u0915\u093E \u0938\u0902\u0926\u0947\u0936:\n" + userMessage
+      ].join("\n\n")
+    });
+    const answer = String(response.text || "").trim();
+    if (!answer || answer.includes("HUMAN_HANDOFF")) return null;
+    return answer.slice(0, 3500);
+  };
+  const processInboundMessage = async (message) => {
+    const waId = String(message.from || "").trim();
+    const messageId = String(message.id || "").trim();
+    if (!waId || !messageId || !centralDb2?.useFirestore) return;
+    const textBody = message.type === "text" ? String(message.text?.body || "").trim() : "";
+    const messageDocId = sha256(messageId);
+    const conversationId = sha256(waId);
+    const now = Date.now();
+    await requireWrite("whatsapp_messages", messageDocId, {
+      messageId,
+      conversationId,
+      waId,
+      direction: "inbound",
+      messageType: String(message.type || "unknown"),
+      text: textBody,
+      timestamp: Number(message.timestamp || Math.floor(now / 1e3)) * 1e3,
+      createdAt: now,
+      status: "received"
+    });
+    await requireWrite("whatsapp_conversations", conversationId, {
+      waId,
+      channel: "whatsapp",
+      lastInboundAt: now,
+      lastMessagePreview: textBody.slice(0, 180) || `[${message.type || "message"}]`,
+      status: "open",
+      updatedAt: now
+    });
+    if (textBody.toUpperCase() === "STOP" || textBody.toUpperCase() === "UNSUBSCRIBE") {
+      await requireWrite("whatsapp_subscribers", conversationId, {
+        waId,
+        newsAlertsConsent: false,
+        newsAlertsOptedOutAt: now,
+        updatedAt: now
+      });
+      const optOutReply = "\u0906\u092A\u0915\u0940 WhatsApp \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0942\u091A\u0928\u093E\u090F\u0901 \u092C\u0902\u0926 \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0902\u0964 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0906\u092A \u0939\u092E\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964";
+      const sent2 = await sendWhatsAppText(waId, optOutReply);
+      await requireWrite("whatsapp_messages", sha256(String(sent2?.messages?.[0]?.id || `out-${messageId}`)), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: optOutReply,
+        timestamp: now,
+        status: "sent"
+      });
+      return;
+    }
+    const wantsHuman = /\b(agent|human|person|support)\b|मानव|व्यक्ति|प्रतिनिधि|कस्टमर केयर|सहायता टीम/i.test(textBody);
+    if (wantsHuman) {
+      await requireWrite("whatsapp_conversations", conversationId, {
+        waId,
+        status: "human_requested",
+        humanHandoff: true,
+        handoffRequestedAt: now,
+        updatedAt: now
+      });
+      const handoffReply = "\u0906\u092A\u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0939\u092E\u093E\u0930\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u094B \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092F\u0939\u0940\u0902 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902, \u091F\u0940\u092E \u0915\u093E \u0938\u0926\u0938\u094D\u092F \u0906\u092A\u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u093E\u0964";
+      const sent2 = await sendWhatsAppText(waId, handoffReply);
+      await requireWrite("whatsapp_messages", sha256(String(sent2?.messages?.[0]?.id || `out-${messageId}`)), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: handoffReply,
+        timestamp: now,
+        status: "sent"
+      });
+      return;
+    }
+    if (process.env.WHATSAPP_AI_ENABLED !== "true" || !textBody) return;
+    let reply = null;
+    try {
+      reply = await generateSupportReply(textBody);
+    } catch (error) {
+      console.error("[WhatsApp] Gemini support response failed:", String(error?.message || error).slice(0, 240));
+    }
+    if (!reply) {
+      await requireWrite("whatsapp_conversations", conversationId, {
+        waId,
+        status: "human_requested",
+        humanHandoff: true,
+        handoffReason: "knowledge_gap",
+        updatedAt: Date.now()
+      });
+      reply = "\u0906\u092A\u0915\u093E \u092A\u094D\u0930\u0936\u094D\u0928 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948, \u0932\u0947\u0915\u093F\u0928 \u0907\u0938\u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0939\u092E\u093E\u0930\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u0939\u093E\u092F\u0924\u093E-\u091C\u094D\u091E\u093E\u0928 \u0938\u0947 \u0928\u0939\u0940\u0902 \u0939\u094B \u092A\u093E \u0930\u0939\u0940 \u0939\u0948\u0964 \u0939\u092E\u0928\u0947 \u0907\u0938\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u0947 \u0932\u093F\u090F \u091A\u093F\u0928\u094D\u0939\u093F\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0939\u0948\u0964";
+    }
+    const sent = await sendWhatsAppText(waId, reply);
+    await requireWrite("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
+      conversationId,
+      waId,
+      direction: "outbound",
+      text: reply,
+      timestamp: Date.now(),
+      status: "sent"
+    });
+  };
+  app2.get(webhookPath, (req, res) => {
+    const mode = String(req.query["hub.mode"] || "");
+    const token = String(req.query["hub.verify_token"] || "");
+    const challenge = String(req.query["hub.challenge"] || "");
+    const expected = process.env.META_WEBHOOK_VERIFY_TOKEN || "";
+    if (!expected) return res.status(503).send("Webhook verification is not configured");
+    if (mode === "subscribe" && safeEqual(token, expected)) return res.status(200).send(challenge);
+    return res.sendStatus(403);
+  });
+  const taskClient = new import_tasks.CloudTasksClient();
+  const taskOidcVerifier = new import_google_auth_library.OAuth2Client();
+  const taskPath = "/api/whatsapp/tasks/process";
+  const getTaskConfig = () => {
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || centralDb2?.projectId || "";
+    const location = process.env.WHATSAPP_TASK_QUEUE_LOCATION || "";
+    const queue = process.env.WHATSAPP_TASK_QUEUE || "";
+    const serviceAccountEmail = process.env.WHATSAPP_TASK_SERVICE_ACCOUNT || "";
+    const baseUrl = String(process.env.WHATSAPP_TASK_BASE_URL || "").replace(/\/$/, "");
+    const url = baseUrl ? baseUrl + taskPath : "";
+    const audience = process.env.WHATSAPP_TASK_AUDIENCE || url;
+    if (!projectId || !location || !queue || !serviceAccountEmail || !url || !audience) return null;
+    return { projectId, location, queue, serviceAccountEmail, url, audience };
+  };
+  const enqueueMessage = async (message) => {
+    const config = getTaskConfig();
+    if (!config) throw new Error("WhatsApp Cloud Tasks configuration is incomplete");
+    const messageId = String(message?.id || "");
+    const parent = taskClient.queuePath(config.projectId, config.location, config.queue);
+    const taskName = taskClient.taskPath(config.projectId, config.location, config.queue, "wa-" + sha256(messageId).slice(0, 32));
+    try {
+      await taskClient.createTask({
+        parent,
+        task: {
+          name: taskName,
+          dispatchDeadline: { seconds: 300 },
+          httpRequest: {
+            httpMethod: "POST",
+            url: config.url,
+            headers: { "Content-Type": "application/json" },
+            body: Buffer.from(JSON.stringify({ messageId, message })).toString("base64"),
+            oidcToken: {
+              serviceAccountEmail: config.serviceAccountEmail,
+              audience: config.audience
+            }
+          }
+        }
+      });
+    } catch (error) {
+      if (Number(error?.code) !== 6 && Number(error?.code) !== 409 && error?.code !== "ALREADY_EXISTS") throw error;
+    }
+  };
+  const verifyTaskRequest = async (req) => {
+    const config = getTaskConfig();
+    if (!config) return false;
+    const authorization = String(req.headers.authorization || "");
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    if (!match) return false;
+    try {
+      const ticket = await taskOidcVerifier.verifyIdToken({ idToken: match[1], audience: config.audience });
+      const payload = ticket.getPayload();
+      return Boolean(payload?.email_verified && payload.email === config.serviceAccountEmail);
+    } catch {
+      return false;
+    }
+  };
+  app2.post(taskPath, async (req, res) => {
+    if (!await verifyTaskRequest(req)) return res.sendStatus(401);
+    const message = req.body?.message;
+    const messageId = String(req.body?.messageId || "");
+    if (!message || !messageId || String(message.id || "") !== messageId) return res.sendStatus(400);
+    if (!centralDb2?.useFirestore) return res.sendStatus(503);
+    const eventId = sha256(messageId);
+    try {
+      const claim = await claimInboundEvent(eventId, messageId);
+      if (claim === "processed") return res.sendStatus(200);
+      if (claim === "busy") return res.sendStatus(503);
+      await processInboundMessage(message);
+      await requireWrite("whatsapp_webhook_events", eventId, {
+        messageId,
+        status: "processed",
+        processedAt: Date.now()
+      });
+      return res.sendStatus(200);
+    } catch (error) {
+      console.error("[WhatsApp] Durable task processing failed:", String(error?.message || error).slice(0, 240));
+      await centralDb2.writeDoc("whatsapp_webhook_events", eventId, {
+        messageId,
+        status: "retryable",
+        lastErrorAt: Date.now()
+      }).catch(() => void 0);
+      return res.sendStatus(500);
+    }
+  });
+  app2.post(webhookPath, async (req, res) => {
+    if (!verifySignature(req)) return res.sendStatus(401);
+    if (req.body?.object !== "whatsapp_business_account") return res.sendStatus(404);
+    if (!centralDb2?.useFirestore || !getTaskConfig()) return res.sendStatus(503);
+    const messages = [];
+    for (const entry of req.body?.entry || []) {
+      for (const change of entry?.changes || []) {
+        for (const message of change?.value?.messages || []) messages.push(message);
+      }
+    }
+    try {
+      for (const message of messages) {
+        const messageId = String(message?.id || "");
+        if (!messageId) continue;
+        const eventId = sha256(messageId);
+        const existing = await centralDb2.readDoc("whatsapp_webhook_events", eventId);
+        if (existing?.success && existing.data?.status === "processed") continue;
+        if (existing?.success && (existing.data?.status === "queued" || existing.data?.status === "processing")) continue;
+        await requireWrite("whatsapp_webhook_events", eventId, {
+          messageId,
+          status: "enqueueing",
+          receivedAt: Number(message.timestamp || Math.floor(Date.now() / 1e3)) * 1e3
+        });
+        await enqueueMessage(message);
+      }
+      return res.sendStatus(200);
+    } catch (error) {
+      console.error("[WhatsApp] Could not enqueue inbound webhook:", String(error?.message || error).slice(0, 240));
+      return res.sendStatus(503);
+    }
+  });
+}
+
+// server.ts
 var import_app = require("firebase-admin/app");
 var import_auth = require("firebase-admin/auth");
 var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd();
@@ -6424,6 +6824,7 @@ app.use(import_express.default.json({
   }
 }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
+registerWhatsAppIntegration(app, centralDb);
 var SENSITIVE_STATIC_PATTERNS = [
   /gemini_api_keys_vault/i,
   /api_keys_database/i,
@@ -6519,7 +6920,7 @@ function generateAuthToken(user) {
   const header = { alg: "HS256", typ: "JWT" };
   const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = import_crypto.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
+  const signature = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 function verifyAuthToken(tokenStr) {
@@ -6527,11 +6928,11 @@ function verifyAuthToken(tokenStr) {
   const parts = tokenStr.trim().split(".");
   if (parts.length !== 3) return null;
   const [encodedHeader, encodedPayload, signature] = parts;
-  const expectedSig = import_crypto.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
+  const expectedSig = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
   if (signature.length !== expectedSig.length) return null;
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expectedSig);
-  if (!import_crypto.default.timingSafeEqual(sigBuf, expBuf)) return null;
+  if (!import_crypto2.default.timingSafeEqual(sigBuf, expBuf)) return null;
   try {
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
     const payload = JSON.parse(payloadJson);
@@ -6769,17 +7170,17 @@ function saveCredentialsDatabase(db) {
   }
 }
 function hashPassword(password, salt) {
-  const actualSalt = salt || import_crypto.default.randomBytes(16).toString("hex");
-  const hash = import_crypto.default.pbkdf2Sync(password, actualSalt, 1e4, 64, "sha512").toString("hex");
+  const actualSalt = salt || import_crypto2.default.randomBytes(16).toString("hex");
+  const hash = import_crypto2.default.pbkdf2Sync(password, actualSalt, 1e4, 64, "sha512").toString("hex");
   return { salt: actualSalt, hash };
 }
 function verifyPassword(password, salt, storedHash) {
   try {
-    const hash = import_crypto.default.pbkdf2Sync(password, salt, 1e4, 64, "sha512").toString("hex");
+    const hash = import_crypto2.default.pbkdf2Sync(password, salt, 1e4, 64, "sha512").toString("hex");
     const a = Buffer.from(hash, "hex");
     const b = Buffer.from(storedHash, "hex");
     if (a.length !== b.length) return false;
-    return import_crypto.default.timingSafeEqual(a, b);
+    return import_crypto2.default.timingSafeEqual(a, b);
   } catch {
     return false;
   }
@@ -8456,7 +8857,7 @@ app.post("/api/rewards/upload-screenshot", async (req, res) => {
       return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092B\u093C\u093E\u0907\u0932: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0939\u0940 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
     }
     const ext = magic.format || "jpg";
-    const filename = `claim-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
+    const filename = `claim-${Date.now()}-${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
     let url = `/uploads/screenshots/${filename}`;
     if (cloudStorage) {
       const uploadRes = await cloudStorage.saveMedia({
@@ -8938,6 +9339,8 @@ app.get("/api/admin/analytics/summary", (req, res) => {
     }
     const aDb = loadAnalyticsDatabase();
     if (!aDb.userGraphics) aDb.userGraphics = {};
+    const newsDb = loadNewsDatabase();
+    const videosDb = loadVideosDatabase();
     const allUsers = loadUsersMasterDatabase();
     for (const u of allUsers) {
       const emailKey = (u.email || "").toLowerCase().trim();
@@ -8959,8 +9362,32 @@ app.get("/api/admin/analytics/summary", (req, res) => {
         if (u.fullName || u.name) aDb.userGraphics[emailKey].userName = u.fullName || u.name;
       }
     }
-    const formatSection = (sec) => {
+    const nowIst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(/* @__PURE__ */ new Date());
+    const currentMonthIst = nowIst.slice(0, 7);
+    let newsDownloadsToday = 0;
+    let newsDownloadsThisMonth = 0;
+    let videoDownloadsToday = 0;
+    let videoDownloadsThisMonth = 0;
+    for (const uRec of Object.values(aDb.userGraphics)) {
+      if (uRec.graphics) {
+        for (const g of Object.values(uRec.graphics)) {
+          if (g.hasDownloaded && g.updatedAt) {
+            try {
+              const evIst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(g.updatedAt));
+              if (evIst === nowIst) newsDownloadsToday += 1;
+              if (evIst.slice(0, 7) === currentMonthIst) newsDownloadsThisMonth += 1;
+            } catch {
+            }
+          }
+        }
+      }
+    }
+    const formatSection = (sec, itemsDb, isVideo = false) => {
       const sortedItems = Object.entries(sec.items || {}).map(([id, val]) => ({ id, ...val })).sort((a, b) => b.views + b.creates * 2 - (a.views + a.creates * 2)).slice(0, 8);
+      const queuedCount = itemsDb.filter((p) => p.status === "queued").length;
+      const processingCount = itemsDb.filter((p) => p.status === "processing" || p.status === "rendering").length;
+      const completedCount = itemsDb.filter((p) => p.status === "published" || p.status === "completed" || !p.status || p.status === "approved").length;
+      const failedCount = itemsDb.filter((p) => p.status === "failed" || p.status === "draft").length;
       return {
         uniqueUsers: sec.uniqueUsers?.length || 0,
         totalViews: sec.totalViews || 0,
@@ -8968,6 +9395,15 @@ app.get("/api/admin/analytics/summary", (req, res) => {
         generationStarts: sec.generationStarts || 0,
         generationSuccess: sec.generationSuccess || 0,
         downloads: sec.downloads || 0,
+        downloadsToday: isVideo ? videoDownloadsToday : newsDownloadsToday,
+        downloadsThisMonth: isVideo ? videoDownloadsThisMonth : newsDownloadsThisMonth,
+        statusBreakdown: {
+          totalCreated: itemsDb.length,
+          queued: queuedCount,
+          processing: processingCount,
+          completed: completedCount,
+          failed: failedCount
+        },
         trending: sortedItems
       };
     };
@@ -8984,8 +9420,11 @@ app.get("/api/admin/analytics/summary", (req, res) => {
     })).sort((a, b) => b.totalGenerated + b.totalDownloaded * 2 - (a.totalGenerated + a.totalDownloaded * 2));
     return res.json({
       success: true,
-      news: formatSection(aDb.news),
-      video: formatSection(aDb.video),
+      timezone: "Asia/Kolkata",
+      todayIst: nowIst,
+      thisMonthIst: currentMonthIst,
+      news: formatSection(aDb.news, newsDb, false),
+      video: formatSection(aDb.video, videosDb, true),
       userWiseAnalytics: userWiseList
     });
   } catch (err) {
@@ -9012,7 +9451,7 @@ app.post("/api/upload-logo", async (req, res) => {
     let ext = isGif ? "gif" : magic.format || "png";
     const userOrEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
     const safeFileBase = userOrEmail ? userOrEmail.replace(/[^a-zA-Z0-9_-]/g, "_") : "logo";
-    const filename = `logo-${safeFileBase}-${Date.now()}-${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
+    const filename = `logo-${safeFileBase}-${Date.now()}-${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
     let logoUrl = `/uploads/logos/${filename}`;
     if (cloudStorage) {
       const uploadRes = await cloudStorage.saveMedia({
@@ -9533,42 +9972,56 @@ app.get("/api/wallet/unlocked-items", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], requireAdminMiddleware, (req, res) => {
+app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/edit-coins", "/api/admin/wallet/credit-coins"], requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u0949\u0907\u0928 \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u0949\u0907\u0928 \u0938\u092E\u093E\u092F\u094B\u091C\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
     }
-    const { email, userId, amount, coins, note, reason } = req.body || {};
+    const { email, userId, amount, coins, note, reason, adjustmentType = "add" } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
     const coinAmount = Number(amount !== void 0 ? amount : coins);
     if (!cleanEmail && !cleanUserId) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
-    if (!Number.isInteger(coinAmount) || coinAmount <= 0) {
-      return res.status(400).json({ error: "\u0915\u0949\u0907\u0928 \u0915\u0940 \u0938\u0902\u0916\u094D\u092F\u093E \u090F\u0915 \u0927\u0928\u093E\u0924\u094D\u092E\u0915 \u092A\u0942\u0930\u094D\u0923\u093E\u0902\u0915 (Positive Integer) \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F" });
+    if (!Number.isFinite(coinAmount) || coinAmount < 0) {
+      return res.status(400).json({ error: "\u0915\u0949\u0907\u0928 \u0915\u0940 \u0938\u0902\u0916\u094D\u092F\u093E \u090F\u0915 \u0935\u0948\u0927 \u0927\u0928\u093E\u0924\u094D\u092E\u0915 \u0938\u0902\u0916\u094D\u092F\u093E \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F" });
     }
     const rDb = loadRewardsDatabase();
     const walletKey = cleanEmail || cleanUserId;
     if (!rDb.wallets[walletKey]) {
       rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
     }
-    rDb.wallets[walletKey].coinBalance += coinAmount;
-    rDb.wallets[walletKey].totalEarnedCoins += coinAmount;
+    const prevBalance = rDb.wallets[walletKey].coinBalance || 0;
+    let newBalance = prevBalance;
+    let diff = 0;
+    const mode = (adjustmentType || "add").toString().toLowerCase();
+    if (mode === "deduct") {
+      newBalance = Math.max(0, prevBalance - Math.floor(coinAmount));
+      diff = newBalance - prevBalance;
+    } else if (mode === "set") {
+      newBalance = Math.max(0, Math.floor(coinAmount));
+      diff = newBalance - prevBalance;
+    } else {
+      newBalance = prevBalance + Math.floor(coinAmount);
+      diff = newBalance - prevBalance;
+      rDb.wallets[walletKey].totalEarnedCoins = (rDb.wallets[walletKey].totalEarnedCoins || 0) + Math.floor(coinAmount);
+    }
+    rDb.wallets[walletKey].coinBalance = newBalance;
     const callerEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || req.body?.adminEmail || req.body?.userEmail || "admin").toString().toLowerCase().trim();
     const txId = `tx-admin-adj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const txReason = note || reason || "\u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092E\u0948\u0928\u0941\u0905\u0932 \u0915\u0949\u0907\u0928 \u0938\u092E\u093E\u092F\u094B\u091C\u0928 (Admin Manual Credit)";
+    const txReason = note || reason || `\u090F\u0921\u092E\u093F\u0928 \u0938\u092E\u093E\u092F\u094B\u091C\u0928 (${mode}): ${diff >= 0 ? "+" : ""}${diff} \u0915\u0949\u0907\u0928\u094D\u0938`;
     const tx = {
       id: txId,
       transactionId: txId,
       userId: cleanUserId,
       userEmail: cleanEmail,
-      description: `\u090F\u0921\u092E\u093F\u0928 \u0915\u094D\u0930\u0947\u0921\u093F\u091F: +${coinAmount} \u0915\u0949\u0907\u0928\u094D\u0938 (${txReason})`,
-      transactionType: "credit",
-      type: "credit",
-      coinAmount,
-      amount: coinAmount,
-      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      description: `\u090F\u0921\u092E\u093F\u0928 ${mode}: ${diff >= 0 ? "+" : ""}${diff} \u0915\u0949\u0907\u0928\u094D\u0938 (${txReason})`,
+      transactionType: diff >= 0 ? "credit" : "debit",
+      type: diff >= 0 ? "credit" : "debit",
+      coinAmount: Math.abs(diff),
+      amount: Math.abs(diff),
+      balanceAfter: newBalance,
       status: "completed",
       createdAt: Date.now(),
       createdBy: callerEmail
@@ -9577,10 +10030,36 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/credit-coins"], r
     saveRewardsDatabase(rDb);
     return res.json({
       success: true,
-      coinBalance: rDb.wallets[walletKey].coinBalance,
-      message: `\u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 ${coinAmount} \u0915\u0949\u0907\u0928 \u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0915\u093F\u090F \u0917\u090F! \u0928\u092F\u093E \u092C\u0948\u0932\u0947\u0902\u0938: ${rDb.wallets[walletKey].coinBalance}`,
+      previousBalance: prevBalance,
+      newBalance,
+      coinBalance: newBalance,
+      difference: diff,
+      adjustmentType: mode,
+      message: `\u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0915\u0949\u0907\u0928 \u0938\u092E\u093E\u092F\u094B\u091C\u093F\u0924 \u0915\u093F\u090F \u0917\u090F! \u092A\u0942\u0930\u094D\u0935 \u092C\u0948\u0932\u0947\u0902\u0938: ${prevBalance}, \u0928\u092F\u093E \u092C\u0948\u0932\u0947\u0902\u0938: ${newBalance}`,
       wallet: rDb.wallets[walletKey],
       transaction: tx
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/wallet/transactions", requireAdminMiddleware, (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u091F\u094D\u0930\u093E\u0902\u091C\u0947\u0915\u094D\u0936\u0928 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const targetEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const targetUserId = (req.query.userId || "").toString().trim();
+    const rDb = loadRewardsDatabase();
+    let txs = rDb.transactions || [];
+    if (targetEmail || targetUserId) {
+      txs = txs.filter(
+        (t) => targetEmail && (t.userEmail || "").toLowerCase().trim() === targetEmail || targetUserId && (t.userId || "").toString().trim() === targetUserId
+      );
+    }
+    return res.json({
+      success: true,
+      transactions: txs.slice(0, 50)
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -9657,6 +10136,9 @@ var DEFAULT_SEED_CHANNELS = [
   { id: "res_amarujala", channelName: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala)", websiteUrl: "amarujala.com", username: "amarujala", logoUrl: "https://www.amarujala.com/assets/images/amarujala.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 }
 ];
 function loadChannelsDatabase() {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.channels && centralDb.cache.channels.size > 0) {
+    return Array.from(centralDb.cache.channels.values());
+  }
   try {
     if (import_fs.default.existsSync(CHANNELS_DB_FILE)) {
       const raw = import_fs.default.readFileSync(CHANNELS_DB_FILE, "utf-8");
@@ -9670,19 +10152,38 @@ function loadChannelsDatabase() {
   return DEFAULT_SEED_CHANNELS;
 }
 function saveChannelsDatabase(channels) {
+  if (centralDb && centralDb.useFirestore) {
+    if (!centralDb.cache.channels) centralDb.cache.channels = /* @__PURE__ */ new Map();
+    centralDb.cache.channels.clear();
+    for (const ch of channels) {
+      const docId = (ch.id || `res_${Date.now()}`).toString().trim();
+      centralDb.cache.channels.set(docId, ch);
+      centralDb.writeDoc("restricted_channels", docId, ch).catch(() => {
+      });
+    }
+  }
   try {
-    import_fs.default.writeFileSync(CHANNELS_DB_FILE, JSON.stringify(channels, null, 2), "utf-8");
+    const locs = resolveAllDatabaseLocations("restricted_channels_db.json");
+    const jsonStr = JSON.stringify(channels, null, 2);
+    for (const loc of locs) {
+      try {
+        const dir = import_path.default.dirname(loc);
+        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
+        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
     return true;
   } catch (e) {
     console.error("Error writing restricted_channels_db.json:", e);
     return false;
   }
 }
-app.get("/api/channels", (_req, res) => {
+app.get(["/api/channels", "/api/admin/channels"], (_req, res) => {
   const channels = loadChannelsDatabase();
   return res.json({ success: true, channels });
 });
-app.post("/api/channels", (req, res) => {
+app.post(["/api/channels", "/api/admin/channels"], (req, res) => {
   try {
     const payload = req.body;
     if (!payload || !payload.channelName) {
@@ -9709,14 +10210,14 @@ app.post("/api/channels", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.put("/api/channels/:id", (req, res) => {
+app.put(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
     let channels = loadChannelsDatabase();
     const idx = channels.findIndex((c) => c.id === id);
     if (idx >= 0) {
-      channels[idx] = { ...channels[idx], ...updates };
+      channels[idx] = { ...channels[idx], ...updates, updatedAt: Date.now() };
       saveChannelsDatabase(channels);
       return res.json({ success: true, channel: channels[idx], channels });
     }
@@ -9725,7 +10226,24 @@ app.put("/api/channels/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/channels/:id", (req, res) => {
+app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, res) => {
+  try {
+    const { id } = req.params;
+    let channels = loadChannelsDatabase();
+    const idx = channels.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      const currentActive = channels[idx].isActive !== false;
+      channels[idx].isActive = !currentActive;
+      channels[idx].updatedAt = Date.now();
+      saveChannelsDatabase(channels);
+      return res.json({ success: true, channel: channels[idx], channels });
+    }
+    return res.status(404).json({ error: "\u091A\u0948\u0928\u0932 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
@@ -10381,7 +10899,11 @@ function reconcileAllUsers() {
           socialIcons: p.socialIcons,
           role: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "superadmin" : p.role || "user",
           tier: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "ultra" : p.tier || "basic",
-          planName: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "VIP DESK" : p.tier === "ultra" ? "VIP DESK" : "BASIC",
+          planName: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "VIP DESK" : p.tier === "ultra" ? "VIP DESK" : p.tier === "professional" || p.tier === "pro" ? "PRO" : p.tier === "advanced" || p.tier === "advance" ? "ADVANCE" : "BASIC",
+          hasActivePaidPlan: Boolean(p.hasActivePaidPlan || p.tier === "advanced" || p.tier === "pro" || p.tier === "ultra"),
+          activatedVia: p.activatedVia || (p.tier && p.tier !== "basic" ? "cashfree" : void 0),
+          activatedAt: p.activatedAt,
+          expiresAt: p.expiresAt,
           isBlocked: false,
           createdAt: p.updatedAt || Date.now(),
           trialStartedAt: p.updatedAt || Date.now(),
@@ -10499,9 +11021,10 @@ function reconcileAllUsers() {
         name: p2?.fullName || "\u090B\u0924\u0941\u0930\u093E\u091C \u0924\u094B\u092E\u0930 (\u0913\u0930\u091B\u093E)",
         fullName: p2?.fullName || "\u090B\u0924\u0941\u0930\u093E\u091C \u0924\u094B\u092E\u0930 (\u0913\u0930\u091B\u093E)",
         username: p2?.username || "riturajtomarorchha",
-        role: "user",
-        tier: "basic",
-        planName: "BASIC",
+        role: "reporter",
+        tier: "advanced",
+        planName: "ADVANCE",
+        hasActivePaidPlan: true,
         channelName: p2?.channelNameHi || "\u0913\u0930\u091B\u093E \u092C\u0941\u0902\u0926\u0947\u0932\u0916\u0902\u0921 \u0928\u094D\u092F\u0942\u091C\u093C",
         channelNameHi: p2?.channelNameHi || "\u0913\u0930\u091B\u093E \u092C\u0941\u0902\u0926\u0947\u0932\u0916\u0902\u0921 \u0928\u094D\u092F\u0942\u091C\u093C",
         channelNameEn: p2?.channelNameEn || "Orchha Bundelkhand News",
@@ -10509,19 +11032,20 @@ function reconcileAllUsers() {
         channelLogoPngUrl: p2?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
         channelLogoGifUrl: "",
         channelLogoType: "png",
-        mobile: p2?.mobileNumber || "9876543211",
-        mobileNumber: p2?.mobileNumber || "9876543211",
+        mobile: p2?.mobileNumber || "9425112233",
+        mobileNumber: p2?.mobileNumber || "9425112233",
         district: p2?.district || "\u0913\u0930\u091B\u093E / \u0928\u093F\u0935\u093E\u0921\u093C\u0940",
         websiteUrl: p2?.websiteUrl || "ainewsmaker.online",
         isBlocked: false,
         isProfileLocked: false,
-        createdAt: 1791892712618,
-        trialStartedAt: 1791892712618,
+        createdAt: 179181e7,
+        trialStartedAt: 179181e7,
         trialEndsAt: 1792497512618,
-        activatedAt: 1791892712618,
-        expiresAt: 1792497512618,
-        activatedVia: "Free 7-Day VIP Trial",
-        lastLoginAt: 1791892712618
+        activatedAt: 1793630565084,
+        expiresAt: 1825166565084,
+        activatedVia: "cashfree",
+        lastLoginAt: Date.now(),
+        isTrialExpired: false
       });
     }
     const seedUser3 = "digital.anmolsandesh@gmail.com";
@@ -10533,7 +11057,7 @@ function reconcileAllUsers() {
         name: p3?.fullName || "Anmol Sandesh",
         fullName: p3?.fullName || "Anmol Sandesh",
         username: p3?.username || "anmolsandesh",
-        role: "user",
+        role: "reporter",
         tier: "basic",
         planName: "BASIC",
         channelName: p3?.channelNameHi || "\u0905\u0928\u092E\u094B\u0932 \u0938\u0902\u0926\u0947\u0936",
@@ -10557,6 +11081,50 @@ function reconcileAllUsers() {
         activatedVia: "Free 7-Day VIP Trial",
         lastLoginAt: 1791892712618
       });
+    }
+    try {
+      const allPayments = loadPaymentsDatabase();
+      for (const u of userMap.values()) {
+        const uEmail = (u.email || "").toLowerCase().trim();
+        if (!uEmail || isProtectedAdminAccount(uEmail)) continue;
+        const userPaidOrders = allPayments.filter((p) => {
+          const pEmail = (p.customerEmail || p.userEmail || "").toLowerCase().trim();
+          const isMatch = pEmail === uEmail || u.userId && (p.userId === u.userId || p.customerPhone === u.mobile || p.customerPhone === u.mobileNumber);
+          const isSuccess = p.orderStatus === "PAID" || p.paymentStatus === "SUCCESS";
+          return isMatch && isSuccess;
+        });
+        if (userPaidOrders.length > 0) {
+          userPaidOrders.sort((a, b) => Number(b.paidAt || b.createdAt || 0) - Number(a.paidAt || a.createdAt || 0));
+          const latest = userPaidOrders[0];
+          const rawPlan = String(latest.planKey || latest.planId || latest.planName || "").toLowerCase();
+          let targetTier = u.tier || "basic";
+          let targetPlanName = u.planName || "BASIC";
+          if (rawPlan.includes("pro") || rawPlan.includes("professional")) {
+            targetTier = "pro";
+            targetPlanName = "PRO";
+          } else if (rawPlan.includes("vip") || rawPlan.includes("ultra") || rawPlan.includes("desk")) {
+            targetTier = "ultra";
+            targetPlanName = "VIP DESK";
+          } else if (rawPlan.includes("advance") || rawPlan.includes("advanced")) {
+            targetTier = "advanced";
+            targetPlanName = "ADVANCE";
+          } else if (rawPlan.includes("basic") || rawPlan.includes("starter")) {
+            targetTier = "basic";
+            targetPlanName = "BASIC";
+          }
+          u.tier = targetTier;
+          u.planName = targetPlanName;
+          u.hasActivePaidPlan = true;
+          u.activatedVia = "cashfree";
+          if (!u.activatedAt) u.activatedAt = Number(latest.paidAt || latest.createdAt || Date.now());
+          if (!u.expiresAt || Number(u.expiresAt) < Date.now()) {
+            u.expiresAt = Math.max(Number(u.expiresAt || 0), Number(latest.paidAt || latest.createdAt || Date.now()) + 30 * 864e5);
+          }
+          u.isTrialExpired = false;
+        }
+      }
+    } catch (payReconcileErr) {
+      console.warn("[Payment Reconcile Error in Users]:", payReconcileErr);
     }
     const reconciledList = Array.from(userMap.values()).filter((u) => !isUserTombstoned(u.email) && !isUserTombstoned(u.userId));
     saveUsersMasterDatabase(reconciledList);
@@ -11141,6 +11709,173 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.get("/api/admin/users/:userId/profile", requireAdminMiddleware, (req, res) => {
+  try {
+    if (!isAuthorizedAdmin(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { userId } = req.params;
+    const cleanId = (userId || "").toString().trim().toLowerCase();
+    const allUsers = loadUsersMasterDatabase();
+    const allProfiles = loadProfilesDatabase();
+    const u = allUsers.find(
+      (x) => x.userId && x.userId.toLowerCase() === cleanId || x.email && x.email.toLowerCase() === cleanId || x.username && x.username.toLowerCase() === cleanId
+    );
+    const p = allProfiles[cleanId] || (u?.email ? allProfiles[u.email.toLowerCase()] : null) || {};
+    if (!u && !p.userId && !p.email) {
+      return res.status(404).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    return res.json({
+      success: true,
+      user: u || null,
+      profile: {
+        userId: u?.userId || p.userId || cleanId,
+        email: u?.email || p.email || "",
+        fullName: p.fullName || u?.fullName || u?.name || "",
+        name: u?.name || p.name || p.fullName || "",
+        username: p.username || u?.username || "",
+        mobileNumber: p.mobileNumber || u?.mobile || u?.mobileNumber || "",
+        channelName: p.channelNameHi || u?.channelName || "",
+        channelNameHi: p.channelNameHi || u?.channelName || "",
+        channelNameEn: p.channelNameEn || "",
+        channelLogoUrl: p.channelLogoUrl || u?.channelLogoUrl || "",
+        channelLogoPngUrl: p.channelLogoPngUrl || u?.channelLogoPngUrl || p.channelLogoUrl || "",
+        channelLogoGifUrl: p.channelLogoGifUrl || u?.channelLogoGifUrl || "",
+        channelLogoType: p.channelLogoType || u?.channelLogoType || (p.channelLogoGifUrl ? "gif" : "png"),
+        websiteUrl: p.websiteUrl || u?.websiteUrl || "",
+        district: p.district || u?.district || p.location || "",
+        location: p.location || u?.location || p.district || "",
+        state: p.state || u?.state || "",
+        socialIcons: p.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: true, linkedin: true },
+        socialLinks: p.socialLinks || {}
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, res) => {
+  const release = await userDbLock.acquire();
+  try {
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0902\u092A\u093E\u0926\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    const { userId } = req.params;
+    const cleanId = (userId || "").toString().trim().toLowerCase();
+    const updates = req.body || {};
+    const allUsers = loadUsersMasterDatabase();
+    const uIdx = allUsers.findIndex(
+      (x) => x.userId && x.userId.toLowerCase() === cleanId || x.email && x.email.toLowerCase() === cleanId || x.username && x.username.toLowerCase() === cleanId
+    );
+    if (uIdx === -1) {
+      return res.status(404).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const targetUser = allUsers[uIdx];
+    const isTargetMaster = isProtectedAdminAccount(targetUser.email) || targetUser.role === "superadmin";
+    const isTargetAdmin = targetUser.role === "admin";
+    if ((isTargetMaster || isTargetAdmin) && !isMaster) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u090F\u0921\u092E\u093F\u0928 \u0916\u093E\u0924\u094B\u0902 \u0915\u094B \u0938\u0902\u092A\u093E\u0926\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
+    }
+    if (updates.name !== void 0 || updates.fullName !== void 0) {
+      const n = (updates.fullName || updates.name || "").toString().trim();
+      targetUser.name = n;
+      targetUser.fullName = n;
+    }
+    if (updates.username !== void 0) {
+      targetUser.username = updates.username.toString().trim().replace(/^@/, "");
+    }
+    if (updates.mobileNumber !== void 0 || updates.mobile !== void 0) {
+      const mob = (updates.mobileNumber || updates.mobile || "").toString().trim();
+      targetUser.mobile = mob;
+      targetUser.mobileNumber = mob;
+    }
+    if (updates.channelName !== void 0 || updates.channelNameHi !== void 0) {
+      const chName = (updates.channelNameHi || updates.channelName || "").toString().trim();
+      targetUser.channelName = chName;
+      targetUser.channelNameHi = chName;
+    }
+    if (updates.channelNameEn !== void 0) {
+      targetUser.channelNameEn = updates.channelNameEn.toString().trim();
+    }
+    if (updates.websiteUrl !== void 0) {
+      targetUser.websiteUrl = updates.websiteUrl.toString().trim();
+    }
+    if (updates.district !== void 0 || updates.location !== void 0) {
+      const dist = (updates.district || updates.location || "").toString().trim();
+      targetUser.district = dist;
+      targetUser.location = dist;
+    }
+    if (updates.state !== void 0) {
+      targetUser.state = updates.state.toString().trim();
+    }
+    if (updates.channelLogoUrl !== void 0) {
+      targetUser.channelLogoUrl = updates.channelLogoUrl;
+    }
+    if (updates.channelLogoPngUrl !== void 0) {
+      targetUser.channelLogoPngUrl = updates.channelLogoPngUrl;
+    }
+    if (updates.channelLogoGifUrl !== void 0) {
+      targetUser.channelLogoGifUrl = updates.channelLogoGifUrl;
+    }
+    if (updates.channelLogoType !== void 0) {
+      targetUser.channelLogoType = updates.channelLogoType;
+    }
+    targetUser.updatedAt = Date.now();
+    saveUsersMasterDatabase(allUsers);
+    const allProfiles = loadProfilesDatabase();
+    const profileKey = (targetUser.email || targetUser.userId || cleanId).toLowerCase().trim();
+    const currentProf = allProfiles[profileKey] || allProfiles[cleanId] || {};
+    const updatedProf = {
+      ...currentProf,
+      userId: targetUser.userId,
+      email: targetUser.email,
+      fullName: targetUser.fullName || targetUser.name,
+      name: targetUser.name || targetUser.fullName,
+      username: targetUser.username,
+      mobile: targetUser.mobile,
+      mobileNumber: targetUser.mobile,
+      channelName: targetUser.channelName,
+      channelNameHi: targetUser.channelNameHi || targetUser.channelName,
+      channelNameEn: targetUser.channelNameEn || currentProf.channelNameEn || "",
+      websiteUrl: targetUser.websiteUrl,
+      district: targetUser.district,
+      location: targetUser.location,
+      state: targetUser.state,
+      channelLogoUrl: targetUser.channelLogoUrl,
+      channelLogoPngUrl: targetUser.channelLogoPngUrl,
+      channelLogoGifUrl: targetUser.channelLogoGifUrl,
+      channelLogoType: targetUser.channelLogoType,
+      socialIcons: updates.socialIcons || currentProf.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: true, linkedin: true },
+      socialLinks: updates.socialLinks || currentProf.socialLinks || {},
+      updatedAt: Date.now()
+    };
+    allProfiles[profileKey] = updatedProf;
+    if (targetUser.userId) allProfiles[targetUser.userId] = updatedProf;
+    saveProfilesDatabase(allProfiles);
+    if (centralDb && centralDb.useFirestore) {
+      centralDb.writeDoc("users", targetUser.email, targetUser).catch(() => {
+      });
+      if (targetUser.userId && targetUser.userId !== targetUser.email) {
+        centralDb.writeDoc("users", targetUser.userId, targetUser).catch(() => {
+        });
+      }
+      centralDb.writeDoc("user_profiles", profileKey, updatedProf).catch(() => {
+      });
+    }
+    return res.json({
+      success: true,
+      message: "\u092F\u0942\u091C\u093C\u0930 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0926\u0940 \u0917\u0908",
+      user: targetUser,
+      profile: updatedProf
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  } finally {
+    release();
+  }
+});
 app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
   const release = await userDbLock.acquire();
   try {
@@ -11289,9 +12024,11 @@ app.post("/api/notifications/mark-read", (req, res) => {
 });
 var ADMIN_NOTIFS_READ_FILE = import_path.default.join(process.cwd(), "admin_notifications_read_db.json");
 function loadAdminReadNotificationIds() {
-  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("admin_notifs_read")) {
-    const list = centralDb.cache.systemConfig.get("admin_notifs_read");
-    if (Array.isArray(list)) return new Set(list);
+  if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache.systemConfig.has("admin_notifs_read")) {
+      const list = centralDb.cache.systemConfig.get("admin_notifs_read");
+      if (Array.isArray(list)) return new Set(list);
+    }
   }
   try {
     if (import_fs.default.existsSync(ADMIN_NOTIFS_READ_FILE)) {
@@ -11304,14 +12041,15 @@ function loadAdminReadNotificationIds() {
   return /* @__PURE__ */ new Set();
 }
 function saveAdminReadNotificationIds(ids) {
+  const readArray = Array.from(ids);
   if (centralDb && centralDb.useFirestore) {
-    centralDb.saveAdminNotificationsRead(Array.from(ids)).catch(() => {
+    centralDb.cache.systemConfig.set("admin_notifs_read", readArray);
+    centralDb.saveAdminNotificationsRead(readArray).catch(() => {
     });
-    return;
   }
   try {
     const locs = resolveAllDatabaseLocations("admin_notifications_read_db.json");
-    const jsonStr = JSON.stringify(Array.from(ids), null, 2);
+    const jsonStr = JSON.stringify(readArray, null, 2);
     for (const loc of locs) {
       try {
         const dir = import_path.default.dirname(loc);
@@ -11538,7 +12276,7 @@ app.post("/api/admin/news/publish-rss", (req, res) => {
 app.post("/api/admin/notifications/mark-read", (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const reqEmail = (req.body?.email || req.body?.adminEmail || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
     const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
     if (!isAdmin) {
       return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
@@ -11564,9 +12302,13 @@ app.post("/api/admin/notifications/mark-read", (req, res) => {
       if (category === "requests" || !category) {
         loadLimitIncreaseRequests().forEach((r) => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
       }
+      try {
+        loadNotificationsDatabase().forEach((n) => readIds.add(String(n.id)));
+      } catch {
+      }
     }
     saveAdminReadNotificationIds(readIds);
-    return res.json({ success: true, totalRead: readIds.size });
+    return res.json({ success: true, totalRead: readIds.size, message: "\u0938\u092D\u0940 \u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u092A\u0922\u093C\u0947 \u0917\u090F \u092E\u093E\u0930\u094D\u0915 \u0915\u0930 \u0926\u093F\u090F \u0917\u090F\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -12428,7 +13170,7 @@ app.post("/api/convert-web-to-rss", async (req, res) => {
         error: "\u0907\u0938 \u0935\u0947\u092C\u092A\u0947\u091C \u0938\u0947 \u0915\u094B\u0908 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0942\u091A\u0940 (Article Listings) \u0928\u0939\u0940\u0902 \u092E\u093F\u0932 \u0938\u0915\u0940\u0964 \u0915\u0943\u092A\u092F\u093E \u092E\u093E\u0928\u094D\u092F \u0939\u094B\u092E\u092A\u0947\u091C \u092F\u093E \u0936\u094D\u0930\u0947\u0923\u0940 \u092A\u0947\u091C \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964"
       });
     }
-    const feedId = `wf_${Date.now()}_${import_crypto.default.randomBytes(3).toString("hex")}`;
+    const feedId = `wf_${Date.now()}_${import_crypto2.default.randomBytes(3).toString("hex")}`;
     const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
@@ -13362,7 +14104,7 @@ app.post("/api/support/requests", async (req, res) => {
         return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0938\u0902\u0932\u0917\u094D\u0928\u0915: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
       }
       const ext = magic.format || "png";
-      const filename = `support_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
+      const filename = `support_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
       if (cloudStorage) {
         const uploadRes = await cloudStorage.saveMedia({
           buffer: buf,
@@ -13382,7 +14124,7 @@ app.post("/api/support/requests", async (req, res) => {
       }
     }
     const newRequest = {
-      id: data.id || `inq_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}`,
+      id: data.id || `inq_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}`,
       userId: data.userId || "",
       userName: data.userName || "\u0905\u0928\u093E\u092E \u092F\u0942\u091C\u093C\u0930",
       userEmail: (data.userEmail || "").replace(/\s+/g, "").toLowerCase().trim(),
@@ -13806,7 +14548,7 @@ app.post("/api/admin/videos/upload-file", requireAdminMiddleware, async (req, re
     } else if (filename.toLowerCase().endsWith(".m4v") || videoData.startsWith("data:video/x-m4v")) {
       ext = "m4v";
     }
-    const savedFilename = `video_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
+    const savedFilename = `video_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, "").replace(/^data:application\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
     let videoUrl = `/uploads/videos/${savedFilename}`;
@@ -13851,7 +14593,7 @@ app.post("/api/admin/videos/upload-thumbnail", requireAdminMiddleware, async (re
       return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092B\u093C\u093E\u0907\u0932: \u0915\u0947\u0935\u0932 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 PNG, JPEG, GIF \u092F\u093E WebP \u091B\u0935\u093F\u092F\u093E\u0901 \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
     }
     const ext = magic.format || "jpg";
-    const savedFilename = `thumb_${Date.now()}_${import_crypto.default.randomBytes(4).toString("hex")}.${ext}`;
+    const savedFilename = `thumb_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
     let thumbnailUrl = `/uploads/thumbnails/${savedFilename}`;
     if (cloudStorage) {
       const uploadRes = await cloudStorage.saveMedia({
@@ -14549,7 +15291,7 @@ app.post("/api/twilio/send-otp", authRateLimiter, async (req, res) => {
     if (cleanNum.length !== 10) {
       return res.status(400).json({ success: false, error: "\u0915\u0943\u092A\u092F\u093E 10 \u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u092E\u093E\u0928\u094D\u092F \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
     }
-    const otp = import_crypto.default.randomInt(1e5, 999999).toString();
+    const otp = import_crypto2.default.randomInt(1e5, 999999).toString();
     otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1e3, attempts: 0 });
     if (TWILIO_ACCOUNT_SID && (TWILIO_API_KEY_SECRET || TWILIO_AUTH_TOKEN)) {
       try {
@@ -15372,7 +16114,7 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
       attemptedKeys.add(cleanKey);
       const start = Date.now();
       try {
-        const ai = new import_genai.GoogleGenAI({
+        const ai = new import_genai2.GoogleGenAI({
           apiKey: cleanKey,
           httpOptions: { headers: { "User-Agent": "aistudio-build-vip-pool" } }
         });
@@ -15434,7 +16176,7 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
       attemptedKeys.add(cleanKey);
       const start = Date.now();
       try {
-        const ai = new import_genai.GoogleGenAI({
+        const ai = new import_genai2.GoogleGenAI({
           apiKey: cleanKey,
           httpOptions: { headers: { "User-Agent": "aistudio-build-free-pool" } }
         });
@@ -15474,7 +16216,7 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
   if (fallbackEnvKey && fallbackEnvKey.length >= 15 && fallbackEnvKey !== "MY_GEMINI_API_KEY" && !attemptedKeys.has(fallbackEnvKey)) {
     attemptedKeys.add(fallbackEnvKey);
     try {
-      const ai = new import_genai.GoogleGenAI({
+      const ai = new import_genai2.GoogleGenAI({
         apiKey: fallbackEnvKey,
         httpOptions: { headers: { "User-Agent": "aistudio-build-fallback" } }
       });
@@ -15563,7 +16305,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
   let lastTestErr = null;
   for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
     try {
-      const testAi = new import_genai.GoogleGenAI({
+      const testAi = new import_genai2.GoogleGenAI({
         apiKey: cleanKey,
         httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
       });
@@ -15710,7 +16452,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
   }
   const start = Date.now();
   try {
-    const testAi = new import_genai.GoogleGenAI({
+    const testAi = new import_genai2.GoogleGenAI({
       apiKey: apiKey.trim(),
       httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
     });
@@ -15758,7 +16500,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
   }
   const start = Date.now();
   try {
-    const testAi = new import_genai.GoogleGenAI({
+    const testAi = new import_genai2.GoogleGenAI({
       apiKey: targetKeyStr,
       httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } }
     });
@@ -17515,22 +18257,22 @@ ${userContext ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0928\u093F\u0930\
             systemInstruction: "You are a professional Hindi news editor. Strip PR flattery and honorifics. Output valid JSON.",
             responseMimeType: "application/json",
             responseSchema: {
-              type: import_genai.Type.OBJECT,
+              type: import_genai2.Type.OBJECT,
               properties: {
-                headline: { type: import_genai.Type.STRING },
+                headline: { type: import_genai2.Type.STRING },
                 highlightWords: {
-                  type: import_genai.Type.ARRAY,
-                  items: { type: import_genai.Type.STRING }
+                  type: import_genai2.Type.ARRAY,
+                  items: { type: import_genai2.Type.STRING }
                 },
-                formattedHeadline: { type: import_genai.Type.STRING },
-                location: { type: import_genai.Type.STRING },
-                summary: { type: import_genai.Type.STRING },
-                category: { type: import_genai.Type.STRING },
-                hasPerson: { type: import_genai.Type.BOOLEAN },
-                description: { type: import_genai.Type.STRING },
-                isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
-                speakerName: { type: import_genai.Type.STRING },
-                speakerTitle: { type: import_genai.Type.STRING }
+                formattedHeadline: { type: import_genai2.Type.STRING },
+                location: { type: import_genai2.Type.STRING },
+                summary: { type: import_genai2.Type.STRING },
+                category: { type: import_genai2.Type.STRING },
+                hasPerson: { type: import_genai2.Type.BOOLEAN },
+                description: { type: import_genai2.Type.STRING },
+                isAiGeneratedPhoto: { type: import_genai2.Type.BOOLEAN },
+                speakerName: { type: import_genai2.Type.STRING },
+                speakerTitle: { type: import_genai2.Type.STRING }
               },
               required: [
                 "headline",
@@ -18006,54 +18748,54 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
   return result.slice(0, 5);
 }
 var GEMINI_NEWS_RESPONSE_SCHEMA = {
-  type: import_genai.Type.OBJECT,
+  type: import_genai2.Type.OBJECT,
   properties: {
     headline: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "Primary journalistic headline in Devanagari Hindi (target 80-110 visible characters, concise, active, no trailing period or punctuation)"
     },
     headlineOptions: {
-      type: import_genai.Type.ARRAY,
-      items: { type: import_genai.Type.STRING },
+      type: import_genai2.Type.ARRAY,
+      items: { type: import_genai2.Type.STRING },
       description: "Exactly 5 distinct, factual headline options for the SAME central news event (Option 1: 80-110 chars, Option 2: 100-130 chars, Option 3: 125-150 chars, Option 4: 130-160 chars, Option 5: 150-200 chars; pure Hindi, no trailing periods or punctuation)"
     },
     highlightWords: {
-      type: import_genai.Type.ARRAY,
-      items: { type: import_genai.Type.STRING },
+      type: import_genai2.Type.ARRAY,
+      items: { type: import_genai2.Type.STRING },
       description: "2 to 4 key names or significant action words to highlight"
     },
     formattedHeadline: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "Headline with highlighted words marked with [yellow]word[/yellow]"
     },
     location: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "Clean city, district, or state without category keywords or URLs"
     },
     summary: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "Comprehensive 3-paragraph Hindi news summary covering all facts, figures, names, locations, dates, and developments from the source. Must NOT begin with the headline or title. Exactly 3 substantive paragraphs separated by blank lines, concluding with hashtags ending with #AINewsMaker"
     },
     captionDetailed: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "Rich, detailed 3-paragraph Hindi social media caption. Directly begins with factual details (who, what, where, when, context) without repeating the headline. 3 substantive paragraphs separated by blank lines, concluding with hashtags ending with #AINewsMaker"
     },
     captionBullets: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "Key facts in 3 to 5 clear bullet points, each starting with '\u2022 ' and ending with '\u0964'. Concluding with hashtags ending with #AINewsMaker. Must not repeat the headline"
     },
     captionShort: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "Crisp 2-paragraph Hindi news summary with key facts and concluding hashtags ending with #AINewsMaker. Must not repeat the headline"
     },
     category: {
-      type: import_genai.Type.STRING,
+      type: import_genai2.Type.STRING,
       description: "News category (\u0939\u093E\u0926\u0938\u093E / \u092A\u094D\u0930\u0936\u093E\u0938\u0928 / \u0930\u093E\u091C\u0928\u0940\u0924\u093F / \u0935\u093F\u0915\u093E\u0938 / \u0905\u092A\u0930\u093E\u0927 / \u0915\u093E\u0930\u094B\u092C\u093E\u0930)"
     },
-    suggestedImagePrompt: { type: import_genai.Type.STRING },
-    isAiGeneratedPhoto: { type: import_genai.Type.BOOLEAN },
-    speakerName: { type: import_genai.Type.STRING },
-    speakerTitle: { type: import_genai.Type.STRING }
+    suggestedImagePrompt: { type: import_genai2.Type.STRING },
+    isAiGeneratedPhoto: { type: import_genai2.Type.BOOLEAN },
+    speakerName: { type: import_genai2.Type.STRING },
+    speakerTitle: { type: import_genai2.Type.STRING }
   },
   required: [
     "headline",
@@ -18467,7 +19209,7 @@ ${rawLink}` : rawLink;
     const runGemini = async () => {
       const clientPassedKey = (req.body.geminiApiKey || "").trim();
       if (clientPassedKey && clientPassedKey !== "MY_GEMINI_API_KEY") {
-        const ai = new import_genai.GoogleGenAI({
+        const ai = new import_genai2.GoogleGenAI({
           apiKey: clientPassedKey,
           httpOptions: { headers: { "User-Agent": "aistudio-build-custom" } }
         });
@@ -18662,11 +19404,11 @@ ${factSentences.slice(0, 5).join("\n")}
                 config: {
                   responseMimeType: "application/json",
                   responseSchema: {
-                    type: import_genai.Type.OBJECT,
+                    type: import_genai2.Type.OBJECT,
                     properties: {
                       headlineOptions: {
-                        type: import_genai.Type.ARRAY,
-                        items: { type: import_genai.Type.STRING }
+                        type: import_genai2.Type.ARRAY,
+                        items: { type: import_genai2.Type.STRING }
                       }
                     },
                     required: ["headlineOptions"]
@@ -19165,7 +19907,7 @@ JSON Output Schema:
     const tryGemini = async () => {
       const clientPassedKey = (geminiApiKey || "").trim();
       if (clientPassedKey && clientPassedKey !== "MY_GEMINI_API_KEY") {
-        const ai = new import_genai.GoogleGenAI({
+        const ai = new import_genai2.GoogleGenAI({
           apiKey: clientPassedKey,
           httpOptions: { headers: { "User-Agent": "aistudio-build-custom" } }
         });
@@ -20956,20 +21698,84 @@ function saveCategoriesDatabase(categories) {
     console.error("Failed to write categories_database.json:", e);
   }
 }
-app.get("/api/categories", (_req, res) => {
+app.get(["/api/categories", "/api/admin/categories"], (_req, res) => {
   res.json({
     success: true,
     categories: loadCategoriesDatabase()
   });
 });
-app.post("/api/categories", requireMasterAdminMiddleware, (req, res) => {
+app.post(["/api/categories", "/api/admin/categories"], (req, res) => {
   try {
-    const { categories } = req.body;
+    const { categories, name, nameHi, nameEn, id, icon, isActive } = req.body || {};
+    let allCats = loadCategoriesDatabase();
     if (Array.isArray(categories) && categories.length > 0) {
       saveCategoriesDatabase(categories);
       return res.json({ success: true, message: "Categories saved successfully", categories });
     }
-    return res.status(400).json({ error: "Invalid categories format" });
+    const catName = (nameHi || name || nameEn || "").toString().trim();
+    if (!catName) {
+      return res.status(400).json({ error: "\u0936\u094D\u0930\u0947\u0923\u0940 \u0915\u093E \u0928\u093E\u092E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
+    }
+    const cleanId = (id || catName).toLowerCase().replace(/[^a-z0-9_]/g, "") || `cat_${Date.now()}`;
+    if (allCats.some((c) => c.id === cleanId)) {
+      return res.status(409).json({ error: "\u092F\u0939 \u0936\u094D\u0930\u0947\u0923\u0940 \u092A\u0939\u0932\u0947 \u0938\u0947 \u092E\u094C\u091C\u0942\u0926 \u0939\u0948" });
+    }
+    const newCat = {
+      id: cleanId,
+      name: catName,
+      nameHi: nameHi || catName,
+      nameEn: nameEn || "",
+      icon: icon || "\u{1F4C1}",
+      isActive: isActive !== false,
+      order: allCats.length + 1,
+      createdAt: Date.now()
+    };
+    allCats.push(newCat);
+    saveCategoriesDatabase(allCats);
+    return res.json({ success: true, category: newCat, categories: allCats });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body || {};
+    let allCats = loadCategoriesDatabase();
+    const idx = allCats.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      allCats[idx] = { ...allCats[idx], ...updates, updatedAt: Date.now() };
+      saveCategoriesDatabase(allCats);
+      return res.json({ success: true, category: allCats[idx], categories: allCats });
+    }
+    return res.status(404).json({ error: "\u0936\u094D\u0930\u0947\u0923\u0940 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], (req, res) => {
+  try {
+    const { id } = req.params;
+    let allCats = loadCategoriesDatabase();
+    const idx = allCats.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      allCats[idx].isActive = !allCats[idx].isActive;
+      allCats[idx].updatedAt = Date.now();
+      saveCategoriesDatabase(allCats);
+      return res.json({ success: true, category: allCats[idx], categories: allCats });
+    }
+    return res.status(404).json({ error: "\u0936\u094D\u0930\u0947\u0923\u0940 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+  try {
+    const { id } = req.params;
+    let allCats = loadCategoriesDatabase();
+    allCats = allCats.filter((c) => c.id !== id);
+    saveCategoriesDatabase(allCats);
+    return res.json({ success: true, categories: allCats });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -21162,15 +21968,18 @@ app.post("/api/admin/plans", requireMasterAdminMiddleware, (req, res) => {
   }
 });
 function loadPaymentsDatabase() {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.payments.size > 0) {
-    return Array.from(centralDb.cache.payments.values());
+  if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache.payments && centralDb.cache.payments.size > 0) {
+      return Array.from(centralDb.cache.payments.values());
+    }
   }
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
       if (import_fs.default.existsSync(loc)) {
         const raw = import_fs.default.readFileSync(loc, "utf-8");
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     }
   } catch {
@@ -21179,8 +21988,10 @@ function loadPaymentsDatabase() {
 }
 function savePaymentsDatabase(data) {
   if (centralDb && centralDb.useFirestore) {
+    if (!centralDb.cache.payments) centralDb.cache.payments = /* @__PURE__ */ new Map();
     for (const p of data) {
       const orderId = (p.orderId || p.cfOrderId || `order_${Date.now()}`).toString().trim();
+      centralDb.cache.payments.set(orderId, p);
       centralDb.recordPayment(orderId, p).catch(() => {
       });
     }
@@ -21249,7 +22060,28 @@ function savePackageCouponsDatabase(data) {
     console.error("Failed saving package_coupons_db.json:", e);
   }
 }
-app.get("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
+app.get(["/api/promo-codes", "/api/package-coupons"], (req, res) => {
+  try {
+    const coupons = loadPackageCouponsDatabase();
+    const promoCodes = coupons.map((c) => ({
+      id: c.id,
+      code: c.code,
+      name: c.name || c.code,
+      discount: c.discountValue || c.discountAmount || c.discount || 0,
+      discountType: c.discountType || "percent",
+      planId: c.applicablePackage || c.planId || "all",
+      maxUses: c.maxUsageLimit || c.maxUses || 100,
+      usedCount: c.currentUsageCount || c.usedCount || 0,
+      expiresAt: c.expiryDate || c.expiresAt || null,
+      isActive: c.isActive !== false,
+      createdAt: c.createdAt || (/* @__PURE__ */ new Date()).toISOString()
+    }));
+    return res.json({ success: true, promoCodes, coupons });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err), promoCodes: [], coupons: [] });
+  }
+});
+app.get(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMasterAdminMiddleware, (req, res) => {
   try {
     const coupons = loadPackageCouponsDatabase();
     return res.json({ success: true, coupons });
@@ -21257,73 +22089,127 @@ app.get("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) =
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/package-coupons", requireMasterAdminMiddleware, (req, res) => {
+app.post(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMasterAdminMiddleware, (req, res) => {
   try {
-    const { id, code, name, discountAmount, applicablePackage, expiryDate, maxUsageLimit, perUserLimit, isActive } = req.body || {};
-    if (!code || !discountAmount) {
-      return res.status(400).json({ error: "\u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0914\u0930 \u091B\u0942\u091F \u0930\u093E\u0936\u093F (\u20B9) \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
+    const {
+      id,
+      code,
+      name,
+      discountType = "fixed",
+      discountValue,
+      discountAmount,
+      minPurchaseAmount = 0,
+      maxDiscount,
+      applicablePackage = "ALL",
+      startDate,
+      expiryDate,
+      maxUsageLimit,
+      perUserLimit = 1,
+      isActive = true,
+      description
+    } = req.body || {};
+    if (!code || typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({ error: "\u092A\u094D\u0930\u094B\u092E\u094B / \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0928\u093E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
     }
-    const cleanCode = String(code).trim().toUpperCase();
+    const cleanCode = String(code).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+    if (!cleanCode) {
+      return res.status(400).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0915\u0942\u092A\u0928 \u0915\u094B\u0921\u0964 \u0915\u0947\u0935\u0932 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0905\u0915\u094D\u0937\u0930, \u0905\u0902\u0915, - \u0914\u0930 _ \u0905\u0928\u0941\u092E\u0924 \u0939\u0948\u0902\u0964" });
+    }
+    const rawVal = Number(discountValue !== void 0 ? discountValue : discountAmount);
+    if (isNaN(rawVal) || rawVal <= 0) {
+      return res.status(400).json({ error: "\u091B\u0942\u091F \u092E\u093E\u0928 (Discount Value) \u090F\u0915 \u0927\u0928\u093E\u0924\u094D\u092E\u0915 \u0938\u0902\u0916\u094D\u092F\u093E \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F\u0964" });
+    }
+    const isPercent = discountType === "percentage";
+    if (isPercent && (rawVal < 1 || rawVal > 100)) {
+      return res.status(400).json({ error: "\u092A\u094D\u0930\u0924\u093F\u0936\u0924 \u091B\u0942\u091F 1% \u0938\u0947 100% \u0915\u0947 \u092C\u0940\u091A \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F\u0964" });
+    }
+    const cleanMinPurchase = Math.max(0, Number(minPurchaseAmount) || 0);
+    const cleanMaxDiscount = maxDiscount ? Math.max(1, Number(maxDiscount)) : void 0;
+    if (startDate && expiryDate) {
+      const sTime = new Date(startDate).getTime();
+      const eTime = new Date(expiryDate).getTime();
+      if (!isNaN(sTime) && !isNaN(eTime) && eTime < sTime) {
+        return res.status(400).json({ error: "\u0938\u092E\u093E\u092A\u094D\u0924\u093F \u0924\u093F\u0925\u093F (Expiry Date) \u092A\u094D\u0930\u093E\u0930\u0902\u092D \u0924\u093F\u0925\u093F \u0938\u0947 \u092A\u0939\u0932\u0947 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u0940\u0964" });
+      }
+    }
     const coupons = loadPackageCouponsDatabase();
     const now = Date.now();
+    const conflictIdx = coupons.findIndex((c) => c.code.toUpperCase() === cleanCode && (id ? c.id !== id : true));
+    if (conflictIdx >= 0) {
+      return res.status(409).json({ error: `\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 '${cleanCode}' \u092A\u0939\u0932\u0947 \u0938\u0947 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0932\u0917 \u0915\u094B\u0921 \u091A\u0941\u0928\u0947\u0902\u0964` });
+    }
     const existingIdx = coupons.findIndex((c) => id && c.id === id || c.code.toUpperCase() === cleanCode);
     if (existingIdx >= 0) {
+      const prev = coupons[existingIdx];
       coupons[existingIdx] = {
-        ...coupons[existingIdx],
+        ...prev,
         code: cleanCode,
         name: (name || cleanCode).trim(),
-        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        discountType: isPercent ? "percentage" : "fixed",
+        discountValue: rawVal,
+        discountAmount: isPercent ? rawVal : rawVal,
+        minPurchaseAmount: cleanMinPurchase,
+        maxDiscount: cleanMaxDiscount,
         applicablePackage: applicablePackage || "ALL",
+        startDate: startDate || "",
         expiryDate: expiryDate || "",
         maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : void 0,
-        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        perUserLimit: Math.max(1, Number(perUserLimit) || 1),
         isActive: isActive !== false,
+        description: (description || "").trim(),
         updatedAt: now
       };
       savePackageCouponsDatabase(coupons);
-      return res.json({ success: true, coupon: coupons[existingIdx], message: "\u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u092A\u0921\u0947\u091F \u0939\u0941\u0906\u0964" });
+      return res.json({ success: true, coupon: coupons[existingIdx], message: `\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 '${cleanCode}' \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u092A\u0921\u0947\u091F \u0939\u0941\u0906\u0964` });
     } else {
       const newCoupon = {
         id: id || `coupon_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
         code: cleanCode,
         name: (name || cleanCode).trim(),
-        discountAmount: Math.max(1, Number(discountAmount) || 0),
+        discountType: isPercent ? "percentage" : "fixed",
+        discountValue: rawVal,
+        discountAmount: isPercent ? rawVal : rawVal,
+        minPurchaseAmount: cleanMinPurchase,
+        maxDiscount: cleanMaxDiscount,
         applicablePackage: applicablePackage || "ALL",
+        startDate: startDate || "",
         expiryDate: expiryDate || "",
         maxUsageLimit: maxUsageLimit ? Number(maxUsageLimit) : void 0,
-        perUserLimit: perUserLimit ? Number(perUserLimit) : 1,
+        perUserLimit: Math.max(1, Number(perUserLimit) || 1),
         usageCount: 0,
         usedBy: [],
         isActive: isActive !== false,
+        description: (description || "").trim(),
         createdAt: now,
         updatedAt: now
       };
-      coupons.push(newCoupon);
+      coupons.unshift(newCoupon);
       savePackageCouponsDatabase(coupons);
-      return res.json({ success: true, coupon: newCoupon, message: "\u0928\u092F\u093E \u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092C\u0928\u093E\u092F\u093E \u0917\u092F\u093E\u0964" });
+      return res.json({ success: true, coupon: newCoupon, message: `\u0928\u092F\u093E \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 '${cleanCode}' \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092C\u0928\u093E\u092F\u093E \u0917\u092F\u093E\u0964` });
     }
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/package-coupons/:id", requireMasterAdminMiddleware, (req, res) => {
+app.delete(["/api/admin/package-coupons/:id", "/api/admin/promo-codes/:id"], requireMasterAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let coupons = loadPackageCouponsDatabase();
+    const cleanId = String(id).toUpperCase().trim();
     const initialLen = coupons.length;
-    coupons = coupons.filter((c) => c.id !== id && c.code !== id);
+    coupons = coupons.filter((c) => c.id !== id && c.code.toUpperCase() !== cleanId);
     if (coupons.length === initialLen) {
-      return res.status(404).json({ error: "\u0915\u0942\u092A\u0928 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+      return res.status(404).json({ error: "\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
     }
     savePackageCouponsDatabase(coupons);
-    return res.json({ success: true, message: "\u092A\u0948\u0915\u0947\u091C \u0915\u0942\u092A\u0928 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E\u092F\u093E \u0917\u092F\u093E\u0964" });
+    return res.json({ success: true, message: "\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E\u092F\u093E \u0917\u092F\u093E\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/package-coupons/validate", (req, res) => {
+app.post(["/api/package-coupons/validate", "/api/promo-codes/validate"], (req, res) => {
   try {
-    const { code, planKey, planId, userEmail } = req.body || {};
+    const { code, planKey, planId, userEmail, orderAmount: reqOrderAmount } = req.body || {};
     if (!code) {
       return res.status(400).json({ valid: false, error: "\u0915\u0943\u092A\u092F\u093E \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
     }
@@ -21331,26 +22217,32 @@ app.post("/api/package-coupons/validate", (req, res) => {
     const coupons = loadPackageCouponsDatabase();
     const coupon = coupons.find((c) => c.code.toUpperCase() === cleanCode);
     if (!coupon) {
-      return res.status(404).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964" });
+      return res.status(404).json({ valid: false, error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964" });
     }
     if (!coupon.isActive) {
-      return res.status(400).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0964" });
+      return res.status(400).json({ valid: false, error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0964" });
+    }
+    if (coupon.startDate) {
+      const sTime = new Date(coupon.startDate).getTime();
+      if (!isNaN(sTime) && Date.now() < sTime) {
+        return res.status(400).json({ valid: false, error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0905\u092D\u0940 \u0938\u0915\u094D\u0930\u093F\u092F \u0928\u0939\u0940\u0902 \u0939\u0941\u0906 \u0939\u0948\u0964" });
+      }
     }
     if (coupon.expiryDate) {
       const exp = new Date(coupon.expiryDate).getTime() + 24 * 60 * 60 * 1e3 - 1;
-      if (Date.now() > exp) {
-        return res.status(400).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0938\u092E\u093E\u092A\u094D\u0924 (Expire) \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
+      if (!isNaN(exp) && Date.now() > exp) {
+        return res.status(400).json({ valid: false, error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0938\u092E\u093E\u092A\u094D\u0924 (Expire) \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
       }
     }
     if (coupon.maxUsageLimit && (coupon.usageCount || 0) >= coupon.maxUsageLimit) {
-      return res.status(400).json({ valid: false, error: "\u092F\u0939 \u0915\u0942\u092A\u0928 \u0905\u092A\u0928\u0940 \u0905\u0927\u093F\u0915\u0924\u092E \u0909\u092A\u092F\u094B\u0917 \u0938\u0940\u092E\u093E \u0924\u0915 \u092A\u0939\u0941\u0901\u091A \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
+      return res.status(400).json({ valid: false, error: "\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0905\u092A\u0928\u0940 \u0905\u0927\u093F\u0915\u0924\u092E \u0909\u092A\u092F\u094B\u0917 \u0938\u0940\u092E\u093E \u0924\u0915 \u092A\u0939\u0941\u0901\u091A \u091A\u0941\u0915\u093E \u0939\u0948\u0964" });
     }
     const cleanEmail = (userEmail || "").trim().toLowerCase();
     if (cleanEmail && coupon.usedBy && Array.isArray(coupon.usedBy)) {
       const userUses = coupon.usedBy.filter((e) => e.toLowerCase() === cleanEmail).length;
       const limit = coupon.perUserLimit || 1;
       if (userUses >= limit) {
-        return res.status(400).json({ valid: false, error: `\u0906\u092A \u0907\u0938 \u0915\u0942\u092A\u0928 \u0915\u094B\u0921 \u0915\u093E \u092A\u0939\u0932\u0947 \u0939\u0940 ${limit} \u092C\u093E\u0930 \u0909\u092A\u092F\u094B\u0917 \u0915\u0930 \u091A\u0941\u0915\u0947 \u0939\u0948\u0902\u0964` });
+        return res.status(400).json({ valid: false, error: `\u0906\u092A \u0907\u0938 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0915\u093E \u092A\u0939\u0932\u0947 \u0939\u0940 ${limit} \u092C\u093E\u0930 \u0909\u092A\u092F\u094B\u0917 \u0915\u0930 \u091A\u0941\u0915\u0947 \u0939\u0948\u0902\u0964` });
       }
     }
     const effectivePlanKey = (planKey || planId || "").toUpperCase();
@@ -21360,14 +22252,29 @@ app.post("/api/package-coupons/validate", (req, res) => {
       if (!matches) {
         return res.status(400).json({
           valid: false,
-          error: `\u092F\u0939 \u0915\u0942\u092A\u0928 \u0915\u0947\u0935\u0932 '${coupon.applicablePackage}' \u092A\u0948\u0915\u0947\u091C \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964`
+          error: `\u092F\u0939 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0915\u0947\u0935\u0932 '${coupon.applicablePackage}' \u092A\u0948\u0915\u0947\u091C \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964`
         });
       }
     }
     const catalog = loadPlansCatalogDatabase();
     const plan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    const originalAmount = plan?.priceNum || 999;
-    const discountAmount = Math.min(originalAmount - 1, coupon.discountAmount);
+    const originalAmount = Number(reqOrderAmount) || plan?.priceNum || 999;
+    if (coupon.minPurchaseAmount && originalAmount < coupon.minPurchaseAmount) {
+      return res.status(400).json({
+        valid: false,
+        error: `\u0907\u0938 \u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 \u0915\u0947 \u0932\u093F\u090F \u0928\u094D\u092F\u0942\u0928\u0924\u092E \u0916\u0930\u0940\u0926 \u0930\u093E\u0936\u093F \u20B9${coupon.minPurchaseAmount} \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F\u0964`
+      });
+    }
+    let calculatedDiscount = 0;
+    if (coupon.discountType === "percentage") {
+      calculatedDiscount = Math.floor(originalAmount * (coupon.discountValue || coupon.discountAmount) / 100);
+      if (coupon.maxDiscount && coupon.maxDiscount > 0) {
+        calculatedDiscount = Math.min(calculatedDiscount, coupon.maxDiscount);
+      }
+    } else {
+      calculatedDiscount = Number(coupon.discountValue || coupon.discountAmount) || 0;
+    }
+    const discountAmount = Math.max(0, Math.min(originalAmount - 1, calculatedDiscount));
     const finalPayableAmount = Math.max(1, originalAmount - discountAmount);
     return res.json({
       valid: true,
@@ -21375,13 +22282,15 @@ app.post("/api/package-coupons/validate", (req, res) => {
         id: coupon.id,
         code: coupon.code,
         name: coupon.name,
-        discountAmount: coupon.discountAmount,
+        discountType: coupon.discountType || "fixed",
+        discountValue: coupon.discountValue || coupon.discountAmount,
+        discountAmount,
         applicablePackage: coupon.applicablePackage
       },
       originalAmount,
       discountAmount,
       finalPayableAmount,
-      message: `\u0915\u0942\u092A\u0928 '${coupon.code}' \u0932\u093E\u0917\u0942 \u0939\u0941\u0906! \u20B9${discountAmount} \u0915\u0940 \u091B\u0942\u091F \u092E\u093F\u0932\u0940\u0964`
+      message: `\u092A\u094D\u0930\u094B\u092E\u094B \u0915\u094B\u0921 '${coupon.code}' \u0932\u093E\u0917\u0942 \u0939\u0941\u0906! \u20B9${discountAmount} \u0915\u0940 \u091B\u0942\u091F \u092E\u093F\u0932\u0940\u0964`
     });
   } catch (err) {
     return res.status(500).json({ valid: false, error: cleanErrorMessage(err) });
@@ -21789,10 +22698,10 @@ app.post("/api/cashfree/webhook", async (req, res) => {
         console.warn("[Cashfree Webhook] Expired webhook timestamp:", timestamp);
         return res.status(400).json({ status: "ERROR", error: "Webhook timestamp expired" });
       }
-      const expectedSig = import_crypto.default.createHmac("sha256", webhookSecret).update(String(timestamp) + rawBody).digest("base64");
+      const expectedSig = import_crypto2.default.createHmac("sha256", webhookSecret).update(String(timestamp) + rawBody).digest("base64");
       const sigBuf = Buffer.from(String(signature));
       const expBuf = Buffer.from(expectedSig);
-      if (sigBuf.length !== expBuf.length || !import_crypto.default.timingSafeEqual(sigBuf, expBuf)) {
+      if (sigBuf.length !== expBuf.length || !import_crypto2.default.timingSafeEqual(sigBuf, expBuf)) {
         console.warn("[Cashfree Webhook] Invalid webhook cryptographic signature");
         return res.status(401).json({ status: "ERROR", error: "Invalid webhook signature" });
       }
@@ -22200,9 +23109,9 @@ function generateDownloadToken(userKey, dateStr, downloadRequestId, cardId = "")
   const cleanUserKey = (userKey || "").toLowerCase().trim();
   const cleanReqId = (downloadRequestId || "").trim();
   const cleanCardId = (cardId || "").trim();
-  const nonce = import_crypto.default.randomBytes(16).toString("hex");
+  const nonce = import_crypto2.default.randomBytes(16).toString("hex");
   const payload = `${cleanUserKey}:${dateStr}:${cleanReqId}:${cleanCardId}:${expiresAt}:${nonce}`;
-  const sig = import_crypto.default.createHmac("sha256", AUTH_SECRET).update(payload).digest("hex");
+  const sig = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(payload).digest("hex");
   const token = `dlt.${expiresAt}.${nonce}.${sig}`;
   activeDownloadTokens.set(token, {
     token,

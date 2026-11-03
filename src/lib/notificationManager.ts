@@ -15,39 +15,17 @@ export interface AppNotification {
 const STORAGE_KEY = 'ai_news_real_notifications_v1';
 const PERMISSION_ASKED_KEY = 'ai_news_notif_permission_prompted';
 
-const DEFAULT_NOTIFICATIONS: AppNotification[] = [
-  {
-    id: 'n_init_1',
-    title: 'डिजिटल लाइव न्यूज़ डेस्क सक्रिय है',
-    message: 'सभी ताज़ा राष्ट्रीय व प्रादेशिक समाचार अपडेट उपलब्ध हैं।',
-    time: 'अभी',
-    timestamp: Date.now() - 60000,
-    unread: true,
-    type: 'system',
-    linkTab: 'home',
-  },
-  {
-    id: 'n_init_2',
-    title: 'नया ग्राफिक स्टूडियो v2.5 लाइव',
-    message: 'फिक्स लोगो स्केलिंग व मास्टर ब्रांडिंग फुटर सक्रिय है।',
-    time: '20 मिनट पहले',
-    timestamp: Date.now() - 1200000,
-    unread: true,
-    type: 'studio',
-    linkTab: 'studio',
-  },
-];
+const DEFAULT_NOTIFICATIONS: AppNotification[] = [];
 
 export function getNotifications(): AppNotification[] {
   if (typeof window === 'undefined') return DEFAULT_NOTIFICATIONS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_NOTIFICATIONS));
       return DEFAULT_NOTIFICATIONS;
     }
     const list: AppNotification[] = JSON.parse(raw);
-    return Array.isArray(list) && list.length > 0 ? list : DEFAULT_NOTIFICATIONS;
+    return Array.isArray(list) ? list : DEFAULT_NOTIFICATIONS;
   } catch {
     return DEFAULT_NOTIFICATIONS;
   }
@@ -96,14 +74,8 @@ export async function fetchNotificationsFromServer(userEmail?: string): Promise<
       const data = await res.json();
       if (Array.isArray(data.notifications)) {
         const serverNotifs: AppNotification[] = data.notifications;
-        const localList = getNotifications();
-        const serverIds = new Set(serverNotifs.map((n) => n.id));
-        const merged = [
-          ...serverNotifs,
-          ...localList.filter((n) => !serverIds.has(n.id)),
-        ].slice(0, 50);
-        saveNotifications(merged);
-        return merged;
+        saveNotifications(serverNotifs);
+        return serverNotifs;
       }
     }
   } catch (err) {

@@ -497,6 +497,18 @@ class CentralFirestoreDatabaseService {
         cRes.documents.forEach((c) => this.cache.coupons.set(c.id, c));
       }
 
+      // 5.5 Payment Transactions (Crucial for User Plan & Financial Permanence)
+      const payRes = await this.listDocs('payment_transactions', 500);
+      if (payRes.success) {
+        if (!this.cache.payments) this.cache.payments = new Map();
+        this.cache.payments.clear();
+        payRes.documents.forEach((p) => {
+          const id = p.orderId || p.id || p.docId;
+          if (id) this.cache.payments.set(id, p);
+        });
+        console.log(`  ✓ Loaded ${payRes.documents.length} payment transactions into live cache`);
+      }
+
       // 6. Categories & Templates
       const catRes = await this.listDocs('news_categories', 100);
       if (catRes.success) {
@@ -514,6 +526,14 @@ class CentralFirestoreDatabaseService {
       if (sysRes.success) {
         this.cache.systemConfig.clear();
         sysRes.documents.forEach((cfg) => this.cache.systemConfig.set(cfg.id, cfg));
+      }
+
+      // 7.5 Admin Notifications Read
+      const anrRes = await this.readDoc('admin_notifications_read', 'global');
+      if (anrRes.success && anrRes.data && Array.isArray(anrRes.data.readIds)) {
+        this.cache.systemConfig.set('admin_notifs_read', anrRes.data.readIds);
+        this.cacheTimestamps.set('systemConfig:admin_notifs_read', Date.now());
+        console.log(`  ✓ Loaded ${anrRes.data.readIds.length} admin read notification IDs into live cache`);
       }
 
       this.isInitialized = true;
@@ -1036,8 +1056,21 @@ class CentralFirestoreDatabaseService {
 
   async getPayments(userEmail = '') {
     if (this.useFirestore) {
-      const res = await this.listDocs('payment_transactions', 300);
+      if (this.cache.payments && this.cache.payments.size > 0) {
+        const all = Array.from(this.cache.payments.values());
+        if (userEmail) {
+          const clean = userEmail.toLowerCase().trim();
+          return all.filter((p) => (p.userEmail || p.customerEmail || '').toLowerCase().trim() === clean);
+        }
+        return all;
+      }
+      const res = await this.listDocs('payment_transactions', 500);
       const docs = res.documents || [];
+      if (!this.cache.payments) this.cache.payments = new Map();
+      docs.forEach((p) => {
+        const id = p.orderId || p.id || p.docId;
+        if (id) this.cache.payments.set(id, p);
+      });
       if (userEmail) {
         const clean = userEmail.toLowerCase().trim();
         return docs.filter((p) => (p.userEmail || p.customerEmail || '').toLowerCase().trim() === clean);
@@ -1047,7 +1080,7 @@ class CentralFirestoreDatabaseService {
       const payments = this._loadLocalJson('payments_transactions_db.json', []);
       if (userEmail) {
         const clean = userEmail.toLowerCase().trim();
-        return payments.filter((p) => (p.userEmail || '').toLowerCase().trim() === clean);
+        return payments.filter((p) => (p.userEmail || p.customerEmail || '').toLowerCase().trim() === clean);
       }
       return payments;
     }

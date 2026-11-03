@@ -2783,26 +2783,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     फुटर में प्रदर्शित सोशल मीडिया आइकन्स
                   </label>
                   <span className="text-[10px] text-amber-300/80 font-medium">
-                    * Facebook व Instagram अनिवार्य हैं
+                    * सभी 5 सोशल आइकन्स स्वतंत्र रूप से ऑन/ऑफ करें
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {[
                     { id: 'youtube', label: 'YouTube' },
-                    { id: 'facebook', label: 'Facebook (Locked)', locked: true },
-                    { id: 'instagram', label: 'Instagram (Locked)', locked: true },
+                    { id: 'facebook', label: 'Facebook' },
+                    { id: 'instagram', label: 'Instagram' },
                     { id: 'twitter', label: 'X (Twitter)' },
                     { id: 'linkedin', label: 'LinkedIn' },
                   ].map((soc) => {
-                    const isMandatory = soc.id === 'facebook' || soc.id === 'instagram';
-                    const isChecked = isMandatory || Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)[soc.id]);
+                    const isChecked = Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)[soc.id]);
                     return (
                       <button
                         key={soc.id}
                         type="button"
-                        disabled={isMandatory}
                         onClick={() => {
-                          if (isMandatory) return;
                           setChannelProfile((p) => {
                             const base = p || DEFAULT_PROFILE;
                             return {
@@ -2815,13 +2812,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           });
                         }}
                         className={`p-2 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition ${
-                          isMandatory
-                            ? 'bg-amber-500/25 border-amber-400 text-amber-300 cursor-not-allowed opacity-90'
-                            : isChecked
+                          isChecked
                             ? 'bg-amber-500/20 border-amber-500 text-amber-300 cursor-pointer'
                             : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300 cursor-pointer'
                         }`}
-                        title={isMandatory ? 'यह आइकन फुटर में अनिवार्य रूप से शामिल रहेगा' : undefined}
+                        title={`${soc.label} आइकन फुटर में ${isChecked ? 'सक्रिय है' : 'निष्क्रिय है'}`}
                       >
                         {isChecked && <Check className="w-3 h-3" />}
                         <span>{soc.label}</span>
