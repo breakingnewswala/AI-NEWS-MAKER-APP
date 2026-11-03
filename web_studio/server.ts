@@ -6,6 +6,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import { registerWhatsAppIntegration } from "./whatsapp_integration";
 import { initializeApp as initFirebaseAdmin, getApps as getFirebaseAdminApps } from "firebase-admin/app";
 import { getAuth as getFirebaseAdminAuth } from "firebase-admin/auth";
 
@@ -78,6 +79,9 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+
+// WhatsApp Cloud API webhook + customer support integration
+registerWhatsAppIntegration(app, centralDb);
 
 // ============================================================================
 // SECURITY HARDENING: SENSITIVE FILE ACCESS DENYLIST & EXPOSURE ELIMINATION

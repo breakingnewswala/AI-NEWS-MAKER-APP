@@ -1,0 +1,31 @@
+name: WhatsApp integration build check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "web_studio/whatsapp_integration.ts"
+      - "web_studio/server.ts"
+      - "web_studio/package.json"
+      - "package.json"
+      - ".github/workflows/whatsapp-integration-ci.yml"
+  push:
+    branches: [feature/whatsapp-ai-customer-support]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install root dependencies
+        run: npm install --legacy-peer-deps --include=dev --no-audit
+      - name: Install web studio dependencies
+        run: npm --prefix web_studio install --legacy-peer-deps --include=dev --no-audit
+      - name: Build frontend and server bundle
+        run: npm --prefix web_studio run build

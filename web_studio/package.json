@@ -32,7 +32,9 @@
     "esbuild": "^0.25.0",
     "terser": "^5.51.2",
     "tsx": "^4.21.0",
-    "typescript": "~5.8.2"
+    "typescript": "~5.8.2",
+    "@google-cloud/tasks": "^6.2.1",
+    "google-auth-library": "^10.3.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
