@@ -22,6 +22,14 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
   const sha256 = (value: string) =>
     createHash("sha256").update(value).digest("hex");
 
+  const requireWrite = async (collection: string, docId: string, data: any) => {
+    const result = await centralDb.writeDoc(collection, docId, data);
+    if (!result?.success) {
+      throw new Error(`Firestore write failed for ${collection}/${docId} (${result?.statusCode || "unknown"})`);
+    }
+    return result;
+  };
+
   const verifySignature = (req: any) => {
     const appSecret = process.env.META_APP_SECRET;
     const signature = String(req.headers["x-hub-signature-256"] || "");
@@ -108,7 +116,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     const conversationId = sha256(waId);
     const now = Date.now();
 
-    await centralDb.writeDoc("whatsapp_messages", messageDocId, {
+    await requireWrite("whatsapp_messages", messageDocId, {
       messageId,
       conversationId,
       waId,
@@ -120,7 +128,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       status: "received",
     });
 
-    await centralDb.writeDoc("whatsapp_conversations", conversationId, {
+    await requireWrite("whatsapp_conversations", conversationId, {
       waId,
       channel: "whatsapp",
       lastInboundAt: now,
@@ -130,7 +138,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     });
 
     if (textBody.toUpperCase() === "STOP" || textBody.toUpperCase() === "UNSUBSCRIBE") {
-      await centralDb.writeDoc("whatsapp_subscribers", conversationId, {
+      await requireWrite("whatsapp_subscribers", conversationId, {
         waId,
         newsAlertsConsent: false,
         newsAlertsOptedOutAt: now,
@@ -138,7 +146,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       });
       const optOutReply = "आपकी WhatsApp समाचार सूचनाएँ बंद कर दी गई हैं। ग्राहक सहायता के लिए आप हमें संदेश भेज सकते हैं।";
       const sent = await sendWhatsAppText(waId, optOutReply);
-      await centralDb.writeDoc("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
+      await requireWrite("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
         conversationId, waId, direction: "outbound", text: optOutReply, timestamp: now, status: "sent",
       });
       return;
@@ -146,12 +154,12 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
 
     const wantsHuman = /\b(agent|human|person|support)\b|मानव|व्यक्ति|प्रतिनिधि|कस्टमर केयर|सहायता टीम/i.test(textBody);
     if (wantsHuman) {
-      await centralDb.writeDoc("whatsapp_conversations", conversationId, {
+      await requireWrite("whatsapp_conversations", conversationId, {
         waId, status: "human_requested", humanHandoff: true, handoffRequestedAt: now, updatedAt: now,
       });
       const handoffReply = "आपका अनुरोध हमारी सहायता टीम को भेज दिया गया है। कृपया यहीं प्रतीक्षा करें, टीम का सदस्य आपसे संपर्क करेगा।";
       const sent = await sendWhatsAppText(waId, handoffReply);
-      await centralDb.writeDoc("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
+      await requireWrite("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
         conversationId, waId, direction: "outbound", text: handoffReply, timestamp: now, status: "sent",
       });
       return;
@@ -166,14 +174,14 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       console.error("[WhatsApp] Gemini support response failed:", String(error?.message || error).slice(0, 240));
     }
     if (!reply) {
-      await centralDb.writeDoc("whatsapp_conversations", conversationId, {
+      await requireWrite("whatsapp_conversations", conversationId, {
         waId, status: "human_requested", humanHandoff: true, handoffReason: "knowledge_gap", updatedAt: Date.now(),
       });
       reply = "आपका प्रश्न हमें मिल गया है, लेकिन इसकी पुष्टि हमारे उपलब्ध सहायता-ज्ञान से नहीं हो पा रही है। हमने इसे सहायता टीम के लिए चिन्हित कर दिया है।";
     }
 
     const sent = await sendWhatsAppText(waId, reply);
-    await centralDb.writeDoc("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
+    await requireWrite("whatsapp_messages", sha256(String(sent?.messages?.[0]?.id || `out-${messageId}`)), {
       conversationId, waId, direction: "outbound", text: reply, timestamp: Date.now(), status: "sent",
     });
   };
@@ -260,12 +268,12 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     const existing = await centralDb.readDoc("whatsapp_webhook_events", eventId);
     if (existing?.success && existing.data?.status === "processed") return res.sendStatus(200);
 
-    await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+    await requireWrite("whatsapp_webhook_events", eventId, {
       messageId, status: "processing", processingAt: Date.now(),
     });
     try {
       await processInboundMessage(message);
-      await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+      await requireWrite("whatsapp_webhook_events", eventId, {
         messageId, status: "processed", processedAt: Date.now(),
       });
       return res.sendStatus(200);
@@ -300,7 +308,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
         if (existing?.success && (existing.data?.status === "queued" || existing.data?.status === "processing")) continue;
 
         // Persist before enqueueing. If enqueue fails, return 503 so Meta retries.
-        await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
+        await requireWrite("whatsapp_webhook_events", eventId, {
           messageId, status: "enqueueing", receivedAt: Number(message.timestamp || Math.floor(Date.now() / 1000)) * 1000,
         });
         await enqueueMessage(message);
