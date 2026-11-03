@@ -304,10 +304,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
           messageId, status: "enqueueing", receivedAt: Number(message.timestamp || Math.floor(Date.now() / 1000)) * 1000,
         });
         await enqueueMessage(message);
-        // Do not overwrite processing/processed: a fast task may finish before this request returns.
-        await centralDb.writeDoc("whatsapp_webhook_events", eventId, {
-          messageId, queuedAt: Date.now(),
-        });
+        // The task handler owns subsequent status transitions; do not overwrite a fast completion.
       }
       return res.sendStatus(200);
     } catch (error: any) {
