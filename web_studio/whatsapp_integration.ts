@@ -197,7 +197,8 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       }
     }
 
-    // Persist webhook deliveries before acknowledging Meta; deduplicate by WhatsApp message ID.
+    // Persist webhook deliveries before acknowledging Meta; process only newly claimed IDs.
+    const messagesToProcess: any[] = [];
     for (const message of messages) {
       const messageId = String(message?.id || "");
       if (!messageId) continue;
@@ -209,10 +210,11 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
         messageId, status: "processing", receivedAt: Date.now(),
       });
       if (!saved?.success) return res.sendStatus(500);
+      messagesToProcess.push(message);
     }
 
     res.sendStatus(200);
-    for (const message of messages) {
+    for (const message of messagesToProcess) {
       const messageId = String(message?.id || "");
       if (!messageId) continue;
       void processInboundMessage(message).then(async () => {
