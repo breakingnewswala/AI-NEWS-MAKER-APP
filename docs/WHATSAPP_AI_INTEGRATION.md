@@ -50,13 +50,16 @@ The integration uses the existing central Firestore service. Do not grant browse
 
 ## Current behavior and limits
 
+- Incoming webhook messages are placed on the configured Cloud Tasks queue; the webhook returns success after enqueueing.
+- The task endpoint validates a Google-issued OIDC token and the configured task service-account email before processing.
 - Incoming text messages are stored and can receive a Gemini answer only when an active knowledge-base entry exists.
 - If the knowledge base cannot ground an answer, the conversation is marked for human follow-up rather than guessing.
 - `STOP` and `UNSUBSCRIBE` turn off news-alert consent for that WhatsApp identity; customer support remains available.
 - Requests for a human/representative mark the conversation for human handoff.
+- Firestore write results are checked so failed writes cause task retry rather than being silently treated as successful.
 - Outbound free-form replies are subject to Meta's customer-service messaging window. Approved templates are needed where Meta requires them.
-- This first phase is customer-support webhook plumbing only. It does not yet implement OTP delivery, the admin inbox UI, a durable background queue, or editor-triggered news broadcasts.
-- For production reliability, move post-acknowledgement message processing to Cloud Tasks or another durable queue before enabling at scale. The current implementation is a limited first-pass webhook handler.
+- This is still an integration foundation, not a complete production customer-support system. OTP delivery, verified-number linking, explicit consent capture UI, admin inbox/takeover UI, approved-template management, and editor-triggered news broadcasts are not implemented.
+- Delivery is at-least-once. A failure after WhatsApp accepts an outbound message but before its Firestore record is committed can still create an ambiguous retry/duplicate-send risk; an outbound outbox and reconciliation process is required before enabling high-volume production use. The current implementation is a limited first-pass webhook handler.
 
 ## Cloud Tasks infrastructure setup (required before deployment)
 
