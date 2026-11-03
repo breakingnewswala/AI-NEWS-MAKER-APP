@@ -206,7 +206,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       if (existing?.success && existing.data?.status === "processed") continue;
       if (existing?.success && existing.data?.status === "processing" && Date.now() - Number(existing.data?.receivedAt || 0) < 5 * 60 * 1000) continue;
       const saved = await centralDb?.writeDoc?.("whatsapp_webhook_events", eventId, {
-        messageId, status: "received", receivedAt: Date.now(),
+        messageId, status: "processing", receivedAt: Date.now(),
       });
       if (!saved?.success) return res.sendStatus(500);
     }
