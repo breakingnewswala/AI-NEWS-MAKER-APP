@@ -3551,11 +3551,11 @@ var require_firestore_database_service = __commonJS({
         );
       }
       // --- AUDIT LOGGING ---
-      async logAdminAction(action, adminEmail2, details = {}) {
+      async logAdminAction(action, adminEmail, details = {}) {
         const logEntry = {
           id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           action,
-          adminEmail: (adminEmail2 || "admin").toLowerCase().trim(),
+          adminEmail: (adminEmail || "admin").toLowerCase().trim(),
           details,
           timestamp: Date.now()
         };
@@ -5824,11 +5824,11 @@ var require_firestore_database_service2 = __commonJS({
         );
       }
       // --- AUDIT LOGGING ---
-      async logAdminAction(action, adminEmail2, details = {}) {
+      async logAdminAction(action, adminEmail, details = {}) {
         const logEntry = {
           id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           action,
-          adminEmail: (adminEmail2 || "admin").toLowerCase().trim(),
+          adminEmail: (adminEmail || "admin").toLowerCase().trim(),
           details,
           timestamp: Date.now()
         };
@@ -6935,13 +6935,13 @@ function loadAuditLogs() {
   }
   return [];
 }
-function logAdminAudit(adminEmail2, action, target, details, ip) {
+function logAdminAudit(adminEmail, action, target, details, ip) {
   try {
     const logs = loadAuditLogs();
     const entry = {
       id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       timestamp: Date.now(),
-      adminEmail: adminEmail2 || "admin",
+      adminEmail: adminEmail || "admin",
       action,
       target,
       details,
@@ -7866,14 +7866,17 @@ app.post("/api/news-posts", (req, res) => {
         sourceUrl: payload.sourceUrl || "",
         category: payload.category || "breaking",
         categoryName: payload.categoryName || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C",
-        publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
+        publishedTime: payload.publishedTime || "\u0905\u092D\u0940-\u0905\u092D\u0940",
         imageUrl: payload.imageUrl || "",
         breaking: Boolean(payload.breaking),
         isExclusive: Boolean(payload.isExclusive),
         fullContent: payload.fullContent || payload.summary || "",
         district: payload.district || "",
         location: payload.location || "",
-        timestamp: payload.timestamp || Date.now()
+        timestamp: payload.timestamp || Date.now(),
+        status: payload.status || "APPROVED",
+        isApproved: payload.isApproved !== void 0 ? payload.isApproved : true,
+        isPrePublished: payload.isPrePublished !== void 0 ? payload.isPrePublished : false
       };
       existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
     }
@@ -8046,8 +8049,8 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     }
     saveNewsDatabase(existing);
     broadcastNewsPublishedNotification(id, approvedTitle);
-    const adminEmail2 = (req.user?.email || "admin").toString();
-    logAdminAudit(adminEmail2, "APPROVE_NEWS", id);
+    const adminEmail = (req.user?.email || "admin").toString();
+    logAdminAudit(adminEmail, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id, posts: existing });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -8077,8 +8080,8 @@ app.post("/api/admin/bulk-approve-news", requireAdminMiddleware, (req, res) => {
       }
     }
     saveNewsDatabase(existing);
-    const adminEmail2 = (req.user?.email || "admin").toString();
-    logAdminAudit(adminEmail2, "BULK_APPROVE_NEWS", `${approvedIds.length} items`);
+    const adminEmail = (req.user?.email || "admin").toString();
+    logAdminAudit(adminEmail, "BULK_APPROVE_NEWS", `${approvedIds.length} items`);
     return res.json({ success: true, approvedIds: Array.from(approvedSet) });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -8098,8 +8101,8 @@ app.post("/api/admin/reject-news/:id", requireAdminMiddleware, (req, res) => {
       }
     } catch {
     }
-    const adminEmail2 = (req.user?.email || "admin").toString();
-    logAdminAudit(adminEmail2, "REJECT_NEWS", id);
+    const adminEmail = (req.user?.email || "admin").toString();
+    logAdminAudit(adminEmail, "REJECT_NEWS", id);
     return res.json({ success: true, message: "\u0916\u092C\u0930 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -8599,7 +8602,7 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0939\u0940 \u0915\u094D\u0932\u0947\u092E \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
     }
     const { id } = req.params;
-    const adminEmail2 = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
+    const adminEmail = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
     const rDb = loadRewardsDatabase();
     const claim = rDb.claims.find((c) => c.claimId === id || c.id === id);
     if (!claim) {
@@ -8636,11 +8639,11 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
       balanceAfter: rDb.wallets[walletKey].coinBalance,
       status: "completed",
       createdAt: Date.now(),
-      createdBy: adminEmail2
+      createdBy: adminEmail
     };
     rDb.transactions.unshift(tx);
     claim.status = "approved";
-    claim.reviewedBy = adminEmail2;
+    claim.reviewedBy = adminEmail;
     claim.reviewedAt = Date.now();
     claim.walletTransactionId = txId;
     claim.id = claim.claimId;
@@ -8662,7 +8665,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     }
     const { id } = req.params;
     const { reason } = req.body;
-    const adminEmail2 = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
+    const adminEmail = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
     const rDb = loadRewardsDatabase();
     const claim = rDb.claims.find((c) => c.claimId === id || c.id === id);
     if (!claim) {
@@ -8676,7 +8679,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     }
     claim.status = "rejected";
     claim.rejectionReason = (reason || "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u094B\u0938\u094D\u091F \u0915\u093E \u0938\u094D\u0915\u094D\u0930\u0940\u0928\u0936\u0949\u091F \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E\u0964").trim();
-    claim.reviewedBy = adminEmail2;
+    claim.reviewedBy = adminEmail;
     claim.reviewedAt = Date.now();
     saveRewardsDatabase(rDb);
     return res.json({
@@ -9615,8 +9618,8 @@ app.post("/api/admin/news-posts/:id/coin-value", (req, res) => {
       restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : []
     };
     saveNewsDatabase(posts);
-    const adminEmail2 = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
-    logAdminAudit(adminEmail2, "SET_NEWS_COIN_VALUE", id, { coinValue: posts[idx].coinValue, restrictedPlans: posts[idx].restrictedPlans });
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_NEWS_COIN_VALUE", id, { coinValue: posts[idx].coinValue, restrictedPlans: posts[idx].restrictedPlans });
     return res.json({ success: true, post: posts[idx] });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -9644,8 +9647,8 @@ app.post("/api/admin/videos/:id/coin-value", (req, res) => {
       restrictedPlans: Array.isArray(restrictedPlans) ? restrictedPlans : []
     };
     saveVideosDatabase(videos);
-    const adminEmail2 = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
-    logAdminAudit(adminEmail2, "SET_VIDEO_COIN_VALUE", id, { coinValue: videos[idx].coinValue, restrictedPlans: videos[idx].restrictedPlans });
+    const adminEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    logAdminAudit(adminEmail, "SET_VIDEO_COIN_VALUE", id, { coinValue: videos[idx].coinValue, restrictedPlans: videos[idx].restrictedPlans });
     return res.json({ success: true, video: videos[idx] });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -10080,6 +10083,11 @@ function syncUserToProfiles(u) {
       mobileNumber: u.mobileNumber || u.mobile || "",
       websiteUrl: u.websiteUrl || "",
       socialIcons: u.socialIcons || allProfiles[cleanKey] && allProfiles[cleanKey].socialIcons || void 0,
+      isBlocked: Boolean(u.isBlocked),
+      blockedAt: u.blockedAt || null,
+      blockedBy: u.blockedBy || null,
+      blockedReason: u.blockedReason || null,
+      isLocked: Boolean(u.isLocked),
       updatedAt: Date.now()
     };
     if (u.email) {
@@ -10413,12 +10421,12 @@ function reconcileAllUsers() {
       activatedVia: "Super Admin Preset",
       lastLoginAt: existingSuper?.lastLoginAt || Date.now()
     });
-    const adminEmail2 = "breakingnewswala.com@gmail.com";
-    const existingAdmin = userMap.get(adminEmail2) || userMap.get("breakingnewswala@gmail.com");
-    const adminProf = profiles[adminEmail2] || profiles["breakingnewswala@gmail.com"];
-    userMap.set(adminEmail2, {
+    const adminEmail = "breakingnewswala.com@gmail.com";
+    const existingAdmin = userMap.get(adminEmail) || userMap.get("breakingnewswala@gmail.com");
+    const adminProf = profiles[adminEmail] || profiles["breakingnewswala@gmail.com"];
+    userMap.set(adminEmail, {
       userId: existingAdmin?.userId || "usr_627265616b69",
-      email: adminEmail2,
+      email: adminEmail,
       name: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
       fullName: adminProf?.fullName || existingAdmin?.fullName || "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915",
       username: adminProf?.username || existingAdmin?.username || "breakingnewswala",
@@ -12227,7 +12235,7 @@ app.post("/api/admin/rss-sources", requireAdminMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/delete-rss-source/:id", requireAdminMiddleware, (req, res) => {
+app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: RSS \u092B\u093C\u0940\u0921\u094D\u0938 \u0939\u091F\u093E\u0928\u093E \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0941\u092E\u0924 \u0939\u0948\u0964" });
@@ -12246,6 +12254,22 @@ app.delete("/api/admin/delete-rss-source/:id", requireAdminMiddleware, (req, res
         return true;
       });
       saveNewsDatabase(posts);
+      if (centralDb) {
+        try {
+          await centralDb.deleteRssSource(id).catch(() => {
+          });
+          if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(id);
+        } catch {
+        }
+      }
+      try {
+        const adapter = require_server_firestore_adapter();
+        if (adapter && typeof adapter.firestoreDeleteDoc === "function") {
+          await adapter.firestoreDeleteDoc("rss_sources", id).catch(() => {
+          });
+        }
+      } catch {
+      }
     }
     return res.json({ success: true, sources });
   } catch (err) {
@@ -12844,7 +12868,7 @@ function saveProfilesDatabase(data) {
     return false;
   }
 }
-app.get("/api/user-profile", (req, res) => {
+app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
   const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const rawMobile = (req.query.mobile || req.query.phone || "").toString().replace(/[^0-9]/g, "").slice(-10);
@@ -12884,11 +12908,21 @@ app.get("/api/user-profile", (req, res) => {
     if (isUserTombstoned(match.email) || isUserTombstoned(match.userId) || isUserTombstoned(match.username)) {
       return res.json({ success: true, profile: null, isDeleted: true });
     }
+    const masterUsers = loadUsersMasterDatabase();
+    const mMatch = masterUsers.find(
+      (u) => u.userId && match.userId && u.userId.toLowerCase() === match.userId.toLowerCase() || u.email && match.email && u.email.toLowerCase().trim() === match.email.toLowerCase().trim()
+    );
+    if (mMatch) {
+      match.isBlocked = Boolean(mMatch.isBlocked);
+      match.blockedReason = mMatch.blockedReason || match.blockedReason;
+      match.blockedAt = mMatch.blockedAt || match.blockedAt;
+      match.isLocked = Boolean(mMatch.isLocked);
+    }
     return res.json({ success: true, profile: match });
   }
   return res.json({ success: true, profile: null });
 });
-app.post("/api/user-profile", async (req, res) => {
+app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
   const release = await userDbLock.acquire();
   try {
     const profile = req.body;
@@ -12948,6 +12982,8 @@ app.post("/api/user-profile", async (req, res) => {
     }
     const safeRole = isAdmin ? profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter") : existing.role || (isMasterAdminEmail ? "admin" : "reporter");
     const safeTier = isAdmin ? profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic") : existing.tier || (isMasterAdminEmail ? "ultra" : "basic");
+    const safeIsBlocked = isAdmin ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
+    const safeIsLocked = isAdmin ? profile.isLocked !== void 0 ? Boolean(profile.isLocked) : Boolean(existing.isLocked) : Boolean(existing.isLocked);
     const updated = {
       ...existing,
       ...profile,
@@ -12957,6 +12993,8 @@ app.post("/api/user-profile", async (req, res) => {
       fullName: profile.fullName || profile.name || existing.fullName || "",
       role: safeRole,
       tier: safeTier,
+      isBlocked: safeIsBlocked,
+      isLocked: safeIsLocked,
       email: profile.email || existing.email || "",
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
@@ -14273,9 +14311,9 @@ app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
         for (const k of delKeys) {
           await centralDb.deleteUser(k).catch(() => {
           });
-          centralDb.cache.users.delete(k);
-          centralDb.cache.wallets.delete(k);
-          centralDb.cache.profiles.delete(k);
+          if (centralDb.cache?.users) centralDb.cache.users.delete(k);
+          if (centralDb.cache?.wallets) centralDb.cache.wallets.delete(k);
+          if (centralDb.cache?.profiles) centralDb.cache.profiles.delete(k);
         }
       } catch (cErr) {
         console.warn("[centralDb User Delete Error]:", cErr.message);
@@ -14301,7 +14339,7 @@ app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
         userId: targetUserIdClean || identifier,
         username: targetUsernameClean,
         deletedAt: Date.now(),
-        deletedBy: adminEmail || "MASTER_ADMIN",
+        deletedBy: callerEmail || "MASTER_ADMIN",
         reason: "Admin permanently deleted user account and purged all associated data"
       });
       saveDeletedUsersTombstones(tombstones);
@@ -14338,10 +14376,14 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
     if (!isMaster) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938 \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
-    const { userId, updates } = req.body;
+    const { userId, updates: rawUpdates } = req.body;
+    const updates = rawUpdates && typeof rawUpdates === "object" ? rawUpdates : req.body ? { ...req.body } : {};
     const identifier = (userId || updates?.userId || updates?.email || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "User ID or email is required" });
+    }
+    if (isUserTombstoned(identifier) || updates?.email && isUserTombstoned(updates.email) || updates?.userId && isUserTombstoned(updates.userId)) {
+      return res.status(400).json({ error: "\u092F\u0939 \u0916\u093E\u0924\u093E \u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0939\u091F\u093E\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948 \u0914\u0930 \u0926\u094B\u092C\u093E\u0930\u093E \u0938\u0915\u094D\u0930\u093F\u092F \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E\u0964" });
     }
     const users = loadUsersMasterDatabase();
     const idx = users.findIndex(
@@ -14432,9 +14474,6 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
         expiresAt: calculatedExpiresAt
       });
     }
-    removeUserFromTombstones(identifier);
-    if (updatedUser.email) removeUserFromTombstones(updatedUser.email);
-    if (updatedUser.userId) removeUserFromTombstones(updatedUser.userId);
     return res.json({ success: true, user: updatedUser });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -15622,8 +15661,8 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
       error: `\u092B\u093E\u092F\u0930\u0938\u094D\u091F\u094B\u0930 \u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u092E\u0947\u0902 API Key \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`
     });
   }
-  const adminEmail2 = extractAdminEmail(req) || "admin";
-  logAdminAudit(adminEmail2, "ADD_FREE_API_KEY", newKeyItem.id, { label: newKeyItem.label, masked: maskApiKey(newKeyItem.key) });
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "ADD_FREE_API_KEY", newKeyItem.id, { label: newKeyItem.label, masked: maskApiKey(newKeyItem.key) });
   return res.json({
     success: true,
     message: "\u2705 \u0928\u0908 \u092B\u094D\u0930\u0940 Gemini API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092B\u094D\u0930\u0940 \u092A\u0942\u0932 \u092E\u0947\u0902 \u091C\u094B\u0921\u093C \u0926\u0940 \u0917\u0908!",
@@ -15654,8 +15693,8 @@ app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (
     cachedApiKeysVault = vault;
     return res.status(500).json({ error: `\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0938\u0947 API Key \u0939\u091F\u093E\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}` });
   }
-  const adminEmail2 = extractAdminEmail(req) || "admin";
-  logAdminAudit(adminEmail2, "DELETE_FREE_API_KEY", id);
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "DELETE_FREE_API_KEY", id);
   return res.json({ success: true, message: "\u092B\u094D\u0930\u0940 API Key \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
 });
 app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
@@ -15683,8 +15722,8 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
   if (!saveResult.success) {
     return res.status(500).json({ error: `\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u092E\u0947\u0902 \u092A\u0947\u0921 VIP Key \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}` });
   }
-  const adminEmail2 = extractAdminEmail(req) || "admin";
-  logAdminAudit(adminEmail2, "UPDATE_PAID_API_KEY", "paid_key", {
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "UPDATE_PAID_API_KEY", "paid_key", {
     configured: Boolean(vault.paidKey?.key),
     vipRoutingEnabled: vault.vipRoutingEnabled
   });
@@ -15705,8 +15744,8 @@ app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req,
   if (!saveResult.success) {
     return res.status(500).json({ error: `\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0938\u0947 \u092A\u0947\u0921 VIP Key \u0939\u091F\u093E\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${saveResult.error || "\u0921\u0947\u091F\u093E\u092C\u0947\u0938 \u0924\u094D\u0930\u0941\u091F\u093F"}` });
   }
-  const adminEmail2 = extractAdminEmail(req) || "admin";
-  logAdminAudit(adminEmail2, "DELETE_PAID_API_KEY", "paid_key");
+  const adminEmail = extractAdminEmail(req) || "admin";
+  logAdminAudit(adminEmail, "DELETE_PAID_API_KEY", "paid_key");
   return res.json({ success: true, message: "\u092A\u0947\u0921 VIP API Key \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
 });
 app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, res) => {

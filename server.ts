@@ -1980,7 +1980,7 @@ app.post("/api/news-posts", (req, res) => {
         sourceUrl: payload.sourceUrl || "",
         category: payload.category || "breaking",
         categoryName: payload.categoryName || "ब्रेकिंग न्यूज़",
-        publishedTime: "अभी-अभी",
+        publishedTime: payload.publishedTime || "अभी-अभी",
         imageUrl: payload.imageUrl || "",
         breaking: Boolean(payload.breaking),
         isExclusive: Boolean(payload.isExclusive),
@@ -1988,6 +1988,9 @@ app.post("/api/news-posts", (req, res) => {
         district: payload.district || "",
         location: payload.location || "",
         timestamp: payload.timestamp || Date.now(),
+        status: payload.status || "APPROVED",
+        isApproved: payload.isApproved !== undefined ? payload.isApproved : true,
+        isPrePublished: payload.isPrePublished !== undefined ? payload.isPrePublished : false,
       };
       existing = [newPost, ...existing.filter((p) => p.id !== newPost.id)];
     }
@@ -4660,6 +4663,11 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       mobileNumber: u.mobileNumber || u.mobile || '',
       websiteUrl: u.websiteUrl || '',
       socialIcons: u.socialIcons || (allProfiles[cleanKey] && allProfiles[cleanKey].socialIcons) || undefined,
+      isBlocked: Boolean(u.isBlocked),
+      blockedAt: u.blockedAt || null,
+      blockedBy: u.blockedBy || null,
+      blockedReason: u.blockedReason || null,
+      isLocked: Boolean(u.isLocked),
       updatedAt: Date.now(),
     };
     // Purge duplicate aliases for the same email in user_profiles_db
@@ -7199,7 +7207,7 @@ app.post("/api/admin/rss-sources", requireAdminMiddleware, (req, res) => {
 });
 
 // 2b. DELETE admin RSS/Web source by ID & clean associated posts
-app.delete("/api/admin/delete-rss-source/:id", requireAdminMiddleware, (req, res) => {
+app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ error: "अनधिकृत: RSS फ़ीड्स हटाना केवल एडमिन के लिए अनुमत है।" });
@@ -7220,6 +7228,19 @@ app.delete("/api/admin/delete-rss-source/:id", requireAdminMiddleware, (req, res
         return true;
       });
       saveNewsDatabase(posts);
+
+      if (centralDb) {
+        try {
+          await centralDb.deleteRssSource(id).catch(() => {});
+          if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(id);
+        } catch {}
+      }
+      try {
+        const adapter = require("./server_firestore_adapter.cjs");
+        if (adapter && typeof adapter.firestoreDeleteDoc === 'function') {
+          await adapter.firestoreDeleteDoc("rss_sources", id).catch(() => {});
+        }
+      } catch {}
     }
 
     return res.json({ success: true, sources });
@@ -8012,7 +8033,7 @@ function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean 
 }
 
 // 1. GET User Profile
-app.get("/api/user-profile", (req, res) => {
+app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
   const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const rawMobile = (req.query.mobile || req.query.phone || "").toString().replace(/[^0-9]/g, '').slice(-10);
@@ -8064,13 +8085,25 @@ app.get("/api/user-profile", (req, res) => {
     if (isUserTombstoned(match.email) || isUserTombstoned(match.userId) || isUserTombstoned(match.username)) {
       return res.json({ success: true, profile: null, isDeleted: true });
     }
+    const masterUsers = loadUsersMasterDatabase();
+    const mMatch = masterUsers.find(
+      (u) =>
+        (u.userId && match.userId && u.userId.toLowerCase() === match.userId.toLowerCase()) ||
+        (u.email && match.email && u.email.toLowerCase().trim() === match.email.toLowerCase().trim())
+    );
+    if (mMatch) {
+      match.isBlocked = Boolean(mMatch.isBlocked);
+      match.blockedReason = mMatch.blockedReason || match.blockedReason;
+      match.blockedAt = mMatch.blockedAt || match.blockedAt;
+      match.isLocked = Boolean(mMatch.isLocked);
+    }
     return res.json({ success: true, profile: match });
   }
   return res.json({ success: true, profile: null });
 });
 
 // 2. POST User Profile
-app.post("/api/user-profile", async (req, res) => {
+app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
   const release = await userDbLock.acquire();
   try {
     const profile = req.body;
@@ -8157,13 +8190,19 @@ app.post("/api/user-profile", async (req, res) => {
       }
     }
 
-    // Non-admin callers cannot escalate their role or tier
+    // Non-admin callers cannot escalate their role or tier, or unblock themselves
     const safeRole = isAdmin
       ? (profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"))
       : (existing.role || (isMasterAdminEmail ? "admin" : "reporter"));
     const safeTier = isAdmin
       ? (profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic"))
       : (existing.tier || (isMasterAdminEmail ? "ultra" : "basic"));
+    const safeIsBlocked = isAdmin
+      ? (profile.isBlocked !== undefined ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked))
+      : Boolean(existing.isBlocked);
+    const safeIsLocked = isAdmin
+      ? (profile.isLocked !== undefined ? Boolean(profile.isLocked) : Boolean(existing.isLocked))
+      : Boolean(existing.isLocked);
 
     const updated: StoredUserProfile = {
       ...existing,
@@ -8174,6 +8213,8 @@ app.post("/api/user-profile", async (req, res) => {
       fullName: profile.fullName || profile.name || existing.fullName || "",
       role: safeRole,
       tier: safeTier,
+      isBlocked: safeIsBlocked,
+      isLocked: safeIsLocked,
       email: profile.email || existing.email || "",
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
@@ -9750,9 +9791,9 @@ app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
         const delKeys = [targetEmailClean, targetUserIdClean, identifier, targetUser?.uid].filter(Boolean);
         for (const k of delKeys) {
           await centralDb.deleteUser(k).catch(() => {});
-          centralDb.cache.users.delete(k);
-          centralDb.cache.wallets.delete(k);
-          centralDb.cache.profiles.delete(k);
+          if (centralDb.cache?.users) centralDb.cache.users.delete(k);
+          if (centralDb.cache?.wallets) centralDb.cache.wallets.delete(k);
+          if (centralDb.cache?.profiles) centralDb.cache.profiles.delete(k);
         }
       } catch (cErr: any) {
         console.warn("[centralDb User Delete Error]:", cErr.message);
@@ -9779,7 +9820,7 @@ app.post("/api/admin/delete-user", requireAdminMiddleware, async (req, res) => {
         userId: targetUserIdClean || identifier,
         username: targetUsernameClean,
         deletedAt: Date.now(),
-        deletedBy: adminEmail || "MASTER_ADMIN",
+        deletedBy: callerEmail || "MASTER_ADMIN",
         reason: "Admin permanently deleted user account and purged all associated data"
       });
       saveDeletedUsersTombstones(tombstones);
@@ -9820,10 +9861,15 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
     if (!isMaster) {
       return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र सेटिंग्स अपडेट कर सकते हैं।" });
     }
-    const { userId, updates } = req.body;
+    const { userId, updates: rawUpdates } = req.body;
+    const updates = (rawUpdates && typeof rawUpdates === 'object') ? rawUpdates : (req.body ? { ...req.body } : {});
     const identifier = (userId || updates?.userId || updates?.email || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "User ID or email is required" });
+    }
+
+    if (isUserTombstoned(identifier) || (updates?.email && isUserTombstoned(updates.email)) || (updates?.userId && isUserTombstoned(updates.userId))) {
+      return res.status(400).json({ error: "यह खाता स्थायी रूप से हटाया जा चुका है और दोबारा सक्रिय नहीं किया जा सकता।" });
     }
     const users = loadUsersMasterDatabase();
     const idx = users.findIndex(u =>
@@ -9927,11 +9973,6 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
         expiresAt: calculatedExpiresAt,
       });
     }
-
-    // Ensure user is removed from tombstones so they become immediately active
-    removeUserFromTombstones(identifier);
-    if (updatedUser.email) removeUserFromTombstones(updatedUser.email);
-    if (updatedUser.userId) removeUserFromTombstones(updatedUser.userId);
 
     return res.json({ success: true, user: updatedUser });
   } catch (err: any) {
