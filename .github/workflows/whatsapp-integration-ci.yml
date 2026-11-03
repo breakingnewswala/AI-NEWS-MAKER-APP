@@ -7,6 +7,7 @@ on:
       - "web_studio/whatsapp_integration.ts"
       - "web_studio/server.ts"
       - "web_studio/package.json"
+      - "package.json"
       - ".github/workflows/whatsapp-integration-ci.yml"
   push:
     branches: [feature/whatsapp-ai-customer-support]
