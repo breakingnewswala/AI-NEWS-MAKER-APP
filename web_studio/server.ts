@@ -8093,7 +8093,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         const isSameUser = (k === cleanId) ||
           (otherEmail && thisEmail && otherEmail === thisEmail) ||
           (otherUserId && thisUserId && otherUserId === thisUserId) ||
-          (isMasterAdminEmail && (otherEmail === 'breakingnewswala.com@gmail.com' || otherUserId === 'usr_627265616b69' || k === 'admin'));
+          (isMasterAdminEmail && (otherEmail === 'breakingnewswala.com@gmail.com' || otherEmail === 'admin.ainewsmaker@gmail.com' || otherUserId === 'usr_627265616b69' || otherUserId === 'user-1791697518060' || k === 'admin')) ||
+          (isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail));
 
         if (!isSameUser) {
           const otherUname = (p.username || "").toLowerCase().trim().replace(/^@/, '');
@@ -8116,7 +8117,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         const isSameUser = (k === cleanId) ||
           (otherEmail && thisEmail && otherEmail === thisEmail) ||
           (otherUserId && thisUserId && otherUserId === thisUserId) ||
-          (isMasterAdminEmail && (otherEmail === 'breakingnewswala.com@gmail.com' || otherUserId === 'usr_627265616b69' || k === 'admin'));
+          (isMasterAdminEmail && (otherEmail === 'breakingnewswala.com@gmail.com' || otherEmail === 'admin.ainewsmaker@gmail.com' || otherUserId === 'usr_627265616b69' || otherUserId === 'user-1791697518060' || k === 'admin')) ||
+          (isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail));
 
         if (!isSameUser) {
           const otherMob = (p.mobileNumber || p.mobile || "").toString().replace(/\D/g, '').slice(-10);
