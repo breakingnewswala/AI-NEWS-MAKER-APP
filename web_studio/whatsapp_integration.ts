@@ -197,7 +197,7 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     const location = process.env.WHATSAPP_TASK_QUEUE_LOCATION || "";
     const queue = process.env.WHATSAPP_TASK_QUEUE || "";
     const serviceAccountEmail = process.env.WHATSAPP_TASK_SERVICE_ACCOUNT || "";
-    const baseUrl = String(process.env.WHATSAPP_TASK_BASE_URL || "").replace(/\\/$/, "");
+    const baseUrl = String(process.env.WHATSAPP_TASK_BASE_URL || "").replace(/\/$/, "");
     const url = baseUrl ? baseUrl + taskPath : "";
     const audience = process.env.WHATSAPP_TASK_AUDIENCE || url;
     if (!projectId || !location || !queue || !serviceAccountEmail || !url || !audience) return null;
