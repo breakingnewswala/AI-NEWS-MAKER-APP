@@ -22,6 +22,11 @@ Configure these in the hosting platform's runtime secret/environment settings (n
 | `GEMINI_API_KEY` | Existing server-side Gemini key |
 | `WHATSAPP_GEMINI_MODEL` | Supported Gemini model name enabled for the project |
 | `WHATSAPP_AI_ENABLED` | Set to `true` only after knowledge-base content has been reviewed |
+| `WHATSAPP_TASK_QUEUE_LOCATION` | Region where the Cloud Tasks queue is created |
+| `WHATSAPP_TASK_QUEUE` | Cloud Tasks queue name (recommended: `whatsapp-inbound`) |
+| `WHATSAPP_TASK_SERVICE_ACCOUNT` | Dedicated service account used for Cloud Tasks OIDC tokens |
+| `WHATSAPP_TASK_BASE_URL` | Public HTTPS origin of the deployed App Hosting backend, without a trailing slash |
+| `WHATSAPP_TASK_AUDIENCE` | Optional OIDC audience; defaults to the full task handler URL |
 
 Do not place these values in the browser, mobile app, GitHub, or public build artifacts.
 
@@ -52,6 +57,15 @@ The integration uses the existing central Firestore service. Do not grant browse
 - Outbound free-form replies are subject to Meta's customer-service messaging window. Approved templates are needed where Meta requires them.
 - This first phase is customer-support webhook plumbing only. It does not yet implement OTP delivery, the admin inbox UI, a durable background queue, or editor-triggered news broadcasts.
 - For production reliability, move post-acknowledgement message processing to Cloud Tasks or another durable queue before enabling at scale. The current implementation is a limited first-pass webhook handler.
+
+## Cloud Tasks infrastructure setup (required before deployment)
+
+1. Enable the Cloud Tasks API in the same Google Cloud project as Firebase App Hosting.
+2. Create a queue named `whatsapp-inbound` in the same region as the App Hosting backend (the queue location must match `WHATSAPP_TASK_QUEUE_LOCATION`). Set bounded retries, for example 10 attempts, 10-second minimum backoff, 300-second maximum backoff, and a 1-hour maximum retry duration.
+3. Create a dedicated service account for task OIDC identity. Grant the App Hosting runtime service account `roles/cloudtasks.enqueuer` on the queue.
+4. Grant the Cloud Tasks service agent (`service-PROJECT_NUMBER@gcp-sa-cloudtasks.iam.gserviceaccount.com`) `roles/iam.serviceAccountTokenCreator` on the dedicated task service account so Cloud Tasks can mint OIDC tokens.
+5. Set the five `WHATSAPP_TASK_*` runtime variables above. `WHATSAPP_TASK_BASE_URL` must point to the deployed App Hosting backend origin; do not guess it or use a browser-only frontend hosting URL.
+6. Keep the task service account dedicated to this integration. Do not put service-account keys in GitHub or app environment variables; Cloud Tasks uses the service account identity directly.
 
 ## Suggested initial test sequence
 
