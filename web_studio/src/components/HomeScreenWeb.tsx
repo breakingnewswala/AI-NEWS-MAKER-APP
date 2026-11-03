@@ -4589,12 +4589,107 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         </div>
       )}
 
-      {/* Bottom Approved Centered Footer Text */}
-        <div className="text-center py-6 border-t border-slate-200 dark:border-slate-800/80 mt-8 select-none">
-          <p className="text-xs sm:text-sm font-black text-slate-600 dark:text-slate-400 tracking-wide">
-            AI News Maker — स्वचालित ब्रेकिंग न्यूज़
-          </p>
+      {/* Continuous Breaking News Horizontal Ticker (Speed-adjusted by ~30% for readability) */}
+      <section aria-label="लाइव ब्रेकिंग न्यूज़ टिकर" className="w-full mt-8 mb-4 px-2 sm:px-4 select-none">
+        <div className="rounded-2xl bg-gradient-to-r from-red-950/40 via-slate-900/90 to-red-950/40 border border-red-500/30 p-3 sm:p-4 shadow-xl backdrop-blur-md overflow-hidden relative group">
+          {/* Ticker Top Bar */}
+          <div className="flex items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-red-500/20">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+              </span>
+              <span className="text-xs sm:text-sm font-black text-red-500 tracking-wider uppercase flex items-center gap-1.5">
+                <Radio className="w-4 h-4 text-red-500 animate-pulse" />
+                लाइव ब्रेकिंग न्यूज़ टिकर
+              </span>
+              <span className="inline-flex text-[10px] font-extrabold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/30">
+                LIVE BULLETIN
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-slate-400 font-medium">
+              <span className="hidden md:inline">रोकने के लिए कर्सर रखें • क्लिक करके खबर बनाएं</span>
+              <span className="inline-flex items-center gap-1 text-amber-400 font-bold">
+                <Zap className="w-3 h-3 text-amber-400" />
+                ऑटो स्क्रॉल
+              </span>
+            </div>
+          </div>
+
+          {/* Marquee Track (Continuous Horizontal Scrolling) */}
+          <div className="relative w-full overflow-hidden py-1">
+            <div className="animate-marquee-continuous flex items-center gap-4">
+              {(() => {
+                const activeTickerPosts = (posts || []).filter((p) => p && p.title && !String(p.id).startsWith('live-post-')).slice(0, 12);
+                const displayItems = activeTickerPosts.length > 0 ? activeTickerPosts : [
+                  {
+                    id: 'fallback-ticker-1',
+                    title: 'AI News Maker: डिजिटल न्यूज़ चैनलों का AI स्टूडियो — 2 मिनट में तैयार करें लाइव वीडियो व ग्राफिक्स',
+                    categoryName: 'डिजिटल स्टूडियो',
+                    publishedTime: 'अभी-अभी',
+                    breaking: true,
+                  },
+                  {
+                    id: 'fallback-ticker-2',
+                    title: 'ऑटोमैटिक ब्रेकिंग प्लेट्स और 24+ डिजिटल एंकर वॉइसओवर की सुविधा उपलब्ध',
+                    categoryName: 'ऑटोमेशन',
+                    publishedTime: 'लाइव',
+                    breaking: true,
+                  },
+                  {
+                    id: 'fallback-ticker-3',
+                    title: 'एडमिन ऑटो-कमांड द्वारा सत्यापित ताज़ा खबरें एवं वेब लिंक लाइव सिंक',
+                    categoryName: 'मुख्य समाचार',
+                    publishedTime: 'ताज़ा अपडेट',
+                    breaking: false,
+                  },
+                ];
+
+                // Ensure base set has enough items for widescreen displays
+                const baseSet = displayItems.length < 6 ? [...displayItems, ...displayItems] : displayItems;
+                // Exactly 2 identical copies for a 100% seamless -50% translateX loop
+                const loopedItems = [...baseSet, ...baseSet];
+
+                return loopedItems.map((item: any, idx: number) => {
+                  const headline = cleanViewerHeadline(item.title || item.headline || '');
+                  const isBreak = Boolean(item.breaking || item.isBreaking);
+                  return (
+                    <div
+                      key={`ticker-item-${item.id || idx}-${idx}`}
+                      onClick={() => {
+                        if (item.id && !String(item.id).startsWith('fallback-ticker-')) {
+                          onOpenStudioWithNews(item);
+                        } else if (onNavigateToTab) {
+                          onNavigateToTab('newsroom');
+                        }
+                      }}
+                      className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-slate-950/70 hover:bg-slate-800/90 border border-slate-700/60 hover:border-amber-400/60 text-slate-200 transition-all cursor-pointer shrink-0 shadow-md hover:scale-[1.02] group/item"
+                    >
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shrink-0 ${
+                        isBreak
+                          ? 'bg-red-600 text-white animate-pulse shadow-sm shadow-red-600/50'
+                          : 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                      }`}>
+                        {isBreak ? '🔴 ब्रेकिंग' : (item.categoryName || 'अपडेट')}
+                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-slate-100 group-hover/item:text-amber-300 transition-colors line-clamp-1 max-w-xs sm:max-w-md md:max-w-lg">
+                        {headline}
+                      </span>
+                      <span className="text-[10px] text-slate-400 flex items-center gap-1 shrink-0 bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-800">
+                        <Clock className="w-2.5 h-2.5 text-slate-400" />
+                        {item.publishedTime || 'अभी'}
+                      </span>
+                      <span className="text-amber-400 font-black text-xs shrink-0 group-hover/item:translate-x-0.5 transition-transform">
+                        →
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
         </div>
+      </section>
 
         {/* Floating Back to Top Button */}
       {showBackToTop && (
