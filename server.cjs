@@ -7593,13 +7593,6 @@ function saveNewsDatabase(posts) {
     return true;
   }
   try {
-    if (cleaned.length === 0) {
-      const existing = loadNewsDatabase();
-      if (existing.length > 0) {
-        console.warn("Safeguard: Refusing to overwrite populated news_database with empty array");
-        return true;
-      }
-    }
     const locations = resolveAllDatabaseLocations("news_database.json");
     for (const loc of locations) {
       try {
@@ -10200,7 +10193,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       address: userPayload.address || "",
       pincode: userPayload.pincode || "",
       websiteUrl: userPayload.websiteUrl || "",
-      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
+      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false, twitter: false, x: false, linkedin: false },
       role: isSuper ? "superadmin" : userPayload.role || "user",
       tier: isSuper ? "ultra" : userPayload.tier || "basic",
       planName: isSuper ? "VIP DESK" : userPayload.planName || "BASIC",
@@ -10710,101 +10703,6 @@ function saveDeletedVideoId(id) {
     console.error("Error saving deleted video id:", err.message);
   }
 }
-var CURATED_DEFAULT_VIDEOS = [
-  {
-    id: "vid-curated-reels-01",
-    title: "\u0938\u0902\u0938\u0926 \u092E\u0947\u0902 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0935 \u092A\u0924\u094D\u0930\u0915\u093E\u0930 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u093E\u0928\u0942\u0928 \u092A\u093E\u0930\u093F\u0924",
-    caption: "\u0926\u0947\u0936 \u092D\u0930 \u0915\u0947 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902 \u0914\u0930 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0938\u0902\u092A\u093E\u0926\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0910\u0924\u093F\u0939\u093E\u0938\u093F\u0915 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u093E\u0928\u0942\u0928 \u0915\u094B \u0938\u0902\u0938\u0926 \u092E\u0947\u0902 \u092E\u0902\u091C\u0942\u0930\u0940\u0964",
-    aspectRatio: "9:16",
-    createdAt: Date.now() - 36e5,
-    duration: "00:45",
-    channel: "BREAKING NEWS WALA",
-    views: "3.4K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
-    category: "\u0930\u093E\u091C\u0928\u0940\u0924\u093F",
-    isBonus: true,
-    rewardCoins: 50,
-    headlineVariants: [
-      "\u0938\u0902\u0938\u0926 \u092E\u0947\u0902 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0935 \u092A\u0924\u094D\u0930\u0915\u093E\u0930 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u093E\u0928\u0942\u0928 \u092A\u093E\u0930\u093F\u0924",
-      "\u0921\u093F\u091C\u093F\u091F\u0932 \u0938\u0902\u092A\u093E\u0926\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0928\u090F \u092A\u094D\u0930\u0947\u0938 \u0928\u093F\u092F\u092E \u091C\u093E\u0930\u0940",
-      "\u0926\u0947\u0936 \u092D\u0930 \u092E\u0947\u0902 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u093E\u0928\u0942\u0928 \u0915\u094B \u092E\u0902\u091C\u0942\u0930\u0940"
-    ],
-    cropRegion: { x: 0, y: 0.1, width: 1, height: 0.8, aspectRatio: "9:16" },
-    isOnly4_5: false,
-    isFullVisibilityAvailable: true,
-    compatibleFrameIds: ["frame-custom-full-9-16", "frame-custom-3line-4-5"],
-    sourceDimensions: { width: 1080, height: 1920 }
-  },
-  {
-    id: "vid-curated-report-02",
-    title: "\u0935\u093F\u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: \u0928\u090F \u0939\u093E\u0908\u0935\u0947 \u0935 \u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0938\u0935\u0947 \u0915\u093E \u0935\u093F\u0938\u094D\u0924\u093E\u0930",
-    caption: "\u092A\u0942\u0930\u094D\u0935\u093E\u0902\u091A\u0932 \u0935 \u092C\u0941\u0902\u0926\u0947\u0932\u0916\u0902\u0921 \u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0938\u0935\u0947 \u092A\u0930 \u0915\u0928\u0947\u0915\u094D\u091F\u093F\u0935\u093F\u091F\u0940 \u0915\u093E \u0928\u092F\u093E \u0928\u0947\u091F\u0935\u0930\u094D\u0915, \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0964",
-    aspectRatio: "4:5",
-    createdAt: Date.now() - 72e5,
-    duration: "01:15",
-    channel: "BREAKING NEWS WALA",
-    views: "2.1K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
-    category: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F",
-    isBonus: false,
-    headlineVariants: [
-      "\u0935\u093F\u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: \u0928\u090F \u0939\u093E\u0908\u0935\u0947 \u0935 \u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0938\u0935\u0947 \u0915\u093E \u0935\u093F\u0938\u094D\u0924\u093E\u0930",
-      "\u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0938\u0935\u0947 \u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u0938\u0947 \u092C\u0926\u0932\u0947\u0917\u0940 \u092A\u094D\u0930\u0926\u0947\u0936 \u0915\u0940 \u0930\u092B\u094D\u0924\u093E\u0930"
-    ],
-    isOnly4_5: true,
-    isFullVisibilityAvailable: false,
-    compatibleFrameIds: ["frame-custom-3line-4-5"],
-    sourceDimensions: { width: 1080, height: 1350 }
-  },
-  {
-    id: "vid-curated-bulletin-03",
-    title: "\u0906\u091C \u0915\u093E \u0928\u0947\u0936\u0928\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u092C\u0941\u0932\u0947\u091F\u093F\u0928: 10 \u092C\u0921\u093C\u0940 \u0916\u092C\u0930\u0947\u0902",
-    caption: "\u0926\u0947\u0936 \u0914\u0930 \u0930\u093E\u091C\u094D\u092F\u094B\u0902 \u0915\u0940 10 \u0938\u092C\u0938\u0947 \u092C\u0921\u093C\u0940 \u0916\u092C\u0930\u0947\u0902 \u0938\u0940\u0927\u0947 \u0928\u0947\u0936\u0928\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0942\u092E \u0938\u0947 \u0932\u093E\u0907\u0935\u0964",
-    aspectRatio: "16:9",
-    createdAt: Date.now() - 108e5,
-    duration: "02:10",
-    channel: "BREAKING NEWS WALA",
-    views: "5.8K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop",
-    category: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F",
-    isBonus: true,
-    rewardCoins: 50,
-    headlineVariants: [
-      "\u0906\u091C \u0915\u093E \u0928\u0947\u0936\u0928\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u092C\u0941\u0932\u0947\u091F\u093F\u0928: 10 \u092C\u0921\u093C\u0940 \u0916\u092C\u0930\u0947\u0902",
-      "\u0926\u0947\u0936-\u0926\u0941\u0928\u093F\u092F\u093E \u0915\u0940 \u091F\u0949\u092A 10 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938"
-    ],
-    isOnly4_5: false,
-    isFullVisibilityAvailable: true,
-    compatibleFrameIds: ["frame-custom-16-9", "frame-custom-full-9-16"],
-    sourceDimensions: { width: 1920, height: 1080 }
-  },
-  {
-    id: "vid-curated-reels-04",
-    title: "\u092E\u094C\u0938\u092E \u0935\u093F\u092D\u093E\u0917 \u0915\u0940 \u092D\u093E\u0930\u0940 \u092C\u093E\u0930\u093F\u0936 \u0914\u0930 \u0906\u0902\u0927\u0940 \u0915\u0940 \u091A\u0947\u0924\u093E\u0935\u0928\u0940",
-    caption: "\u0909\u0924\u094D\u0924\u0930 \u092D\u093E\u0930\u0924 \u0915\u0947 \u0915\u0908 \u0930\u093E\u091C\u094D\u092F\u094B\u0902 \u092E\u0947\u0902 \u0905\u0917\u0932\u0947 48 \u0918\u0902\u091F\u0947 \u092D\u093E\u0930\u0940 \u092C\u093E\u0930\u093F\u0936 \u0914\u0930 \u0924\u0947\u091C \u0939\u0935\u093E\u0913\u0902 \u0915\u093E \u0930\u0947\u0921 \u0905\u0932\u0930\u094D\u091F\u0964",
-    aspectRatio: "9:16",
-    createdAt: Date.now() - 144e5,
-    duration: "00:35",
-    channel: "BREAKING NEWS WALA",
-    views: "4.2K \u0926\u0947\u0916\u093E \u0917\u092F\u093E",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&auto=format&fit=crop",
-    category: "\u092E\u094C\u0938\u092E",
-    isBonus: false,
-    headlineVariants: [
-      "\u092E\u094C\u0938\u092E \u0935\u093F\u092D\u093E\u0917 \u0915\u0940 \u092D\u093E\u0930\u0940 \u092C\u093E\u0930\u093F\u0936 \u0914\u0930 \u0906\u0902\u0927\u0940 \u0915\u0940 \u091A\u0947\u0924\u093E\u0935\u0928\u0940",
-      "\u0905\u0917\u0932\u0947 48 \u0918\u0902\u091F\u0947 \u0907\u0928 \u0930\u093E\u091C\u094D\u092F\u094B\u0902 \u092E\u0947\u0902 \u092D\u093E\u0930\u0940 \u092C\u093E\u0930\u093F\u0936 \u0915\u093E \u0905\u0932\u0930\u094D\u091F"
-    ],
-    cropRegion: { x: 0, y: 0.1, width: 1, height: 0.8, aspectRatio: "9:16" },
-    isOnly4_5: false,
-    isFullVisibilityAvailable: true,
-    compatibleFrameIds: ["frame-custom-full-9-16", "frame-custom-3line-4-5"],
-    sourceDimensions: { width: 1080, height: 1920 }
-  }
-];
 function loadVideosDatabase() {
   try {
     let videos = [];
@@ -10833,10 +10731,6 @@ function loadVideosDatabase() {
         }
       }
     }
-    if (videos.length === 0) {
-      videos = [...CURATED_DEFAULT_VIDEOS];
-      saveVideosDatabase(videos);
-    }
     const deletedSet = loadDeletedVideoIds();
     const validVideos = videos.filter((v) => {
       if (!v || !v.id) return false;
@@ -10852,7 +10746,7 @@ function loadVideosDatabase() {
     return validVideos;
   } catch (err) {
     console.error("Error loading videos database:", err.message);
-    return CURATED_DEFAULT_VIDEOS;
+    return [];
   }
 }
 function saveVideosDatabase(videos) {
@@ -13069,7 +12963,21 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
           customHeaderPng: updated.customHeaderPng,
           customFooterPng: updated.customFooterPng,
           showMobileNumber: Boolean(updated.mobileNumber),
-          activeSocialIcons: updated.socialIcons || [],
+          activeSocialIcons: (() => {
+            const list = [];
+            if (typeof updated.socialIcons === "object" && updated.socialIcons !== null) {
+              for (const [k, v] of Object.entries(updated.socialIcons)) {
+                if (v) {
+                  list.push(k);
+                  if (k === "twitter" && !list.includes("x")) list.push("x");
+                  if (k === "x" && !list.includes("twitter")) list.push("twitter");
+                }
+              }
+            } else if (Array.isArray(updated.socialIcons)) {
+              list.push(...updated.socialIcons);
+            }
+            return list;
+          })(),
           updatedAt: Date.now()
         });
       } catch (brErr) {
@@ -13325,7 +13233,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         role: savedUser.role || "user",
         username: savedUser.username
       });
-      return res.json({ success: true, user: savedUser, token: token2 });
+      return res.json({ success: true, isBlocked: Boolean(savedUser.isBlocked), user: savedUser, token: token2 });
     }
     if (!cleanId || !password) {
       return res.status(400).json({ error: "\u0915\u0943\u092A\u092F\u093E \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E/\u0908\u092E\u0947\u0932 \u0914\u0930 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902" });
@@ -13377,7 +13285,7 @@ app.get("/api/auth/me", (req, res) => {
   if (!user) {
     return res.status(401).json({ authenticated: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u092E\u093E\u0928\u094D\u092F \u0938\u0924\u094D\u0930 \u091F\u094B\u0915\u0928 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
   }
-  return res.json({ authenticated: true, user });
+  return res.json({ authenticated: true, isBlocked: Boolean(user.isBlocked), user });
 });
 var SUPPORT_DB_FILE = import_path.default.join(process.cwd(), "support_requests_database.json");
 var UPLOAD_SUPPORT_DIR = import_path.default.join(process.cwd(), "public", "uploads", "support");

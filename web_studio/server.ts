@@ -1587,14 +1587,7 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
     return true;
   }
   try {
-    // Safeguard: Never wipe out an existing populated database with an empty array
-    if (cleaned.length === 0) {
-      const existing = loadNewsDatabase();
-      if (existing.length > 0) {
-        console.warn("Safeguard: Refusing to overwrite populated news_database with empty array");
-        return true;
-      }
-    }
+    // Safeguard removed: empty database authorized
 
     const locations = resolveAllDatabaseLocations("news_database.json");
     for (const loc of locations) {
@@ -4809,7 +4802,7 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       address: userPayload.address || '',
       pincode: userPayload.pincode || '',
       websiteUrl: userPayload.websiteUrl || '',
-      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false },
+      socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false, twitter: false, x: false, linkedin: false },
       role: isSuper ? 'superadmin' : (userPayload.role || 'user'),
       tier: isSuper ? 'ultra' : (userPayload.tier || 'basic'),
       planName: isSuper ? 'VIP DESK' : (userPayload.planName || 'BASIC'),
@@ -5427,101 +5420,7 @@ function saveDeletedVideoId(id: string): void {
   }
 }
 
-const CURATED_DEFAULT_VIDEOS: StoredVideoItem[] = [
-  {
-    id: "vid-curated-reels-01",
-    title: "संसद में डिजिटल मीडिया व पत्रकार सुरक्षा कानून पारित",
-    caption: "देश भर के पत्रकारों और डिजिटल मीडिया संपादकों के लिए ऐतिहासिक सुरक्षा कानून को संसद में मंजूरी।",
-    aspectRatio: "9:16",
-    createdAt: Date.now() - 3600000,
-    duration: "00:45",
-    channel: "BREAKING NEWS WALA",
-    views: "3.4K देखा गया",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop",
-    category: "राजनीति",
-    isBonus: true,
-    rewardCoins: 50,
-    headlineVariants: [
-      "संसद में डिजिटल मीडिया व पत्रकार सुरक्षा कानून पारित",
-      "डिजिटल संपादकों के लिए नए प्रेस नियम जारी",
-      "देश भर में डिजिटल मीडिया कानून को मंजूरी"
-    ],
-    cropRegion: { x: 0, y: 0.1, width: 1, height: 0.8, aspectRatio: "9:16" },
-    isOnly4_5: false,
-    isFullVisibilityAvailable: true,
-    compatibleFrameIds: ["frame-custom-full-9-16", "frame-custom-3line-4-5"],
-    sourceDimensions: { width: 1080, height: 1920 }
-  },
-  {
-    id: "vid-curated-report-02",
-    title: "विशेष ग्राउंड रिपोर्ट: नए हाईवे व एक्सप्रेसवे का विस्तार",
-    caption: "पूर्वांचल व बुंदेलखंड एक्सप्रेसवे पर कनेक्टिविटी का नया नेटवर्क, ग्राउंड रिपोर्ट।",
-    aspectRatio: "4:5",
-    createdAt: Date.now() - 7200000,
-    duration: "01:15",
-    channel: "BREAKING NEWS WALA",
-    views: "2.1K देखा गया",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
-    category: "राष्ट्रीय",
-    isBonus: false,
-    headlineVariants: [
-      "विशेष ग्राउंड रिपोर्ट: नए हाईवे व एक्सप्रेसवे का विस्तार",
-      "एक्सप्रेसवे नेटवर्क से बदलेगी प्रदेश की रफ्तार"
-    ],
-    isOnly4_5: true,
-    isFullVisibilityAvailable: false,
-    compatibleFrameIds: ["frame-custom-3line-4-5"],
-    sourceDimensions: { width: 1080, height: 1350 }
-  },
-  {
-    id: "vid-curated-bulletin-03",
-    title: "आज का नेशनल वीडियो बुलेटिन: 10 बड़ी खबरें",
-    caption: "देश और राज्यों की 10 सबसे बड़ी खबरें सीधे नेशनल न्यूज़ रूम से लाइव।",
-    aspectRatio: "16:9",
-    createdAt: Date.now() - 10800000,
-    duration: "02:10",
-    channel: "BREAKING NEWS WALA",
-    views: "5.8K देखा गया",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&auto=format&fit=crop",
-    category: "राष्ट्रीय",
-    isBonus: true,
-    rewardCoins: 50,
-    headlineVariants: [
-      "आज का नेशनल वीडियो बुलेटिन: 10 बड़ी खबरें",
-      "देश-दुनिया की टॉप 10 हेडलाइंस"
-    ],
-    isOnly4_5: false,
-    isFullVisibilityAvailable: true,
-    compatibleFrameIds: ["frame-custom-16-9", "frame-custom-full-9-16"],
-    sourceDimensions: { width: 1920, height: 1080 }
-  },
-  {
-    id: "vid-curated-reels-04",
-    title: "मौसम विभाग की भारी बारिश और आंधी की चेतावनी",
-    caption: "उत्तर भारत के कई राज्यों में अगले 48 घंटे भारी बारिश और तेज हवाओं का रेड अलर्ट।",
-    aspectRatio: "9:16",
-    createdAt: Date.now() - 14400000,
-    duration: "00:35",
-    channel: "BREAKING NEWS WALA",
-    views: "4.2K देखा गया",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1534088568595-a066f410bcda?w=800&auto=format&fit=crop",
-    category: "मौसम",
-    isBonus: false,
-    headlineVariants: [
-      "मौसम विभाग की भारी बारिश और आंधी की चेतावनी",
-      "अगले 48 घंटे इन राज्यों में भारी बारिश का अलर्ट"
-    ],
-    cropRegion: { x: 0, y: 0.1, width: 1, height: 0.8, aspectRatio: "9:16" },
-    isOnly4_5: false,
-    isFullVisibilityAvailable: true,
-    compatibleFrameIds: ["frame-custom-full-9-16", "frame-custom-3line-4-5"],
-    sourceDimensions: { width: 1080, height: 1920 }
-  }
-];
+const CURATED_DEFAULT_VIDEOS: StoredVideoItem[] = [];
 
 function loadVideosDatabase(): StoredVideoItem[] {
   try {
@@ -5551,11 +5450,7 @@ function loadVideosDatabase(): StoredVideoItem[] {
       }
     }
 
-    // 3. If videos collection is still empty, populate curated default news videos & reels
-    if (videos.length === 0) {
-      videos = [...CURATED_DEFAULT_VIDEOS];
-      saveVideosDatabase(videos);
-    }
+    // Videos remain empty until uploaded
 
     const deletedSet = loadDeletedVideoIds();
     // Videos are preserved across deployments; do not auto-delete valid videos
@@ -5576,7 +5471,7 @@ function loadVideosDatabase(): StoredVideoItem[] {
     return validVideos;
   } catch (err: any) {
     console.error("Error loading videos database:", err.message);
-    return CURATED_DEFAULT_VIDEOS;
+    return [];
   }
 }
 
@@ -8290,7 +8185,21 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
           customHeaderPng: updated.customHeaderPng,
           customFooterPng: updated.customFooterPng,
           showMobileNumber: Boolean(updated.mobileNumber),
-          activeSocialIcons: updated.socialIcons || [],
+          activeSocialIcons: (() => {
+            const list: string[] = [];
+            if (typeof updated.socialIcons === 'object' && updated.socialIcons !== null) {
+              for (const [k, v] of Object.entries(updated.socialIcons)) {
+                if (v) {
+                  list.push(k);
+                  if (k === 'twitter' && !list.includes('x')) list.push('x');
+                  if (k === 'x' && !list.includes('twitter')) list.push('twitter');
+                }
+              }
+            } else if (Array.isArray(updated.socialIcons)) {
+              list.push(...updated.socialIcons);
+            }
+            return list;
+          })(),
           updatedAt: Date.now(),
         });
       } catch (brErr) {
@@ -8596,7 +8505,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         role: savedUser.role || "user",
         username: savedUser.username,
       });
-      return res.json({ success: true, user: savedUser, token });
+      return res.json({ success: true, isBlocked: Boolean(savedUser.isBlocked), user: savedUser, token });
     }
 
     // 2. Direct Credentials
@@ -8659,7 +8568,7 @@ app.get("/api/auth/me", (req, res) => {
   if (!user) {
     return res.status(401).json({ authenticated: false, error: "अनधिकृत: मान्य सत्र टोकन नहीं मिला" });
   }
-  return res.json({ authenticated: true, user });
+  return res.json({ authenticated: true, isBlocked: Boolean(user.isBlocked), user });
 });
 
 // --- SUPPORT INBOX CLOUD DATABASE (support_requests_database.json) ---

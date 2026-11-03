@@ -2383,7 +2383,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 अभी कोई खबर उपलब्ध नहीं है।
               </h4>
               <p className="text-sm text-slate-400 max-w-lg leading-relaxed">
-                Admin द्वारा खबरें जोड़ने या अधिकृत RSS स्रोत सक्रिय करने के बाद खबरें यहाँ दिखाई देंगी।
+                Master Admin द्वारा अधिकृत स्रोत जोड़ने या नई खबर प्रकाशित करने के बाद खबरें यहाँ दिखाई देंगी।
               </p>
             </div>
           ) : (

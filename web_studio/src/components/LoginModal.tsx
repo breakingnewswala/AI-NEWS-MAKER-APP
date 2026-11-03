@@ -219,6 +219,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             if (data.user.username && !data.user.username.includes('@')) {
               user.username = data.user.username;
             }
+            if (data.isBlocked || data.user.isBlocked) {
+              user.isBlocked = true;
+              localStorage.setItem(`user_blocked_${cleanEmail}`, 'true');
+              window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: data.user }));
+            }
             if (data.token) {
               localStorage.setItem('reporter_auth_token', data.token);
               (user as any).token = data.token;
@@ -444,7 +449,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             mobileNumber: data.user.mobileNumber,
             channelWebsite: data.user.websiteUrl,
             token: data.token,
+            isBlocked: Boolean(data.isBlocked || data.user.isBlocked),
           };
+          if (data.isBlocked || data.user.isBlocked) {
+            const cleanEm = (authUser.email || cleanUser).toLowerCase().trim();
+            localStorage.setItem(`user_blocked_${cleanEm}`, 'true');
+            window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: data.user }));
+          }
           if (data.token) {
             localStorage.setItem('reporter_auth_token', data.token);
           }

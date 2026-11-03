@@ -323,7 +323,13 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             mobileNumber: data.user.mobileNumber,
             channelWebsite: data.user.websiteUrl,
             token: data.token,
+            isBlocked: Boolean(data.isBlocked || data.user.isBlocked),
           };
+          if (data.isBlocked || data.user.isBlocked) {
+            const cleanEm = (authUser.email || cleanUser).toLowerCase().trim();
+            safeLocalStorageSet(`user_blocked_${cleanEm}`, 'true');
+            window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: data.user }));
+          }
           if (data.token) {
             safeLocalStorageSet('reporter_auth_token', data.token);
           }

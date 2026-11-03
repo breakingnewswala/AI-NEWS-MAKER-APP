@@ -332,6 +332,13 @@ export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
 
 export function getActiveRssNewsPosts(): NewsFeedPost[] {
   if (typeof window === 'undefined') return [];
+  const activeSources = getAdminRssSources().filter((s) => s.isActive);
+  if (activeSources.length === 0) {
+    try {
+      localStorage.removeItem(STORAGE_KEY_SYNCED_RSS_POSTS);
+    } catch {}
+    return [];
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SYNCED_RSS_POSTS);
     if (raw) {
