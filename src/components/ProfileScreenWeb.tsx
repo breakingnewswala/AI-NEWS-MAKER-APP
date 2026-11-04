@@ -308,6 +308,172 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     getUserLogoChangeRequestStatus(currentUser?.email || '', 'gif')
   );
 
+  // Master Admin Social Links (LinkedIn, X/Twitter, etc.) State (Task 3)
+  const [selectedSocialPlatform, setSelectedSocialPlatform] = useState<'linkedin' | 'twitter' | 'youtube' | 'facebook' | 'instagram'>('linkedin');
+  const [socialLinkInput, setSocialLinkInput] = useState<string>('');
+  const [socialLinkSuccessMsg, setSocialLinkSuccessMsg] = useState<string>('');
+  const [socialLinkErrorMsg, setSocialLinkErrorMsg] = useState<string>('');
+
+  // WhatsApp Account Linking State (Task 1)
+  const [waLinkStatus, setWaLinkStatus] = useState<{ isLinked: boolean; linkedWhatsAppWaId: string; whatsappVerifiedAt?: number }>({ isLinked: false, linkedWhatsAppWaId: '' });
+  const [waLinkLoading, setWaLinkLoading] = useState<boolean>(false);
+  const [waGeneratedCode, setWaGeneratedCode] = useState<string>('');
+  const [waCodeExpiresIn, setWaCodeExpiresIn] = useState<number>(0);
+  const [waOfficialNumber, setWaOfficialNumber] = useState<string>('+91 9669802408');
+  const [waLinkMsg, setWaLinkMsg] = useState<string>('');
+
+  // Fetch WhatsApp Link status on mount / email change
+  useEffect(() => {
+    if (!cleanEmail) return;
+    fetch(getApiUrl('/api/whatsapp/link/status'), {
+      headers: { ...getAuthHeaders() }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.success) {
+          setWaLinkStatus({
+            isLinked: Boolean(data.isLinked),
+            linkedWhatsAppWaId: data.linkedWhatsAppWaId || '',
+            whatsappVerifiedAt: data.whatsappVerifiedAt
+          });
+        }
+      })
+      .catch(() => {});
+  }, [cleanEmail]);
+
+  // Keep socialLinkInput in sync when selected platform or profile updates
+  useEffect(() => {
+    const curVal = channelProfile?.socialLinks?.[selectedSocialPlatform] || '';
+    setSocialLinkInput(curVal);
+    setSocialLinkErrorMsg('');
+  }, [selectedSocialPlatform, channelProfile?.socialLinks]);
+
+  // Handle saving individual Social Media Links (LinkedIn, X/Twitter, etc.)
+  const handleSaveSocialLink = async (platform: 'linkedin' | 'twitter' | 'youtube' | 'facebook' | 'instagram') => {
+    let rawUrl = socialLinkInput.trim();
+    if (rawUrl) {
+      if (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+        if (rawUrl.startsWith('@')) {
+          if (platform === 'twitter') rawUrl = `https://x.com/${rawUrl.slice(1)}`;
+          else if (platform === 'linkedin') rawUrl = `https://linkedin.com/in/${rawUrl.slice(1)}`;
+          else if (platform === 'instagram') rawUrl = `https://instagram.com/${rawUrl.slice(1)}`;
+          else if (platform === 'youtube') rawUrl = `https://youtube.com/@${rawUrl.slice(1)}`;
+          else if (platform === 'facebook') rawUrl = `https://facebook.com/${rawUrl.slice(1)}`;
+        } else {
+          rawUrl = `https://${rawUrl}`;
+        }
+      }
+    }
+
+    const updatedLinks = {
+      ...DEFAULT_SOCIAL_LINKS,
+      ...(channelProfile.socialLinks || {}),
+      [platform]: rawUrl,
+    };
+
+    const updatedIcons = {
+      ...(channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS),
+      [platform]: Boolean(rawUrl),
+    };
+
+    const updatedProfileData = {
+      ...channelProfile,
+      socialLinks: updatedLinks,
+      socialIcons: updatedIcons,
+    };
+
+    setChannelProfile(updatedProfileData);
+
+    try {
+      const res = await fetch(getApiUrl('/api/user-profile'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+          'x-admin-key': 'master-admin',
+          'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
+          'x-admin-email': cleanEmail,
+          'x-user-email': cleanEmail,
+        },
+        body: JSON.stringify({
+          ...updatedProfileData,
+          email: cleanEmail,
+          userId: effectiveUser?.userId || currentUser?.userId || cleanEmail,
+        }),
+      });
+
+      if (res.ok) {
+        const platLabel = platform === 'twitter' ? 'X (Twitter)' : platform === 'linkedin' ? 'LinkedIn' : platform;
+        setSocialLinkSuccessMsg(`✅ ${platLabel} लिंक सफलतापूर्वक सुरक्षित हो गया!`);
+        setTimeout(() => setSocialLinkSuccessMsg(''), 4000);
+        try {
+          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updatedProfileData));
+          localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfileData));
+        } catch {}
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        setSocialLinkErrorMsg(errJson.error || 'सोशल लिंक सेव करने में विफलता आई');
+      }
+    } catch (err: any) {
+      setSocialLinkErrorMsg(err.message || 'नेटवर्क त्रुटि आई');
+    }
+  };
+
+  // Handle WhatsApp Link Code Generation
+  const handleGenerateWaLinkCode = async () => {
+    setWaLinkLoading(true);
+    setWaLinkMsg('');
+    try {
+      const res = await fetch(getApiUrl('/api/whatsapp/link/generate-code'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        setWaGeneratedCode(data.code);
+        setWaCodeExpiresIn(data.expiresInSeconds || 600);
+        if (data.officialWhatsAppNumber) setWaOfficialNumber(data.officialWhatsAppNumber);
+        setWaLinkMsg('✅ 6-अंकों का लिंकिंग कोड तैयार है! कृपया इसे आधिकारिक WhatsApp पर भेजें।');
+      } else {
+        alert(data.error || 'कोड जनरेट करने में समस्या आई');
+      }
+    } catch (err: any) {
+      alert('लिंकिंग कोड जनरेट करने में विफलता: ' + err.message);
+    } finally {
+      setWaLinkLoading(false);
+    }
+  };
+
+  // Handle WhatsApp Unlink
+  const handleUnlinkWhatsApp = async () => {
+    if (!confirm('क्या आप वाकई अपने AI NEWS MAKER अकाउंट से यह WhatsApp नंबर अनलिंक करना चाहते हैं?')) return;
+    setWaLinkLoading(true);
+    try {
+      const res = await fetch(getApiUrl('/api/whatsapp/link/unlink'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        setWaLinkStatus({ isLinked: false, linkedWhatsAppWaId: '' });
+        setWaGeneratedCode('');
+        alert('✅ WhatsApp अकाउंट सफलतापूर्वक अनलिंक कर दिया गया है।');
+      } else {
+        alert(data.error || 'अनलिंक करने में समस्या आई');
+      }
+    } catch (err: any) {
+      alert('त्रुटि: ' + err.message);
+    } finally {
+      setWaLinkLoading(false);
+    }
+  };
+
   // Manual Username Creation state & handler (Google Email != Username)
   const [isUsernameEditing, setIsUsernameEditing] = useState(false);
   const [manualUsernameInput, setManualUsernameInput] = useState('');
@@ -1384,7 +1550,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const handleAdminResetLogo = async () => {
     const confirmed = window.confirm('क्या आप चैनल लोगो को डिफ़ॉल्ट पर रीसेट करना चाहते हैं?');
     if (!confirmed) return;
-    const defaultLogo = '/assets/ai_news_maker_logo.png';
+    const defaultLogo = isAdmin ? '/assets/ai_news_maker_logo.png' : '';
     setChannelProfile((prev) => ({
       ...prev,
       channelLogoUrl: defaultLogo,
@@ -2073,7 +2239,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <div className="flex items-center gap-3">
                         <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
                           <img
-                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png'}
+                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '')}
                             alt="PNG Logo"
                             className="w-full h-full object-contain"
                           />
@@ -2301,7 +2467,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               src={
                                 logoReqType === 'gif'
                                   ? (channelProfile.channelLogoGifUrl || '/assets/ai_news_maker_logo.png')
-                                  : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '/assets/ai_news_maker_logo.png')
+                                  : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : ''))
                               }
                               alt="Current Asset"
                               className="max-h-20 w-auto object-contain"
@@ -2774,6 +2940,208 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
                   />
                 </div>
+              </div>
+
+              {/* MASTER ADMIN & USER SOCIAL MEDIA PROFILE LINKS MANAGER (Task 3) */}
+              <div className="pt-3 pb-2 border-t border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <span className="text-amber-400">🔗</span>
+                    <span>सोशल मीडिया प्रोफ़ाइल लिंक्स (Social Media Profile Links)</span>
+                  </label>
+                  <span className="text-[10px] text-amber-300 font-semibold bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/80">
+                    * LinkedIn व X (Twitter) सुरक्षित सेविंग
+                  </span>
+                </div>
+
+                {/* Platform Selection Tabs */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'linkedin', label: 'LinkedIn', icon: '💼', placeholder: 'https://linkedin.com/in/username' },
+                    { id: 'twitter', label: 'X (Twitter)', icon: '𝕏', placeholder: 'https://x.com/username' },
+                    { id: 'youtube', label: 'YouTube', icon: '▶', placeholder: 'https://youtube.com/@channel' },
+                    { id: 'facebook', label: 'Facebook', icon: '📘', placeholder: 'https://facebook.com/page' },
+                    { id: 'instagram', label: 'Instagram', icon: '📷', placeholder: 'https://instagram.com/handle' },
+                  ].map((plat) => {
+                    const isSelected = selectedSocialPlatform === plat.id;
+                    const hasSavedLink = Boolean(channelProfile?.socialLinks?.[plat.id as any]);
+                    return (
+                      <button
+                        key={plat.id}
+                        type="button"
+                        onClick={() => setSelectedSocialPlatform(plat.id as any)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-md ring-1 ring-amber-400/50'
+                            : hasSavedLink
+                            ? 'bg-slate-900 border-amber-500/40 text-amber-300 hover:border-amber-400'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>{plat.icon}</span>
+                        <span>{plat.label}</span>
+                        {hasSavedLink && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="सहेजा हुआ लिंक सक्रिय है" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* URL Input & Dedicated Active Save Button */}
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={socialLinkInput}
+                        onChange={(e) => setSocialLinkInput(e.target.value)}
+                        placeholder={
+                          selectedSocialPlatform === 'linkedin'
+                            ? 'https://linkedin.com/in/username या profile link'
+                            : selectedSocialPlatform === 'twitter'
+                            ? 'https://x.com/username या @handle'
+                            : 'https://...'
+                        }
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSocialLink(selectedSocialPlatform)}
+                      disabled={!socialLinkInput.trim() && !channelProfile?.socialLinks?.[selectedSocialPlatform]}
+                      className={`px-4 py-2 font-black text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 ${
+                        (!socialLinkInput.trim() && !channelProfile?.socialLinks?.[selectedSocialPlatform])
+                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                          : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 cursor-pointer shadow-amber-500/20 active:scale-95'
+                      }`}
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>{selectedSocialPlatform === 'twitter' ? 'X लिंक सेव करें' : selectedSocialPlatform === 'linkedin' ? 'LinkedIn सेव करें' : 'लिंक सेव करें'}</span>
+                    </button>
+                  </div>
+
+                  {/* Feedback Messages */}
+                  {socialLinkSuccessMsg && (
+                    <p className="text-[11px] text-emerald-400 font-bold animate-in fade-in">
+                      {socialLinkSuccessMsg}
+                    </p>
+                  )}
+                  {socialLinkErrorMsg && (
+                    <p className="text-[11px] text-rose-400 font-bold animate-in fade-in">
+                      {socialLinkErrorMsg}
+                    </p>
+                  )}
+
+                  {/* Active Saved Link Summary Pills */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-[10px] text-slate-400">वर्तमान सहेजे गए लिंक्स:</span>
+                    {channelProfile?.socialLinks?.linkedin && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-950/60 border border-blue-500/40 text-blue-300 font-mono truncate max-w-[200px]" title={channelProfile.socialLinks.linkedin}>
+                        💼 LinkedIn: {channelProfile.socialLinks.linkedin}
+                      </span>
+                    )}
+                    {channelProfile?.socialLinks?.twitter && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-slate-200 font-mono truncate max-w-[200px]" title={channelProfile.socialLinks.twitter}>
+                        𝕏 X: {channelProfile.socialLinks.twitter}
+                      </span>
+                    )}
+                    {!channelProfile?.socialLinks?.linkedin && !channelProfile?.socialLinks?.twitter && (
+                      <span className="text-[10px] text-slate-500 italic">कोई LinkedIn या X लिंक सहेजा नहीं गया है</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* WHATSAPP CUSTOMER SUPPORT ACCOUNT LINKING CARD (Task 1) */}
+              <div className="p-4 bg-slate-950/80 border border-emerald-500/40 rounded-2xl space-y-3 shadow-lg shadow-emerald-500/5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-sm">
+                      💬
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                        <span>WhatsApp AI ग्राहक सहायता लिंकेज</span>
+                        {waLinkStatus.isLinked ? (
+                          <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-[10px] font-black rounded-full">
+                            सत्यापित (Linked) ✅
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-bold rounded-full">
+                            लिंक नहीं है
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        अपने WhatsApp से 'मेरा प्लान', 'कोटा', 'वॉलेट' जानने हेतु अकाउंट लिंक करें।
+                      </p>
+                    </div>
+                  </div>
+
+                  {waLinkStatus.isLinked && (
+                    <button
+                      type="button"
+                      onClick={handleUnlinkWhatsApp}
+                      disabled={waLinkLoading}
+                      className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800 text-rose-300 text-xs font-bold rounded-xl cursor-pointer transition active:scale-95"
+                    >
+                      {waLinkLoading ? 'अनलिंक हो रहा है...' : 'WhatsApp अनलिंक करें'}
+                    </button>
+                  )}
+                </div>
+
+                {waLinkStatus.isLinked ? (
+                  <div className="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-xl flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-400 font-bold">लिंक्ड नंबर:</span>
+                      <span className="font-mono text-white font-bold">{waLinkStatus.linkedWhatsAppWaId}</span>
+                    </div>
+                    <span className="text-[11px] text-emerald-300/80">
+                      आधिकारिक बॉट: <a href="https://wa.me/919669802408" target="_blank" rel="noopener noreferrer" className="underline font-mono text-emerald-300">+91 9669802408</a>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {!waGeneratedCode ? (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={handleGenerateWaLinkCode}
+                          disabled={waLinkLoading}
+                          className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-2 active:scale-95"
+                        >
+                          <span>📱</span>
+                          <span>{waLinkLoading ? 'कोड तैयार हो रहा है...' : 'WhatsApp अकाउंट लिंक करें (6-अंकों का कोड)'}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 bg-slate-900 border border-amber-500/50 rounded-xl space-y-3 animate-in fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-amber-300">आपका 6-अंकों का One-Time Linking Code:</span>
+                          <span className="text-[10px] text-slate-400 font-mono">वैधता: 10 मिनट</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="px-4 py-2 bg-slate-950 border border-amber-400 rounded-xl font-mono text-xl sm:text-2xl font-black text-amber-300 tracking-widest shadow-inner">
+                            {waGeneratedCode}
+                          </div>
+                          <a
+                            href={`https://wa.me/${waOfficialNumber.replace(/[^0-9]/g, '')}?text=${waGeneratedCode}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-lg cursor-pointer transition active:scale-95"
+                          >
+                            <span>WhatsApp पर भेजें ➔</span>
+                          </a>
+                        </div>
+                        <p className="text-[11px] text-slate-300 leading-relaxed">
+                          📌 अपने WhatsApp से हमारे आधिकारिक नंबर (<b className="font-mono text-amber-300">{waOfficialNumber}</b>) पर यह कोड भेजें। आपका अकाउंट तुरंत लिंक हो जाएगा।
+                        </p>
+                      </div>
+                    )}
+                    {waLinkMsg && (
+                      <p className="text-[11px] text-emerald-400 font-semibold">{waLinkMsg}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Social Media Icons Toggles */}

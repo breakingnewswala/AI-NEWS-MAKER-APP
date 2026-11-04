@@ -8354,6 +8354,148 @@ function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean 
   }
 }
 
+// ============================================================================
+// WHATSAPP ACCOUNT LINKING API (Task 1: Secure One-Time Code & Verification)
+// ============================================================================
+const recentLinkCodeRequests = new Map();
+
+app.post("/api/whatsapp/link/generate-code", requireAuthMiddleware, async (req: any, res: any) => {
+  try {
+    const authUser = req.user;
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    const userId = (authUser?.userId || userEmail).toString().trim();
+    if (!userEmail) return res.status(400).json({ success: false, error: "ईमेल पता आवश्यक है।" });
+
+    // Rate limit: 60s resend cooldown
+    const lastTime = recentLinkCodeRequests.get(userEmail);
+    const now = Date.now();
+    if (lastTime && now - lastTime < 60000) {
+      const waitSec = Math.ceil((60000 - (now - lastTime)) / 1000);
+      return res.status(429).json({
+        success: false,
+        error: `कृपया ${waitSec} सेकंड प्रतीक्षा करें और पुनः प्रयास करें।`,
+        cooldownRemainingSeconds: waitSec,
+      });
+    }
+
+    // Generate secure 6-digit code
+    const code = Math.floor(100000 + crypto.randomInt(0, 900000)).toString();
+    const salt = crypto.randomBytes(16).toString("hex");
+    const codeHash = crypto.createHash("sha256").update(code + salt).digest("hex");
+    const expiresAt = now + (10 * 60 * 1000); // 10 minutes
+
+    const reqDocId = `link_${crypto.createHash("sha256").update(userEmail).digest("hex").slice(0, 24)}`;
+    const linkDoc = {
+      uid: userId,
+      email: userEmail,
+      codeHash,
+      salt,
+      createdAt: now,
+      expiresAt,
+      attempts: 0,
+      status: "pending",
+      ip: req.ip || "",
+    };
+
+    if (centralDb && centralDb.useFirestore) {
+      await centralDb.writeDoc("whatsapp_link_requests", reqDocId, linkDoc);
+    }
+
+    recentLinkCodeRequests.set(userEmail, now);
+
+    const officialNumber = process.env.WHATSAPP_DISPLAY_NUMBER || "+91 9669802408";
+    return res.json({
+      success: true,
+      code,
+      expiresInSeconds: 600,
+      expiresAt,
+      officialWhatsAppNumber: officialNumber,
+      message: "6-अंकों का लिंकिंग कोड जनरेट किया गया। यह 10 मिनट के लिए मान्य है।",
+    });
+  } catch (err: any) {
+    console.error("[WhatsApp:LinkCode] Error generating code:", err);
+    return res.status(500).json({ success: false, error: "लिंकिंग कोड जनरेट करने में विफलता आई।" });
+  }
+});
+
+app.get("/api/whatsapp/link/status", requireAuthMiddleware, async (req: any, res: any) => {
+  try {
+    const authUser = req.user;
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    if (!userEmail) return res.status(400).json({ success: false, error: "ईमेल पता आवश्यक है।" });
+
+    let userDoc: any = null;
+    if (centralDb && centralDb.useFirestore) {
+      const uRes = await centralDb.readDoc("users", userEmail);
+      if (uRes?.success && uRes.data) userDoc = uRes.data;
+    }
+    if (!userDoc && centralDb?.cache?.users) {
+      userDoc = centralDb.cache.users.get(userEmail);
+    }
+    if (!userDoc) {
+      const allProfiles = loadProfilesDatabase();
+      userDoc = allProfiles[userEmail];
+    }
+
+    const isLinked = Boolean(userDoc?.whatsappLinkStatus === "linked" && userDoc?.linkedWhatsAppWaId);
+    let maskedNumber = "";
+    if (userDoc?.linkedWhatsAppWaId) {
+      const num = String(userDoc.linkedWhatsAppWaId);
+      maskedNumber = num.length > 4 ? `+${num.slice(0, 2)} ******${num.slice(-4)}` : num;
+    }
+
+    return res.json({
+      success: true,
+      isLinked,
+      linkedWhatsAppWaId: maskedNumber,
+      whatsappVerified: Boolean(userDoc?.whatsappVerified),
+      whatsappVerifiedAt: userDoc?.whatsappVerifiedAt || null,
+      whatsappLinkStatus: userDoc?.whatsappLinkStatus || (isLinked ? "linked" : "unlinked"),
+    });
+  } catch (err: any) {
+    console.error("[WhatsApp:LinkStatus] Error fetching status:", err);
+    return res.status(500).json({ success: false, error: "स्टेटस प्राप्त करने में समस्या आई।" });
+  }
+});
+
+app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req: any, res: any) => {
+  try {
+    const authUser = req.user;
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    if (!userEmail) return res.status(400).json({ success: false, error: "ईमेल पता आवश्यक है।" });
+
+    const unlinkedUpdates = {
+      linkedWhatsAppWaId: null,
+      whatsappVerified: false,
+      whatsappLinkStatus: "unlinked",
+      whatsappUnlinkedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    if (centralDb && centralDb.useFirestore) {
+      await centralDb.writeDoc("users", userEmail, unlinkedUpdates);
+      if (centralDb.cache?.users?.has(userEmail)) {
+        const cached = centralDb.cache.users.get(userEmail);
+        centralDb.cache.users.set(userEmail, { ...cached, ...unlinkedUpdates });
+      }
+    }
+
+    const allProfiles = loadProfilesDatabase();
+    if (allProfiles[userEmail]) {
+      allProfiles[userEmail] = { ...allProfiles[userEmail], ...unlinkedUpdates };
+      saveProfilesDatabase(allProfiles);
+    }
+
+    return res.json({
+      success: true,
+      message: "WhatsApp अकाउंट सफलतापूर्वक अनलिंक कर दिया गया है।",
+    });
+  } catch (err: any) {
+    console.error("[WhatsApp:Unlink] Error unlinking account:", err);
+    return res.status(500).json({ success: false, error: "अकाउंट अनलिंक करने में समस्या आई।" });
+  }
+});
+
 // 1. GET User Profile
 app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
@@ -8550,7 +8692,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       mobileNumber: finalMobile || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
-      socialLinks: profile.socialLinks || existing.socialLinks,
+      socialLinks: profile.socialLinks ? { ...(existing.socialLinks || {}), ...profile.socialLinks } : existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== undefined ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng,
       updatedAt: Date.now(),

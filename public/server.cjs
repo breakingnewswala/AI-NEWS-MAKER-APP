@@ -6695,6 +6695,276 @@ function registerWhatsAppIntegration(app2, centralDb2) {
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId2}`);
       return;
     }
+    const codeMatch = textBody.match(/^\s*(\d{6})\s*$/);
+    if (codeMatch) {
+      const code = codeMatch[1];
+      console.log(`[WhatsApp:Link] 6-digit linking code candidate received from ${maskedWa}`);
+      let matchedRequest = null;
+      let matchedReqId = "";
+      try {
+        const linkReqsRes = await centralDb2.listDocs("whatsapp_link_requests", 100);
+        const docs = linkReqsRes?.documents || [];
+        for (const doc of docs) {
+          if (doc.status === "pending" && doc.expiresAt && doc.expiresAt > now) {
+            const candidateHash = (0, import_crypto.createHash)("sha256").update(code + (doc.salt || "")).digest("hex");
+            if (candidateHash === doc.codeHash) {
+              matchedRequest = doc;
+              matchedReqId = doc.id || doc.docId;
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[WhatsApp:Link] Error reading link requests:", err.message);
+      }
+      if (matchedRequest) {
+        const targetEmail = (matchedRequest.email || "").toLowerCase().trim();
+        let conflictUser = null;
+        for (const u of centralDb2.cache.users.values()) {
+          const uEmail = (u.email || "").toLowerCase().trim();
+          if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked" && uEmail !== targetEmail) {
+            conflictUser = u;
+            break;
+          }
+        }
+        if (conflictUser) {
+          console.warn(`[WhatsApp:Link] waId ${maskedWa} is already linked to ${conflictUser.email}`);
+          const conflictReply = `\u26A0\uFE0F \u092F\u0939 WhatsApp \u0928\u0902\u092C\u0930 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F AI NEWS MAKER \u0905\u0915\u093E\u0909\u0902\u091F (${maskWaId(conflictUser.email)}) \u0938\u0947 \u0932\u093F\u0902\u0915 \u0939\u0948\u0964
+
+\u090F\u0915 WhatsApp \u0928\u0902\u092C\u0930 \u0915\u094B \u090F\u0915 \u0938\u092E\u092F \u092E\u0947\u0902 \u0915\u0947\u0935\u0932 \u090F\u0915 \u0939\u0940 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u091C\u094B\u0921\u093C\u093E \u091C\u093E \u0938\u0915\u0924\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u0909\u0938 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u0907\u0938\u0947 \u0905\u0928\u0932\u093F\u0902\u0915 \u0915\u0930\u0947\u0902\u0964`;
+          const sent3 = await sendWhatsAppText(waId, conflictReply);
+          const outMsgId3 = String(sent3?.messages?.[0]?.id || `out-${messageId}`);
+          await requireWrite("whatsapp_messages", sha256(outMsgId3), {
+            conversationId,
+            waId,
+            direction: "outbound",
+            text: conflictReply,
+            timestamp: Date.now(),
+            status: "sent"
+          });
+          return;
+        }
+        await requireWrite("whatsapp_link_requests", matchedReqId, {
+          ...matchedRequest,
+          status: "verified",
+          verifiedAt: now,
+          verifiedWaId: waId
+        });
+        const existingUserDoc = await centralDb2.readDoc("users", targetEmail);
+        const uData = existingUserDoc?.data || {};
+        const updatedUser = {
+          ...uData,
+          email: targetEmail,
+          linkedWhatsAppWaId: waId,
+          whatsappVerified: true,
+          whatsappVerifiedAt: now,
+          whatsappLinkStatus: "linked",
+          whatsappNumber: waId,
+          updatedAt: now
+        };
+        await requireWrite("users", targetEmail, updatedUser);
+        if (centralDb2.cache?.users) {
+          centralDb2.cache.users.set(targetEmail, updatedUser);
+        }
+        console.log(`[WhatsApp:Link] Successfully linked waId ${maskedWa} to account ${targetEmail}`);
+        const linkSuccessReply = `\u{1F389} *\u092C\u0927\u093E\u0908 \u0939\u094B! \u0906\u092A\u0915\u093E WhatsApp \u0905\u0915\u093E\u0909\u0902\u091F \u0932\u093F\u0902\u0915 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964*
+
+\u2022 \u0905\u0915\u093E\u0909\u0902\u091F \u0908\u092E\u0947\u0932: *${targetEmail}*
+\u2022 WhatsApp \u0928\u0902\u092C\u0930: *${maskWaId(waId)}*
+\u2022 \u0938\u094D\u0925\u093F\u0924\u093F: *\u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 (Verified) \u2705*
+
+\u0905\u092C \u0906\u092A \u0915\u092D\u0940 \u092D\u0940 \u092F\u0939\u093E\u0901 \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0932\u093F\u0916\u0915\u0930 \u0905\u092A\u0928\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u0940\u0927\u0947 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902:
+\u2022 *'\u092E\u0947\u0930\u093E \u092A\u094D\u0932\u093E\u0928'* - \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092A\u094D\u0932\u093E\u0928 \u0935 \u0935\u0948\u0927\u0924\u093E
+\u2022 *'\u0915\u094B\u091F\u093E'* - \u0906\u091C \u0915\u0947 \u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921
+\u2022 *'\u0935\u0949\u0932\u0947\u091F'* - \u0915\u0949\u0907\u0928\u094D\u0938 \u092C\u0948\u0932\u0947\u0902\u0938
+\u2022 *'\u0905\u0915\u093E\u0909\u0902\u091F'* - \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0935 \u091A\u0948\u0928\u0932 \u0935\u093F\u0935\u0930\u0923`;
+        const sent2 = await sendWhatsAppText(waId, linkSuccessReply);
+        const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+        await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+          conversationId,
+          waId,
+          direction: "outbound",
+          text: linkSuccessReply,
+          timestamp: Date.now(),
+          status: "sent"
+        });
+        return;
+      } else {
+        console.warn(`[WhatsApp:Link] Code candidate invalid or expired from ${maskedWa}`);
+        const invalidReply = `\u26A0\uFE0F *\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0932\u093F\u0902\u0915\u093F\u0902\u0917 \u0915\u094B\u0921*
+
+\u0906\u092A\u0915\u093E \u0926\u0930\u094D\u091C \u0915\u093F\u092F\u093E \u0917\u092F\u093E 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0915\u094B\u0921 \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948 \u092F\u093E \u0909\u0938\u0915\u0940 10 \u092E\u093F\u0928\u091F \u0915\u0940 \u0935\u0948\u0927\u0924\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964
+
+\u0915\u0943\u092A\u092F\u093E https://ainewsmaker.online \u092A\u0930 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 \u091C\u093E\u0915\u0930 \u0928\u092F\u093E 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0915\u094B\u0921 \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0947\u0902\u0964`;
+        const sent2 = await sendWhatsAppText(waId, invalidReply);
+        const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+        await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+          conversationId,
+          waId,
+          direction: "outbound",
+          text: invalidReply,
+          timestamp: Date.now(),
+          status: "sent"
+        });
+        return;
+      }
+    }
+    const isPlanQuery = /\b(plan|membership|subscription)\b|मेरा प्लान|प्लान क्या है|प्लान विवरण|सब्सक्रिप्शन|मेंबरशिप/i.test(textBody);
+    const isQuotaQuery = /\b(quota|limit|download|downloads)\b|कोटा|दैनिक सीमा|कितने ग्राफिक|शेष ग्राफिक|आज कितने|डाउनलोड सीमा/i.test(textBody);
+    const isWalletQuery = /\b(wallet|coins|coin|balance)\b|वॉलेट|कॉइन्स|पॉइंट्स|बैलेंस|सिक्के/i.test(textBody);
+    const isAccountQuery = /\b(account|profile|status)\b|मेरा अकाउंट|my account|अकाउंट विवरण|मेरी प्रोफाइल|प्रोफाइल विवरण|खाता विवरण|स्टेटस/i.test(textBody);
+    if (isPlanQuery || isQuotaQuery || isWalletQuery || isAccountQuery) {
+      console.log(`[WhatsApp:AccountQuery] Private info query matched from ${maskedWa}: text="${textBody.slice(0, 40)}"`);
+      let linkedUser = null;
+      for (const u of centralDb2.cache.users.values()) {
+        if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked") {
+          linkedUser = u;
+          break;
+        }
+      }
+      if (!linkedUser) {
+        try {
+          const uRes = await centralDb2.listDocs("users", 100);
+          for (const u of uRes?.documents || []) {
+            if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked") {
+              linkedUser = u;
+              break;
+            }
+          }
+        } catch {
+        }
+      }
+      if (!linkedUser) {
+        console.log(`[WhatsApp:AccountQuery] waId ${maskedWa} is not linked to any account; sending unlinked guidance`);
+        const unlinkedReply = `\u{1F512} *\u0905\u0915\u093E\u0909\u0902\u091F \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0939\u0948*
+
+\u0906\u092A\u0915\u093E \u092F\u0939 WhatsApp \u0928\u0902\u092C\u0930 \u0915\u093F\u0938\u0940 AI NEWS MAKER \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964
+
+\u0928\u093F\u091C\u0940 \u0905\u0915\u093E\u0909\u0902\u091F, \u092A\u094D\u0932\u093E\u0928 \u0935 \u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E \u0926\u0947\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F:
+1. https://ainewsmaker.online \u092A\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964
+2. '\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932' \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 'WhatsApp \u0905\u0915\u093E\u0909\u0902\u091F \u0932\u093F\u0902\u0915 \u0915\u0930\u0947\u0902' \u092A\u0930 \u091C\u093E\u090F\u0902\u0964
+3. \u092A\u094D\u0930\u093E\u092A\u094D\u0924 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0915\u094B\u0921 \u092F\u0939\u093E\u0901 \u092D\u0947\u091C\u0947\u0902\u0964
+
+_\u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0938\u0939\u093E\u092F\u0924\u093E \u0935 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u0947 \u0932\u093F\u090F \u0906\u092A \u0905\u092A\u0928\u093E \u092A\u094D\u0930\u0936\u094D\u0928 \u092A\u0942\u091B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964_`;
+        const sent3 = await sendWhatsAppText(waId, unlinkedReply);
+        const outMsgId3 = String(sent3?.messages?.[0]?.id || `out-${messageId}`);
+        await requireWrite("whatsapp_messages", sha256(outMsgId3), {
+          conversationId,
+          waId,
+          direction: "outbound",
+          text: unlinkedReply,
+          timestamp: Date.now(),
+          status: "sent"
+        });
+        return;
+      }
+      const userEmail = (linkedUser.email || "").toLowerCase().trim();
+      const planName = linkedUser.planName || "BASIC";
+      const tier = (linkedUser.tier || "basic").toLowerCase();
+      const isPaid = Boolean(linkedUser.hasActivePaidPlan);
+      const isSuper = linkedUser.role === "superadmin" || linkedUser.role === "admin";
+      let maxAllowed = 10;
+      if (isSuper) {
+        maxAllowed = 99999;
+      } else if (tier === "ultra" || tier === "vip" || tier === "vip_desk") {
+        maxAllowed = 99999;
+      } else if (tier === "professional" || tier === "pro") {
+        maxAllowed = 50;
+      } else if (tier === "advanced" || tier === "advance") {
+        maxAllowed = 25;
+      } else {
+        maxAllowed = 10;
+      }
+      const todayStr = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(/* @__PURE__ */ new Date());
+      const dailyDocId = `${userEmail}_${todayStr}`;
+      let downloadsToday = 0;
+      try {
+        const dRes = await centralDb2.readDoc("daily_graphic_downloads", dailyDocId);
+        if (dRes?.success && dRes.data) {
+          downloadsToday = Number(dRes.data.count || 0);
+        }
+      } catch {
+      }
+      const remainingToday = Math.max(0, maxAllowed - downloadsToday);
+      let coinBalance = 0;
+      let pendingCoins = 0;
+      try {
+        const wRes = await centralDb2.readDoc("wallets", userEmail);
+        if (wRes?.success && wRes.data) {
+          coinBalance = Number(wRes.data.coinBalance || 0);
+          pendingCoins = Number(wRes.data.pendingCoins || 0);
+        }
+      } catch {
+      }
+      const formatExpiryHindi = (ms) => {
+        if (!ms || isNaN(ms)) return "\u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902";
+        try {
+          return new Date(ms).toLocaleDateString("hi-IN", {
+            timeZone: "Asia/Kolkata",
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+          });
+        } catch {
+          return "\u0938\u0915\u094D\u0930\u093F\u092F";
+        }
+      };
+      const expiryStr = linkedUser.expiresAt ? formatExpiryHindi(linkedUser.expiresAt) : isPaid ? "\u0935\u093E\u0930\u094D\u0937\u093F\u0915 \u092A\u094D\u0932\u093E\u0928 \u0938\u0915\u094D\u0930\u093F\u092F" : "7 \u0926\u093F\u0928 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932";
+      const hasVideoStudio = isSuper || tier === "advanced" || tier === "professional" || tier === "ultra" || tier === "vip";
+      const videoStatus = hasVideoStudio ? "\u0938\u0915\u094D\u0930\u093F\u092F (\u0935\u0940\u0921\u093F\u092F\u094B \u092C\u0928\u093E\u0928\u0947 \u0915\u0940 \u0938\u0941\u0935\u093F\u0927\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u2705)" : "\u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u274C (\u0915\u0947\u0935\u0932 \u090F\u0921\u0935\u093E\u0902\u0938/\u092A\u094D\u0930\u094B/\u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 \u092E\u0947\u0902)";
+      let replyText = "";
+      if (isQuotaQuery && !isAccountQuery) {
+        replyText = `\u{1F4CA} *\u0906\u091C \u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u094B\u091F\u093E:*
+
+\u2022 \u092A\u094D\u0932\u093E\u0928: *${planName}*
+\u2022 \u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E: *${maxAllowed >= 9999 ? "\u0905\u0938\u0940\u092E\u093F\u0924 (Unlimited)" : `${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 / \u0926\u093F\u0928`}*
+\u2022 \u0906\u091C \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0939\u0941\u090F: *${downloadsToday} \u0917\u094D\u0930\u093E\u092B\u093F\u0915*
+\u2022 *\u0906\u091C \u0915\u0947 \u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u092B\u093F\u0915: ${maxAllowed >= 9999 ? "\u0905\u0938\u0940\u092E\u093F\u0924" : `${remainingToday} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u093E\u0915\u0940`}*
+\u2022 \u0915\u094B\u091F\u093E \u0930\u0940\u0938\u0947\u091F \u0938\u092E\u092F: *\u0930\u093E\u0924 12:00 AM (IST)*`;
+      } else if (isPlanQuery && !isAccountQuery) {
+        replyText = `\u{1F4CB} *\u0906\u092A\u0915\u093E \u092E\u0947\u0902\u092C\u0930\u0936\u093F\u092A \u092A\u094D\u0932\u093E\u0928 \u0935\u093F\u0935\u0930\u0923:*
+
+\u2022 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092A\u094D\u0932\u093E\u0928: *${planName}* (${isPaid ? "\u0938\u0915\u094D\u0930\u093F\u092F \u092A\u0947\u0921 \u092A\u094D\u0932\u093E\u0928" : "\u091F\u094D\u0930\u093E\u092F\u0932"})
+\u2022 \u0935\u0948\u0927\u0924\u093E \u0938\u092E\u093E\u092A\u094D\u0924\u093F: *${expiryStr}*
+\u2022 \u0926\u0948\u0928\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E: *${maxAllowed >= 9999 ? "\u0905\u0938\u0940\u092E\u093F\u0924" : `${maxAllowed} \u0917\u094D\u0930\u093E\u092B\u093F\u0915 / \u0926\u093F\u0928`}*
+\u2022 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B: *${videoStatus}*
+\u2022 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0935 \u0930\u093F\u0928\u094D\u092F\u0942: https://ainewsmaker.online/#plans`;
+      } else if (isWalletQuery && !isAccountQuery) {
+        replyText = `\u{1F4B0} *\u0906\u092A\u0915\u093E \u0935\u0949\u0932\u0947\u091F \u0935 \u0930\u093F\u0935\u0949\u0930\u094D\u0921 \u0915\u0949\u0907\u0928\u094D\u0938:*
+
+\u2022 \u0909\u092A\u0932\u092C\u094D\u0927 \u092C\u0948\u0932\u0947\u0902\u0938: *${coinBalance} Coins*
+\u2022 \u092A\u0947\u0902\u0921\u093F\u0902\u0917 \u0915\u094D\u0932\u0947\u092E: *${pendingCoins} Coins*
+
+_\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0928\u090F \u092A\u094D\u0930\u0940\u092E\u093F\u092F\u092E \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F\u094D\u0938 \u0905\u0928\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E \u0939\u0948\u0964_`;
+      } else {
+        replyText = `\u{1F464} *AI NEWS MAKER \u0905\u0915\u093E\u0909\u0902\u091F \u0935\u093F\u0935\u0930\u0923:*
+
+\u2022 \u0928\u093E\u092E: *${linkedUser.fullName || linkedUser.name || "\u0938\u0902\u092A\u093E\u0926\u0915"}*
+\u2022 \u091A\u0948\u0928\u0932: *${linkedUser.channelNameHi || linkedUser.channelName || "\u0938\u0947\u091F \u0928\u0939\u0940\u0902"}*
+\u2022 \u0930\u091C\u093F\u0938\u094D\u091F\u0930\u094D\u0921 \u0908\u092E\u0947\u0932: *${userEmail}*
+\u2022 \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092A\u094D\u0932\u093E\u0928: *${planName}* (${isPaid ? "\u0938\u0915\u094D\u0930\u093F\u092F" : "\u091F\u094D\u0930\u093E\u092F\u0932"})
+\u2022 \u0906\u091C \u0915\u0947 \u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u092B\u093F\u0915: *${maxAllowed >= 9999 ? "\u0905\u0938\u0940\u092E\u093F\u0924" : `${remainingToday} / ${maxAllowed} \u092C\u093E\u0915\u0940`}*
+\u2022 \u0935\u0949\u0932\u0947\u091F \u0915\u0949\u0907\u0928\u094D\u0938: *${coinBalance} Coins*
+\u2022 WhatsApp \u0938\u094D\u0925\u093F\u0924\u093F: *\u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0935 \u0932\u093F\u0902\u0915 \u2705*`;
+      }
+      console.log(`[WhatsApp:AccountQuery] Sending deterministic reply to ${maskedWa}`);
+      const sent2 = await sendWhatsAppText(waId, replyText);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: replyText,
+        timestamp: Date.now(),
+        status: "sent"
+      });
+      return;
+    }
     if (process.env.WHATSAPP_AI_ENABLED !== "true") {
       console.log("[WhatsApp:Inbound] WHATSAPP_AI_ENABLED is not 'true'; skipping AI reply");
       return;
@@ -13667,6 +13937,126 @@ function saveProfilesDatabase(data) {
     return false;
   }
 }
+var recentLinkCodeRequests = /* @__PURE__ */ new Map();
+app.post("/api/whatsapp/link/generate-code", requireAuthMiddleware, async (req, res) => {
+  try {
+    const authUser = req.user;
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    const userId = (authUser?.userId || userEmail).toString().trim();
+    if (!userEmail) return res.status(400).json({ success: false, error: "\u0908\u092E\u0947\u0932 \u092A\u0924\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    const lastTime = recentLinkCodeRequests.get(userEmail);
+    const now = Date.now();
+    if (lastTime && now - lastTime < 6e4) {
+      const waitSec = Math.ceil((6e4 - (now - lastTime)) / 1e3);
+      return res.status(429).json({
+        success: false,
+        error: `\u0915\u0943\u092A\u092F\u093E ${waitSec} \u0938\u0947\u0915\u0902\u0921 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902 \u0914\u0930 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`,
+        cooldownRemainingSeconds: waitSec
+      });
+    }
+    const code = Math.floor(1e5 + import_crypto2.default.randomInt(0, 9e5)).toString();
+    const salt = import_crypto2.default.randomBytes(16).toString("hex");
+    const codeHash = import_crypto2.default.createHash("sha256").update(code + salt).digest("hex");
+    const expiresAt = now + 10 * 60 * 1e3;
+    const reqDocId = `link_${import_crypto2.default.createHash("sha256").update(userEmail).digest("hex").slice(0, 24)}`;
+    const linkDoc = {
+      uid: userId,
+      email: userEmail,
+      codeHash,
+      salt,
+      createdAt: now,
+      expiresAt,
+      attempts: 0,
+      status: "pending",
+      ip: req.ip || ""
+    };
+    if (centralDb && centralDb.useFirestore) {
+      await centralDb.writeDoc("whatsapp_link_requests", reqDocId, linkDoc);
+    }
+    recentLinkCodeRequests.set(userEmail, now);
+    const officialNumber = process.env.WHATSAPP_DISPLAY_NUMBER || "+91 9669802408";
+    return res.json({
+      success: true,
+      code,
+      expiresInSeconds: 600,
+      expiresAt,
+      officialWhatsAppNumber: officialNumber,
+      message: "6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0932\u093F\u0902\u0915\u093F\u0902\u0917 \u0915\u094B\u0921 \u091C\u0928\u0930\u0947\u091F \u0915\u093F\u092F\u093E \u0917\u092F\u093E\u0964 \u092F\u0939 10 \u092E\u093F\u0928\u091F \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964"
+    });
+  } catch (err) {
+    console.error("[WhatsApp:LinkCode] Error generating code:", err);
+    return res.status(500).json({ success: false, error: "\u0932\u093F\u0902\u0915\u093F\u0902\u0917 \u0915\u094B\u0921 \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0935\u093F\u092B\u0932\u0924\u093E \u0906\u0908\u0964" });
+  }
+});
+app.get("/api/whatsapp/link/status", requireAuthMiddleware, async (req, res) => {
+  try {
+    const authUser = req.user;
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    if (!userEmail) return res.status(400).json({ success: false, error: "\u0908\u092E\u0947\u0932 \u092A\u0924\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    let userDoc = null;
+    if (centralDb && centralDb.useFirestore) {
+      const uRes = await centralDb.readDoc("users", userEmail);
+      if (uRes?.success && uRes.data) userDoc = uRes.data;
+    }
+    if (!userDoc && centralDb?.cache?.users) {
+      userDoc = centralDb.cache.users.get(userEmail);
+    }
+    if (!userDoc) {
+      const allProfiles = loadProfilesDatabase();
+      userDoc = allProfiles[userEmail];
+    }
+    const isLinked = Boolean(userDoc?.whatsappLinkStatus === "linked" && userDoc?.linkedWhatsAppWaId);
+    let maskedNumber = "";
+    if (userDoc?.linkedWhatsAppWaId) {
+      const num = String(userDoc.linkedWhatsAppWaId);
+      maskedNumber = num.length > 4 ? `+${num.slice(0, 2)} ******${num.slice(-4)}` : num;
+    }
+    return res.json({
+      success: true,
+      isLinked,
+      linkedWhatsAppWaId: maskedNumber,
+      whatsappVerified: Boolean(userDoc?.whatsappVerified),
+      whatsappVerifiedAt: userDoc?.whatsappVerifiedAt || null,
+      whatsappLinkStatus: userDoc?.whatsappLinkStatus || (isLinked ? "linked" : "unlinked")
+    });
+  } catch (err) {
+    console.error("[WhatsApp:LinkStatus] Error fetching status:", err);
+    return res.status(500).json({ success: false, error: "\u0938\u094D\u091F\u0947\u091F\u0938 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0938\u092E\u0938\u094D\u092F\u093E \u0906\u0908\u0964" });
+  }
+});
+app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req, res) => {
+  try {
+    const authUser = req.user;
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    if (!userEmail) return res.status(400).json({ success: false, error: "\u0908\u092E\u0947\u0932 \u092A\u0924\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    const unlinkedUpdates = {
+      linkedWhatsAppWaId: null,
+      whatsappVerified: false,
+      whatsappLinkStatus: "unlinked",
+      whatsappUnlinkedAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    if (centralDb && centralDb.useFirestore) {
+      await centralDb.writeDoc("users", userEmail, unlinkedUpdates);
+      if (centralDb.cache?.users?.has(userEmail)) {
+        const cached = centralDb.cache.users.get(userEmail);
+        centralDb.cache.users.set(userEmail, { ...cached, ...unlinkedUpdates });
+      }
+    }
+    const allProfiles = loadProfilesDatabase();
+    if (allProfiles[userEmail]) {
+      allProfiles[userEmail] = { ...allProfiles[userEmail], ...unlinkedUpdates };
+      saveProfilesDatabase(allProfiles);
+    }
+    return res.json({
+      success: true,
+      message: "WhatsApp \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u0928\u0932\u093F\u0902\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
+    });
+  } catch (err) {
+    console.error("[WhatsApp:Unlink] Error unlinking account:", err);
+    return res.status(500).json({ success: false, error: "\u0905\u0915\u093E\u0909\u0902\u091F \u0905\u0928\u0932\u093F\u0902\u0915 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0938\u092E\u0938\u094D\u092F\u093E \u0906\u0908\u0964" });
+  }
+});
 app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
   const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
@@ -13805,7 +14195,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       mobileNumber: finalMobile || "",
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
-      socialLinks: profile.socialLinks || existing.socialLinks,
+      socialLinks: profile.socialLinks ? { ...existing.socialLinks || {}, ...profile.socialLinks } : existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng,
       updatedAt: Date.now()

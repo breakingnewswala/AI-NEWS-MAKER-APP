@@ -8,7 +8,7 @@ import { OAuth2Client } from "google-auth-library";
  * Secrets are supplied only through server runtime environment variables.
  * Firestore collections used here are server-side only:
  * whatsapp_webhook_events, whatsapp_messages, whatsapp_conversations,
- * whatsapp_knowledge_base, whatsapp_subscribers.
+ * whatsapp_knowledge_base, whatsapp_subscribers, whatsapp_link_requests, users.
  */
 
 export const maskWaId = (id: string): string => {
@@ -301,6 +301,291 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
         conversationId, waId, direction: "outbound", text: handoffReply, timestamp: now, status: "sent",
       });
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+      return;
+    }
+
+    // --- TASK 1: ONE-TIME 6-DIGIT WHATSAPP ACCOUNT LINKING HANDLER ---
+    const codeMatch = textBody.match(/^\s*(\d{6})\s*$/);
+    if (codeMatch) {
+      const code = codeMatch[1];
+      console.log(`[WhatsApp:Link] 6-digit linking code candidate received from ${maskedWa}`);
+      
+      let matchedRequest: any = null;
+      let matchedReqId = "";
+      
+      try {
+        const linkReqsRes = await centralDb.listDocs("whatsapp_link_requests", 100);
+        const docs = linkReqsRes?.documents || [];
+        for (const doc of docs) {
+          if (doc.status === "pending" && doc.expiresAt && doc.expiresAt > now) {
+            const candidateHash = createHash("sha256").update(code + (doc.salt || "")).digest("hex");
+            if (candidateHash === doc.codeHash) {
+              matchedRequest = doc;
+              matchedReqId = doc.id || doc.docId;
+              break;
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error("[WhatsApp:Link] Error reading link requests:", err.message);
+      }
+
+      if (matchedRequest) {
+        const targetEmail = (matchedRequest.email || "").toLowerCase().trim();
+        
+        // Anti-overwriting: Check if waId is already linked to another active account
+        let conflictUser: any = null;
+        for (const u of centralDb.cache.users.values()) {
+          const uEmail = (u.email || "").toLowerCase().trim();
+          if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked" && uEmail !== targetEmail) {
+            conflictUser = u;
+            break;
+          }
+        }
+
+        if (conflictUser) {
+          console.warn(`[WhatsApp:Link] waId ${maskedWa} is already linked to ${conflictUser.email}`);
+          const conflictReply = `⚠️ यह WhatsApp नंबर पहले से किसी अन्य AI NEWS MAKER अकाउंट (${maskWaId(conflictUser.email)}) से लिंक है।\n\nएक WhatsApp नंबर को एक समय में केवल एक ही अकाउंट से जोड़ा जा सकता है। कृपया पहले उस अकाउंट से इसे अनलिंक करें।`;
+          const sent = await sendWhatsAppText(waId, conflictReply);
+          const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+          await requireWrite("whatsapp_messages", sha256(outMsgId), {
+            conversationId, waId, direction: "outbound", text: conflictReply, timestamp: Date.now(), status: "sent",
+          });
+          return;
+        }
+
+        // Mark link request as verified
+        await requireWrite("whatsapp_link_requests", matchedReqId, {
+          ...matchedRequest,
+          status: "verified",
+          verifiedAt: now,
+          verifiedWaId: waId,
+        });
+
+        // Update user profile in Firestore
+        const existingUserDoc = await centralDb.readDoc("users", targetEmail);
+        const uData = existingUserDoc?.data || {};
+        const updatedUser = {
+          ...uData,
+          email: targetEmail,
+          linkedWhatsAppWaId: waId,
+          whatsappVerified: true,
+          whatsappVerifiedAt: now,
+          whatsappLinkStatus: "linked",
+          whatsappNumber: waId,
+          updatedAt: now,
+        };
+        await requireWrite("users", targetEmail, updatedUser);
+
+        // Update cache
+        if (centralDb.cache?.users) {
+          centralDb.cache.users.set(targetEmail, updatedUser);
+        }
+
+        console.log(`[WhatsApp:Link] Successfully linked waId ${maskedWa} to account ${targetEmail}`);
+
+        const linkSuccessReply = `🎉 *बधाई हो! आपका WhatsApp अकाउंट लिंक हो गया है।*
+
+• अकाउंट ईमेल: *${targetEmail}*
+• WhatsApp नंबर: *${maskWaId(waId)}*
+• स्थिति: *सत्यापित (Verified) ✅*
+
+अब आप कभी भी यहाँ निम्नलिखित लिखकर अपनी जानकारी सीधे प्राप्त कर सकते हैं:
+• *'मेरा प्लान'* - वर्तमान प्लान व वैधता
+• *'कोटा'* - आज के शेष ग्राफिक डाउनलोड
+• *'वॉलेट'* - कॉइन्स बैलेंस
+• *'अकाउंट'* - प्रोफाइल व चैनल विवरण`;
+
+        const sent = await sendWhatsAppText(waId, linkSuccessReply);
+        const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+        await requireWrite("whatsapp_messages", sha256(outMsgId), {
+          conversationId, waId, direction: "outbound", text: linkSuccessReply, timestamp: Date.now(), status: "sent",
+        });
+        return;
+      } else {
+        // Invalid or expired code
+        console.warn(`[WhatsApp:Link] Code candidate invalid or expired from ${maskedWa}`);
+        const invalidReply = `⚠️ *अमान्य अथवा समाप्त हो चुका लिंकिंग कोड*
+
+आपका दर्ज किया गया 6-अंकों का कोड अमान्य है या उसकी 10 मिनट की वैधता समाप्त हो चुकी है।
+
+कृपया https://ainewsmaker.online पर प्रोफाइल सेक्शन में जाकर नया 6-अंकों का कोड जनरेट करें।`;
+        const sent = await sendWhatsAppText(waId, invalidReply);
+        const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+        await requireWrite("whatsapp_messages", sha256(outMsgId), {
+          conversationId, waId, direction: "outbound", text: invalidReply, timestamp: Date.now(), status: "sent",
+        });
+        return;
+      }
+    }
+
+    // --- TASK 4: DETERMINISTIC PRIVATE ACCOUNT & QUOTA HANDLER ---
+    const isPlanQuery = /\b(plan|membership|subscription)\b|मेरा प्लान|प्लान क्या है|प्लान विवरण|सब्सक्रिप्शन|मेंबरशिप/i.test(textBody);
+    const isQuotaQuery = /\b(quota|limit|download|downloads)\b|कोटा|दैनिक सीमा|कितने ग्राफिक|शेष ग्राफिक|आज कितने|डाउनलोड सीमा/i.test(textBody);
+    const isWalletQuery = /\b(wallet|coins|coin|balance)\b|वॉलेट|कॉइन्स|पॉइंट्स|बैलेंस|सिक्के/i.test(textBody);
+    const isAccountQuery = /\b(account|profile|status)\b|मेरा अकाउंट|my account|अकाउंट विवरण|मेरी प्रोफाइल|प्रोफाइल विवरण|खाता विवरण|स्टेटस/i.test(textBody);
+
+    if (isPlanQuery || isQuotaQuery || isWalletQuery || isAccountQuery) {
+      console.log(`[WhatsApp:AccountQuery] Private info query matched from ${maskedWa}: text="${textBody.slice(0, 40)}"`);
+
+      // Find user linked to waId
+      let linkedUser: any = null;
+      for (const u of centralDb.cache.users.values()) {
+        if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked") {
+          linkedUser = u;
+          break;
+        }
+      }
+
+      if (!linkedUser) {
+        try {
+          const uRes = await centralDb.listDocs("users", 100);
+          for (const u of uRes?.documents || []) {
+            if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked") {
+              linkedUser = u;
+              break;
+            }
+          }
+        } catch {}
+      }
+
+      if (!linkedUser) {
+        console.log(`[WhatsApp:AccountQuery] waId ${maskedWa} is not linked to any account; sending unlinked guidance`);
+        const unlinkedReply = `🔒 *अकाउंट लिंक नहीं है*
+
+आपका यह WhatsApp नंबर किसी AI NEWS MAKER अकाउंट से लिंक नहीं है।
+
+निजी अकाउंट, प्लान व दैनिक कोटा देखने के लिए:
+1. https://ainewsmaker.online पर लॉगिन करें।
+2. 'प्रोफाइल' सेक्शन में 'WhatsApp अकाउंट लिंक करें' पर जाएं।
+3. प्राप्त 6-अंकों का कोड यहाँ भेजें।
+
+_सामान्य सहायता व जानकारी के लिए आप अपना प्रश्न पूछ सकते हैं।_`;
+
+        const sent = await sendWhatsAppText(waId, unlinkedReply);
+        const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+        await requireWrite("whatsapp_messages", sha256(outMsgId), {
+          conversationId, waId, direction: "outbound", text: unlinkedReply, timestamp: Date.now(), status: "sent",
+        });
+        return;
+      }
+
+      // User is verified and linked! Fetch authoritative real-time data
+      const userEmail = (linkedUser.email || "").toLowerCase().trim();
+      const planName = linkedUser.planName || "BASIC";
+      const tier = (linkedUser.tier || "basic").toLowerCase();
+      const isPaid = Boolean(linkedUser.hasActivePaidPlan);
+      const isSuper = linkedUser.role === "superadmin" || linkedUser.role === "admin";
+
+      // 1. Quota determination
+      let maxAllowed = 10;
+      if (isSuper) {
+        maxAllowed = 99999;
+      } else if (tier === "ultra" || tier === "vip" || tier === "vip_desk") {
+        maxAllowed = 99999;
+      } else if (tier === "professional" || tier === "pro") {
+        maxAllowed = 50;
+      } else if (tier === "advanced" || tier === "advance") {
+        maxAllowed = 25;
+      } else {
+        maxAllowed = 10;
+      }
+
+      const todayStr = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+
+      const dailyDocId = `${userEmail}_${todayStr}`;
+      let downloadsToday = 0;
+      try {
+        const dRes = await centralDb.readDoc("daily_graphic_downloads", dailyDocId);
+        if (dRes?.success && dRes.data) {
+          downloadsToday = Number(dRes.data.count || 0);
+        }
+      } catch {}
+      const remainingToday = Math.max(0, maxAllowed - downloadsToday);
+
+      // 2. Wallet balance
+      let coinBalance = 0;
+      let pendingCoins = 0;
+      try {
+        const wRes = await centralDb.readDoc("wallets", userEmail);
+        if (wRes?.success && wRes.data) {
+          coinBalance = Number(wRes.data.coinBalance || 0);
+          pendingCoins = Number(wRes.data.pendingCoins || 0);
+        }
+      } catch {}
+
+      // 3. Expiry and features
+      const formatExpiryHindi = (ms?: number) => {
+        if (!ms || isNaN(ms)) return "उपलब्ध नहीं";
+        try {
+          return new Date(ms).toLocaleDateString("hi-IN", {
+            timeZone: "Asia/Kolkata",
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          });
+        } catch {
+          return "सक्रिय";
+        }
+      };
+
+      const expiryStr = linkedUser.expiresAt
+        ? formatExpiryHindi(linkedUser.expiresAt)
+        : (isPaid ? "वार्षिक प्लान सक्रिय" : "7 दिन फ्री ट्रायल");
+
+      const hasVideoStudio = isSuper || tier === "advanced" || tier === "professional" || tier === "ultra" || tier === "vip";
+      const videoStatus = hasVideoStudio
+        ? "सक्रिय (वीडियो बनाने की सुविधा उपलब्ध ✅)"
+        : "अनुपलब्ध ❌ (केवल एडवांस/प्रो/वीआईपी डेस्क में)";
+
+      let replyText = "";
+      if (isQuotaQuery && !isAccountQuery) {
+        replyText = `📊 *आज का दैनिक ग्राफिक कोटा:*
+
+• प्लान: *${planName}*
+• दैनिक डाउनलोड सीमा: *${maxAllowed >= 9999 ? "असीमित (Unlimited)" : `${maxAllowed} ग्राफिक / दिन`}*
+• आज डाउनलोड हुए: *${downloadsToday} ग्राफिक*
+• *आज के शेष ग्राफिक: ${maxAllowed >= 9999 ? "असीमित" : `${remainingToday} ग्राफिक बाकी`}*
+• कोटा रीसेट समय: *रात 12:00 AM (IST)*`;
+      } else if (isPlanQuery && !isAccountQuery) {
+        replyText = `📋 *आपका मेंबरशिप प्लान विवरण:*
+
+• वर्तमान प्लान: *${planName}* (${isPaid ? "सक्रिय पेड प्लान" : "ट्रायल"})
+• वैधता समाप्ति: *${expiryStr}*
+• दैनिक डाउनलोड सीमा: *${maxAllowed >= 9999 ? "असीमित" : `${maxAllowed} ग्राफिक / दिन`}*
+• वीडियो स्टूडियो: *${videoStatus}*
+• अपग्रेड व रिन्यू: https://ainewsmaker.online/#plans`;
+      } else if (isWalletQuery && !isAccountQuery) {
+        replyText = `💰 *आपका वॉलेट व रिवॉर्ड कॉइन्स:*
+
+• उपलब्ध बैलेंस: *${coinBalance} Coins*
+• पेंडिंग क्लेम: *${pendingCoins} Coins*
+
+_कॉइन्स का उपयोग नए प्रीमियम टेम्पलेट्स अनलॉक करने के लिए किया जा सकता है।_`;
+      } else {
+        // Account summary
+        replyText = `👤 *AI NEWS MAKER अकाउंट विवरण:*
+
+• नाम: *${linkedUser.fullName || linkedUser.name || "संपादक"}*
+• चैनल: *${linkedUser.channelNameHi || linkedUser.channelName || "सेट नहीं"}*
+• रजिस्टर्ड ईमेल: *${userEmail}*
+• वर्तमान प्लान: *${planName}* (${isPaid ? "सक्रिय" : "ट्रायल"})
+• आज के शेष ग्राफिक: *${maxAllowed >= 9999 ? "असीमित" : `${remainingToday} / ${maxAllowed} बाकी`}*
+• वॉलेट कॉइन्स: *${coinBalance} Coins*
+• WhatsApp स्थिति: *सत्यापित व लिंक ✅*`;
+      }
+
+      console.log(`[WhatsApp:AccountQuery] Sending deterministic reply to ${maskedWa}`);
+      const sent = await sendWhatsAppText(waId, replyText);
+      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId, waId, direction: "outbound", text: replyText, timestamp: Date.now(), status: "sent",
+      });
       return;
     }
 
