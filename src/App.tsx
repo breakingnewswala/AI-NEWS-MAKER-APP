@@ -465,7 +465,12 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           // Strictly purge any deleted or obsolete dummy live-post seed records
-          const clean = parsed.filter((p: any) => p && p.id && !deletedSet.has(p.id) && !String(p.id).startsWith('live-post-'));
+          const clean = parsed.filter((p: any) => {
+            if (!p || !p.id) return false;
+            if (deletedSet.has(p.id)) return false;
+            if (String(p.id).startsWith('live-post-') || String(p.id).startsWith('editorial-seed-')) return false;
+            return true;
+          });
           clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
             const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
             const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
@@ -523,7 +528,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         const apiPosts = Array.isArray(data) ? data : (data?.posts || []);
-        if (Array.isArray(apiPosts) && apiPosts.length > 0) {
+        if (Array.isArray(apiPosts)) {
           const cleanApi = apiPosts.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
           if (cleanApi.length > 0) {
             cleanApi.sort((a: NewsFeedPost, b: NewsFeedPost) => {
@@ -566,6 +571,14 @@ export default function App() {
             setPosts(cleanApi);
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
+            } catch {}
+            loaded = true;
+          } else {
+            // AUTHORITATIVE RESET: Server explicitly returned 0 posts. Clear local stale posts!
+            setPosts([]);
+            seenNewsIdsRef.current = new Set();
+            try {
+              localStorage.setItem('app_news_posts_v2', JSON.stringify([]));
             } catch {}
             loaded = true;
           }
@@ -711,8 +724,11 @@ export default function App() {
     try {
       const isDummyVideo = (v: any) => {
         if (!v || !v.id) return true;
-        if (['vid-1', 'vid-2', 'vid-3', 'vid-4', 'vid-5'].includes(v.id)) return true;
-        if (v.videoUrl && typeof v.videoUrl === 'string' && v.videoUrl.includes('mov_bbb.mp4')) return true;
+        const id = String(v.id);
+        if (['vid-1', 'vid-2', 'vid-3', 'vid-4', 'vid-5'].includes(id)) return true;
+        if (id.startsWith('demo-') || id.startsWith('sample-') || id.startsWith('dummy-')) return true;
+        if (v.videoUrl && typeof v.videoUrl === 'string' && (v.videoUrl.includes('mov_bbb.mp4') || v.videoUrl.includes('sample-videos') || v.videoUrl.includes('commondatastorage.googleapis.com/gtv-videos-bucket'))) return true;
+        if (v.title && (v.title.includes('विशेष ग्राउंड रिपोर्ट') || v.title.includes('राहुल गांधी') || v.title.includes('सामान्य User को यह Button') || v.title.includes('दिवाली से पहले HERO'))) return true;
         return false;
       };
 
@@ -735,8 +751,11 @@ export default function App() {
     try {
       const isDummyVideo = (v: any) => {
         if (!v || !v.id) return true;
-        if (['vid-1', 'vid-2', 'vid-3', 'vid-4', 'vid-5'].includes(v.id)) return true;
-        if (v.videoUrl && typeof v.videoUrl === 'string' && v.videoUrl.includes('mov_bbb.mp4')) return true;
+        const id = String(v.id);
+        if (['vid-1', 'vid-2', 'vid-3', 'vid-4', 'vid-5'].includes(id)) return true;
+        if (id.startsWith('demo-') || id.startsWith('sample-') || id.startsWith('dummy-')) return true;
+        if (v.videoUrl && typeof v.videoUrl === 'string' && (v.videoUrl.includes('mov_bbb.mp4') || v.videoUrl.includes('sample-videos') || v.videoUrl.includes('commondatastorage.googleapis.com/gtv-videos-bucket'))) return true;
+        if (v.title && (v.title.includes('विशेष ग्राउंड रिपोर्ट') || v.title.includes('राहुल गांधी') || v.title.includes('सामान्य User को यह Button') || v.title.includes('दिवाली से पहले HERO'))) return true;
         return false;
       };
 

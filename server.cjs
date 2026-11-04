@@ -8249,7 +8249,7 @@ app.get("/api/news-posts", (req, res) => {
   const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
   const activePosts = posts.filter((p) => {
     if (p.status === "REJECTED") return false;
-    if (String(p.id).startsWith("live-post-")) return false;
+    if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) return false;
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
       if (activeSources.length === 0) {
@@ -8286,7 +8286,7 @@ app.get("/api/news-posts", (req, res) => {
   if (activePosts.length < 20) {
     const activeIds = new Set(activePosts.map((p) => p.id));
     const backfillCandidates = posts.filter((p) => {
-      if (String(p.id).startsWith("live-post-")) return false;
+      if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) return false;
       if (activeIds.has(p.id)) return false;
       const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
       if (isFeedSource) {

@@ -156,19 +156,6 @@
     "targetUserEmail": "admin"
   },
   {
-    "docId": "notif_video_vid-admin-1793613040124",
-    "linkTab": "videos",
-    "timestamp": 1793613041630,
-    "unread": true,
-    "message": "सामान्य User को यह Button बिल्कुल न दिखे।",
-    "time": "अभी",
-    "targetUserEmail": "all",
-    "id": "notif_video_vid-admin-1793613040124",
-    "type": "video",
-    "updatedAt": 1793613041630,
-    "title": "🎬 नया वीडियो व रील्स जारी"
-  },
-  {
     "time": "अभी",
     "id": "notif_warn_user_usr_1793391037093_1793736637095",
     "message": "नमस्ते यूज़र, आपका 7-दिवसीय फ्री ट्रायल कल (4 नव॰ 2026, 01:40 am) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।",

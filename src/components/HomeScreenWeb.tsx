@@ -4634,7 +4634,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           <div className="relative w-full overflow-hidden py-1">
             <div className="animate-marquee-continuous flex items-center gap-4">
               {(() => {
-                const activeTickerPosts = (posts || []).filter((p) => p && p.title && !String(p.id).startsWith('live-post-')).slice(0, 12);
+                const activeTickerPosts = (posts || []).filter((p) => p && p.title && !String(p.id).startsWith('live-post-') && !String(p.id).startsWith('editorial-seed-')).slice(0, 12);
                 const displayItems = activeTickerPosts.length > 0 ? activeTickerPosts : [
                   {
                     id: 'fallback-ticker-1',
