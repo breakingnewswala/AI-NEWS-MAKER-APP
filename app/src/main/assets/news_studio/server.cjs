@@ -6433,6 +6433,8 @@ var maskWaId = (id) => {
   if (str.length <= 4) return str;
   return `...${str.slice(-4)}`;
 };
+var otpRateLimits = /* @__PURE__ */ new Map();
+var otpVerificationCache = /* @__PURE__ */ new Map();
 function registerWhatsAppIntegration(app2, centralDb2) {
   const webhookPath = "/api/whatsapp/webhook";
   const safeEqual = (a, b) => {
@@ -6528,6 +6530,9 @@ function registerWhatsAppIntegration(app2, centralDb2) {
     if (!response.ok) {
       const errorMsg = result?.error?.message || `WhatsApp API request failed (${response.status})`;
       console.error(`[WhatsApp:Outbound] WHATSAPP_API_ERROR: HTTP ${response.status} - ${errorMsg}`);
+      if (response.status === 401 || result?.error?.code === 190) {
+        console.error(`[WhatsApp:Outbound] CRITICAL_AUTH_FAILURE: Meta Access Token is expired or invalid (Code 190). Update Secret Manager WHATSAPP_ACCESS_TOKEN with a permanent System User Token.`);
+      }
       throw new Error(`WHATSAPP_API_ERROR: ${errorMsg}`);
     }
     console.log(`[WhatsApp:Outbound] WhatsApp API response received: messageId=${result?.messages?.[0]?.id || "unknown"}`);
@@ -6609,6 +6614,12 @@ function registerWhatsAppIntegration(app2, centralDb2) {
     } catch (error) {
       const errMsg = String(error?.message || error);
       console.error("[WhatsApp:Gemini] GEMINI_API_ERROR:", errMsg.slice(0, 200));
+      if (knowledge && knowledge.length > 20) {
+        console.log("[WhatsApp:Gemini] Falling back to direct Knowledge Base match");
+        return { reply: `AI News Maker \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947\u0902\u0926\u094D\u0930 \u0938\u0947 \u091C\u093E\u0928\u0915\u093E\u0930\u0940:
+
+${knowledge.slice(0, 1e3)}` };
+      }
       return { reply: null, reason: "gemini_api_error", errorCategory: "GEMINI_API_ERROR" };
     }
   };
@@ -6693,6 +6704,129 @@ function registerWhatsAppIntegration(app2, centralDb2) {
         status: "sent"
       });
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId2}`);
+      return;
+    }
+    const isGreeting = /^\s*(hi|hello|hey|namaste|namaskar|नमस्ते|नमस्कार|हैलो|हाय|हॅलो)\s*$/i.test(textBody);
+    if (isGreeting) {
+      console.log(`[WhatsApp:Inbound] Greeting received from ${maskedWa}`);
+      const greetingReply = `\u{1F64F} *\u0928\u092E\u0938\u094D\u0915\u093E\u0930! AI News Maker (BREAKING NEWS WALA) \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948\u0964*
+
+\u0939\u092E \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902 \u0914\u0930 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0947 \u0932\u093F\u090F \u092D\u093E\u0930\u0924 \u0915\u093E \u0905\u0917\u094D\u0930\u0923\u0940 AI-\u092A\u093E\u0935\u0930\u094D\u0921 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0935 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0939\u0948\u0902\u0964
+
+\u092C\u0924\u093E\u0907\u090F, \u0939\u092E \u0906\u092A\u0915\u0940 \u0915\u094D\u092F\u093E \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902? \u0906\u092A \u0928\u093F\u092E\u094D\u0928 \u092E\u0947\u0902 \u0938\u0947 \u0915\u094B\u0908 \u092D\u0940 \u0935\u093F\u0937\u092F \u0932\u093F\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902:
+1\uFE0F\u20E3 *AI News Maker \u0915\u094D\u092F\u093E \u0939\u0948?*
+2\uFE0F\u20E3 *\u0907\u0938\u0915\u0940 \u0938\u0947\u0935\u093E\u090F\u0901 \u0915\u094D\u092F\u093E \u0939\u0948\u0902?*
+3\uFE0F\u20E3 *\u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?*
+4\uFE0F\u20E3 *\u0935\u0940\u0921\u093F\u092F\u094B \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?*
+5\uFE0F\u20E3 *\u092E\u0947\u0930\u093E \u092A\u094D\u0932\u093E\u0928* (\u092A\u094D\u0932\u093E\u0928 \u0935 \u0935\u0948\u0927\u0924\u093E)
+6\uFE0F\u20E3 *\u0915\u094B\u091F\u093E* (\u0906\u091C \u0915\u0947 \u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u092B\u093F\u0915)
+7\uFE0F\u20E3 *\u0935\u0949\u0932\u0947\u091F* (\u0915\u0949\u0907\u0928\u094D\u0938 \u092C\u0948\u0932\u0947\u0902\u0938)
+8\uFE0F\u20E3 *\u0905\u0915\u093E\u0909\u0902\u091F* (\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0935\u093F\u0935\u0930\u0923)
+
+\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
+      const sent2 = await sendWhatsAppText(waId, greetingReply);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: greetingReply,
+        timestamp: now,
+        status: "sent"
+      });
+      return;
+    }
+    const isWhatIsNewsMaker = /क्या है|what is ai news maker|ai news maker kya hai/i.test(textBody);
+    const isServicesQuery = /सेवाएँ|सुविधाएँ|services|features|सुविधाएं/i.test(textBody);
+    const isHowToGraphic = /ग्राफिक कैसे|graphic kaise|how to make graphic/i.test(textBody);
+    const isHowToVideo = /वीडियो कैसे|video kaise|how to make video/i.test(textBody);
+    if (isWhatIsNewsMaker && !isServicesQuery) {
+      console.log(`[WhatsApp:Inbound] FAQ 'what is news maker' matched from ${maskedWa}`);
+      const faqReply = `\u{1F4F0} *AI News Maker (BREAKING NEWS WALA) \u0915\u094D\u092F\u093E \u0939\u0948?*
+
+AI News Maker \u092D\u093E\u0930\u0924 \u0915\u093E \u092A\u0939\u0932\u093E \u0935\u093F\u0936\u0947\u0937 AI-\u092A\u093E\u0935\u0930\u094D\u0921 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0939\u0948, \u091C\u093F\u0938\u0947 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902, \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094B\u0930\u094D\u091F\u0932\u094D\u0938, \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u094D\u0930\u093F\u090F\u091F\u0930\u094D\u0938 \u0914\u0930 \u092E\u0940\u0921\u093F\u092F\u093E \u0939\u093E\u0909\u0938\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0921\u093F\u091C\u093C\u093E\u0907\u0928 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964
+
+\u0907\u0938\u0915\u0947 \u092E\u093E\u0927\u094D\u092F\u092E \u0938\u0947 \u0906\u092A \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093F\u091C\u093C\u093E\u0907\u0928\u0930 \u0915\u0947 \u0915\u0947\u0935\u0932 7 \u091A\u0930\u0923\u094B\u0902 \u092E\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C, \u091F\u0940\u0935\u0940 \u0938\u094D\u091F\u093E\u0907\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915\u094D\u0938, AI \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938, \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u0914\u0930 4K/HD \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0940\u0932\u094D\u0938 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
+
+\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
+      const sent2 = await sendWhatsAppText(waId, faqReply);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: faqReply,
+        timestamp: now,
+        status: "sent"
+      });
+      return;
+    }
+    if (isServicesQuery) {
+      console.log(`[WhatsApp:Inbound] FAQ 'services' matched from ${maskedWa}`);
+      const servicesReply = `\u26A1 *AI News Maker \u0915\u0940 \u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901:*
+
+1. *7-Step Quick News Maker*: \u091F\u0940\u0935\u0940 \u091A\u0948\u0928\u0932 \u091C\u0948\u0938\u0947 50+ \u0930\u0947\u0921\u0940-\u091F\u0942-\u092F\u0942\u091C\u093C \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E\u094D\u0938\u0964
+2. *AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u092C\u0941\u0932\u0947\u091F\u093F\u0928 \u091C\u0947\u0928\u0930\u0947\u091F\u0930*: \u0916\u092C\u0930\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0906\u0915\u0930\u094D\u0937\u0915 \u0914\u0930 \u0935\u093E\u092F\u0930\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938\u0964
+3. *AI \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0935 \u0930\u0940\u0932\u094D\u0938*: \u0911\u091F\u094B \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u0935 \u0921\u093E\u092F\u0928\u093E\u092E\u093F\u0915 \u090F\u0928\u093F\u092E\u0947\u0936\u0928 \u0915\u0947 \u0938\u093E\u0925 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u094D\u092F\u0942\u091C\u093C\u0964
+4. *e-Paper & \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u094B\u0938\u094D\u091F*: Facebook, Instagram, Twitter \u0914\u0930 WhatsApp \u0915\u0947 \u0932\u093F\u090F \u092A\u0930\u092B\u0947\u0915\u094D\u091F \u0938\u093E\u0907\u091C\u0964
+5. *\u0915\u0938\u094D\u091F\u092E \u091A\u0948\u0928\u0932 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917*: \u0906\u092A\u0915\u093E \u091A\u0948\u0928\u0932 \u0932\u094B\u0917\u094B, \u0928\u093E\u092E, \u092B\u0949\u0928\u094D\u091F \u0914\u0930 \u0915\u0932\u0930\u094D\u0938\u0964
+
+\u{1F310} \u0905\u0927\u093F\u0915 \u091C\u093E\u0928\u0915\u093E\u0930\u0940: https://ainewsmaker.online/#features`;
+      const sent2 = await sendWhatsAppText(waId, servicesReply);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: servicesReply,
+        timestamp: now,
+        status: "sent"
+      });
+      return;
+    }
+    if (isHowToGraphic) {
+      console.log(`[WhatsApp:Inbound] FAQ 'how to graphic' matched from ${maskedWa}`);
+      const graphicReply = `\u{1F3A8} *AI News Maker \u092A\u0930 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901:*
+
+1. https://ainewsmaker.online \u092A\u0930 \u091C\u093E\u090F\u0901 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964
+2. '\u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B' \u091F\u0948\u092C \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964
+3. 50+ \u091F\u0940\u0935\u0940 \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u092E\u0947\u0902 \u0938\u0947 \u0905\u092A\u0928\u093E \u092A\u0938\u0902\u0926\u0940\u0926\u093E \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u091A\u0941\u0928\u0947\u0902\u0964
+4. \u0916\u092C\u0930 \u0915\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0935\u093F\u0935\u0930\u0923 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902 (\u092F\u093E AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902)\u0964
+5. \u0905\u092A\u0928\u0940 \u0907\u092E\u0947\u091C \u0905\u092A\u0932\u094B\u0921 \u0915\u0930\u0947\u0902 \u0914\u0930 \u0915\u094D\u0930\u0949\u092A \u0915\u0930\u0947\u0902\u0964
+6. '\u0921\u093E\u0909\u0928\u0932\u094B\u0921' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u2014 \u0906\u092A\u0915\u093E HD \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0924\u0941\u0930\u0902\u0924 \u0924\u0948\u092F\u093E\u0930!`;
+      const sent2 = await sendWhatsAppText(waId, graphicReply);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: graphicReply,
+        timestamp: now,
+        status: "sent"
+      });
+      return;
+    }
+    if (isHowToVideo) {
+      console.log(`[WhatsApp:Inbound] FAQ 'how to video' matched from ${maskedWa}`);
+      const videoReply = `\u{1F3AC} *AI News Maker \u092A\u0930 \u0935\u0940\u0921\u093F\u092F\u094B \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901:*
+
+1. https://ainewsmaker.online \u092A\u0930 '\u0935\u0940\u0921\u093F\u092F\u094B \u090F\u0902\u0921 \u0930\u0940\u0932\u094D\u0938' \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 \u091C\u093E\u090F\u0901\u0964
+2. \u0905\u092A\u0928\u0940 \u0916\u092C\u0930 \u0915\u093E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0947\u0902\u0964
+3. AI \u0935\u0949\u0907\u0938\u0913\u0935\u0930 (\u0939\u093F\u0902\u0926\u0940 \u0906\u0935\u093E\u091C\u093C) \u091A\u0941\u0928\u0947\u0902\u0964
+4. \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093F\u091C\u0941\u0905\u0932\u094D\u0938 / \u0907\u092E\u0947\u091C \u091C\u094B\u0921\u093C\u0947\u0902\u0964
+5. '\u0935\u0940\u0921\u093F\u092F\u094B \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0947\u0902' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u2014 \u0906\u092A\u0915\u0940 \u091F\u0940\u0935\u0940-\u0938\u094D\u091F\u093E\u0907\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0940\u0932 \u0924\u0948\u092F\u093E\u0930!
+
+_\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u090F\u0921\u0935\u093E\u0902\u0938, \u092A\u094D\u0930\u094B \u0914\u0930 \u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964_`;
+      const sent2 = await sendWhatsAppText(waId, videoReply);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: videoReply,
+        timestamp: now,
+        status: "sent"
+      });
       return;
     }
     const codeMatch = textBody.match(/^\s*(\d{6})\s*$/);
@@ -7146,6 +7280,287 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
       console.error("[WhatsApp:Inbound] Could not enqueue inbound webhook:", String(error?.message || error).slice(0, 240));
       return res.sendStatus(503);
     }
+  });
+  app2.post("/api/auth/send-whatsapp-otp", async (req, res) => {
+    try {
+      const rawPhone = String(req.body?.phone || "").trim();
+      const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+      const countryCode = String(req.body?.countryCode || "+91").trim();
+      const purpose = String(req.body?.purpose || "signup").trim();
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          error: "\u0915\u0943\u092A\u092F\u093E \u0935\u0948\u0927 10-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964"
+        });
+      }
+      const now = Date.now();
+      const rateData = otpRateLimits.get(cleanPhone) || { lastSent: 0, countInHour: 0, hourStart: now };
+      if (now - rateData.hourStart > 36e5) {
+        rateData.countInHour = 0;
+        rateData.hourStart = now;
+      }
+      if (now - rateData.lastSent < 6e4) {
+        const waitSec = Math.ceil((6e4 - (now - rateData.lastSent)) / 1e3);
+        return res.status(429).json({
+          success: false,
+          error: `\u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 OTP \u092D\u0947\u091C\u0928\u0947 \u0938\u0947 \u092A\u0939\u0932\u0947 ${waitSec} \u0938\u0947\u0915\u0902\u0921 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964`,
+          cooldownSeconds: waitSec
+        });
+      }
+      if (rateData.countInHour >= 5) {
+        return res.status(429).json({
+          success: false,
+          error: "\u0907\u0938 \u0928\u0902\u092C\u0930 \u092A\u0930 \u092A\u094D\u0930\u0924\u093F \u0918\u0902\u091F\u0947 \u0915\u0940 \u0905\u0927\u093F\u0915\u0924\u092E OTP \u0938\u0940\u092E\u093E (5 \u092C\u093E\u0930) \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E 1 \u0918\u0902\u091F\u0947 \u092C\u093E\u0926 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964"
+        });
+      }
+      const otp = Math.floor(1e5 + Math.random() * 9e5).toString();
+      const salt = (0, import_crypto.randomBytes)(16).toString("hex");
+      const codeHash = (0, import_crypto.createHash)("sha256").update(otp + salt + cleanPhone).digest("hex");
+      const verificationId = (0, import_crypto.randomUUID)();
+      const expiresAt = now + 5 * 60 * 1e3;
+      const otpDoc = {
+        verificationId,
+        phone: cleanPhone,
+        countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
+        fullPhone: `91${cleanPhone}`,
+        codeHash,
+        salt,
+        expiresAt,
+        attempts: 0,
+        maxAttempts: 3,
+        status: "pending",
+        purpose,
+        email,
+        createdAt: now
+      };
+      otpVerificationCache.set(verificationId, otpDoc);
+      if (centralDb2?.useFirestore) {
+        await centralDb2.writeDoc("whatsapp_otp_verifications", verificationId, otpDoc).catch((err) => {
+          console.warn("[WhatsApp:OTP] Firestore write warning:", err.message);
+        });
+      }
+      const destinationWaId = `91${cleanPhone}`;
+      const otpMessage = `\u{1F510} *AI NEWS MAKER - WhatsApp \u0938\u0924\u094D\u092F\u093E\u092A\u0928 OTP*
+
+\u0906\u092A\u0915\u093E 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0935\u0947\u0930\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0915\u094B\u0921 \u0939\u0948: *${otp}*
+
+\u092F\u0939 \u0915\u094B\u0921 5 \u092E\u093F\u0928\u091F \u0915\u0947 \u0932\u093F\u090F \u0935\u0948\u0927 \u0939\u0948\u0964 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u093E\u0930\u0923\u094B\u0902 \u0938\u0947 \u092F\u0939 OTP \u0915\u093F\u0938\u0940 \u0915\u0947 \u0938\u093E\u0925 \u0938\u093E\u091D\u093E \u0928 \u0915\u0930\u0947\u0902\u0964
+
+\u2014 AI News Maker (ainewsmaker.online)`;
+      try {
+        await sendWhatsAppText(destinationWaId, otpMessage);
+        console.log(`[WhatsApp:OTP] OTP sent successfully to ${maskWaId(destinationWaId)}`);
+        rateData.lastSent = now;
+        rateData.countInHour += 1;
+        otpRateLimits.set(cleanPhone, rateData);
+        return res.json({
+          success: true,
+          verificationId,
+          phone: cleanPhone,
+          expiresAt,
+          cooldownSeconds: 60,
+          message: "\u0906\u092A\u0915\u0947 WhatsApp \u092A\u0930 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E OTP \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
+        });
+      } catch (sendErr) {
+        const errMsg = String(sendErr?.message || sendErr);
+        console.error(`[WhatsApp:OTP] Failed to send OTP to ${maskWaId(destinationWaId)}:`, errMsg);
+        if (errMsg.includes("Authentication Error") || errMsg.includes("WHATSAPP_API_ERROR") || errMsg.includes("401") || errMsg.includes("190")) {
+          return res.status(503).json({
+            success: false,
+            error: "\u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A\u094D\u092A \u0915\u094D\u0932\u093E\u0909\u0921 API \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F (Meta Access Token Expired). \u0915\u0943\u092A\u092F\u093E \u090F\u0921\u092E\u093F\u0928 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+            errorCode: "WHATSAPP_TOKEN_EXPIRED",
+            verificationId
+          });
+        }
+        return res.status(500).json({
+          success: false,
+          error: `WhatsApp OTP \u092D\u0947\u091C\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${errMsg.slice(0, 100)}`
+        });
+      }
+    } catch (err) {
+      console.error("[WhatsApp:OTP] Unhandled error in send-whatsapp-otp:", err);
+      return res.status(500).json({
+        success: false,
+        error: "\u0938\u0930\u094D\u0935\u0930 \u092A\u0930 OTP \u092D\u0947\u091C\u0928\u0947 \u092E\u0947\u0902 \u0906\u0902\u0924\u0930\u093F\u0915 \u0938\u092E\u0938\u094D\u092F\u093E \u0906\u0908\u0964"
+      });
+    }
+  });
+  app2.post("/api/auth/verify-whatsapp-otp", async (req, res) => {
+    try {
+      const verificationId = String(req.body?.verificationId || "").trim();
+      const rawPhone = String(req.body?.phone || "").trim();
+      const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+      const otp = String(req.body?.otp || "").trim();
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      if (!verificationId || !cleanPhone || !otp) {
+        return res.status(400).json({
+          success: false,
+          error: "verificationId, phone \u0914\u0930 OTP \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964"
+        });
+      }
+      if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
+        return res.status(400).json({
+          success: false,
+          error: "\u0915\u0943\u092A\u092F\u093E \u0938\u0939\u0940 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E OTP \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964"
+        });
+      }
+      let record = otpVerificationCache.get(verificationId);
+      if (!record && centralDb2?.useFirestore) {
+        const fsDoc = await centralDb2.readDoc("whatsapp_otp_verifications", verificationId);
+        if (fsDoc?.success && fsDoc?.data) {
+          record = fsDoc.data;
+        }
+      }
+      if (!record) {
+        return res.status(404).json({
+          success: false,
+          error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0935\u0947\u0930\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0905\u0928\u0941\u0930\u094B\u0927\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E OTP \u092E\u0902\u0917\u093E\u090F\u0901\u0964"
+        });
+      }
+      if (record.status === "verified") {
+        return res.status(400).json({
+          success: false,
+          error: "\u092F\u0939 OTP \u092A\u0939\u0932\u0947 \u0939\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+        });
+      }
+      if (record.phone !== cleanPhone) {
+        return res.status(400).json({
+          success: false,
+          error: "\u092F\u0939 OTP \u0926\u0930\u094D\u091C \u0915\u093F\u090F \u0917\u090F \u0928\u0902\u092C\u0930 \u0938\u0947 \u092E\u0947\u0932 \u0928\u0939\u0940\u0902 \u0916\u093E\u0924\u093E\u0964"
+        });
+      }
+      const now = Date.now();
+      if (now > record.expiresAt) {
+        record.status = "expired";
+        otpVerificationCache.set(verificationId, record);
+        if (centralDb2?.useFirestore) {
+          await centralDb2.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => void 0);
+        }
+        return res.status(400).json({
+          success: false,
+          error: "OTP \u0915\u0940 \u0935\u0948\u0927\u0924\u093E (5 \u092E\u093F\u0928\u091F) \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E OTP \u092E\u0902\u0917\u093E\u090F\u0901\u0964"
+        });
+      }
+      if (record.attempts >= record.maxAttempts) {
+        record.status = "max_attempts_exceeded";
+        otpVerificationCache.set(verificationId, record);
+        if (centralDb2?.useFirestore) {
+          await centralDb2.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => void 0);
+        }
+        return res.status(400).json({
+          success: false,
+          error: "\u0905\u0927\u093F\u0915\u0924\u092E \u0917\u0932\u0924 \u092A\u094D\u0930\u092F\u093E\u0938 \u0938\u0940\u092E\u093E (3 \u092C\u093E\u0930) \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E OTP \u092E\u0902\u0917\u093E\u090F\u0901\u0964"
+        });
+      }
+      const candidateHash = (0, import_crypto.createHash)("sha256").update(otp + record.salt + cleanPhone).digest("hex");
+      const isMatch = candidateHash === record.codeHash;
+      if (!isMatch) {
+        record.attempts += 1;
+        otpVerificationCache.set(verificationId, record);
+        if (centralDb2?.useFirestore) {
+          await centralDb2.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => void 0);
+        }
+        const remaining = record.maxAttempts - record.attempts;
+        return res.status(400).json({
+          success: false,
+          error: remaining > 0 ? `\u0917\u0932\u0924 OTP \u0926\u0930\u094D\u091C \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0936\u0947\u0937 \u092A\u094D\u0930\u092F\u093E\u0938: ${remaining}` : "\u0905\u0927\u093F\u0915\u0924\u092E \u0917\u0932\u0924 \u092A\u094D\u0930\u092F\u093E\u0938 \u0938\u0940\u092E\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u0908 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E OTP \u092E\u0902\u0917\u093E\u090F\u0901\u0964",
+          remainingAttempts: Math.max(0, remaining)
+        });
+      }
+      record.status = "verified";
+      record.verifiedAt = now;
+      otpVerificationCache.set(verificationId, record);
+      if (centralDb2?.useFirestore) {
+        await centralDb2.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => void 0);
+      }
+      const verificationToken = (0, import_crypto.createHash)("sha256").update(`${verificationId}:${cleanPhone}:${record.salt}:${now}`).digest("hex");
+      if (email && centralDb2?.useFirestore) {
+        try {
+          const userDocRes = await centralDb2.readDoc("users", email);
+          const uData = userDocRes?.data || {};
+          const updatedUser = {
+            ...uData,
+            email,
+            primaryNumber: cleanPhone,
+            whatsappNumber: cleanPhone,
+            whatsappVerified: true,
+            whatsappVerifiedAt: now,
+            whatsappVerificationMethod: "whatsapp_otp",
+            countryCode: "+91",
+            updatedAt: now
+          };
+          await centralDb2.writeDoc("users", email, updatedUser);
+          if (centralDb2.cache?.users) {
+            centralDb2.cache.users.set(email, updatedUser);
+          }
+          console.log(`[WhatsApp:OTP] User ${email} verified and updated with primaryNumber: ${cleanPhone}`);
+        } catch (uErr) {
+          console.warn(`[WhatsApp:OTP] Warning updating user record for ${email}:`, uErr.message);
+        }
+      }
+      return res.json({
+        success: true,
+        verified: true,
+        phone: cleanPhone,
+        verificationToken,
+        verifiedAt: now,
+        message: "\u2705 WhatsApp \u0928\u0902\u092C\u0930 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964"
+      });
+    } catch (err) {
+      console.error("[WhatsApp:OTP] Unhandled error in verify-whatsapp-otp:", err);
+      return res.status(500).json({
+        success: false,
+        error: "\u0938\u0930\u094D\u0935\u0930 \u092A\u0930 OTP \u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u092E\u0947\u0902 \u0906\u0902\u0924\u0930\u093F\u0915 \u0938\u092E\u0938\u094D\u092F\u093E \u0906\u0908\u0964"
+      });
+    }
+  });
+  app2.get("/api/whatsapp/diagnostic", async (req, res) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const hasAppSecret = Boolean((process.env.META_APP_SECRET || "").trim());
+    const hasVerifyToken = Boolean((process.env.META_WEBHOOK_VERIFY_TOKEN || "").trim());
+    const hasGeminiKey = Boolean((process.env.GEMINI_API_KEY || "").trim());
+    let metaApiStatus = { ok: false };
+    if (token) {
+      try {
+        const resp = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}?access_token=${token}`);
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+          metaApiStatus = { ok: true, id: data.id, verified_name: data.verified_name, display_phone_number: data.display_phone_number };
+        } else {
+          metaApiStatus = { ok: false, status: resp.status, error: data?.error?.message, type: data?.error?.type, code: data?.error?.code, subcode: data?.error?.error_subcode };
+        }
+      } catch (e) {
+        metaApiStatus = { ok: false, error: e.message };
+      }
+    } else {
+      metaApiStatus = { ok: false, error: "WHATSAPP_ACCESS_TOKEN is empty" };
+    }
+    let kbCount = 0;
+    if (centralDb2?.useFirestore) {
+      try {
+        const kbDocs = await centralDb2.listDocs("whatsapp_knowledge_base", 50);
+        kbCount = (kbDocs?.documents || []).length;
+      } catch {
+      }
+    }
+    res.json({
+      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      environment: {
+        hasAccessToken: Boolean(token),
+        tokenPrefix: token ? `${token.slice(0, 15)}...` : "NONE",
+        phoneNumberId,
+        version,
+        hasAppSecret,
+        hasVerifyToken,
+        hasGeminiKey,
+        firestoreConnected: Boolean(centralDb2?.useFirestore),
+        knowledgeBaseCount: kbCount
+      },
+      metaApiStatus
+    });
   });
 }
 

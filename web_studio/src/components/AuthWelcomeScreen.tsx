@@ -441,6 +441,107 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [primaryMobileNumber, setPrimaryMobileNumber] = useState<string>(
     subscription.primaryMobile || initialProfile.mobileNumber || ''
   );
+  const [whatsappCountryCode, setWhatsappCountryCode] = useState<string>('+91');
+  const [whatsappOtp, setWhatsappOtp] = useState<string>('');
+  const [whatsappVerificationId, setWhatsappVerificationId] = useState<string>('');
+  const [isWhatsappVerified, setIsWhatsappVerified] = useState<boolean>(
+    Boolean(subscription.isMobileLocked || initialProfile.whatsappVerified || (subscription.primaryMobile && subscription.primaryMobile.length === 10))
+  );
+  const [verifiedWhatsappNumber, setVerifiedWhatsappNumber] = useState<string>(
+    subscription.primaryMobile || initialProfile.mobileNumber || ''
+  );
+  const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState<boolean>(false);
+  const [otpSent, setOtpSent] = useState<boolean>(false);
+  const [otpCooldown, setOtpCooldown] = useState<number>(0);
+  const [otpStatusMsg, setOtpStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCooldown]);
+
+  const handleSendWhatsAppOtp = async () => {
+    setOtpStatusMsg(null);
+    const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
+    if (cleanDigits.length !== 10) {
+      setOtpStatusMsg({ type: 'error', text: 'कृपया वैध 10-अंकों का WhatsApp नंबर दर्ज करें।' });
+      return;
+    }
+    setIsSendingOtp(true);
+    try {
+      const activeEmail = (currentUser?.email || tempRegisteredUser?.email || '').toLowerCase().trim();
+      const res = await fetch(getApiUrl('/api/auth/send-whatsapp-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: cleanDigits,
+          countryCode: whatsappCountryCode,
+          purpose: 'signup',
+          email: activeEmail,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setWhatsappVerificationId(data.verificationId);
+        setOtpSent(true);
+        setOtpCooldown(data.cooldownSeconds || 60);
+        setOtpStatusMsg({ type: 'success', text: '✅ आपके WhatsApp पर 6-अंकों का OTP भेज दिया गया है।' });
+      } else {
+        const errorText = data.error || 'WhatsApp OTP भेजने में विफल।';
+        setOtpStatusMsg({ type: 'error', text: `⚠️ ${errorText}` });
+      }
+    } catch (err: any) {
+      setOtpStatusMsg({ type: 'error', text: `⚠️ सर्वर कनेक्शन त्रुटि: ${err.message || 'OTP भेजा नहीं जा सका।'}` });
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyWhatsAppOtp = async () => {
+    setOtpStatusMsg(null);
+    const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
+    const cleanOtp = whatsappOtp.trim();
+    if (!whatsappVerificationId) {
+      setOtpStatusMsg({ type: 'error', text: 'कृपया पहले OTP भेजें।' });
+      return;
+    }
+    if (cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+      setOtpStatusMsg({ type: 'error', text: 'कृपया 6-अंकों का सही OTP दर्ज करें।' });
+      return;
+    }
+    setIsVerifyingOtp(true);
+    try {
+      const activeEmail = (currentUser?.email || tempRegisteredUser?.email || '').toLowerCase().trim();
+      const res = await fetch(getApiUrl('/api/auth/verify-whatsapp-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          verificationId: whatsappVerificationId,
+          phone: cleanDigits,
+          otp: cleanOtp,
+          email: activeEmail,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.verified) {
+        setIsWhatsappVerified(true);
+        setVerifiedWhatsappNumber(cleanDigits);
+        setOtpStatusMsg({ type: 'success', text: '🎉 बधाई! आपका WhatsApp नंबर सफलतापूर्वक सत्यापित हो गया है।' });
+        setStep2ErrorMsg('');
+      } else {
+        const errorText = data.error || 'अमान्य OTP।';
+        setOtpStatusMsg({ type: 'error', text: `⚠️ ${errorText}` });
+      }
+    } catch (err: any) {
+      setOtpStatusMsg({ type: 'error', text: `⚠️ सत्यापन त्रुटि: ${err.message || 'OTP सत्यापित नहीं हो सका।'}` });
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
 
   const [detailChannelNameHi, setDetailChannelNameHi] = useState<string>(
     initialProfile.channelNameHi || ''
@@ -1096,11 +1197,17 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
-    // Validate 10-digit mobile number
+    // Enforce Mandatory WhatsApp Number & OTP Verification
     const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
-    if (!subscription.isMobileLocked && cleanDigits.length !== 10) {
-      setStep2ErrorMsg('कृपया आगे बढ़ने के लिए अपना वैध 10-अंकों का मोबाइल नंबर दर्ज करें।');
-      return;
+    if (!subscription.isMobileLocked) {
+      if (!cleanDigits || cleanDigits.length !== 10) {
+        setStep2ErrorMsg('⚠️ कृपया आगे बढ़ने के लिए अपना वैध 10-अंकों का WhatsApp नंबर दर्ज करें।');
+        return;
+      }
+      if (!isWhatsappVerified || cleanDigits !== verifiedWhatsappNumber) {
+        setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp OTP द्वारा अपना मोबाइल नंबर सत्यापित करना अनिवार्य है।');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -1157,8 +1264,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         channelLogoType: detailChannelLogoType,
         socialIcons,
         username: cleanSavedUsername,
-        mobileNumber: primaryMobileNumber.trim() || finalContact,
-        whatsappNumber: finalWhatsapp,
+        mobileNumber: cleanDigits,
+        whatsappNumber: cleanDigits,
+        whatsappVerified: true,
+        whatsappVerifiedAt: Date.now(),
+        whatsappVerificationMethod: 'whatsapp_otp',
         showMobileNumber,
         websiteUrl: websiteUrl.trim(),
         isLocked: !isAdm,
@@ -1171,6 +1281,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         district: reportingDistrict || currentUser?.district || "सेंट्रल डेस्क",
         email: activeEmail || "user@ainewsmaker.online",
         avatarUrl: currentUser?.avatarUrl || tempRegisteredUser?.avatarUrl,
+        mobile: cleanDigits,
+        mobileNumber: cleanDigits,
+        whatsappNumber: cleanDigits,
+        whatsappVerified: true,
       };
 
       safeLocalStorageSet("user_channel_profile", JSON.stringify(finalProfile));
@@ -1744,31 +1858,32 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                     <div>
                       <p className="text-xs font-black text-red-200">
-                        महत्वपूर्ण सूचना: यह Primary Number बाद में बदला नहीं जा सकेगा।
+                        महत्वपूर्ण सूचना: WhatsApp Number ही आपका स्थायी प्राइमरी नंबर होगा।
                       </p>
                       <p className="text-[11px] text-red-300/80 mt-0.5">
-                        खाता सुरक्षा व सत्यापन हेतु कृपया अपना सही 10-अंकों का मोबाइल नंबर दर्ज करें।
+                        खाता सुरक्षा व लॉगिन सत्यापन हेतु कृपया अपना सही 10-अंकों का WhatsApp नंबर दर्ज करें और OTP सत्यापित करें।
                       </p>
                     </div>
                   </div>
 
-                  {subscription.isMobileLocked ? (
-                    <div className="p-3.5 bg-emerald-950/60 rounded-xl border border-emerald-500/60 space-y-1">
+                  {subscription.isMobileLocked || (isWhatsappVerified && verifiedWhatsappNumber && primaryMobileNumber.replace(/\D/g, '').slice(-10) === verifiedWhatsappNumber) ? (
+                    <div className="p-3.5 bg-emerald-950/70 rounded-xl border border-emerald-500/70 space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
                           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                          <span>3. प्राइमरी मोबाइल नंबर (सत्यापित व स्थायी रूप से लॉक)</span>
+                          <span>3. WhatsApp नंबर (प्राइमरी नंबर — सत्यापित ✅)</span>
                         </label>
                         <span className="text-[10px] text-emerald-300 font-bold bg-emerald-900/90 px-2.5 py-0.5 rounded-full border border-emerald-600 flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                           सत्यापित / Locked
                         </span>
                       </div>
-                      <div className="text-sm font-mono font-black text-white">
-                        +91 {subscription.primaryMobile || primaryMobileNumber}
+                      <div className="text-base font-mono font-black text-white flex items-center gap-2">
+                        <span>+91</span>
+                        <span>{verifiedWhatsappNumber || subscription.primaryMobile || primaryMobileNumber}</span>
                       </div>
                       <p className="text-[11px] text-emerald-400/90">
-                        ✅ आपका प्राइमरी मोबाइल नंबर सुरक्षित रूप से सत्यापित है।
+                        ✅ आपका WhatsApp नंबर सफलतापूर्वक सत्यापित है और प्राइमरी नंबर के रूप में सुरक्षित है।
                       </p>
                     </div>
                   ) : (
@@ -1777,36 +1892,123 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         <div className="flex items-center justify-between mb-1">
                           <label className="block text-xs font-bold text-slate-300 flex items-center gap-1">
                             <Lock className="w-3.5 h-3.5 text-amber-400" />
-                            <span>3. प्राइमरी मोबाइल नंबर (10 अंक) *</span>
+                            <span>3. WhatsApp Number (Primary Number) *</span>
                           </label>
                           <span className="text-[10px] text-amber-400 font-bold">
-                            🔒 स्थायी लॉक होगा
+                            🔒 OTP सत्यापन अनिवार्य
                           </span>
                         </div>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                          <input
-                            type="tel"
-                            maxLength={10}
-                            required
-                            readOnly={Boolean(subscription.isMobileLocked || initialProfile.mobileNumber || subscription.primaryMobile)}
-                            value={primaryMobileNumber}
-                            onChange={(e) => {
-                              const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
-                              setPrimaryMobileNumber(val);
-                              if (!graphicContactNumber) {
-                                setGraphicContactNumber(val);
-                              }
-                            }}
-                            placeholder="यहाँ अपना 10-अंकों का मोबाइल नंबर दर्ज करें (उदा. 9876543210)"
-                            className={`w-full pl-9 pr-3 py-2 border rounded-xl text-xs sm:text-sm font-mono placeholder:text-slate-500/80 placeholder:font-normal ${
-                              subscription.isMobileLocked || initialProfile.mobileNumber || subscription.primaryMobile
-                                ? 'bg-slate-900/60 border-slate-800 text-slate-300 cursor-not-allowed'
-                                : 'bg-slate-950 border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                        
+                        {/* Number Input with Country Code and Send OTP button */}
+                        <div className="flex items-center gap-2">
+                          <div className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-slate-300 text-xs sm:text-sm font-mono font-bold shrink-0">
+                            +91
+                          </div>
+                          <div className="relative flex-1">
+                            <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                            <input
+                              type="tel"
+                              maxLength={10}
+                              required
+                              value={primaryMobileNumber}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                                setPrimaryMobileNumber(val);
+                                if (!graphicContactNumber) {
+                                  setGraphicContactNumber(val);
+                                }
+                                if (isWhatsappVerified && val !== verifiedWhatsappNumber) {
+                                  setIsWhatsappVerified(false);
+                                }
+                              }}
+                              placeholder="10-अंकों का WhatsApp नंबर (उदा. 9876543210)"
+                              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm font-mono text-white placeholder:text-slate-500/80 focus:border-amber-400 focus:outline-hidden"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleSendWhatsAppOtp}
+                            disabled={isSendingOtp || otpCooldown > 0 || primaryMobileNumber.replace(/\D/g, '').length !== 10}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 ${
+                              isSendingOtp || otpCooldown > 0 || primaryMobileNumber.replace(/\D/g, '').length !== 10
+                                ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                                : 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-md active:scale-95'
                             }`}
-                          />
+                          >
+                            {isSendingOtp ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>भेज रहे हैं...</span>
+                              </>
+                            ) : otpCooldown > 0 ? (
+                              <span>पुनः भेजें ({otpCooldown}s)</span>
+                            ) : (
+                              <span>OTP भेजें</span>
+                            )}
+                          </button>
                         </div>
                       </div>
+
+                      {/* OTP Input & Verification Row (Appears once OTP is requested) */}
+                      {otpSent && !isWhatsappVerified && (
+                        <div className="pt-2 border-t border-slate-800 space-y-2">
+                          <label className="block text-xs font-bold text-emerald-400 flex items-center justify-between">
+                            <span>WhatsApp पर प्राप्त 6-अंकों का OTP दर्ज करें:</span>
+                            <span className="text-[10px] text-slate-400">वैधता: 5 मिनट</span>
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              maxLength={6}
+                              value={whatsappOtp}
+                              onChange={(e) => setWhatsappOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              placeholder="6-अंकों का OTP (उदा. 123456)"
+                              className="flex-1 px-3.5 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-sm font-mono font-bold tracking-widest text-center text-white focus:border-emerald-400 focus:outline-hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleVerifyWhatsAppOtp}
+                              disabled={isVerifyingOtp || whatsappOtp.trim().length !== 6}
+                              className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all flex items-center gap-1.5 ${
+                                isVerifyingOtp || whatsappOtp.trim().length !== 6
+                                  ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                                  : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-md font-bold active:scale-95'
+                              }`}
+                            >
+                              {isVerifyingOtp ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>जाँच रहे हैं...</span>
+                                </>
+                              ) : (
+                                <span>सत्यापित करें</span>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Feedback messages */}
+                      {otpStatusMsg && (
+                        <div
+                          className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                            otpStatusMsg.type === 'success'
+                              ? 'bg-emerald-950/70 border border-emerald-500/50 text-emerald-300'
+                              : 'bg-red-950/70 border border-red-500/50 text-red-300'
+                          }`}
+                        >
+                          {otpStatusMsg.type === 'success' ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                          ) : (
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+                          )}
+                          <span>{otpStatusMsg.text}</span>
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-slate-400">
+                        * आधिकारिक WhatsApp Business खाते से आपके नंबर पर 6-अंकों का वेरिफिकेशन कोड भेजा जाएगा।
+                      </p>
                     </div>
                   )}
                 </div>

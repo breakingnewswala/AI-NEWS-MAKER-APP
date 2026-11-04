@@ -1,4 +1,4 @@
-import { createHmac, createHash, timingSafeEqual } from "crypto";
+import { createHmac, createHash, timingSafeEqual, randomBytes, randomUUID } from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { CloudTasksClient } from "@google-cloud/tasks";
 import { OAuth2Client } from "google-auth-library";
@@ -17,6 +17,11 @@ export const maskWaId = (id: string): string => {
   if (str.length <= 4) return str;
   return `...${str.slice(-4)}`;
 };
+
+// Rate limiter store: Map<cleanPhone, { lastSent: number, countInHour: number, hourStart: number }>
+const otpRateLimits = new Map<string, { lastSent: number; countInHour: number; hourStart: number }>();
+// In-memory verification cache for fast lookup and dev fallback
+const otpVerificationCache = new Map<string, any>();
 
 export function registerWhatsAppIntegration(app: any, centralDb: any) {
   const webhookPath = "/api/whatsapp/webhook";
@@ -127,6 +132,9 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     if (!response.ok) {
       const errorMsg = (result as any)?.error?.message || `WhatsApp API request failed (${response.status})`;
       console.error(`[WhatsApp:Outbound] WHATSAPP_API_ERROR: HTTP ${response.status} - ${errorMsg}`);
+      if (response.status === 401 || (result as any)?.error?.code === 190) {
+        console.error(`[WhatsApp:Outbound] CRITICAL_AUTH_FAILURE: Meta Access Token is expired or invalid (Code 190). Update Secret Manager WHATSAPP_ACCESS_TOKEN with a permanent System User Token.`);
+      }
       throw new Error(`WHATSAPP_API_ERROR: ${errorMsg}`);
     }
 
@@ -226,6 +234,10 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     } catch (error: any) {
       const errMsg = String(error?.message || error);
       console.error("[WhatsApp:Gemini] GEMINI_API_ERROR:", errMsg.slice(0, 200));
+      if (knowledge && knowledge.length > 20) {
+        console.log("[WhatsApp:Gemini] Falling back to direct Knowledge Base match");
+        return { reply: `AI News Maker सहायता केंद्र से जानकारी:\n\n${knowledge.slice(0, 1000)}` };
+      }
       return { reply: null, reason: "gemini_api_error", errorCategory: "GEMINI_API_ERROR" };
     }
   };
@@ -301,6 +313,117 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
         conversationId, waId, direction: "outbound", text: handoffReply, timestamp: now, status: "sent",
       });
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+      return;
+    }
+
+    // --- GREETING AND INSTANT WELCOME HANDLER ---
+    const isGreeting = /^\s*(hi|hello|hey|namaste|namaskar|नमस्ते|नमस्कार|हैलो|हाय|हॅलो)\s*$/i.test(textBody);
+    if (isGreeting) {
+      console.log(`[WhatsApp:Inbound] Greeting received from ${maskedWa}`);
+      const greetingReply = `🙏 *नमस्कार! AI News Maker (BREAKING NEWS WALA) में आपका स्वागत है।*
+
+हम पत्रकारों और डिजिटल मीडिया के लिए भारत का अग्रणी AI-पावर्ड न्यूज़ ग्राफिक व वीडियो स्टूडियो हैं।
+
+बताइए, हम आपकी क्या सहायता कर सकते हैं? आप निम्न में से कोई भी विषय लिख सकते हैं:
+1️⃣ *AI News Maker क्या है?*
+2️⃣ *इसकी सेवाएँ क्या हैं?*
+3️⃣ *ग्राफिक कैसे बनाएँ?*
+4️⃣ *वीडियो कैसे बनाएँ?*
+5️⃣ *मेरा प्लान* (प्लान व वैधता)
+6️⃣ *कोटा* (आज के शेष ग्राफिक)
+7️⃣ *वॉलेट* (कॉइन्स बैलेंस)
+8️⃣ *अकाउंट* (प्रोफाइल विवरण)
+
+🌐 वेबसाइट: https://ainewsmaker.online`;
+
+      const sent = await sendWhatsAppText(waId, greetingReply);
+      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId, waId, direction: "outbound", text: greetingReply, timestamp: now, status: "sent",
+      });
+      return;
+    }
+
+    // --- DIRECT FAQ PRE-MATCHER ---
+    const isWhatIsNewsMaker = /क्या है|what is ai news maker|ai news maker kya hai/i.test(textBody);
+    const isServicesQuery = /सेवाएँ|सुविधाएँ|services|features|सुविधाएं/i.test(textBody);
+    const isHowToGraphic = /ग्राफिक कैसे|graphic kaise|how to make graphic/i.test(textBody);
+    const isHowToVideo = /वीडियो कैसे|video kaise|how to make video/i.test(textBody);
+
+    if (isWhatIsNewsMaker && !isServicesQuery) {
+      console.log(`[WhatsApp:Inbound] FAQ 'what is news maker' matched from ${maskedWa}`);
+      const faqReply = `📰 *AI News Maker (BREAKING NEWS WALA) क्या है?*
+
+AI News Maker भारत का पहला विशेष AI-पावर्ड डिजिटल न्यूज़ स्टूडियो है, जिसे पत्रकारों, न्यूज़ पोर्टल्स, सोशल मीडिया क्रिएटर्स और मीडिया हाउसों के लिए डिज़ाइन किया गया है।
+
+इसके माध्यम से आप बिना किसी ग्राफिक डिज़ाइनर के केवल 7 चरणों में ब्रेकिंग न्यूज़, टीवी स्टाइल न्यूज़ ग्राफिक्स, AI हेडलाइंस, वॉइसओवर और 4K/HD वीडियो न्यूज़ रील्स तैयार कर सकते हैं।
+
+🌐 वेबसाइट: https://ainewsmaker.online`;
+
+      const sent = await sendWhatsAppText(waId, faqReply);
+      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId, waId, direction: "outbound", text: faqReply, timestamp: now, status: "sent",
+      });
+      return;
+    }
+
+    if (isServicesQuery) {
+      console.log(`[WhatsApp:Inbound] FAQ 'services' matched from ${maskedWa}`);
+      const servicesReply = `⚡ *AI News Maker की मुख्य सेवाएँ:*
+
+1. *7-Step Quick News Maker*: टीवी चैनल जैसे 50+ रेडी-टू-यूज़ न्यूज़ फ्रेम्स।
+2. *AI हेडलाइन व बुलेटिन जेनरेटर*: खबरों के लिए आकर्षक और वायरल हेडलाइंस।
+3. *AI वीडियो स्टूडियो व रील्स*: ऑटो वॉइसओवर व डायनामिक एनिमेशन के साथ वीडियो न्यूज़।
+4. *e-Paper & सोशल मीडिया पोस्ट*: Facebook, Instagram, Twitter और WhatsApp के लिए परफेक्ट साइज।
+5. *कस्टम चैनल ब्रांडिंग*: आपका चैनल लोगो, नाम, फॉन्ट और कलर्स।
+
+🌐 अधिक जानकारी: https://ainewsmaker.online/#features`;
+
+      const sent = await sendWhatsAppText(waId, servicesReply);
+      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId, waId, direction: "outbound", text: servicesReply, timestamp: now, status: "sent",
+      });
+      return;
+    }
+
+    if (isHowToGraphic) {
+      console.log(`[WhatsApp:Inbound] FAQ 'how to graphic' matched from ${maskedWa}`);
+      const graphicReply = `🎨 *AI News Maker पर ग्राफिक कैसे बनाएँ:*
+
+1. https://ainewsmaker.online पर जाएँ और लॉगिन करें।
+2. 'स्टूडियो' टैब पर क्लिक करें।
+3. 50+ टीवी फ्रेम्स में से अपना पसंदीदा टेम्पलेट चुनें।
+4. खबर की हेडलाइन और मुख्य विवरण दर्ज करें (या AI हेडलाइन का उपयोग करें)।
+5. अपनी इमेज अपलोड करें और क्रॉप करें।
+6. 'डाउनलोड' पर क्लिक करें — आपका HD न्यूज़ ग्राफिक तुरंत तैयार!`;
+
+      const sent = await sendWhatsAppText(waId, graphicReply);
+      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId, waId, direction: "outbound", text: graphicReply, timestamp: now, status: "sent",
+      });
+      return;
+    }
+
+    if (isHowToVideo) {
+      console.log(`[WhatsApp:Inbound] FAQ 'how to video' matched from ${maskedWa}`);
+      const videoReply = `🎬 *AI News Maker पर वीडियो कैसे बनाएँ:*
+
+1. https://ainewsmaker.online पर 'वीडियो एंड रील्स' सेक्शन में जाएँ।
+2. अपनी खबर का टेक्स्ट पेस्ट करें।
+3. AI वॉइसओवर (हिंदी आवाज़) चुनें।
+4. न्यूज़ विजुअल्स / इमेज जोड़ें।
+5. 'वीडियो जनरेट करें' पर क्लिक करें — आपकी टीवी-स्टाइल न्यूज़ रील तैयार!
+
+_नोट: वीडियो स्टूडियो एडवांस, प्रो और वीआईपी डेस्क प्लान में उपलब्ध है।_`;
+
+      const sent = await sendWhatsAppText(waId, videoReply);
+      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId, waId, direction: "outbound", text: videoReply, timestamp: now, status: "sent",
+      });
       return;
     }
 
@@ -770,5 +893,313 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
       console.error("[WhatsApp:Inbound] Could not enqueue inbound webhook:", String(error?.message || error).slice(0, 240));
       return res.sendStatus(503);
     }
+  });
+
+  // --- WHATSAPP OTP VERIFICATION ENDPOINTS ---
+  app.post("/api/auth/send-whatsapp-otp", async (req: any, res: any) => {
+    try {
+      const rawPhone = String(req.body?.phone || "").trim();
+      const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+      const countryCode = String(req.body?.countryCode || "+91").trim();
+      const purpose = String(req.body?.purpose || "signup").trim();
+      const email = String(req.body?.email || "").toLowerCase().trim();
+
+      if (!cleanPhone || cleanPhone.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          error: "कृपया वैध 10-अंकों का मोबाइल नंबर दर्ज करें।"
+        });
+      }
+
+      const now = Date.now();
+      const rateData = otpRateLimits.get(cleanPhone) || { lastSent: 0, countInHour: 0, hourStart: now };
+      if (now - rateData.hourStart > 3600000) {
+        rateData.countInHour = 0;
+        rateData.hourStart = now;
+      }
+      if (now - rateData.lastSent < 60000) {
+        const waitSec = Math.ceil((60000 - (now - rateData.lastSent)) / 1000);
+        return res.status(429).json({
+          success: false,
+          error: `कृपया पुनः OTP भेजने से पहले ${waitSec} सेकंड प्रतीक्षा करें।`,
+          cooldownSeconds: waitSec
+        });
+      }
+      if (rateData.countInHour >= 5) {
+        return res.status(429).json({
+          success: false,
+          error: "इस नंबर पर प्रति घंटे की अधिकतम OTP सीमा (5 बार) समाप्त हो चुकी है। कृपया 1 घंटे बाद प्रयास करें।"
+        });
+      }
+
+      // Generate cryptographically random 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const salt = randomBytes(16).toString("hex");
+      const codeHash = createHash("sha256").update(otp + salt + cleanPhone).digest("hex");
+      const verificationId = randomUUID();
+      const expiresAt = now + (5 * 60 * 1000); // 5 minutes
+
+      const otpDoc = {
+        verificationId,
+        phone: cleanPhone,
+        countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
+        fullPhone: `91${cleanPhone}`,
+        codeHash,
+        salt,
+        expiresAt,
+        attempts: 0,
+        maxAttempts: 3,
+        status: "pending",
+        purpose,
+        email,
+        createdAt: now,
+      };
+
+      otpVerificationCache.set(verificationId, otpDoc);
+
+      if (centralDb?.useFirestore) {
+        await centralDb.writeDoc("whatsapp_otp_verifications", verificationId, otpDoc).catch((err: any) => {
+          console.warn("[WhatsApp:OTP] Firestore write warning:", err.message);
+        });
+      }
+
+      const destinationWaId = `91${cleanPhone}`;
+      const otpMessage = `🔐 *AI NEWS MAKER - WhatsApp सत्यापन OTP*\n\nआपका 6-अंकों का वेरिफिकेशन कोड है: *${otp}*\n\nयह कोड 5 मिनट के लिए वैध है। सुरक्षा कारणों से यह OTP किसी के साथ साझा न करें।\n\n— AI News Maker (ainewsmaker.online)`;
+
+      try {
+        await sendWhatsAppText(destinationWaId, otpMessage);
+        console.log(`[WhatsApp:OTP] OTP sent successfully to ${maskWaId(destinationWaId)}`);
+        
+        rateData.lastSent = now;
+        rateData.countInHour += 1;
+        otpRateLimits.set(cleanPhone, rateData);
+
+        return res.json({
+          success: true,
+          verificationId,
+          phone: cleanPhone,
+          expiresAt,
+          cooldownSeconds: 60,
+          message: "आपके WhatsApp पर 6-अंकों का OTP भेज दिया गया है।"
+        });
+      } catch (sendErr: any) {
+        const errMsg = String(sendErr?.message || sendErr);
+        console.error(`[WhatsApp:OTP] Failed to send OTP to ${maskWaId(destinationWaId)}:`, errMsg);
+        
+        if (errMsg.includes("Authentication Error") || errMsg.includes("WHATSAPP_API_ERROR") || errMsg.includes("401") || errMsg.includes("190")) {
+          return res.status(503).json({
+            success: false,
+            error: "व्हाट्सएप्प क्लाउड API ऑथेंटिकेशन त्रुटि (Meta Access Token Expired). कृपया एडमिन से संपर्क करें।",
+            errorCode: "WHATSAPP_TOKEN_EXPIRED",
+            verificationId
+          });
+        }
+
+        return res.status(500).json({
+          success: false,
+          error: `WhatsApp OTP भेजने में त्रुटि: ${errMsg.slice(0, 100)}`
+        });
+      }
+    } catch (err: any) {
+      console.error("[WhatsApp:OTP] Unhandled error in send-whatsapp-otp:", err);
+      return res.status(500).json({
+        success: false,
+        error: "सर्वर पर OTP भेजने में आंतरिक समस्या आई।"
+      });
+    }
+  });
+
+  app.post("/api/auth/verify-whatsapp-otp", async (req: any, res: any) => {
+    try {
+      const verificationId = String(req.body?.verificationId || "").trim();
+      const rawPhone = String(req.body?.phone || "").trim();
+      const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+      const otp = String(req.body?.otp || "").trim();
+      const email = String(req.body?.email || "").toLowerCase().trim();
+
+      if (!verificationId || !cleanPhone || !otp) {
+        return res.status(400).json({
+          success: false,
+          error: "verificationId, phone और OTP अनिवार्य हैं।"
+        });
+      }
+
+      if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
+        return res.status(400).json({
+          success: false,
+          error: "कृपया सही 6-अंकों का OTP दर्ज करें।"
+        });
+      }
+
+      let record = otpVerificationCache.get(verificationId);
+      if (!record && centralDb?.useFirestore) {
+        const fsDoc = await centralDb.readDoc("whatsapp_otp_verifications", verificationId);
+        if (fsDoc?.success && fsDoc?.data) {
+          record = fsDoc.data;
+        }
+      }
+
+      if (!record) {
+        return res.status(404).json({
+          success: false,
+          error: "अमान्य अथवा समाप्त हो चुका वेरिफिकेशन अनुरोध। कृपया नया OTP मंगाएँ।"
+        });
+      }
+
+      if (record.status === "verified") {
+        return res.status(400).json({
+          success: false,
+          error: "यह OTP पहले ही उपयोग किया जा चुका है।"
+        });
+      }
+
+      if (record.phone !== cleanPhone) {
+        return res.status(400).json({
+          success: false,
+          error: "यह OTP दर्ज किए गए नंबर से मेल नहीं खाता।"
+        });
+      }
+
+      const now = Date.now();
+      if (now > record.expiresAt) {
+        record.status = "expired";
+        otpVerificationCache.set(verificationId, record);
+        if (centralDb?.useFirestore) {
+          await centralDb.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => undefined);
+        }
+        return res.status(400).json({
+          success: false,
+          error: "OTP की वैधता (5 मिनट) समाप्त हो चुकी है। कृपया नया OTP मंगाएँ।"
+        });
+      }
+
+      if (record.attempts >= record.maxAttempts) {
+        record.status = "max_attempts_exceeded";
+        otpVerificationCache.set(verificationId, record);
+        if (centralDb?.useFirestore) {
+          await centralDb.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => undefined);
+        }
+        return res.status(400).json({
+          success: false,
+          error: "अधिकतम गलत प्रयास सीमा (3 बार) समाप्त हो चुकी है। कृपया नया OTP मंगाएँ।"
+        });
+      }
+
+      const candidateHash = createHash("sha256").update(otp + record.salt + cleanPhone).digest("hex");
+      const isMatch = candidateHash === record.codeHash;
+
+      if (!isMatch) {
+        record.attempts += 1;
+        otpVerificationCache.set(verificationId, record);
+        if (centralDb?.useFirestore) {
+          await centralDb.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => undefined);
+        }
+        const remaining = record.maxAttempts - record.attempts;
+        return res.status(400).json({
+          success: false,
+          error: remaining > 0 ? `गलत OTP दर्ज किया गया है। शेष प्रयास: ${remaining}` : "अधिकतम गलत प्रयास सीमा समाप्त हो गई है। कृपया नया OTP मंगाएँ।",
+          remainingAttempts: Math.max(0, remaining)
+        });
+      }
+
+      record.status = "verified";
+      record.verifiedAt = now;
+      otpVerificationCache.set(verificationId, record);
+      if (centralDb?.useFirestore) {
+        await centralDb.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => undefined);
+      }
+
+      const verificationToken = createHash("sha256").update(`${verificationId}:${cleanPhone}:${record.salt}:${now}`).digest("hex");
+
+      if (email && centralDb?.useFirestore) {
+        try {
+          const userDocRes = await centralDb.readDoc("users", email);
+          const uData = userDocRes?.data || {};
+          const updatedUser = {
+            ...uData,
+            email,
+            primaryNumber: cleanPhone,
+            whatsappNumber: cleanPhone,
+            whatsappVerified: true,
+            whatsappVerifiedAt: now,
+            whatsappVerificationMethod: "whatsapp_otp",
+            countryCode: "+91",
+            updatedAt: now
+          };
+          await centralDb.writeDoc("users", email, updatedUser);
+          if (centralDb.cache?.users) {
+            centralDb.cache.users.set(email, updatedUser);
+          }
+          console.log(`[WhatsApp:OTP] User ${email} verified and updated with primaryNumber: ${cleanPhone}`);
+        } catch (uErr: any) {
+          console.warn(`[WhatsApp:OTP] Warning updating user record for ${email}:`, uErr.message);
+        }
+      }
+
+      return res.json({
+        success: true,
+        verified: true,
+        phone: cleanPhone,
+        verificationToken,
+        verifiedAt: now,
+        message: "✅ WhatsApp नंबर सफलतापूर्वक सत्यापित हो गया है।"
+      });
+    } catch (err: any) {
+      console.error("[WhatsApp:OTP] Unhandled error in verify-whatsapp-otp:", err);
+      return res.status(500).json({
+        success: false,
+        error: "सर्वर पर OTP सत्यापन में आंतरिक समस्या आई।"
+      });
+    }
+  });
+
+  app.get("/api/whatsapp/diagnostic", async (req: any, res: any) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const hasAppSecret = Boolean((process.env.META_APP_SECRET || "").trim());
+    const hasVerifyToken = Boolean((process.env.META_WEBHOOK_VERIFY_TOKEN || "").trim());
+    const hasGeminiKey = Boolean((process.env.GEMINI_API_KEY || "").trim());
+
+    let metaApiStatus: any = { ok: false };
+    if (token) {
+      try {
+        const resp = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}?access_token=${token}`);
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+          metaApiStatus = { ok: true, id: data.id, verified_name: data.verified_name, display_phone_number: data.display_phone_number };
+        } else {
+          metaApiStatus = { ok: false, status: resp.status, error: data?.error?.message, type: data?.error?.type, code: data?.error?.code, subcode: data?.error?.error_subcode };
+        }
+      } catch (e: any) {
+        metaApiStatus = { ok: false, error: e.message };
+      }
+    } else {
+      metaApiStatus = { ok: false, error: "WHATSAPP_ACCESS_TOKEN is empty" };
+    }
+
+    let kbCount = 0;
+    if (centralDb?.useFirestore) {
+      try {
+        const kbDocs = await centralDb.listDocs("whatsapp_knowledge_base", 50);
+        kbCount = (kbDocs?.documents || []).length;
+      } catch {}
+    }
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      environment: {
+        hasAccessToken: Boolean(token),
+        tokenPrefix: token ? `${token.slice(0, 15)}...` : "NONE",
+        phoneNumberId,
+        version,
+        hasAppSecret,
+        hasVerifyToken,
+        hasGeminiKey,
+        firestoreConnected: Boolean(centralDb?.useFirestore),
+        knowledgeBaseCount: kbCount
+      },
+      metaApiStatus
+    });
   });
 }

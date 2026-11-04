@@ -912,6 +912,121 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [userPayments, setUserPayments] = useState<any[]>([]);
   const [isLoadingUserPayments, setIsLoadingUserPayments] = useState(false);
 
+  // Change WhatsApp Primary Number Modal State
+  const [isChangeNumberOpen, setIsChangeNumberOpen] = useState(false);
+  const [newWhatsappNumber, setNewWhatsappNumber] = useState('');
+  const [changeNumberOtp, setChangeNumberOtp] = useState('');
+  const [changeNumberVerificationId, setChangeNumberVerificationId] = useState('');
+  const [isSendingChangeOtp, setIsSendingChangeOtp] = useState(false);
+  const [isVerifyingChangeOtp, setIsVerifyingChangeOtp] = useState(false);
+  const [changeOtpSent, setChangeOtpSent] = useState(false);
+  const [changeOtpCooldown, setChangeOtpCooldown] = useState(0);
+  const [changeOtpStatusMsg, setChangeOtpStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (changeOtpCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setChangeOtpCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [changeOtpCooldown]);
+
+  const handleSendChangeNumberOtp = async () => {
+    setChangeOtpStatusMsg(null);
+    const cleanDigits = newWhatsappNumber.replace(/\D/g, '').slice(-10);
+    if (cleanDigits.length !== 10) {
+      setChangeOtpStatusMsg({ type: 'error', text: 'कृपया नया वैध 10-अंकों का WhatsApp नंबर दर्ज करें।' });
+      return;
+    }
+    const currentClean = (channelProfile.whatsappNumber || channelProfile.mobileNumber || subscription.primaryMobile || '').replace(/\D/g, '').slice(-10);
+    if (cleanDigits === currentClean) {
+      setChangeOtpStatusMsg({ type: 'error', text: 'यह नंबर पहले से ही आपका प्राइमरी नंबर है।' });
+      return;
+    }
+    setIsSendingChangeOtp(true);
+    try {
+      const activeEmail = (currentUser?.email || '').toLowerCase().trim();
+      const res = await fetch(getApiUrl('/api/auth/send-whatsapp-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: cleanDigits,
+          countryCode: '+91',
+          purpose: 'change_number',
+          email: activeEmail,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setChangeNumberVerificationId(data.verificationId);
+        setChangeOtpSent(true);
+        setChangeOtpCooldown(data.cooldownSeconds || 60);
+        setChangeOtpStatusMsg({ type: 'success', text: '✅ नए नंबर पर 6-अंकों का WhatsApp OTP भेज दिया गया है।' });
+      } else {
+        const errorText = data.error || 'WhatsApp OTP भेजने में विफल।';
+        setChangeOtpStatusMsg({ type: 'error', text: `⚠️ ${errorText}` });
+      }
+    } catch (err: any) {
+      setChangeOtpStatusMsg({ type: 'error', text: `⚠️ कनेक्शन त्रुटि: ${err.message || 'OTP भेजा नहीं जा सका।'}` });
+    } finally {
+      setIsSendingChangeOtp(false);
+    }
+  };
+
+  const handleVerifyChangeNumberOtp = async () => {
+    setChangeOtpStatusMsg(null);
+    const cleanDigits = newWhatsappNumber.replace(/\D/g, '').slice(-10);
+    const cleanOtp = changeNumberOtp.trim();
+    if (!changeNumberVerificationId) {
+      setChangeOtpStatusMsg({ type: 'error', text: 'कृपया पहले OTP भेजें।' });
+      return;
+    }
+    if (cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+      setChangeOtpStatusMsg({ type: 'error', text: 'कृपया 6-अंकों का सही OTP दर्ज करें।' });
+      return;
+    }
+    setIsVerifyingChangeOtp(true);
+    try {
+      const activeEmail = (currentUser?.email || '').toLowerCase().trim();
+      const res = await fetch(getApiUrl('/api/auth/verify-whatsapp-otp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          verificationId: changeNumberVerificationId,
+          phone: cleanDigits,
+          otp: cleanOtp,
+          email: activeEmail,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.verified) {
+        savePrimaryMobileNumber(cleanDigits);
+        setChannelProfile((prev) => ({
+          ...prev,
+          whatsappNumber: cleanDigits,
+          mobileNumber: cleanDigits,
+          whatsappVerified: true,
+        }));
+        setSubscription(getUserSubscription());
+        setChangeOtpStatusMsg({ type: 'success', text: '🎉 बधाई! आपका नया प्राइमरी WhatsApp नंबर सफलतापूर्वक अपडेट हो गया है।' });
+        setTimeout(() => {
+          setIsChangeNumberOpen(false);
+          setNewWhatsappNumber('');
+          setChangeNumberOtp('');
+          setChangeOtpSent(false);
+          setChangeOtpStatusMsg(null);
+        }, 2000);
+      } else {
+        const errorText = data.error || 'अमान्य OTP।';
+        setChangeOtpStatusMsg({ type: 'error', text: `⚠️ ${errorText}` });
+      }
+    } catch (err: any) {
+      setChangeOtpStatusMsg({ type: 'error', text: `⚠️ सत्यापन त्रुटि: ${err.message || 'OTP सत्यापित नहीं हो सका।'}` });
+    } finally {
+      setIsVerifyingChangeOtp(false);
+    }
+  };
+
   useEffect(() => {
     const email = (currentUser?.email || '').trim().toLowerCase();
     if (!email) return;
@@ -2876,39 +2991,72 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Social Details: WhatsApp Number & Website (Primary Mobile is locked exclusively at the top of the profile) */}
+              {/* Social Details: WhatsApp Number & Website (Primary WhatsApp is verified and locked) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                      <span className="text-emerald-400 font-bold">📱 WhatsApp नंबर (Social Usernames / फुटर)</span>
+                      <span className="text-emerald-400 font-bold">📱 WhatsApp नंबर (प्राइमरी नंबर)</span>
                     </label>
-                    <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={channelProfile.showMobileNumber}
-                        onChange={(e) =>
-                          setChannelProfile((p) => ({
-                            ...p,
-                            showMobileNumber: e.target.checked,
-                          }))
-                        }
-                        className="rounded accent-emerald-500"
-                      />
-                      <span>फुटर में दिखाएं</span>
-                    </label>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={channelProfile.showMobileNumber}
+                          onChange={(e) =>
+                            setChannelProfile((p) => ({
+                              ...p,
+                              showMobileNumber: e.target.checked,
+                            }))
+                          }
+                          className="rounded accent-emerald-500"
+                        />
+                        <span>फुटर में दिखाएं</span>
+                      </label>
+                      <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(channelProfile.showWhatsappOnVideos)}
+                          onChange={(e) =>
+                            setChannelProfile((p) => ({
+                              ...p,
+                              showWhatsappOnVideos: e.target.checked,
+                            }))
+                          }
+                          className="rounded accent-emerald-500"
+                        />
+                        <span>वीडियो में दिखाएं</span>
+                      </label>
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={channelProfile.whatsappNumber || channelProfile.mobileNumber || subscription.primaryMobile || ''}
-                    onChange={(e) =>
-                      setChannelProfile((p) => ({ ...p, whatsappNumber: e.target.value }))
-                    }
-                    placeholder="+91 98765 43210"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-emerald-400 focus:outline-hidden font-mono"
-                  />
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Phone className="absolute left-3 top-2.5 w-4 h-4 text-emerald-400" />
+                      <input
+                        type="text"
+                        readOnly
+                        value={channelProfile.whatsappNumber || channelProfile.mobileNumber || subscription.primaryMobile || ''}
+                        placeholder="+91 98765 43210"
+                        className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-slate-300 text-xs sm:text-sm cursor-not-allowed font-mono"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsChangeNumberOpen(true);
+                        setNewWhatsappNumber('');
+                        setChangeNumberOtp('');
+                        setChangeOtpSent(false);
+                        setChangeOtpStatusMsg(null);
+                      }}
+                      className="px-3.5 py-2 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/60 rounded-xl text-xs font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1"
+                    >
+                      <Lock className="w-3 h-3 text-emerald-400" />
+                      <span>नंबर बदलें</span>
+                    </button>
+                  </div>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    * साइनअप के समय लिया गया WhatsApp नंबर यहाँ स्वतः उपलब्ध है। आप इसे कभी भी एडिट कर सकते हैं।
+                    * Primary Number = Verified WhatsApp Number। बिना OTP वेरिफिकेशन के नंबर बदला नहीं जा सकता।
                   </p>
                 </div>
 
@@ -3351,16 +3499,29 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                   )}
 
-                  {/* Primary Mobile Status - Strictly Locked & Inline with Primary Number */}
+                  {/* Primary WhatsApp Status - Strictly Verified & Locked */}
                   <div className="pt-1.5 flex items-center flex-wrap gap-2 text-xs">
                     <div className="flex items-center gap-1.5 font-mono text-emerald-400 font-bold text-xs sm:text-sm">
                       <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>प्राइमरी नंबर: +91 {subscription.primaryMobile || channelProfile.mobileNumber || '9876543210'}</span>
+                      <span>प्राइमरी WhatsApp: +91 {subscription.primaryMobile || channelProfile.whatsappNumber || channelProfile.mobileNumber || '9669802408'}</span>
                     </div>
                     <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                      <Lock className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                      <span>स्थायी लॉक</span>
+                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                      <span>सत्यापित / Locked</span>
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsChangeNumberOpen(true);
+                        setNewWhatsappNumber('');
+                        setChangeNumberOtp('');
+                        setChangeOtpSent(false);
+                        setChangeOtpStatusMsg(null);
+                      }}
+                      className="text-[10px] text-slate-300 hover:text-white underline font-semibold ml-1 cursor-pointer"
+                    >
+                      (नंबर बदलें)
+                    </button>
                   </div>
                 </div>
               </div>
@@ -4174,6 +4335,138 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           setTimeout(() => setPlanSuccessMsg(''), 6000);
         }}
       />
+
+      {/* CHANGE WHATSAPP PRIMARY NUMBER OTP MODAL */}
+      {isChangeNumberOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-black text-white">प्राइमरी WhatsApp नंबर बदलें</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChangeNumberOpen(false)}
+                className="text-slate-400 hover:text-white text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-950/50 border border-amber-500/50 rounded-xl text-xs text-amber-200">
+              ⚠️ नया WhatsApp नंबर केवल तभी सक्रिय होगा जब आप उस पर प्राप्त 6-अंकों का OTP सफलतापूर्वक सत्यापित कर लेंगे।
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  नया 10-अंकों का WhatsApp नंबर:
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-slate-300 font-mono text-xs font-bold">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={newWhatsappNumber}
+                    onChange={(e) => setNewWhatsappNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="उदा. 9876543210"
+                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-xs sm:text-sm focus:border-emerald-400 focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendChangeNumberOtp}
+                    disabled={isSendingChangeOtp || changeOtpCooldown > 0 || newWhatsappNumber.replace(/\D/g, '').length !== 10}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${
+                      isSendingChangeOtp || changeOtpCooldown > 0 || newWhatsappNumber.replace(/\D/g, '').length !== 10
+                        ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95'
+                    }`}
+                  >
+                    {isSendingChangeOtp ? (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        भेज रहे हैं...
+                      </span>
+                    ) : changeOtpCooldown > 0 ? (
+                      `पुनः भेजें (${changeOtpCooldown}s)`
+                    ) : (
+                      'OTP भेजें'
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {changeOtpSent && (
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <label className="block text-xs font-bold text-emerald-400 flex items-center justify-between">
+                    <span>नए WhatsApp पर प्राप्त 6-अंकों का OTP:</span>
+                    <span className="text-[10px] text-slate-400">वैधता: 5 मिनट</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={changeNumberOtp}
+                      onChange={(e) => setChangeNumberOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="6-अंकों का OTP"
+                      className="flex-1 px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-sm font-mono font-bold tracking-widest text-center text-white focus:border-emerald-400 focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyChangeNumberOtp}
+                      disabled={isVerifyingChangeOtp || changeNumberOtp.trim().length !== 6}
+                      className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+                        isVerifyingChangeOtp || changeNumberOtp.trim().length !== 6
+                          ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                          : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold active:scale-95'
+                      }`}
+                    >
+                      {isVerifyingChangeOtp ? (
+                        <span className="flex items-center gap-1">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          सत्यापित कर रहे हैं...
+                        </span>
+                      ) : (
+                        'सत्यापित व सेव करें'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {changeOtpStatusMsg && (
+                <div
+                  className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
+                    changeOtpStatusMsg.type === 'success'
+                      ? 'bg-emerald-950/70 border border-emerald-500/50 text-emerald-300'
+                      : 'bg-red-950/70 border border-red-500/50 text-red-300'
+                  }`}
+                >
+                  {changeOtpStatusMsg.type === 'success' ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+                  )}
+                  <span>{changeOtpStatusMsg.text}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsChangeNumberOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+              >
+                रद्द करें (Cancel)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-amber-500/50 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
