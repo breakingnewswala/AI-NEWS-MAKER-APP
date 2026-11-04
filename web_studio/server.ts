@@ -8354,7 +8354,7 @@ app.post("/api/whatsapp/link/generate-code", requireAuthMiddleware, async (req: 
 
     recentLinkCodeRequests.set(userEmail, now);
 
-    const officialNumber = process.env.WHATSAPP_DISPLAY_NUMBER || "+91 9669802408";
+    const officialNumber = process.env.WHATSAPP_DISPLAY_NUMBER || "+1 555-706-1955";
     return res.json({
       success: true,
       code,

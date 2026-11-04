@@ -6538,6 +6538,75 @@ function registerWhatsAppIntegration(app2, centralDb2) {
     console.log(`[WhatsApp:Outbound] WhatsApp API response received: messageId=${result?.messages?.[0]?.id || "unknown"}`);
     return result;
   };
+  const sendWhatsAppOtpMessage = async (to, otpCode, validityMinutes = 5) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const templateName = (process.env.WHATSAPP_OTP_TEMPLATE || "profile_otp").trim();
+    const templateLang = (process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US").trim();
+    const maskedTo = maskWaId(to);
+    const fallbackTextMessage = `\u{1F510} *AI NEWS MAKER - WhatsApp \u0938\u0924\u094D\u092F\u093E\u092A\u0928 OTP*
+
+\u0906\u092A\u0915\u093E 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0935\u0947\u0930\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0915\u094B\u0921 \u0939\u0948: *${otpCode}*
+
+\u092F\u0939 \u0915\u094B\u0921 ${validityMinutes} \u092E\u093F\u0928\u091F \u0915\u0947 \u0932\u093F\u090F \u0935\u0948\u0927 \u0939\u0948\u0964 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u093E\u0930\u0923\u094B\u0902 \u0938\u0947 \u092F\u0939 OTP \u0915\u093F\u0938\u0940 \u0915\u0947 \u0938\u093E\u0925 \u0938\u093E\u091D\u093E \u0928 \u0915\u0930\u0947\u0902\u0964
+
+\u2014 AI News Maker (ainewsmaker.online)`;
+    if (!token || !phoneNumberId) {
+      console.warn("[WhatsApp:OTP] Credentials missing, delegating to sendWhatsAppText to log config missing error");
+      return await sendWhatsAppText(to, fallbackTextMessage);
+    }
+    try {
+      console.log(`[WhatsApp:OTP] Attempting to send OTP via Meta template '${templateName}' (${templateLang}) to ${maskedTo}`);
+      const payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: templateLang },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: String(otpCode) }
+              ]
+            },
+            {
+              type: "button",
+              sub_type: "url",
+              index: "0",
+              parameters: [
+                { type: "text", text: String(otpCode) }
+              ]
+            }
+          ]
+        }
+      };
+      const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok && result?.messages?.[0]?.id) {
+        console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${templateName}': id=${result.messages[0].id}`);
+        return result;
+      }
+      console.warn(`[WhatsApp:OTP] Meta Template '${templateName}' request returned HTTP ${response.status}:`, JSON.stringify(result?.error || result));
+      if (response.status === 401 || result?.error?.code === 190) {
+        return await sendWhatsAppText(to, fallbackTextMessage);
+      }
+      console.log("[WhatsApp:OTP] Gracefully falling back to direct formatted text message...");
+    } catch (templateErr) {
+      console.warn("[WhatsApp:OTP] Template send threw exception:", templateErr?.message, "- falling back to direct text");
+    }
+    return await sendWhatsAppText(to, fallbackTextMessage);
+  };
   const getKnowledgeContext = async () => {
     if (!centralDb2?.useFirestore) {
       console.warn("[WhatsApp:KnowledgeBase] FIRESTORE_CONNECTION_ERROR: Firestore is disabled on centralDb");
@@ -7349,7 +7418,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
 
 \u2014 AI News Maker (ainewsmaker.online)`;
       try {
-        await sendWhatsAppText(destinationWaId, otpMessage);
+        await sendWhatsAppOtpMessage(destinationWaId, otp, 5);
         console.log(`[WhatsApp:OTP] OTP sent successfully to ${maskWaId(destinationWaId)}`);
         rateData.lastSent = now;
         rateData.countInHour += 1;
@@ -7519,6 +7588,10 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
     const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
     const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const officialSenderNumber = (process.env.WHATSAPP_PHONE_NUMBER || process.env.WHATSAPP_DISPLAY_NUMBER || "+1 555-706-1955").trim();
+    const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+    const otpTemplate = (process.env.WHATSAPP_OTP_TEMPLATE || "profile_otp").trim();
+    const otpTemplateLang = (process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US").trim();
     const hasAppSecret = Boolean((process.env.META_APP_SECRET || "").trim());
     const hasVerifyToken = Boolean((process.env.META_WEBHOOK_VERIFY_TOKEN || "").trim());
     const hasGeminiKey = Boolean((process.env.GEMINI_API_KEY || "").trim());
@@ -7548,10 +7621,18 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     }
     res.json({
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      officialSender: {
+        number: officialSenderNumber,
+        phoneNumberId,
+        wabaId,
+        otpTemplate,
+        otpTemplateLang
+      },
       environment: {
         hasAccessToken: Boolean(token),
         tokenPrefix: token ? `${token.slice(0, 15)}...` : "NONE",
         phoneNumberId,
+        wabaId,
         version,
         hasAppSecret,
         hasVerifyToken,
@@ -14340,7 +14421,7 @@ app.post("/api/whatsapp/link/generate-code", requireAuthMiddleware, async (req, 
       await centralDb.writeDoc("whatsapp_link_requests", reqDocId, linkDoc);
     }
     recentLinkCodeRequests.set(userEmail, now);
-    const officialNumber = process.env.WHATSAPP_DISPLAY_NUMBER || "+91 9669802408";
+    const officialNumber = process.env.WHATSAPP_DISPLAY_NUMBER || "+1 555-706-1955";
     return res.json({
       success: true,
       code,

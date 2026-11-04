@@ -1954,7 +1954,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         <div className="pt-2 border-t border-slate-800 space-y-2">
                           <label className="block text-xs font-bold text-emerald-400 flex items-center justify-between">
                             <span>WhatsApp पर प्राप्त 6-अंकों का OTP दर्ज करें:</span>
-                            <span className="text-[10px] text-slate-400">वैधता: 5 मिनट</span>
+                            <span className="text-[10px] text-slate-400">आधिकारिक बॉट (+1 555-706-1955) से प्राप्त | वैधता: 5 मिनट</span>
                           </label>
                           <div className="flex items-center gap-2">
                             <input

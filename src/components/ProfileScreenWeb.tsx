@@ -321,7 +321,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [waLinkLoading, setWaLinkLoading] = useState<boolean>(false);
   const [waGeneratedCode, setWaGeneratedCode] = useState<string>('');
   const [waCodeExpiresIn, setWaCodeExpiresIn] = useState<number>(0);
-  const [waOfficialNumber, setWaOfficialNumber] = useState<string>('+91 9669802408');
+  const [waOfficialNumber, setWaOfficialNumber] = useState<string>('+1 555-706-1955');
   const [waLinkMsg, setWaLinkMsg] = useState<string>('');
 
   // Fetch WhatsApp Link status on mount / email change
@@ -3246,7 +3246,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <span className="font-mono text-white font-bold">{waLinkStatus.linkedWhatsAppWaId}</span>
                     </div>
                     <span className="text-[11px] text-emerald-300/80">
-                      आधिकारिक बॉट: <a href="https://wa.me/919669802408" target="_blank" rel="noopener noreferrer" className="underline font-mono text-emerald-300">+91 9669802408</a>
+                      आधिकारिक बॉट: <a href="https://wa.me/15557061955" target="_blank" rel="noopener noreferrer" className="underline font-mono text-emerald-300">+1 555-706-1955</a>
                     </span>
                   </div>
                 ) : (
@@ -3503,7 +3503,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <div className="pt-1.5 flex items-center flex-wrap gap-2 text-xs">
                     <div className="flex items-center gap-1.5 font-mono text-emerald-400 font-bold text-xs sm:text-sm">
                       <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>प्राइमरी WhatsApp: +91 {subscription.primaryMobile || channelProfile.whatsappNumber || channelProfile.mobileNumber || '9669802408'}</span>
+                      <span>प्राइमरी WhatsApp: {subscription.primaryMobile || channelProfile.whatsappNumber || channelProfile.mobileNumber ? `+91 ${subscription.primaryMobile || channelProfile.whatsappNumber || channelProfile.mobileNumber}` : 'दर्ज नहीं (Not Set)'}</span>
                     </div>
                     <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
                       <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
@@ -4403,7 +4403,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 <div className="pt-2 border-t border-slate-800 space-y-2">
                   <label className="block text-xs font-bold text-emerald-400 flex items-center justify-between">
                     <span>नए WhatsApp पर प्राप्त 6-अंकों का OTP:</span>
-                    <span className="text-[10px] text-slate-400">वैधता: 5 मिनट</span>
+                    <span className="text-[10px] text-slate-400">आधिकारिक बॉट (+1 555-706-1955) से प्राप्त | वैधता: 5 मिनट</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <input

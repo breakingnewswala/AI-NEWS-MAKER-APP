@@ -142,6 +142,78 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
     return result;
   };
 
+  const sendWhatsAppOtpMessage = async (to: string, otpCode: string, validityMinutes: number = 5) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const templateName = (process.env.WHATSAPP_OTP_TEMPLATE || "profile_otp").trim();
+    const templateLang = (process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US").trim();
+    const maskedTo = maskWaId(to);
+
+    const fallbackTextMessage = `🔐 *AI NEWS MAKER - WhatsApp सत्यापन OTP*\n\nआपका 6-अंकों का वेरिफिकेशन कोड है: *${otpCode}*\n\nयह कोड ${validityMinutes} मिनट के लिए वैध है। सुरक्षा कारणों से यह OTP किसी के साथ साझा न करें।\n\n— AI News Maker (ainewsmaker.online)`;
+
+    if (!token || !phoneNumberId) {
+      console.warn("[WhatsApp:OTP] Credentials missing, delegating to sendWhatsAppText to log config missing error");
+      return await sendWhatsAppText(to, fallbackTextMessage);
+    }
+
+    // Attempt sending via Meta Authentication Template 'profile_otp'
+    try {
+      console.log(`[WhatsApp:OTP] Attempting to send OTP via Meta template '${templateName}' (${templateLang}) to ${maskedTo}`);
+      const payload: any = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: templateLang },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: String(otpCode) },
+              ],
+            },
+            {
+              type: "button",
+              sub_type: "url",
+              index: "0",
+              parameters: [
+                { type: "text", text: String(otpCode) }
+              ]
+            }
+          ]
+        }
+      };
+
+      const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (response.ok && result?.messages?.[0]?.id) {
+        console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${templateName}': id=${result.messages[0].id}`);
+        return result;
+      }
+
+      console.warn(`[WhatsApp:OTP] Meta Template '${templateName}' request returned HTTP ${response.status}:`, JSON.stringify(result?.error || result));
+      if (response.status === 401 || (result as any)?.error?.code === 190) {
+        return await sendWhatsAppText(to, fallbackTextMessage);
+      }
+      console.log("[WhatsApp:OTP] Gracefully falling back to direct formatted text message...");
+    } catch (templateErr: any) {
+      console.warn("[WhatsApp:OTP] Template send threw exception:", templateErr?.message, "- falling back to direct text");
+    }
+
+    return await sendWhatsAppText(to, fallbackTextMessage);
+  };
+
   const getKnowledgeContext = async (): Promise<{ context: string; count: number; errorCategory?: string }> => {
     if (!centralDb?.useFirestore) {
       console.warn("[WhatsApp:KnowledgeBase] FIRESTORE_CONNECTION_ERROR: Firestore is disabled on centralDb");
@@ -967,7 +1039,7 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
       const otpMessage = `🔐 *AI NEWS MAKER - WhatsApp सत्यापन OTP*\n\nआपका 6-अंकों का वेरिफिकेशन कोड है: *${otp}*\n\nयह कोड 5 मिनट के लिए वैध है। सुरक्षा कारणों से यह OTP किसी के साथ साझा न करें।\n\n— AI News Maker (ainewsmaker.online)`;
 
       try {
-        await sendWhatsAppText(destinationWaId, otpMessage);
+        await sendWhatsAppOtpMessage(destinationWaId, otp, 5);
         console.log(`[WhatsApp:OTP] OTP sent successfully to ${maskWaId(destinationWaId)}`);
         
         rateData.lastSent = now;
@@ -1157,6 +1229,10 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
     const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
     const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
     const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const officialSenderNumber = (process.env.WHATSAPP_PHONE_NUMBER || process.env.WHATSAPP_DISPLAY_NUMBER || "+1 555-706-1955").trim();
+    const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+    const otpTemplate = (process.env.WHATSAPP_OTP_TEMPLATE || "profile_otp").trim();
+    const otpTemplateLang = (process.env.WHATSAPP_OTP_TEMPLATE_LANG || "en_US").trim();
     const hasAppSecret = Boolean((process.env.META_APP_SECRET || "").trim());
     const hasVerifyToken = Boolean((process.env.META_WEBHOOK_VERIFY_TOKEN || "").trim());
     const hasGeminiKey = Boolean((process.env.GEMINI_API_KEY || "").trim());
@@ -1188,10 +1264,18 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
 
     res.json({
       timestamp: new Date().toISOString(),
+      officialSender: {
+        number: officialSenderNumber,
+        phoneNumberId,
+        wabaId,
+        otpTemplate,
+        otpTemplateLang
+      },
       environment: {
         hasAccessToken: Boolean(token),
         tokenPrefix: token ? `${token.slice(0, 15)}...` : "NONE",
         phoneNumberId,
+        wabaId,
         version,
         hasAppSecret,
         hasVerifyToken,

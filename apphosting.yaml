@@ -63,6 +63,26 @@ env:
     value: "1474022642460639"
     availability:
       - RUNTIME
+  - variable: WHATSAPP_PHONE_NUMBER
+    value: "+1 555-706-1955"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_DISPLAY_NUMBER
+    value: "+1 555-706-1955"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_BUSINESS_ACCOUNT_ID
+    value: "1136242015583003"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_OTP_TEMPLATE
+    value: "profile_otp"
+    availability:
+      - RUNTIME
+  - variable: WHATSAPP_OTP_TEMPLATE_LANG
+    value: "en_US"
+    availability:
+      - RUNTIME
   - variable: WHATSAPP_GRAPH_API_VERSION
     value: "v21.0"
     availability:
