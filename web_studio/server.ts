@@ -5247,78 +5247,7 @@ function reconcileAllUsers() {
     });
 
     // 4. Guaranteed Active Regular Users (Only if not tombstoned / deleted)
-    const seedUser1 = 'khabridasnews@gmail.com';
-    if (!isUserTombstoned(seedUser1) && !userMap.has(seedUser1)) {
-      const p1 = profiles[seedUser1];
-      userMap.set(seedUser1, {
-        userId: p1?.userId || 'usr_khabridas_101',
-        email: seedUser1,
-        name: p1?.fullName || 'खबरिदास न्यूज़ (Khabridas News)',
-        fullName: p1?.fullName || 'खबरिदास न्यूज़ (Khabridas News)',
-        username: p1?.username || 'khabridasnews',
-        role: 'user',
-        tier: 'basic',
-        planName: 'BASIC',
-        channelName: p1?.channelNameHi || 'खबरिदास न्यूज़',
-        channelNameHi: p1?.channelNameHi || 'खबरिदास न्यूज़',
-        channelNameEn: p1?.channelNameEn || 'Khabridas News',
-        channelLogoUrl: p1?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoPngUrl: p1?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoGifUrl: '',
-        channelLogoType: 'png',
-        mobile: p1?.mobileNumber || '9876543210',
-        mobileNumber: p1?.mobileNumber || '9876543210',
-        district: p1?.district || 'ग्वालियर',
-        websiteUrl: p1?.websiteUrl || 'https://khabridasnews.com',
-        isBlocked: false,
-        isProfileLocked: false,
-        createdAt: 1791892712618,
-        trialStartedAt: 1791892712618,
-        trialEndsAt: 1792497512618,
-        activatedAt: 1791892712618,
-        expiresAt: 1792497512618,
-        activatedVia: 'Free 7-Day VIP Trial',
-        lastLoginAt: 1791892712618,
-      });
-    }
-
-    const seedUser2 = 'riturajtomarorchha@gmail.com';
-    if (!isUserTombstoned(seedUser2) && !userMap.has(seedUser2)) {
-      const p2 = profiles[seedUser2];
-      userMap.set(seedUser2, {
-        userId: p2?.userId || 'usr_rituraj_102',
-        email: seedUser2,
-        name: p2?.fullName || 'ऋतुराज तोमर (ओरछा)',
-        fullName: p2?.fullName || 'ऋतुराज तोमर (ओरछा)',
-        username: p2?.username || 'riturajtomarorchha',
-        role: 'reporter',
-        tier: 'advanced',
-        planName: 'ADVANCE',
-        hasActivePaidPlan: true,
-        channelName: p2?.channelNameHi || 'ओरछा बुंदेलखंड न्यूज़',
-        channelNameHi: p2?.channelNameHi || 'ओरछा बुंदेलखंड न्यूज़',
-        channelNameEn: p2?.channelNameEn || 'Orchha Bundelkhand News',
-        channelLogoUrl: p2?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoPngUrl: p2?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoGifUrl: '',
-        channelLogoType: 'png',
-        mobile: p2?.mobileNumber || '9425112233',
-        mobileNumber: p2?.mobileNumber || '9425112233',
-        district: p2?.district || 'ओरछा / निवाड़ी',
-        websiteUrl: p2?.websiteUrl || 'ainewsmaker.online',
-        isBlocked: false,
-        isProfileLocked: false,
-        createdAt: 1791810000000,
-        trialStartedAt: 1791810000000,
-        trialEndsAt: 1792497512618,
-        activatedAt: 1793630565084,
-        expiresAt: 1825166565084,
-        activatedVia: 'cashfree',
-        lastLoginAt: Date.now(),
-        isTrialExpired: false,
-      });
-    }
-
+    // (Target test users khabridasnews and riturajtomarorchha removed for clean registration/setup)
     const seedUser3 = 'digital.anmolsandesh@gmail.com';
     if (!isUserTombstoned(seedUser3) && !userMap.has(seedUser3)) {
       const p3 = profiles[seedUser3];
