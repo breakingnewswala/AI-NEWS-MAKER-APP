@@ -13,19 +13,6 @@
     "timestamp": 1793694949424
   },
   {
-    "time": "अभी",
-    "message": "नमस्ते खबरिदास न्यूज़ (Khabridas News), आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए प्लान चुनें।",
-    "id": "notif_exp_user_usr_khabridas_101_1792497512618",
-    "updatedAt": 1793723955119,
-    "docId": "notif_exp_user_usr_khabridas_101_1792497512618",
-    "linkTab": "profile",
-    "timestamp": 1792544404239,
-    "unread": true,
-    "targetUserEmail": "khabridasnews@gmail.com",
-    "type": "plan",
-    "title": "🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है"
-  },
-  {
     "linkTab": "profile",
     "updatedAt": 1793723955119,
     "message": "नमस्ते Anmol Sandesh, आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए प्लान चुनें।",
@@ -50,45 +37,6 @@
     "timestamp": 1793024283940,
     "time": "अभी",
     "unread": false
-  },
-  {
-    "time": "अभी",
-    "message": "उपयोगकर्ता 'ऋतुराज तोमर (ओरछा)' (riturajtomarorchha@gmail.com) का 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है और प्लान-प्रतिबंधित सुविधाएं लॉक कर दी गई हैं।",
-    "linkTab": "profile",
-    "id": "notif_exp_admin_usr_rituraj_102_1792497512618",
-    "updatedAt": 1793723955119,
-    "title": "🚫 ट्रायल समाप्त: ऋतुराज तोमर (ओरछा)",
-    "timestamp": 1792544404239,
-    "unread": false,
-    "targetUserEmail": "admin",
-    "docId": "notif_exp_admin_usr_rituraj_102_1792497512618",
-    "type": "admin"
-  },
-  {
-    "title": "🔒 7-दि���सीय फ्री ट्रायल समाप्त हो गया है",
-    "type": "plan",
-    "unread": true,
-    "updatedAt": 1793723955119,
-    "id": "notif_exp_user_usr_rituraj_102_1792497512618",
-    "linkTab": "profile",
-    "timestamp": 1792544404239,
-    "targetUserEmail": "riturajtomarorchha@gmail.com",
-    "docId": "notif_exp_user_usr_rituraj_102_1792497512618",
-    "time": "अभी",
-    "message": "नमस्ते ऋतुराज तोमर (ओरछा), आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए ���्लान चुनें।"
-  },
-  {
-    "time": "अभी",
-    "id": "notif_exp_admin_usr_khabridas_101_1792497512618",
-    "unread": false,
-    "timestamp": 1792544404239,
-    "title": "🚫 ट्रायल समाप्त: खबरिदास न्यूज़ (Khabridas News)",
-    "linkTab": "profile",
-    "docId": "notif_exp_admin_usr_khabridas_101_1792497512618",
-    "updatedAt": 1793723955119,
-    "targetUserEmail": "admin",
-    "message": "उपयोगकर्ता 'खबरिदास न्यूज़ (Khabridas News)' (khabridasnews@gmail.com) का 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है और प्लान-प्रतिबंधित सुविधाएं लॉक कर दी गई हैं।",
-    "type": "admin"
   },
   {
     "targetUserEmail": "reporter_1793391037090@testworkflow.com",

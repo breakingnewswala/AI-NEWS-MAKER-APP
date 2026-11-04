@@ -1852,6 +1852,9 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
           data.users.forEach((u: PlanUserRecord) => {
             if (u && u.email) {
               const key = u.email.toLowerCase().trim();
+              if (key === 'riturajtomarorchha@gmail.com' || key === 'khabridasnews@gmail.com' || String(u.userId || '').toLowerCase() === 'usr_rituraj_102' || String(u.userId || '').toLowerCase() === 'usr_khabridas_101') {
+                return;
+              }
               const existing = map.get(key);
               map.set(key, { ...existing, ...u });
             }
