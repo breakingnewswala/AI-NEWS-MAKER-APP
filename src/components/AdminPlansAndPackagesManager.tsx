@@ -893,7 +893,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       { id: 'p-3', name: 'एनडीटीवी (NDTV India)', url: 'https://ndtv.in', category: 'national' },
       { id: 'p-4', name: 'ज़ी न्यूज़ (Zee News)', url: 'https://zeenews.india.com', category: 'breaking' },
       { id: 'p-5', name: 'नवभारत टाइम्स (Navbharat Times)', url: 'https://navbharattimes.indiatimes.com', category: 'state' },
-      { id: 'p-6', name: 'खबरिदास न्यूज़ (Khabridas News)', url: 'https://khabridasnews.com', category: 'breaking' }
+      { id: 'p-6', name: 'अमर उजाला (Amar Ujala)', url: 'https://amarujala.com', category: 'breaking' }
     ];
   });
   const [newPortalName, setNewPortalName] = useState<string>('');

@@ -779,38 +779,6 @@ export const DEFAULT_GUARANTEED_PLAN_USERS: PlanUserRecord[] = [
     hasActivePaidPlan: true,
   },
   {
-    userId: 'usr_khabridas_101',
-    email: 'khabridasnews@gmail.com',
-    name: 'खबरिदास न्यूज़',
-    fullName: 'खबरिदास न्यूज़ (Khabridas News)',
-    username: 'khabridasnews',
-    role: 'reporter',
-    tier: 'basic',
-    planName: 'BASIC',
-    channelName: 'खबरिदास न्यूज़',
-    mobile: '9876543210',
-    mobileNumber: '9876543210',
-    isBlocked: false,
-    isLocked: false,
-    createdAt: 1791800000000,
-  },
-  {
-    userId: 'usr_rituraj_102',
-    email: 'riturajtomarorchha@gmail.com',
-    name: 'ऋतुराज तोमर',
-    fullName: 'ऋतुराज तोमर (ओरछा)',
-    username: 'riturajorchha',
-    role: 'reporter',
-    tier: 'basic',
-    planName: 'BASIC',
-    channelName: 'ऋतुराज तोमर (ओरछा)',
-    mobile: '9425112233',
-    mobileNumber: '9425112233',
-    isBlocked: false,
-    isLocked: false,
-    createdAt: 1791810000000,
-  },
-  {
     userId: 'usr_anmolsandesh_103',
     email: 'digital.anmolsandesh@gmail.com',
     name: 'Anmol Sandesh',
@@ -848,6 +816,9 @@ export function getPlanUsers(): PlanUserRecord[] {
   parsed.forEach((u) => {
     if (u && u.email) {
       const key = u.email.toLowerCase().trim();
+      if (key === 'riturajtomarorchha@gmail.com' || key === 'khabridasnews@gmail.com' || String(u.userId || '').toLowerCase() === 'usr_rituraj_102' || String(u.userId || '').toLowerCase() === 'usr_khabridas_101') {
+        return;
+      }
       if (key.includes('@test') || key.includes('user_block_') || key.includes('user_to_be_blocked') || String(u.userId || '').includes('usr_block_')) {
         return;
       }

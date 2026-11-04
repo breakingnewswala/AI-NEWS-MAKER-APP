@@ -170,6 +170,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   })();
   const isRealAdmin = isUserAdmin(effectiveUser) || isUserAdmin(currentUser);
   const isAdmin = isEffectiveAdmin(effectiveUser) || isRealAdmin;
+  const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
