@@ -132,6 +132,8 @@ export const DEFAULT_PROFILE: ChannelProfile = {
   socialLinks: DEFAULT_SOCIAL_LINKS,
   username: '',
   mobileNumber: '',
+  whatsappNumber: '',
+  whatsappDisplayNumber: '',
   showMobileNumber: true,
   websiteUrl: '',
 };
@@ -2991,95 +2993,39 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Social Details: WhatsApp Number & Website (Primary WhatsApp is verified and locked) */}
+              {/* 1. Permanent Verified Identity Number (Locked) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>प्राथमिक मोबाइल नंबर (Permanent Verified Identity)</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800 flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5 text-emerald-400" />
+                    <span>स्थायी रूप से लॉक (Locked)</span>
+                  </span>
+                </div>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-2.5 w-4 h-4 text-emerald-400" />
+                  <input
+                    type="text"
+                    readOnly
+                    value={channelProfile.whatsappNumber || channelProfile.mobileNumber || subscription.primaryMobile || ''}
+                    placeholder="+91 98765 43210"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-800 rounded-xl text-emerald-400 text-xs sm:text-sm cursor-not-allowed font-mono font-bold"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  * यह आपका स्थायी OTP-सत्यापित WhatsApp पहचान नंबर है। यह प्रोफ़ाइल से सुरक्षित और लॉक है।
+                </p>
+              </div>
+
+              {/* 2. Compact Row: Website Address & WhatsApp Display Number */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                      <span className="text-emerald-400 font-bold">📱 WhatsApp नंबर (प्राइमरी नंबर)</span>
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={channelProfile.showMobileNumber}
-                          onChange={(e) =>
-                            setChannelProfile((p) => ({
-                              ...p,
-                              showMobileNumber: e.target.checked,
-                            }))
-                          }
-                          className="rounded accent-emerald-500"
-                        />
-                        <span>फुटर में दिखाएं</span>
-                      </label>
-                      <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(channelProfile.showWhatsappOnVideos)}
-                          onChange={(e) =>
-                            setChannelProfile((p) => ({
-                              ...p,
-                              showWhatsappOnVideos: e.target.checked,
-                            }))
-                          }
-                          className="rounded accent-emerald-500"
-                        />
-                        <span>वीडियो में दिखाएं</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Phone className="absolute left-3 top-2.5 w-4 h-4 text-emerald-400" />
-                      <input
-                        type="text"
-                        readOnly
-                        value={channelProfile.whatsappNumber || channelProfile.mobileNumber || subscription.primaryMobile || ''}
-                        placeholder="+91 98765 43210"
-                        className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-slate-300 text-xs sm:text-sm cursor-not-allowed font-mono"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsChangeNumberOpen(true);
-                        setNewWhatsappNumber('');
-                        setChangeNumberOtp('');
-                        setChangeOtpSent(false);
-                        setChangeOtpStatusMsg(null);
-                      }}
-                      className="px-3.5 py-2 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/60 rounded-xl text-xs font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1"
-                    >
-                      <Lock className="w-3 h-3 text-emerald-400" />
-                      <span>नंबर बदलें</span>
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    * Primary Number = Verified WhatsApp Number। बिना OTP वेरिफिकेशन के नंबर बदला नहीं जा सकता।
-                  </p>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-300">
-                      🌐 वेबसाइट का पता (Website Address)
-                    </label>
-                    <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={channelProfile.showWebsite !== false}
-                        onChange={(e) =>
-                          setChannelProfile((p) => ({
-                            ...p,
-                            showWebsite: e.target.checked,
-                          }))
-                        }
-                        className="rounded accent-sky-500"
-                      />
-                      <span>फुटर में दिखाएं</span>
-                    </label>
-                  </div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    🌐 वेबसाइट का पता (Website Address)
+                  </label>
                   <input
                     type="text"
                     value={channelProfile.websiteUrl}
@@ -3090,208 +3036,30 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono"
                   />
                 </div>
-              </div>
 
-              {/* MASTER ADMIN & USER SOCIAL MEDIA PROFILE LINKS MANAGER (Task 3) */}
-              <div className="pt-3 pb-2 border-t border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                    <span className="text-amber-400">🔗</span>
-                    <span>सोशल मीडिया प्रोफ़ाइल लिंक्स (Social Media Profile Links)</span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    💬 WhatsApp नंबर (फुटर डिस्प्ले / Footer Display)
                   </label>
-                  <span className="text-[10px] text-amber-300 font-semibold bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/80">
-                    * LinkedIn व X (Twitter) सुरक्षित सेविंग
-                  </span>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-2.5 w-4 h-4 text-emerald-400" />
+                    <input
+                      type="text"
+                      value={channelProfile.whatsappDisplayNumber !== undefined ? channelProfile.whatsappDisplayNumber : (channelProfile.whatsappNumber || channelProfile.mobileNumber || '')}
+                      onChange={(e) =>
+                        setChannelProfile((p) => ({
+                          ...p,
+                          whatsappDisplayNumber: e.target.value,
+                        }))
+                      }
+                      placeholder="उदा. 9876543210"
+                      className="w-full pl-9 pr-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-emerald-400 focus:outline-hidden font-mono"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    * ग्राफिक्स व वीडियो के फुटर में प्रदर्शित होने वाला नंबर। इसे स्वतंत्र रूप से बदल सकते हैं।
+                  </p>
                 </div>
-
-                {/* Platform Selection Tabs */}
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: 'linkedin', label: 'LinkedIn', icon: '💼', placeholder: 'https://linkedin.com/in/username' },
-                    { id: 'twitter', label: 'X (Twitter)', icon: '𝕏', placeholder: 'https://x.com/username' },
-                    { id: 'youtube', label: 'YouTube', icon: '▶', placeholder: 'https://youtube.com/@channel' },
-                    { id: 'facebook', label: 'Facebook', icon: '📘', placeholder: 'https://facebook.com/page' },
-                    { id: 'instagram', label: 'Instagram', icon: '📷', placeholder: 'https://instagram.com/handle' },
-                  ].map((plat) => {
-                    const isSelected = selectedSocialPlatform === plat.id;
-                    const hasSavedLink = Boolean(channelProfile?.socialLinks?.[plat.id as any]);
-                    return (
-                      <button
-                        key={plat.id}
-                        type="button"
-                        onClick={() => setSelectedSocialPlatform(plat.id as any)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 border-amber-400 shadow-md ring-1 ring-amber-400/50'
-                            : hasSavedLink
-                            ? 'bg-slate-900 border-amber-500/40 text-amber-300 hover:border-amber-400'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <span>{plat.icon}</span>
-                        <span>{plat.label}</span>
-                        {hasSavedLink && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="सहेजा हुआ लिंक सक्रिय है" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* URL Input & Dedicated Active Save Button */}
-                <div className="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={socialLinkInput}
-                        onChange={(e) => setSocialLinkInput(e.target.value)}
-                        placeholder={
-                          selectedSocialPlatform === 'linkedin'
-                            ? 'https://linkedin.com/in/username या profile link'
-                            : selectedSocialPlatform === 'twitter'
-                            ? 'https://x.com/username या @handle'
-                            : 'https://...'
-                        }
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleSaveSocialLink(selectedSocialPlatform)}
-                      disabled={!socialLinkInput.trim() && !channelProfile?.socialLinks?.[selectedSocialPlatform]}
-                      className={`px-4 py-2 font-black text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5 ${
-                        (!socialLinkInput.trim() && !channelProfile?.socialLinks?.[selectedSocialPlatform])
-                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                          : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 cursor-pointer shadow-amber-500/20 active:scale-95'
-                      }`}
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>{selectedSocialPlatform === 'twitter' ? 'X लिंक सेव करें' : selectedSocialPlatform === 'linkedin' ? 'LinkedIn सेव करें' : 'लिंक सेव करें'}</span>
-                    </button>
-                  </div>
-
-                  {/* Feedback Messages */}
-                  {socialLinkSuccessMsg && (
-                    <p className="text-[11px] text-emerald-400 font-bold animate-in fade-in">
-                      {socialLinkSuccessMsg}
-                    </p>
-                  )}
-                  {socialLinkErrorMsg && (
-                    <p className="text-[11px] text-rose-400 font-bold animate-in fade-in">
-                      {socialLinkErrorMsg}
-                    </p>
-                  )}
-
-                  {/* Active Saved Link Summary Pills */}
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <span className="text-[10px] text-slate-400">वर्तमान सहेजे गए लिंक्स:</span>
-                    {channelProfile?.socialLinks?.linkedin && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-950/60 border border-blue-500/40 text-blue-300 font-mono truncate max-w-[200px]" title={channelProfile.socialLinks.linkedin}>
-                        💼 LinkedIn: {channelProfile.socialLinks.linkedin}
-                      </span>
-                    )}
-                    {channelProfile?.socialLinks?.twitter && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-slate-200 font-mono truncate max-w-[200px]" title={channelProfile.socialLinks.twitter}>
-                        𝕏 X: {channelProfile.socialLinks.twitter}
-                      </span>
-                    )}
-                    {!channelProfile?.socialLinks?.linkedin && !channelProfile?.socialLinks?.twitter && (
-                      <span className="text-[10px] text-slate-500 italic">कोई LinkedIn या X लिंक सहेजा नहीं गया है</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* WHATSAPP CUSTOMER SUPPORT ACCOUNT LINKING CARD (Task 1) */}
-              <div className="p-4 bg-slate-950/80 border border-emerald-500/40 rounded-2xl space-y-3 shadow-lg shadow-emerald-500/5">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black text-sm">
-                      💬
-                    </div>
-                    <div>
-                      <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-                        <span>WhatsApp AI ग्राहक सहायता लिंकेज</span>
-                        {waLinkStatus.isLinked ? (
-                          <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-[10px] font-black rounded-full">
-                            सत्यापित (Linked) ✅
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/50 text-amber-300 text-[10px] font-bold rounded-full">
-                            लिंक नहीं है
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-[11px] text-slate-400">
-                        अपने WhatsApp से 'मेरा प्लान', 'कोटा', 'वॉलेट' जानने हेतु अकाउंट लिंक करें।
-                      </p>
-                    </div>
-                  </div>
-
-                  {waLinkStatus.isLinked && (
-                    <button
-                      type="button"
-                      onClick={handleUnlinkWhatsApp}
-                      disabled={waLinkLoading}
-                      className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-800 text-rose-300 text-xs font-bold rounded-xl cursor-pointer transition active:scale-95"
-                    >
-                      {waLinkLoading ? 'अनलिंक हो रहा है...' : 'WhatsApp अनलिंक करें'}
-                    </button>
-                  )}
-                </div>
-
-                {waLinkStatus.isLinked ? (
-                  <div className="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-xl flex items-center justify-between gap-3 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="text-emerald-400 font-bold">लिंक्ड नंबर:</span>
-                      <span className="font-mono text-white font-bold">{waLinkStatus.linkedWhatsAppWaId}</span>
-                    </div>
-                    <span className="text-[11px] text-emerald-300/80">
-                      आधिकारिक बॉट: <a href="https://wa.me/15557061955" target="_blank" rel="noopener noreferrer" className="underline font-mono text-emerald-300">+1 555-706-1955</a>
-                    </span>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {!waGeneratedCode ? (
-                      <div>
-                        <button
-                          type="button"
-                          onClick={handleGenerateWaLinkCode}
-                          disabled={waLinkLoading}
-                          className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-2 active:scale-95"
-                        >
-                          <span>📱</span>
-                          <span>{waLinkLoading ? 'कोड तैयार हो रहा है...' : 'WhatsApp अकाउंट लिंक करें (6-अंकों का कोड)'}</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-3.5 bg-slate-900 border border-amber-500/50 rounded-xl space-y-3 animate-in fade-in">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-amber-300">आपका 6-अंकों का One-Time Linking Code:</span>
-                          <span className="text-[10px] text-slate-400 font-mono">वैधता: 10 मिनट</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="px-4 py-2 bg-slate-950 border border-amber-400 rounded-xl font-mono text-xl sm:text-2xl font-black text-amber-300 tracking-widest shadow-inner">
-                            {waGeneratedCode}
-                          </div>
-                          <a
-                            href={`https://wa.me/${waOfficialNumber.replace(/[^0-9]/g, '')}?text=${waGeneratedCode}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-lg cursor-pointer transition active:scale-95"
-                          >
-                            <span>WhatsApp पर भेजें ➔</span>
-                          </a>
-                        </div>
-                        <p className="text-[11px] text-slate-300 leading-relaxed">
-                          📌 अपने WhatsApp से हमारे आधिकारिक नंबर (<b className="font-mono text-amber-300">{waOfficialNumber}</b>) पर यह कोड भेजें। आपका अकाउंट तुरंत लिंक हो जाएगा।
-                        </p>
-                      </div>
-                    )}
-                    {waLinkMsg && (
-                      <p className="text-[11px] text-emerald-400 font-semibold">{waLinkMsg}</p>
-                    )}
-                  </div>
-                )}
               </div>
 
               {/* Social Media Icons Toggles */}
@@ -3443,8 +3211,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           const effectiveAvatarLogo =
             channelProfile.channelLogoPngUrl ||
             (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) ||
-            currentUser?.photoURL ||
-            (currentUser as any)?.avatarUrl ||
+            (currentUser as any)?.photoURL ||
+            currentUser?.avatarUrl ||
             (effectiveUser as any)?.photoURL ||
             (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : ''));
 
@@ -3509,19 +3277,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
                       <span>सत्यापित / Locked</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsChangeNumberOpen(true);
-                        setNewWhatsappNumber('');
-                        setChangeNumberOtp('');
-                        setChangeOtpSent(false);
-                        setChangeOtpStatusMsg(null);
-                      }}
-                      className="text-[10px] text-slate-300 hover:text-white underline font-semibold ml-1 cursor-pointer"
-                    >
-                      (नंबर बदलें)
-                    </button>
+
                   </div>
                 </div>
               </div>
@@ -4335,138 +4091,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           setTimeout(() => setPlanSuccessMsg(''), 6000);
         }}
       />
-
-      {/* CHANGE WHATSAPP PRIMARY NUMBER OTP MODAL */}
-      {isChangeNumberOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-sm font-black text-white">प्राइमरी WhatsApp नंबर बदलें</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsChangeNumberOpen(false)}
-                className="text-slate-400 hover:text-white text-lg p-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-3 bg-amber-950/50 border border-amber-500/50 rounded-xl text-xs text-amber-200">
-              ⚠️ नया WhatsApp नंबर केवल तभी सक्रिय होगा जब आप उस पर प्राप्त 6-अंकों का OTP सफलतापूर्वक सत्यापित कर लेंगे।
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  नया 10-अंकों का WhatsApp नंबर:
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-slate-300 font-mono text-xs font-bold">
-                    +91
-                  </span>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    value={newWhatsappNumber}
-                    onChange={(e) => setNewWhatsappNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="उदा. 9876543210"
-                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-xs sm:text-sm focus:border-emerald-400 focus:outline-hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSendChangeNumberOtp}
-                    disabled={isSendingChangeOtp || changeOtpCooldown > 0 || newWhatsappNumber.replace(/\D/g, '').length !== 10}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${
-                      isSendingChangeOtp || changeOtpCooldown > 0 || newWhatsappNumber.replace(/\D/g, '').length !== 10
-                        ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95'
-                    }`}
-                  >
-                    {isSendingChangeOtp ? (
-                      <span className="flex items-center gap-1">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        भेज रहे हैं...
-                      </span>
-                    ) : changeOtpCooldown > 0 ? (
-                      `पुनः भेजें (${changeOtpCooldown}s)`
-                    ) : (
-                      'OTP भेजें'
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {changeOtpSent && (
-                <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <label className="block text-xs font-bold text-emerald-400 flex items-center justify-between">
-                    <span>नए WhatsApp पर प्राप्त 6-अंकों का OTP:</span>
-                    <span className="text-[10px] text-slate-400">आधिकारिक बॉट (+1 555-706-1955) से प्राप्त | वैधता: 5 मिनट</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={changeNumberOtp}
-                      onChange={(e) => setChangeNumberOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="6-अंकों का OTP"
-                      className="flex-1 px-3 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-sm font-mono font-bold tracking-widest text-center text-white focus:border-emerald-400 focus:outline-hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleVerifyChangeNumberOtp}
-                      disabled={isVerifyingChangeOtp || changeNumberOtp.trim().length !== 6}
-                      className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
-                        isVerifyingChangeOtp || changeNumberOtp.trim().length !== 6
-                          ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
-                          : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold active:scale-95'
-                      }`}
-                    >
-                      {isVerifyingChangeOtp ? (
-                        <span className="flex items-center gap-1">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          सत्यापित कर रहे हैं...
-                        </span>
-                      ) : (
-                        'सत्यापित व सेव करें'
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {changeOtpStatusMsg && (
-                <div
-                  className={`p-2.5 rounded-lg text-xs flex items-center gap-2 ${
-                    changeOtpStatusMsg.type === 'success'
-                      ? 'bg-emerald-950/70 border border-emerald-500/50 text-emerald-300'
-                      : 'bg-red-950/70 border border-red-500/50 text-red-300'
-                  }`}
-                >
-                  {changeOtpStatusMsg.type === 'success' ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-                  ) : (
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-400" />
-                  )}
-                  <span>{changeOtpStatusMsg.text}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setIsChangeNumberOpen(false)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
-              >
-                रद्द करें (Cancel)
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-amber-500/50 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">

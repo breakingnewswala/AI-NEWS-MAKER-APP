@@ -1,7 +1,15 @@
 import { createHmac, createHash, timingSafeEqual, randomBytes, randomUUID } from "crypto";
 import { GoogleGenAI } from "@google/genai";
-import { CloudTasksClient } from "@google-cloud/tasks";
-import { OAuth2Client } from "google-auth-library";
+// Lazy-loaded GCP Cloud Tasks and Auth clients for resilience across dev, test, and container environments
+let CloudTasksClientClass: any = null;
+try {
+  CloudTasksClientClass = require("@google-cloud/tasks")?.CloudTasksClient || null;
+} catch {}
+
+let OAuth2ClientClass: any = null;
+try {
+  OAuth2ClientClass = require("google-auth-library")?.OAuth2Client || null;
+} catch {}
 
 /**
  * WhatsApp Cloud API webhook foundation.
@@ -106,6 +114,10 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
       throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
     }
 
+    if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Outbound:TestMode] Mock send to ${maskedTo}`);
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
+    }
     console.log(`[WhatsApp:Outbound] WhatsApp outbound request started to ${maskedTo} via Graph API ${version}`);
     let response: any;
     try {
@@ -385,6 +397,59 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
         conversationId, waId, direction: "outbound", text: handoffReply, timestamp: now, status: "sent",
       });
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+      return;
+    }
+
+    // --- USER CONSENT & ONBOARDING PREFERENCE HANDLER ---
+    const isConsent1 = /^\s*1\s*$/i.test(textBody) || /फीचर्स|अपडेट|feature|update/i.test(textBody);
+    const isConsent2 = /^\s*2\s*$/i.test(textBody) || /ब्रेकिंग|समाचार|breaking|news alert/i.test(textBody);
+    const isConsent3 = /^\s*3\s*$/i.test(textBody) || /प्रोफाइल|अकाउंट|profile|account/i.test(textBody);
+    const isConsentAll = /^\s*(सभी|all|yes|हाँ|हा|ok)\s*$/i.test(textBody);
+
+    if (isConsent1 || isConsent2 || isConsent3 || isConsentAll) {
+      console.log(`[WhatsApp:Consent] User preference selected from ${maskedWa}: ${textBody}`);
+      const updates: any = {
+        waId,
+        updatedAt: now,
+        whatsappConsentAt: now,
+        whatsappConsentSource: "whatsapp_chat",
+      };
+
+      if (isConsentAll) {
+        updates.whatsappProductUpdatesConsent = true;
+        updates.whatsappBreakingNewsConsent = true;
+        updates.whatsappProfileAssistanceEnabled = true;
+        updates.newsAlertsConsent = true;
+      } else {
+        if (isConsent1) updates.whatsappProductUpdatesConsent = true;
+        if (isConsent2) {
+          updates.whatsappBreakingNewsConsent = true;
+          updates.newsAlertsConsent = true;
+        }
+        if (isConsent3) updates.whatsappProfileAssistanceEnabled = true;
+      }
+
+      await requireWrite("whatsapp_subscribers", conversationId, updates).catch(() => {});
+
+      if (centralDb?.cache?.users) {
+        for (const [em, u] of centralDb.cache.users.entries()) {
+          const uWa = (u.whatsappNumber || u.primaryPhone || u.mobileNumber || "").replace(/\D/g, "").slice(-10);
+          const curWa = waId.replace(/\D/g, "").slice(-10);
+          if (uWa && curWa && uWa === curWa) {
+            await centralDb.writeDoc("users", em, { ...u, ...updates }).catch(() => {});
+          }
+        }
+      }
+
+      const prefAckReply = isConsentAll
+        ? "✅ धन्यवाद! आपकी सभी प्राथमिकताएँ (फीचर्स, ब्रेकिंग न्यूज़, प्रोफाइल सहायता) सफलतापूर्वक सक्रिय कर दी गई हैं। आप किसी भी समय 'STOP' लिखकर इन्हें बंद कर सकते हैं।"
+        : `✅ धन्यवाद! आपकी प्राथमिकता (${isConsent1 ? "फीचर्स अपडेट " : ""}${isConsent2 ? "ब्रेकिंग न्यूज़ " : ""}${isConsent3 ? "प्रोफाइल सहायता " : ""}) सफलतापूर्वक दर्ज कर ली गई है।`;
+
+      const sent = await sendWhatsAppText(waId, prefAckReply);
+      const outMsgId = String(sent?.messages?.[0]?.id || `pref-ack-${now}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId, waId, direction: "outbound", text: prefAckReply, timestamp: now, status: "sent",
+      }).catch(() => {});
       return;
     }
 
@@ -826,8 +891,14 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
     return res.sendStatus(403);
   });
 
-  const taskClient = new CloudTasksClient();
-  const taskOidcVerifier = new OAuth2Client();
+  let taskClient: any = null;
+  try {
+    if (CloudTasksClientClass) taskClient = new CloudTasksClientClass();
+  } catch {}
+  let taskOidcVerifier: any = null;
+  try {
+    if (OAuth2ClientClass) taskOidcVerifier = new OAuth2ClientClass();
+  } catch {}
   const taskPath = "/api/whatsapp/tasks/process";
 
   const getTaskConfig = () => {
@@ -844,7 +915,15 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
 
   const enqueueMessage = async (message: any) => {
     const config = getTaskConfig();
-    if (!config) throw new Error("WhatsApp Cloud Tasks configuration is incomplete");
+    if (!config || !taskClient) {
+      // In-process fallback when Cloud Tasks is unconfigured or unavailable
+      setImmediate(() => {
+        processInboundMessage(message).catch((err: any) => {
+          console.error("[WhatsApp:Inbound] In-process fallback error:", err?.message || err);
+        });
+      });
+      return;
+    }
     const messageId = String(message?.id || "");
     const parent = taskClient.queuePath(config.projectId, config.location, config.queue);
     const taskName = taskClient.taskPath(config.projectId, config.location, config.queue, "wa-" + sha256(messageId).slice(0, 32));
@@ -1208,6 +1287,38 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
         }
       }
 
+      // Automatically dispatch First-Time Onboarding Preferences Message to verified WhatsApp
+      try {
+        const recipientWaId = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const onboardingPrefMsg = `🙏 *नमस्कार! AI News Maker में आपका स्वागत है।*
+
+क्या आप हमारे WhatsApp AI Assistant के माध्यम से निम्न सुविधाएँ प्राप्त करना चाहेंगे?
+
+1️⃣ *AI News Maker के नए फीचर्स और लेटेस्ट अपडेट*
+2️⃣ *ताज़ा ब्रेकिंग न्यूज़ और महत्वपूर्ण समाचार*
+3️⃣ *अपनी प्रोफाइल और अकाउंट से जुड़ी जानकारी*
+4️⃣ *AI News Maker के उपयोग और सुविधाओं में सहायता*
+
+👉 *उत्तर दें:* अपनी पसंद का नंबर लिखें (उदा. *1*, *2*, *3*, *4* या सभी हेतु *सभी* / *ALL*)।
+(नोट: आप किसी भी समय 'STOP' लिखकर सूचनाएँ बंद कर सकते हैं)`;
+
+        sendWhatsAppText(recipientWaId, onboardingPrefMsg).then(async (sent) => {
+          const outMsgId = String(sent?.messages?.[0]?.id || `onb-pref-${now}`);
+          await requireWrite("whatsapp_messages", sha256(outMsgId), {
+            conversationId: sha256(recipientWaId),
+            waId: recipientWaId,
+            direction: "outbound",
+            text: onboardingPrefMsg,
+            timestamp: now,
+            status: "sent",
+          }).catch(() => {});
+        }).catch((err) => {
+          console.warn("[WhatsApp:Onboarding] Failed to send onboarding pref message:", err.message);
+        });
+      } catch (onbErr: any) {
+        console.warn("[WhatsApp:Onboarding] Non-fatal dispatch error:", onbErr.message);
+      }
+
       return res.json({
         success: true,
         verified: true,
@@ -1222,6 +1333,215 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
         success: false,
         error: "सर्वर पर OTP सत्यापन में आंतरिक समस्या आई।"
       });
+    }
+  });
+
+  // --- ONBOARDING WELCOME MESSAGE ENDPOINT ---
+  app.post("/api/whatsapp/onboarding/welcome", async (req: any, res: any) => {
+    try {
+      const rawPhone = String(req.body?.phone || req.body?.mobileNumber || "").trim();
+      const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      const userName = String(req.body?.name || req.body?.fullName || "संपादक").trim();
+
+      if (!cleanPhone) {
+        return res.status(400).json({ error: "Phone number required" });
+      }
+
+      const recipientWaId = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      const conversationId = sha256(recipientWaId);
+      const now = Date.now();
+
+      // Check if welcome message was already sent to avoid duplicate welcome messages on logins
+      if (email && centralDb?.useFirestore) {
+        const uRes = await centralDb.readDoc("users", email);
+        if (uRes?.data?.whatsappWelcomeSentAt || uRes?.data?.whatsappOnboardingStatus === "completed") {
+          return res.json({ success: true, message: "Welcome message already sent previously." });
+        }
+      }
+
+      const welcomeMsg = `🙏 *नमस्कार ${userName}!*
+
+आपकी *AI News Maker* प्रोफ़ाइल सफलतापूर्वक तैयार हो गई है। 🎉
+
+अब आप हमारे WhatsApp AI Assistant के माध्यम से:
+✨ AI News Maker की सुविधाओं की जानकारी प्राप्त कर सकते हैं।
+📊 अपनी प्रोफाइल, प्लान और कोटा से जुड़ी जानकारी पूछ सकते हैं।
+🛠️ न्यूज़ ग्राफिक व वीडियो निर्माण में सहायता प्राप्त कर सकते हैं।
+⚡ ताज़ा अपडेट और ब्रेकिंग न्यूज़ अलर्ट प्राप्त कर सकते हैं।
+
+AI News Maker परिवार में आपका हार्दिक स्वागत है!
+🌐 वेबसाइट: https://ainewsmaker.online`;
+
+      const sent = await sendWhatsAppText(recipientWaId, welcomeMsg);
+      const outMsgId = String(sent?.messages?.[0]?.id || `onb-wel-${now}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId,
+        waId: recipientWaId,
+        direction: "outbound",
+        text: welcomeMsg,
+        timestamp: now,
+        status: "sent",
+      }).catch(() => {});
+
+      if (email && centralDb?.useFirestore) {
+        await centralDb.writeDoc("users", email, {
+          whatsappWelcomeSentAt: now,
+          whatsappOnboardingStatus: "completed",
+          updatedAt: now,
+        }).catch(() => {});
+      }
+
+      return res.json({ success: true, message: "Welcome message dispatched successfully" });
+    } catch (err: any) {
+      return res.status(500).json({ error: String(err?.message || err) });
+    }
+  });
+
+  // --- ADMIN WHATSAPP NOTIFICATION CENTER CAMPAIGN ENDPOINT ---
+  app.post("/api/admin/whatsapp/campaign", async (req: any, res: any) => {
+    try {
+      const adminEmail = (req.headers["x-admin-email"] || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+      const adminRole = (req.headers["x-user-role"] || "").toString().toLowerCase().trim();
+      const isAuthAdmin = adminEmail === 'admin.ainewsmaker@gmail.com' || adminEmail === 'breakingnewswala.com@gmail.com' || adminRole === "superadmin" || adminRole === "admin" || adminEmail.includes("admin") || adminEmail.includes("breakingnewswala");
+
+      if (!isAuthAdmin) {
+        return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत एडमिन ही व्हाट्सएप नोटिफिकेशन कैंपेन चला सकते हैं।" });
+      }
+
+      const {
+        targetAudience = "all",
+        targetUserEmails = [],
+        customNumbers = [],
+        category = "Breaking News",
+        headline = "",
+        summary = "",
+        articleUrl = "",
+        customMessage = "",
+        testPhone = "",
+      } = req.body;
+
+      const now = Date.now();
+      const campaignId = `camp_${now}_${Math.random().toString(36).slice(2, 7)}`;
+
+      let finalMessage = "";
+      if (headline) finalMessage += `🚨 *${headline.trim()}*\n\n`;
+      if (summary) finalMessage += `${summary.trim()}\n\n`;
+      if (customMessage) finalMessage += `${customMessage.trim()}\n\n`;
+      if (articleUrl) finalMessage += `🔗 पूरी खबर पढ़ें: ${articleUrl.trim()}\n\n`;
+      finalMessage += `_AI News Maker (ब्रेकिंग न्यूज़ वाला) - आधिकारिक समाचार सेवा_\n_नोटिफिकेशन रोकने के लिए STOP लिखें_`;
+
+      // Test Mode
+      if (testPhone) {
+        const cleanTest = String(testPhone).replace(/\D/g, "").slice(-10);
+        const testWaId = cleanTest.length === 10 ? `91${cleanTest}` : cleanTest;
+        const testSent = await sendWhatsAppText(testWaId, `[TEST PREVIEW]\n\n${finalMessage}`);
+        return res.json({
+          success: true,
+          testMode: true,
+          deliveredTo: testWaId,
+          metaResponse: testSent,
+        });
+      }
+
+      // Resolve Recipients
+      const recipientNumbers = new Set<string>();
+
+      if (targetAudience === "custom" && Array.isArray(customNumbers)) {
+        for (const num of customNumbers) {
+          const clean = String(num || "").replace(/\D/g, "").slice(-10);
+          if (clean.length === 10) recipientNumbers.add(`91${clean}`);
+        }
+      } else {
+        const usersList: any[] = centralDb?.cache?.users
+          ? Array.from(centralDb.cache.users.values())
+          : [];
+
+        for (const u of usersList) {
+          const uEmail = (u.email || "").toLowerCase().trim();
+          const uTier = (u.tier || "basic").toLowerCase().trim();
+          const uPhone = (u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || "").replace(/\D/g, "").slice(-10);
+
+          if (!uPhone || uPhone.length !== 10) continue;
+
+          if (targetAudience === "selected") {
+            if (!targetUserEmails.includes(uEmail)) continue;
+          } else if (targetAudience !== "all") {
+            if (targetAudience === "vip" && uTier !== "ultra" && uTier !== "vip") continue;
+            else if (targetAudience !== "vip" && uTier !== targetAudience) continue;
+          }
+
+          if (category === "Breaking News" && u.whatsappBreakingNewsConsent === false) continue;
+          if (u.newsAlertsConsent === false) continue;
+
+          recipientNumbers.add(`91${uPhone}`);
+        }
+      }
+
+      const recipientsList = Array.from(recipientNumbers);
+      console.log(`[WhatsApp:Campaign] Starting campaign '${campaignId}' to ${recipientsList.length} recipients`);
+
+      let successfulDeliveries = 0;
+      let failedDeliveries = 0;
+      const failedRecipients: { phone: string; error: string }[] = [];
+
+      for (const phone of recipientsList) {
+        try {
+          const sent = await sendWhatsAppText(phone, finalMessage);
+          if (sent && (sent.messages || sent.contacts)) {
+            successfulDeliveries++;
+            const outMsgId = String(sent?.messages?.[0]?.id || `camp-out-${Date.now()}`);
+            await requireWrite("whatsapp_messages", sha256(outMsgId), {
+              conversationId: sha256(phone),
+              waId: phone,
+              direction: "outbound",
+              text: finalMessage,
+              timestamp: Date.now(),
+              status: "sent",
+              campaignId,
+            }).catch(() => {});
+          } else {
+            failedDeliveries++;
+            failedRecipients.push({ phone, error: sent?.error?.message || "Delivery rejected" });
+          }
+        } catch (mErr: any) {
+          failedDeliveries++;
+          failedRecipients.push({ phone, error: mErr.message || "Network error" });
+        }
+        await new Promise((r) => setTimeout(r, 60));
+      }
+
+      const campaignRecord = {
+        campaignId,
+        category,
+        targetAudience,
+        totalRecipients: recipientsList.length,
+        successfulDeliveries,
+        failedDeliveries,
+        failedRecipients: failedRecipients.slice(0, 50),
+        messagePreview: finalMessage.slice(0, 200),
+        createdBy: adminEmail || "admin",
+        createdAt: now,
+        sentAt: Date.now(),
+        status: "completed",
+      };
+
+      if (centralDb?.useFirestore) {
+        await centralDb.writeDoc("whatsapp_campaigns", campaignId, campaignRecord).catch(() => {});
+      }
+
+      console.log(`[WhatsApp:Campaign] Finished '${campaignId}': ${successfulDeliveries} sent, ${failedDeliveries} failed`);
+      return res.json({
+        success: true,
+        campaignId,
+        totalRecipients: recipientsList.length,
+        successfulDeliveries,
+        failedDeliveries,
+        failedRecipients,
+      });
+    } catch (err: any) {
+      console.error("[WhatsApp:Campaign] Campaign failure:", err);
+      return res.status(500).json({ error: String(err?.message || err) });
     }
   });
 

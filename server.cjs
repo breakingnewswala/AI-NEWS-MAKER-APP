@@ -6425,8 +6425,16 @@ var import_crypto2 = __toESM(require("crypto"), 1);
 // whatsapp_integration.ts
 var import_crypto = require("crypto");
 var import_genai = require("@google/genai");
-var import_tasks = require("@google-cloud/tasks");
-var import_google_auth_library = require("google-auth-library");
+var CloudTasksClientClass = null;
+try {
+  CloudTasksClientClass = require("@google-cloud/tasks")?.CloudTasksClient || null;
+} catch {
+}
+var OAuth2ClientClass = null;
+try {
+  OAuth2ClientClass = require("google-auth-library")?.OAuth2Client || null;
+} catch {
+}
 var maskWaId = (id) => {
   const str = String(id || "").trim();
   if (!str) return "[unknown]";
@@ -6504,6 +6512,10 @@ function registerWhatsAppIntegration(app2, centralDb2) {
     if (!phoneNumberId) {
       console.error("[WhatsApp:Outbound] CONFIG_MISSING: WHATSAPP_PHONE_NUMBER_ID is not configured");
       throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
+    }
+    if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Outbound:TestMode] Mock send to ${maskedTo}`);
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
     }
     console.log(`[WhatsApp:Outbound] WhatsApp outbound request started to ${maskedTo} via Graph API ${version}`);
     let response;
@@ -6773,6 +6785,57 @@ ${knowledge.slice(0, 1e3)}` };
         status: "sent"
       });
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId2}`);
+      return;
+    }
+    const isConsent1 = /^\s*1\s*$/i.test(textBody) || /फीचर्स|अपडेट|feature|update/i.test(textBody);
+    const isConsent2 = /^\s*2\s*$/i.test(textBody) || /ब्रेकिंग|समाचार|breaking|news alert/i.test(textBody);
+    const isConsent3 = /^\s*3\s*$/i.test(textBody) || /प्रोफाइल|अकाउंट|profile|account/i.test(textBody);
+    const isConsentAll = /^\s*(सभी|all|yes|हाँ|हा|ok)\s*$/i.test(textBody);
+    if (isConsent1 || isConsent2 || isConsent3 || isConsentAll) {
+      console.log(`[WhatsApp:Consent] User preference selected from ${maskedWa}: ${textBody}`);
+      const updates = {
+        waId,
+        updatedAt: now,
+        whatsappConsentAt: now,
+        whatsappConsentSource: "whatsapp_chat"
+      };
+      if (isConsentAll) {
+        updates.whatsappProductUpdatesConsent = true;
+        updates.whatsappBreakingNewsConsent = true;
+        updates.whatsappProfileAssistanceEnabled = true;
+        updates.newsAlertsConsent = true;
+      } else {
+        if (isConsent1) updates.whatsappProductUpdatesConsent = true;
+        if (isConsent2) {
+          updates.whatsappBreakingNewsConsent = true;
+          updates.newsAlertsConsent = true;
+        }
+        if (isConsent3) updates.whatsappProfileAssistanceEnabled = true;
+      }
+      await requireWrite("whatsapp_subscribers", conversationId, updates).catch(() => {
+      });
+      if (centralDb2?.cache?.users) {
+        for (const [em, u] of centralDb2.cache.users.entries()) {
+          const uWa = (u.whatsappNumber || u.primaryPhone || u.mobileNumber || "").replace(/\D/g, "").slice(-10);
+          const curWa = waId.replace(/\D/g, "").slice(-10);
+          if (uWa && curWa && uWa === curWa) {
+            await centralDb2.writeDoc("users", em, { ...u, ...updates }).catch(() => {
+            });
+          }
+        }
+      }
+      const prefAckReply = isConsentAll ? "\u2705 \u0927\u0928\u094D\u092F\u0935\u093E\u0926! \u0906\u092A\u0915\u0940 \u0938\u092D\u0940 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E\u090F\u0901 (\u092B\u0940\u091A\u0930\u094D\u0938, \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C, \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0939\u093E\u092F\u0924\u093E) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0902\u0964 \u0906\u092A \u0915\u093F\u0938\u0940 \u092D\u0940 \u0938\u092E\u092F 'STOP' \u0932\u093F\u0916\u0915\u0930 \u0907\u0928\u094D\u0939\u0947\u0902 \u092C\u0902\u0926 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" : `\u2705 \u0927\u0928\u094D\u092F\u0935\u093E\u0926! \u0906\u092A\u0915\u0940 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E (${isConsent1 ? "\u092B\u0940\u091A\u0930\u094D\u0938 \u0905\u092A\u0921\u0947\u091F " : ""}${isConsent2 ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C " : ""}${isConsent3 ? "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0939\u093E\u092F\u0924\u093E " : ""}) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0926\u0930\u094D\u091C \u0915\u0930 \u0932\u0940 \u0917\u0908 \u0939\u0948\u0964`;
+      const sent2 = await sendWhatsAppText(waId, prefAckReply);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `pref-ack-${now}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        conversationId,
+        waId,
+        direction: "outbound",
+        text: prefAckReply,
+        timestamp: now,
+        status: "sent"
+      }).catch(() => {
+      });
       return;
     }
     const isGreeting = /^\s*(hi|hello|hey|namaste|namaskar|नमस्ते|नमस्कार|हैलो|हाय|हॅलो)\s*$/i.test(textBody);
@@ -7215,8 +7278,16 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     if (mode === "subscribe" && safeEqual(token, expected)) return res.status(200).send(challenge);
     return res.sendStatus(403);
   });
-  const taskClient = new import_tasks.CloudTasksClient();
-  const taskOidcVerifier = new import_google_auth_library.OAuth2Client();
+  let taskClient = null;
+  try {
+    if (CloudTasksClientClass) taskClient = new CloudTasksClientClass();
+  } catch {
+  }
+  let taskOidcVerifier = null;
+  try {
+    if (OAuth2ClientClass) taskOidcVerifier = new OAuth2ClientClass();
+  } catch {
+  }
   const taskPath = "/api/whatsapp/tasks/process";
   const getTaskConfig = () => {
     const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID || centralDb2?.projectId || "";
@@ -7231,7 +7302,14 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
   };
   const enqueueMessage = async (message) => {
     const config = getTaskConfig();
-    if (!config) throw new Error("WhatsApp Cloud Tasks configuration is incomplete");
+    if (!config || !taskClient) {
+      setImmediate(() => {
+        processInboundMessage(message).catch((err) => {
+          console.error("[WhatsApp:Inbound] In-process fallback error:", err?.message || err);
+        });
+      });
+      return;
+    }
     const messageId = String(message?.id || "");
     const parent = taskClient.queuePath(config.projectId, config.location, config.queue);
     const taskName = taskClient.taskPath(config.projectId, config.location, config.queue, "wa-" + sha256(messageId).slice(0, 32));
@@ -7568,6 +7646,36 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
           console.warn(`[WhatsApp:OTP] Warning updating user record for ${email}:`, uErr.message);
         }
       }
+      try {
+        const recipientWaId = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const onboardingPrefMsg = `\u{1F64F} *\u0928\u092E\u0938\u094D\u0915\u093E\u0930! AI News Maker \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948\u0964*
+
+\u0915\u094D\u092F\u093E \u0906\u092A \u0939\u092E\u093E\u0930\u0947 WhatsApp AI Assistant \u0915\u0947 \u092E\u093E\u0927\u094D\u092F\u092E \u0938\u0947 \u0928\u093F\u092E\u094D\u0928 \u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0928\u093E \u091A\u093E\u0939\u0947\u0902\u0917\u0947?
+
+1\uFE0F\u20E3 *AI News Maker \u0915\u0947 \u0928\u090F \u092B\u0940\u091A\u0930\u094D\u0938 \u0914\u0930 \u0932\u0947\u091F\u0947\u0938\u094D\u091F \u0905\u092A\u0921\u0947\u091F*
+2\uFE0F\u20E3 *\u0924\u093E\u091C\u093C\u093E \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0914\u0930 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u092E\u093E\u091A\u093E\u0930*
+3\uFE0F\u20E3 *\u0905\u092A\u0928\u0940 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0914\u0930 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940*
+4\uFE0F\u20E3 *AI News Maker \u0915\u0947 \u0909\u092A\u092F\u094B\u0917 \u0914\u0930 \u0938\u0941\u0935\u093F\u0927\u093E\u0913\u0902 \u092E\u0947\u0902 \u0938\u0939\u093E\u092F\u0924\u093E*
+
+\u{1F449} *\u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0902:* \u0905\u092A\u0928\u0940 \u092A\u0938\u0902\u0926 \u0915\u093E \u0928\u0902\u092C\u0930 \u0932\u093F\u0916\u0947\u0902 (\u0909\u0926\u093E. *1*, *2*, *3*, *4* \u092F\u093E \u0938\u092D\u0940 \u0939\u0947\u0924\u0941 *\u0938\u092D\u0940* / *ALL*)\u0964
+(\u0928\u094B\u091F: \u0906\u092A \u0915\u093F\u0938\u0940 \u092D\u0940 \u0938\u092E\u092F 'STOP' \u0932\u093F\u0916\u0915\u0930 \u0938\u0942\u091A\u0928\u093E\u090F\u0901 \u092C\u0902\u0926 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902)`;
+        sendWhatsAppText(recipientWaId, onboardingPrefMsg).then(async (sent) => {
+          const outMsgId = String(sent?.messages?.[0]?.id || `onb-pref-${now}`);
+          await requireWrite("whatsapp_messages", sha256(outMsgId), {
+            conversationId: sha256(recipientWaId),
+            waId: recipientWaId,
+            direction: "outbound",
+            text: onboardingPrefMsg,
+            timestamp: now,
+            status: "sent"
+          }).catch(() => {
+          });
+        }).catch((err) => {
+          console.warn("[WhatsApp:Onboarding] Failed to send onboarding pref message:", err.message);
+        });
+      } catch (onbErr) {
+        console.warn("[WhatsApp:Onboarding] Non-fatal dispatch error:", onbErr.message);
+      }
       return res.json({
         success: true,
         verified: true,
@@ -7582,6 +7690,196 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
         success: false,
         error: "\u0938\u0930\u094D\u0935\u0930 \u092A\u0930 OTP \u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u092E\u0947\u0902 \u0906\u0902\u0924\u0930\u093F\u0915 \u0938\u092E\u0938\u094D\u092F\u093E \u0906\u0908\u0964"
       });
+    }
+  });
+  app2.post("/api/whatsapp/onboarding/welcome", async (req, res) => {
+    try {
+      const rawPhone = String(req.body?.phone || req.body?.mobileNumber || "").trim();
+      const cleanPhone = rawPhone.replace(/\D/g, "").slice(-10);
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      const userName = String(req.body?.name || req.body?.fullName || "\u0938\u0902\u092A\u093E\u0926\u0915").trim();
+      if (!cleanPhone) {
+        return res.status(400).json({ error: "Phone number required" });
+      }
+      const recipientWaId = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      const conversationId = sha256(recipientWaId);
+      const now = Date.now();
+      if (email && centralDb2?.useFirestore) {
+        const uRes = await centralDb2.readDoc("users", email);
+        if (uRes?.data?.whatsappWelcomeSentAt || uRes?.data?.whatsappOnboardingStatus === "completed") {
+          return res.json({ success: true, message: "Welcome message already sent previously." });
+        }
+      }
+      const welcomeMsg = `\u{1F64F} *\u0928\u092E\u0938\u094D\u0915\u093E\u0930 ${userName}!*
+
+\u0906\u092A\u0915\u0940 *AI News Maker* \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0924\u0948\u092F\u093E\u0930 \u0939\u094B \u0917\u0908 \u0939\u0948\u0964 \u{1F389}
+
+\u0905\u092C \u0906\u092A \u0939\u092E\u093E\u0930\u0947 WhatsApp AI Assistant \u0915\u0947 \u092E\u093E\u0927\u094D\u092F\u092E \u0938\u0947:
+\u2728 AI News Maker \u0915\u0940 \u0938\u0941\u0935\u093F\u0927\u093E\u0913\u0902 \u0915\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
+\u{1F4CA} \u0905\u092A\u0928\u0940 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932, \u092A\u094D\u0932\u093E\u0928 \u0914\u0930 \u0915\u094B\u091F\u093E \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u092A\u0942\u091B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
+\u{1F6E0}\uFE0F \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0935 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923 \u092E\u0947\u0902 \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
+\u26A1 \u0924\u093E\u091C\u093C\u093E \u0905\u092A\u0921\u0947\u091F \u0914\u0930 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0905\u0932\u0930\u094D\u091F \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
+
+AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0939\u093E\u0930\u094D\u0926\u093F\u0915 \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948!
+\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
+      const sent = await sendWhatsAppText(recipientWaId, welcomeMsg);
+      const outMsgId = String(sent?.messages?.[0]?.id || `onb-wel-${now}`);
+      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+        conversationId,
+        waId: recipientWaId,
+        direction: "outbound",
+        text: welcomeMsg,
+        timestamp: now,
+        status: "sent"
+      }).catch(() => {
+      });
+      if (email && centralDb2?.useFirestore) {
+        await centralDb2.writeDoc("users", email, {
+          whatsappWelcomeSentAt: now,
+          whatsappOnboardingStatus: "completed",
+          updatedAt: now
+        }).catch(() => {
+        });
+      }
+      return res.json({ success: true, message: "Welcome message dispatched successfully" });
+    } catch (err) {
+      return res.status(500).json({ error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/campaign", async (req, res) => {
+    try {
+      const adminEmail = (req.headers["x-admin-email"] || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+      const adminRole = (req.headers["x-user-role"] || "").toString().toLowerCase().trim();
+      const isAuthAdmin = adminEmail === "admin.ainewsmaker@gmail.com" || adminEmail === "breakingnewswala.com@gmail.com" || adminRole === "superadmin" || adminRole === "admin" || adminEmail.includes("admin") || adminEmail.includes("breakingnewswala");
+      if (!isAuthAdmin) {
+        return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A \u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0915\u0948\u0902\u092A\u0947\u0928 \u091A\u0932\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      }
+      const {
+        targetAudience = "all",
+        targetUserEmails = [],
+        customNumbers = [],
+        category = "Breaking News",
+        headline = "",
+        summary = "",
+        articleUrl = "",
+        customMessage = "",
+        testPhone = ""
+      } = req.body;
+      const now = Date.now();
+      const campaignId = `camp_${now}_${Math.random().toString(36).slice(2, 7)}`;
+      let finalMessage = "";
+      if (headline) finalMessage += `\u{1F6A8} *${headline.trim()}*
+
+`;
+      if (summary) finalMessage += `${summary.trim()}
+
+`;
+      if (customMessage) finalMessage += `${customMessage.trim()}
+
+`;
+      if (articleUrl) finalMessage += `\u{1F517} \u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u092A\u0922\u093C\u0947\u0902: ${articleUrl.trim()}
+
+`;
+      finalMessage += `_AI News Maker (\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E) - \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0947\u0935\u093E_
+_\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F STOP \u0932\u093F\u0916\u0947\u0902_`;
+      if (testPhone) {
+        const cleanTest = String(testPhone).replace(/\D/g, "").slice(-10);
+        const testWaId = cleanTest.length === 10 ? `91${cleanTest}` : cleanTest;
+        const testSent = await sendWhatsAppText(testWaId, `[TEST PREVIEW]
+
+${finalMessage}`);
+        return res.json({
+          success: true,
+          testMode: true,
+          deliveredTo: testWaId,
+          metaResponse: testSent
+        });
+      }
+      const recipientNumbers = /* @__PURE__ */ new Set();
+      if (targetAudience === "custom" && Array.isArray(customNumbers)) {
+        for (const num of customNumbers) {
+          const clean = String(num || "").replace(/\D/g, "").slice(-10);
+          if (clean.length === 10) recipientNumbers.add(`91${clean}`);
+        }
+      } else {
+        const usersList = centralDb2?.cache?.users ? Array.from(centralDb2.cache.users.values()) : [];
+        for (const u of usersList) {
+          const uEmail = (u.email || "").toLowerCase().trim();
+          const uTier = (u.tier || "basic").toLowerCase().trim();
+          const uPhone = (u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || "").replace(/\D/g, "").slice(-10);
+          if (!uPhone || uPhone.length !== 10) continue;
+          if (targetAudience === "selected") {
+            if (!targetUserEmails.includes(uEmail)) continue;
+          } else if (targetAudience !== "all") {
+            if (targetAudience === "vip" && uTier !== "ultra" && uTier !== "vip") continue;
+            else if (targetAudience !== "vip" && uTier !== targetAudience) continue;
+          }
+          if (category === "Breaking News" && u.whatsappBreakingNewsConsent === false) continue;
+          if (u.newsAlertsConsent === false) continue;
+          recipientNumbers.add(`91${uPhone}`);
+        }
+      }
+      const recipientsList = Array.from(recipientNumbers);
+      console.log(`[WhatsApp:Campaign] Starting campaign '${campaignId}' to ${recipientsList.length} recipients`);
+      let successfulDeliveries = 0;
+      let failedDeliveries = 0;
+      const failedRecipients = [];
+      for (const phone of recipientsList) {
+        try {
+          const sent = await sendWhatsAppText(phone, finalMessage);
+          if (sent && (sent.messages || sent.contacts)) {
+            successfulDeliveries++;
+            const outMsgId = String(sent?.messages?.[0]?.id || `camp-out-${Date.now()}`);
+            await requireWrite("whatsapp_messages", sha256(outMsgId), {
+              conversationId: sha256(phone),
+              waId: phone,
+              direction: "outbound",
+              text: finalMessage,
+              timestamp: Date.now(),
+              status: "sent",
+              campaignId
+            }).catch(() => {
+            });
+          } else {
+            failedDeliveries++;
+            failedRecipients.push({ phone, error: sent?.error?.message || "Delivery rejected" });
+          }
+        } catch (mErr) {
+          failedDeliveries++;
+          failedRecipients.push({ phone, error: mErr.message || "Network error" });
+        }
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      const campaignRecord = {
+        campaignId,
+        category,
+        targetAudience,
+        totalRecipients: recipientsList.length,
+        successfulDeliveries,
+        failedDeliveries,
+        failedRecipients: failedRecipients.slice(0, 50),
+        messagePreview: finalMessage.slice(0, 200),
+        createdBy: adminEmail || "admin",
+        createdAt: now,
+        sentAt: Date.now(),
+        status: "completed"
+      };
+      if (centralDb2?.useFirestore) {
+        await centralDb2.writeDoc("whatsapp_campaigns", campaignId, campaignRecord).catch(() => {
+        });
+      }
+      console.log(`[WhatsApp:Campaign] Finished '${campaignId}': ${successfulDeliveries} sent, ${failedDeliveries} failed`);
+      return res.json({
+        success: true,
+        campaignId,
+        totalRecipients: recipientsList.length,
+        successfulDeliveries,
+        failedDeliveries,
+        failedRecipients
+      });
+    } catch (err) {
+      console.error("[WhatsApp:Campaign] Campaign failure:", err);
+      return res.status(500).json({ error: String(err?.message || err) });
     }
   });
   app2.get("/api/whatsapp/diagnostic", async (req, res) => {
@@ -11320,9 +11618,6 @@ function saveUsersDatabase(users) {
   return saveUsersMasterDatabase(users);
 }
 function loadNotificationsDatabase() {
-  if (centralDb && centralDb.useFirestore && centralDb.cache.notifications.size > 0) {
-    return Array.from(centralDb.cache.notifications.values());
-  }
   try {
     if (import_fs.default.existsSync(NOTIFICATIONS_DB_FILE)) {
       const raw = import_fs.default.readFileSync(NOTIFICATIONS_DB_FILE, "utf-8");
@@ -11335,20 +11630,18 @@ function loadNotificationsDatabase() {
   return [];
 }
 function saveNotificationsDatabase(notifs) {
-  if (centralDb && centralDb.useFirestore) {
-    for (const n of notifs) {
-      centralDb.saveNotification(n.id, n).catch(() => {
-      });
-    }
-    return true;
-  }
   try {
     import_fs.default.writeFileSync(NOTIFICATIONS_DB_FILE, JSON.stringify(notifs, null, 2), "utf-8");
-    return true;
   } catch (err) {
     console.error("Error writing notifications_database.json:", err);
-    return false;
   }
+  if (centralDb && centralDb.useFirestore && typeof centralDb.writeDoc === "function") {
+    for (const n of notifs.slice(0, 50)) {
+      centralDb.writeDoc("notifications", n.id, n).catch(() => {
+      });
+    }
+  }
+  return true;
 }
 function broadcastNewsPublishedNotification(newsId, title) {
   try {
@@ -12834,6 +13127,29 @@ app.get("/api/notifications", (req, res) => {
       return cleanTarget === email || cleanTarget.replace(/\s+/g, "") === email.replace(/\s+/g, "");
     });
     return res.json({ success: true, notifications: filtered.slice(0, 50) });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
+  try {
+    const { title, message, newsId, postId, category, imageUrl, linkTab, targetUserEmail } = req.body;
+    if (!title) return res.status(400).json({ error: "\u0936\u0940\u0930\u094D\u0937\u0915 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    const newNotif = {
+      id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title,
+      message: message || "",
+      time: (/* @__PURE__ */ new Date()).toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+      unread: true,
+      newsId: newsId || postId,
+      postId: newsId || postId,
+      linkTab: linkTab || "home",
+      targetUserEmail: targetUserEmail || "all",
+      createdAt: Date.now()
+    };
+    const notifs = loadNotificationsDatabase();
+    saveNotificationsDatabase([newNotif, ...notifs]);
+    return res.json({ success: true, notification: newNotif });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -14640,6 +14956,13 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || "",
+      whatsappNumber: existing.whatsappNumber || finalMobile || "",
+      whatsappDisplayNumber: profile.whatsappDisplayNumber || existing.whatsappDisplayNumber || profile.whatsappNumber || finalMobile || "",
+      activeLogoUrl: existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
+      logoApprovalStatus: existing.logoApprovalStatus || "none",
+      approvedLogoRequestId: existing.approvedLogoRequestId,
+      logoApprovedAt: existing.logoApprovedAt,
+      logoApprovedBy: existing.logoApprovedBy,
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
       socialLinks: profile.socialLinks ? { ...existing.socialLinks || {}, ...profile.socialLinks } : existing.socialLinks,
@@ -14647,6 +14970,13 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       customFooterPng: profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng,
       updatedAt: Date.now()
     };
+    if (!isAdmin && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
+      if (!profile.channelLogoUrl || profile.channelLogoUrl.includes("ai_news_maker_logo.png") || profile.channelLogoUrl.trim() === "") {
+        updated.channelLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
+        updated.channelLogoPngUrl = existing.channelLogoPngUrl || existing.activeLogoUrl || existing.channelLogoUrl;
+        updated.activeLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
+      }
+    }
     const canonicalKey = updated.email ? updated.email.toLowerCase().trim() : cleanId;
     allProfiles[canonicalKey] = updated;
     if (isMasterAdminEmail) {
@@ -14724,6 +15054,29 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     } catch (masterSyncErr) {
       console.warn("Error auto-syncing profile to master users:", masterSyncErr);
+    }
+    try {
+      if (centralDb && centralDb.useFirestore && updated.email) {
+        const cleanEm = updated.email.toLowerCase().trim();
+        await centralDb.writeDoc("users", cleanEm, {
+          ...updated,
+          whatsappDisplayNumber: updated.whatsappDisplayNumber,
+          activeLogoUrl: updated.activeLogoUrl || updated.channelLogoUrl,
+          channelLogoUrl: updated.channelLogoUrl,
+          updatedAt: Date.now()
+        }).catch((e) => console.warn("[Firestore:users] Profile write error:", e.message));
+        await centralDb.writeDoc("user_profiles", cleanEm, updated).catch(() => {
+        });
+        if (centralDb.cache?.users) {
+          const prevCached = centralDb.cache.users.get(cleanEm) || {};
+          centralDb.cache.users.set(cleanEm, {
+            ...prevCached,
+            ...updated
+          });
+        }
+      }
+    } catch (fsSyncErr) {
+      console.warn("[UserProfile:Firestore] Non-fatal sync error:", fsSyncErr.message);
     }
     return res.json({ success: true, profile: updated });
   } catch (err) {
@@ -24632,6 +24985,7 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
     if (!target) return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
     target.status = "approved";
     target.approvedAt = Date.now();
+    target.approvedBy = (req.headers["x-admin-email"] || req.headers["x-user-email"] || "admin").toString();
     saveLogoRequestsDatabase(reqs);
     const cleanEmail = target.userEmail.toLowerCase().trim();
     const allProfiles = loadProfilesDatabase();
@@ -24645,6 +24999,11 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
         profile.channelLogoPngUrl = target.newLogoUrl;
         profile.channelLogoType = "png";
       }
+      profile.activeLogoUrl = target.newLogoUrl;
+      profile.logoApprovalStatus = "approved";
+      profile.approvedLogoRequestId = target.id;
+      profile.logoApprovedAt = Date.now();
+      profile.logoApprovedBy = target.approvedBy;
       profile.updatedAt = Date.now();
       saveProfilesDatabase(allProfiles);
     }
@@ -24679,6 +25038,35 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
         saveUsersMasterDatabase(master);
       }
     } catch {
+    }
+    try {
+      if (centralDb && centralDb.useFirestore) {
+        const logoDoc = {
+          channelLogoUrl: target.newLogoUrl,
+          activeLogoUrl: target.newLogoUrl,
+          channelLogoPngUrl: target.requestType === "gif" ? void 0 : target.newLogoUrl,
+          channelLogoGifUrl: target.requestType === "gif" ? target.newLogoUrl : void 0,
+          channelLogoType: target.requestType || "png",
+          logoApprovalStatus: "approved",
+          approvedLogoRequestId: target.id,
+          logoApprovedAt: Date.now(),
+          logoApprovedBy: target.approvedBy,
+          updatedAt: Date.now()
+        };
+        await centralDb.writeDoc("users", cleanEmail, logoDoc).catch((e) => console.warn("[Firestore:users] Write logo failed:", e.message));
+        await centralDb.writeDoc("user_profiles", cleanEmail, logoDoc).catch((e) => console.warn("[Firestore:user_profiles] Write logo failed:", e.message));
+        await centralDb.writeDoc("logo_requests", target.id, target).catch(() => {
+        });
+        if (centralDb.cache?.users) {
+          const prevCached = centralDb.cache.users.get(cleanEmail) || {};
+          centralDb.cache.users.set(cleanEmail, {
+            ...prevCached,
+            ...logoDoc
+          });
+        }
+      }
+    } catch (fsErr) {
+      console.warn("[LogoApproval:Firestore] Non-fatal sync error:", fsErr.message);
     }
     return res.json({ success: true, message: "\u0932\u094B\u0917\u094B \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0914\u0930 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0905\u092A\u0921\u0947\u091F \u0939\u094B \u0917\u092F\u093E\u0964" });
   } catch (err) {

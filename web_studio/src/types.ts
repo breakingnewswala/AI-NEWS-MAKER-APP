@@ -467,6 +467,21 @@ export interface ChannelProfile {
   username: string; // derived from English Channel Name
   mobileNumber: string;
   whatsappNumber?: string;
+  whatsappDisplayNumber?: string;
+  whatsappVerified?: boolean;
+  whatsappVerifiedAt?: number;
+  activeLogoUrl?: string;
+  logoApprovalStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  approvedLogoRequestId?: string;
+  logoApprovedAt?: number;
+  logoApprovedBy?: string;
+  whatsappProductUpdatesConsent?: boolean;
+  whatsappBreakingNewsConsent?: boolean;
+  whatsappProfileAssistanceEnabled?: boolean;
+  whatsappConsentAt?: number;
+  whatsappConsentSource?: string;
+  whatsappWelcomeSentAt?: number;
+  whatsappOnboardingStatus?: 'pending' | 'completed';
   showMobileNumber: boolean; // visible on card or not
   websiteUrl: string; // direct without https:// or www
   showWebsite?: boolean; // visible on card or not

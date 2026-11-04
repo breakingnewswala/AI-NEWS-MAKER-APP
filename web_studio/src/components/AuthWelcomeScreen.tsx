@@ -1266,6 +1266,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         username: cleanSavedUsername,
         mobileNumber: cleanDigits,
         whatsappNumber: cleanDigits,
+        whatsappDisplayNumber: graphicContactNumber.trim() || cleanDigits,
         whatsappVerified: true,
         whatsappVerifiedAt: Date.now(),
         whatsappVerificationMethod: 'whatsapp_otp',
@@ -1318,6 +1319,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             mobile: finalProfile.mobileNumber,
             mobileNumber: finalProfile.mobileNumber,
             whatsappNumber: finalProfile.whatsappNumber,
+            whatsappDisplayNumber: finalProfile.whatsappDisplayNumber || finalProfile.whatsappNumber,
             showMobileNumber: finalProfile.showMobileNumber,
             websiteUrl: finalProfile.websiteUrl,
             socialIcons: finalProfile.socialIcons,
@@ -1334,6 +1336,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
+            }),
+            fetch(getApiUrl('/api/whatsapp/onboarding/welcome'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phone: finalProfile.whatsappNumber || cleanDigits,
+                email: cleanEmail,
+                name: finalProfile.fullName,
+              }),
             }),
           ]);
         } catch (syncErr) {

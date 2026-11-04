@@ -1096,7 +1096,7 @@ export default function App() {
         socialHandle: savedProfile.username
           ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
           : '',
-        whatsappNumber: (savedProfile.whatsappNumber || savedProfile.mobileNumber || '').trim(),
+        whatsappNumber: (savedProfile.whatsappDisplayNumber || savedProfile.whatsappNumber || savedProfile.mobileNumber || '').trim(),
         websiteUrl: (savedProfile.websiteUrl || '').trim(),
         showWebsite: savedProfile.showWebsite !== false,
         showMobileNumber: savedProfile.showMobileNumber !== false,
@@ -1228,7 +1228,7 @@ export default function App() {
           ? profile.username
           : `@${profile.username}`
         : prev.socialHandle,
-      whatsappNumber: (profile.whatsappNumber || profile.mobileNumber || '').trim(),
+      whatsappNumber: (profile.whatsappDisplayNumber || profile.whatsappNumber || profile.mobileNumber || '').trim(),
       websiteUrl: (profile.websiteUrl || '').trim(),
       showWebsite: profile.showWebsite !== false,
       showMobileNumber: profile.showMobileNumber !== false,
@@ -1301,7 +1301,7 @@ export default function App() {
           socialHandle: savedProfile.username
             ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
             : '',
-          whatsappNumber: (savedProfile.whatsappNumber || savedProfile.mobileNumber || '').trim(),
+          whatsappNumber: (savedProfile.whatsappDisplayNumber || savedProfile.whatsappNumber || savedProfile.mobileNumber || '').trim(),
           websiteUrl: (savedProfile.websiteUrl !== undefined ? savedProfile.websiteUrl : prev.websiteUrl || '').trim(),
           showWebsite: savedProfile.showWebsite !== false,
           showMobileNumber: savedProfile.showMobileNumber !== false,
@@ -1749,7 +1749,7 @@ export default function App() {
       socialHandle: savedProfile?.username
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
         : '',
-      whatsappNumber: (savedProfile?.whatsappNumber || savedProfile?.mobileNumber || '').trim(),
+      whatsappNumber: (savedProfile?.whatsappDisplayNumber || savedProfile?.whatsappNumber || savedProfile?.mobileNumber || '').trim(),
       websiteUrl: (savedProfile?.websiteUrl || '').trim(),
       showMobileNumber: savedProfile?.showMobileNumber !== false,
       showWebsite: savedProfile?.showWebsite !== false,

@@ -4619,9 +4619,6 @@ function saveUsersDatabase(users: AuthoritativeUser[]): boolean {
 }
 
 function loadNotificationsDatabase(): StoredNotification[] {
-  if (centralDb && centralDb.useFirestore && centralDb.cache.notifications.size > 0) {
-    return Array.from(centralDb.cache.notifications.values());
-  }
   try {
     if (fs.existsSync(NOTIFICATIONS_DB_FILE)) {
       const raw = fs.readFileSync(NOTIFICATIONS_DB_FILE, "utf-8");
@@ -4635,19 +4632,17 @@ function loadNotificationsDatabase(): StoredNotification[] {
 }
 
 function saveNotificationsDatabase(notifs: StoredNotification[]): boolean {
-  if (centralDb && centralDb.useFirestore) {
-    for (const n of notifs) {
-      centralDb.saveNotification(n.id, n).catch(() => {});
-    }
-    return true;
-  }
   try {
     fs.writeFileSync(NOTIFICATIONS_DB_FILE, JSON.stringify(notifs, null, 2), "utf-8");
-    return true;
   } catch (err) {
     console.error("Error writing notifications_database.json:", err);
-    return false;
   }
+  if (centralDb && centralDb.useFirestore && typeof centralDb.writeDoc === "function") {
+    for (const n of notifs.slice(0, 50)) {
+      centralDb.writeDoc("notifications", n.id, n).catch(() => {});
+    }
+  }
+  return true;
 }
 
 function broadcastNewsPublishedNotification(newsId: string, title: string) {
@@ -6399,6 +6394,31 @@ app.get("/api/notifications", (req, res) => {
       return cleanTarget === email || cleanTarget.replace(/\s+/g, '') === email.replace(/\s+/g, '');
     });
     return res.json({ success: true, notifications: filtered.slice(0, 50) });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// POST /api/notifications/broadcast - Broadcast in-app & web alert
+app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
+  try {
+    const { title, message, newsId, postId, category, imageUrl, linkTab, targetUserEmail } = req.body;
+    if (!title) return res.status(400).json({ error: "शीर्षक आवश्यक है" });
+    const newNotif: StoredNotification = {
+      id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      title,
+      message: message || "",
+      time: new Date().toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+      unread: true,
+      newsId: newsId || postId,
+      postId: newsId || postId,
+      linkTab: linkTab || "home",
+      targetUserEmail: targetUserEmail || "all",
+      createdAt: Date.now(),
+    };
+    const notifs = loadNotificationsDatabase();
+    saveNotificationsDatabase([newNotif, ...notifs]);
+    return res.json({ success: true, notification: newNotif });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -8641,6 +8661,13 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || "",
+      whatsappNumber: existing.whatsappNumber || finalMobile || "",
+      whatsappDisplayNumber: profile.whatsappDisplayNumber || existing.whatsappDisplayNumber || profile.whatsappNumber || finalMobile || "",
+      activeLogoUrl: existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : undefined),
+      logoApprovalStatus: existing.logoApprovalStatus || "none",
+      approvedLogoRequestId: existing.approvedLogoRequestId,
+      logoApprovedAt: existing.logoApprovedAt,
+      logoApprovedBy: existing.logoApprovedBy,
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
       socialIcons: profile.socialIcons || existing.socialIcons,
       socialLinks: profile.socialLinks ? { ...(existing.socialLinks || {}), ...profile.socialLinks } : existing.socialLinks,
@@ -8648,6 +8675,15 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       customFooterPng: profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng,
       updatedAt: Date.now(),
     };
+
+    // If user has an approved logo and is non-admin, prevent clearing or defaulting it
+    if (!isAdmin && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
+      if (!profile.channelLogoUrl || profile.channelLogoUrl.includes("ai_news_maker_logo.png") || profile.channelLogoUrl.trim() === "") {
+        updated.channelLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
+        updated.channelLogoPngUrl = existing.channelLogoPngUrl || existing.activeLogoUrl || existing.channelLogoUrl;
+        updated.activeLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
+      }
+    }
     
     // Store only canonical key to avoid duplicate ghost profiles
     const canonicalKey = updated.email ? updated.email.toLowerCase().trim() : cleanId;
@@ -8730,6 +8766,30 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     } catch (masterSyncErr) {
       console.warn("Error auto-syncing profile to master users:", masterSyncErr);
+    }
+
+    // CRITICAL: Persist user profile directly to centralDb (Firestore)
+    try {
+      if (centralDb && centralDb.useFirestore && updated.email) {
+        const cleanEm = updated.email.toLowerCase().trim();
+        await centralDb.writeDoc("users", cleanEm, {
+          ...updated,
+          whatsappDisplayNumber: updated.whatsappDisplayNumber,
+          activeLogoUrl: updated.activeLogoUrl || updated.channelLogoUrl,
+          channelLogoUrl: updated.channelLogoUrl,
+          updatedAt: Date.now(),
+        }).catch((e: any) => console.warn("[Firestore:users] Profile write error:", e.message));
+        await centralDb.writeDoc("user_profiles", cleanEm, updated).catch(() => {});
+        if (centralDb.cache?.users) {
+          const prevCached = centralDb.cache.users.get(cleanEm) || {};
+          centralDb.cache.users.set(cleanEm, {
+            ...prevCached,
+            ...updated,
+          });
+        }
+      }
+    } catch (fsSyncErr: any) {
+      console.warn("[UserProfile:Firestore] Non-fatal sync error:", fsSyncErr.message);
     }
 
     return res.json({ success: true, profile: updated });
@@ -21268,6 +21328,7 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
 
     target.status = "approved";
     target.approvedAt = Date.now();
+    target.approvedBy = (req.headers["x-admin-email"] || req.headers["x-user-email"] || "admin").toString();
     saveLogoRequestsDatabase(reqs);
 
     // Apply the approved logo to the user profile
@@ -21283,6 +21344,11 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
         profile.channelLogoPngUrl = target.newLogoUrl;
         profile.channelLogoType = "png";
       }
+      profile.activeLogoUrl = target.newLogoUrl;
+      profile.logoApprovalStatus = "approved";
+      profile.approvedLogoRequestId = target.id;
+      profile.logoApprovedAt = Date.now();
+      profile.logoApprovedBy = target.approvedBy;
       profile.updatedAt = Date.now();
       saveProfilesDatabase(allProfiles);
     }
@@ -21320,6 +21386,36 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
         saveUsersMasterDatabase(master);
       }
     } catch {}
+
+    // CRITICAL FIX: Persist approved logo directly to centralDb (Firestore) so it is never lost on restart
+    try {
+      if (centralDb && centralDb.useFirestore) {
+        const logoDoc = {
+          channelLogoUrl: target.newLogoUrl,
+          activeLogoUrl: target.newLogoUrl,
+          channelLogoPngUrl: target.requestType === "gif" ? undefined : target.newLogoUrl,
+          channelLogoGifUrl: target.requestType === "gif" ? target.newLogoUrl : undefined,
+          channelLogoType: target.requestType || "png",
+          logoApprovalStatus: "approved",
+          approvedLogoRequestId: target.id,
+          logoApprovedAt: Date.now(),
+          logoApprovedBy: target.approvedBy,
+          updatedAt: Date.now(),
+        };
+        await centralDb.writeDoc("users", cleanEmail, logoDoc).catch((e: any) => console.warn("[Firestore:users] Write logo failed:", e.message));
+        await centralDb.writeDoc("user_profiles", cleanEmail, logoDoc).catch((e: any) => console.warn("[Firestore:user_profiles] Write logo failed:", e.message));
+        await centralDb.writeDoc("logo_requests", target.id, target).catch(() => {});
+        if (centralDb.cache?.users) {
+          const prevCached = centralDb.cache.users.get(cleanEmail) || {};
+          centralDb.cache.users.set(cleanEmail, {
+            ...prevCached,
+            ...logoDoc,
+          });
+        }
+      }
+    } catch (fsErr: any) {
+      console.warn("[LogoApproval:Firestore] Non-fatal sync error:", fsErr.message);
+    }
 
     return res.json({ success: true, message: "लोगो अनुरोध स्वीकृत और प्रोफाइल अपडेट हो गया।" });
   } catch (err: any) {

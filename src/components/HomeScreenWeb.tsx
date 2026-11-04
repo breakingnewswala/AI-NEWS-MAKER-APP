@@ -49,8 +49,12 @@ import {
   CheckCircle2,
   Loader2,
   Zap,
+  MessageSquare,
+  Bell,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
+import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
+import { addNotification } from '../lib/notificationManager';
 import {
   isEffectiveAdmin,
   getUserSubscription,
@@ -635,6 +639,43 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   // Admin Coin Value Configuration state
   const [coinConfigPost, setCoinConfigPost] = useState<NewsFeedPost | null>(null);
+  const [isWhatsAppCampaignOpen, setIsWhatsAppCampaignOpen] = useState(false);
+  const [campaignArticle, setCampaignArticle] = useState<NewsFeedPost | null>(null);
+
+  const handleOpenWhatsAppAlert = (post: NewsFeedPost) => {
+    setCampaignArticle(post);
+    setIsWhatsAppCampaignOpen(true);
+  };
+
+  const handleSendWebAlert = async (post: NewsFeedPost) => {
+    try {
+      addNotification({
+        title: `🚨 ब्रेकिंग न्यूज़: ${post.title}`,
+        message: post.summary || post.content || 'ताज़ा समाचार उपलब्ध है। अभी पढ़ें।',
+        newsId: post.id,
+        linkTab: 'home',
+        unread: true,
+      });
+
+      fetch(getApiUrl('/api/notifications/broadcast'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          title: `🚨 ${post.title}`,
+          message: post.summary || post.content,
+          newsId: post.id,
+          category: post.category,
+        }),
+      }).catch(() => {});
+
+      alert(`✅ '${post.title.slice(0, 40)}...' के लिए वेब व इन-ऐप ब्रेकिंग अलर्ट प्रसारित कर दिया गया!`);
+    } catch (err: any) {
+      alert('अलर्ट भेजने में त्रुटि: ' + err.message);
+    }
+  };
   const [coinConfigCost, setCoinConfigCost] = useState<number>(50);
   const [coinConfigPlans, setCoinConfigPlans] = useState<string[]>(['Basic']);
   const [coinConfigSaving, setCoinConfigSaving] = useState<boolean>(false);
@@ -4707,6 +4748,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       </section>
 
         {/* Floating Back to Top Button */}
+      {/* WhatsApp Notification Center Modal for Admins */}
+      {isWhatsAppCampaignOpen && (
+        <WhatsAppNotificationCenterModal
+          isOpen={isWhatsAppCampaignOpen}
+          onClose={() => {
+            setIsWhatsAppCampaignOpen(false);
+            setCampaignArticle(null);
+          }}
+          attachedArticle={campaignArticle}
+          currentUserEmail={currentUser?.email || ''}
+        />
+      )}
+
       {showBackToTop && (
         <button
           type="button"

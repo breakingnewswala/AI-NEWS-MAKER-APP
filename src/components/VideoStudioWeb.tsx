@@ -1063,7 +1063,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     profile?.websiteUrl || ''
   );
   const [mobileNumber, setMobileNumber] = useState<string>(
-    profile?.mobileNumber || ''
+    profile?.whatsappDisplayNumber || profile?.whatsappNumber || profile?.mobileNumber || ''
   );
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     profile?.showMobileNumber ?? true
