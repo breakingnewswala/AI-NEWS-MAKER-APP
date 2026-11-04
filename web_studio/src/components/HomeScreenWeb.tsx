@@ -50,10 +50,12 @@ import {
   Loader2,
   Zap,
   MessageSquare,
+  MessageCircle,
   Bell,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
+import { WebNotificationModal } from './WebNotificationModal';
 import { addNotification } from '../lib/notificationManager';
 import {
   isEffectiveAdmin,
@@ -639,42 +641,23 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   // Admin Coin Value Configuration state
   const [coinConfigPost, setCoinConfigPost] = useState<NewsFeedPost | null>(null);
+  // Admin News Card Notification Modals (Phase 1)
   const [isWhatsAppCampaignOpen, setIsWhatsAppCampaignOpen] = useState(false);
   const [campaignArticle, setCampaignArticle] = useState<NewsFeedPost | null>(null);
+  const [isWebNotificationOpen, setIsWebNotificationOpen] = useState(false);
+  const [webNotificationPost, setWebNotificationPost] = useState<NewsFeedPost | null>(null);
 
   const handleOpenWhatsAppAlert = (post: NewsFeedPost) => {
-    setCampaignArticle(post);
+    setCampaignArticle({
+      ...post,
+      url: post.sourceUrl || (post.id ? `https://ainewsmaker.online/news/${post.id}` : 'https://ainewsmaker.online'),
+    });
     setIsWhatsAppCampaignOpen(true);
   };
 
-  const handleSendWebAlert = async (post: NewsFeedPost) => {
-    try {
-      addNotification({
-        title: `🚨 ब्रेकिंग न्यूज़: ${post.title}`,
-        message: post.summary || post.content || 'ताज़ा समाचार उपलब्ध है। अभी पढ़ें।',
-        newsId: post.id,
-        linkTab: 'home',
-        unread: true,
-      });
-
-      fetch(getApiUrl('/api/notifications/broadcast'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({
-          title: `🚨 ${post.title}`,
-          message: post.summary || post.content,
-          newsId: post.id,
-          category: post.category,
-        }),
-      }).catch(() => {});
-
-      alert(`✅ '${post.title.slice(0, 40)}...' के लिए वेब व इन-ऐप ब्रेकिंग अलर्ट प्रसारित कर दिया गया!`);
-    } catch (err: any) {
-      alert('अलर्ट भेजने में त्रुटि: ' + err.message);
-    }
+  const handleOpenWebAlert = (post: NewsFeedPost) => {
+    setWebNotificationPost(post);
+    setIsWebNotificationOpen(true);
   };
   const [coinConfigCost, setCoinConfigCost] = useState<number>(50);
   const [coinConfigPlans, setCoinConfigPlans] = useState<string[]>(['Basic']);
@@ -2951,6 +2934,31 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             <span className="truncate">हटाएं</span>
                           </button>
                         </div>
+
+                        {/* Third Row: 2 Notification controls in a single row, 50% width each per Phase 1 */}
+                        <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+                          {/* Button 1: WhatsApp Notification (50%) */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWhatsAppAlert(post)}
+                            className="py-1.5 px-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 hover:text-emerald-200 text-[10px] font-black rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm truncate"
+                            title="इस खबर का WhatsApp नोटिफिकेशन भेजें"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="truncate">WhatsApp नोटिफिकेशन</span>
+                          </button>
+
+                          {/* Button 2: Web Notification (50%) */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenWebAlert(post)}
+                            className="py-1.5 px-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/50 text-indigo-300 hover:text-indigo-200 text-[10px] font-black rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm truncate"
+                            title="इस खबर का वेब नोटिफिकेशन भेजें"
+                          >
+                            <Bell className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                            <span className="truncate">वेब नोटिफिकेशन</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -4809,6 +4817,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             setCampaignArticle(null);
           }}
           attachedArticle={campaignArticle}
+          currentUserEmail={currentUser?.email || ''}
+        />
+      )}
+
+      {/* Web Notification Modal for Admins (Phase 1) */}
+      {isWebNotificationOpen && (
+        <WebNotificationModal
+          isOpen={isWebNotificationOpen}
+          onClose={() => {
+            setIsWebNotificationOpen(false);
+            setWebNotificationPost(null);
+          }}
+          post={webNotificationPost}
           currentUserEmail={currentUser?.email || ''}
         />
       )}
