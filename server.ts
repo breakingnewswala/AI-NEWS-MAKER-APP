@@ -2319,6 +2319,9 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       category: body.category || existing.category || "",
       imageUrl: body.imageUrl || existing.imageUrl || "",
       additionalPhotos: Array.isArray(body.additionalPhotos) ? body.additionalPhotos : (existing.additionalPhotos || []),
+      manualThumbnailUrl: body.manualThumbnailUrl || existing.manualThumbnailUrl || "",
+      additionalImages: Array.isArray(body.additionalImages) ? body.additionalImages : (existing.additionalImages || []),
+      featuredPhotoUrl: body.featuredPhotoUrl || existing.featuredPhotoUrl || "",
       approvedAt: Date.now(),
       approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
       status: "APPROVED",
@@ -2355,6 +2358,9 @@ app.post("/api/editorial/approved/:id", (req, res) => {
             imageUrl: updated.imageUrl || p.imageUrl,
             additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos,
             approvedPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.approvedPhotos,
+            manualThumbnailUrl: updated.manualThumbnailUrl || p.manualThumbnailUrl || "",
+            additionalImages: (updated.additionalImages && updated.additionalImages.length > 0) ? updated.additionalImages : (p.additionalImages || []),
+            featuredPhotoUrl: updated.featuredPhotoUrl || p.featuredPhotoUrl || "",
           };
         }
         return p;
@@ -2373,6 +2379,9 @@ app.post("/api/editorial/approved/:id", (req, res) => {
           publishedTime: body.publishedTime || "अभी-अभी",
           imageUrl: updated.imageUrl || body.imageUrl || body.image || getCategoryFallbackImage("general"),
           additionalPhotos: updated.additionalPhotos || [],
+          manualThumbnailUrl: updated.manualThumbnailUrl || body.manualThumbnailUrl || "",
+          additionalImages: updated.additionalImages || body.additionalImages || [],
+          featuredPhotoUrl: updated.featuredPhotoUrl || body.featuredPhotoUrl || "",
           breaking: body.breaking !== undefined ? body.breaking : true,
           isExclusive: body.isExclusive || false,
           fullContent: body.fullContent || updated.captionDetailed || "",
