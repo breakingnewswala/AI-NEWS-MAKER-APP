@@ -209,26 +209,54 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             },
           }),
         });
+        if (res.status === 403) {
+          const errData = await res.json().catch(() => ({}));
+          setLoading(false);
+          setErrorMessage(errData.error || 'अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।');
+          localStorage.setItem(`user_blocked_${cleanEmail}`, 'true');
+          window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: { email: cleanEmail } }));
+          return;
+        }
+
+        let isServerProfileComplete = false;
         if (res.ok) {
           const data = await res.json();
+          if (data.isBlocked || data.user?.isBlocked) {
+            setLoading(false);
+            setErrorMessage('अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है।');
+            localStorage.setItem(`user_blocked_${cleanEmail}`, 'true');
+            window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: data.user }));
+            return;
+          }
+
           if (data.success && data.user) {
             user.role = data.user.role || user.role;
             user.planTier = data.user.tier || data.user.planTier || user.planTier;
             user.tier = data.user.tier || user.tier;
             user.channelName = data.user.channelNameHi || user.channelName;
             user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
+            isServerProfileComplete = Boolean(data.isProfileComplete || data.user.isProfileComplete);
             if (data.user.username && !data.user.username.includes('@')) {
               user.username = data.user.username;
-            }
-            if (data.isBlocked || data.user.isBlocked) {
-              user.isBlocked = true;
-              localStorage.setItem(`user_blocked_${cleanEmail}`, 'true');
-              window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: data.user }));
             }
             if (data.token) {
               localStorage.setItem('reporter_auth_token', data.token);
               (user as any).token = data.token;
             }
+          }
+
+          if (!isServerProfileComplete && !isSuper && !isAdmin) {
+            setLoading(false);
+            onClose();
+            localStorage.setItem('auth_current_step', '2');
+            localStorage.removeItem(`onboarding_completed_${cleanEmail}`);
+            localStorage.removeItem('is_onboarding_completed');
+            if (onOpenProfileSetup) {
+              onOpenProfileSetup(user);
+            } else {
+              window.dispatchEvent(new CustomEvent('open_auth_welcome_screen', { detail: { step: 2 } }));
+            }
+            return;
           }
         }
       } catch (authErr) {
@@ -253,7 +281,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             role: user.role,
             tier: effectiveTier,
             planName: isSuper || isAdmin ? 'VIP DESK' : (tierPlanNames[effectiveTier] || 'BASIC'),
-            isLocked: !isAdmin && !isSuper,
+            isLocked: Boolean((isSuper || isAdmin) || (isServerProfileComplete && !isAdmin && !isSuper)),
           });
         } catch (gRegErr) {
           console.warn('Error syncing Google user in LoginModal:', gRegErr);

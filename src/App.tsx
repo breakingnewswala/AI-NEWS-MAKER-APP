@@ -905,8 +905,23 @@ export default function App() {
       if (explicitLogout === 'true') return false;
       const rawUser = localStorage.getItem('reporter_auth_session');
       if (!rawUser) return false;
-      const flag = localStorage.getItem('is_onboarding_completed');
-      if (flag === 'false') return false;
+      const parsedUser = JSON.parse(rawUser);
+      const cleanEmail = (parsedUser?.email || '').toLowerCase().trim();
+      const isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || parsedUser?.role === 'admin' || parsedUser?.role === 'superadmin';
+      if (isAdmin) return true;
+      if (!cleanEmail) return false;
+
+      // Check user-specific onboarding completion flag
+      const userOnboarding = localStorage.getItem(`onboarding_completed_${cleanEmail}`);
+      if (userOnboarding !== 'true') return false;
+
+      // Check actual profile data completeness
+      const userProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`) || localStorage.getItem('user_channel_profile');
+      if (!userProfileStr) return false;
+      const profile = JSON.parse(userProfileStr);
+      if (!profile.channelNameHi || profile.channelNameHi === 'सेटअप अधूरा (Incomplete)' || profile.channelNameHi === 'एआई न्यूज़ मेकर' || !profile.channelLogoUrl) {
+        return false;
+      }
       return true;
     } catch {
       return false;
@@ -2256,8 +2271,14 @@ export default function App() {
     };
 
     let targetImageForStudio = '';
-    if (post.manualThumbnailUrl && post.manualThumbnailUrl.trim()) {
-      targetImageForStudio = post.manualThumbnailUrl.trim();
+    // Manual thumbnail is strictly for Home Screen News Card, NOT graphic studio background
+    if (post.additionalImages && post.additionalImages.length > 0) {
+      const feat = post.additionalImages.find((img) => img.isFeatured);
+      targetImageForStudio = (feat ? feat.imageUrl : post.additionalImages[0].imageUrl).trim();
+    } else if (post.featuredPhotoUrl && post.featuredPhotoUrl.trim()) {
+      targetImageForStudio = post.featuredPhotoUrl.trim();
+    } else if (post.additionalPhotos && post.additionalPhotos.length > 0) {
+      targetImageForStudio = post.additionalPhotos[0].trim();
     } else if (post.imageUrl && post.imageUrl.trim() && !post.imageUrl.includes('placeholder')) {
       targetImageForStudio = post.imageUrl.trim();
     } else if ((post as any).thumbnailUrl && (post as any).thumbnailUrl.trim() && !(post as any).thumbnailUrl.includes('placeholder')) {
@@ -2305,6 +2326,20 @@ export default function App() {
       return true;
     };
 
+    if (post.additionalImages && Array.isArray(post.additionalImages)) {
+      post.additionalImages.forEach((img) => {
+        if (isValidArticlePhoto(img.imageUrl)) {
+          const safeP = safeProxy(img.imageUrl);
+          if (safeP && !articlePhotos.includes(safeP)) {
+            if (img.isFeatured) {
+              articlePhotos.unshift(safeP);
+            } else {
+              articlePhotos.push(safeP);
+            }
+          }
+        }
+      });
+    }
     if (post.additionalPhotos && Array.isArray(post.additionalPhotos)) {
       post.additionalPhotos.forEach((p) => {
         if (isValidArticlePhoto(p)) {
@@ -2327,9 +2362,9 @@ export default function App() {
     } catch {}
 
     const primaryPhoto = articlePhotos[0] || safeTargetImage || '';
-    const secondPhoto = articlePhotos[1] || primaryPhoto;
-    const thirdPhoto = articlePhotos[2] || primaryPhoto;
-    const fourthPhoto = articlePhotos[3] || secondPhoto || primaryPhoto;
+    const secondPhoto = articlePhotos[1] || '';
+    const thirdPhoto = articlePhotos[2] || '';
+    const fourthPhoto = articlePhotos[3] || '';
 
     const approvedIds = getApprovedRssIds();
     const isApprovedNews = Boolean(

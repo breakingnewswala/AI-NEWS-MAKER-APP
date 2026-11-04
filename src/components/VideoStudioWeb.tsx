@@ -829,7 +829,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
   // Mode 1 (Ready-to-Use / Quick Video) vs Mode 2 (Full Video Studio)
   // On mobile or when opened from Video & Reels, Quick Video workflow is MANDATORY (Part 2 & Part 3)
-  const [isReadyToUseMode, setIsReadyToUseMode] = useState<boolean>(() => Boolean(initialVideo) || (typeof window !== 'undefined' ? window.innerWidth < 1024 : false));
+  const [isReadyToUseMode, setIsReadyToUseMode] = useState<boolean>(true);
 
   // Video Source & Playback State - clean default (no hardcoded mov_bbb fallback per Part C.5 & F.13)
   const [videoUrl, setVideoUrl] = useState<string>(

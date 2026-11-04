@@ -727,11 +727,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       } catch {}
     }
 
-    if (serverProfile) {
+    const isProfileGenuinelyComplete = Boolean(
+      serverProfile &&
+      serverProfile.isProfileComplete &&
+      serverProfile.channelNameHi &&
+      serverProfile.channelNameHi !== 'सेटअप अधूरा (Incomplete)' &&
+      serverProfile.channelNameHi !== 'एआई न्यूज़ मेकर' &&
+      (serverProfile.channelLogoUrl || serverProfile.channelLogoPngUrl)
+    );
+
+    if (isProfileGenuinelyComplete) {
       try {
         localStorage.setItem(userProfileKey, JSON.stringify(serverProfile));
         localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
       } catch {}
+    } else {
+      localStorage.removeItem(`onboarding_completed_${cleanEmail}`);
     }
 
     // 1. Check known registered users dictionary
@@ -750,13 +761,23 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
 
     const hasCompletedProfile = Boolean(
-      (serverProfile && (serverProfile.channelLogoUrl || serverProfile.channelNameHi)) ||
-      (knownProfile && knownProfile.channelLogoUrl) ||
-      (parsedProfile && parsedProfile.channelLogoUrl && parsedProfile.channelNameHi && parsedProfile.mobileNumber)
+      (isAdmin && !cleanEmail.includes('reporter')) ||
+      (serverProfile &&
+        serverProfile.isProfileComplete &&
+        serverProfile.channelLogoUrl &&
+        serverProfile.channelNameHi &&
+        serverProfile.channelNameHi !== 'सेटअप अधूरा (Incomplete)' &&
+        serverProfile.channelNameHi !== 'एआई न्यूज़ मेकर') ||
+      (parsedProfile &&
+        parsedProfile.isProfileComplete &&
+        parsedProfile.channelLogoUrl &&
+        parsedProfile.channelNameHi &&
+        parsedProfile.channelNameHi !== 'सेटअप अधूरा (Incomplete)' &&
+        parsedProfile.channelNameHi !== 'एआई न्यूज़ मेकर')
     );
 
     // Only genuine existing users with completed setup (or admins) bypass onboarding directly to Home
-    const isExistingUser = isAdmin || isCompletedFlag || hasCompletedProfile;
+    const isExistingUser = (isAdmin && !cleanEmail.includes('reporter')) || (hasCompletedProfile && isCompletedFlag);
 
     if (isExistingUser) {
       // EXISTING user: direct Home
@@ -805,7 +826,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       if (isAdmin) {
         setAdminSystemMode('admin');
       } else {
-        safeLocalStorageSet('is_channel_profile_locked', 'true');
+        safeLocalStorageSet(`channel_profile_locked_${cleanEmail}`, 'true');
+        safeLocalStorageRemove('is_channel_profile_locked');
         finalProfile.isLocked = true;
       }
 
@@ -869,10 +891,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     } catch {}
 
     const pendingUser: ReporterUser = {
-      username: draftData?.username || cleanEmail.split('@')[0],
-      name: draftData?.fullName || name || cleanEmail.split('@')[0],
+      username: draftData?.username || '',
+      name: draftData?.fullName || name || 'संपादक',
       role: 'user',
-      district: draftData?.district || 'पेंडिंग प्रोफ़ाइल',
+      district: draftData?.district || '',
       email: cleanEmail,
       avatarUrl: picture, // Google avatar is NOT channel logo
     };
@@ -883,19 +905,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     // Persist pending session so page refresh or tab re-opening stays smoothly in Step 2
     safeLocalStorageSet('reporter_auth_session', JSON.stringify(pendingUser));
     safeLocalStorageSet('auth_current_step', '2');
+    safeLocalStorageRemove(`onboarding_completed_${cleanEmail}`);
+    safeLocalStorageRemove('is_onboarding_completed');
 
-    // Register immediately so Users Manager shows this genuine user with incomplete status!
+    // Register immediately with profileIncomplete: true and isLocked: false so user can edit!
     registerOrUpdateUser({
       email: cleanEmail,
       username: pendingUser.username,
       name: pendingUser.name,
       mobile: draftData?.mobileNumber || '',
-      channelName: draftData?.channelNameHi || 'सेटअप अधूरा (Incomplete)',
+      channelName: draftData?.channelNameHi || '',
       channelLogoUrl: draftData?.channelLogoUrl || '',
       tier: 'basic',
       role: 'user',
-      isLocked: true,
+      isLocked: false,
       profileIncomplete: true,
+      isProfileComplete: false,
     });
 
     try {
@@ -920,10 +945,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     setDetailFullName(draftData?.fullName || name || '');
     setReportingDistrict(draftData?.district || '');
-    setDetailChannelNameHi(draftData?.channelNameHi || (knownProfile?.channelNameHi || ''));
-    setDetailChannelNameEn(draftData?.channelNameEn || (knownProfile?.channelNameEn || ''));
+    setDetailChannelNameHi(draftData?.channelNameHi || '');
+    setDetailChannelNameEn(draftData?.channelNameEn || '');
     setUsername(draftData?.username || '');
-    setIsUsernameCustomized(true);
+    setIsUsernameCustomized(Boolean(draftData?.username));
     setPrimaryMobileNumber(draftData?.mobileNumber || '');
     setGraphicContactNumber(draftData?.graphicContactNumber || '');
     setDetailChannelLogoUrl(draftData?.channelLogoUrl || '');
@@ -1179,6 +1204,18 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
+    // Check Channel Name Hi (Mandatory)
+    if (!detailChannelNameHi || !detailChannelNameHi.trim() || detailChannelNameHi.trim() === 'सेटअप अधूरा (Incomplete)' || detailChannelNameHi.trim() === 'एआई न्यूज़ मेकर') {
+      setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का वास्तविक नाम (हिन्दी में) दर्ज करें।');
+      return;
+    }
+
+    // Check Channel Name En (Mandatory)
+    if (!detailChannelNameEn || !detailChannelNameEn.trim() || detailChannelNameEn.trim() === 'AI News Maker') {
+      setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का नाम (English में) दर्ज करें।');
+      return;
+    }
+
     // Check Channel Logo (Mandatory)
     if (!detailChannelLogoUrl || !detailChannelLogoUrl.trim()) {
       setStep2ErrorMsg('⚠️ चैनल लोगो अपलोड करना अनिवार्य है। कृपया "लोगो चुनें" पर क्लिक करके अपने चैनल का लोगो अपलोड करें।');
@@ -1222,8 +1259,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       const isAdm = isSuper || (currentUser?.role === "admin") || (tempRegisteredUser?.role === "admin");
 
       // Lock channel details and logo for normal users (One-Time Setup Rule)
-      if (!isAdm) {
-        safeLocalStorageSet("is_channel_profile_locked", "true");
+      if (!isAdm && activeEmail) {
+        safeLocalStorageSet(`channel_profile_locked_${activeEmail}`, "true");
+        safeLocalStorageRemove("is_channel_profile_locked");
       }
 
       const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
@@ -1256,8 +1294,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
       const finalProfile: ChannelProfile = {
         fullName: detailFullName.trim() || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
-        channelNameHi: detailChannelNameHi.trim() || "AI News Maker App",
-        channelNameEn: detailChannelNameEn.trim() || "AI News Maker",
+        channelNameHi: detailChannelNameHi.trim(),
+        channelNameEn: detailChannelNameEn.trim(),
         channelLogoUrl: processedLogo || "",
         channelLogoPngUrl: processedLogo || "",
         channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
@@ -1325,6 +1363,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             socialIcons: finalProfile.socialIcons,
             tier: isAdm ? 'ultra' : 'basic',
             profileIncomplete: false,
+            isProfileComplete: true,
+            isProfileLocked: true,
+            profileStatus: 'active',
           };
           await Promise.allSettled([
             fetch(getApiUrl('/api/user-profile'), {

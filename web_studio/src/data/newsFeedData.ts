@@ -1,3 +1,12 @@
+export interface AdditionalImageItem {
+  imageId: string;
+  imageUrl: string;
+  storagePath?: string;
+  uploadedBy?: string;
+  uploadedAt?: number;
+  isFeatured?: boolean;
+}
+
 export interface NewsFeedPost {
   id: string;
   title: string;
@@ -18,6 +27,8 @@ export interface NewsFeedPost {
   imageSource?: 'source' | 'default' | 'manual';
   manualThumbnailUrl?: string;
   additionalPhotos?: string[];
+  additionalImages?: AdditionalImageItem[];
+  featuredPhotoUrl?: string;
   status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
   isBonus?: boolean;
   rewardCoins?: number;

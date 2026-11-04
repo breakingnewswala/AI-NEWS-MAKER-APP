@@ -3000,6 +3000,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (editingPost) {
+                  if (editingPost.imageSource === 'manual' && editingPost.manualThumbnailUrl && editingPost.manualThumbnailUrl.trim()) {
+                    const photos = editingPost.additionalPhotos || (editingPost.additionalImages ? editingPost.additionalImages.map((i: any) => i.imageUrl) : []);
+                    if (!photos || photos.length === 0) {
+                      alert('मैनुअल थंबनेल अपलोड करने पर कम से कम एक अतिरिक्त फोटो अपलोड करना अनिवार्य है।');
+                      return;
+                    }
+                  }
                   try {
                     await fetch(getApiUrl(`/api/admin/approve-news/${encodeURIComponent(editingPost.id)}`), {
                       method: 'POST',
@@ -3235,25 +3242,60 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  {(editingPost.additionalPhotos || []).map((imgUrl, idx) => (
-                    <div key={idx} className="relative h-20 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 group">
-                      <img src={imgUrl} alt={`Additional ${idx + 1}`} className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = (editingPost.additionalPhotos || []).filter((_, i) => i !== idx);
-                          setEditingPost({ ...editingPost, additionalPhotos: updated });
-                        }}
-                        className="absolute top-1 right-1 p-1 bg-red-600/90 text-white rounded-md opacity-80 hover:opacity-100 transition cursor-pointer"
-                        title="फोटो हटाएं"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[9px] text-white font-bold">
-                        फोटो {idx + 1}
-                      </span>
-                    </div>
-                  ))}
+                  {(editingPost.additionalPhotos || []).map((imgUrl, idx) => {
+                    const isFeatured = editingPost.featuredPhotoUrl === imgUrl || (!editingPost.featuredPhotoUrl && idx === 0);
+                    return (
+                      <div key={idx} className={`relative h-20 rounded-xl overflow-hidden border bg-slate-900 group ${isFeatured ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-slate-700'}`}>
+                        <img src={imgUrl} alt={`Additional ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPost({
+                              ...editingPost,
+                              featuredPhotoUrl: imgUrl,
+                              additionalImages: (editingPost.additionalPhotos || []).map((u, i) => ({
+                                imageId: `img_${i}`,
+                                imageUrl: u,
+                                isFeatured: u === imgUrl,
+                              })),
+                            });
+                          }}
+                          className={`absolute top-1 left-1 px-1.5 py-0.5 rounded flex items-center gap-0.5 text-[9px] font-black transition cursor-pointer shadow ${
+                            isFeatured
+                              ? 'bg-amber-400 text-slate-950 font-black'
+                              : 'bg-black/70 text-slate-300 hover:text-amber-300 hover:bg-black/90'
+                          }`}
+                          title="इस फोटो को मुख्य ग्राफिक फोटो (Featured) चुनें"
+                        >
+                          <Star className={`w-2.5 h-2.5 ${isFeatured ? 'fill-current' : ''}`} />
+                          <span>{isFeatured ? '★ Featured' : 'Star'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = (editingPost.additionalPhotos || []).filter((_, i) => i !== idx);
+                            setEditingPost({
+                              ...editingPost,
+                              additionalPhotos: updated,
+                              featuredPhotoUrl: editingPost.featuredPhotoUrl === imgUrl ? (updated[0] || '') : editingPost.featuredPhotoUrl,
+                              additionalImages: updated.map((u, i) => ({
+                                imageId: `img_${i}`,
+                                imageUrl: u,
+                                isFeatured: i === 0,
+                              })),
+                            });
+                          }}
+                          className="absolute top-1 right-1 p-1 bg-red-600/90 text-white rounded-md opacity-80 hover:opacity-100 transition cursor-pointer"
+                          title="फोटो हटाएं"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[9px] text-white font-bold">
+                          फोटो {idx + 1}
+                        </span>
+                      </div>
+                    );
+                  })}
 
                   {/* Upload button if less than 3 photos */}
                   {(editingPost.additionalPhotos || []).length < 3 && (
@@ -3552,6 +3594,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   type="button"
                   onClick={async () => {
                     if (!editingPost) return;
+                    if (editingPost.imageSource === 'manual' && editingPost.manualThumbnailUrl && editingPost.manualThumbnailUrl.trim()) {
+                      const photos = editingPost.additionalPhotos || (editingPost.additionalImages ? editingPost.additionalImages.map((i: any) => i.imageUrl) : []);
+                      if (!photos || photos.length === 0) {
+                        alert('मैनुअल थंबनेल अपलोड करने पर कम से कम एक अतिरिक्त फोटो अपलोड करना अनिवार्य है।');
+                        return;
+                      }
+                    }
                     try {
                       const headlineList = (editingPost.approvedHeadlines && editingPost.approvedHeadlines.length > 0)
                         ? editingPost.approvedHeadlines

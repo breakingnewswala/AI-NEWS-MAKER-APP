@@ -103,7 +103,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         : (card.images?.second || ''));
   const secondPhotoSrc = resolvedSecond
     ? getProxiedImageUrl(resolvedSecond)
-    : mainPhotoSrc;
+    : '';
 
   const resolvedThird = (card.images?.third && card.images.third.trim().length > 0 && card.images.third !== card.images.main)
     ? card.images.third
@@ -112,7 +112,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         : (card.images?.third || ''));
   const thirdPhotoSrc = resolvedThird
     ? getProxiedImageUrl(resolvedThird)
-    : mainPhotoSrc;
+    : '';
 
   const resolvedFourth = (card.images?.fourth && card.images.fourth.trim().length > 0 && card.images.fourth !== card.images.main)
     ? card.images.fourth
@@ -765,8 +765,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
         {/* Layout 3C: Double Image (50-50 Left & Right: साइड-बाई-साइड) */}
         {(card.layout === 'double-h' || card.layout === 'split-h') && (
-          <div className="w-full h-full grid grid-cols-2 gap-0.5">
-            <div className="w-full h-full overflow-hidden relative">
+          <div className="w-full h-full grid grid-cols-2 gap-0.5 bg-black">
+            <div className="w-full h-full overflow-hidden relative bg-black">
               <img
                 src={mainPhotoSrc}
                 alt=""
@@ -776,24 +776,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 onError={handleImgError}
               />
             </div>
-            <div className="w-full h-full overflow-hidden relative">
-              <img
-                src={secondPhotoSrc}
-                alt=""
-                className="w-full h-full object-cover transition-all duration-150"
-                style={secondStyle}
-                crossOrigin="anonymous"
-                onError={handleImgError}
-              />
+            <div className="w-full h-full overflow-hidden relative bg-black">
+              {secondPhotoSrc ? (
+                <img
+                  src={secondPhotoSrc}
+                  alt=""
+                  className="w-full h-full object-cover transition-all duration-150"
+                  style={secondStyle}
+                  crossOrigin="anonymous"
+                  onError={handleImgError}
+                />
+              ) : (
+                <div className="w-full h-full bg-black flex items-center justify-center text-slate-700 text-xs">फोटो 2</div>
+              )}
             </div>
           </div>
         )}
 
         {/* Layout 4A: Three Image (2 फोटो ऊपर, 1 चौड़ी फोटो नीचे) */}
         {card.layout === 'grid-3' && (
-          <div className="w-full h-full flex flex-col gap-0.5">
-            <div className="w-full h-[52%] grid grid-cols-2 gap-0.5">
-              <div className="w-full h-full overflow-hidden relative">
+          <div className="w-full h-full flex flex-col gap-0.5 bg-black">
+            <div className="w-full h-[52%] grid grid-cols-2 gap-0.5 bg-black">
+              <div className="w-full h-full overflow-hidden relative bg-black">
                 <img
                   src={mainPhotoSrc}
                   alt=""
@@ -803,34 +807,42 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   onError={handleImgError}
                 />
               </div>
-              <div className="w-full h-full overflow-hidden relative">
+              <div className="w-full h-full overflow-hidden relative bg-black">
+                {secondPhotoSrc ? (
+                  <img
+                    src={secondPhotoSrc}
+                    alt=""
+                    className="w-full h-full object-cover transition-all duration-150"
+                    style={secondStyle}
+                    crossOrigin="anonymous"
+                    onError={handleImgError}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-black flex items-center justify-center text-slate-700 text-xs">फोटो 2</div>
+                )}
+              </div>
+            </div>
+            <div className="w-full h-[48%] overflow-hidden relative bg-black">
+              {thirdPhotoSrc ? (
                 <img
-                  src={secondPhotoSrc}
+                  src={thirdPhotoSrc}
                   alt=""
                   className="w-full h-full object-cover transition-all duration-150"
-                  style={secondStyle}
+                  style={thirdStyle}
                   crossOrigin="anonymous"
                   onError={handleImgError}
                 />
-              </div>
-            </div>
-            <div className="w-full h-[48%] overflow-hidden relative">
-              <img
-                src={thirdPhotoSrc}
-                alt=""
-                className="w-full h-full object-cover transition-all duration-150"
-                style={thirdStyle}
-                crossOrigin="anonymous"
-                onError={handleImgError}
-              />
+              ) : (
+                <div className="w-full h-full bg-black flex items-center justify-center text-slate-700 text-xs">फोटो 3</div>
+              )}
             </div>
           </div>
         )}
 
         {/* Layout 4B: Three Image (1 चौड़ी फोटो ऊपर, 2 फोटो नीचे) */}
         {card.layout === 'grid-3-bottom' && (
-          <div className="w-full h-full flex flex-col gap-0.5">
-            <div className="w-full h-[48%] overflow-hidden relative">
+          <div className="w-full h-full flex flex-col gap-0.5 bg-black">
+            <div className="w-full h-[48%] overflow-hidden relative bg-black">
               <img
                 src={mainPhotoSrc}
                 alt=""
@@ -840,26 +852,34 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 onError={handleImgError}
               />
             </div>
-            <div className="w-full h-[52%] grid grid-cols-2 gap-0.5">
-              <div className="w-full h-full overflow-hidden relative">
-                <img
-                  src={secondPhotoSrc}
-                  alt=""
-                  className="w-full h-full object-cover transition-all duration-150"
-                  style={secondStyle}
-                  crossOrigin="anonymous"
-                  onError={handleImgError}
-                />
+            <div className="w-full h-[52%] grid grid-cols-2 gap-0.5 bg-black">
+              <div className="w-full h-full overflow-hidden relative bg-black">
+                {secondPhotoSrc ? (
+                  <img
+                    src={secondPhotoSrc}
+                    alt=""
+                    className="w-full h-full object-cover transition-all duration-150"
+                    style={secondStyle}
+                    crossOrigin="anonymous"
+                    onError={handleImgError}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-black flex items-center justify-center text-slate-700 text-xs">फोटो 2</div>
+                )}
               </div>
-              <div className="w-full h-full overflow-hidden relative">
-                <img
-                  src={thirdPhotoSrc}
-                  alt=""
-                  className="w-full h-full object-cover transition-all duration-150"
-                  style={thirdStyle}
-                  crossOrigin="anonymous"
-                  onError={handleImgError}
-                />
+              <div className="w-full h-full overflow-hidden relative bg-black">
+                {thirdPhotoSrc ? (
+                  <img
+                    src={thirdPhotoSrc}
+                    alt=""
+                    className="w-full h-full object-cover transition-all duration-150"
+                    style={thirdStyle}
+                    crossOrigin="anonymous"
+                    onError={handleImgError}
+                  />
+                ) : (
+                  <div className="w-full h-full bg-black flex items-center justify-center text-slate-700 text-xs">फोटो 3</div>
+                )}
               </div>
             </div>
           </div>

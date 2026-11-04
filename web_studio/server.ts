@@ -8571,7 +8571,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     // Username and Mobile locking:
     // If user is non-admin and username/mobileNumber already exists in profile, keep existing
     let finalUsername = profile.username !== undefined ? profile.username : existing.username;
-    if (!isAdmin && existing.username && existing.username.trim()) {
+    if (!isAdmin && existing.username && existing.username.trim() && existing.isProfileComplete && existing.isProfileLocked) {
       finalUsername = existing.username;
     }
     let finalMobile = (profile.mobileNumber || profile.mobile) !== undefined ? (profile.mobileNumber || profile.mobile) : existing.mobileNumber;
@@ -8637,9 +8637,19 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const safeIsBlocked = isAdmin
       ? (profile.isBlocked !== undefined ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked))
       : Boolean(existing.isBlocked);
+
+    const finalChannelHi = (profile.channelNameHi || profile.channelName || existing.channelNameHi || existing.channelName || "").toString().trim();
+    const isProfileComplete = Boolean(
+      (profile.isProfileComplete !== undefined ? profile.isProfileComplete : existing.isProfileComplete) &&
+      finalChannelHi &&
+      finalChannelHi !== "सेटअप अधूरा (Incomplete)" &&
+      finalChannelHi !== "एआई न्यूज़ मेकर" &&
+      (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
+    );
+
     const safeIsLocked = isAdmin
       ? (profile.isLocked !== undefined ? Boolean(profile.isLocked) : Boolean(existing.isLocked))
-      : Boolean(existing.isLocked);
+      : (isProfileComplete ? true : false);
 
     const updated: StoredUserProfile = {
       ...existing,
@@ -8651,7 +8661,10 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       role: safeRole,
       tier: safeTier,
       isBlocked: safeIsBlocked,
-      isLocked: safeIsLocked,
+      isLocked: isMasterAdminEmail ? true : safeIsLocked,
+      isProfileLocked: isMasterAdminEmail ? true : safeIsLocked,
+      isProfileComplete: isMasterAdminEmail ? true : isProfileComplete,
+      profileStatus: isMasterAdminEmail ? "active" : (isProfileComplete ? "active" : "incomplete"),
       email: profile.email || existing.email || "",
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
@@ -8998,20 +9011,46 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         const existing = Object.values(allProfiles).find(
           (p) => (p.uid && p.uid === googleUid) || (p.userId && p.userId === googleUid) || (p.email && p.email.toLowerCase() === cleanId)
         );
+
+        // Check blocked account
+        if (existing && existing.isBlocked) {
+          return res.status(403).json({
+            success: false,
+            isBlocked: true,
+            error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
+            user: existing,
+          });
+        }
+
+        const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
         const isSuper = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, '') === "admin.ainewsmaker@gmail.com";
         const isAdmin = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, '') === "breakingnewswala.com@gmail.com";
+
+        const isProfileComplete = Boolean(
+          !isDeletedTombstoned &&
+          existing &&
+          existing.isProfileComplete &&
+          existing.channelNameHi &&
+          existing.channelNameHi !== "सेटअप अधूरा (Incomplete)" &&
+          existing.channelNameHi !== "एआई न्यूज़ मेकर" &&
+          (existing.channelLogoUrl || existing.channelLogoPngUrl)
+        );
 
         let safeUsername: string;
         if (isSuper) {
           safeUsername = "AI News Maker";
         } else if (isAdmin) {
           safeUsername = "breakingnewswala";
+        } else if (isProfileComplete && existing?.username) {
+          safeUsername = existing.username;
+        } else if (profileData?.username && !profileData.username.includes('@')) {
+          safeUsername = profileData.username.trim().replace(/^@+/, '');
         } else {
-          safeUsername = cleanGenerateUsername(profileData?.username, profileData?.name || profileData?.fullName, existing?.username);
+          safeUsername = "";
         }
 
         const userPayload: any = {
-          userId: existing?.userId || googleUid,
+          userId: existing?.userId || (cleanId ? `usr_${Buffer.from(cleanId).toString('hex').slice(0, 16)}` : googleUid),
           uid: existing?.uid || googleUid,
           email: cleanId,
           username: safeUsername,
@@ -9020,18 +9059,20 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           role: isSuper ? "superadmin" : (isAdmin ? "superadmin" : (existing?.role || "user")),
           tier: isSuper ? "ultra" : (isAdmin ? "ultra" : (existing?.tier || "basic")),
           planName: isSuper ? "VIP DESK" : (isAdmin ? "VIP DESK" : (existing?.planName || "BASIC")),
-          channelName: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
-          channelNameHi: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (profileData?.channelName || existing?.channelNameHi || existing?.channelName || "एआई न्यूज़ मेकर")),
-          channelNameEn: isSuper ? "AI News Maker" : (isAdmin ? "Breaking News Wala" : (existing?.channelNameEn || "AI News Maker")),
-          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || existing?.channelLogoUrl || profileData?.channelLogoUrl || "")),
-          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "")),
-          channelLogoGifUrl: existing?.channelLogoGifUrl || "",
+          channelName: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (isProfileComplete ? (existing?.channelNameHi || existing?.channelName || "") : (profileData?.channelName || ""))),
+          channelNameHi: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (isProfileComplete ? (existing?.channelNameHi || "") : (profileData?.channelNameHi || ""))),
+          channelNameEn: isSuper ? "AI News Maker" : (isAdmin ? "Breaking News Wala" : (isProfileComplete ? (existing?.channelNameEn || "") : (profileData?.channelNameEn || ""))),
+          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
+          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
+          channelLogoGifUrl: isProfileComplete ? (existing?.channelLogoGifUrl || "") : "",
           channelLogoType: existing?.channelLogoType || "png",
-          mobile: profileData?.mobile || existing?.mobileNumber || "9669802408",
-          mobileNumber: profileData?.mobile || existing?.mobileNumber || "9669802408",
-          district: existing?.district || (isSuper ? "हेडक्वार्टर सेंट्रल डेस्क" : (isAdmin ? "सेंट्रल डेस्क / भोपाल" : "डिजिटल डेस्क")),
-          websiteUrl: isSuper ? "ainewsmaker.online" : (isAdmin ? "breakingnewswala.com" : (existing?.websiteUrl || "ainewsmaker.online")),
-          isProfileLocked: !isAdmin && !isSuper,
+          mobile: isSuper || isAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
+          mobileNumber: isSuper || isAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
+          district: isSuper ? "हेडक्वार्टर सेंट्रल डेस्क" : (isAdmin ? "सेंट्रल डेस्क / भोपाल" : (existing?.district || "")),
+          websiteUrl: isSuper ? "ainewsmaker.online" : (isAdmin ? "breakingnewswala.com" : (isProfileComplete ? (existing?.websiteUrl || "") : (profileData?.websiteUrl || ""))),
+          isProfileLocked: isSuper || isAdmin ? true : Boolean(isProfileComplete && existing?.isProfileLocked),
+          isProfileComplete: isSuper || isAdmin ? true : isProfileComplete,
+          profileStatus: isSuper || isAdmin ? "active" : (isProfileComplete ? "active" : "incomplete"),
         };
 
         savedUser = registerOrUpdateUserAuthoritative(userPayload);
@@ -9045,7 +9086,14 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         role: savedUser.role || "user",
         username: savedUser.username,
       });
-      return res.json({ success: true, isBlocked: Boolean(savedUser.isBlocked), user: savedUser, token });
+      return res.json({
+        success: true,
+        isBlocked: Boolean(savedUser.isBlocked),
+        isProfileComplete: isSuper || isAdmin ? true : Boolean(savedUser.isProfileComplete),
+        profileStatus: isSuper || isAdmin ? "active" : (savedUser.profileStatus || "incomplete"),
+        user: savedUser,
+        token,
+      });
     }
 
     // 2. Direct Credentials
@@ -9108,7 +9156,16 @@ app.get("/api/auth/me", (req, res) => {
   if (!user) {
     return res.status(401).json({ authenticated: false, error: "अनधिकृत: मान्य सत्र टोकन नहीं मिला" });
   }
-  return res.json({ authenticated: true, isBlocked: Boolean(user.isBlocked), user });
+  if (user.isBlocked) {
+    return res.status(403).json({ authenticated: true, isBlocked: true, error: "खाता व्यवस्थापक द्वारा ब्लॉक किया गया है।", user });
+  }
+  return res.json({
+    authenticated: true,
+    isBlocked: false,
+    isProfileComplete: Boolean((user as any).isProfileComplete),
+    profileStatus: (user as any).profileStatus || "active",
+    user,
+  });
 });
 
 // --- SUPPORT INBOX CLOUD DATABASE (support_requests_database.json) ---

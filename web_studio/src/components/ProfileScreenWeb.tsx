@@ -1771,9 +1771,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     };
     localStorage.setItem('profile_header_footer_json', JSON.stringify(headerFooterConfig));
 
-    // For non-admin users, lock profile status
-    if (!isAdmin) {
-      localStorage.setItem('is_channel_profile_locked', 'true');
+    // For non-admin users, lock profile status user-specifically
+    if (!isAdmin && cleanEmail) {
+      localStorage.setItem(`channel_profile_locked_${cleanEmail}`, 'true');
+      localStorage.removeItem('is_channel_profile_locked');
     }
 
     // Register or sync user profile record in system database

@@ -62,6 +62,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { PackageCoupon } from '../types';
+import { GoogleSheetsUserSyncModal } from './GoogleSheetsUserSyncModal';
 import {
   isUserMasterAdmin,
   isUserSuperAdmin,
@@ -1098,8 +1099,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [targetUserBalance, setTargetUserBalance] = useState<number | null>(null);
   const [isLoadingTargetBalance, setIsLoadingTargetBalance] = useState<boolean>(false);
 
-  // Category & Channel Manager subtab state
-  const [catChanTab, setCatChanTab] = useState<'categories' | 'channels'>('categories');
+  // Category & Channel Manager subtab state (3 distinct tabs per Phase 6)
+  const [catChanTab, setCatChanTab] = useState<'categories' | 'channels' | 'security'>('categories');
+  const [isSheetsSyncModalOpen, setIsSheetsSyncModalOpen] = useState<boolean>(false);
 
   // Reload data on events
   // Reload data on events & Auto-sync users in real-time
@@ -1722,6 +1724,25 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <span>{planSaveSuccess}</span>
             </div>
           )}
+
+          {/* Plan Manager Action Bar with Google Sheets Sync */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900 border border-slate-800 rounded-2xl shadow">
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-amber-400" />
+              <div>
+                <span className="text-xs font-black text-white block">सब्सक्रिप्शन प्लांस एवं पैकेजेस</span>
+                <span className="text-[10px] text-slate-400">सभी 4 प्लांस, फीचर्स, छूट व मूल्य निर्धारण</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsSheetsSyncModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>Google Sheets Sync (गूगल शीट सिंक)</span>
+            </button>
+          </div>
 
           {/* Cards Grid for the 4 Plans */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2882,14 +2903,24 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       </span>
                     )}
                   </h3>
-                  <p className="text-xs text-amber-200">
-                    यूज़र्स द्वारा चैनल लोगो बदलने हेतु सबमिट की गई रिक्वेस्ट। एडमिन द्वारा स्वीकृत (Approve) करने पर संबंधित यूज़र का प्रोफाइल अनलॉक हो जाएगा।
+                  <p className="text-xs text-amber-200 font-medium">
+                    यूजर्स द्वारा चैनल लोगो बदलने हेतु सबमिट की गई रिक्वेस्ट
                   </p>
                 </div>
               </div>
-              <span className="px-3 py-1 bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[11px] font-black rounded-lg">
-                🔐 एकबारगी सेटअप अनलॉक
-              </span>
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsSheetsSyncModalOpen(true)}
+                  className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 text-white font-black text-xs rounded-xl shadow flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>Google Sheets Sync</span>
+                </button>
+                <span className="px-3 py-1 bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[11px] font-black rounded-lg">
+                  🔐 एकबारगी सेटअप अनलॉक
+                </span>
+              </div>
             </div>
 
             {logoReqMsg && (
@@ -5565,7 +5596,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             ) : (
         <div className="space-y-6">
-          {/* Subtab Selector for Category & Channel Manager */}
+          {/* Subtab Selector for Category & Channel Manager (3 Separate Tabs per Phase 6) */}
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
             <button
               type="button"
@@ -5584,12 +5615,24 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               onClick={() => setCatChanTab('channels')}
               className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
                 catChanTab === 'channels'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow-lg'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              <span>2. चैनल व पोर्टल डायरेक्टरी (Channel & Portal Directory) ({newsPortals.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCatChanTab('security')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-2 ${
+                catChanTab === 'security'
                   ? 'bg-gradient-to-r from-rose-600 to-red-700 text-white shadow-lg'
                   : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               <ShieldAlert className="w-4 h-4" />
-              <span>2. चैनल व पोर्टल डायरेक्टरी (Channel & Portal Directory) ({restrictedList.length})</span>
+              <span>3. प्रतिबंधित चैनल सुरक्षा सूची (Restricted Channel Security List) ({restrictedList.length})</span>
             </button>
           </div>
 
@@ -5705,8 +5748,104 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
 
-          {/* TAB 2: CHANNEL & PORTAL DIRECTORY */}
+          {/* TAB 2: CHANNEL & PORTAL DIRECTORY (News Portal Management per Phase 6) */}
           {catChanTab === 'channels' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-cyan-950/80 via-slate-900 to-blue-950/80 border-2 border-cyan-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-black shadow-lg shrink-0">
+                      <Globe className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base sm:text-lg font-black text-white">
+                          चैनल व न्यूज़ पोर्टल डायरेक्टरी
+                        </h3>
+                        <span className="px-2 py-0.5 bg-cyan-600 text-white text-[10px] font-black rounded uppercase">
+                          मीडिया पोर्टल्स
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                        वेबसाइट एवं आर्टिकल न्यूज़ पोर्टल्स जोड़ें, संपादित करें या हटाएं। सभी सक्रिय न्यूज़ चैनल्स व मीडिया हाउस का केंद्रीय प्रबंधन।
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-cyan-300 bg-cyan-950/60 px-3 py-1.5 rounded-xl border border-cyan-500/40">
+                    <span>कुल पोर्टल्स: {newsPortals.length}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Add New News Portal Form */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                <div className="flex items-center gap-2 text-sm font-black text-cyan-300 border-b border-slate-800 pb-2.5">
+                  <Plus className="w-4 h-4 text-cyan-400" />
+                  <span>+ नया न्यूज़ चैनल / पोर्टल जोड़ें</span>
+                </div>
+                <form onSubmit={handleAddNewsPortal} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input
+                    type="text"
+                    required
+                    value={newPortalName}
+                    onChange={(e) => setNewPortalName(e.target.value)}
+                    placeholder="न्यूज़ चैनल / पोर्टल का नाम (उदा. नवभारत टाइम्स)"
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:border-cyan-400 focus:outline-hidden"
+                  />
+                  <input
+                    type="url"
+                    value={newPortalUrl}
+                    onChange={(e) => setNewPortalUrl(e.target.value)}
+                    placeholder="वेबसाइट URL (उदा. https://navbharattimes.indiatimes.com)"
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:border-cyan-400 focus:outline-hidden font-mono"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ न्यूज़ पोर्टल जोड़ें</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* News Portals Directory Grid */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2 text-sm font-black text-white">
+                    <Globe className="w-4 h-4 text-cyan-400" />
+                    <span>सक्रिय न्यूज़ पोर्टल्स सूची ({newsPortals.length})</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {newsPortals.map((p) => (
+                    <div
+                      key={p.id}
+                      className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center justify-between gap-2 hover:border-slate-700 transition"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-100 truncate">{p.name}</div>
+                        <div className="text-[10px] font-mono text-cyan-400/80 truncate mt-0.5">{p.url || 'वेबसाइट URL उपलब्ध नहीं'}</div>
+                      </div>
+                      {newsPortals.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNewsPortal(p.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-950/30 transition cursor-pointer shrink-0"
+                          title="पोर्टल हटाएं"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: RESTRICTED CHANNEL SECURITY LIST */}
+          {catChanTab === 'security' && (
           <div className="space-y-6">
           {/* Top Explanation Banner */}
           <div className="bg-gradient-to-r from-red-950/80 via-slate-900 to-amber-950/80 border-2 border-red-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl">
@@ -6736,6 +6875,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           setPlanSaveSuccess(`🎉 ${planId.toUpperCase()} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
           setTimeout(() => setPlanSaveSuccess(null), 4000);
         }}
+      />
+
+      {/* Google Sheets Sync Modal (Phase 4) */}
+      <GoogleSheetsUserSyncModal
+        isOpen={isSheetsSyncModalOpen}
+        onClose={() => setIsSheetsSyncModalOpen(false)}
       />
     </div>
   );

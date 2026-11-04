@@ -1364,16 +1364,20 @@ export function isChannelProfileLocked(user?: any): boolean {
     }
 
     const explicitLock = localStorage.getItem(`channel_profile_locked_${userEmail}`);
-    if (explicitLock === 'true') return true;
     if (explicitLock === 'false') return false;
+    if (explicitLock === 'true' && user?.isProfileComplete) return true;
 
-    const generalLock = localStorage.getItem('is_channel_profile_locked');
-    if (generalLock === 'true') return true;
+    // Never lock if profile is incomplete or has default/placeholder channel names
+    if (!user?.channelNameHi || user.channelNameHi === 'सेटअप अधूरा (Incomplete)' || user.channelNameHi === 'एआई न्यूज़ मेकर') {
+      return false;
+    }
 
-    const savedProfile = localStorage.getItem('user_channel_profile');
+    if (user?.isProfileLocked && user?.isProfileComplete) return true;
+
+    const savedProfile = localStorage.getItem(`user_profile_${userEmail}`) || localStorage.getItem('user_channel_profile');
     if (savedProfile) {
       const profile = JSON.parse(savedProfile);
-      if (profile && (profile.channelLogoUrl || profile.channelNameHi)) {
+      if (profile && profile.isProfileComplete && profile.channelLogoUrl && profile.channelNameHi && profile.channelNameHi !== 'सेटअप अधूरा (Incomplete)' && profile.channelNameHi !== 'एआई न्यूज़ मेकर') {
         return true;
       }
     }
