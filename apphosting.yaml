@@ -87,3 +87,7 @@ env:
     secret: GEMINI_API_KEY
     availability:
       - RUNTIME
+  - variable: WHATSAPP_ACCESS_TOKEN
+    secret: WHATSAPP_ACCESS_TOKEN
+    availability:
+      - RUNTIME
