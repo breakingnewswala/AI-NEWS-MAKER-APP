@@ -60,6 +60,7 @@ import {
 } from '../lib/userPlanManager';
 import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
+import { ReporterUser } from './LoginModal';
 
 // Social Media Brand Icons for Story Feature (Part H)
 export const FacebookIcon = () => (

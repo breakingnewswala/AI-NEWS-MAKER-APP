@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
 import {
@@ -82,6 +82,7 @@ import {
   fetchUserDailyDownloadStatus,
   getCachedUserDailyDownloadStatus,
   UserDailyDownloadStatus,
+  checkAccountUniqueness,
 } from '../lib/userPlanManager';
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';

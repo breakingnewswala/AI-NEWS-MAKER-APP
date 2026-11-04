@@ -4500,6 +4500,28 @@ class AsyncLock {
 }
 const userDbLock = new AsyncLock();
 
+
+function loadUsersAccountsDatabase(): any[] {
+  try {
+    const locs = resolveAllDatabaseLocations("users_accounts_db.json");
+    for (const loc of locs) {
+      if (fs.existsSync(loc)) {
+        return JSON.parse(fs.readFileSync(loc, "utf-8")) || [];
+      }
+    }
+  } catch {}
+  return [];
+}
+
+function saveUsersAccountsDatabase(accounts: any[]): void {
+  try {
+    const locs = resolveAllDatabaseLocations("users_accounts_db.json");
+    for (const loc of locs) {
+      fs.writeFileSync(loc, JSON.stringify(accounts, null, 2), "utf-8");
+    }
+  } catch {}
+}
+
 function loadUsersMasterDatabase(): AuthoritativeUser[] {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
     const unique = new Map<string, any>();
@@ -18499,9 +18521,7 @@ app.post("/api/admin/save-template-config", requireMasterAdminMiddleware, (req, 
       updatedAt: Date.now(),
     };
 
-    if (centralDb && centralDb.useFirestore) {
-      centralDb.saveTemplateConfig(templateId, current[templateId]).catch(() => {});
-    }
+
     fs.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,

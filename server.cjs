@@ -10707,6 +10707,27 @@ var AsyncLock = class {
   }
 };
 var userDbLock = new AsyncLock();
+function loadUsersAccountsDatabase() {
+  try {
+    const locs = resolveAllDatabaseLocations("users_accounts_db.json");
+    for (const loc of locs) {
+      if (import_fs.default.existsSync(loc)) {
+        return JSON.parse(import_fs.default.readFileSync(loc, "utf-8")) || [];
+      }
+    }
+  } catch {
+  }
+  return [];
+}
+function saveUsersAccountsDatabase(accounts) {
+  try {
+    const locs = resolveAllDatabaseLocations("users_accounts_db.json");
+    for (const loc of locs) {
+      import_fs.default.writeFileSync(loc, JSON.stringify(accounts, null, 2), "utf-8");
+    }
+  } catch {
+  }
+}
 function loadUsersMasterDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
     const unique = /* @__PURE__ */ new Map();
@@ -21758,10 +21779,6 @@ app.post("/api/admin/save-template-config", requireMasterAdminMiddleware, (req, 
       ...logoArea ? { logoArea: String(logoArea).trim() } : {},
       updatedAt: Date.now()
     };
-    if (centralDb && centralDb.useFirestore) {
-      centralDb.saveTemplateConfig(templateId2, current[templateId2]).catch(() => {
-      });
-    }
     import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,

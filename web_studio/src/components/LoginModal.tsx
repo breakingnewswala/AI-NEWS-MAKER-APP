@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { registerOrUpdateUser } from '../lib/userPlanManager';
+import { safeLocalStorageSet } from '../lib/storageUtils';
 import { getApiUrl } from '../lib/apiConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';

@@ -4542,13 +4542,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                         headers: { 'Content-Type': 'application/json', 'x-user-email': currentUser?.email || '' },
                                       });
                                       if (res.ok) {
-                                        fetchAdminRewardClaims();
-                                        showToast('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
+                                        fetchAdminRewards();
+                                        alert('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
                                       } else {
-                                        showToast('❌ क्लेम हटाने में समस्या आई।');
+                                        alert('❌ क्लेम हटाने में समस्या आई।');
                                       }
                                     } catch (e: any) {
-                                      showToast('❌ त्रुटि: ' + e.message);
+                                      alert('❌ त्रुटि: ' + e.message);
                                     } finally {
                                       setIsProcessingRewardAction(false);
                                     }
@@ -4578,13 +4578,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                         headers: { 'Content-Type': 'application/json', 'x-user-email': currentUser?.email || '' },
                                       });
                                       if (res.ok) {
-                                        fetchAdminRewardClaims();
-                                        showToast('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
+                                        fetchAdminRewards();
+                                        alert('✓ बोनस क्लेम रिकॉर्ड हटा दिया गया।');
                                       } else {
-                                        showToast('❌ क्लेम हटाने में समस्या आई।');
+                                        alert('❌ क्लेम हटाने में समस्या आई।');
                                       }
                                     } catch (e: any) {
-                                      showToast('❌ त्रुटि: ' + e.message);
+                                      alert('❌ त्रुटि: ' + e.message);
                                     } finally {
                                       setIsProcessingRewardAction(false);
                                     }
