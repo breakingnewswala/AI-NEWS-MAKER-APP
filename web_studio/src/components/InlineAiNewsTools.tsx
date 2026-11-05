@@ -193,6 +193,16 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     ((currentUser as any)?.planName && String((currentUser as any).planName).toUpperCase().includes('VIP'))
   );
   const canUseOpenAi = ['pro', 'professional', 'vip_dash', 'vip-dash', 'ultra', 'vip desk', 'admin', 'superadmin'].includes(userPlan) || isAdminOrSuperAdmin;
+  const canUseUrlGeneration = Boolean(
+    isAdminOrSuperAdmin ||
+    [
+      'advance', 'advanced', 'एडवांस',
+      'pro', 'professional', 'प्रो',
+      'vip', 'vip_desk', 'vip-desk', 'vip desk', 'ultra', 'vip_dash', 'vip-dash', 'वीआईपी',
+      'admin', 'superadmin', 'super_admin'
+    ].includes(userPlan) ||
+    ((currentUser as any)?.planName && /advance|pro|vip|admin/i.test(String((currentUser as any).planName)))
+  );
 
   // Restore previous session from localStorage so headlines are preserved across view/tab changes
   const [activeTab, setActiveTab] = useState<'link' | 'command'>(() => {
@@ -204,9 +214,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const [activeGeneratedProvider, setActiveGeneratedProvider] = useState<'gemini' | 'openai' | null>(() => {
     return getSavedAiSession()?.activeGeneratedProvider || null;
   });
+  // URL field MUST default to empty string unless explicitly opened from a Home Screen News Card (autoFillNews?.url)
   const [linkUrl, setLinkUrl] = useState<string>(() => {
-    const s = getSavedAiSession();
-    return s?.linkUrl || autoFillNews?.url || card.websiteUrl || '';
+    return autoFillNews?.url ? autoFillNews.url.trim() : '';
   });
   const [inputText, setInputText] = useState<string>(() => {
     const s = getSavedAiSession();
@@ -1047,139 +1057,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         globalIsExecuting = false;
         return;
       }
-      if (aiProvider === 'openai') {
-        const errorMsg = err.message || 'चैट जीपीटी (OpenAI) से विश्लेषण विफल रहा। कृपया API कुंजी या नेटवर्क की जाँच करें।';
-        setError(errorMsg);
-        setLoading(false);
-        isExecutingRef.current = false;
-        globalIsExecuting = false;
-        window.dispatchEvent(new CustomEvent('ai_tools_state_synced', { detail: { error: errorMsg } }));
-        return;
-      }
-      console.warn('API error, executing client AI fallback:', err);
-      let fallbackText = effectiveText || extraData?.title || '';
-      let fallbackImages: string[] = extraData?.additionalPhotos || (extraData?.imageUrl ? [extraData.imageUrl] : []);
-
-      // If URL was provided, attempt client-side edge scraping so real news facts and photos are used
-      if (effectiveLink && (!fallbackText || fallbackText.length < 25)) {
-        try {
-          const scraped = await scrapeNewsUrlClient(effectiveLink, 16000);
-          if (scraped) {
-            fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
-            if (scraped.images && scraped.images.length > 0) {
-              fallbackImages = scraped.images;
-            }
-          }
-        } catch (scrapeErr) {
-          console.warn('Client scrape fallback error in triggerProcessDirectly:', scrapeErr);
-        }
-      }
-
-      if (effectiveLink && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
-        const errorMsg = 'इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।';
-        setError(errorMsg);
-        setLoading(false);
-        isExecutingRef.current = false;
-        globalIsExecuting = false;
-        window.dispatchEvent(new CustomEvent('ai_tools_state_synced', { detail: { error: errorMsg } }));
-        return;
-      }
-
-      const fallbackResult = processNewsLocally(
-        fallbackText || effectiveLink,
-        effectiveLink || undefined,
-        tplConfig,
-        getActiveCaptionUsername(card, currentUser)
-      );
-
-      const opts: string[] = [];
-      if (Array.isArray(fallbackResult.headlineOptions) && fallbackResult.headlineOptions.length > 0) {
-        fallbackResult.headlineOptions.forEach((h: string) => {
-          const cleanH = cleanHeadlineText(h);
-          if (cleanH && !opts.includes(cleanH)) opts.push(cleanH);
-        });
-      }
-      if (fallbackResult.headline) {
-        const cleanMain = cleanHeadlineText(fallbackResult.headline);
-        if (cleanMain && !opts.includes(cleanMain)) {
-          if (!opts.some((o) => calculateHeadlineSimilarity(o, cleanMain) >= 0.65)) {
-            opts.unshift(cleanMain);
-          }
-        }
-      }
-
-      const finalOpts = buildFiveStoryOptions(
-        opts,
-        cleanHeadlineText(opts[0] || fallbackResult.headline || ''),
-        extraData?.summary || fallbackResult.summary || '',
-        fallbackResult.location || extraData?.location || '',
-        extraData?.title || ''
-      );
-
-      setResult(fallbackResult);
-      if (fallbackResult.canonicalContext) {
-        setCanonicalContext(fallbackResult.canonicalContext);
-        try {
-          localStorage.setItem('ai_news_canonical_context', JSON.stringify(fallbackResult.canonicalContext));
-        } catch {}
-      }
-      setHeadlineOptions(finalOpts.slice(0, 5));
-      setSelectedHeadlineIndex(0);
-      setUseWebsitePhoto(!!fallbackImages[0] || !!extraData?.imageUrl);
-
-      const finalHeadline = cleanHeadlineText(finalOpts[0] || fallbackResult.headline || '');
-      const finalLoc = cleanLocationField(fallbackResult.location || extraData?.location || '');
-      const finalImage = (fallbackImages[0] && !fallbackImages[0].includes('placeholder'))
-        ? fallbackImages[0]
-        : (card.images.main || extraData?.imageUrl || '');
-
-      const effectiveCaption = formatCaptionByStyle(
-        captionStyle,
-        finalHeadline,
-        finalLoc,
-        fallbackResult.captionDetailed || fallbackResult.summary || extraData?.summary || '',
-        fallbackResult,
-        effectiveLink || url
-      );
-
-      const finalSecond = fallbackImages[1] || extraData?.additionalPhotos?.[1] || card.images.second || finalImage;
-      const finalThird = fallbackImages[2] || extraData?.additionalPhotos?.[2] || card.images.third || finalImage;
-      const finalFourth = fallbackImages[3] || extraData?.additionalPhotos?.[3] || card.images.fourth || finalImage;
-
-      onChange({
-        headline: finalHeadline,
-        formattedHeadline: fallbackResult.formattedHeadline || finalHeadline,
-        headlineOptions: finalOpts.slice(0, 5),
-        highlightWords: fallbackResult.highlightWords || [],
-        location: finalLoc,
-        summary: effectiveCaption,
-        images: {
-          ...card.images,
-          main: finalImage,
-          second: finalSecond,
-          third: finalThird,
-          fourth: finalFourth,
-        },
-        extractedArticlePhotos: fallbackImages.length > 0 ? fallbackImages : card.extractedArticlePhotos,
-      });
-
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(effectiveCaption).catch(() => {});
-      }
-
-      window.dispatchEvent(
-        new CustomEvent('ai_tools_state_synced', {
-          detail: {
-            result: fallbackResult,
-            headlineOptions: finalOpts.slice(0, 5),
-            selectedHeadlineIndex: 0,
-            linkUrl: effectiveLink || url,
-            inputText: effectiveText,
-            activeGeneratedProvider: 'gemini',
-            error: null,
-          },
-        })
-      );
+      const rawMsg = err?.message || '';
+      const errorMsg = /AbortError|Failed to fetch|NetworkError/i.test(rawMsg)
+        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।'
+        : (rawMsg || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
+      setError(errorMsg);
+      setLoading(false);
+      isExecutingRef.current = false;
+      globalIsExecuting = false;
+      window.dispatchEvent(new CustomEvent('ai_tools_state_synced', { detail: { error: errorMsg } }));
     } finally {
       setLoading(false);
       isExecutingRef.current = false;
@@ -1202,6 +1088,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     let effectiveText = !isLinkMode ? inputText.trim() : '';
     const rawPrompt = customPrompt.trim();
 
+    if (isLinkMode && !canUseUrlGeneration) {
+      setError('यह सुविधा केवल Advanced, Pro और VIP प्लान के लिए उपलब्ध है। URL से AI हेडलाइन बनाने के लिए अपना प्लान अपग्रेड करें।');
+      return;
+    }
+
     if (isLinkMode && effectiveLink) {
       if (!effectiveLink.startsWith('http://') && !effectiveLink.startsWith('https://')) {
         effectiveText = effectiveLink;
@@ -1209,12 +1100,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       }
     }
 
+    if (effectiveLink && !canUseUrlGeneration) {
+      setError('यह सुविधा केवल Advanced, Pro और VIP प्लान के लिए उपलब्ध है। URL से AI हेडलाइन बनाने के लिए अपना प्लान अपग्रेड करें।');
+      return;
+    }
+
     if (!effectiveLink && !effectiveText && rawPrompt) {
       effectiveText = rawPrompt;
     }
 
     if (!effectiveLink && !effectiveText) {
-      setError('कृपया किसी समाचार का लिंक, कच्चा विवरण या निर्देश/प्रॉम्प्ट दर्ज करें');
+      setError(isLinkMode ? 'कृपया समाचार का सही URL दर्ज करें।' : 'कृपया किसी समाचार का कच्चा विवरण या निर्देश/प्रॉम्प्ट दर्ज करें');
       return;
     }
 
@@ -1362,110 +1258,11 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       if (isResetRef.current || activeRequestIdRef.current !== requestId) {
         return;
       }
-      if (effectiveProvider === 'openai') {
-        setError(err.message || 'चैट जीपीटी (OpenAI) से विश्लेषण विफल रहा। कृपया API कुंजी या नेटवर्क की जाँच करें।');
-        setLoading(false);
-        return;
-      }
-      console.warn('API error, executing client AI fallback:', err);
-      try {
-        let fallbackText = effectiveText;
-        let scrapedPhotos: string[] = [];
-
-        // If URL was provided, attempt client-side edge scraping so real news facts and photos are used
-        if (effectiveLink && (!fallbackText || fallbackText.length < 25)) {
-          try {
-            const scraped = await scrapeNewsUrlClient(effectiveLink, 16000);
-            if (scraped) {
-              fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
-              if (scraped.images && scraped.images.length > 0) {
-                scrapedPhotos = scraped.images;
-              }
-            }
-          } catch (scrapeErr) {
-            console.warn('Client scrape fallback error in handleProcess:', scrapeErr);
-          }
-        }
-
-        if (effectiveLink && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
-          setError('इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट बॉक्स में सीधे पेस्ट करें।');
-          setLoading(false);
-          isExecutingRef.current = false;
-          return;
-        }
-
-        const fallbackResult = processNewsLocally(
-          fallbackText || effectiveLink,
-          effectiveLink || undefined,
-          tplConfig,
-          card.socialHandle || currentUser?.username
-        );
-
-        const rawOpts: string[] = [];
-        if (Array.isArray(fallbackResult.headlineOptions) && fallbackResult.headlineOptions.length > 0) {
-          fallbackResult.headlineOptions.forEach((h: string) => {
-            const cleanH = cleanHeadlineText(h);
-            if (cleanH && !rawOpts.includes(cleanH)) rawOpts.push(cleanH);
-          });
-        }
-        const originalTitleToExclude = card.originalHeadline || autoFillNews?.title || '';
-        const finalOpts = buildFiveStoryOptions(
-          rawOpts,
-          cleanHeadlineText(rawOpts[0] || fallbackResult.headline || ''),
-          fallbackResult.summary || '',
-          fallbackResult.location || '',
-          originalTitleToExclude
-        );
-
-        setResult(fallbackResult);
-        if (fallbackResult.canonicalContext) {
-          setCanonicalContext(fallbackResult.canonicalContext);
-          try {
-            localStorage.setItem('ai_news_canonical_context', JSON.stringify(fallbackResult.canonicalContext));
-          } catch {}
-        }
-        setHeadlineOptions(finalOpts.slice(0, 5));
-        setSelectedHeadlineIndex(0);
-        setUseWebsitePhoto(scrapedPhotos.length > 0);
-
-        const finalHeadline = cleanHeadlineText(finalOpts[0] || fallbackResult.headline || '');
-        const finalLoc = cleanLocationField(fallbackResult.location || '');
-        const finalImage = scrapedPhotos[0] || card.images.main;
-        const finalSecond = scrapedPhotos[1] || card.images.second || finalImage;
-        const finalThird = scrapedPhotos[2] || card.images.third || finalImage;
-        const finalFourth = scrapedPhotos[3] || card.images.fourth || finalImage;
-
-        const effectiveCaption = formatCaptionByStyle(
-          captionStyle,
-          finalHeadline,
-          finalLoc,
-          fallbackResult.summary || '',
-          fallbackResult,
-          effectiveLink
-        );
-
-        onChange({
-          headline: finalHeadline,
-          formattedHeadline: fallbackResult.formattedHeadline || finalHeadline,
-          highlightWords: fallbackResult.highlightWords || [],
-          location: finalLoc,
-          summary: effectiveCaption,
-          images: {
-            ...card.images,
-            main: finalImage,
-            second: finalSecond,
-            third: finalThird,
-            fourth: finalFourth,
-          },
-          extractedArticlePhotos: scrapedPhotos.length > 0 ? scrapedPhotos : card.extractedArticlePhotos,
-        });
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(effectiveCaption).catch(() => {});
-        }
-      } catch {
-        setError('खबर की जानकारी प्राप्त नहीं हो सकी। कृपया लिंक जाँचें या खबर का टेक्स्ट पेस्ट करें।');
-      }
+      const rawMsg = err?.message || '';
+      const errorMsg = /AbortError|Failed to fetch|NetworkError/i.test(rawMsg)
+        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।'
+        : (rawMsg || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
+      setError(errorMsg);
     } finally {
       setLoading(false);
       isExecutingRef.current = false;
@@ -1609,9 +1406,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           setIsRegenerating(false);
           return;
         }
+
+        if (!res.ok || !data || !data.success) {
+          setError(data?.error || 'AI सेवा से हेडलाइन्स तैयार करने में समस्या आई। कृपया पुनः प्रयास करें।');
+          setIsRegenerating(false);
+          return;
+        }
       } catch (fetchErr) {
         console.warn('Network or endpoint fetch error in regenerate-headlines:', fetchErr);
-        data = null;
+        setError('समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
+        setIsRegenerating(false);
+        return;
       }
 
       let rawNew: string[] = [];
@@ -1672,34 +1477,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         setRegenSuccessMsg(`✓ 5 नए संतुलित हेडलाइन विकल्प सफलतापूर्वक जोड़े गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
         setTimeout(() => setRegenSuccessMsg(null), 4000);
       } else {
-        setError('हेडलाइन्स के नए विकल्प तैयार नहीं हो सके। कृपया समाचार टेक्स्ट जांचें।');
+        setError('हेडलाइन्स के नए विकल्प तैयार नहीं हो सके। कृपया पुनः प्रयास करें।');
       }
     } catch (err: any) {
-      console.warn('Fallback headline regeneration executed:', err);
-      try {
-        const sourceTitle = cleanHeadlineText(activeCtx.title || result?.headline || card.headline || 'ताज़ा समाचार');
-        const sourceText = activeCtx.articleText || inputText || result?.summary || card.summary || '';
-        const sourceLoc = cleanLocationField(activeCtx.location || result?.location || card.location || '');
-        const articleSentences = (sourceText || sourceTitle)
-          .split(/[।\n]+|\.\s+/)
-          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-        const generated = generate5BalancedHeadlineOptions(sourceTitle, articleSentences, sourceLoc);
-        const fitted = fitHeadlinesTo5TierRanges(generated, articleSentences, sourceTitle, sourceLoc).slice(0, 5);
-        if (fitted.length > 0) {
-          const initial5 = headlineOptions.slice(0, 5);
-          const combined10 = [...initial5, ...fitted].slice(0, 10);
-          setHeadlineOptions(combined10);
-          setSelectedHeadlineIndex(initial5.length);
-          const topH = fitted[0];
-          setResult((prev) => (prev ? { ...prev, headline: topH, formattedHeadline: topH, headlineOptions: combined10, regenerationUsed: true } : null));
-          onChange({ headline: topH, formattedHeadline: topH, headlineOptions: combined10, regenerationUsed: true });
-          setRegenSuccessMsg(`✓ 5 नए संतुलित हेडलाइन विकल्प तैयार किए गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
-          setTimeout(() => setRegenSuccessMsg(null), 4000);
-          return;
-        }
-      } catch {}
-      setError('हेडलाइन्स दोबारा बनाने में समस्या आई। कृपया पुनः प्रयास करें।');
+      setError(err?.message || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
     } finally {
       setIsRegenerating(false);
     }
@@ -2018,8 +1799,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           {/* Input Section */}
           <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 sm:p-4 space-y-3">
             {activeTab === 'link' ? (
-              /* बॉक्स 1: Link Input with Automatic Photo Extraction */
+              /* बॉक्स 1: Link Input with Automatic Photo Extraction & Plan-Based Access Control */
               <div className="space-y-2">
+                {!canUseUrlGeneration && (
+                  <div className="p-3 rounded-xl bg-amber-950/70 border border-amber-500/60 text-amber-200 text-xs font-bold flex items-start gap-2.5 shadow-inner">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>यह सुविधा केवल Advanced, Pro और VIP प्लान के लिए उपलब्ध है। URL से AI हेडलाइन बनाने के लिए अपना प्लान अपग्रेड करें।</span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-blue-300 flex items-center gap-1.5">
                     <LinkIcon className="w-3.5 h-3.5 text-blue-400" />
@@ -2028,7 +1816,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      disabled={loading || isRegenerating}
+                      disabled={loading || isRegenerating || !canUseUrlGeneration}
                       onClick={handlePasteClipboardToLink}
                       className="text-[11px] font-bold text-blue-300 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="क्लिपबोर्ड से लिंक पेस्ट करें"
@@ -2039,7 +1827,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                     {linkUrl && (
                       <button
                         type="button"
-                        disabled={loading || isRegenerating}
+                        disabled={loading || isRegenerating || !canUseUrlGeneration}
                         onClick={() => setLinkUrl('')}
                         className="text-neutral-500 hover:text-red-400 p-0.5 rounded disabled:opacity-50"
                         title="साफ़ करें"
@@ -2052,13 +1840,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
                 <input
                   type="url"
-                  disabled={loading || isRegenerating}
+                  disabled={loading || isRegenerating || !canUseUrlGeneration}
                   value={linkUrl}
                   onChange={(e) => {
                     setLinkUrl(e.target.value);
                     setError(null);
                   }}
-                  placeholder="https://... कोई भी न्यूज़ वेबसाइट लिंक पेस्ट करें"
+                  placeholder="समाचार का URL यहाँ दर्ज करें"
                   className="w-full bg-neutral-900 border border-neutral-700 focus:border-blue-400 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="text-[11px] text-neutral-400 leading-snug">
@@ -2158,8 +1946,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             <button
               type="button"
               onClick={() => handleProcess()}
-              disabled={loading}
-              className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 ${
+              disabled={loading || (activeTab === 'link' && !canUseUrlGeneration)}
+              className={`w-full py-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-lg transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed ${
                 activeTab === 'link' ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white'
                   : 'bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-neutral-950'
               }`}
