@@ -31,6 +31,472 @@ const otpRateLimits = new Map<string, { lastSent: number; countInHour: number; h
 // In-memory verification cache for fast lookup and dev fallback
 const otpVerificationCache = new Map<string, any>();
 
+const sha256 = (value: string) => createHash("sha256").update(String(value || "")).digest("hex");
+
+// Phase 1B In-memory caches for live inbox fast access and offline resilience
+export const conversationCache = new Map<string, any>();
+export const messageCache = new Map<string, any>();
+export const replyIdempotencyCache = new Map<string, number>();
+
+/**
+ * Phase 1B.1 Issue 2 Remediation: Explicit Meta WhatsApp Message State Machine.
+ * Valid state transitions:
+ *   pending   -> sent, failed
+ *   sent      -> delivered, failed
+ *   delivered -> read (strictly terminal against failed, sent, or pending)
+ *   read      -> terminal (strictly terminal against failed, delivered, sent, or pending)
+ *   failed    -> terminal (strictly terminal against any other status)
+ */
+export const VALID_STATUS_TRANSITIONS: Record<string, string[]> = {
+  pending: ["sent", "failed"],
+  sent: ["delivered", "failed"],
+  delivered: ["read"],
+  read: [],
+  failed: [],
+};
+
+export const isValidStatusTransition = (currentStatus: string, incomingStatus: string): boolean => {
+  const current = String(currentStatus || "pending").toLowerCase().trim();
+  const incoming = String(incomingStatus || "").toLowerCase().trim();
+  if (current === incoming) return false; // Duplicate callback
+  const allowed = VALID_STATUS_TRANSITIONS[current];
+  return Array.isArray(allowed) && allowed.includes(incoming);
+};
+
+export const STATUS_RANK: Record<string, number> = {
+  pending: 0,
+  sent: 1,
+  delivered: 2,
+  read: 3,
+  failed: 4,
+};
+
+/**
+ * Phase 1B.1 / 1B.2 Hardened: Acquires an atomic dispatch reservation for an AI message.
+ * Coordinates human takeover and AI dispatch through a transaction-safe state transition.
+ * Verifies that the conversation is in 'ai' mode and has not been taken over by an operator.
+ * Safely handles expired reservations by allowing a new worker to reclaim the lease.
+ */
+export const acquireAiDispatchReservation = async (
+  conversationId: string,
+  centralDb: any
+): Promise<{ acquired: boolean; reservationId?: string; reason?: string }> => {
+  const now = Date.now();
+  const reservationId = randomUUID();
+  const leaseDurationMs = 15000; // 15-second reservation lease
+
+  // 1. Transactional reservation if Firestore transaction is available
+  if (centralDb?.useFirestore && typeof centralDb.beginTransaction === "function") {
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      let tx: any = null;
+      try {
+        const attemptNow = Date.now();
+        tx = await centralDb.beginTransaction();
+        if (tx?.success && tx.transaction) {
+          const current = await centralDb._readDocInTransaction("whatsapp_conversations", conversationId, tx.transaction);
+          const data = current?.data || {};
+          const handlingMode = data.handlingMode || "ai";
+
+          if (handlingMode === "human" || handlingMode === "waiting_human") {
+            await centralDb.rollbackTransaction(tx.transaction);
+            return { acquired: false, reason: `conversation_in_${handlingMode}_mode` };
+          }
+
+          // Check if an active non-expired reservation exists from another worker
+          const existingReservation = data.aiDispatchReservation;
+          if (existingReservation && Number(existingReservation.expiresAt || 0) > attemptNow) {
+            await centralDb.rollbackTransaction(tx.transaction);
+            return { acquired: false, reason: "active_reservation_conflict" };
+          }
+
+          if (existingReservation && Number(existingReservation.expiresAt || 0) <= attemptNow) {
+            console.log(`[WhatsApp:Reservation] Reclaiming expired AI dispatch reservation ${existingReservation.reservationId} (expired ${attemptNow - Number(existingReservation.expiresAt)}ms ago) on ${conversationId}`);
+          }
+
+          const newReservation = {
+            reservationId,
+            reservedAt: attemptNow,
+            expiresAt: attemptNow + leaseDurationMs,
+          };
+
+          const updatedData = {
+            ...data,
+            aiDispatchReservation: newReservation,
+            conversationVersion: Number(data.conversationVersion || 0) + 1,
+            updatedAt: attemptNow,
+          };
+
+          const fields: any = {};
+          for (const [key, value] of Object.entries(updatedData)) {
+            if (value !== undefined) fields[key] = centralDb._toFirestoreField(value);
+          }
+          const name = `projects/${centralDb.projectId}/databases/${centralDb.databaseId}/documents/whatsapp_conversations/${conversationId}`;
+          const write: any = { update: { name, fields } };
+          if (current.updateTime) {
+            write.currentDocument = { updateTime: current.updateTime };
+          }
+          const committed = await centralDb.commitTransaction(tx.transaction, [write]);
+          if (committed?.success) {
+            conversationCache.set(conversationId, updatedData);
+            return { acquired: true, reservationId };
+          } else {
+            if (attempt < maxRetries - 1) {
+              const jitter = Math.floor(Math.random() * 50);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            return { acquired: false, reason: "transaction_conflict" };
+          }
+        }
+      } catch (txErr: any) {
+        if (tx?.transaction) {
+          await centralDb.rollbackTransaction(tx.transaction).catch(() => {});
+        }
+        if (attempt < maxRetries - 1) {
+          const jitter = Math.floor(Math.random() * 50);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        }
+        return { acquired: false, reason: "transaction_error" };
+      }
+    }
+  }
+
+  // 2. Direct Firestore read/write fallback or in-memory cache check (used only when transactions are unsupported)
+  let convDoc: any = null;
+  if (centralDb?.readDoc) {
+    try {
+      const cRes = await centralDb.readDoc("whatsapp_conversations", conversationId);
+      if (cRes?.success && cRes.data) convDoc = cRes.data;
+    } catch {}
+  }
+  if (!convDoc && conversationCache.has(conversationId)) {
+    convDoc = conversationCache.get(conversationId);
+  }
+
+  const currentMode = convDoc?.handlingMode || "ai";
+  if (currentMode === "human" || currentMode === "waiting_human") {
+    return { acquired: false, reason: `conversation_in_${currentMode}_mode` };
+  }
+
+  const existingRes = convDoc?.aiDispatchReservation;
+  if (existingRes && Number(existingRes.expiresAt || 0) > now) {
+    return { acquired: false, reason: "active_reservation_conflict" };
+  }
+
+  if (existingRes && Number(existingRes.expiresAt || 0) <= now) {
+    console.log(`[WhatsApp:Reservation] Reclaiming expired AI dispatch reservation ${existingRes.reservationId} (expired ${now - Number(existingRes.expiresAt)}ms ago) on ${conversationId}`);
+  }
+
+  const reservation = {
+    reservationId,
+    reservedAt: now,
+    expiresAt: now + leaseDurationMs,
+  };
+
+  const updated = {
+    ...convDoc,
+    aiDispatchReservation: reservation,
+    conversationVersion: Number(convDoc?.conversationVersion || 0) + 1,
+    updatedAt: now,
+  };
+
+  if (centralDb?.writeDoc) {
+    await centralDb.writeDoc("whatsapp_conversations", conversationId, updated).catch(() => {});
+  }
+  conversationCache.set(conversationId, updated);
+  return { acquired: true, reservationId };
+};
+
+/**
+ * Phase 1B.1 / 1B.2 Hardened: Releases an acquired AI dispatch reservation.
+ * Verifies reservation ownership: cannot clear another worker's newer reservation.
+ */
+export const releaseAiDispatchReservation = async (
+  conversationId: string,
+  reservationId: string,
+  centralDb: any
+): Promise<{ released: boolean; reason?: string }> => {
+  if (!reservationId) {
+    return { released: false, reason: "missing_reservation_id" };
+  }
+
+  // 1. Transactional release if Firestore transaction is available
+  if (centralDb?.useFirestore && typeof centralDb.beginTransaction === "function") {
+    let tx: any = null;
+    try {
+      tx = await centralDb.beginTransaction();
+      if (tx?.success && tx.transaction) {
+        const current = await centralDb._readDocInTransaction("whatsapp_conversations", conversationId, tx.transaction);
+        const data = current?.data || {};
+        const currentRes = data.aiDispatchReservation;
+
+        if (!currentRes) {
+          await centralDb.rollbackTransaction(tx.transaction);
+          return { released: false, reason: "no_active_reservation" };
+        }
+
+        if (currentRes.reservationId !== reservationId) {
+          console.warn(`[WhatsApp:Reservation] Refusing to release reservation: worker ${reservationId} tried to release newer/different reservation ${currentRes.reservationId}`);
+          await centralDb.rollbackTransaction(tx.transaction);
+          return { released: false, reason: "reservation_id_mismatch" };
+        }
+
+        const updatedData = {
+          ...data,
+          aiDispatchReservation: null,
+          updatedAt: Date.now(),
+        };
+
+        const fields: any = {};
+        for (const [key, value] of Object.entries(updatedData)) {
+          if (value !== undefined) fields[key] = centralDb._toFirestoreField(value);
+        }
+        const name = `projects/${centralDb.projectId}/databases/${centralDb.databaseId}/documents/whatsapp_conversations/${conversationId}`;
+        const write: any = { update: { name, fields } };
+        if (current.updateTime) {
+          write.currentDocument = { updateTime: current.updateTime };
+        }
+        const committed = await centralDb.commitTransaction(tx.transaction, [write]);
+        if (committed?.success) {
+          conversationCache.set(conversationId, updatedData);
+          return { released: true };
+        }
+      }
+    } catch (txErr: any) {
+      if (tx?.transaction) {
+        await centralDb.rollbackTransaction(tx.transaction).catch(() => {});
+      }
+      console.warn("[WhatsApp:Reservation] Transactional release failed, falling back to direct check:", txErr?.message || txErr);
+    }
+  }
+
+  // 2. Direct Firestore fallback
+  let convDoc: any = null;
+  if (centralDb?.readDoc) {
+    try {
+      const cRes = await centralDb.readDoc("whatsapp_conversations", conversationId);
+      if (cRes?.success && cRes.data) convDoc = cRes.data;
+    } catch {}
+  }
+  if (!convDoc && conversationCache.has(conversationId)) {
+    convDoc = conversationCache.get(conversationId);
+  }
+
+  const currentRes = convDoc?.aiDispatchReservation;
+  if (!currentRes) {
+    return { released: false, reason: "no_active_reservation" };
+  }
+
+  if (currentRes.reservationId !== reservationId) {
+    console.warn(`[WhatsApp:Reservation] Refusing to release reservation: worker ${reservationId} tried to release newer/different reservation ${currentRes.reservationId}`);
+    return { released: false, reason: "reservation_id_mismatch" };
+  }
+
+  const updated = {
+    ...convDoc,
+    aiDispatchReservation: null,
+    updatedAt: Date.now(),
+  };
+  if (centralDb?.writeDoc) {
+    await centralDb.writeDoc("whatsapp_conversations", conversationId, updated).catch(() => {});
+  }
+  conversationCache.set(conversationId, updated);
+  return { released: true };
+};
+
+/**
+ * Phase 1B: Records a persistent audit event for WhatsApp conversation actions
+ * (e.g. mode changes, operator assignment, operator replies).
+ */
+export const recordAuditEvent = async (
+  centralDb: any,
+  event: {
+    conversationId: string;
+    eventType: string;
+    previousValue?: any;
+    newValue?: any;
+    actorId: string;
+    actorType: "customer" | "operator" | "system";
+    metadata?: any;
+  }
+) => {
+  const auditId = `audit_${Date.now()}_${randomBytes(4).toString("hex")}`;
+  const record = {
+    auditId,
+    timestamp: Date.now(),
+    ...event,
+  };
+  if (centralDb?.writeDoc) {
+    await centralDb.writeDoc("whatsapp_audit_events", auditId, record).catch(() => {});
+  }
+  return record;
+};
+
+/**
+ * Phase 1B: Processes Meta WhatsApp delivery status webhook callbacks
+ * (sent, delivered, read, failed). Enforces idempotent updates, explicit state machine transitions,
+ * and strictly prevents regression of delivered or read states from late/duplicate callbacks.
+ */
+export const processDeliveryStatus = async (
+  statusUpdate: any,
+  centralDb: any,
+  requireWriteFn?: (col: string, id: string, data: any) => Promise<any>
+) => {
+  const metaMessageId = String(statusUpdate?.id || "").trim();
+  const rawStatus = String(statusUpdate?.status || "").toLowerCase().trim();
+  if (!metaMessageId || !rawStatus) {
+    return { success: false, reason: "missing_id_or_status" };
+  }
+
+  const validStatuses = ["sent", "delivered", "read", "failed"];
+  if (!validStatuses.includes(rawStatus)) {
+    return { success: false, reason: "unsupported_status" };
+  }
+
+  const statusTimestamp = Number(statusUpdate.timestamp || Math.floor(Date.now() / 1000)) * 1000;
+  const docId = sha256(metaMessageId);
+  const eventDedupeId = sha256(`status_${metaMessageId}_${rawStatus}`);
+
+  // 1. Idempotency check via whatsapp_webhook_events
+  if (centralDb?.readDoc) {
+    try {
+      const existingEvent = await centralDb.readDoc("whatsapp_webhook_events", eventDedupeId);
+      if (existingEvent?.success && existingEvent.data?.status === "processed") {
+        return { success: true, duplicate: true, metaMessageId, status: rawStatus };
+      }
+    } catch {}
+  }
+
+  // 2. Fetch existing message record
+  let existingMsg: any = null;
+  let actualDocId = docId;
+  if (centralDb?.readDoc) {
+    try {
+      const mRes = await centralDb.readDoc("whatsapp_messages", docId);
+      if (mRes?.success && mRes.data) {
+        existingMsg = mRes.data;
+      }
+    } catch {}
+  }
+
+  if (!existingMsg && messageCache.has(docId)) {
+    existingMsg = messageCache.get(docId);
+  }
+
+  if (!existingMsg) {
+    for (const [k, v] of messageCache.entries()) {
+      if (v.metaMessageId === metaMessageId || v.messageId === metaMessageId) {
+        existingMsg = v;
+        actualDocId = k;
+        break;
+      }
+    }
+  }
+
+  if (!existingMsg) {
+    console.log(`[WhatsApp:Status] Unknown messageId ${metaMessageId} received with status ${rawStatus}; recording event safely`);
+    if (centralDb?.writeDoc) {
+      await centralDb.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+        metaMessageId,
+        status: "processed",
+        messageNotFound: true,
+        rawStatus,
+        receivedAt: Date.now(),
+      }).catch(() => {});
+    }
+    return { success: true, messageFound: false, metaMessageId, status: rawStatus };
+  }
+
+  // 3. Phase 1B.1 Issue 2 Remediation: Explicit State Machine Transition Validation
+  const currentStatus = String(existingMsg.status || "pending").toLowerCase().trim();
+
+  // 3a. Duplicate callback detection
+  if (currentStatus === rawStatus) {
+    console.log(`[WhatsApp:Status] Duplicate status callback ignored for ${metaMessageId}: already in status '${currentStatus}'`);
+    if (centralDb?.writeDoc) {
+      await centralDb.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+        metaMessageId,
+        status: "processed",
+        ignoredReason: "duplicate_status_callback",
+        receivedAt: Date.now(),
+      }).catch(() => {});
+    }
+    return { success: true, duplicate: true, currentStatus, incomingStatus: rawStatus };
+  }
+
+  // 3b. State machine validation (Preserves delivered and read from late failed/sent callbacks)
+  const isTransitionValid = isValidStatusTransition(currentStatus, rawStatus);
+  if (!isTransitionValid) {
+    console.log(`[WhatsApp:Status] Invalid status transition rejected for ${metaMessageId}: '${currentStatus}' -> '${rawStatus}' (terminal or regression prevented)`);
+    if (centralDb?.writeDoc) {
+      await centralDb.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+        metaMessageId,
+        status: "processed",
+        ignoredReason: `invalid_transition_${currentStatus}_to_${rawStatus}`,
+        receivedAt: Date.now(),
+      }).catch(() => {});
+    }
+    return {
+      success: true,
+      ignored: true,
+      reason: "invalid_transition_prevented",
+      currentStatus,
+      incomingStatus: rawStatus,
+    };
+  }
+
+  // 4. Update message record
+  const writeFn = requireWriteFn || ((col: string, id: string, data: any) => centralDb.writeDoc(col, id, data));
+  const updatedMsg = {
+    ...existingMsg,
+    status: rawStatus,
+    statusTimestamp,
+    deliveryStatusUpdatedAt: Date.now(),
+  };
+
+  if (rawStatus === "failed") {
+    updatedMsg.failureDetails = statusUpdate.errors || statusUpdate.error || [{ message: "Delivery failed" }];
+  }
+
+  await writeFn("whatsapp_messages", actualDocId, updatedMsg);
+  messageCache.set(actualDocId, updatedMsg);
+
+  // 5. Update parent conversation document if available
+  const conversationId = existingMsg.conversationId;
+  if (conversationId && centralDb) {
+    try {
+      const convRes = await centralDb.readDoc("whatsapp_conversations", conversationId);
+      const convData = convRes?.success && convRes.data ? convRes.data : {};
+      const updatedConv = {
+        ...convData,
+        lastMessageStatus: rawStatus,
+        updatedAt: Date.now(),
+      };
+      await writeFn("whatsapp_conversations", conversationId, updatedConv).catch(() => {});
+      if (conversationCache.has(conversationId)) {
+        conversationCache.set(conversationId, { ...conversationCache.get(conversationId), ...updatedConv });
+      }
+    } catch (err: any) {
+      console.warn("[WhatsApp:Status] Error updating conversation status:", err?.message || err);
+    }
+  }
+
+  // 6. Record deduplication event in whatsapp_webhook_events
+  if (centralDb?.writeDoc) {
+    await centralDb.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+      metaMessageId,
+      status: "processed",
+      appliedStatus: rawStatus,
+      processedAt: Date.now(),
+    }).catch(() => {});
+  }
+
+  console.log(`[WhatsApp:Status] Message ${metaMessageId} status transitioned: ${currentStatus} -> ${rawStatus}`);
+  return { success: true, updated: true, metaMessageId, previousStatus: currentStatus, newStatus: rawStatus };
+};
+
 /**
  * Task B & C: Canonical international phone normalization.
  * Normalizes numbers with country codes into standard E.164 without leading '+'.
@@ -426,9 +892,28 @@ export function registerWhatsAppIntegration(
 
   const verifySignature = (req: any) => {
     const appSecret = process.env.META_APP_SECRET;
-    const signature = String(req.headers["x-hub-signature-256"] || "");
-    const rawBody = String(req.rawBody || "");
-    if (!appSecret || !signature.startsWith("sha256=") || !rawBody) return false;
+    const signature = String(req?.headers?.["x-hub-signature-256"] || "").trim();
+
+    // Phase 1B.2 Fail-Closed Cryptographic Security:
+    // 1. Raw body MUST be present as an original unparsed string or Buffer.
+    // 2. Reject immediately if rawBody is missing, undefined, null, or empty.
+    // 3. NEVER fall back to JSON.stringify(req.body).
+    if (!req || !("rawBody" in req) || req.rawBody === undefined || req.rawBody === null) {
+      console.warn("[WhatsApp:Inbound] Webhook signature rejected: raw request body is missing or unavailable");
+      return false;
+    }
+
+    const rawBody = typeof req.rawBody === "string" ? req.rawBody : Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : "";
+    if (rawBody.length === 0) {
+      console.warn("[WhatsApp:Inbound] Webhook signature rejected: raw request body is empty");
+      return false;
+    }
+
+    if (!appSecret || !signature.startsWith("sha256=")) {
+      console.warn("[WhatsApp:Inbound] Webhook signature rejected: invalid signature format or app secret missing");
+      return false;
+    }
+
     const expected = "sha256=" + createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
     return safeEqual(signature, expected);
   };
@@ -679,8 +1164,9 @@ export function registerWhatsAppIntegration(
     const conversationId = sha256(waId);
     const now = Date.now();
 
-    await requireWrite("whatsapp_messages", messageDocId, {
+    const incomingRecord = {
       messageId,
+      metaMessageId: messageId,
       conversationId,
       waId,
       direction: "inbound",
@@ -689,16 +1175,46 @@ export function registerWhatsAppIntegration(
       timestamp: Number(message.timestamp || Math.floor(now / 1000)) * 1000,
       createdAt: now,
       status: "received",
-    });
+      senderType: "customer",
+      senderId: waId,
+    };
+    await requireWrite("whatsapp_messages", messageDocId, incomingRecord);
+    messageCache.set(messageDocId, incomingRecord);
 
-    await requireWrite("whatsapp_conversations", conversationId, {
+    // Read existing conversation state to preserve handlingMode, operator assignment, and audit data
+    let existingConv: any = null;
+    try {
+      const convRes = await centralDb.readDoc("whatsapp_conversations", conversationId);
+      if (convRes?.success && convRes.data) {
+        existingConv = convRes.data;
+      }
+    } catch {}
+    if (!existingConv && conversationCache.has(conversationId)) {
+      existingConv = conversationCache.get(conversationId);
+    }
+
+    const currentHandlingMode = existingConv?.handlingMode || "ai";
+    const currentUnread = Number(existingConv?.unreadCount || 0) + 1;
+
+    const convUpdates = {
+      ...existingConv,
+      conversationId,
       waId,
+      customerPhone: waId,
       channel: "whatsapp",
       lastInboundAt: now,
       lastMessagePreview: textBody.slice(0, 180) || `[${message.type || "message"}]`,
-      status: "open",
+      lastMessageDirection: "inbound",
+      lastMessageAt: now,
+      lastMessageStatus: "received",
+      unreadCount: currentUnread,
+      status: existingConv?.status === "closed" ? "open" : (existingConv?.status || "open"),
+      handlingMode: currentHandlingMode,
       updatedAt: now,
-    });
+    };
+
+    await requireWrite("whatsapp_conversations", conversationId, convUpdates);
+    conversationCache.set(conversationId, convUpdates);
 
     if (textBody.toUpperCase() === "STOP" || textBody.toUpperCase() === "UNSUBSCRIBE") {
       console.log(`[WhatsApp:Inbound] STOP/UNSUBSCRIBE received from ${maskedWa}`);
@@ -707,26 +1223,83 @@ export function registerWhatsAppIntegration(
       const optOutReply = "आपकी WhatsApp समाचार सूचनाएँ बंद कर दी गई हैं। ग्राहक सहायता के लिए आप हमें संदेश भेज सकते हैं।";
       const sent = await sendWhatsAppText(waId, optOutReply);
       const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
-        conversationId, waId, direction: "outbound", text: optOutReply, timestamp: now, status: "sent",
-      });
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId,
+        waId,
+        direction: "outbound",
+        senderType: "system",
+        text: optOutReply,
+        timestamp: now,
+        status: "sent",
+      };
+      await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord);
+      messageCache.set(sha256(outMsgId), outRecord);
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
       return;
     }
 
-    const wantsHuman = /\b(agent|human|person|support)\b|मानव|व्यक्ति|प्रतिनिधि|कस्टमर केयर|सहायता टीम/i.test(textBody);
+    const wantsHuman = /\b(agent|human|person|support|representative|executive|live\s*agent)\b|मानव|व्यक्ति|प्रतिनिधि|कस्टमर केयर|सहायता टीम|कस्टमर सपोर्ट|बात करनी है|सहायता चाहिए|एजेंट/i.test(textBody);
     if (wantsHuman) {
-      console.log("[WhatsApp:Inbound] Human handoff triggered, with exact reason: user_request");
-      await requireWrite("whatsapp_conversations", conversationId, {
-        waId, status: "human_requested", humanHandoff: true, handoffRequestedAt: now, handoffReason: "user_request", updatedAt: now,
+      console.log(`[WhatsApp:Inbound] Human handoff triggered by customer ${maskedWa}`);
+      const handoffConvUpdates = {
+        ...convUpdates,
+        handlingMode: "waiting_human",
+        status: "human_requested",
+        humanHandoff: true,
+        handoffRequestedAt: now,
+        handoffReason: "user_request",
+        modeUpdatedAt: now,
+        modeUpdatedBy: "customer",
+        updatedAt: now,
+      };
+      await requireWrite("whatsapp_conversations", conversationId, handoffConvUpdates);
+      conversationCache.set(conversationId, handoffConvUpdates);
+
+      await recordAuditEvent(centralDb, {
+        conversationId,
+        eventType: "conversation_mode_changed",
+        previousValue: currentHandlingMode,
+        newValue: "waiting_human",
+        actorId: waId,
+        actorType: "customer",
+        metadata: { trigger: "user_keyword", text: textBody.slice(0, 60) },
       });
-      const handoffReply = "आपका अनुरोध हमारी सहायता टीम को भेज दिया गया है। कृपया यहीं प्रतीक्षा करें, टीम का सदस्य आपसे संपर्क करेगा।";
+
+      const handoffReply = "नमस्ते! आपका अनुरोध हमारी सहायता टीम को भेज दिया गया है। हमारे प्रतिनिधि जल्द ही आपसे यहाँ संपर्क करेंगे।";
       const sent = await sendWhatsAppText(waId, handoffReply);
       const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
-        conversationId, waId, direction: "outbound", text: handoffReply, timestamp: now, status: "sent",
-      });
-      console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId,
+        waId,
+        direction: "outbound",
+        senderType: "system",
+        text: handoffReply,
+        timestamp: now,
+        status: "sent",
+      };
+      await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord);
+      messageCache.set(sha256(outMsgId), outRecord);
+      console.log(`[WhatsApp:Outbound] Outbound handoff acknowledgement saved: ${outMsgId}`);
+      return;
+    }
+
+    // MANDATORY PHASE 1B SAFETY GUARD: Check active handling mode directly from Firestore.
+    // While in 'human' mode, the AI must NOT generate or send automatic replies.
+    // While in 'waiting_human' mode, the AI is suppressed while customer awaits human pickup.
+    const activeConvRes = await centralDb.readDoc("whatsapp_conversations", conversationId);
+    const activeHandlingMode = activeConvRes?.data?.handlingMode || currentHandlingMode;
+
+    if (activeHandlingMode === "human") {
+      console.log(`[WhatsApp:Handoff] AI reply suppressed: conversation ${conversationId} is currently handled by human operator (${activeConvRes?.data?.assignedOperatorName || activeConvRes?.data?.assignedOperatorId || "unassigned"}). Inbound message recorded for live inbox.`);
+      return;
+    }
+
+    if (activeHandlingMode === "waiting_human") {
+      console.log(`[WhatsApp:Handoff] AI reply suppressed: conversation ${conversationId} is in 'waiting_human' mode awaiting operator pickup. Inbound message recorded for live inbox.`);
       return;
     }
 
@@ -1185,9 +1758,35 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
     if (!reply) {
       const handoffReason = aiResult.reason || "knowledge_gap";
       console.log(`[WhatsApp:Inbound] Human handoff triggered, with exact reason: ${handoffReason}`);
-      await requireWrite("whatsapp_conversations", conversationId, {
-        waId, status: "human_requested", humanHandoff: true, handoffReason, updatedAt: Date.now(),
+      let kgConvData: any = {};
+      try {
+        const kgRes = await centralDb.readDoc("whatsapp_conversations", conversationId);
+        if (kgRes?.success && kgRes.data) kgConvData = kgRes.data;
+      } catch {}
+      const kgUpdates = {
+        ...kgConvData,
+        waId,
+        handlingMode: "waiting_human",
+        status: "human_requested",
+        humanHandoff: true,
+        handoffReason,
+        modeUpdatedAt: Date.now(),
+        modeUpdatedBy: "system_ai_gap",
+        updatedAt: Date.now(),
+      };
+      await requireWrite("whatsapp_conversations", conversationId, kgUpdates);
+      conversationCache.set(conversationId, kgUpdates);
+
+      await recordAuditEvent(centralDb, {
+        conversationId,
+        eventType: "conversation_mode_changed",
+        previousValue: kgConvData.handlingMode || "ai",
+        newValue: "waiting_human",
+        actorId: "system",
+        actorType: "system",
+        metadata: { reason: handoffReason },
       });
+
       if (handoffReason === "knowledge_gap") {
         reply = "आपका प्रश्न हमें मिल गया है, लेकिन इसकी पुष्टि हमारे उपलब्ध सहायता-ज्ञान से नहीं हो पा रही है। हमने इसे सहायता टीम के लिए चिन्हित कर दिया है।";
       } else {
@@ -1195,12 +1794,57 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
       }
     }
 
-    const sent = await sendWhatsAppText(waId, reply);
-    const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-    await requireWrite("whatsapp_messages", sha256(outMsgId), {
-      conversationId, waId, direction: "outbound", text: reply, timestamp: Date.now(), status: "sent",
-    });
-    console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+    // PHASE 1B.1 ISSUE 1 REMEDIATION: Transaction-safe AI Dispatch Reservation
+    // Coordinates human takeover and AI dispatch through an atomic state transition.
+    const reservation = await acquireAiDispatchReservation(conversationId, centralDb);
+    if (!reservation.acquired) {
+      console.log(`[WhatsApp:Handoff] Aborting AI response dispatch: could not acquire dispatch reservation (${reservation.reason}). Operator takeover has priority.`);
+      return;
+    }
+
+    let sent: any = null;
+    let outMsgId = `out-${messageId}`;
+    try {
+      // Micro-check immediately prior to network call: verify reservation was not revoked by takeover and is unexpired
+      let latestConv = conversationCache.get(conversationId);
+      if (centralDb?.readDoc) {
+        try {
+          const lRes = await centralDb.readDoc("whatsapp_conversations", conversationId);
+          if (lRes?.success && lRes.data) latestConv = lRes.data;
+        } catch {}
+      }
+      const curReservation = latestConv?.aiDispatchReservation;
+      if (
+        latestConv?.handlingMode === "human" ||
+        !curReservation ||
+        curReservation.reservationId !== reservation.reservationId ||
+        Number(curReservation.expiresAt || 0) <= Date.now()
+      ) {
+        console.log(`[WhatsApp:Handoff] Aborting AI response dispatch: reservation was revoked, expired, or superseded by human operator takeover.`);
+        return;
+      }
+
+      sent = await sendWhatsAppText(waId, reply);
+      outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId,
+        waId,
+        direction: "outbound",
+        senderType: aiResult.reply ? "ai_bot" : "system",
+        text: reply,
+        timestamp: Date.now(),
+        status: "sent",
+      };
+      await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord);
+      messageCache.set(sha256(outMsgId), outRecord);
+      console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+    } finally {
+      // Release reservation after dispatch attempt
+      await releaseAiDispatchReservation(conversationId, reservation.reservationId, centralDb).catch(() => {});
+    }
   };
 
   app.get(webhookPath, (req: any, res: any) => {
@@ -1338,6 +1982,26 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
     if (req.body?.object !== "whatsapp_business_account") return res.sendStatus(404);
     if (!centralDb?.useFirestore || !getTaskConfig()) return res.sendStatus(503);
 
+    // 1. Process Meta Delivery Status Callbacks (PART 6)
+    const statuses: any[] = [];
+    for (const entry of req.body?.entry || []) {
+      for (const change of entry?.changes || []) {
+        for (const status of change?.value?.statuses || []) statuses.push(status);
+      }
+    }
+
+    if (statuses.length > 0) {
+      console.log(`[WhatsApp:Webhook] Received ${statuses.length} delivery status update(s)`);
+      for (const st of statuses) {
+        try {
+          await processDeliveryStatus(st, centralDb, requireWrite);
+        } catch (stErr: any) {
+          console.error("[WhatsApp:Webhook] Error processing delivery status:", stErr?.message || stErr);
+        }
+      }
+    }
+
+    // 2. Process Inbound Messages
     const messages: any[] = [];
     for (const entry of req.body?.entry || []) {
       for (const change of entry?.changes || []) {
@@ -1928,6 +2592,820 @@ AI News Maker परिवार में आपका हार्दिक �
     } catch (err: any) {
       console.error("[WhatsApp:Campaign] Campaign failure:", err);
       return res.status(500).json({ error: String(err?.message || err) });
+    }
+  });
+
+  // ============================================================================
+  // PHASE 1B: LIVE INBOX, HUMAN SUPPORT & DELIVERY STATUS ADMIN APIS
+  // ============================================================================
+
+  const enrichCustomerData = async (waId: string) => {
+    let customer: any = {
+      phone: waId,
+      isLinked: false,
+      fullName: "",
+      name: "",
+      email: "",
+      channelName: "",
+      planName: "FREE",
+      tier: "free",
+      hasActivePaidPlan: false,
+      remainingToday: 10,
+      coinBalance: 0,
+    };
+
+    if (!waId) return customer;
+    const cleanWa10 = waId.replace(/\D/g, "").slice(-10);
+
+    // 1. Check in-memory user cache
+    if (centralDb?.cache?.users) {
+      for (const u of centralDb.cache.users.values()) {
+        const uWa = (u.linkedWhatsAppWaId || u.whatsappNumber || u.primaryPhone || u.mobile || "").replace(/\D/g, "").slice(-10);
+        if (uWa && cleanWa10 && uWa === cleanWa10) {
+          customer = {
+            phone: waId,
+            isLinked: Boolean(u.whatsappVerified || (u.whatsappLinkStatus === "linked" && u.linkedWhatsAppWaId)),
+            fullName: u.fullName || u.name || "संपादक",
+            name: u.name || u.fullName || "संपादक",
+            email: u.email || "",
+            channelName: u.channelNameHi || u.channelName || "",
+            planName: u.planName || "BASIC",
+            tier: u.tier || "basic",
+            hasActivePaidPlan: Boolean(u.hasActivePaidPlan),
+            remainingToday: 10,
+            coinBalance: 0,
+          };
+          break;
+        }
+      }
+    }
+
+    // 2. Check phone registry if not matched in cache
+    if (!customer.email && centralDb?.readDoc) {
+      try {
+        const regRes = await centralDb.readDoc("whatsapp_phone_registry", `phone_${waId}`);
+        if (regRes?.success && regRes.data?.verifiedEmail) {
+          const ownerEmail = regRes.data.verifiedEmail.toLowerCase().trim();
+          customer.email = ownerEmail;
+          customer.isLinked = true;
+          const uRes = await centralDb.readDoc("users", ownerEmail);
+          if (uRes?.success && uRes.data) {
+            customer.fullName = uRes.data.fullName || uRes.data.name || "";
+            customer.name = customer.fullName;
+            customer.channelName = uRes.data.channelNameHi || uRes.data.channelName || "";
+            customer.planName = uRes.data.planName || "BASIC";
+            customer.tier = uRes.data.tier || "basic";
+            customer.hasActivePaidPlan = Boolean(uRes.data.hasActivePaidPlan);
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Compute remaining downloads if user has an email
+    if (customer.email && centralDb?.readDoc) {
+      try {
+        const isSuper = customer.tier === "superadmin" || customer.tier === "admin";
+        let maxAllowed = 10;
+        if (isSuper || customer.tier === "ultra" || customer.tier === "vip") maxAllowed = 99999;
+        else if (customer.tier === "professional" || customer.tier === "pro") maxAllowed = 50;
+        else if (customer.tier === "advanced" || customer.tier === "advance") maxAllowed = 25;
+
+        const todayStr = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date());
+
+        const dRes = await centralDb.readDoc("daily_graphic_downloads", `${customer.email}_${todayStr}`);
+        const count = dRes?.success && dRes.data ? Number(dRes.data.count || 0) : 0;
+        customer.remainingToday = Math.max(0, maxAllowed - count);
+        customer.downloadsToday = count;
+        customer.maxAllowed = maxAllowed;
+      } catch {}
+
+      try {
+        const wRes = await centralDb.readDoc("wallets", customer.email);
+        if (wRes?.success && wRes.data) {
+          customer.coinBalance = Number(wRes.data.coinBalance || 0);
+        }
+      } catch {}
+    }
+
+    return customer;
+  };
+
+  /**
+   * GET /api/admin/whatsapp/conversations
+   * Retrieves conversation list for the Live Inbox with filters, search, and customer enrichment.
+   */
+  app.get("/api/admin/whatsapp/conversations", requireAdmin, async (req: any, res: any) => {
+    try {
+      const filter = String(req.query.filter || "all").toLowerCase().trim();
+      const search = String(req.query.search || "").toLowerCase().trim();
+      const operatorFilter = String(req.query.operatorId || "").trim();
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
+
+      // 1. Fetch conversations from Firestore or cache
+      const convMap = new Map<string, any>();
+
+      // Populate from in-memory cache
+      for (const [id, conv] of conversationCache.entries()) {
+        convMap.set(id, { ...conv, conversationId: id, id });
+      }
+
+      // Fetch from Firestore
+      if (centralDb?.listDocs) {
+        try {
+          const listRes = await centralDb.listDocs("whatsapp_conversations", 300);
+          if (listRes?.success && Array.isArray(listRes.documents)) {
+            for (const doc of listRes.documents) {
+              const id = doc.conversationId || doc.id || doc.docId;
+              if (id) {
+                const merged = { ...doc, conversationId: id, id, ...(convMap.get(id) || {}) };
+                convMap.set(id, merged);
+                conversationCache.set(id, merged);
+              }
+            }
+          }
+        } catch (dbErr: any) {
+          console.warn("[WhatsApp:AdminInbox] listDocs warning:", dbErr?.message || dbErr);
+        }
+      }
+
+      let allConversations = Array.from(convMap.values());
+
+      // 2. Enrich with customer details
+      const enrichedConversations = await Promise.all(
+        allConversations.map(async (conv) => {
+          const phone = conv.waId || conv.customerPhone || "";
+          const customer = await enrichCustomerData(phone);
+          return {
+            ...conv,
+            conversationId: conv.conversationId || conv.id,
+            customerPhone: phone,
+            customerName: customer.fullName || customer.name || conv.customerName || maskWaId(phone),
+            customerEmail: customer.email || conv.customerEmail || "",
+            handlingMode: conv.handlingMode || "ai",
+            unreadCount: Number(conv.unreadCount || 0),
+            status: conv.status || "open",
+            lastMessagePreview: conv.lastMessagePreview || "",
+            lastMessageAt: Number(conv.lastMessageAt || conv.lastInboundAt || conv.updatedAt || 0),
+            lastMessageStatus: conv.lastMessageStatus || "sent",
+            lastMessageDirection: conv.lastMessageDirection || "inbound",
+            assignedOperatorId: conv.assignedOperatorId || null,
+            assignedOperatorName: conv.assignedOperatorName || null,
+            customer,
+          };
+        })
+      );
+
+      // 3. Apply Filters
+      let filtered = enrichedConversations.filter((c) => {
+        // Mode/status filters
+        if (filter === "unread" && c.unreadCount <= 0) return false;
+        if (filter === "unassigned" && Boolean(c.assignedOperatorId)) return false;
+        if (filter === "ai" && c.handlingMode !== "ai") return false;
+        if (filter === "human" && c.handlingMode !== "human") return false;
+        if (filter === "waiting_human" && c.handlingMode !== "waiting_human") return false;
+        if (filter === "closed" && c.status !== "closed") return false;
+        if (filter !== "closed" && c.status === "closed" && filter !== "all") return false;
+
+        // Operator filter
+        if (operatorFilter && c.assignedOperatorId !== operatorFilter) return false;
+
+        // Search filter (phone, name, email, preview)
+        if (search) {
+          const textMatch =
+            (c.customerPhone || "").toLowerCase().includes(search) ||
+            (c.customerName || "").toLowerCase().includes(search) ||
+            (c.customerEmail || "").toLowerCase().includes(search) ||
+            (c.lastMessagePreview || "").toLowerCase().includes(search);
+          if (!textMatch) return false;
+        }
+
+        return true;
+      });
+
+      // 4. Sort descending by last activity timestamp
+      filtered.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+
+      return res.json({
+        success: true,
+        count: filtered.length,
+        filter,
+        conversations: filtered.slice(0, limit),
+      });
+    } catch (err: any) {
+      console.error("[WhatsApp:AdminInbox] Error listing conversations:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * GET /api/admin/whatsapp/conversations/:id
+   * Retrieves single conversation details with rich customer info.
+   */
+  app.get("/api/admin/whatsapp/conversations/:id", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      const phone = convDoc.waId || convDoc.customerPhone || "";
+      const customer = await enrichCustomerData(phone);
+
+      const conversation = {
+        ...convDoc,
+        conversationId: convId,
+        customerPhone: phone,
+        customerName: customer.fullName || customer.name || convDoc.customerName || maskWaId(phone),
+        customerEmail: customer.email || "",
+        handlingMode: convDoc.handlingMode || "ai",
+        unreadCount: Number(convDoc.unreadCount || 0),
+        status: convDoc.status || "open",
+        customer,
+      };
+
+      return res.json({ success: true, conversation });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * GET /api/admin/whatsapp/conversations/:id/messages
+   * Retrieves chronological message history for a conversation.
+   */
+  app.get("/api/admin/whatsapp/conversations/:id/messages", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+
+      const limit = Math.min(300, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
+      const msgsMap = new Map<string, any>();
+
+      // 1. Gather messages from memory cache
+      for (const [id, msg] of messageCache.entries()) {
+        if (msg.conversationId === convId) {
+          msgsMap.set(id, { ...msg, id });
+        }
+      }
+
+      // 2. Gather from Firestore
+      if (centralDb?.listDocs) {
+        try {
+          const listRes = await centralDb.listDocs("whatsapp_messages", 400);
+          if (listRes?.success && Array.isArray(listRes.documents)) {
+            for (const doc of listRes.documents) {
+              if (doc.conversationId === convId) {
+                const id = doc.messageId || doc.id || doc.docId || sha256(String(doc.metaMessageId || Date.now()));
+                const merged = { ...doc, id, ...(msgsMap.get(id) || {}) };
+                msgsMap.set(id, merged);
+                messageCache.set(id, merged);
+              }
+            }
+          }
+        } catch (dbErr: any) {
+          console.warn("[WhatsApp:AdminInbox] Messages listDocs warning:", dbErr?.message || dbErr);
+        }
+      }
+
+      const messages = Array.from(msgsMap.values());
+      // Sort chronological ascending (oldest first, latest last)
+      messages.sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+
+      return res.json({
+        success: true,
+        conversationId: convId,
+        count: messages.length,
+        messages: messages.slice(-limit),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/conversations/:id/mode
+   * Changes conversation handling mode: 'ai' | 'human' | 'waiting_human'.
+   * Records audit event and updates Firestore persistently.
+   */
+  app.post("/api/admin/whatsapp/conversations/:id/mode", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      const newMode = String(req.body?.mode || "").toLowerCase().trim();
+
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      if (!["ai", "human", "waiting_human"].includes(newMode)) {
+        return res.status(400).json({
+          success: false,
+          error: "अमान्य हैंडलिंग मोड। केवल 'ai', 'human' अथवा 'waiting_human' मान्य हैं।"
+        });
+      }
+
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      const previousMode = convDoc.handlingMode || "ai";
+      const now = Date.now();
+      const actorEmail = req.user?.email || "admin";
+
+      // Phase 1B.2 Hardening: Detect whether an AI dispatch reservation is active (in-flight)
+      const existingRes = convDoc.aiDispatchReservation;
+      const isAiInFlight = Boolean(existingRes && Number(existingRes.expiresAt || 0) > now);
+
+      const updatedConv = {
+        ...convDoc,
+        handlingMode: newMode,
+        aiDispatchReservation: newMode === "human" ? null : convDoc.aiDispatchReservation,
+        operatorTakeoverAt: newMode === "human" ? now : convDoc.operatorTakeoverAt,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        modeUpdatedAt: now,
+        modeUpdatedBy: actorEmail,
+        status: newMode === "waiting_human" ? "human_requested" : convDoc.status || "open",
+        updatedAt: now,
+      };
+
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+
+      await recordAuditEvent(centralDb, {
+        conversationId: convId,
+        eventType: "conversation_mode_changed",
+        previousValue: previousMode,
+        newValue: newMode,
+        actorId: actorEmail,
+        actorType: "operator",
+        metadata: {
+          reason: req.body?.reason || "manual_operator_switch",
+          aiWasInFlight: isAiInFlight,
+          revokedReservationId: isAiInFlight && newMode === "human" ? existingRes?.reservationId : null,
+        },
+      });
+
+      console.log(`[WhatsApp:Handoff] Conversation ${convId} mode transitioned: ${previousMode} -> ${newMode} by ${actorEmail}${isAiInFlight ? " (AI dispatch was in-flight)" : ""}`);
+      return res.json({
+        success: true,
+        conversationId: convId,
+        previousMode,
+        newMode,
+        modeUpdatedAt: now,
+        aiDispatchInFlight: isAiInFlight,
+        warning: isAiInFlight ? "ai_dispatch_in_flight" : undefined,
+        warningMessage: isAiInFlight ? "चेतावनी: एक स्वचालित AI संदेश पहले से प्रेषण प्रक्रिया में (in-flight) था। ऑपरेटर टेकओवर प्रभावी हो चुका है, किंतु यदि पूर्ववर्ती संदेश Meta सॉकेट पर जा चुका है, तो वह निरस्त नहीं हो सकेगा।" : undefined,
+      });
+    } catch (err: any) {
+      console.error("[WhatsApp:Handoff] Error updating mode:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/conversations/:id/assign
+   * Assigns an operator to the conversation.
+   * Automatically transitions handlingMode to 'human' on operator acceptance.
+   * Includes optimistic concurrency protection via expectedOperatorId.
+   */
+  app.post("/api/admin/whatsapp/conversations/:id/assign", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+
+      const actorEmail = req.user?.email || "admin";
+      const operatorId = String(req.body?.operatorId || req.user?.userId || actorEmail).trim();
+      const operatorName = String(req.body?.operatorName || req.user?.name || req.user?.fullName || actorEmail).trim();
+      const operatorEmail = String(req.body?.operatorEmail || actorEmail).trim();
+      const expectedOperatorId = req.body?.expectedOperatorId;
+
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      // Optimistic Concurrency Protection: prevent silent overwriting if already assigned to someone else
+      if (expectedOperatorId !== undefined && convDoc.assignedOperatorId && convDoc.assignedOperatorId !== expectedOperatorId) {
+        return res.status(409).json({
+          success: false,
+          errorCode: "CONCURRENT_ASSIGNMENT_CONFLICT",
+          error: `यह वार्तालाप पहले ही ${convDoc.assignedOperatorName || convDoc.assignedOperatorId} को असाइन किया जा चुका है।`,
+          currentOperatorId: convDoc.assignedOperatorId,
+          currentOperatorName: convDoc.assignedOperatorName,
+        });
+      }
+
+      const previousOperatorId = convDoc.assignedOperatorId || null;
+      const previousMode = convDoc.handlingMode || "ai";
+      const now = Date.now();
+
+      // Phase 1B.2 Hardening: Detect whether an AI dispatch reservation is active (in-flight)
+      const existingRes = convDoc.aiDispatchReservation;
+      const isAiInFlight = Boolean(existingRes && Number(existingRes.expiresAt || 0) > now);
+
+      const updatedConv = {
+        ...convDoc,
+        assignedOperatorId: operatorId,
+        assignedOperatorName: operatorName,
+        assignedOperatorEmail: operatorEmail,
+        assignedAt: now,
+        assignedBy: actorEmail,
+        // Auto transition to human mode on operator assignment
+        handlingMode: "human",
+        aiDispatchReservation: null, // Revokes any pending AI dispatch reservation
+        operatorTakeoverAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        modeUpdatedAt: now,
+        modeUpdatedBy: actorEmail,
+        updatedAt: now,
+      };
+
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+
+      await recordAuditEvent(centralDb, {
+        conversationId: convId,
+        eventType: "operator_assigned",
+        previousValue: previousOperatorId,
+        newValue: operatorId,
+        actorId: actorEmail,
+        actorType: "operator",
+        metadata: {
+          operatorName,
+          operatorEmail,
+          aiWasInFlight: isAiInFlight,
+          revokedReservationId: isAiInFlight ? existingRes?.reservationId : null,
+        },
+      });
+
+      console.log(`[WhatsApp:Handoff] Conversation ${convId} assigned to ${operatorName} (${operatorId})${isAiInFlight ? " (AI dispatch was in-flight)" : ""}`);
+      return res.json({
+        success: true,
+        conversationId: convId,
+        assignedOperatorId: operatorId,
+        assignedOperatorName: operatorName,
+        handlingMode: "human",
+        aiDispatchInFlight: isAiInFlight,
+        warning: isAiInFlight ? "ai_dispatch_in_flight" : undefined,
+        warningMessage: isAiInFlight ? "चेतावनी: वार्तालाप ऑपरेटर को असाइन कर दिया गया है, किंतु एक पूर्ववर्ती AI संदेश प्रेषण प्रक्रिया (in-flight) में था।" : undefined,
+      });
+    } catch (err: any) {
+      console.error("[WhatsApp:Handoff] Error assigning operator:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/conversations/:id/unassign
+   * Unassigns the current operator from the conversation.
+   */
+  app.post("/api/admin/whatsapp/conversations/:id/unassign", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      const previousOperatorId = convDoc.assignedOperatorId || null;
+      const previousOperatorName = convDoc.assignedOperatorName || null;
+      const now = Date.now();
+      const actorEmail = req.user?.email || "admin";
+
+      const updatedConv = {
+        ...convDoc,
+        assignedOperatorId: null,
+        assignedOperatorName: null,
+        assignedOperatorEmail: null,
+        unassignedAt: now,
+        unassignedBy: actorEmail,
+        updatedAt: now,
+      };
+
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+
+      await recordAuditEvent(centralDb, {
+        conversationId: convId,
+        eventType: "operator_unassigned",
+        previousValue: previousOperatorId,
+        newValue: null,
+        actorId: actorEmail,
+        actorType: "operator",
+        metadata: { previousOperatorName },
+      });
+
+      console.log(`[WhatsApp:Handoff] Conversation ${convId} unassigned by ${actorEmail}`);
+      return res.json({
+        success: true,
+        conversationId: convId,
+        previousOperatorId,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/conversations/:id/reply
+   * Sends an operator message via official Meta WhatsApp Graph API.
+   * Enforces Meta 24-hour customer service window, message size limits,
+   * idempotency protection, and maintains conversation in human mode.
+   */
+  app.post("/api/admin/whatsapp/conversations/:id/reply", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      const text = String(req.body?.text || "").trim();
+      const idempotencyKey = String(req.body?.idempotencyKey || "").trim();
+
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      if (!text || text.length > 4096) {
+        return res.status(400).json({
+          success: false,
+          error: "संदेश खाली नहीं हो सकता और अधिकतम 4096 अक्षरों का होना चाहिए।"
+        });
+      }
+
+      // Idempotency check: prevent accidental duplicate sends
+      if (idempotencyKey) {
+        const lastSent = replyIdempotencyCache.get(idempotencyKey);
+        if (lastSent && Date.now() - lastSent < 600000) {
+          // Within 10 minutes duplicate key
+          return res.status(409).json({
+            success: false,
+            errorCode: "DUPLICATE_REQUEST",
+            error: "यह संदेश पहले ही भेजा जा चुका है (Duplicate request detected).",
+          });
+        }
+        replyIdempotencyCache.set(idempotencyKey, Date.now());
+      }
+
+      // Fetch conversation document
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      const recipientWaId = convDoc.waId || convDoc.customerPhone;
+      if (!recipientWaId) {
+        return res.status(400).json({ success: false, error: "वैध ग्राहक फ़ोन नंबर उपलब्ध नहीं है।" });
+      }
+
+      // Meta 24-Hour Customer Care Window Compliance
+      const lastInboundAt = Number(convDoc.lastInboundAt || 0);
+      const windowMs = 24 * 60 * 60 * 1000; // 24 hours
+      const timeSinceInbound = Date.now() - lastInboundAt;
+      const isWithinWindow = lastInboundAt > 0 && timeSinceInbound <= windowMs;
+
+      if (!isWithinWindow) {
+        console.warn(`[WhatsApp:OperatorReply] Reply blocked: outside 24h window for ${maskWaId(recipientWaId)} (last inbound: ${lastInboundAt})`);
+        return res.status(403).json({
+          success: false,
+          errorCode: "OUTSIDE_24H_WINDOW",
+          error: "24 घंटे की ग्राहक सेवा विंडो समाप्त हो चुकी है। Meta नीति के अनुसार केवल स्वीकृत टेम्पलेट संदेश ही भेजा जा सकता है।",
+          lastInboundAt,
+          hoursElapsed: Math.round(timeSinceInbound / (3600 * 1000) * 10) / 10,
+        });
+      }
+
+      // Dispatch message via Meta WhatsApp API
+      const operatorEmail = req.user?.email || "operator";
+      const operatorName = req.user?.name || req.user?.fullName || operatorEmail;
+      console.log(`[WhatsApp:OperatorReply] Operator ${operatorEmail} sending reply to ${maskWaId(recipientWaId)}: "${text.slice(0, 40)}..."`);
+
+      // Phase 1B.2 Hardening: Detect whether an AI dispatch reservation was active (in-flight) prior to operator reply
+      const existingRes = convDoc.aiDispatchReservation;
+      const isAiInFlight = Boolean(existingRes && Number(existingRes.expiresAt || 0) > Date.now());
+
+      const sent = await sendWhatsAppText(recipientWaId, text);
+      const outMsgId = String(sent?.messages?.[0]?.id || `operator-${Date.now()}-${randomBytes(4).toString("hex")}`);
+      const now = Date.now();
+
+      // Save outbound message record
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId: convId,
+        waId: recipientWaId,
+        direction: "outbound",
+        messageType: "text",
+        text,
+        timestamp: now,
+        status: "sent",
+        senderType: "human_operator",
+        senderId: operatorEmail,
+        senderName: operatorName,
+        idempotencyKey: idempotencyKey || null,
+        createdAt: now,
+      };
+
+      await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord);
+      messageCache.set(sha256(outMsgId), outRecord);
+
+      // Update parent conversation
+      const updatedConv = {
+        ...convDoc,
+        lastMessagePreview: text.slice(0, 180),
+        lastMessageDirection: "outbound",
+        lastMessageAt: now,
+        lastMessageStatus: "sent",
+        unreadCount: 0, // Reset unread count as operator has replied
+        handlingMode: "human", // Remains in human mode until explicitly switched
+        aiDispatchReservation: null, // Revokes any AI dispatch reservation
+        operatorTakeoverAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        updatedAt: now,
+      };
+
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+
+      await recordAuditEvent(centralDb, {
+        conversationId: convId,
+        eventType: "operator_reply_sent",
+        newValue: outMsgId,
+        actorId: operatorEmail,
+        actorType: "operator",
+        metadata: { textLength: text.length, messageId: outMsgId, aiWasInFlight: isAiInFlight },
+      });
+
+      console.log(`[WhatsApp:OperatorReply] Message ${outMsgId} successfully sent and recorded${isAiInFlight ? " (AI dispatch was in-flight prior to reply)" : ""}`);
+      return res.json({
+        success: true,
+        messageId: outMsgId,
+        status: "sent",
+        timestamp: now,
+        aiDispatchInFlight: isAiInFlight,
+        warning: isAiInFlight ? "ai_dispatch_in_flight" : undefined,
+        warningMessage: isAiInFlight ? "चेतावनी: ऑपरेटर उत्तर प्रेषित किया गया, किंतु पूर्ववर्ती AI संदेश नेटवर्क प्रेषण (in-flight) में था।" : undefined,
+      });
+    } catch (err: any) {
+      console.error("[WhatsApp:OperatorReply] Error sending reply:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/conversations/:id/mark-read
+   * Marks a conversation as read (resets unreadCount to 0).
+   */
+  app.post("/api/admin/whatsapp/conversations/:id/mark-read", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      const updatedConv = {
+        ...convDoc,
+        unreadCount: 0,
+        readAt: Date.now(),
+        readBy: req.user?.email || "admin",
+        updatedAt: Date.now(),
+      };
+
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+
+      return res.json({ success: true, conversationId: convId, unreadCount: 0 });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/conversations/:id/close
+   * Closes a conversation.
+   */
+  app.post("/api/admin/whatsapp/conversations/:id/close", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      const now = Date.now();
+      const actorEmail = req.user?.email || "admin";
+      const updatedConv = {
+        ...convDoc,
+        status: "closed",
+        closedAt: now,
+        closedBy: actorEmail,
+        updatedAt: now,
+      };
+
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+
+      await recordAuditEvent(centralDb, {
+        conversationId: convId,
+        eventType: "conversation_closed",
+        previousValue: convDoc.status || "open",
+        newValue: "closed",
+        actorId: actorEmail,
+        actorType: "operator",
+      });
+
+      return res.json({ success: true, conversationId: convId, status: "closed" });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * GET /api/admin/whatsapp/conversations/:id/audit-events
+   * Retrieves audit log trail for a conversation.
+   */
+  app.get("/api/admin/whatsapp/conversations/:id/audit-events", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+
+      const events: any[] = [];
+      if (centralDb?.listDocs) {
+        const aRes = await centralDb.listDocs("whatsapp_audit_events", 200);
+        if (aRes?.success && Array.isArray(aRes.documents)) {
+          for (const ev of aRes.documents) {
+            if (ev.conversationId === convId) {
+              events.push(ev);
+            }
+          }
+        }
+      }
+
+      events.sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+      return res.json({ success: true, conversationId: convId, count: events.length, events });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
     }
   });
 

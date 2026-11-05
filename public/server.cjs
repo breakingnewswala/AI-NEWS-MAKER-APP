@@ -6443,6 +6443,367 @@ var maskWaId = (id) => {
 };
 var otpRateLimits = /* @__PURE__ */ new Map();
 var otpVerificationCache = /* @__PURE__ */ new Map();
+var sha256 = (value) => (0, import_crypto.createHash)("sha256").update(String(value || "")).digest("hex");
+var conversationCache = /* @__PURE__ */ new Map();
+var messageCache = /* @__PURE__ */ new Map();
+var replyIdempotencyCache = /* @__PURE__ */ new Map();
+var VALID_STATUS_TRANSITIONS = {
+  pending: ["sent", "failed"],
+  sent: ["delivered", "failed"],
+  delivered: ["read"],
+  read: [],
+  failed: []
+};
+var isValidStatusTransition = (currentStatus, incomingStatus) => {
+  const current = String(currentStatus || "pending").toLowerCase().trim();
+  const incoming = String(incomingStatus || "").toLowerCase().trim();
+  if (current === incoming) return false;
+  const allowed = VALID_STATUS_TRANSITIONS[current];
+  return Array.isArray(allowed) && allowed.includes(incoming);
+};
+var acquireAiDispatchReservation = async (conversationId, centralDb2) => {
+  const now = Date.now();
+  const reservationId = (0, import_crypto.randomUUID)();
+  const leaseDurationMs = 15e3;
+  if (centralDb2?.useFirestore && typeof centralDb2.beginTransaction === "function") {
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      let tx = null;
+      try {
+        const attemptNow = Date.now();
+        tx = await centralDb2.beginTransaction();
+        if (tx?.success && tx.transaction) {
+          const current = await centralDb2._readDocInTransaction("whatsapp_conversations", conversationId, tx.transaction);
+          const data = current?.data || {};
+          const handlingMode = data.handlingMode || "ai";
+          if (handlingMode === "human" || handlingMode === "waiting_human") {
+            await centralDb2.rollbackTransaction(tx.transaction);
+            return { acquired: false, reason: `conversation_in_${handlingMode}_mode` };
+          }
+          const existingReservation = data.aiDispatchReservation;
+          if (existingReservation && Number(existingReservation.expiresAt || 0) > attemptNow) {
+            await centralDb2.rollbackTransaction(tx.transaction);
+            return { acquired: false, reason: "active_reservation_conflict" };
+          }
+          if (existingReservation && Number(existingReservation.expiresAt || 0) <= attemptNow) {
+            console.log(`[WhatsApp:Reservation] Reclaiming expired AI dispatch reservation ${existingReservation.reservationId} (expired ${attemptNow - Number(existingReservation.expiresAt)}ms ago) on ${conversationId}`);
+          }
+          const newReservation = {
+            reservationId,
+            reservedAt: attemptNow,
+            expiresAt: attemptNow + leaseDurationMs
+          };
+          const updatedData = {
+            ...data,
+            aiDispatchReservation: newReservation,
+            conversationVersion: Number(data.conversationVersion || 0) + 1,
+            updatedAt: attemptNow
+          };
+          const fields = {};
+          for (const [key, value] of Object.entries(updatedData)) {
+            if (value !== void 0) fields[key] = centralDb2._toFirestoreField(value);
+          }
+          const name = `projects/${centralDb2.projectId}/databases/${centralDb2.databaseId}/documents/whatsapp_conversations/${conversationId}`;
+          const write = { update: { name, fields } };
+          if (current.updateTime) {
+            write.currentDocument = { updateTime: current.updateTime };
+          }
+          const committed = await centralDb2.commitTransaction(tx.transaction, [write]);
+          if (committed?.success) {
+            conversationCache.set(conversationId, updatedData);
+            return { acquired: true, reservationId };
+          } else {
+            if (attempt < maxRetries - 1) {
+              const jitter = Math.floor(Math.random() * 50);
+              await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+              continue;
+            }
+            return { acquired: false, reason: "transaction_conflict" };
+          }
+        }
+      } catch (txErr) {
+        if (tx?.transaction) {
+          await centralDb2.rollbackTransaction(tx.transaction).catch(() => {
+          });
+        }
+        if (attempt < maxRetries - 1) {
+          const jitter = Math.floor(Math.random() * 50);
+          await new Promise((r) => setTimeout(r, 40 * (attempt + 1) + jitter));
+          continue;
+        }
+        return { acquired: false, reason: "transaction_error" };
+      }
+    }
+  }
+  let convDoc = null;
+  if (centralDb2?.readDoc) {
+    try {
+      const cRes = await centralDb2.readDoc("whatsapp_conversations", conversationId);
+      if (cRes?.success && cRes.data) convDoc = cRes.data;
+    } catch {
+    }
+  }
+  if (!convDoc && conversationCache.has(conversationId)) {
+    convDoc = conversationCache.get(conversationId);
+  }
+  const currentMode = convDoc?.handlingMode || "ai";
+  if (currentMode === "human" || currentMode === "waiting_human") {
+    return { acquired: false, reason: `conversation_in_${currentMode}_mode` };
+  }
+  const existingRes = convDoc?.aiDispatchReservation;
+  if (existingRes && Number(existingRes.expiresAt || 0) > now) {
+    return { acquired: false, reason: "active_reservation_conflict" };
+  }
+  if (existingRes && Number(existingRes.expiresAt || 0) <= now) {
+    console.log(`[WhatsApp:Reservation] Reclaiming expired AI dispatch reservation ${existingRes.reservationId} (expired ${now - Number(existingRes.expiresAt)}ms ago) on ${conversationId}`);
+  }
+  const reservation = {
+    reservationId,
+    reservedAt: now,
+    expiresAt: now + leaseDurationMs
+  };
+  const updated = {
+    ...convDoc,
+    aiDispatchReservation: reservation,
+    conversationVersion: Number(convDoc?.conversationVersion || 0) + 1,
+    updatedAt: now
+  };
+  if (centralDb2?.writeDoc) {
+    await centralDb2.writeDoc("whatsapp_conversations", conversationId, updated).catch(() => {
+    });
+  }
+  conversationCache.set(conversationId, updated);
+  return { acquired: true, reservationId };
+};
+var releaseAiDispatchReservation = async (conversationId, reservationId, centralDb2) => {
+  if (!reservationId) {
+    return { released: false, reason: "missing_reservation_id" };
+  }
+  if (centralDb2?.useFirestore && typeof centralDb2.beginTransaction === "function") {
+    let tx = null;
+    try {
+      tx = await centralDb2.beginTransaction();
+      if (tx?.success && tx.transaction) {
+        const current = await centralDb2._readDocInTransaction("whatsapp_conversations", conversationId, tx.transaction);
+        const data = current?.data || {};
+        const currentRes2 = data.aiDispatchReservation;
+        if (!currentRes2) {
+          await centralDb2.rollbackTransaction(tx.transaction);
+          return { released: false, reason: "no_active_reservation" };
+        }
+        if (currentRes2.reservationId !== reservationId) {
+          console.warn(`[WhatsApp:Reservation] Refusing to release reservation: worker ${reservationId} tried to release newer/different reservation ${currentRes2.reservationId}`);
+          await centralDb2.rollbackTransaction(tx.transaction);
+          return { released: false, reason: "reservation_id_mismatch" };
+        }
+        const updatedData = {
+          ...data,
+          aiDispatchReservation: null,
+          updatedAt: Date.now()
+        };
+        const fields = {};
+        for (const [key, value] of Object.entries(updatedData)) {
+          if (value !== void 0) fields[key] = centralDb2._toFirestoreField(value);
+        }
+        const name = `projects/${centralDb2.projectId}/databases/${centralDb2.databaseId}/documents/whatsapp_conversations/${conversationId}`;
+        const write = { update: { name, fields } };
+        if (current.updateTime) {
+          write.currentDocument = { updateTime: current.updateTime };
+        }
+        const committed = await centralDb2.commitTransaction(tx.transaction, [write]);
+        if (committed?.success) {
+          conversationCache.set(conversationId, updatedData);
+          return { released: true };
+        }
+      }
+    } catch (txErr) {
+      if (tx?.transaction) {
+        await centralDb2.rollbackTransaction(tx.transaction).catch(() => {
+        });
+      }
+      console.warn("[WhatsApp:Reservation] Transactional release failed, falling back to direct check:", txErr?.message || txErr);
+    }
+  }
+  let convDoc = null;
+  if (centralDb2?.readDoc) {
+    try {
+      const cRes = await centralDb2.readDoc("whatsapp_conversations", conversationId);
+      if (cRes?.success && cRes.data) convDoc = cRes.data;
+    } catch {
+    }
+  }
+  if (!convDoc && conversationCache.has(conversationId)) {
+    convDoc = conversationCache.get(conversationId);
+  }
+  const currentRes = convDoc?.aiDispatchReservation;
+  if (!currentRes) {
+    return { released: false, reason: "no_active_reservation" };
+  }
+  if (currentRes.reservationId !== reservationId) {
+    console.warn(`[WhatsApp:Reservation] Refusing to release reservation: worker ${reservationId} tried to release newer/different reservation ${currentRes.reservationId}`);
+    return { released: false, reason: "reservation_id_mismatch" };
+  }
+  const updated = {
+    ...convDoc,
+    aiDispatchReservation: null,
+    updatedAt: Date.now()
+  };
+  if (centralDb2?.writeDoc) {
+    await centralDb2.writeDoc("whatsapp_conversations", conversationId, updated).catch(() => {
+    });
+  }
+  conversationCache.set(conversationId, updated);
+  return { released: true };
+};
+var recordAuditEvent = async (centralDb2, event) => {
+  const auditId = `audit_${Date.now()}_${(0, import_crypto.randomBytes)(4).toString("hex")}`;
+  const record = {
+    auditId,
+    timestamp: Date.now(),
+    ...event
+  };
+  if (centralDb2?.writeDoc) {
+    await centralDb2.writeDoc("whatsapp_audit_events", auditId, record).catch(() => {
+    });
+  }
+  return record;
+};
+var processDeliveryStatus = async (statusUpdate, centralDb2, requireWriteFn) => {
+  const metaMessageId = String(statusUpdate?.id || "").trim();
+  const rawStatus = String(statusUpdate?.status || "").toLowerCase().trim();
+  if (!metaMessageId || !rawStatus) {
+    return { success: false, reason: "missing_id_or_status" };
+  }
+  const validStatuses = ["sent", "delivered", "read", "failed"];
+  if (!validStatuses.includes(rawStatus)) {
+    return { success: false, reason: "unsupported_status" };
+  }
+  const statusTimestamp = Number(statusUpdate.timestamp || Math.floor(Date.now() / 1e3)) * 1e3;
+  const docId = sha256(metaMessageId);
+  const eventDedupeId = sha256(`status_${metaMessageId}_${rawStatus}`);
+  if (centralDb2?.readDoc) {
+    try {
+      const existingEvent = await centralDb2.readDoc("whatsapp_webhook_events", eventDedupeId);
+      if (existingEvent?.success && existingEvent.data?.status === "processed") {
+        return { success: true, duplicate: true, metaMessageId, status: rawStatus };
+      }
+    } catch {
+    }
+  }
+  let existingMsg = null;
+  let actualDocId = docId;
+  if (centralDb2?.readDoc) {
+    try {
+      const mRes = await centralDb2.readDoc("whatsapp_messages", docId);
+      if (mRes?.success && mRes.data) {
+        existingMsg = mRes.data;
+      }
+    } catch {
+    }
+  }
+  if (!existingMsg && messageCache.has(docId)) {
+    existingMsg = messageCache.get(docId);
+  }
+  if (!existingMsg) {
+    for (const [k, v] of messageCache.entries()) {
+      if (v.metaMessageId === metaMessageId || v.messageId === metaMessageId) {
+        existingMsg = v;
+        actualDocId = k;
+        break;
+      }
+    }
+  }
+  if (!existingMsg) {
+    console.log(`[WhatsApp:Status] Unknown messageId ${metaMessageId} received with status ${rawStatus}; recording event safely`);
+    if (centralDb2?.writeDoc) {
+      await centralDb2.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+        metaMessageId,
+        status: "processed",
+        messageNotFound: true,
+        rawStatus,
+        receivedAt: Date.now()
+      }).catch(() => {
+      });
+    }
+    return { success: true, messageFound: false, metaMessageId, status: rawStatus };
+  }
+  const currentStatus = String(existingMsg.status || "pending").toLowerCase().trim();
+  if (currentStatus === rawStatus) {
+    console.log(`[WhatsApp:Status] Duplicate status callback ignored for ${metaMessageId}: already in status '${currentStatus}'`);
+    if (centralDb2?.writeDoc) {
+      await centralDb2.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+        metaMessageId,
+        status: "processed",
+        ignoredReason: "duplicate_status_callback",
+        receivedAt: Date.now()
+      }).catch(() => {
+      });
+    }
+    return { success: true, duplicate: true, currentStatus, incomingStatus: rawStatus };
+  }
+  const isTransitionValid = isValidStatusTransition(currentStatus, rawStatus);
+  if (!isTransitionValid) {
+    console.log(`[WhatsApp:Status] Invalid status transition rejected for ${metaMessageId}: '${currentStatus}' -> '${rawStatus}' (terminal or regression prevented)`);
+    if (centralDb2?.writeDoc) {
+      await centralDb2.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+        metaMessageId,
+        status: "processed",
+        ignoredReason: `invalid_transition_${currentStatus}_to_${rawStatus}`,
+        receivedAt: Date.now()
+      }).catch(() => {
+      });
+    }
+    return {
+      success: true,
+      ignored: true,
+      reason: "invalid_transition_prevented",
+      currentStatus,
+      incomingStatus: rawStatus
+    };
+  }
+  const writeFn = requireWriteFn || ((col, id, data) => centralDb2.writeDoc(col, id, data));
+  const updatedMsg = {
+    ...existingMsg,
+    status: rawStatus,
+    statusTimestamp,
+    deliveryStatusUpdatedAt: Date.now()
+  };
+  if (rawStatus === "failed") {
+    updatedMsg.failureDetails = statusUpdate.errors || statusUpdate.error || [{ message: "Delivery failed" }];
+  }
+  await writeFn("whatsapp_messages", actualDocId, updatedMsg);
+  messageCache.set(actualDocId, updatedMsg);
+  const conversationId = existingMsg.conversationId;
+  if (conversationId && centralDb2) {
+    try {
+      const convRes = await centralDb2.readDoc("whatsapp_conversations", conversationId);
+      const convData = convRes?.success && convRes.data ? convRes.data : {};
+      const updatedConv = {
+        ...convData,
+        lastMessageStatus: rawStatus,
+        updatedAt: Date.now()
+      };
+      await writeFn("whatsapp_conversations", conversationId, updatedConv).catch(() => {
+      });
+      if (conversationCache.has(conversationId)) {
+        conversationCache.set(conversationId, { ...conversationCache.get(conversationId), ...updatedConv });
+      }
+    } catch (err) {
+      console.warn("[WhatsApp:Status] Error updating conversation status:", err?.message || err);
+    }
+  }
+  if (centralDb2?.writeDoc) {
+    await centralDb2.writeDoc("whatsapp_webhook_events", eventDedupeId, {
+      metaMessageId,
+      status: "processed",
+      appliedStatus: rawStatus,
+      processedAt: Date.now()
+    }).catch(() => {
+    });
+  }
+  console.log(`[WhatsApp:Status] Message ${metaMessageId} status transitioned: ${currentStatus} -> ${rawStatus}`);
+  return { success: true, updated: true, metaMessageId, previousStatus: currentStatus, newStatus: rawStatus };
+};
 var normalizeToWaId = (rawPhone, defaultCountryCode = "+91") => {
   let cleaned = String(rawPhone || "").trim().replace(/[^\d+]/g, "");
   if (!cleaned) return "";
@@ -6715,7 +7076,7 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     const right = Buffer.from(String(b || ""));
     return left.length === right.length && (0, import_crypto.timingSafeEqual)(left, right);
   };
-  const sha256 = (value) => (0, import_crypto.createHash)("sha256").update(value).digest("hex");
+  const sha2562 = (value) => (0, import_crypto.createHash)("sha256").update(value).digest("hex");
   const requireWrite = async (collection, docId, data) => {
     const result = await centralDb2.writeDoc(collection, docId, data);
     if (!result?.success) {
@@ -6759,9 +7120,20 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
   };
   const verifySignature = (req) => {
     const appSecret = process.env.META_APP_SECRET;
-    const signature = String(req.headers["x-hub-signature-256"] || "");
-    const rawBody = String(req.rawBody || "");
-    if (!appSecret || !signature.startsWith("sha256=") || !rawBody) return false;
+    const signature = String(req?.headers?.["x-hub-signature-256"] || "").trim();
+    if (!req || !("rawBody" in req) || req.rawBody === void 0 || req.rawBody === null) {
+      console.warn("[WhatsApp:Inbound] Webhook signature rejected: raw request body is missing or unavailable");
+      return false;
+    }
+    const rawBody = typeof req.rawBody === "string" ? req.rawBody : Buffer.isBuffer(req.rawBody) ? req.rawBody.toString("utf8") : "";
+    if (rawBody.length === 0) {
+      console.warn("[WhatsApp:Inbound] Webhook signature rejected: raw request body is empty");
+      return false;
+    }
+    if (!appSecret || !signature.startsWith("sha256=")) {
+      console.warn("[WhatsApp:Inbound] Webhook signature rejected: invalid signature format or app secret missing");
+      return false;
+    }
     const expected = "sha256=" + (0, import_crypto.createHmac)("sha256", appSecret).update(rawBody, "utf8").digest("hex");
     return safeEqual(signature, expected);
   };
@@ -6983,11 +7355,12 @@ ${knowledge.slice(0, 1e3)}` };
     const maskedWa = maskWaId(waId);
     console.log(`[WhatsApp:Inbound] Inbound message received: id=${messageId}, from=${maskedWa}, type=${message.type || "unknown"}`);
     const textBody = message.type === "text" ? String(message.text?.body || "").trim() : "";
-    const messageDocId = sha256(messageId);
-    const conversationId = sha256(waId);
+    const messageDocId = sha2562(messageId);
+    const conversationId = sha2562(waId);
     const now = Date.now();
-    await requireWrite("whatsapp_messages", messageDocId, {
+    const incomingRecord = {
       messageId,
+      metaMessageId: messageId,
       conversationId,
       waId,
       direction: "inbound",
@@ -6995,56 +7368,117 @@ ${knowledge.slice(0, 1e3)}` };
       text: textBody,
       timestamp: Number(message.timestamp || Math.floor(now / 1e3)) * 1e3,
       createdAt: now,
-      status: "received"
-    });
-    await requireWrite("whatsapp_conversations", conversationId, {
+      status: "received",
+      senderType: "customer",
+      senderId: waId
+    };
+    await requireWrite("whatsapp_messages", messageDocId, incomingRecord);
+    messageCache.set(messageDocId, incomingRecord);
+    let existingConv = null;
+    try {
+      const convRes = await centralDb2.readDoc("whatsapp_conversations", conversationId);
+      if (convRes?.success && convRes.data) {
+        existingConv = convRes.data;
+      }
+    } catch {
+    }
+    if (!existingConv && conversationCache.has(conversationId)) {
+      existingConv = conversationCache.get(conversationId);
+    }
+    const currentHandlingMode = existingConv?.handlingMode || "ai";
+    const currentUnread = Number(existingConv?.unreadCount || 0) + 1;
+    const convUpdates = {
+      ...existingConv,
+      conversationId,
       waId,
+      customerPhone: waId,
       channel: "whatsapp",
       lastInboundAt: now,
       lastMessagePreview: textBody.slice(0, 180) || `[${message.type || "message"}]`,
-      status: "open",
+      lastMessageDirection: "inbound",
+      lastMessageAt: now,
+      lastMessageStatus: "received",
+      unreadCount: currentUnread,
+      status: existingConv?.status === "closed" ? "open" : existingConv?.status || "open",
+      handlingMode: currentHandlingMode,
       updatedAt: now
-    });
+    };
+    await requireWrite("whatsapp_conversations", conversationId, convUpdates);
+    conversationCache.set(conversationId, convUpdates);
     if (textBody.toUpperCase() === "STOP" || textBody.toUpperCase() === "UNSUBSCRIBE") {
       console.log(`[WhatsApp:Inbound] STOP/UNSUBSCRIBE received from ${maskedWa}`);
       await syncWhatsAppOptOut(waId, "inbound_whatsapp_stop", centralDb2);
       const optOutReply = "\u0906\u092A\u0915\u0940 WhatsApp \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0942\u091A\u0928\u093E\u090F\u0901 \u092C\u0902\u0926 \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0902\u0964 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0906\u092A \u0939\u092E\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964";
       const sent2 = await sendWhatsAppText(waId, optOutReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      const outRecord = {
+        messageId: outMsgId2,
+        metaMessageId: outMsgId2,
         conversationId,
         waId,
         direction: "outbound",
+        senderType: "system",
         text: optOutReply,
         timestamp: now,
         status: "sent"
-      });
+      };
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), outRecord);
+      messageCache.set(sha2562(outMsgId2), outRecord);
       console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId2}`);
       return;
     }
-    const wantsHuman = /\b(agent|human|person|support)\b|मानव|व्यक्ति|प्रतिनिधि|कस्टमर केयर|सहायता टीम/i.test(textBody);
+    const wantsHuman = /\b(agent|human|person|support|representative|executive|live\s*agent)\b|मानव|व्यक्ति|प्रतिनिधि|कस्टमर केयर|सहायता टीम|कस्टमर सपोर्ट|बात करनी है|सहायता चाहिए|एजेंट/i.test(textBody);
     if (wantsHuman) {
-      console.log("[WhatsApp:Inbound] Human handoff triggered, with exact reason: user_request");
-      await requireWrite("whatsapp_conversations", conversationId, {
-        waId,
+      console.log(`[WhatsApp:Inbound] Human handoff triggered by customer ${maskedWa}`);
+      const handoffConvUpdates = {
+        ...convUpdates,
+        handlingMode: "waiting_human",
         status: "human_requested",
         humanHandoff: true,
         handoffRequestedAt: now,
         handoffReason: "user_request",
+        modeUpdatedAt: now,
+        modeUpdatedBy: "customer",
         updatedAt: now
+      };
+      await requireWrite("whatsapp_conversations", conversationId, handoffConvUpdates);
+      conversationCache.set(conversationId, handoffConvUpdates);
+      await recordAuditEvent(centralDb2, {
+        conversationId,
+        eventType: "conversation_mode_changed",
+        previousValue: currentHandlingMode,
+        newValue: "waiting_human",
+        actorId: waId,
+        actorType: "customer",
+        metadata: { trigger: "user_keyword", text: textBody.slice(0, 60) }
       });
-      const handoffReply = "\u0906\u092A\u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0939\u092E\u093E\u0930\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u094B \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092F\u0939\u0940\u0902 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902, \u091F\u0940\u092E \u0915\u093E \u0938\u0926\u0938\u094D\u092F \u0906\u092A\u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u093E\u0964";
+      const handoffReply = "\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0939\u092E\u093E\u0930\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u094B \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0939\u092E\u093E\u0930\u0947 \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u091C\u0932\u094D\u0926 \u0939\u0940 \u0906\u092A\u0938\u0947 \u092F\u0939\u093E\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0917\u0947\u0964";
       const sent2 = await sendWhatsAppText(waId, handoffReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      const outRecord = {
+        messageId: outMsgId2,
+        metaMessageId: outMsgId2,
         conversationId,
         waId,
         direction: "outbound",
+        senderType: "system",
         text: handoffReply,
         timestamp: now,
         status: "sent"
-      });
-      console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId2}`);
+      };
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), outRecord);
+      messageCache.set(sha2562(outMsgId2), outRecord);
+      console.log(`[WhatsApp:Outbound] Outbound handoff acknowledgement saved: ${outMsgId2}`);
+      return;
+    }
+    const activeConvRes = await centralDb2.readDoc("whatsapp_conversations", conversationId);
+    const activeHandlingMode = activeConvRes?.data?.handlingMode || currentHandlingMode;
+    if (activeHandlingMode === "human") {
+      console.log(`[WhatsApp:Handoff] AI reply suppressed: conversation ${conversationId} is currently handled by human operator (${activeConvRes?.data?.assignedOperatorName || activeConvRes?.data?.assignedOperatorId || "unassigned"}). Inbound message recorded for live inbox.`);
+      return;
+    }
+    if (activeHandlingMode === "waiting_human") {
+      console.log(`[WhatsApp:Handoff] AI reply suppressed: conversation ${conversationId} is in 'waiting_human' mode awaiting operator pickup. Inbound message recorded for live inbox.`);
       return;
     }
     const isConsent1 = /^\s*1\s*$/i.test(textBody) || /फीचर्स|अपडेट|feature|update/i.test(textBody);
@@ -7087,7 +7521,7 @@ ${knowledge.slice(0, 1e3)}` };
       const prefAckReply = isConsentAll ? "\u2705 \u0927\u0928\u094D\u092F\u0935\u093E\u0926! \u0906\u092A\u0915\u0940 \u0938\u092D\u0940 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E\u090F\u0901 (\u092B\u0940\u091A\u0930\u094D\u0938, \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C, \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0939\u093E\u092F\u0924\u093E) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0902\u0964 \u0906\u092A \u0915\u093F\u0938\u0940 \u092D\u0940 \u0938\u092E\u092F 'STOP' \u0932\u093F\u0916\u0915\u0930 \u0907\u0928\u094D\u0939\u0947\u0902 \u092C\u0902\u0926 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" : `\u2705 \u0927\u0928\u094D\u092F\u0935\u093E\u0926! \u0906\u092A\u0915\u0940 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E (${isConsent1 ? "\u092B\u0940\u091A\u0930\u094D\u0938 \u0905\u092A\u0921\u0947\u091F " : ""}${isConsent2 ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C " : ""}${isConsent3 ? "\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0939\u093E\u092F\u0924\u093E " : ""}) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0926\u0930\u094D\u091C \u0915\u0930 \u0932\u0940 \u0917\u0908 \u0939\u0948\u0964`;
       const sent2 = await sendWhatsAppText(waId, prefAckReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `pref-ack-${now}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -7118,7 +7552,7 @@ ${knowledge.slice(0, 1e3)}` };
 \u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
       const sent2 = await sendWhatsAppText(waId, greetingReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -7143,7 +7577,7 @@ AI News Maker \u092D\u093E\u0930\u0924 \u0915\u093E \u092A\u0939\u0932\u093E \u0
 \u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
       const sent2 = await sendWhatsAppText(waId, faqReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -7166,7 +7600,7 @@ AI News Maker \u092D\u093E\u0930\u0924 \u0915\u093E \u092A\u0939\u0932\u093E \u0
 \u{1F310} \u0905\u0927\u093F\u0915 \u091C\u093E\u0928\u0915\u093E\u0930\u0940: https://ainewsmaker.online/#features`;
       const sent2 = await sendWhatsAppText(waId, servicesReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -7188,7 +7622,7 @@ AI News Maker \u092D\u093E\u0930\u0924 \u0915\u093E \u092A\u0939\u0932\u093E \u0
 6. '\u0921\u093E\u0909\u0928\u0932\u094B\u0921' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u2014 \u0906\u092A\u0915\u093E HD \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0924\u0941\u0930\u0902\u0924 \u0924\u0948\u092F\u093E\u0930!`;
       const sent2 = await sendWhatsAppText(waId, graphicReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -7211,7 +7645,7 @@ AI News Maker \u092D\u093E\u0930\u0924 \u0915\u093E \u092A\u0939\u0932\u093E \u0
 _\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u090F\u0921\u0935\u093E\u0902\u0938, \u092A\u094D\u0930\u094B \u0914\u0930 \u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964_`;
       const sent2 = await sendWhatsAppText(waId, videoReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -7253,7 +7687,7 @@ _\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u09
 \u090F\u0915 WhatsApp \u0928\u0902\u092C\u0930 \u0915\u094B \u090F\u0915 \u0938\u092E\u092F \u092E\u0947\u0902 \u0915\u0947\u0935\u0932 \u090F\u0915 \u0939\u0940 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u091C\u094B\u0921\u093C\u093E \u091C\u093E \u0938\u0915\u0924\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u0909\u0938 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u0907\u0938\u0947 \u0905\u0928\u0932\u093F\u0902\u0915 \u0915\u0930\u0947\u0902\u0964`;
           const sent3 = await sendWhatsAppText(waId, conflictReply);
           const outMsgId3 = String(sent3?.messages?.[0]?.id || `out-${messageId}`);
-          await requireWrite("whatsapp_messages", sha256(outMsgId3), {
+          await requireWrite("whatsapp_messages", sha2562(outMsgId3), {
             conversationId,
             waId,
             direction: "outbound",
@@ -7299,7 +7733,7 @@ _\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u09
 \u2022 *'\u0905\u0915\u093E\u0909\u0902\u091F'* - \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0935 \u091A\u0948\u0928\u0932 \u0935\u093F\u0935\u0930\u0923`;
         const sent2 = await sendWhatsAppText(waId, linkSuccessReply);
         const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-        await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
           conversationId,
           waId,
           direction: "outbound",
@@ -7317,7 +7751,7 @@ _\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u09
 \u0915\u0943\u092A\u092F\u093E https://ainewsmaker.online \u092A\u0930 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 \u091C\u093E\u0915\u0930 \u0928\u092F\u093E 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0915\u094B\u0921 \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0947\u0902\u0964`;
         const sent2 = await sendWhatsAppText(waId, invalidReply);
         const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-        await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+        await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
           conversationId,
           waId,
           direction: "outbound",
@@ -7367,7 +7801,7 @@ _\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u09
 _\u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0938\u0939\u093E\u092F\u0924\u093E \u0935 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0915\u0947 \u0932\u093F\u090F \u0906\u092A \u0905\u092A\u0928\u093E \u092A\u094D\u0930\u0936\u094D\u0928 \u092A\u0942\u091B \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964_`;
         const sent3 = await sendWhatsAppText(waId, unlinkedReply);
         const outMsgId3 = String(sent3?.messages?.[0]?.id || `out-${messageId}`);
-        await requireWrite("whatsapp_messages", sha256(outMsgId3), {
+        await requireWrite("whatsapp_messages", sha2562(outMsgId3), {
           conversationId,
           waId,
           direction: "outbound",
@@ -7474,7 +7908,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
       console.log(`[WhatsApp:AccountQuery] Sending deterministic reply to ${maskedWa}`);
       const sent2 = await sendWhatsAppText(waId, replyText);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId2), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
         conversationId,
         waId,
         direction: "outbound",
@@ -7497,12 +7931,33 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     if (!reply) {
       const handoffReason = aiResult.reason || "knowledge_gap";
       console.log(`[WhatsApp:Inbound] Human handoff triggered, with exact reason: ${handoffReason}`);
-      await requireWrite("whatsapp_conversations", conversationId, {
+      let kgConvData = {};
+      try {
+        const kgRes = await centralDb2.readDoc("whatsapp_conversations", conversationId);
+        if (kgRes?.success && kgRes.data) kgConvData = kgRes.data;
+      } catch {
+      }
+      const kgUpdates = {
+        ...kgConvData,
         waId,
+        handlingMode: "waiting_human",
         status: "human_requested",
         humanHandoff: true,
         handoffReason,
+        modeUpdatedAt: Date.now(),
+        modeUpdatedBy: "system_ai_gap",
         updatedAt: Date.now()
+      };
+      await requireWrite("whatsapp_conversations", conversationId, kgUpdates);
+      conversationCache.set(conversationId, kgUpdates);
+      await recordAuditEvent(centralDb2, {
+        conversationId,
+        eventType: "conversation_mode_changed",
+        previousValue: kgConvData.handlingMode || "ai",
+        newValue: "waiting_human",
+        actorId: "system",
+        actorType: "system",
+        metadata: { reason: handoffReason }
       });
       if (handoffReason === "knowledge_gap") {
         reply = "\u0906\u092A\u0915\u093E \u092A\u094D\u0930\u0936\u094D\u0928 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948, \u0932\u0947\u0915\u093F\u0928 \u0907\u0938\u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0939\u092E\u093E\u0930\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u0939\u093E\u092F\u0924\u093E-\u091C\u094D\u091E\u093E\u0928 \u0938\u0947 \u0928\u0939\u0940\u0902 \u0939\u094B \u092A\u093E \u0930\u0939\u0940 \u0939\u0948\u0964 \u0939\u092E\u0928\u0947 \u0907\u0938\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u0947 \u0932\u093F\u090F \u091A\u093F\u0928\u094D\u0939\u093F\u0924 \u0915\u0930 \u0926\u093F\u092F\u093E \u0939\u0948\u0964";
@@ -7510,17 +7965,47 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
         reply = "\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u093E \u0938\u0902\u0926\u0947\u0936 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948\u0964 \u0939\u092E\u093E\u0930\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u091C\u0932\u094D\u0926 \u0939\u0940 \u0906\u092A\u0938\u0947 \u092F\u0939\u093E\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0917\u0940\u0964";
       }
     }
-    const sent = await sendWhatsAppText(waId, reply);
-    const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-    await requireWrite("whatsapp_messages", sha256(outMsgId), {
-      conversationId,
-      waId,
-      direction: "outbound",
-      text: reply,
-      timestamp: Date.now(),
-      status: "sent"
-    });
-    console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+    const reservation = await acquireAiDispatchReservation(conversationId, centralDb2);
+    if (!reservation.acquired) {
+      console.log(`[WhatsApp:Handoff] Aborting AI response dispatch: could not acquire dispatch reservation (${reservation.reason}). Operator takeover has priority.`);
+      return;
+    }
+    let sent = null;
+    let outMsgId = `out-${messageId}`;
+    try {
+      let latestConv = conversationCache.get(conversationId);
+      if (centralDb2?.readDoc) {
+        try {
+          const lRes = await centralDb2.readDoc("whatsapp_conversations", conversationId);
+          if (lRes?.success && lRes.data) latestConv = lRes.data;
+        } catch {
+        }
+      }
+      const curReservation = latestConv?.aiDispatchReservation;
+      if (latestConv?.handlingMode === "human" || !curReservation || curReservation.reservationId !== reservation.reservationId || Number(curReservation.expiresAt || 0) <= Date.now()) {
+        console.log(`[WhatsApp:Handoff] Aborting AI response dispatch: reservation was revoked, expired, or superseded by human operator takeover.`);
+        return;
+      }
+      sent = await sendWhatsAppText(waId, reply);
+      outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId,
+        waId,
+        direction: "outbound",
+        senderType: aiResult.reply ? "ai_bot" : "system",
+        text: reply,
+        timestamp: Date.now(),
+        status: "sent"
+      };
+      await requireWrite("whatsapp_messages", sha2562(outMsgId), outRecord);
+      messageCache.set(sha2562(outMsgId), outRecord);
+      console.log(`[WhatsApp:Outbound] Outbound Firestore record saved: ${outMsgId}`);
+    } finally {
+      await releaseAiDispatchReservation(conversationId, reservation.reservationId, centralDb2).catch(() => {
+      });
+    }
   };
   app2.get(webhookPath, (req, res) => {
     const mode = String(req.query["hub.mode"] || "");
@@ -7565,7 +8050,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     }
     const messageId = String(message?.id || "");
     const parent = taskClient.queuePath(config.projectId, config.location, config.queue);
-    const taskName = taskClient.taskPath(config.projectId, config.location, config.queue, "wa-" + sha256(messageId).slice(0, 32));
+    const taskName = taskClient.taskPath(config.projectId, config.location, config.queue, "wa-" + sha2562(messageId).slice(0, 32));
     try {
       await taskClient.createTask({
         parent,
@@ -7613,7 +8098,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     const messageId = String(req.body?.messageId || "");
     if (!message || !messageId || String(message.id || "") !== messageId) return res.sendStatus(400);
     if (!centralDb2?.useFirestore) return res.sendStatus(503);
-    const eventId = sha256(messageId);
+    const eventId = sha2562(messageId);
     console.log(`[WhatsApp:Tasks] Cloud Task processing started for event ${eventId.slice(0, 10)}... (messageId=${messageId})`);
     try {
       const claim = await claimInboundEvent(eventId, messageId);
@@ -7653,6 +8138,22 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     console.log("[WhatsApp:Inbound] Webhook signature verified successfully");
     if (req.body?.object !== "whatsapp_business_account") return res.sendStatus(404);
     if (!centralDb2?.useFirestore || !getTaskConfig()) return res.sendStatus(503);
+    const statuses = [];
+    for (const entry of req.body?.entry || []) {
+      for (const change of entry?.changes || []) {
+        for (const status of change?.value?.statuses || []) statuses.push(status);
+      }
+    }
+    if (statuses.length > 0) {
+      console.log(`[WhatsApp:Webhook] Received ${statuses.length} delivery status update(s)`);
+      for (const st of statuses) {
+        try {
+          await processDeliveryStatus(st, centralDb2, requireWrite);
+        } catch (stErr) {
+          console.error("[WhatsApp:Webhook] Error processing delivery status:", stErr?.message || stErr);
+        }
+      }
+    }
     const messages = [];
     for (const entry of req.body?.entry || []) {
       for (const change of entry?.changes || []) {
@@ -7663,7 +8164,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
       for (const message of messages) {
         const messageId = String(message?.id || "");
         if (!messageId) continue;
-        const eventId = sha256(messageId);
+        const eventId = sha2562(messageId);
         const existing = await centralDb2.readDoc("whatsapp_webhook_events", eventId);
         if (existing?.success && existing.data?.status === "processed") continue;
         if (existing?.success && (existing.data?.status === "queued" || existing.data?.status === "processing")) continue;
@@ -7940,8 +8441,8 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
 (\u0928\u094B\u091F: \u0906\u092A \u0915\u093F\u0938\u0940 \u092D\u0940 \u0938\u092E\u092F 'STOP' \u0932\u093F\u0916\u0915\u0930 \u0938\u0942\u091A\u0928\u093E\u090F\u0901 \u092C\u0902\u0926 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902)`;
         sendWhatsAppText(recipientWaId, onboardingPrefMsg).then(async (sent) => {
           const outMsgId = String(sent?.messages?.[0]?.id || `onb-pref-${now}`);
-          await requireWrite("whatsapp_messages", sha256(outMsgId), {
-            conversationId: sha256(recipientWaId),
+          await requireWrite("whatsapp_messages", sha2562(outMsgId), {
+            conversationId: sha2562(recipientWaId),
             waId: recipientWaId,
             direction: "outbound",
             text: onboardingPrefMsg,
@@ -7981,7 +8482,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
         return res.status(400).json({ error: "Phone number required" });
       }
       const recipientWaId = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-      const conversationId = sha256(recipientWaId);
+      const conversationId = sha2562(recipientWaId);
       const now = Date.now();
       if (email && centralDb2?.useFirestore) {
         const uRes = await centralDb2.readDoc("users", email);
@@ -8003,7 +8504,7 @@ AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u09
 \u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
       const sent = await sendWhatsAppText(recipientWaId, welcomeMsg);
       const outMsgId = String(sent?.messages?.[0]?.id || `onb-wel-${now}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
+      await requireWrite("whatsapp_messages", sha2562(outMsgId), {
         conversationId,
         waId: recipientWaId,
         direction: "outbound",
@@ -8138,8 +8639,8 @@ ${finalMessage}`);
           if (sent && (sent.messages || sent.contacts)) {
             successfulDeliveries++;
             const outMsgId = String(sent?.messages?.[0]?.id || `camp-out-${Date.now()}`);
-            await requireWrite("whatsapp_messages", sha256(outMsgId), {
-              conversationId: sha256(phone),
+            await requireWrite("whatsapp_messages", sha2562(outMsgId), {
+              conversationId: sha2562(phone),
               waId: phone,
               direction: "outbound",
               text: finalMessage,
@@ -8188,6 +8689,653 @@ ${finalMessage}`);
     } catch (err) {
       console.error("[WhatsApp:Campaign] Campaign failure:", err);
       return res.status(500).json({ error: String(err?.message || err) });
+    }
+  });
+  const enrichCustomerData = async (waId) => {
+    let customer = {
+      phone: waId,
+      isLinked: false,
+      fullName: "",
+      name: "",
+      email: "",
+      channelName: "",
+      planName: "FREE",
+      tier: "free",
+      hasActivePaidPlan: false,
+      remainingToday: 10,
+      coinBalance: 0
+    };
+    if (!waId) return customer;
+    const cleanWa10 = waId.replace(/\D/g, "").slice(-10);
+    if (centralDb2?.cache?.users) {
+      for (const u of centralDb2.cache.users.values()) {
+        const uWa = (u.linkedWhatsAppWaId || u.whatsappNumber || u.primaryPhone || u.mobile || "").replace(/\D/g, "").slice(-10);
+        if (uWa && cleanWa10 && uWa === cleanWa10) {
+          customer = {
+            phone: waId,
+            isLinked: Boolean(u.whatsappVerified || u.whatsappLinkStatus === "linked" && u.linkedWhatsAppWaId),
+            fullName: u.fullName || u.name || "\u0938\u0902\u092A\u093E\u0926\u0915",
+            name: u.name || u.fullName || "\u0938\u0902\u092A\u093E\u0926\u0915",
+            email: u.email || "",
+            channelName: u.channelNameHi || u.channelName || "",
+            planName: u.planName || "BASIC",
+            tier: u.tier || "basic",
+            hasActivePaidPlan: Boolean(u.hasActivePaidPlan),
+            remainingToday: 10,
+            coinBalance: 0
+          };
+          break;
+        }
+      }
+    }
+    if (!customer.email && centralDb2?.readDoc) {
+      try {
+        const regRes = await centralDb2.readDoc("whatsapp_phone_registry", `phone_${waId}`);
+        if (regRes?.success && regRes.data?.verifiedEmail) {
+          const ownerEmail = regRes.data.verifiedEmail.toLowerCase().trim();
+          customer.email = ownerEmail;
+          customer.isLinked = true;
+          const uRes = await centralDb2.readDoc("users", ownerEmail);
+          if (uRes?.success && uRes.data) {
+            customer.fullName = uRes.data.fullName || uRes.data.name || "";
+            customer.name = customer.fullName;
+            customer.channelName = uRes.data.channelNameHi || uRes.data.channelName || "";
+            customer.planName = uRes.data.planName || "BASIC";
+            customer.tier = uRes.data.tier || "basic";
+            customer.hasActivePaidPlan = Boolean(uRes.data.hasActivePaidPlan);
+          }
+        }
+      } catch {
+      }
+    }
+    if (customer.email && centralDb2?.readDoc) {
+      try {
+        const isSuper2 = customer.tier === "superadmin" || customer.tier === "admin";
+        let maxAllowed = 10;
+        if (isSuper2 || customer.tier === "ultra" || customer.tier === "vip") maxAllowed = 99999;
+        else if (customer.tier === "professional" || customer.tier === "pro") maxAllowed = 50;
+        else if (customer.tier === "advanced" || customer.tier === "advance") maxAllowed = 25;
+        const todayStr = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }).format(/* @__PURE__ */ new Date());
+        const dRes = await centralDb2.readDoc("daily_graphic_downloads", `${customer.email}_${todayStr}`);
+        const count = dRes?.success && dRes.data ? Number(dRes.data.count || 0) : 0;
+        customer.remainingToday = Math.max(0, maxAllowed - count);
+        customer.downloadsToday = count;
+        customer.maxAllowed = maxAllowed;
+      } catch {
+      }
+      try {
+        const wRes = await centralDb2.readDoc("wallets", customer.email);
+        if (wRes?.success && wRes.data) {
+          customer.coinBalance = Number(wRes.data.coinBalance || 0);
+        }
+      } catch {
+      }
+    }
+    return customer;
+  };
+  app2.get("/api/admin/whatsapp/conversations", requireAdmin, async (req, res) => {
+    try {
+      const filter = String(req.query.filter || "all").toLowerCase().trim();
+      const search = String(req.query.search || "").toLowerCase().trim();
+      const operatorFilter = String(req.query.operatorId || "").trim();
+      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
+      const convMap = /* @__PURE__ */ new Map();
+      for (const [id, conv] of conversationCache.entries()) {
+        convMap.set(id, { ...conv, conversationId: id, id });
+      }
+      if (centralDb2?.listDocs) {
+        try {
+          const listRes = await centralDb2.listDocs("whatsapp_conversations", 300);
+          if (listRes?.success && Array.isArray(listRes.documents)) {
+            for (const doc of listRes.documents) {
+              const id = doc.conversationId || doc.id || doc.docId;
+              if (id) {
+                const merged = { ...doc, conversationId: id, id, ...convMap.get(id) || {} };
+                convMap.set(id, merged);
+                conversationCache.set(id, merged);
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[WhatsApp:AdminInbox] listDocs warning:", dbErr?.message || dbErr);
+        }
+      }
+      let allConversations = Array.from(convMap.values());
+      const enrichedConversations = await Promise.all(
+        allConversations.map(async (conv) => {
+          const phone = conv.waId || conv.customerPhone || "";
+          const customer = await enrichCustomerData(phone);
+          return {
+            ...conv,
+            conversationId: conv.conversationId || conv.id,
+            customerPhone: phone,
+            customerName: customer.fullName || customer.name || conv.customerName || maskWaId(phone),
+            customerEmail: customer.email || conv.customerEmail || "",
+            handlingMode: conv.handlingMode || "ai",
+            unreadCount: Number(conv.unreadCount || 0),
+            status: conv.status || "open",
+            lastMessagePreview: conv.lastMessagePreview || "",
+            lastMessageAt: Number(conv.lastMessageAt || conv.lastInboundAt || conv.updatedAt || 0),
+            lastMessageStatus: conv.lastMessageStatus || "sent",
+            lastMessageDirection: conv.lastMessageDirection || "inbound",
+            assignedOperatorId: conv.assignedOperatorId || null,
+            assignedOperatorName: conv.assignedOperatorName || null,
+            customer
+          };
+        })
+      );
+      let filtered = enrichedConversations.filter((c) => {
+        if (filter === "unread" && c.unreadCount <= 0) return false;
+        if (filter === "unassigned" && Boolean(c.assignedOperatorId)) return false;
+        if (filter === "ai" && c.handlingMode !== "ai") return false;
+        if (filter === "human" && c.handlingMode !== "human") return false;
+        if (filter === "waiting_human" && c.handlingMode !== "waiting_human") return false;
+        if (filter === "closed" && c.status !== "closed") return false;
+        if (filter !== "closed" && c.status === "closed" && filter !== "all") return false;
+        if (operatorFilter && c.assignedOperatorId !== operatorFilter) return false;
+        if (search) {
+          const textMatch = (c.customerPhone || "").toLowerCase().includes(search) || (c.customerName || "").toLowerCase().includes(search) || (c.customerEmail || "").toLowerCase().includes(search) || (c.lastMessagePreview || "").toLowerCase().includes(search);
+          if (!textMatch) return false;
+        }
+        return true;
+      });
+      filtered.sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0));
+      return res.json({
+        success: true,
+        count: filtered.length,
+        filter,
+        conversations: filtered.slice(0, limit)
+      });
+    } catch (err) {
+      console.error("[WhatsApp:AdminInbox] Error listing conversations:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.get("/api/admin/whatsapp/conversations/:id", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      const phone = convDoc.waId || convDoc.customerPhone || "";
+      const customer = await enrichCustomerData(phone);
+      const conversation = {
+        ...convDoc,
+        conversationId: convId,
+        customerPhone: phone,
+        customerName: customer.fullName || customer.name || convDoc.customerName || maskWaId(phone),
+        customerEmail: customer.email || "",
+        handlingMode: convDoc.handlingMode || "ai",
+        unreadCount: Number(convDoc.unreadCount || 0),
+        status: convDoc.status || "open",
+        customer
+      };
+      return res.json({ success: true, conversation });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.get("/api/admin/whatsapp/conversations/:id/messages", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      const limit = Math.min(300, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
+      const msgsMap = /* @__PURE__ */ new Map();
+      for (const [id, msg] of messageCache.entries()) {
+        if (msg.conversationId === convId) {
+          msgsMap.set(id, { ...msg, id });
+        }
+      }
+      if (centralDb2?.listDocs) {
+        try {
+          const listRes = await centralDb2.listDocs("whatsapp_messages", 400);
+          if (listRes?.success && Array.isArray(listRes.documents)) {
+            for (const doc of listRes.documents) {
+              if (doc.conversationId === convId) {
+                const id = doc.messageId || doc.id || doc.docId || sha2562(String(doc.metaMessageId || Date.now()));
+                const merged = { ...doc, id, ...msgsMap.get(id) || {} };
+                msgsMap.set(id, merged);
+                messageCache.set(id, merged);
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[WhatsApp:AdminInbox] Messages listDocs warning:", dbErr?.message || dbErr);
+        }
+      }
+      const messages = Array.from(msgsMap.values());
+      messages.sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+      return res.json({
+        success: true,
+        conversationId: convId,
+        count: messages.length,
+        messages: messages.slice(-limit)
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/conversations/:id/mode", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      const newMode = String(req.body?.mode || "").toLowerCase().trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      if (!["ai", "human", "waiting_human"].includes(newMode)) {
+        return res.status(400).json({
+          success: false,
+          error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0902\u0921\u0932\u093F\u0902\u0917 \u092E\u094B\u0921\u0964 \u0915\u0947\u0935\u0932 'ai', 'human' \u0905\u0925\u0935\u093E 'waiting_human' \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0902\u0964"
+        });
+      }
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      const previousMode = convDoc.handlingMode || "ai";
+      const now = Date.now();
+      const actorEmail = req.user?.email || "admin";
+      const existingRes = convDoc.aiDispatchReservation;
+      const isAiInFlight = Boolean(existingRes && Number(existingRes.expiresAt || 0) > now);
+      const updatedConv = {
+        ...convDoc,
+        handlingMode: newMode,
+        aiDispatchReservation: newMode === "human" ? null : convDoc.aiDispatchReservation,
+        operatorTakeoverAt: newMode === "human" ? now : convDoc.operatorTakeoverAt,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        modeUpdatedAt: now,
+        modeUpdatedBy: actorEmail,
+        status: newMode === "waiting_human" ? "human_requested" : convDoc.status || "open",
+        updatedAt: now
+      };
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+      await recordAuditEvent(centralDb2, {
+        conversationId: convId,
+        eventType: "conversation_mode_changed",
+        previousValue: previousMode,
+        newValue: newMode,
+        actorId: actorEmail,
+        actorType: "operator",
+        metadata: {
+          reason: req.body?.reason || "manual_operator_switch",
+          aiWasInFlight: isAiInFlight,
+          revokedReservationId: isAiInFlight && newMode === "human" ? existingRes?.reservationId : null
+        }
+      });
+      console.log(`[WhatsApp:Handoff] Conversation ${convId} mode transitioned: ${previousMode} -> ${newMode} by ${actorEmail}${isAiInFlight ? " (AI dispatch was in-flight)" : ""}`);
+      return res.json({
+        success: true,
+        conversationId: convId,
+        previousMode,
+        newMode,
+        modeUpdatedAt: now,
+        aiDispatchInFlight: isAiInFlight,
+        warning: isAiInFlight ? "ai_dispatch_in_flight" : void 0,
+        warningMessage: isAiInFlight ? "\u091A\u0947\u0924\u093E\u0935\u0928\u0940: \u090F\u0915 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 AI \u0938\u0902\u0926\u0947\u0936 \u092A\u0939\u0932\u0947 \u0938\u0947 \u092A\u094D\u0930\u0947\u0937\u0923 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092E\u0947\u0902 (in-flight) \u0925\u093E\u0964 \u0911\u092A\u0930\u0947\u091F\u0930 \u091F\u0947\u0915\u0913\u0935\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0940 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948, \u0915\u093F\u0902\u0924\u0941 \u092F\u0926\u093F \u092A\u0942\u0930\u094D\u0935\u0935\u0930\u094D\u0924\u0940 \u0938\u0902\u0926\u0947\u0936 Meta \u0938\u0949\u0915\u0947\u091F \u092A\u0930 \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948, \u0924\u094B \u0935\u0939 \u0928\u093F\u0930\u0938\u094D\u0924 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0947\u0917\u093E\u0964" : void 0
+      });
+    } catch (err) {
+      console.error("[WhatsApp:Handoff] Error updating mode:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/conversations/:id/assign", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      const actorEmail = req.user?.email || "admin";
+      const operatorId = String(req.body?.operatorId || req.user?.userId || actorEmail).trim();
+      const operatorName = String(req.body?.operatorName || req.user?.name || req.user?.fullName || actorEmail).trim();
+      const operatorEmail = String(req.body?.operatorEmail || actorEmail).trim();
+      const expectedOperatorId = req.body?.expectedOperatorId;
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      if (expectedOperatorId !== void 0 && convDoc.assignedOperatorId && convDoc.assignedOperatorId !== expectedOperatorId) {
+        return res.status(409).json({
+          success: false,
+          errorCode: "CONCURRENT_ASSIGNMENT_CONFLICT",
+          error: `\u092F\u0939 \u0935\u093E\u0930\u094D\u0924\u093E\u0932\u093E\u092A \u092A\u0939\u0932\u0947 \u0939\u0940 ${convDoc.assignedOperatorName || convDoc.assignedOperatorId} \u0915\u094B \u0905\u0938\u093E\u0907\u0928 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964`,
+          currentOperatorId: convDoc.assignedOperatorId,
+          currentOperatorName: convDoc.assignedOperatorName
+        });
+      }
+      const previousOperatorId = convDoc.assignedOperatorId || null;
+      const previousMode = convDoc.handlingMode || "ai";
+      const now = Date.now();
+      const existingRes = convDoc.aiDispatchReservation;
+      const isAiInFlight = Boolean(existingRes && Number(existingRes.expiresAt || 0) > now);
+      const updatedConv = {
+        ...convDoc,
+        assignedOperatorId: operatorId,
+        assignedOperatorName: operatorName,
+        assignedOperatorEmail: operatorEmail,
+        assignedAt: now,
+        assignedBy: actorEmail,
+        // Auto transition to human mode on operator assignment
+        handlingMode: "human",
+        aiDispatchReservation: null,
+        // Revokes any pending AI dispatch reservation
+        operatorTakeoverAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        modeUpdatedAt: now,
+        modeUpdatedBy: actorEmail,
+        updatedAt: now
+      };
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+      await recordAuditEvent(centralDb2, {
+        conversationId: convId,
+        eventType: "operator_assigned",
+        previousValue: previousOperatorId,
+        newValue: operatorId,
+        actorId: actorEmail,
+        actorType: "operator",
+        metadata: {
+          operatorName,
+          operatorEmail,
+          aiWasInFlight: isAiInFlight,
+          revokedReservationId: isAiInFlight ? existingRes?.reservationId : null
+        }
+      });
+      console.log(`[WhatsApp:Handoff] Conversation ${convId} assigned to ${operatorName} (${operatorId})${isAiInFlight ? " (AI dispatch was in-flight)" : ""}`);
+      return res.json({
+        success: true,
+        conversationId: convId,
+        assignedOperatorId: operatorId,
+        assignedOperatorName: operatorName,
+        handlingMode: "human",
+        aiDispatchInFlight: isAiInFlight,
+        warning: isAiInFlight ? "ai_dispatch_in_flight" : void 0,
+        warningMessage: isAiInFlight ? "\u091A\u0947\u0924\u093E\u0935\u0928\u0940: \u0935\u093E\u0930\u094D\u0924\u093E\u0932\u093E\u092A \u0911\u092A\u0930\u0947\u091F\u0930 \u0915\u094B \u0905\u0938\u093E\u0907\u0928 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948, \u0915\u093F\u0902\u0924\u0941 \u090F\u0915 \u092A\u0942\u0930\u094D\u0935\u0935\u0930\u094D\u0924\u0940 AI \u0938\u0902\u0926\u0947\u0936 \u092A\u094D\u0930\u0947\u0937\u0923 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E (in-flight) \u092E\u0947\u0902 \u0925\u093E\u0964" : void 0
+      });
+    } catch (err) {
+      console.error("[WhatsApp:Handoff] Error assigning operator:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/conversations/:id/unassign", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      const previousOperatorId = convDoc.assignedOperatorId || null;
+      const previousOperatorName = convDoc.assignedOperatorName || null;
+      const now = Date.now();
+      const actorEmail = req.user?.email || "admin";
+      const updatedConv = {
+        ...convDoc,
+        assignedOperatorId: null,
+        assignedOperatorName: null,
+        assignedOperatorEmail: null,
+        unassignedAt: now,
+        unassignedBy: actorEmail,
+        updatedAt: now
+      };
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+      await recordAuditEvent(centralDb2, {
+        conversationId: convId,
+        eventType: "operator_unassigned",
+        previousValue: previousOperatorId,
+        newValue: null,
+        actorId: actorEmail,
+        actorType: "operator",
+        metadata: { previousOperatorName }
+      });
+      console.log(`[WhatsApp:Handoff] Conversation ${convId} unassigned by ${actorEmail}`);
+      return res.json({
+        success: true,
+        conversationId: convId,
+        previousOperatorId
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/conversations/:id/reply", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      const text = String(req.body?.text || "").trim();
+      const idempotencyKey = String(req.body?.idempotencyKey || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      if (!text || text.length > 4096) {
+        return res.status(400).json({
+          success: false,
+          error: "\u0938\u0902\u0926\u0947\u0936 \u0916\u093E\u0932\u0940 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0924\u093E \u0914\u0930 \u0905\u0927\u093F\u0915\u0924\u092E 4096 \u0905\u0915\u094D\u0937\u0930\u094B\u0902 \u0915\u093E \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964"
+        });
+      }
+      if (idempotencyKey) {
+        const lastSent = replyIdempotencyCache.get(idempotencyKey);
+        if (lastSent && Date.now() - lastSent < 6e5) {
+          return res.status(409).json({
+            success: false,
+            errorCode: "DUPLICATE_REQUEST",
+            error: "\u092F\u0939 \u0938\u0902\u0926\u0947\u0936 \u092A\u0939\u0932\u0947 \u0939\u0940 \u092D\u0947\u091C\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948 (Duplicate request detected)."
+          });
+        }
+        replyIdempotencyCache.set(idempotencyKey, Date.now());
+      }
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      const recipientWaId = convDoc.waId || convDoc.customerPhone;
+      if (!recipientWaId) {
+        return res.status(400).json({ success: false, error: "\u0935\u0948\u0927 \u0917\u094D\u0930\u093E\u0939\u0915 \u092B\u093C\u094B\u0928 \u0928\u0902\u092C\u0930 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
+      }
+      const lastInboundAt = Number(convDoc.lastInboundAt || 0);
+      const windowMs = 24 * 60 * 60 * 1e3;
+      const timeSinceInbound = Date.now() - lastInboundAt;
+      const isWithinWindow = lastInboundAt > 0 && timeSinceInbound <= windowMs;
+      if (!isWithinWindow) {
+        console.warn(`[WhatsApp:OperatorReply] Reply blocked: outside 24h window for ${maskWaId(recipientWaId)} (last inbound: ${lastInboundAt})`);
+        return res.status(403).json({
+          success: false,
+          errorCode: "OUTSIDE_24H_WINDOW",
+          error: "24 \u0918\u0902\u091F\u0947 \u0915\u0940 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0947\u0935\u093E \u0935\u093F\u0902\u0921\u094B \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 Meta \u0928\u0940\u0924\u093F \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 \u0915\u0947\u0935\u0932 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0938\u0902\u0926\u0947\u0936 \u0939\u0940 \u092D\u0947\u091C\u093E \u091C\u093E \u0938\u0915\u0924\u093E \u0939\u0948\u0964",
+          lastInboundAt,
+          hoursElapsed: Math.round(timeSinceInbound / (3600 * 1e3) * 10) / 10
+        });
+      }
+      const operatorEmail = req.user?.email || "operator";
+      const operatorName = req.user?.name || req.user?.fullName || operatorEmail;
+      console.log(`[WhatsApp:OperatorReply] Operator ${operatorEmail} sending reply to ${maskWaId(recipientWaId)}: "${text.slice(0, 40)}..."`);
+      const existingRes = convDoc.aiDispatchReservation;
+      const isAiInFlight = Boolean(existingRes && Number(existingRes.expiresAt || 0) > Date.now());
+      const sent = await sendWhatsAppText(recipientWaId, text);
+      const outMsgId = String(sent?.messages?.[0]?.id || `operator-${Date.now()}-${(0, import_crypto.randomBytes)(4).toString("hex")}`);
+      const now = Date.now();
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId: convId,
+        waId: recipientWaId,
+        direction: "outbound",
+        messageType: "text",
+        text,
+        timestamp: now,
+        status: "sent",
+        senderType: "human_operator",
+        senderId: operatorEmail,
+        senderName: operatorName,
+        idempotencyKey: idempotencyKey || null,
+        createdAt: now
+      };
+      await requireWrite("whatsapp_messages", sha2562(outMsgId), outRecord);
+      messageCache.set(sha2562(outMsgId), outRecord);
+      const updatedConv = {
+        ...convDoc,
+        lastMessagePreview: text.slice(0, 180),
+        lastMessageDirection: "outbound",
+        lastMessageAt: now,
+        lastMessageStatus: "sent",
+        unreadCount: 0,
+        // Reset unread count as operator has replied
+        handlingMode: "human",
+        // Remains in human mode until explicitly switched
+        aiDispatchReservation: null,
+        // Revokes any AI dispatch reservation
+        operatorTakeoverAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        updatedAt: now
+      };
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+      await recordAuditEvent(centralDb2, {
+        conversationId: convId,
+        eventType: "operator_reply_sent",
+        newValue: outMsgId,
+        actorId: operatorEmail,
+        actorType: "operator",
+        metadata: { textLength: text.length, messageId: outMsgId, aiWasInFlight: isAiInFlight }
+      });
+      console.log(`[WhatsApp:OperatorReply] Message ${outMsgId} successfully sent and recorded${isAiInFlight ? " (AI dispatch was in-flight prior to reply)" : ""}`);
+      return res.json({
+        success: true,
+        messageId: outMsgId,
+        status: "sent",
+        timestamp: now,
+        aiDispatchInFlight: isAiInFlight,
+        warning: isAiInFlight ? "ai_dispatch_in_flight" : void 0,
+        warningMessage: isAiInFlight ? "\u091A\u0947\u0924\u093E\u0935\u0928\u0940: \u0911\u092A\u0930\u0947\u091F\u0930 \u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0947\u0937\u093F\u0924 \u0915\u093F\u092F\u093E \u0917\u092F\u093E, \u0915\u093F\u0902\u0924\u0941 \u092A\u0942\u0930\u094D\u0935\u0935\u0930\u094D\u0924\u0940 AI \u0938\u0902\u0926\u0947\u0936 \u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u092A\u094D\u0930\u0947\u0937\u0923 (in-flight) \u092E\u0947\u0902 \u0925\u093E\u0964" : void 0
+      });
+    } catch (err) {
+      console.error("[WhatsApp:OperatorReply] Error sending reply:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/conversations/:id/mark-read", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      const updatedConv = {
+        ...convDoc,
+        unreadCount: 0,
+        readAt: Date.now(),
+        readBy: req.user?.email || "admin",
+        updatedAt: Date.now()
+      };
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+      return res.json({ success: true, conversationId: convId, unreadCount: 0 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/conversations/:id/close", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      const now = Date.now();
+      const actorEmail = req.user?.email || "admin";
+      const updatedConv = {
+        ...convDoc,
+        status: "closed",
+        closedAt: now,
+        closedBy: actorEmail,
+        updatedAt: now
+      };
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+      await recordAuditEvent(centralDb2, {
+        conversationId: convId,
+        eventType: "conversation_closed",
+        previousValue: convDoc.status || "open",
+        newValue: "closed",
+        actorId: actorEmail,
+        actorType: "operator"
+      });
+      return res.json({ success: true, conversationId: convId, status: "closed" });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.get("/api/admin/whatsapp/conversations/:id/audit-events", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      const events = [];
+      if (centralDb2?.listDocs) {
+        const aRes = await centralDb2.listDocs("whatsapp_audit_events", 200);
+        if (aRes?.success && Array.isArray(aRes.documents)) {
+          for (const ev of aRes.documents) {
+            if (ev.conversationId === convId) {
+              events.push(ev);
+            }
+          }
+        }
+      }
+      events.sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0));
+      return res.json({ success: true, conversationId: convId, count: events.length, events });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
     }
   });
   app2.get("/api/whatsapp/diagnostic", async (req, res) => {
@@ -8312,7 +9460,7 @@ app.get("/api/health", (_req, res) => {
 app.use(import_express.default.json({
   limit: "100mb",
   verify: (req, _res, buf) => {
-    req.rawBody = buf ? buf.toString() : "";
+    req.rawBody = buf && buf.length > 0 ? buf.toString("utf8") : "";
   }
 }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
@@ -24378,7 +25526,10 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
 });
 app.post("/api/cashfree/webhook", async (req, res) => {
   try {
-    const rawBody = req.rawBody || JSON.stringify(req.body);
+    const rawBody = typeof req.rawBody === "string" ? req.rawBody : "";
+    if (!rawBody) {
+      return res.status(401).json({ status: "ERROR", error: "Missing raw request body" });
+    }
     const signature = (req.headers["x-webhook-signature"] || req.headers["x-cashfree-signature"] || "").toString().trim();
     const timestamp = (req.headers["x-webhook-timestamp"] || "").toString().trim();
     const webhookSecret = (process.env.CASHFREE_WEBHOOK_SECRET || process.env.CASHFREE_SECRET_KEY || "").trim();

@@ -84,7 +84,7 @@ app.get("/api/health", (_req, res) => {
 app.use(express.json({
   limit: "100mb",
   verify: (req: any, _res, buf) => {
-    req.rawBody = buf ? buf.toString() : "";
+    req.rawBody = buf && buf.length > 0 ? buf.toString("utf8") : "";
   },
 }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
@@ -20189,7 +20189,10 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
 // 4. Webhook Listener with Official Cryptographic Signature Verification & Replay Protection (Task 4)
 app.post("/api/cashfree/webhook", async (req, res) => {
   try {
-    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+    const rawBody = typeof (req as any).rawBody === "string" ? (req as any).rawBody : "";
+    if (!rawBody) {
+      return res.status(401).json({ status: "ERROR", error: "Missing raw request body" });
+    }
     const signature = (req.headers["x-webhook-signature"] || req.headers["x-cashfree-signature"] || "").toString().trim();
     const timestamp = (req.headers["x-webhook-timestamp"] || "").toString().trim();
 
