@@ -56,18 +56,32 @@ const VIDEO_NEWSROOM_STAGES = [
   { id: 6, label: 'वीडियो स्टूडियो', detail: 'अंतिम स्टूडियो लोड हो रहा है', icon: CheckCircle2 },
 ];
 
+export const HOME_CARD_GRAPHIC_SUBTITLES: string[] = [
+  'चुनी गई खबर के तथ्यों के आधार पर हेडलाइन, कैप्शन और ग्राफिक सामग्री तैयार की जा रही है।',
+  'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों की पुष्टि...',
+  'संतुलित हेडलाइन और उपयोगी कैप्शन तैयार किए जा रहे हैं...',
+  'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
+];
+
 export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = ({
   isOpen,
   mode = 'graphic_preparation',
   title,
   durationSeconds,
-  subtitles = BRANDED_LOADER_SUBTITLES,
+  subtitles,
   subtitleIntervalMs = 5000,
   onComplete,
   onCancel,
   error = null,
   onRetry,
 }) => {
+  const effectiveSubtitles =
+    subtitles && subtitles.length > 0
+      ? subtitles
+      : mode === 'graphic_preparation' || mode === 'approved_presentation'
+      ? HOME_CARD_GRAPHIC_SUBTITLES
+      : BRANDED_LOADER_SUBTITLES;
+
   const [subtitleIndex, setSubtitleIndex] = useState<number>(0);
   const [isSubtitleFading, setIsSubtitleFading] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
@@ -94,11 +108,11 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
 
     timerRef.current = setInterval(() => {
       if (prefersReducedMotion) {
-        setSubtitleIndex((prev) => (prev + 1) % subtitles.length);
+        setSubtitleIndex((prev) => (prev + 1) % effectiveSubtitles.length);
       } else {
         setIsSubtitleFading(true);
         setTimeout(() => {
-          setSubtitleIndex((prev) => (prev + 1) % subtitles.length);
+          setSubtitleIndex((prev) => (prev + 1) % effectiveSubtitles.length);
           setIsSubtitleFading(false);
         }, 250);
       }
@@ -107,9 +121,9 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isOpen, error, subtitles, subtitleIntervalMs, prefersReducedMotion]);
+  }, [isOpen, error, effectiveSubtitles, subtitleIntervalMs, prefersReducedMotion]);
 
-  // Duration countdown for fixed presentation intervals (e.g. 10-second approved news presentation)
+  // Duration countdown for fixed presentation intervals
   useEffect(() => {
     if (!isOpen || error || !durationSeconds || durationSeconds <= 0) {
       if (countdownRef.current) clearInterval(countdownRef.current);
@@ -151,22 +165,19 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
 
   const activeStages = mode === 'video_render' ? VIDEO_NEWSROOM_STAGES : NEWSROOM_STAGES;
 
-  // Operation-Specific Main Loading Message:
-  // For video render: “आपका वीडियो स्टूडियो तैयार किया जा रहा है...”
-  // For actual AI headline generation: “अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...”
-  // For pre-approved editorial presentation: “संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...”
-  // For graphic preparation: “ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...”
+  // Part 5.1 & 5.2 Operation-Specific Main Loading Messages:
+  // - URL-based news generation (ai_generation): "खबर जनरेट हो रही है, कृपया प्रतीक्षा करें..."
+  // - Home Screen News Card -> Graphic workflow (graphic_preparation / approved_presentation):
+  //   "संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है..."
   const defaultTitle =
     mode === 'video_render'
       ? 'आपका वीडियो स्टूडियो तैयार किया जा रहा है...'
       : mode === 'ai_generation'
-      ? 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
-      : mode === 'approved_presentation'
-      ? 'संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...'
-      : 'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...';
+      ? 'खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
+      : 'संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...';
 
   const displayTitle = title || defaultTitle;
-  const currentSubtitle = subtitles[subtitleIndex] || subtitles[0];
+  const currentSubtitle = effectiveSubtitles[subtitleIndex] || effectiveSubtitles[0];
 
   // Calculated progress for presentation timer or indeterminate animation
   const progressPercent = durationSeconds && durationSeconds > 0
@@ -187,25 +198,26 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
       aria-labelledby="branded-loading-title"
       className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-md bg-gradient-to-b from-neutral-900 via-neutral-950 to-black border-2 border-amber-500/60 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-amber-500/25 space-y-5 animate-in zoom-in-95 duration-200">
-        {/* Subtle decorative gold top glow */}
-        <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-20 bg-amber-500/20 blur-2xl rounded-full pointer-events-none" />
+      <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 via-slate-950 to-neutral-950 border border-indigo-500/40 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-indigo-950/50 space-y-5 animate-in zoom-in-95 duration-200 overflow-hidden">
+        {/* Subtle decorative multicolor top glow */}
+        <div className="absolute -top-12 left-1/4 w-36 h-20 bg-blue-500/20 blur-2xl rounded-full pointer-events-none" />
+        <div className="absolute -top-12 right-1/4 w-36 h-20 bg-violet-500/20 blur-2xl rounded-full pointer-events-none" />
 
         {/* Optional top close / cancel button */}
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
-            className="absolute top-4 right-4 p-1.5 text-neutral-400 hover:text-white rounded-full bg-neutral-800/60 hover:bg-neutral-800 transition-colors cursor-pointer"
+            className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white rounded-full bg-slate-800/70 hover:bg-slate-700 transition-colors cursor-pointer"
             title="रद्द करें"
           >
             <X className="w-4 h-4" />
           </button>
         )}
 
-        {/* Authentic AI NEWS MAKER Brand Logo & Editorial Desk Badge */}
-        <div className="flex flex-col items-center justify-center gap-2 pt-1">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-neutral-900 border border-amber-500/60 p-2 shadow-lg flex items-center justify-center overflow-hidden">
+        {/* Part 6.1 & 6.2: Prominent Original Transparent PNG Logo & Single Subtitle "संपादकीय न्यूज़रूम डेस्क" */}
+        <div className="flex flex-col items-center justify-center gap-2.5 pt-1">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-900/90 border border-indigo-400/30 p-2 shadow-lg shadow-indigo-950/40 flex items-center justify-center overflow-hidden">
             <img
               src="/assets/ai_news_maker_logo.png"
               alt="AI News Maker Logo"
@@ -215,39 +227,34 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
               }}
             />
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-black tracking-widest text-amber-400 uppercase drop-shadow-sm">
-              AI NEWS MAKER
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
-              {mode === 'ai_generation' ? '🤖 AI जनरेशन इंजन' : '✍️ संपादकीय न्यूज़रूम डेस्क'}
-            </span>
-          </div>
+          <span className="text-xs sm:text-sm px-3.5 py-1 rounded-full bg-gradient-to-r from-blue-500/15 via-violet-500/15 to-amber-500/15 text-sky-200 border border-indigo-400/30 font-extrabold tracking-wide shadow-sm">
+            संपादकीय न्यूज़रूम डेस्क
+          </span>
         </div>
 
-        {/* 4-Step Newsroom Process Animation Area per Section 2.4 */}
-        <div className="relative py-2 px-1">
+        {/* Part 6.3: Multicolor Newsroom Process Animation Area */}
+        <div className="relative py-1.5 px-1">
           {/* Central Newsroom Activity Graphic */}
-          <div className="relative w-20 h-20 mx-auto flex items-center justify-center mb-3">
+          <div className="relative w-16 h-16 mx-auto flex items-center justify-center mb-3">
             {/* Subtle outer pulse */}
-            <div className={`absolute inset-0 rounded-full border-2 border-amber-500/20 ${prefersReducedMotion ? '' : 'animate-ping'} opacity-30 pointer-events-none`} />
+            <div className={`absolute inset-0 rounded-full border-2 border-violet-500/25 ${prefersReducedMotion ? '' : 'animate-ping'} opacity-30 pointer-events-none`} />
 
-            {/* Rotating golden circle */}
-            <div className={`absolute inset-1 rounded-full border-2 border-amber-500/30 border-t-amber-400 border-r-amber-500 ${prefersReducedMotion ? '' : 'animate-spin'}`} />
+            {/* Rotating multicolor circle */}
+            <div className={`absolute inset-1 rounded-full border-2 border-slate-700/50 border-t-sky-400 border-r-violet-400 border-b-amber-400 ${prefersReducedMotion ? '' : 'animate-spin'}`} />
 
-            {/* Upper-right sparkle */}
-            <div className="absolute -top-1 -right-1 p-1 bg-amber-500/20 rounded-full border border-amber-400/40">
-              <Sparkles className="w-4 h-4 text-amber-300" />
+            {/* Upper-right AI accent sparkle */}
+            <div className="absolute -top-1 -right-1 p-1 bg-violet-500/20 rounded-full border border-violet-400/40">
+              <Sparkles className="w-3.5 h-3.5 text-violet-300" />
             </div>
 
             {/* Dynamic Center Stage Icon */}
-            <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/40 flex items-center justify-center shadow-inner text-amber-400 transition-all duration-300">
-              <CurrentStageIcon className="w-6 h-6 animate-in zoom-in-75 duration-200" />
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 border border-sky-400/40 flex items-center justify-center shadow-inner text-sky-300 transition-all duration-300">
+              <CurrentStageIcon className="w-5 h-5 animate-in zoom-in-75 duration-200" />
             </div>
           </div>
 
-          {/* Newsroom Activity Steps Tracker */}
-          <div className={`grid gap-1.5 bg-neutral-900/80 p-2 rounded-2xl border border-neutral-800 ${mode === 'video_render' ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-4'}`}>
+          {/* Newsroom Activity Steps Tracker (Green completed, Blue active processing, Slate pending) */}
+          <div className={`grid gap-1.5 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 ${mode === 'video_render' ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-4'}`}>
             {activeStages.map((stg, idx) => {
               const isActive = idx === activeStepIndex;
               const isPassed = idx < activeStepIndex;
@@ -257,14 +264,14 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
                   key={stg.id}
                   className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-center transition-all duration-300 ${
                     isActive
-                      ? 'bg-amber-500/20 border border-amber-500/60 shadow-sm text-amber-300'
+                      ? 'bg-gradient-to-b from-blue-500/25 to-violet-500/20 border border-sky-400/60 shadow-sm text-sky-200'
                       : isPassed
-                      ? 'bg-neutral-800/60 border border-neutral-700/60 text-emerald-400'
-                      : 'bg-transparent text-neutral-500'
+                      ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                      : 'bg-slate-900/40 border border-slate-800/60 text-slate-400'
                   }`}
                 >
-                  <IconComp className={`w-3.5 h-3.5 mb-1 ${isActive ? 'text-amber-400 scale-110' : isPassed ? 'text-emerald-400' : 'text-neutral-500'}`} />
-                  <span className={`text-[10px] font-black leading-tight truncate w-full ${isActive ? 'text-amber-300' : isPassed ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                  <IconComp className={`w-3.5 h-3.5 mb-1 ${isActive ? 'text-sky-300 scale-110' : isPassed ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <span className={`text-[10px] font-black leading-tight truncate w-full ${isActive ? 'text-white' : isPassed ? 'text-emerald-300' : 'text-slate-400'}`}>
                     {stg.label}
                   </span>
                 </div>
@@ -296,7 +303,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="px-3.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs transition-colors cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
                 >
                   बंद करें
                 </button>
@@ -314,9 +321,9 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
                 {displayTitle}
               </h2>
 
-              {/* Rotating yellow subtitle changing every ~5 seconds with smooth fade transition */}
+              {/* Supporting description in balanced sky/indigo tone */}
               <p
-                className={`text-xs sm:text-sm font-semibold text-amber-300 leading-relaxed font-['Noto_Sans_Devanagari'] min-h-[42px] flex items-center justify-center px-1 transition-opacity duration-300 ${
+                className={`text-xs sm:text-sm font-semibold text-sky-200/95 leading-relaxed font-['Noto_Sans_Devanagari'] min-h-[42px] flex items-center justify-center px-1 transition-opacity duration-300 ${
                   isSubtitleFading ? 'opacity-0 scale-98' : 'opacity-100 scale-100'
                 }`}
               >
@@ -324,24 +331,24 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
               </p>
             </div>
 
-            {/* Smooth animated progress bar */}
+            {/* Smooth animated multicolor progress bar */}
             <div className="space-y-1.5 px-3">
-              <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden border border-neutral-700/80">
+              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/80">
                 {progressPercent !== null ? (
                   <div
-                    className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-300 transition-all duration-200 rounded-full shadow-sm"
+                    className="h-full bg-gradient-to-r from-blue-500 via-violet-500 to-emerald-400 transition-all duration-200 rounded-full shadow-sm"
                     style={{ width: `${progressPercent}%` }}
                   />
                 ) : (
-                  <div className="h-full w-2/5 bg-gradient-to-r from-amber-500 to-yellow-300 rounded-full animate-pulse transition-all duration-300" />
+                  <div className="h-full w-3/5 bg-gradient-to-r from-blue-500 via-violet-500 to-amber-400 rounded-full animate-pulse transition-all duration-300" />
                 )}
               </div>
-              <div className="flex justify-between text-[11px] font-bold text-neutral-400">
-                <span className="text-amber-400">
-                  {mode === 'approved_presentation' ? 'स्वीकृत सामग्री प्रस्तुतीकरण...' : 'तैयारी जारी है...'}
+              <div className="flex justify-between text-[11px] font-bold text-slate-400">
+                <span className="text-sky-300">
+                  {mode === 'ai_generation' ? 'AI विश्लेषण जारी है...' : 'ग्राफिक सामग्री तैयार हो रही है...'}
                 </span>
                 {progressPercent !== null && (
-                  <span className="text-amber-300 font-mono">
+                  <span className="text-violet-300 font-mono">
                     {Math.floor(elapsedSeconds)}s / {durationSeconds}s
                   </span>
                 )}
@@ -349,12 +356,12 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
             </div>
 
             {/* Brand supporting line at bottom */}
-            <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-center gap-1.5 text-[11px] text-neutral-400 font-medium">
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-[11px] text-slate-300 font-medium">
               <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>
                 {mode === 'ai_generation'
                   ? '⚡ AI कुछ ही क्षणों में 5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन प्रस्तुत करेगा'
-                  : '⚡ पत्रकारिता मानकों के अनुसार सटीक लेआउट तैयार किया जा रहा है'}
+                  : '⚡ चुनी गई खबर के तथ्यों के आधार पर हेडलाइन, कैप्शन और ग्राफिक सामग्री तैयार की जा रही है'}
               </span>
             </div>
           </>

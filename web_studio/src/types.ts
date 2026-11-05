@@ -108,6 +108,7 @@ export interface NewsCardData {
   testLogoUrl?: string;
   testSamplePhotoUrl?: string;
   id?: string;
+  draftId?: string;
   sourceNewsId?: string; // Tracks the news ID from which graphic was initiated
   isBonus?: boolean;
   sourceUrl?: string;
@@ -116,6 +117,9 @@ export interface NewsCardData {
   date?: string;
   photoUrl?: string;
   headline: string;
+  headlineOptions?: string[];
+  regenerationUsed?: boolean;
+  regeneratedHeadlines?: string[];
   originalHeadline?: string;
   subHeadline?: string;
   customScript?: string;
@@ -364,6 +368,8 @@ export interface ImageFilterSettings {
 export interface AIAnalysisResult {
   headline: string;
   headlineOptions?: string[];
+  regenerationUsed?: boolean;
+  regeneratedHeadlines?: string[];
   highlightWords: string[];
   formattedHeadline: string;
   location: string;

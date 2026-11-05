@@ -26,11 +26,17 @@ export function cleanHeadlineText(text: any): string {
     .replace(/(?:generating[\s\.]*)+/gi, '')
     .replace(/(?:ai is processing[\s\.]*)+/gi, '');
 
-  // 2. Remove scraping artifacts & interactive website buttons
-  cleaned = cleaned.replace(
-    /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-    ' '
-  );
+  // 2. Remove scraping artifacts, image caption prefixes, dateline timestamps & interactive website buttons
+  cleaned = cleaned
+    .replace(
+      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+      ' '
+    )
+    .replace(
+      /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन|शहडोल|दुर्ग|भिलाई|वाराणसी|प्रयागराज|कानपुर|आगरा|नोएडा|गाजियाबाद|गुरुग्राम|अहमदाबाद|सूरत|कोलकाता|हैदराबाद|बेंगलुरु|चेन्नई)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने|साल|वर्ष)\s*पहले\s*/gu,
+      ' '
+    )
+    .replace(/(?:Updated|Published|Edited)\s*(?:By|On|At)?\s*[:\-–—]?\s*[^\n।|]+/gi, ' ');
 
   // 3. Remove publisher, portal, city-news suffixes (e.g. "- Bhopal News", "Bhopal News", "Dainik Bhaskar")
   cleaned = cleaned
@@ -119,10 +125,39 @@ export function cleanHeadlineText(text: any): string {
     [/\bFAR\b/g, 'एफएआर'],
     [/\bPWD\b/g, 'पीडब्ल्यूडी'],
     [/\bNHAI\b/g, 'एनएचएआई'],
-    [/\bOTP\b/g, 'ओटीपी'],
-    [/\bLPG\b/g, 'एलपीजी'],
-    [/\bCNG\b/g, 'सीएनजी'],
-    [/\bEV\b/g, 'ईवी'],
+    [/\bOTP\b/gi, 'ओटीपी'],
+    [/\bAPK\b/gi, 'एपीके'],
+    [/\bUPI\b/gi, 'यूपीआई'],
+    [/\bATM\b/gi, 'एटीएम'],
+    [/\bSIM\b/gi, 'सिम'],
+    [/\bKYC\b/gi, 'केवाईसी'],
+    [/\bPDF\b/gi, 'पीडीएफ'],
+    [/\bURL\b/gi, 'यूआरएल'],
+    [/\bSMS\b/gi, 'एसएमएस'],
+    [/\bPIL\b/gi, 'पीआईएल'],
+    [/\bDGP\b/gi, 'डीजीपी'],
+    [/\bDIG\b/gi, 'डीआईजी'],
+    [/\bIG\b/gi, 'आईजी'],
+    [/\bSHO\b/gi, 'एसएचओ'],
+    [/\bTI\b/gi, 'टीआई'],
+    [/\bMLA\b/gi, 'विधायक'],
+    [/\bBCCI\b/gi, 'बीसीसीआई'],
+    [/\bICC\b/gi, 'आईसीसी'],
+    [/\bIPL\b/gi, 'आईपीएल'],
+    [/\bWHO\b/gi, 'डब्ल्यूएचओ'],
+    [/\bUN\b/gi, 'यूएन'],
+    [/\bUPSC\b/gi, 'यूपीएससी'],
+    [/\bCBSE\b/gi, 'सीबीएसई'],
+    [/\bNEET\b/gi, 'नीट'],
+    [/\bJEE\b/gi, 'जेईई'],
+    [/\bIIT\b/gi, 'आईआईटी'],
+    [/\bIIM\b/gi, 'आईआईएम'],
+    [/\bSupreme Court\b/gi, 'सुप्रीम कोर्ट'],
+    [/\bHigh Court\b/gi, 'हाई कोर्ट'],
+    [/\bWhatsApp\b/gi, 'व्हाट्सएप'],
+    [/\bLPG\b/gi, 'एलपीजी'],
+    [/\bCNG\b/gi, 'सीएनजी'],
+    [/\bEV\b/gi, 'ईवी'],
   ];
   for (const [pattern, devanagari] of acronyms) {
     cleaned = cleaned.replace(pattern, devanagari);
@@ -150,8 +185,18 @@ export function cleanHeadlineText(text: any): string {
   // 13. Remove sycophancy and formal honorifics (Part 3)
   cleaned = sanitizePressNoteFlattery(cleaned, true);
 
-  // 14. Remove unnecessary trailing explanatory sentences (e.g. "इससे लोगों को मदद मिलेगी")
-  cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, '');
+  // 14. Remove unnecessary trailing explanatory sentences & prohibited AI filler phrases (Part 1.3)
+  cleaned = cleaned
+    .replace(/\s*[,।;:\-–—]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*शासन\s+स्तर\s+पर\s+(?:संबंधित|संक्षिप्त)?\s*(?:तथ्यों\s+को\s+)?(?:दिए\s+गए\s+)?(?:आवश्यक\s+)?निर्देश(?:\s+दिए\s+गए|\s+जारी\s+किए\s+गए)?.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*संबंधित\s+पक्षों\s+को\s+निर्देश\s+जारी\s+किए\s+गए.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*मामले\s+में\s+नया\s+घटनाक्रम\s+सामने\s+आया(?:\s+है)?.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*(?:यह\s+)?पूरे\s+मामले\s+को\s+लेकर\s+(?:प्रशासनिक\s+व\s+विभागीय\s+स्तर\s+पर\s+जरूरी\s+कदम\s+उठाए\s+जा\s+रहे\s+हैं|कार्रवाई\s+की\s+जा\s+रही\s+है).*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+व\s+विभागीय\s+स्तर\s+पर\s+जरूरी\s+कदम\s+उठाए\s+जा\s+रहे\s+हैं.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*इस\s+घटना\s+के\s+बाद\s+प्रशासन\s+अलर्ट.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*मामले\s+को\s+लेकर\s+विभागीय\s+स्तर\s+पर\s+समीक्षा.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+स्तर\s+पर\s+आवश्यक\s+संज्ञान\s+लिया\s+गया(?:\s+है)?.*$/u, '')
+    .replace(/\s*[,।;:\-–—\/]?\s*(?:विशेष\s*डेस्क|विशेष\s*डैश|विशेष\s*संवाददाता|सेंट्रल\s*डेस्क|न्यूज़\s*डेस्क|ब्यूरो\s*डेस्क)\s*/gu, ' ');
 
   // 15. Standard Hindi spelling for compound state/location names (Part 1, Item 5)
   cleaned = cleaned
@@ -181,6 +226,12 @@ const CATEGORY_KEYWORDS = [
   'कारोबार',
   'टेक',
   'विशेष कवरेज',
+  'विशेष डेस्क',
+  'विशेष डैश',
+  'विशेष संवाददाता',
+  'सेंट्रल डेस्क',
+  'न्यूज़ डेस्क',
+  'ब्यूरो डेस्क',
   'ताज़ा ख़बर',
   'ताज़ा समाचार',
   'ताज़ा'
@@ -403,7 +454,18 @@ export const DISTRICT_STATE_LIST: DistrictStateEntry[] = [
 export function formatDistrictWithState(loc: string): string {
   if (!loc || typeof loc !== 'string') return '';
   const trimmed = loc.trim();
-  if (!trimmed || trimmed === 'विशेष कवरेज') return '';
+  if (
+    !trimmed ||
+    trimmed === 'विशेष कवरेज' ||
+    trimmed === 'विशेष डेस्क' ||
+    trimmed === 'विशेष डैश' ||
+    trimmed === 'विशेष संवाददाता' ||
+    trimmed === 'सेंट्रल डेस्क' ||
+    trimmed === 'न्यूज़ डेस्क' ||
+    trimmed === 'ब्यूरो डेस्क'
+  ) {
+    return '';
+  }
 
   // If already contains comma and state (e.g. "शहडोल, मध्य प्रदेश"), verify clean spacing
   if (trimmed.includes(',')) {
@@ -909,15 +971,15 @@ export interface HeadlineTierRange {
 }
 
 export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
-  { min: 80, max: 110, label: 'विकल्प 1: मुख्य समाचार (80-110 अक्षर)' },
-  { min: 100, max: 130, label: 'विकल्प 2: प्रभाव / परिणाम (100-130 अक्षर)' },
-  { min: 125, max: 150, label: 'विकल्प 3: तथ्य व आंकड़े (125-150 अक्षर)' },
-  { min: 130, max: 160, label: 'विकल्प 4: पृष्ठभूमि व संदर्भ (130-160 अक्षर)' },
-  { min: 150, max: 200, label: 'विकल्प 5: विस्तृत जनहित सारांश (150-200 अक्षर)' },
+  { min: 80, max: 95, label: 'विकल्प 1' },
+  { min: 85, max: 100, label: 'विकल्प 2' },
+  { min: 90, max: 105, label: 'विकल्प 3' },
+  { min: 95, max: 110, label: 'विकल्प 4' },
+  { min: 100, max: 120, label: 'विकल्प 5' },
 ];
 
-export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
-export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+export const HEADLINE_MAX_CHARACTER_LIMIT = 120;
+export const HEADLINE_5_TIER_MAX_LIMITS = [95, 100, 105, 110, 120];
 
 /**
  * Canonical segmenter for user-perceived Unicode grapheme clusters (Devanagari aksharas).
@@ -1050,14 +1112,27 @@ export function sanitizeHeadlineClean(text: string): string {
     .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
     .trim();
 
+  // Remove any leading/inline image caption or relative time artifacts
+  res = res
+    .replace(/^(?:प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—\s]*)+/gu, "")
+    .replace(/(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
   // Repair known dangling verbal completions
   res = res.replace(/(?:की\s+)?(?:दे\s+रहा|दे\s+रहे|दे\s+रही)$/u, "की धमकी का मामला");
   res = res.replace(/\s+(?:कर\s+रहा|कर\s+रहे|कर\s+रही)$/u, " का मामला");
   res = res.replace(/\s+(?:हो\s+रहा|हो\s+रहे|हो\s+रही)$/u, " की स्थिति");
   res = res.replace(/(?:यातायात पुलिस ने\s*)?लोगों\s+की\s+सुरक्षा\s+के$/u, "यातायात व सुरक्षा के पुख्ता इंतजाम");
 
+  // Strip trailing incomplete clauses (e.g. "कोर्ट ने कहा", "सुप्रीम कोर्ट ने गुरुवार", "खाते से 5", "; 5 सवाल")
+  res = res.replace(/[;,\s]+\d+\s*सवाल$/u, "");
+  res = res.replace(/[,:\s]+(?:सुप्रीम\s+कोर्ट|हाई\s+कोर्ट|कोर्ट|अदालत|पुलिस|सरकार|प्रशासन|उन्होंने|याचिकाकर्ता)\s+ने\s+(?:गुरुवार|शुक्रवार|सोमवार|मंगलवार|बुधवार|शनिवार|रविवार|आज|कल|कहा|बताया|बोला|पूछा)(?:\s+को)?$/u, "");
+  res = res.replace(/\s+ने\s+(?:गुरुवार|शुक्रवार|सोमवार|मंगलवार|बुधवार|शनिवार|रविवार)(?:\s+को)?$/u, "");
+  res = res.replace(/\s+(?:से|में|पर|को|के|का|की)\s+\d+$/u, "");
+
   // Strip trailing connectors & prepositions in a loop
-  const danglingPostpositions = /(?:\s+(?:ने|के|की|का|को|कि|हेतु|तहत|दौरान|और|या|एवं|व|के\s+बीच|के\s+लिए|के\s+तहत|द्वारा\s+आवश्यक|की\s+ओर|के\s+साथ))$/u;
+  const danglingPostpositions = /(?:\s+(?:ने|के|की|का|को|में|पर|से|कि|हेतु|तहत|दौरान|और|या|एवं|व|के\s+बीच|के\s+लिए|के\s+तहत|के\s+जरिए|के\s+बाद|द्वारा\s+आवश्यक|की\s+ओर|के\s+साथ|ने\s+कहा|ने\s+बताया))$/u;
   let prevLen = 0;
   while (res.length !== prevLen) {
     prevLen = res.length;
@@ -1068,73 +1143,62 @@ export function sanitizeHeadlineClean(text: string): string {
 
 export function fitSingleHeadlineToTier(
   text: string,
-  maxLimit: number = 200,
+  maxLimit: number = 120,
   minLimit: number = 0,
   factSentence?: string | string[]
 ): string {
   if (!text) return "";
+  const effectiveMax = Math.min(maxLimit || 120, 120);
   let cleaned = sanitizeHeadlineClean(text);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
-  // Ensure proper spacing between Hindi words and location names
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
   cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = sanitizeHeadlineClean(cleaned);
 
-  let currentLen = countHeadlineVisibleCharacters(cleaned);
-  if (currentLen >= minLimit && currentLen <= maxLimit) {
+  const currentLen = countHeadlineVisibleCharacters(cleaned);
+  if (currentLen <= effectiveMax && (currentLen >= minLimit || currentLen >= 30)) {
     return cleaned;
   }
 
-  // Case 1: Too long -> Truncate cleanly at clause boundaries
-  if (currentLen > maxLimit) {
-    const delimiters = [", ", " - ", ": ", " — ", " और ", " तथा ", " व "];
+  // Case 1: Exceeds target max -> Truncate cleanly ONLY at natural clause boundaries; if <= 120 chars and no clause boundary, preserve complete sentence!
+  if (currentLen > effectiveMax) {
+    const delimiters = [", ", " - ", ": ", " — ", "; "];
     for (const d of delimiters) {
-      const idx = cleaned.lastIndexOf(d, maxLimit);
-      if (idx >= minLimit) {
+      const idx = cleaned.lastIndexOf(d, effectiveMax);
+      if (idx >= Math.min(minLimit, 55)) {
         const candidate = sanitizeHeadlineClean(cleaned.substring(0, idx));
         const cLen = countHeadlineVisibleCharacters(candidate);
-        if (cLen >= minLimit && cLen <= maxLimit) {
+        if (cLen >= 50 && cLen <= effectiveMax) {
           return candidate;
         }
       }
     }
-    const sliced = cleaned.substring(0, maxLimit);
+    if (currentLen <= 120) {
+      return cleaned;
+    }
+    const sliced = cleaned.substring(0, 120);
     const lastSpace = sliced.lastIndexOf(" ");
-    let result = lastSpace >= minLimit ? sliced.substring(0, lastSpace) : sliced;
+    const result = lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced;
     return sanitizeHeadlineClean(result);
   }
 
-  // Case 2: Too short -> Expand factually using facts
-  if (minLimit > 0 && currentLen < minLimit && factSentence) {
+  // Case 2: Only expand if headline is an incomplete fragment (< 30 chars)
+  if (minLimit > 0 && currentLen < 30 && factSentence) {
     const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence])
       .filter(Boolean)
       .flatMap((f: any) => String(f).split(/[।\n]+/))
+      .flatMap((s: string) => s.split(/[,;:]\s+/))
       .map((s: string) => sanitizeHeadlineClean(s))
-      .filter((s: string) => s.length >= 10);
+      .filter((s: string) => s.length >= 12);
 
     for (const rawFact of candidates) {
-      if (cleaned.includes(rawFact.slice(0, 15))) continue;
+      if (cleaned.includes(rawFact.slice(0, 14)) || calculateHeadlineSimilarity(cleaned, rawFact) >= 0.65) continue;
 
-      for (const sep of [", ", " - ", ": ", " और "]) {
+      for (const sep of [": ", ", "]) {
         const combined = sanitizeHeadlineClean(`${cleaned}${sep}${rawFact}`);
         const cLen = countHeadlineVisibleCharacters(combined);
-        if (cLen >= minLimit && cLen <= maxLimit) {
+        if (cLen >= 35 && cLen <= effectiveMax) {
           return combined;
-        }
-      }
-
-      const words = rawFact.split(/\s+/).filter(Boolean);
-      let built = cleaned + ",";
-      for (const w of words) {
-        const next = built + " " + w;
-        const nextLen = countHeadlineVisibleCharacters(next);
-        if (nextLen <= maxLimit) {
-          built = next;
-          if (nextLen >= minLimit) {
-            return sanitizeHeadlineClean(built);
-          }
-        } else {
-          break;
         }
       }
     }
@@ -1155,7 +1219,7 @@ export function fitHeadlinesTo5TierRanges(
     if (typeof h !== 'string') continue;
     const clean = sanitizeHeadlineClean(h);
     if (!clean) continue;
-    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarity(existing, clean) >= 0.85);
+    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarity(existing, clean) >= 0.88);
     if (!isDup) {
       safeHeadlines.push(clean);
     }
@@ -1170,120 +1234,64 @@ export function fitHeadlinesTo5TierRanges(
 
   const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
     ? baseOrContext.trim()
-    : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || 'मुख्य समाचार'));
+    : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || ''));
 
   const factsList = rawSources
     .flatMap((f: string) => f.split(/[।\n\.\r]+/))
     .map((s: string) => sanitizeHeadlineClean(s))
-    .filter((s: string) => s.length >= 10);
-
-  // Sub-clauses from facts
-  const subClauses: string[] = [];
-  for (const f of factsList) {
-    const parts = f
-      .split(/[,:]s*|s+(?:और|तथा|व|जिसमें|जहां|जिससे)s+/)
-      .map((p: string) => sanitizeHeadlineClean(p))
-      .filter((p: string) => p.length >= 8);
-    for (const p of parts) {
-      if (!subClauses.includes(p)) subClauses.push(p);
-    }
-    if (!subClauses.includes(f)) subClauses.push(f);
-  }
+    .filter((s: string) => s.length >= 12);
 
   const workingHeadlines = [...safeHeadlines];
-  if (workingHeadlines.length < 5) {
+  if (workingHeadlines.length < 5 && baseText) {
     const supp = generate5BalancedHeadlineOptions(baseText, factsList, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
-      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.85);
+      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.88);
       if (!isDup) {
         workingHeadlines.push(cand);
       }
     }
-    while (workingHeadlines.length < 5) {
-      const fallbackCand = factsList[workingHeadlines.length % Math.max(factsList.length, 1)] || workingHeadlines[0] || 'मुख्य समाचार';
-      workingHeadlines.push(fallbackCand);
-    }
   }
+
+  // Sort workingHeadlines by visible character count ascending so Option 1..5 progress naturally from shortest to longest
+  workingHeadlines.sort((a, b) => countHeadlineVisibleCharacters(a) - countHeadlineVisibleCharacters(b));
 
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: '' };
-    let cand = workingHeadlines[i] || workingHeadlines[0] || baseText || 'मुख्य समाचार';
-    let cleaned = sanitizeHeadlineClean(cand);
-    let currentLen = countHeadlineVisibleCharacters(cleaned);
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 120, label: `विकल्प ${i + 1}` };
+    const effectiveMax = Math.min(tier.max, 120);
+    const cand = workingHeadlines[i] || workingHeadlines[0] || baseText || '';
+    if (!cand) continue;
+    const cleaned = sanitizeHeadlineClean(cand);
+    const currentLen = countHeadlineVisibleCharacters(cleaned);
 
-    // Case 1: Already fits
-    if (currentLen >= tier.min && currentLen <= tier.max) {
+    // Case 1: Within tier max (or complete sentence <= 120 chars) -> Keep accurate headline without cutting off the final verb
+    if (currentLen <= effectiveMax) {
       result.push(cleaned);
       continue;
     }
 
-    // Case 2: Too long -> Truncate cleanly
-    if (currentLen > tier.max) {
-      let truncated = cleaned;
-      const delimiters = [", ", " - ", ": ", " — ", " और ", " तथा ", " व "];
-      for (const d of delimiters) {
-        const idx = cleaned.lastIndexOf(d, tier.max);
-        if (idx >= tier.min) {
-          const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
-          const testLen = countHeadlineVisibleCharacters(testCand);
-          if (testLen >= tier.min && testLen <= tier.max) {
-            truncated = testCand;
-            break;
-          }
-        }
-      }
-      if (countHeadlineVisibleCharacters(truncated) > tier.max) {
-        const sliced = cleaned.substring(0, tier.max);
-        const lastSpace = sliced.lastIndexOf(" ");
-        truncated = sanitizeHeadlineClean(lastSpace >= tier.min ? sliced.substring(0, lastSpace) : sliced);
-      }
-      result.push(truncated);
-      continue;
-    }
-
-    // Case 3: Too short -> Expand factually using available subClauses cumulatively
-    let expanded = cleaned;
-
-    for (const clause of subClauses) {
-      if (expanded.includes(clause.slice(0, 15))) continue;
-      const testCombined = sanitizeHeadlineClean(`${expanded}, ${clause}`);
-      const testLen = countHeadlineVisibleCharacters(testCombined);
-      if (testLen <= tier.max) {
-        expanded = testCombined;
-        if (testLen >= tier.min) {
-          break;
-        }
-      } else {
-        const words = clause.split(/\s+/).filter(Boolean);
-        let built = expanded + ',';
-        let added = false;
-        for (const w of words) {
-          const next = built + ' ' + w;
-          const cleanCand = sanitizeHeadlineClean(next);
-          const nextLen = countHeadlineVisibleCharacters(cleanCand);
-          if (nextLen <= tier.max) {
-            built = next;
-            added = true;
-            if (nextLen >= tier.min) {
-              break;
-            }
-          } else {
-            break;
-          }
-        }
-        if (added) {
-          expanded = sanitizeHeadlineClean(built);
-        }
-        if (countHeadlineVisibleCharacters(expanded) >= tier.min) {
+    // Case 2: Exceeds tier.max -> Check if there is a clean clause boundary; if not and currentLen <= 120, keep complete sentence
+    let truncated = cleaned;
+    const delimiters = [", ", " - ", ": ", " — ", "; "];
+    for (const d of delimiters) {
+      const idx = cleaned.lastIndexOf(d, effectiveMax);
+      if (idx >= Math.min(tier.min, 55)) {
+        const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
+        const testLen = countHeadlineVisibleCharacters(testCand);
+        if (testLen >= 50 && testLen <= effectiveMax) {
+          truncated = testCand;
           break;
         }
       }
     }
-
-    result.push(sanitizeHeadlineClean(expanded));
+    if (countHeadlineVisibleCharacters(truncated) > 120) {
+      const sliced = cleaned.substring(0, 120);
+      const lastSpace = sliced.lastIndexOf(" ");
+      truncated = sanitizeHeadlineClean(lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced);
+    }
+    result.push(truncated);
   }
 
   return result.slice(0, 5);
@@ -1300,9 +1308,8 @@ export function fitHeadlineNaturally(
 }
 
 /**
- * Generates 5 distinct, balanced headline options across editorial angles
- * Strictly anchored to the SAME verified primary news event (BREAKING NEWS WALA standard)
- * NEVER adds unrelated generic filler words or administrative clichés.
+ * Generates up to 5 distinct headline options strictly from the provided article facts.
+ * NEVER injects hardcoded unrelated news templates or generic administrative clichés.
  */
 export function generate5BalancedHeadlineOptions(
   primaryTitle: string,
@@ -1310,7 +1317,7 @@ export function generate5BalancedHeadlineOptions(
   location: string = ""
 ): string[] {
   const cleanBase = sanitizeHeadlineClean(primaryTitle || "");
-  const base = cleanBase || "मुख्य समाचार अपडेट";
+  if (!cleanBase) return [];
   const loc = location && location !== "विशेष कवरेज" ? location.trim() : "";
 
   const uniqueOptions: string[] = [];
@@ -1320,107 +1327,42 @@ export function generate5BalancedHeadlineOptions(
     const formatted = sanitizeHeadlineClean(cand);
     if (!formatted || formatted.length < 20) return;
     if (uniqueOptions.includes(formatted)) return;
-    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.85);
+    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88);
     if (!isTooSimilar) {
       uniqueOptions.push(formatted);
     }
   };
 
-  // 1. Angle 1: Direct Core News Event (मुख्य समाचार - active, direct)
-  addOptionIfDistinct(base);
+  addOptionIfDistinct(cleanBase);
 
   const validFacts = (factSentences || [])
     .map((s) => sanitizeHeadlineClean(s))
-    .filter((s) => s.length >= 15 && !BYLINE_REGEX.test(s));
+    .filter((s) => s.length >= 20 && !BYLINE_REGEX.test(s));
 
-  let prefix = "";
-  let core = base;
-  if (base.includes(": ")) {
-    const parts = base.split(": ");
-    prefix = parts[0].trim();
-    core = parts.slice(1).join(": ").trim();
+  for (const fact of validFacts) {
+    if (uniqueOptions.length >= 5) break;
+    addOptionIfDistinct(fact);
   }
 
-  // 2. Angle 2: Impact / Outcome / Action Angle (प्रभाव व परिणाम)
-  const impactFact = validFacts.find((f) => /(?:कार्रवाई|फैसला|आदेश|जांच|मुकदमा|गिरफ्तार|निर्देश|तैयारी|सख्त|बदलाव|रूट|प्रभाव|डायवर्ट|सख्त|नियम)/u.test(f) && !uniqueOptions.includes(f));
-  if (impactFact) {
-    addOptionIfDistinct(impactFact);
-  } else if (base.includes("महंगाई भत्ता") || base.includes("वेतन") || base.includes("एलान")) {
-    addOptionIfDistinct("कर्मचारियों और पेंशनरों को सरकार की बड़ी सौगात: डीए में 2 फीसदी बढ़ोतरी के आदेश जारी");
-  } else if (base.includes("केस दर्ज") || base.includes("ब्लैकमेल") || base.includes("धमकी")) {
-    addOptionIfDistinct("पीड़िता की शिकायत पर पुलिस की बड़ी कार्रवाई: आरोपी के खिलाफ एफआईआर दर्ज कर जांच शुरू");
-  } else if (base.includes("ट्रैफिक") || base.includes("डायवर्जन") || base.includes("मेट्रो")) {
-    addOptionIfDistinct("यातायात व्यवस्था में बड़ा बदलाव: मेट्रो निर्माण के चलते कई रूट डायवर्ट, वैकल्पिक मार्ग तय");
-  } else if (base.includes("जनगणना") || base.includes("ड्यूटी") || base.includes("कर्मचारियों")) {
-    addOptionIfDistinct("मप्र में व्यापक प्रशासनिक अभियान: 2 लाख कर्मचारियों को सौंपी गई फील्ड सर्वे की जिम्मेदारी");
-  } else if (prefix && core) {
-    addOptionIfDistinct(`${core}: प्रशासन द्वारा सख्त कदम उठाने के निर्देश`);
-  } else {
-    addOptionIfDistinct(`${base}, शासन स्तर पर संबंधित पक्षों को दिए गए आवश्यक निर्देश`);
-  }
-
-  // 3. Angle 3: Specific Facts, Numbers & Timeline (तथ्य व आंकड़े)
-  const numberFact = validFacts.find((f) => /\d+|(?:लाख|करोड़|हजार|दिन|महीने|तारीख|घंटे|फीसदी)/u.test(f) && !uniqueOptions.includes(f));
-  if (numberFact) {
-    addOptionIfDistinct(numberFact);
-  } else if (base.includes("2%") || base.includes("अक्टूबर")) {
-    addOptionIfDistinct("2 फीसदी डीए बढ़ोतरी का नकद भुगतान: अक्टूबर के वेतन से मिलेगा बढ़ा हुआ लाभ");
-  } else if (base.includes("22 दिन")) {
-    addOptionIfDistinct("22 दिनों के लिए ट्रैफिक डायवर्जन लागू: आईटीआई से पिपलानी के बीच मेट्रो निर्माण कार्य तेज");
-  } else if (base.includes("2 लाख") || base.includes("जनवरी")) {
-    addOptionIfDistinct("जनवरी से मार्च तक 2 लाख कर्मचारियों की तैनाती: मप्र में जनगणना कार्य की रूपरेखा तैयार");
-  } else if (base.includes("अश्लील फोटो") || base.includes("ब्लैकमेल")) {
-    addOptionIfDistinct("अश्लील फोटो वायरल करने की धमकी का मामला: पुलिस ने दर्ज की एफआईआर, साक्ष्य जुटाने में जुटी टीम");
-  } else {
-    const numMatch = base.match(/(\d+[\s\w%]*)/);
-    if (numMatch) {
-      addOptionIfDistinct(`आधिकारिक आंकड़ों की पुष्टि: ${base}`);
-    } else {
-      addOptionIfDistinct(`घटनाक्रम से जुड़े अहम तथ्य: ${base}`);
+  for (let i = 0; i < validFacts.length && uniqueOptions.length < 5; i++) {
+    const f1 = validFacts[i];
+    if (!cleanBase.includes(f1.slice(0, 15)) && calculateHeadlineSimilarityInternal(cleanBase, f1) < 0.65) {
+      addOptionIfDistinct(`${cleanBase}, ${f1}`);
+    }
+    if (i + 1 < validFacts.length && uniqueOptions.length < 5) {
+      const f2 = validFacts[i + 1];
+      if (calculateHeadlineSimilarityInternal(f1, f2) < 0.65) {
+        addOptionIfDistinct(`${f1}, ${f2}`);
+      }
     }
   }
 
-  // 4. Angle 4: Context, Cause & Background (पृष्ठभूमि व संदर्भ)
-  const contextFact = validFacts.find((f) => /(?:के कारण|के चलते|वजह से|के बाद|के तहत|आरोप|विवाद|योजना)/u.test(f) && !uniqueOptions.includes(f));
-  if (contextFact) {
-    addOptionIfDistinct(contextFact);
-  } else if (base.includes("महंगाई भत्ता") || base.includes("वेतन")) {
-    addOptionIfDistinct("त्योहारी सीजन से पहले कर्मचारियों को राहत: लंबे समय से की जा रही थी भत्ते में बढ़ोतरी की मांग");
-  } else if (base.includes("ब्लैकमेल") || base.includes("महिला")) {
-    addOptionIfDistinct("सोशल मीडिया पर प्रताड़ना और ब्लैकमेलिंग का मामला: साइबर सेल ने शुरू की तकनीकी जांच");
-  } else if (base.includes("मेट्रो") || base.includes("ट्रैफिक")) {
-    addOptionIfDistinct("मेट्रो रेल परियोजना का काम तेज करने की योजना: पिलर और ट्रैक निर्माण के लिए जरूरी हुआ डायवर्जन");
-  } else if (base.includes("जनगणना")) {
-    addOptionIfDistinct("राष्ट्रीय स्तर पर जनसंख्या आंकड़ों के संकलन की तैयारी: मप्र में जमीनी स्तर पर प्रशिक्षण अभियान शुरू");
-  } else if (prefix && core) {
-    addOptionIfDistinct(`${core}: जानिए क्या है इस पूरे मामले का मुख्य संदर्भ और पृष्ठभूमि`);
-  } else {
-    addOptionIfDistinct(`${base}: जानिए घटनाक्रम से जुड़ी पूरी पृष्ठभूमि और मुख्य वजह`);
-  }
-
-  // 5. Angle 5: Comprehensive Public Interest Summary (विस्तृत जनहित सारांश - 150-200 chars)
-  if (base.includes("महंगाई भत्ता") || base.includes("वेतन")) {
-    addOptionIfDistinct("मप्र सरकार का कर्मचारियों को बड़ा तोहफा: 2 प्रतिशत महंगाई भत्ता बढ़ाने का फैसला, अक्टूबर के वेतन में नकद जुड़कर मिलेगा लाभ");
-  } else if (base.includes("मेट्रो") || base.includes("ट्रैफिक")) {
-    addOptionIfDistinct("भोपाल में मेट्रो निर्माण के चलते 22 दिन का ट्रैफिक ब्लॉक: आईटीआई से पिपलानी तक बदला रूट, वाहन चालकों के लिए जारी हुई आवश्यक एडवाइजरी");
-  } else if (base.includes("ब्लैकमेल") || base.includes("महिला")) {
-    addOptionIfDistinct("महिला को ब्लैकमेल कर अश्लील फोटो वायरल करने की धमकी देने का सनसनीखेज मामला: पीड़िता की तहरीर पर पुलिस ने दर्ज किया केस, आरोपी की तलाश तेज");
-  } else if (base.includes("जनगणना")) {
-    addOptionIfDistinct("मप्र में जनगणना 2026 की व्यापक तैयारी: जनवरी से मार्च तक 2 लाख कर्मचारियों की लगेगी ड्यूटी, प्रशासनिक स्तर पर पूरी रूपरेखा तैयार");
-  } else {
-    addOptionIfDistinct(`${loc ? `${loc}: ` : ""}${base}, पूरे मामले को लेकर प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं`);
-  }
-
-  // Fallbacks if still under 5
-  const fallbackAngles = [
-    (b: string) => `मामले में नया घटनाक्रम सामने आया: ${b}`,
-    (b: string) => `नागरिकों और संबंधित पक्षों पर असर: ${b}`,
-    (b: string) => `विभाग द्वारा जारी हुआ आधिकारिक स्पष्टीकरण: ${b}`,
-    (b: string) => `घटना से जुड़े मुख्य बिंदुओं की पड़ताल: ${b}`,
-  ];
-  for (const fn of fallbackAngles) {
-    if (uniqueOptions.length >= 5) break;
-    addOptionIfDistinct(fn(base));
+  if (loc && uniqueOptions.length < 5 && !cleanBase.includes(loc.split(",")[0].trim())) {
+    const primaryLoc = loc.split(",")[0].trim();
+    for (const f of validFacts) {
+      if (uniqueOptions.length >= 5) break;
+      addOptionIfDistinct(`${primaryLoc} में ${f}`);
+    }
   }
 
   return uniqueOptions.slice(0, 5);
@@ -1785,7 +1727,17 @@ export function cleanLocationField(loc: string): string {
   // Clean trailing punctuation and multiple spaces
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
-  if (cleaned === 'विशेष कवरेज') return '';
+  if (
+    cleaned === 'विशेष कवरेज' ||
+    cleaned === 'विशेष डेस्क' ||
+    cleaned === 'विशेष डैश' ||
+    cleaned === 'विशेष संवाददाता' ||
+    cleaned === 'सेंट्रल डेस्क' ||
+    cleaned === 'न्यूज़ डेस्क' ||
+    cleaned === 'ब्यूरो डेस्क'
+  ) {
+    return '';
+  }
 
   // Enforce standard "जिला, राज्य" format if a district is detected
   return formatDistrictWithState(cleaned);

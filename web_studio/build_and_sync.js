@@ -53,7 +53,26 @@ const targets = [
   path.resolve(rootDir, 'app/src/main/assets/news_studio'),
 ];
 
-// 2. Run web_studio build
+// 2a. Synchronize root src/, server.ts, whatsapp_integration.ts, and index.html into web_studio before building
+try {
+  const rootSrc = path.resolve(rootDir, 'src');
+  const studioSrc = path.resolve(__dirname, 'src');
+  if (fs.existsSync(rootSrc)) {
+    fs.cpSync(rootSrc, studioSrc, { recursive: true, force: true });
+  }
+  for (const file of ['server.ts', 'whatsapp_integration.ts', 'index.html']) {
+    const srcFile = path.resolve(rootDir, file);
+    const destFile = path.resolve(__dirname, file);
+    if (fs.existsSync(srcFile)) {
+      fs.copyFileSync(srcFile, destFile);
+    }
+  }
+  console.log('🔄 Synchronized root source files into web_studio before build.');
+} catch (syncErr) {
+  console.warn('⚠️ Source sync warning:', syncErr.message);
+}
+
+// 2b. Run web_studio build
 console.log('📦 Step 1: Compiling web_studio frontend & server...');
 try {
   execSync('npm run build', {
@@ -62,18 +81,34 @@ try {
     shell: true,
   });
 } catch (buildErr) {
-  const existingDistIndex = path.join(rootDir, 'dist', 'index.html');
-  const existingPublicIndex = path.join(rootDir, 'public', 'index.html');
-  const existingServerCjs = path.join(rootDir, 'server.cjs');
-  if (fs.existsSync(existingDistIndex) || fs.existsSync(existingPublicIndex) || fs.existsSync(existingServerCjs)) {
-    console.warn('⚠️ Web studio build skipped in cloud container, using pre-built distribution assets:', buildErr.message);
-    if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
-    const sourceDir = fs.existsSync(existingDistIndex) ? path.join(rootDir, 'dist') : (fs.existsSync(existingPublicIndex) ? path.join(rootDir, 'public') : null);
-    if (sourceDir && fs.existsSync(sourceDir)) {
-      fs.cpSync(sourceDir, distDir, { recursive: true });
+  console.warn('⚠️ web_studio build error, attempting direct build from rootDir:', buildErr.message);
+  let rootBuildSucceeded = false;
+  try {
+    execSync('npx vite build --outDir web_studio/dist && npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=web_studio/dist/server.cjs', {
+      cwd: rootDir,
+      stdio: 'inherit',
+      shell: true,
+    });
+    rootBuildSucceeded = true;
+    console.log('✅ Direct build from rootDir succeeded!');
+  } catch (rootBuildErr) {
+    console.warn('⚠️ Direct rootDir build also failed:', rootBuildErr.message);
+  }
+
+  if (!rootBuildSucceeded) {
+    const existingDistIndex = path.join(rootDir, 'dist', 'index.html');
+    const existingPublicIndex = path.join(rootDir, 'public', 'index.html');
+    const existingServerCjs = path.join(rootDir, 'server.cjs');
+    if (fs.existsSync(existingDistIndex) || fs.existsSync(existingPublicIndex) || fs.existsSync(existingServerCjs)) {
+      console.warn('⚠️ Web studio build skipped in cloud container, using pre-built distribution assets:', buildErr.message);
+      if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
+      const sourceDir = fs.existsSync(existingDistIndex) ? path.join(rootDir, 'dist') : (fs.existsSync(existingPublicIndex) ? path.join(rootDir, 'public') : null);
+      if (sourceDir && fs.existsSync(sourceDir)) {
+        fs.cpSync(sourceDir, distDir, { recursive: true });
+      }
+    } else {
+      console.warn('⚠️ Web studio build encountered an issue, continuing with fallback:', buildErr.message);
     }
-  } else {
-    console.warn('⚠️ Web studio build encountered an issue, continuing with fallback:', buildErr.message);
   }
 }
 
@@ -83,14 +118,14 @@ targets.forEach((target) => {
     if (!fs.existsSync(target)) {
       fs.mkdirSync(target, { recursive: true });
     }
-    // Purge stale index-*.js and index-*.css bundles in target/assets before copying
+    // Purge stale index-* and vendor* JS/CSS bundles in target/assets before copying
     const targetAssets = path.join(target, 'assets');
     const distAssets = path.join(distDir, 'assets');
     if (fs.existsSync(targetAssets) && fs.existsSync(distAssets)) {
       const activeFiles = new Set(fs.readdirSync(distAssets));
       const targetFiles = fs.readdirSync(targetAssets);
       targetFiles.forEach((file) => {
-        if ((file.startsWith('index-') && (file.endsWith('.js') || file.endsWith('.css'))) && !activeFiles.has(file)) {
+        if (((file.startsWith('index-') || file.startsWith('vendor')) && (file.endsWith('.js') || file.endsWith('.css'))) && !activeFiles.has(file)) {
           try { fs.unlinkSync(path.join(targetAssets, file)); } catch {}
         }
       });

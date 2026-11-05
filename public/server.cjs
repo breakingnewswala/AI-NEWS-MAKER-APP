@@ -28373,40 +28373,130 @@ async function startServer() {
       import_path2.default.join(process.cwd(), "dist"),
       import_path2.default.join(process.cwd(), "web_studio", "dist"),
       import_path2.default.join(process.cwd(), "public"),
+      import_path2.default.join(process.cwd(), "app", "src", "main", "assets", "news_studio"),
       safeDirname,
       import_path2.default.join(safeDirname, "dist")
     ];
-    const distPath = possibleDistPaths.find((p) => import_fs2.default.existsSync(import_path2.default.join(p, "index.html"))) || import_path2.default.join(process.cwd(), "dist");
-    console.log(`Serving static studio files from: ${distPath}`);
-    app.use(
-      import_express.default.static(distPath, {
-        setHeaders: (res, filePath) => {
-          if (filePath.endsWith(".html")) {
-            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            res.setHeader("Pragma", "no-cache");
-            res.setHeader("Expires", "0");
-          } else if (filePath.includes("/assets/")) {
-            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-          }
+    const hasValidBuiltBundle = (dir) => {
+      try {
+        const idxPath = import_path2.default.join(dir, "index.html");
+        if (!import_fs2.default.existsSync(idxPath)) return false;
+        const html = import_fs2.default.readFileSync(idxPath, "utf-8");
+        const scriptMatch = html.match(/src=["'](?:\.\/|\/)?assets\/(index-[^"']+\.js)["']/);
+        if (scriptMatch && scriptMatch[1]) {
+          return import_fs2.default.existsSync(import_path2.default.join(dir, "assets", scriptMatch[1]));
         }
-      })
-    );
-    app.get(["/lite", "/lite/*"], (_req, res) => {
-      res.redirect(301, "/");
-    });
-    app.get("*", (req, res) => {
-      if (req.path.startsWith("/api/")) {
-        return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
+        const assetsDir = import_path2.default.join(dir, "assets");
+        if (import_fs2.default.existsSync(assetsDir)) {
+          return import_fs2.default.readdirSync(assetsDir).some((f) => f.startsWith("index-") && f.endsWith(".js"));
+        }
+        return false;
+      } catch {
+        return false;
       }
-      const ext = import_path2.default.extname(req.path);
-      if (ext && ext !== ".html") {
-        return res.status(404).json({ success: false, error: "Not Found" });
+    };
+    const findAnyAvailableIndexJs = () => {
+      for (const p of possibleDistPaths) {
+        try {
+          const assetsDir = import_path2.default.join(p, "assets");
+          if (import_fs2.default.existsSync(assetsDir)) {
+            const files = import_fs2.default.readdirSync(assetsDir);
+            const jsFile = files.find((f) => f.startsWith("index-") && f.endsWith(".js"));
+            if (jsFile) {
+              const cssFile = files.find((f) => f.startsWith("index-") && f.endsWith(".css"));
+              return { dir: p, jsFile, cssFile };
+            }
+          }
+        } catch {
+        }
       }
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-      res.sendFile(import_path2.default.join(distPath, "index.html"));
-    });
+      return null;
+    };
+    const validDistPath = possibleDistPaths.find((p) => hasValidBuiltBundle(p));
+    const availableBundle = findAnyAvailableIndexJs();
+    if (!validDistPath && !availableBundle) {
+      console.warn("\u26A0\uFE0F No pre-built JS bundle found in dist/ or public/; falling back to live Vite server middleware.");
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          host: "0.0.0.0",
+          port: PORT,
+          watch: null
+        },
+        appType: "spa"
+      });
+      app.use(vite.middlewares);
+      app.use("*", async (req, res, next) => {
+        const url = req.originalUrl;
+        if (url.startsWith("/api/")) {
+          return res.status(404).json({ success: false, error: `API route not found: ${req.method} ${url}` });
+        }
+        try {
+          const indexPath = import_path2.default.resolve(process.cwd(), "index.html");
+          let template = import_fs2.default.readFileSync(indexPath, "utf-8");
+          template = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ "Content-Type": "text/html" }).end(template);
+        } catch (e) {
+          next(e);
+        }
+      });
+    } else {
+      const distPath = validDistPath || (availableBundle ? availableBundle.dir : null) || possibleDistPaths.find((p) => import_fs2.default.existsSync(import_path2.default.join(p, "index.html"))) || import_path2.default.join(process.cwd(), "dist");
+      console.log(`Serving static studio files from: ${distPath}`);
+      const staticPathsToMount = Array.from(/* @__PURE__ */ new Set([distPath, ...possibleDistPaths.filter((p) => import_fs2.default.existsSync(p))]));
+      for (const staticDir of staticPathsToMount) {
+        app.use(
+          import_express.default.static(staticDir, {
+            setHeaders: (res, filePath) => {
+              if (filePath.endsWith(".html")) {
+                res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                res.setHeader("Pragma", "no-cache");
+                res.setHeader("Expires", "0");
+              } else if (filePath.includes("/assets/")) {
+                res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+              }
+            }
+          })
+        );
+      }
+      app.get(["/lite", "/lite/*"], (_req, res) => {
+        res.redirect(301, "/");
+      });
+      app.get("*", (req, res) => {
+        if (req.path.startsWith("/api/")) {
+          return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
+        }
+        const ext = import_path2.default.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+        const indexHtmlPath = import_path2.default.join(distPath, "index.html");
+        try {
+          let html = import_fs2.default.readFileSync(indexHtmlPath, "utf-8");
+          const scriptMatch = html.match(/src=["'](?:\.\/|\/)?assets\/(index-[^"']+\.js)["']/);
+          if (scriptMatch && scriptMatch[1]) {
+            const expectedJs = scriptMatch[1];
+            const jsExistsAnywhere = staticPathsToMount.some((d) => import_fs2.default.existsSync(import_path2.default.join(d, "assets", expectedJs)));
+            if (!jsExistsAnywhere) {
+              const fallbackBundle = findAnyAvailableIndexJs();
+              if (fallbackBundle) {
+                html = html.replace(expectedJs, fallbackBundle.jsFile);
+                if (fallbackBundle.cssFile) {
+                  html = html.replace(/index-[^"']+\.css/, fallbackBundle.cssFile);
+                }
+              }
+            }
+          }
+          return res.status(200).set({ "Content-Type": "text/html" }).send(html);
+        } catch {
+          return res.sendFile(indexHtmlPath);
+        }
+      });
+    }
   }
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
     console.log(`AI News Maker server running on http://0.0.0.0:${PORT}`);

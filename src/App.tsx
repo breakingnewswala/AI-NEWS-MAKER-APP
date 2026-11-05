@@ -1484,6 +1484,7 @@ export default function App() {
     isOpen: boolean;
     mode: BrandedLoaderMode;
     title?: string;
+    subtitles?: string[];
     durationSeconds?: number;
     error?: string | null;
     onRetry?: () => void;
@@ -1499,6 +1500,7 @@ export default function App() {
         isOpen: true,
         mode: detail.mode || 'ai_generation',
         title: detail.title,
+        subtitles: detail.subtitles,
         durationSeconds: detail.durationSeconds,
         error: null,
       });
@@ -2376,23 +2378,30 @@ export default function App() {
     const thirdPhoto = articlePhotos[2] || '';
     const fourthPhoto = articlePhotos[3] || '';
 
-    const approvedIds = getApprovedRssIds();
+    const prePublishedHeadlines = Array.isArray((post as any).approvedHeadlines) && (post as any).approvedHeadlines.length >= 5
+      ? (post as any).approvedHeadlines
+      : [];
     const isApprovedNews = Boolean(
-      post.status === 'APPROVED' ||
-      !post.status ||
-      (post.id && approvedIds.has(post.id)) ||
-      (post as any).isApproved ||
-      ((post as any).headlineOptions && (post as any).headlineOptions.length > 0) ||
-      ((post as any).headlineVariants && (post as any).headlineVariants.length > 0)
+      (post as any).isPrePublished === true &&
+      prePublishedHeadlines.length >= 5 &&
+      prePublishedHeadlines.every((h: string) =>
+        typeof h === 'string' &&
+        h.trim().length > 0 &&
+        h.trim().length <= 120 &&
+        !/शासन स्तर|प्रशासनिक व विभागीय|मामले में नया घटनाक्रम|संबंधित पक्षों को निर्देश|पूरे मामले को लेकर कार्रवाई|इस घटना के बाद प्रशासन अलर्ट|विशेष डेस्क|विशेष डैश/.test(h)
+      )
     );
 
     if (isApprovedNews) {
-      // 1. Immediately trigger the branded loading screen with minimum 10-second presentation per Requirement 2
+      // Pre-published editorial presentation with Part 5.2 waiting popup message
       setBrandedLoader({
         isOpen: true,
-        mode: 'approved_presentation',
-        title: 'संपादकीय डेस्क आपकी स्वीकृत हेडलाइन और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...',
-        durationSeconds: 10,
+        mode: 'graphic_preparation',
+        title: 'संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...',
+        subtitles: [
+          'चुनी गई खबर के तथ्यों के आधार पर हेडलाइन, कैप्शन और ग्राफिक सामग्री तैयार की जा रही है।',
+        ],
+        durationSeconds: 4,
         error: null,
       });
 
@@ -2417,7 +2426,7 @@ export default function App() {
         }
 
         if (!approvedData) {
-          const headlineOpts = (post as any).headlineOptions || (post as any).headlineVariants || (post as any).approvedHeadlines || [post.title];
+          const headlineOpts = prePublishedHeadlines.length >= 5 ? prePublishedHeadlines : [post.title];
           approvedData = {
             newsId: post.id,
             title: post.title,
@@ -2442,7 +2451,6 @@ export default function App() {
         const approvedHeadlines = fitHeadlinesTo5TierRanges(rawHeadlines, factSentences, baseTitle, effectiveLoc);
         const initialHeadline = approvedHeadlines[0] || post.title;
 
-        // Caption personalization: append username to first hashtag only, leave remaining content and final #AINewsMaker unchanged
         const savedProf = getSavedChannelProfile();
         const userTag = savedProf?.username ? `#${savedProf.username.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')}` : '';
 
@@ -2482,6 +2490,8 @@ export default function App() {
           headline: initialHeadline,
           formattedHeadline: initialHeadline,
           headlineOptions: approvedHeadlines,
+          regenerationUsed: false,
+          regeneratedHeadlines: undefined,
           location: effectiveLoc,
           category: post.categoryName,
           summary: formattedCaption,
@@ -2500,7 +2510,7 @@ export default function App() {
         }
 
         const elapsed = Date.now() - startTime;
-        const remainingMs = Math.max(0, 10000 - elapsed);
+        const remainingMs = Math.max(0, 1200 - elapsed);
 
         setTimeout(() => {
           setAutoFillNews({
@@ -2512,7 +2522,7 @@ export default function App() {
             imageUrl: targetImageForStudio,
             location: effectiveLoc,
             category: post.categoryName,
-            autoTrigger: false, // NO redundant Gemini API call!
+            autoTrigger: false,
             timestamp: Date.now(),
             additionalPhotos: articlePhotos,
             isApproved: true,
@@ -2525,14 +2535,14 @@ export default function App() {
           });
 
           setBrandedLoader((prev) => ({ ...prev, isOpen: false }));
-          setToastMessage('✅ स्वीकृत संपादकीय हेडलाइन व लेआउट लोड हो गए हैं!');
+          setToastMessage('✅ संपादकीय हेडलाइन व लेआउट लोड हो गए हैं!');
           setTimeout(() => {
             scrollToStepById('step-ai');
           }, 150);
         }, remainingMs);
       };
 
-      retrieveApprovedData().catch((err) => {
+      retrieveApprovedData().catch(() => {
         setBrandedLoader((prev) => ({
           ...prev,
           error: 'संपादकीय रिकॉर्ड लोड करने में समस्या आई।',
@@ -2541,22 +2551,18 @@ export default function App() {
       });
 
     } else {
-      // Unapproved news: Live AI generation path with immediate branded loader
+      // Home Screen News Card -> Graphic Workflow: Live AI generation path with Part 5.2 Waiting Popup
       setBrandedLoader({
         isOpen: true,
-        mode: 'ai_generation',
-        title: 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
+        mode: 'graphic_preparation',
+        title: 'संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...',
+        subtitles: [
+          'चुनी गई खबर के तथ्यों के आधार पर हेडलाइन, कैप्शन और ग्राफिक सामग्री तैयार की जा रही है।',
+        ],
         error: null,
       });
 
       const baseTitle = cleanHeadlineText(post.title || 'ताज़ा समाचार');
-      const factSentences = (post.summary || (post as any).fullContent || baseTitle)
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-        .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-      const supp = generate5BalancedHeadlineOptions(baseTitle, factSentences, effectiveLoc);
-      const initialFiveHeadlines = fitHeadlinesTo5TierRanges(supp, factSentences, baseTitle, effectiveLoc).slice(0, 5);
-      const topHeadline = initialFiveHeadlines[0] || post.title;
 
       setCard((prev) => ({
         ...prev,
@@ -2568,9 +2574,11 @@ export default function App() {
         showDate: false,
         showWatermark: false,
         showLocation: Boolean(effectiveLoc && effectiveLoc.trim()),
-        headline: topHeadline,
-        formattedHeadline: topHeadline,
-        headlineOptions: initialFiveHeadlines,
+        headline: baseTitle,
+        formattedHeadline: baseTitle,
+        headlineOptions: [],
+        regenerationUsed: false,
+        regeneratedHeadlines: undefined,
         location: effectiveLoc,
         category: post.categoryName,
         summary: post.summary || '',
@@ -2593,7 +2601,6 @@ export default function App() {
         imageUrl: targetImageForStudio,
         location: effectiveLoc,
         category: post.categoryName,
-        headlineOptions: initialFiveHeadlines,
         autoTrigger: true,
         timestamp: Date.now(),
         additionalPhotos: articlePhotos,
@@ -4129,6 +4136,7 @@ export default function App() {
         isOpen={brandedLoader.isOpen}
         mode={brandedLoader.mode}
         title={brandedLoader.title}
+        subtitles={brandedLoader.subtitles}
         durationSeconds={brandedLoader.durationSeconds}
         error={brandedLoader.error}
         onRetry={brandedLoader.onRetry}

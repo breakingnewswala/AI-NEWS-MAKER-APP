@@ -232,7 +232,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       <header
         className={`bg-[#0B132B]/95 backdrop-blur-md border-b border-slate-800/90 text-white ${
           isAdminUser && adminSystemMode === 'test' ? 'relative' : 'sticky top-0'
-        } z-40 shadow-md transition-colors ${isStudio ? 'hidden md:block' : ''}`}
+        } z-40 shadow-sm dark:shadow-md transition-colors ${isStudio ? 'hidden md:block' : ''}`}
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className={`h-14 flex items-center ${isStudio ? 'justify-center md:justify-between' : 'justify-between'} gap-2`}>

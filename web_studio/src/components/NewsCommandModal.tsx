@@ -146,7 +146,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     try {
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           input: inputPayload || undefined,
           linkUrl: urlPayload || undefined,
@@ -159,7 +159,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
 
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'न्यूज़ प्रोसेस करने में त्रुटि');
+        throw new Error(data.error || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
       }
 
       setResult(data.data);
@@ -171,7 +171,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         opts.unshift(data.data.headline);
       }
       if (opts.length < 5) {
-        const baseTitle = cleanHeadlineText(opts[0] || data.data.headline || 'ताज़ा समाचार');
+        const baseTitle = cleanHeadlineText(opts[0] || data.data.headline || '');
         const sourceText = data.data.summary || inputPayload || '';
         const sourceLoc = cleanLocationField(data.data.location || '');
         const factSentences = (sourceText || baseTitle)
@@ -199,41 +199,11 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         setPhotoMode('manual');
       }
     } catch (err: any) {
-      console.warn('Command processing network error, falling back to client engine:', err);
-      try {
-        let fallbackText = inputPayload || '';
-        let fallbackImages: string[] = [];
-        if (urlPayload && (!fallbackText || fallbackText.length < 25)) {
-          const scraped = await scrapeNewsUrlClient(urlPayload, 16000);
-          if (scraped) {
-            fallbackText = scraped.title ? `Title: ${scraped.title}\n\n${scraped.content}` : scraped.content;
-            if (scraped.images && scraped.images.length > 0) {
-              fallbackImages = scraped.images;
-            }
-          }
-        }
-
-        if (urlPayload && (!fallbackText || fallbackText.length < 15 || !/[\u0900-\u097F]/.test(fallbackText))) {
-          setError('इस न्यूज़ लिंक से मुख्य खबर स्वतः नहीं पढ़ी जा सकी (वेबसाइट सुरक्षा के कारण)। कृपया खबर का शीर्षक/टेक्स्ट सीधे बॉक्स में पेस्ट करें।');
-          return;
-        }
-
-        const fallbackResult = processNewsLocally(fallbackText || urlPayload || '', urlPayload || undefined);
-        setResult(fallbackResult);
-        const opts = fallbackResult.headlineOptions && fallbackResult.headlineOptions.length > 0
-          ? fallbackResult.headlineOptions
-          : [fallbackResult.headline];
-        setHeadlineOptions(opts);
-        setSelectedHeadlineIndex(0);
-        if (fallbackImages[0]) {
-          setUseWebsitePhoto(true);
-          setPhotoMode('website');
-        } else {
-          setPhotoMode('manual');
-        }
-      } catch (clientErr: any) {
-        setError('न्यूज़ प्रोसेस करने में समस्या आई। कृपया खबर का टेक्स्ट सीधे पेस्ट करें।');
-      }
+      const rawMsg = err?.message || '';
+      const errorMsg = /AbortError|Failed to fetch|NetworkError/i.test(rawMsg)
+        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।'
+        : (rawMsg || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -286,6 +256,12 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         data = null;
       }
 
+      if (!data || !data.success) {
+        setError(data?.error || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
+        setIsRegeneratingHeadlines(false);
+        return;
+      }
+
       let newOpts: string[] = [];
       if (data && data.success && Array.isArray(data.headlineOptions) && data.headlineOptions.length > 0) {
         newOpts = data.headlineOptions.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
@@ -293,19 +269,6 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         newOpts = data.options.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
       } else if (data && data.success && Array.isArray(data.headlines) && data.headlines.length > 0) {
         newOpts = data.headlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
-      }
-
-      if (newOpts.length === 0) {
-        // Fallback to local headline generator
-        const srcTitle = cleanHeadlineText(result.headline);
-        const srcSummary = result.summary || '';
-        const srcLoc = cleanLocationField(result.location || '');
-        const sentences = (srcSummary || srcTitle)
-          .split(/[।\n]+|\.\s+/)
-          .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-          .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
-        const balanced = generate5BalancedHeadlineOptions(srcTitle, sentences, srcLoc);
-        newOpts = fitHeadlinesTo5TierRanges(balanced, sentences, srcTitle, srcLoc);
       }
 
       if (newOpts.length > 0) {
@@ -326,8 +289,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
         setError('नए हेडलाइन विकल्प नहीं बन सके');
       }
     } catch (err: any) {
-      console.warn('Headlines regeneration fallback in modal:', err);
-      setError('नए हेडलाइन विकल्प नहीं बन सके');
+      setError(err?.message || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
     } finally {
       setIsRegeneratingHeadlines(false);
     }
@@ -481,7 +443,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                 type="text"
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://example.com/news... (या लिंक न हो तो इसे खाली छोड़ दें)"
+                placeholder="समाचार का URL यहाँ दर्ज करें"
                 className="w-full bg-neutral-950 border border-neutral-700 rounded-xl p-3 text-xs sm:text-sm text-white focus:border-yellow-400 focus:outline-none"
               />
               <p className="text-[11px] text-yellow-400/90 mt-1.5 flex items-center gap-1">
