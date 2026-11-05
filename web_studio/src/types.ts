@@ -563,4 +563,5 @@ export interface PackageCoupon {
 }
 
 export type { ReporterUser } from './components/LoginModal';
+export * from './types/dynamicFrame';
 

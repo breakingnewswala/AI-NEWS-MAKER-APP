@@ -56,6 +56,7 @@ import {
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
 import { WebNotificationModal } from './WebNotificationModal';
+import { SocialMediaStoryModal } from './SocialMediaStoryModal';
 import { addNotification } from '../lib/notificationManager';
 import {
   isEffectiveAdmin,
@@ -303,6 +304,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [isNewsAnalyticsOpen, setIsNewsAnalyticsOpen] = useState<boolean>(false);
   const [newsAnalyticsData, setNewsAnalyticsData] = useState<any>(null);
   const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
+  const [selectedStoryPost, setSelectedStoryPost] = useState<NewsFeedPost | null>(null);
+  const [isStoryModalOpen, setIsStoryModalOpen] = useState<boolean>(false);
 
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
   const [walletCoins, setWalletCoins] = useState<number | null>(() => {
@@ -2309,13 +2312,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </div>
                       <button
                         type="button"
-                        disabled
-                        className="flex-1 py-1 px-1.5 bg-slate-800/80 text-slate-400 font-bold text-[10.5px] rounded-lg border border-slate-700/60 flex items-center justify-center gap-1 cursor-not-allowed opacity-80"
-                        title="सोशल मीडिया स्टोरी फीचर जल्द आ रहा है (Coming Soon)"
+                        onClick={() => {
+                          setSelectedStoryPost(item);
+                          setIsStoryModalOpen(true);
+                        }}
+                        className="flex-1 py-1 px-1.5 bg-gradient-to-r from-pink-600/90 to-purple-600/90 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-[10.5px] rounded-lg border border-pink-500/40 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
+                        title="सोशल मीडिया स्टोरी बनाएँ (9:16 HD)"
                       >
-                        <Film className="w-3 h-3 text-amber-400/70" />
+                        <Film className="w-3 h-3 text-pink-200" />
                         <span className="truncate">सोशल मीडिया स्टोरी बनाएँ</span>
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-normal">जल्द</span>
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-pink-400/30 text-white font-bold">9:16</span>
                       </button>
                     </div>
                   </div>
@@ -2792,13 +2798,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </div>
                       <button
                         type="button"
-                        disabled
-                        className="flex-1 py-1 px-2 bg-slate-200/70 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 cursor-not-allowed opacity-90"
-                        title="सोशल मीडिया स्टोरी बनाएँ (शीघ्र आ रहा है)"
+                        onClick={() => {
+                          setSelectedStoryPost(post);
+                          setIsStoryModalOpen(true);
+                        }}
+                        className="flex-1 py-1 px-2 bg-gradient-to-r from-pink-600/90 to-purple-600/90 hover:from-pink-500 hover:to-purple-500 text-white border border-pink-500/40 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-sm transition-all cursor-pointer active:scale-95"
+                        title="सोशल मीडिया स्टोरी बनाएँ (9:16 HD)"
                       >
-                        <Film className="w-3 h-3 text-slate-400 shrink-0" />
+                        <Film className="w-3 h-3 text-pink-200 shrink-0" />
                         <span>सोशल मीडिया स्टोरी बनाएँ</span>
-                        <span className="text-[9px] bg-slate-700 text-amber-300 px-1 py-0.2 rounded">शीघ्र</span>
+                        <span className="text-[9px] bg-pink-400/30 text-white px-1 py-0.2 rounded font-bold">9:16</span>
                       </button>
                     </div>
 
@@ -4831,6 +4840,29 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           }}
           post={webNotificationPost}
           currentUserEmail={currentUser?.email || ''}
+        />
+      )}
+
+      {/* Social Media Story Modal (9:16 Ultra HD) */}
+      {isStoryModalOpen && (
+        <SocialMediaStoryModal
+          isOpen={isStoryModalOpen}
+          onClose={() => {
+            setIsStoryModalOpen(false);
+            setSelectedStoryPost(null);
+          }}
+          newsPost={selectedStoryPost}
+          currentUser={currentUser}
+          onOpenStudioWithStory={(storyConfig) => {
+            if (selectedStoryPost) {
+              onOpenStudioWithNews(selectedStoryPost);
+            }
+          }}
+          onNavigateToPlans={() => {
+            if (onNavigateToTab) {
+              onNavigateToTab('plans');
+            }
+          }}
         />
       )}
 

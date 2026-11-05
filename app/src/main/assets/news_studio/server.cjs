@@ -18183,6 +18183,607 @@ app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) =>
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+var DYNAMIC_FRAMES_DB_FILE = import_path2.default.join(process.cwd(), "dynamic_frames_db.json");
+var USER_STORY_PREF_DB_FILE = import_path2.default.join(process.cwd(), "user_story_preferences_db.json");
+function loadDynamicFramesDatabase() {
+  try {
+    if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+  }
+  return [];
+}
+function saveDynamicFramesDatabase(frames) {
+  try {
+    import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to write dynamic_frames_db.json:", err);
+  }
+}
+function loadUserStoryPreferencesDatabase() {
+  try {
+    if (import_fs2.default.existsSync(USER_STORY_PREF_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(USER_STORY_PREF_DB_FILE, "utf-8");
+      return JSON.parse(raw) || {};
+    }
+  } catch {
+  }
+  return {};
+}
+function saveUserStoryPreferencesDatabase(data) {
+  try {
+    import_fs2.default.writeFileSync(USER_STORY_PREF_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to write user_story_preferences_db.json:", err);
+  }
+}
+var TIER_WEIGHTS_MAP = {
+  BASIC: 1,
+  basic: 1,
+  ADVANCE: 2,
+  ADVANCED: 2,
+  advance: 2,
+  advanced: 2,
+  PRO: 3,
+  pro: 3,
+  professional: 3,
+  VIP: 4,
+  vip: 4,
+  "VIP DESK": 4,
+  vip_desk: 4,
+  "VIP-DASH": 4,
+  vip_dash: 4,
+  ultra: 4
+};
+function isUserPlanAuthorizedForFrame(userTier, allowedPlans) {
+  if (!allowedPlans || allowedPlans.length === 0) return true;
+  const cleanTier = (userTier || "basic").toUpperCase().trim();
+  const userWeight = TIER_WEIGHTS_MAP[cleanTier] || 1;
+  const minAllowed = Math.min(...allowedPlans.map((p) => TIER_WEIGHTS_MAP[p.toUpperCase()] || 1));
+  return userWeight >= minAllowed;
+}
+app.get("/api/dynamic-frames", async (req, res) => {
+  try {
+    const { aspectRatio, category } = req.query;
+    const isMaster = isAuthorizedMasterAdmin(req);
+    let frames = loadDynamicFramesDatabase();
+    if (frames.length === 0) {
+      frames = [
+        {
+          id: "df_reg_4_5_clean",
+          name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u093E\u0938\u093F\u0915 4:5 \u092B\u094D\u0930\u0947\u092E (Regular Classic)",
+          description: "\u0926\u0948\u0928\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u0915 4:5 \u092A\u094B\u0930\u094D\u091F\u094D\u0930\u0947\u091F \u092B\u094B\u091F\u094B \u092B\u094D\u0930\u0947\u092E\u0964",
+          aspectRatio: "4:5",
+          canvasWidth: 1080,
+          canvasHeight: 1350,
+          designCategory: "Regular Frames",
+          allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+          publicationStatus: "published",
+          createdBy: "breakingnewswala.com@gmail.com",
+          createdAt: 179388e7,
+          updatedAt: 179388e7,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: "top_left",
+            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+            showLocation: true,
+            locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
+            locationStyle: "pill"
+          },
+          footerConfig: {
+            footerHeightRatio: 0.08,
+            enforcePermanentFooter: true,
+            footerBgColor: "#FFFFFF",
+            footerTextColor: "#000000"
+          },
+          photoSlots: [
+            {
+              id: "slot_main_photo",
+              name: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092B\u094B\u091F\u094B (Main Photo)",
+              slotType: "normal",
+              rect: { x: 0, y: 0, width: 100, height: 61.33 },
+              required: true,
+              cropMode: "cover"
+            }
+          ],
+          textSlots: [
+            {
+              id: "slot_main_headline",
+              name: "\u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (3 \u092A\u0902\u0915\u094D\u0924\u093F\u092F\u093E\u0901)",
+              role: "headline",
+              rect: { x: 7.7, y: 64, width: 84.6, height: 26 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 70,
+              fontWeight: "bold",
+              textColor: "#FFFFFF",
+              alignment: "center",
+              maxLines: 3,
+              lineHeight: 1.25,
+              backgroundColor: "#B91C1C"
+            }
+          ]
+        },
+        {
+          id: "df_bayaan_4_5_red",
+          name: "\u092C\u092F\u093E\u0928\u092C\u093E\u091C\u093C\u0940 \u0930\u0947\u0921 \u0915\u091F\u0906\u0909\u091F \u092B\u094D\u0930\u0947\u092E (Statement Red Cutout)",
+          description: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092E\u0942\u0935\u094D\u0921 \u0915\u091F\u0906\u0909\u091F \u0935 \u092E\u0941\u0916\u094D\u092F \u092C\u092F\u093E\u0928/\u0915\u094B\u091F\u0947\u0936\u0928 \u092B\u094D\u0930\u0947\u092E\u0964",
+          aspectRatio: "4:5",
+          canvasWidth: 1080,
+          canvasHeight: 1350,
+          designCategory: "\u092C\u092F\u093E\u0928\u092C\u093E\u091C\u0940",
+          allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
+          publicationStatus: "published",
+          createdBy: "breakingnewswala.com@gmail.com",
+          createdAt: 179388e7,
+          updatedAt: 179388e7,
+          version: 1,
+          isStatementFrame: true,
+          statementOptions: { solidBackgroundHex: "#C81E1E" },
+          headerConfig: {
+            showLogo: true,
+            logoPosition: "top_left",
+            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+            showLocation: true,
+            locationRect: { x: 5, y: 13.5, width: 26, height: 4.5 },
+            locationStyle: "pill"
+          },
+          footerConfig: {
+            footerHeightRatio: 0.08,
+            enforcePermanentFooter: true,
+            footerBgColor: "#FFFFFF",
+            footerTextColor: "#000000"
+          },
+          photoSlots: [
+            {
+              id: "slot_speaker_cutout",
+              name: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u092B\u094B\u091F\u094B (\u0915\u091F\u0906\u0909\u091F)",
+              slotType: "cutout",
+              rect: { x: 50, y: 44, width: 48, height: 48 },
+              required: true,
+              bgRemoval: true,
+              cropMode: "contain"
+            }
+          ],
+          textSlots: [
+            {
+              id: "slot_statement_quote",
+              name: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u092C\u092F\u093E\u0928 (Quote)",
+              role: "quote",
+              rect: { x: 8, y: 22, width: 84, height: 26 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 66,
+              fontWeight: "bold",
+              textColor: "#FFFFFF",
+              alignment: "center",
+              maxLines: 4
+            },
+            {
+              id: "slot_speaker_name",
+              name: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u0928\u093E\u092E",
+              role: "speaker_name",
+              rect: { x: 8, y: 72, width: 42, height: 7 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 42,
+              fontWeight: "bold",
+              textColor: "#FFE600",
+              alignment: "left",
+              maxLines: 1
+            },
+            {
+              id: "slot_speaker_desig",
+              name: "\u092A\u0926 / \u0935\u093F\u0935\u0930\u0923",
+              role: "speaker_designation",
+              rect: { x: 8, y: 79.5, width: 42, height: 6 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 28,
+              fontWeight: "normal",
+              textColor: "#F8FAFC",
+              alignment: "left",
+              maxLines: 2
+            }
+          ]
+        },
+        {
+          id: "df_story_9_16_standard",
+          name: "\u0938\u094D\u091F\u0948\u0902\u0921\u0930\u094D\u0921 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Standard Story)",
+          description: "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E \u0935 \u092B\u0947\u0938\u092C\u0941\u0915 \u0938\u094D\u091F\u094B\u0930\u0940 \u0915\u0947 \u0932\u093F\u090F 9:16 \u0935\u0930\u094D\u091F\u093F\u0915\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0932\u0947\u0906\u0909\u091F\u0964",
+          aspectRatio: "9:16",
+          canvasWidth: 1080,
+          canvasHeight: 1920,
+          designCategory: "Story Frames",
+          allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+          publicationStatus: "published",
+          createdBy: "breakingnewswala.com@gmail.com",
+          createdAt: 179388e7,
+          updatedAt: 179388e7,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: "top_left",
+            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+            showLocation: true,
+            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
+            locationStyle: "pill"
+          },
+          footerConfig: {
+            footerHeightRatio: 0.065,
+            enforcePermanentFooter: true,
+            footerBgColor: "#0F172A",
+            footerTextColor: "#F8FAFC"
+          },
+          photoSlots: [
+            {
+              id: "slot_story_photo",
+              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092E\u0941\u0916\u094D\u092F \u092B\u094B\u091F\u094B",
+              slotType: "normal",
+              rect: { x: 0, y: 0, width: 100, height: 62 },
+              required: true,
+              cropMode: "cover"
+            }
+          ],
+          textSlots: [
+            {
+              id: "slot_story_headline",
+              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
+              role: "headline",
+              rect: { x: 7, y: 66, width: 86, height: 25 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 72,
+              fontWeight: "bold",
+              textColor: "#FFFFFF",
+              alignment: "left",
+              maxLines: 4
+            }
+          ]
+        },
+        {
+          id: "df_story_9_16_breaking",
+          name: "\u0938\u0941\u092A\u0930 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Super Breaking Story)",
+          description: "3D \u0930\u093F\u092C\u0928, \u092C\u0921\u093C\u0940 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u0909\u091A\u094D\u091A \u092A\u094D\u0930\u092D\u093E\u0935 \u0935\u093E\u0932\u0940 9:16 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940\u0964",
+          aspectRatio: "9:16",
+          canvasWidth: 1080,
+          canvasHeight: 1920,
+          designCategory: "Story Frames",
+          allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
+          publicationStatus: "published",
+          createdBy: "breakingnewswala.com@gmail.com",
+          createdAt: 179388e7,
+          updatedAt: 179388e7,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: "top_left",
+            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+            showLocation: true,
+            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
+            locationStyle: "pill"
+          },
+          footerConfig: {
+            footerHeightRatio: 0.065,
+            enforcePermanentFooter: true,
+            footerBgColor: "#FFE600",
+            footerTextColor: "#000000"
+          },
+          ribbonConfig: {
+            enabled: true,
+            ribbonId: "speed-blue-red",
+            customRibbonUrl: "/assets/breaking_news_ribbon.svg",
+            rect: { x: 12, y: 60, width: 76, height: 6.8 },
+            scalePct: 76
+          },
+          photoSlots: [
+            {
+              id: "slot_story_photo",
+              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092B\u094B\u091F\u094B",
+              slotType: "normal",
+              rect: { x: 0, y: 0, width: 100, height: 64 },
+              required: true,
+              cropMode: "cover"
+            }
+          ],
+          textSlots: [
+            {
+              id: "slot_story_headline",
+              name: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
+              role: "headline",
+              rect: { x: 6, y: 68, width: 88, height: 23 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 74,
+              fontWeight: "bold",
+              textColor: "#0A0A0A",
+              alignment: "center",
+              maxLines: 3
+            }
+          ]
+        }
+      ];
+      saveDynamicFramesDatabase(frames);
+    }
+    let filtered = isMaster ? frames : frames.filter((f) => f.publicationStatus === "published");
+    if (aspectRatio) {
+      filtered = filtered.filter((f) => f.aspectRatio === aspectRatio);
+    }
+    if (category && category !== "all") {
+      filtered = filtered.filter((f) => f.designCategory === category);
+    }
+    return res.json({ success: true, frames: filtered });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const payload = req.body || {};
+    if (!payload.name || !payload.aspectRatio) {
+      return res.status(400).json({ error: "Frame name and aspectRatio ('4:5' or '9:16') are required." });
+    }
+    if (payload.aspectRatio !== "4:5" && payload.aspectRatio !== "9:16") {
+      return res.status(400).json({ error: "Only '4:5' (1080x1350) and '9:16' (1080x1920) aspect ratios are allowed. 1:1 is strictly disabled." });
+    }
+    const newFrame = {
+      id: payload.id && !payload.id.startsWith("temp_") ? payload.id : `df_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: payload.name.trim(),
+      description: payload.description || "",
+      aspectRatio: payload.aspectRatio,
+      canvasWidth: 1080,
+      canvasHeight: payload.aspectRatio === "4:5" ? 1350 : 1920,
+      sampleReferenceUrl: payload.sampleReferenceUrl || "",
+      previewImageUrl: payload.previewImageUrl || "",
+      designCategory: payload.designCategory || (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"),
+      allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      publicationStatus: payload.publicationStatus || "draft",
+      createdBy: req.user?.email || "breakingnewswala.com@gmail.com",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      version: 1,
+      headerConfig: payload.headerConfig || {
+        showLogo: true,
+        logoPosition: "top_left",
+        logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+        showLocation: true,
+        locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 }
+      },
+      footerConfig: {
+        footerHeightRatio: payload.footerConfig?.footerHeightRatio || (payload.aspectRatio === "4:5" ? 0.08 : 0.065),
+        enforcePermanentFooter: true,
+        footerBgColor: payload.footerConfig?.footerBgColor || "#FFFFFF",
+        footerTextColor: payload.footerConfig?.footerTextColor || "#000000"
+      },
+      photoSlots: Array.isArray(payload.photoSlots) ? payload.photoSlots : [],
+      textSlots: Array.isArray(payload.textSlots) ? payload.textSlots : [],
+      ribbonConfig: payload.ribbonConfig || { enabled: false },
+      layers: Array.isArray(payload.layers) ? payload.layers : [],
+      isStatementFrame: Boolean(payload.isStatementFrame),
+      statementOptions: payload.statementOptions || {}
+    };
+    const all = loadDynamicFramesDatabase();
+    const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
+    saveDynamicFramesDatabase(updated);
+    return res.json({ success: true, frame: newFrame });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    const payload = req.body || {};
+    const all = loadDynamicFramesDatabase();
+    const existingIdx = all.findIndex((f) => f.id === id);
+    if (existingIdx === -1) {
+      return res.status(404).json({ error: "Frame not found." });
+    }
+    const existing = all[existingIdx];
+    const targetRatio = payload.aspectRatio || existing.aspectRatio;
+    if (targetRatio !== "4:5" && targetRatio !== "9:16") {
+      return res.status(400).json({ error: "Only 4:5 and 9:16 are supported." });
+    }
+    const updatedFrame = {
+      ...existing,
+      ...payload,
+      id: existing.id,
+      aspectRatio: targetRatio,
+      canvasWidth: 1080,
+      canvasHeight: targetRatio === "4:5" ? 1350 : 1920,
+      footerConfig: {
+        ...existing.footerConfig || {},
+        ...payload.footerConfig || {},
+        enforcePermanentFooter: true
+        // Always enforced
+      },
+      updatedAt: Date.now(),
+      version: (existing.version || 1) + 1
+    };
+    all[existingIdx] = updatedFrame;
+    saveDynamicFramesDatabase(all);
+    return res.json({ success: true, frame: updatedFrame });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadDynamicFramesDatabase();
+    all = all.filter((f) => f.id !== id);
+    saveDynamicFramesDatabase(all);
+    return res.json({ success: true, message: "Frame deleted successfully." });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
+  try {
+    const { sampleBase64, selectedRatio } = req.body || {};
+    if (!selectedRatio || selectedRatio !== "4:5" && selectedRatio !== "9:16") {
+      return res.status(400).json({ error: "A valid aspectRatio ('4:5' or '9:16') is required." });
+    }
+    const isStory = selectedRatio === "9:16";
+    const fallbackLayout = {
+      detectedRatio: selectedRatio,
+      headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : { x: 5, y: 3.5, width: 90, height: 15 },
+      logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : { x: 5, y: 3.5, width: 22, height: 9 },
+      locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
+      headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : { x: 7, y: 63, width: 86, height: 27 },
+      recommendedPhotoSlots: [
+        {
+          name: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092B\u094B\u091F\u094B",
+          slotType: "normal",
+          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : { x: 0, y: 0, width: 100, height: 61.33 }
+        }
+      ],
+      statementDetected: false,
+      quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : { x: 8, y: 22, width: 84, height: 26 },
+      speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
+      speakerDesigRect: isStory ? { x: 8, y: 84, width: 44, height: 6 } : { x: 8, y: 79.5, width: 42, height: 6 },
+      ribbonDetected: false,
+      ribbonRect: isStory ? { x: 12, y: 60, width: 76, height: 6.8 } : { x: 15, y: 64, width: 70, height: 9 },
+      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : { x: 0, y: 92, width: 100, height: 8 }
+    };
+    if (!sampleBase64 || typeof sampleBase64 !== "string") {
+      return res.json({ success: true, result: fallbackLayout });
+    }
+    try {
+      const gemini = getGeminiClient();
+      let cleanBase64 = sampleBase64;
+      let mimeType = "image/png";
+      const match = sampleBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        cleanBase64 = match[2];
+      }
+      const prompt = `Analyze this news graphic / jacket template design for creating an automated news frame template in AI News Maker.
+The target aspect ratio is ${selectedRatio} (${isStory ? "1080x1920 Story" : "1080x1350 Portrait"}).
+Detect bounding boxes for layout elements as percentages (0-100) of the canvas:
+- Logo placement
+- Location tag placement
+- Photo slot boundaries (normal photo, cutout/speaker photo, collages)
+- Headline text area
+- Statement / Quote text area (if a statement/bayaan design)
+- Breaking Ribbon (if any ribbon exists)
+- Permanent bottom footer region
+
+Return ONLY a valid JSON object matching this schema without any markdown formatting or code blocks:
+{
+  "detectedRatio": "${selectedRatio}",
+  "headerRect": { "x": 5, "y": 3, "width": 90, "height": 14 },
+  "logoRect": { "x": 5, "y": 3, "width": 22, "height": 8 },
+  "locationRect": { "x": 5, "y": 12, "width": 26, "height": 4 },
+  "headlineRect": { "x": 6, "y": 64, "width": 88, "height": 26 },
+  "recommendedPhotoSlots": [
+    { "name": "Main Photo", "slotType": "normal", "rect": { "x": 0, "y": 0, "width": 100, "height": 62 } }
+  ],
+  "statementDetected": false,
+  "quoteRect": { "x": 8, "y": 20, "width": 84, "height": 28 },
+  "speakerNameRect": { "x": 8, "y": 72, "width": 42, "height": 6 },
+  "speakerDesigRect": { "x": 8, "y": 79, "width": 42, "height": 5 },
+  "ribbonDetected": false,
+  "ribbonRect": { "x": 12, "y": 62, "width": 76, "height": 8 },
+  "footerRect": { "x": 0, "y": 92, "width": 100, "height": 8 }
+}`;
+      const aiResponse = await gemini.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType,
+                  data: cleanBase64
+                }
+              }
+            ]
+          }
+        ]
+      });
+      const responseText = aiResponse.text || "";
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.footerRect) {
+          parsed.footerRect.y = isStory ? 93.5 : 92;
+          parsed.footerRect.height = isStory ? 6.5 : 8;
+        }
+        return res.json({ success: true, result: { ...fallbackLayout, ...parsed } });
+      }
+    } catch (aiErr) {
+      console.warn("Gemini vision analysis error, using calibrated geometric fallback:", aiErr);
+    }
+    return res.json({ success: true, result: fallbackLayout });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/user/story-preference", (req, res) => {
+  try {
+    const { userId } = req.query;
+    const cleanId = String(userId || "default").toLowerCase().trim();
+    const prefs = loadUserStoryPreferencesDatabase();
+    const userPref = prefs[cleanId] || { primaryStoryFrameId: "df_story_9_16_standard", updatedAt: Date.now() };
+    return res.json({ success: true, preference: userPref });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/user/story-preference", (req, res) => {
+  try {
+    const { userId, primaryStoryFrameId } = req.body || {};
+    const cleanId = String(userId || "default").toLowerCase().trim();
+    const prefs = loadUserStoryPreferencesDatabase();
+    prefs[cleanId] = {
+      primaryStoryFrameId: primaryStoryFrameId || null,
+      updatedAt: Date.now()
+    };
+    saveUserStoryPreferencesDatabase(prefs);
+    return res.json({ success: true, preference: prefs[cleanId] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
+  try {
+    const { frameId, email, userEmail, userId } = req.body || {};
+    if (!frameId) {
+      return res.status(400).json({ error: "frameId is required" });
+    }
+    const cleanEmail = String(email || userEmail || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail);
+    if (isMaster) {
+      return res.json({ success: true, authorized: true, plan: "MASTER_ADMIN" });
+    }
+    const frames = loadDynamicFramesDatabase();
+    const targetFrame = frames.find((f) => f.id === frameId);
+    if (!targetFrame) {
+      return res.json({ success: true, authorized: true });
+    }
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.userId && u.userId.toLowerCase().trim() === String(userId || "").trim()
+    );
+    const userTier = targetUser?.tier || "basic";
+    const allowedPlans = targetFrame.allowedPlans || ["BASIC", "ADVANCED", "PRO", "VIP DESK"];
+    const isAllowed = isUserPlanAuthorizedForFrame(userTier, allowedPlans);
+    if (!isAllowed) {
+      const requiredPlan = allowedPlans[0] || "ADVANCED";
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        upgradeRequired: true,
+        requiredPlan,
+        error: `\u092F\u0939 \u092B\u094D\u0930\u0947\u092E ${requiredPlan} \u092A\u094D\u0932\u093E\u0928 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0907\u0938 \u0921\u093F\u091C\u093E\u0907\u0928 \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0905\u092A\u0928\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`
+      });
+    }
+    return res.json({ success: true, authorized: true, userTier });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
     const { identifier, password, googleUid, profileData } = req.body;
@@ -19803,6 +20404,23 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
   }
 });
 var aiClient = null;
+function getGeminiClient() {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("GEMINI_API_KEY is not set in environment variables.");
+    }
+    aiClient = new import_genai2.GoogleGenAI({
+      apiKey: apiKey || "",
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build"
+        }
+      }
+    });
+  }
+  return aiClient;
+}
 var openaiClient = null;
 function getOpenAIClient() {
   const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || "";

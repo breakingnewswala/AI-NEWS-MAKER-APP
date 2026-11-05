@@ -392,9 +392,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const getCategoryLabelHi = (catName: string) => {
     const map: Record<string, string> = {
       'Regular Frame': 'रेगुलर फ्रेम',
+      'Story Frame': 'स्टोरी फ्रेम (9:16)',
       'Package Frame': 'पैकेज फ्रेम',
+      'Super Breaking': 'सुपर ब्रेकिंग',
       'Super Breaking Frame': 'सुपर ब्रेकिंग',
+      'Text Breaking': 'टेक्स्ट ब्रेकिंग',
       'Text Breaking Frame': 'टेक्स्ट ब्रेकिंग',
+      'बयानबाजी': 'बयानबाजी',
       'बयानबाज़ी फ्रेम': 'बयानबाज़ी',
       'Special Frame': 'स्पेशल फ्रेम',
       'Bonus Frame': 'बोनस फ्रेम',
@@ -1412,16 +1416,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <div
                       key={f.id}
                       onClick={() => {
-                        if (isUnlocked) {
-                          onChange({ frameDesign: f.id });
-                        }
+                        onChange({ frameDesign: f.id });
                       }}
-                      className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all relative overflow-hidden select-none ${
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all relative overflow-hidden select-none cursor-pointer ${
                         isSelected
-                          ? 'border-yellow-400 bg-yellow-500/15 text-white shadow-lg ring-2 ring-yellow-400/40 cursor-pointer'
+                          ? 'border-yellow-400 bg-yellow-500/15 text-white shadow-lg ring-2 ring-yellow-400/40'
                           : isUnlocked
-                          ? 'border-neutral-800 bg-neutral-950/70 hover:border-neutral-700 text-neutral-300 hover:bg-neutral-900/60 cursor-pointer'
-                          : 'border-neutral-800/80 bg-neutral-950/40 text-neutral-500'
+                          ? 'border-neutral-800 bg-neutral-950/70 hover:border-neutral-700 text-neutral-300 hover:bg-neutral-900/60'
+                          : 'border-neutral-800/80 bg-neutral-950/40 text-neutral-400 hover:border-amber-500/40'
                       }`}
                     >
                       {/* Top Badge Row */}
@@ -1578,6 +1580,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               })()}
           </div>
         )}
+
+        {/* Selected Frame Plan Lock Guidance Banner (Part 11) */}
+        {(() => {
+          const curId = card.frameDesign || 'graphic_001';
+          const curCfg = getTemplateConfig(curId);
+          const isPlanAllowed = isTemplateAvailableForUserPlan(curId, effectiveTier, effectiveAdmin);
+          const isUnlocked = effectiveAdmin || isPlanAllowed || unlockedFrameIds.includes(curId);
+          if (!isUnlocked && curCfg) {
+            const planName = curCfg.allowedPlans.includes('BASIC')
+              ? 'Basic'
+              : curCfg.allowedPlans.includes('ADVANCED')
+              ? 'Advance'
+              : curCfg.allowedPlans.includes('PRO')
+              ? 'Pro'
+              : 'VIP Desk';
+            return (
+              <div className="mt-3 p-3 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-red-500/10 border-2 border-amber-500/50 rounded-xl flex items-center justify-between gap-3 text-amber-200 shadow-md animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg shrink-0">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-black text-amber-300">
+                      यह फ्रेम {planName} प्लान के लिए उपलब्ध है।
+                    </h5>
+                    <p className="text-[11px] text-amber-200/90 mt-0.5">
+                      इस डिजाइन का उपयोग करने के लिए अपना प्लान अपग्रेड करें।
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {/* Step 1 Mobile Nav Button */}
         {renderMobileStepNavigation(1)}

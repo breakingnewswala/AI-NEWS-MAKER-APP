@@ -39,14 +39,24 @@ import {
 } from '../lib/userTemplatesManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
+import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
+import { DynamicFrameTemplate } from '../types/dynamicFrame';
+import {
+  fetchDynamicFramesFromApi,
+  deleteDynamicFrameFromApi,
+  getLocalDynamicFrames,
+} from '../lib/dynamicFramesManager';
 import {
   getUserSubscription,
   isUserAdmin,
+  isUserMasterAdmin,
+  isEffectiveSuperAdmin,
   getPlanUsers,
   assignCustomHeaderFooterToUser,
   getAssignedCustomHeaderFooter,
   PlanUserRecord,
 } from '../lib/userPlanManager';
+import { getAuthToken } from '../lib/apiConfig';
 
 interface UserTemplateManagerProps {
   currentUser?: any;
@@ -85,10 +95,24 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     active: boolean;
   } | null>(null);
 
-  // Admin Section Accordion States (Part 15) - Collapsed by default
+  // Admin Section Accordion States (Part 15 + Section D: AI Frame Generator)
   const [isGraphicsExpanded, setIsGraphicsExpanded] = useState(false);
   const [isVideoExpanded, setIsVideoExpanded] = useState(false);
   const [isApprovalExpanded, setIsApprovalExpanded] = useState(false);
+  const [isFrameGenExpanded, setIsFrameGenExpanded] = useState(false);
+
+  // Section D: AI Frame Generator Modal & Frame Management State
+  const [isDynamicFrameModalOpen, setIsDynamicFrameModalOpen] = useState(false);
+  const [selectedEditFrame, setSelectedEditFrame] = useState<DynamicFrameTemplate | null>(null);
+  const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>(() =>
+    typeof window !== 'undefined' ? getLocalDynamicFrames() : []
+  );
+  const [dynamicFramesLoading, setDynamicFramesLoading] = useState(false);
+  const [dfRatioFilter, setDfRatioFilter] = useState<'all' | '4:5' | '9:16'>('all');
+  const [dfSearch, setDfSearch] = useState('');
+
+  // Master Admin Verification for Frame Creation and Publishing
+  const isMasterAdmin = isUserMasterAdmin(currentUser) || isEffectiveSuperAdmin(currentUser);
 
   // New Frame Creation State
   const [isAddingFrame, setIsAddingFrame] = useState(false);
@@ -110,11 +134,24 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const refreshDynamicFrames = async () => {
+    setDynamicFramesLoading(true);
+    try {
+      const list = await fetchDynamicFramesFromApi();
+      setDynamicFramesList(list || []);
+    } catch {
+      setDynamicFramesList(getLocalDynamicFrames());
+    } finally {
+      setDynamicFramesLoading(false);
+    }
+  };
+
   const refreshData = () => {
     const email = currentUser?.email;
     setFrames(getCustomFrames(email));
     setUserTemplates(getUserCustomTemplates(email));
     setActiveFrameId(getActiveCustomFrameId());
+    refreshDynamicFrames();
   };
 
   useEffect(() => {
@@ -122,15 +159,35 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
 
     const handleFramesUpdate = () => refreshData();
     const handleTemplatesUpdate = () => refreshData();
+    const handleDynamicFramesUpdate = () => refreshDynamicFrames();
 
     window.addEventListener('ai_news_custom_frames_updated', handleFramesUpdate);
     window.addEventListener('ai_news_user_templates_updated', handleTemplatesUpdate);
+    window.addEventListener('ai_news_dynamic_frames_updated', handleDynamicFramesUpdate);
 
     return () => {
       window.removeEventListener('ai_news_custom_frames_updated', handleFramesUpdate);
       window.removeEventListener('ai_news_user_templates_updated', handleTemplatesUpdate);
+      window.removeEventListener('ai_news_dynamic_frames_updated', handleDynamicFramesUpdate);
     };
   }, [currentUser?.email]);
+
+  const handleDeleteDynamicFrame = async (frame: DynamicFrameTemplate) => {
+    if (!isMasterAdmin) {
+      alert('केवल अधिकृत मास्टर एडमिन ही फ्रेम डिलीट कर सकते हैं।');
+      return;
+    }
+    if (window.confirm(`क्या आप "${frame.name}" फ्रेम को डिलीट करना चाहते हैं?`)) {
+      const token = getAuthToken();
+      const success = await deleteDynamicFrameFromApi(frame.id, token);
+      if (success) {
+        refreshDynamicFrames();
+        showToast(`🗑️ "${frame.name}" फ्रेम सफलतापूर्वक हटा दिया गया`);
+      } else {
+        showToast('❌ फ्रेम हटाने में विफल (मास्टर एडमिन प्रमाणीकरण आवश्यक)');
+      }
+    }
+  };
 
   // Frame Upload Handler
   const handleFrameFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -728,6 +785,235 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     </div>
   );
 
+  const renderFrameGeneratorSection = () => {
+    if (!isMasterAdmin) {
+      return (
+        <div className="p-4 bg-amber-950/40 border border-amber-500/50 rounded-xl flex items-center gap-3 text-amber-200 text-xs">
+          <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
+          <span>
+            यह सेक्शन केवल अधिकृत मास्टर एडमिन (<strong>breakingnewswala.com@gmail.com</strong>) के लिए उपलब्ध है।
+          </span>
+        </div>
+      );
+    }
+
+    const filteredFrames = dynamicFramesList.filter((f) => {
+      if (dfRatioFilter !== 'all' && f.aspectRatio !== dfRatioFilter) return false;
+      if (dfSearch.trim()) {
+        const q = dfSearch.toLowerCase();
+        return (
+          f.name.toLowerCase().includes(q) ||
+          f.designCategory.toLowerCase().includes(q) ||
+          (f.description && f.description.toLowerCase().includes(q))
+        );
+      }
+      return true;
+    });
+
+    const count4_5 = dynamicFramesList.filter((f) => f.aspectRatio === '4:5').length;
+    const count9_16 = dynamicFramesList.filter((f) => f.aspectRatio === '9:16').length;
+
+    return (
+      <div className="space-y-4">
+        {/* Header Action Banner */}
+        <div className="bg-gradient-to-r from-pink-950/60 via-slate-900 to-rose-950/60 border border-pink-500/40 rounded-2xl p-5 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 rounded-2xl bg-gradient-to-tr from-pink-600 to-rose-600 text-white shadow-lg shadow-pink-600/30 shrink-0">
+              <Sparkles className="w-6 h-6 text-amber-200" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-base sm:text-lg font-black text-white">
+                  D. AI Frame Generator & Dynamic Frame Manager
+                </h4>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/40">
+                  4:5 व 9:16 कैनवास
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-red-600/40 text-red-200 border border-red-500/50">
+                  MASTER ADMIN
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                सैंपल ग्राफिक (PNG/JPG) अपलोड करें, Gemini AI विज़न से स्वचालित तत्व पहचानें, 4:5 व 9:16 स्लॉट्स कॉन्फ़िगर करें, और री-यूज़ेबल फ्रेम पब्लिश करें।
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedEditFrame(null);
+              setIsDynamicFrameModalOpen(true);
+            }}
+            className="shrink-0 px-4 py-2.5 bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-pink-600/25 flex items-center gap-2 cursor-pointer transition transform active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ नया AI फ्रेम बनाएं (Launch Generator)</span>
+          </button>
+        </div>
+
+        {/* Filter and Search Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-800">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setDfRatioFilter('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                dfRatioFilter === 'all'
+                  ? 'bg-pink-600 text-white shadow-sm'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+              }`}
+            >
+              सभी फ्रेम्स ({dynamicFramesList.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDfRatioFilter('4:5')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                dfRatioFilter === '4:5'
+                  ? 'bg-pink-600 text-white shadow-sm'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+              }`}
+            >
+              4:5 पोर्ट्रेट ({count4_5})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDfRatioFilter('9:16')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                dfRatioFilter === '9:16'
+                  ? 'bg-pink-600 text-white shadow-sm'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
+              }`}
+            >
+              9:16 सोशल स्टोरी ({count9_16})
+            </button>
+          </div>
+
+          <div className="relative min-w-[220px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={dfSearch}
+              onChange={(e) => setDfSearch(e.target.value)}
+              placeholder="फ्रेम या श्रेणी खोजें..."
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
+            />
+          </div>
+        </div>
+
+        {/* Dynamic Frames Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredFrames.map((frame) => {
+            const isStory = frame.aspectRatio === '9:16';
+            return (
+              <div
+                key={frame.id}
+                className="bg-slate-900/90 border border-slate-800 hover:border-pink-500/50 rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all shadow-md group"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-mono text-[10px] text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded-md border border-pink-500/20">
+                      {frame.id}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`px-2 py-0.5 text-[9.5px] font-black rounded ${
+                        isStory ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                      }`}>
+                        {isStory ? '9:16 स्टोरी' : '4:5 पोर्ट्रेट'}
+                      </span>
+                      <span className="px-2 py-0.5 text-[9.5px] font-bold bg-slate-800 text-slate-300 rounded">
+                        v{frame.version || 1}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Frame Visual Preview */}
+                  <div className={`w-full ${isStory ? 'h-36' : 'h-32'} rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex items-center justify-center relative mb-3 group-hover:border-pink-500/30 transition`}>
+                    {frame.previewImageUrl ? (
+                      <img
+                        src={frame.previewImageUrl}
+                        alt={frame.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <Layout className="w-8 h-8 text-slate-700" />
+                    )}
+                    <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-amber-300 border border-amber-500/30">
+                      📂 {frame.designCategory}
+                    </span>
+                    <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
+                      {frame.allowedPlans?.join(', ') || 'ALL'}
+                    </span>
+                  </div>
+
+                  <h5 className="text-sm font-bold text-white line-clamp-1">{frame.name}</h5>
+                  <p className="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+                    {frame.description || 'डायनामिक फ्रेम टेम्पलेट'}
+                  </p>
+
+                  <div className="flex items-center gap-3 text-[10.5px] text-slate-400 mt-2.5 pt-2 border-t border-slate-800/80">
+                    <span>फोटो स्लॉट्स: <strong className="text-white">{frame.photoSlots?.length || 0}</strong></span>
+                    <span>•</span>
+                    <span>टेक्स्ट ज़ोन: <strong className="text-white">{frame.textSlots?.length || 0}</strong></span>
+                    <span>•</span>
+                    <span className="text-emerald-400">फुटर सुरक्षित ✓</span>
+                  </div>
+                </div>
+
+                {/* Actions Row */}
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedEditFrame(frame);
+                      setIsDynamicFrameModalOpen(true);
+                    }}
+                    className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <span>✏️ एडिट</span>
+                  </button>
+
+                  {onOpenStudioWithTemplate && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenStudioWithTemplate(frame.id)}
+                      className="py-1.5 px-2.5 bg-pink-600/30 hover:bg-pink-600 text-pink-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border border-pink-500/40 cursor-pointer"
+                      title="स्टूडियो में टेस्ट करें"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>टेस्ट</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteDynamicFrame(frame)}
+                    className="p-1.5 bg-slate-800 hover:bg-red-950/60 text-slate-400 hover:text-red-300 rounded-lg transition border border-slate-700 hover:border-red-500/40 cursor-pointer"
+                    title="फ्रेम हटाएं"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredFrames.length === 0 && (
+          <div className="p-8 text-center bg-slate-950/50 rounded-2xl border border-slate-800 text-slate-400 text-xs space-y-2">
+            <Sparkles className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="font-bold text-slate-300">कोई डायनामिक फ्रेम नहीं मिला</p>
+            <p className="text-[11px] text-slate-500">ऊपर दिए गए बटन से नया 4:5 या 9:16 फ्रेम तैयार करें।</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`w-full ${isAdmin ? 'space-y-6 text-slate-100' : 'bg-[#0a0f1d] border border-purple-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100'}`}>
       {/* Header - Only shown for non-admin custom template manager */}
@@ -1159,24 +1445,25 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
       {/* ========================================================================= */}
       {isAdmin && (
         <div className="space-y-6 animate-in fade-in">
-          {/* Phase 5: Mobile Single-Row 3 Controls + Details Section Below */}
+          {/* Phase 5: Mobile Single-Row 4 Controls (A, B, C, D) + Details Section Below */}
           <div className="md:hidden space-y-3">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-1.5">
               <button
                 type="button"
                 onClick={() => {
                   setIsGraphicsExpanded(!isGraphicsExpanded);
                   setIsVideoExpanded(false);
                   setIsApprovalExpanded(false);
+                  setIsFrameGenExpanded(false);
                 }}
-                className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
                   isGraphicsExpanded
                     ? 'bg-purple-600 text-white border-purple-400 font-black shadow-md'
                     : 'bg-slate-900 text-purple-300 border-purple-500/30'
                 }`}
               >
                 <Layout className="w-4 h-4" />
-                <span className="text-[11px] font-bold leading-tight">ग्राफिक टेम्पलेट</span>
+                <span className="text-[10px] font-bold leading-tight">A. ग्राफिक</span>
               </button>
 
               <button
@@ -1185,15 +1472,16 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   setIsVideoExpanded(!isVideoExpanded);
                   setIsGraphicsExpanded(false);
                   setIsApprovalExpanded(false);
+                  setIsFrameGenExpanded(false);
                 }}
-                className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
                   isVideoExpanded
                     ? 'bg-amber-600 text-white border-amber-400 font-black shadow-md'
                     : 'bg-slate-900 text-amber-300 border-amber-500/30'
                 }`}
               >
                 <Film className="w-4 h-4" />
-                <span className="text-[11px] font-bold leading-tight">वीडियो टेम्पलेट</span>
+                <span className="text-[10px] font-bold leading-tight">B. वीडियो</span>
               </button>
 
               <button
@@ -1202,15 +1490,34 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   setIsApprovalExpanded(!isApprovalExpanded);
                   setIsGraphicsExpanded(false);
                   setIsVideoExpanded(false);
+                  setIsFrameGenExpanded(false);
                 }}
-                className={`p-2.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
                   isApprovalExpanded
                     ? 'bg-indigo-600 text-white border-indigo-400 font-black shadow-md'
                     : 'bg-slate-900 text-indigo-300 border-indigo-500/30'
                 }`}
               >
                 <Layers className="w-4 h-4" />
-                <span className="text-[11px] font-bold leading-tight">ऐड अप्रूवल</span>
+                <span className="text-[10px] font-bold leading-tight">C. अप्रूवल</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFrameGenExpanded(!isFrameGenExpanded);
+                  setIsGraphicsExpanded(false);
+                  setIsVideoExpanded(false);
+                  setIsApprovalExpanded(false);
+                }}
+                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                  isFrameGenExpanded
+                    ? 'bg-pink-600 text-white border-pink-400 font-black shadow-md'
+                    : 'bg-slate-900 text-pink-300 border-pink-500/30'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span className="text-[10px] font-bold leading-tight">D. AI फ्रेम</span>
               </button>
             </div>
 
@@ -1218,13 +1525,13 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             <div className="p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300 shadow-sm">
               <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold border-b border-slate-800/80 pb-1.5">
                 <span>एक्सेस व फॉर्मेट विवरण:</span>
-                <span className="text-amber-400 font-bold">PRO & VIP DESK</span>
+                <span className="text-amber-400 font-bold">PRO & VIP DESK • AI STUDIO</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[10.5px]">
                 <div className="text-purple-300">• 8 ग्राफिक श्रेणियां</div>
                 <div className="text-amber-300">• 9:16, 1:1, 4:5 वीडियो</div>
                 <div className="text-indigo-300">• कस्टम हेडर/फुटर</div>
-                <div className="text-emerald-300">• VIP Desk अप्रूवल</div>
+                <div className="text-pink-300">• 4:5 व 9:16 AI फ्रेम जनरेटर</div>
               </div>
             </div>
 
@@ -1242,6 +1549,11 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             {isApprovalExpanded && (
               <div className="p-3 bg-slate-950/80 border border-indigo-500/40 rounded-xl animate-in fade-in space-y-4">
                 {renderApprovalSection()}
+              </div>
+            )}
+            {isFrameGenExpanded && (
+              <div className="p-3 bg-slate-950/80 border border-pink-500/40 rounded-xl animate-in fade-in space-y-4">
+                {renderFrameGeneratorSection()}
               </div>
             )}
           </div>
@@ -1829,10 +2141,66 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 </div>
               )}
             </div>
+
+            {/* 15.4 SECTION D: AI Frame Generator (Master Admin Only) */}
+            <div id="admin-ai-frame-generator-section" className="border border-pink-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
+              <button
+                type="button"
+                onClick={() => setIsFrameGenExpanded(!isFrameGenExpanded)}
+                className="w-full p-4 bg-gradient-to-r from-pink-950/80 via-slate-900 to-rose-950/80 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-gradient-to-tr from-pink-600 to-rose-600 text-white shadow-md">
+                    <Sparkles className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-base font-black text-white">D. AI Frame Generator</h4>
+                      <span className="px-2 py-0.5 text-[10px] bg-pink-500/20 text-pink-300 font-bold rounded-full border border-pink-500/40">
+                        4:5 व 9:16 • Gemini AI विज़न
+                      </span>
+                      <span className="px-2 py-0.5 text-[9px] bg-red-600/40 text-red-200 font-black rounded border border-red-500/50">
+                        MASTER ADMIN
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      सैंपल डिज़ाइन अपलोड, Gemini AI विज़न एनालिसिस, 4:5 व 9:16 डायनामिक फ्रेम क्रिएशन व पब्लिशिंग
+                    </p>
+                  </div>
+                </div>
+                <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                  {isFrameGenExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </button>
+              {isFrameGenExpanded && (
+                <div className="p-4 sm:p-6 border-t border-pink-500/20 bg-slate-950/40 animate-in fade-in space-y-6">
+                  {renderFrameGeneratorSection()}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         )}
       </div>
+
+      {/* Master Admin Dynamic Frame Generator Wizard Modal */}
+      {isDynamicFrameModalOpen && (
+        <DynamicFrameGeneratorModal
+          isOpen={isDynamicFrameModalOpen}
+          onClose={() => {
+            setIsDynamicFrameModalOpen(false);
+            setSelectedEditFrame(null);
+          }}
+          initialFrame={selectedEditFrame}
+          currentUser={currentUser}
+          onFramePublished={(newFrame) => {
+            setIsDynamicFrameModalOpen(false);
+            setSelectedEditFrame(null);
+            refreshDynamicFrames();
+            showToast(`✅ नया AI फ्रेम "${newFrame.name}" सफलतापूर्वक पब्लिश किया गया!`);
+          }}
+        />
+      )}
     </div>
   );
 };

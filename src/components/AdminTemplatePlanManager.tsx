@@ -34,6 +34,9 @@ import {
   getCascadingAllowedPlans,
 } from '../lib/graphicTemplatesRegistry';
 import { getEffectiveFrameOptions, FrameOption } from '../lib/HeaderDesigns';
+import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
+import { DynamicFrameTemplate } from '../types/dynamicFrame';
+import { fetchDynamicFramesFromApi, getLocalDynamicFrames } from '../lib/dynamicFramesManager';
 
 interface AdminTemplatePlanManagerProps {
   isAdmin: boolean;
@@ -64,9 +67,16 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   const [isCreatingFrame, setIsCreatingFrame] = useState(false);
   const [createError, setCreateError] = useState('');
 
+  // AI Frame Generator Modal State
+  const [isDynamicGeneratorOpen, setIsDynamicGeneratorOpen] = useState(false);
+  const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>([]);
+
   const refreshFrames = () => {
     setFrameOptions(getEffectiveFrameOptions());
     setTemplateConfigs(getAllTemplateConfigs());
+    fetchDynamicFramesFromApi()
+      .then((dfs) => setDynamicFramesList(dfs || []))
+      .catch(() => setDynamicFramesList(getLocalDynamicFrames()));
   };
 
   useEffect(() => {
@@ -295,7 +305,17 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-center">
+        <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsDynamicGeneratorOpen(true)}
+            className="px-3 py-1.5 bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition cursor-pointer"
+            title="AI फ्रेम जनरेटर (Sample Graphic Upload to Dynamic Frame)"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>AI फ्रेम जनरेटर</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsAddingFrame(!isAddingFrame)}
@@ -768,6 +788,23 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
           </div>
         )}
       </div>
+
+      {/* AI Dynamic Frame Generator Modal */}
+      {isDynamicGeneratorOpen && (
+        <DynamicFrameGeneratorModal
+          isOpen={isDynamicGeneratorOpen}
+          onClose={() => setIsDynamicGeneratorOpen(false)}
+          onFramePublished={(newFrame) => {
+            setIsDynamicGeneratorOpen(false);
+            refreshFrames();
+            setSuccessToast({
+              id: newFrame.name,
+              msg: 'नया AI फ्रेम सफलतापूर्वक पब्लिश किया गया!',
+            });
+            setTimeout(() => setSuccessToast(null), 3000);
+          }}
+        />
+      )}
     </div>
   );
 };

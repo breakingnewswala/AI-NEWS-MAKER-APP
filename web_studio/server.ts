@@ -9382,6 +9382,664 @@ app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) =>
   }
 });
 
+// --- DYNAMIC FRAME GENERATOR & SOCIAL MEDIA STORY SYSTEM ---
+const DYNAMIC_FRAMES_DB_FILE = path.join(process.cwd(), "dynamic_frames_db.json");
+const USER_STORY_PREF_DB_FILE = path.join(process.cwd(), "user_story_preferences_db.json");
+
+function loadDynamicFramesDatabase(): any[] {
+  try {
+    if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+function saveDynamicFramesDatabase(frames: any[]) {
+  try {
+    fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to write dynamic_frames_db.json:", err);
+  }
+}
+
+function loadUserStoryPreferencesDatabase(): Record<string, { primaryStoryFrameId: string | null; updatedAt: number }> {
+  try {
+    if (fs.existsSync(USER_STORY_PREF_DB_FILE)) {
+      const raw = fs.readFileSync(USER_STORY_PREF_DB_FILE, "utf-8");
+      return JSON.parse(raw) || {};
+    }
+  } catch {}
+  return {};
+}
+
+function saveUserStoryPreferencesDatabase(data: Record<string, any>) {
+  try {
+    fs.writeFileSync(USER_STORY_PREF_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to write user_story_preferences_db.json:", err);
+  }
+}
+
+// Plan tier weights for permission evaluation
+const TIER_WEIGHTS_MAP: Record<string, number> = {
+  BASIC: 1,
+  basic: 1,
+  ADVANCE: 2,
+  ADVANCED: 2,
+  advance: 2,
+  advanced: 2,
+  PRO: 3,
+  pro: 3,
+  professional: 3,
+  VIP: 4,
+  vip: 4,
+  'VIP DESK': 4,
+  vip_desk: 4,
+  'VIP-DASH': 4,
+  vip_dash: 4,
+  ultra: 4,
+};
+
+function isUserPlanAuthorizedForFrame(userTier: string | undefined | null, allowedPlans: string[]): boolean {
+  if (!allowedPlans || allowedPlans.length === 0) return true;
+  const cleanTier = (userTier || 'basic').toUpperCase().trim();
+  const userWeight = TIER_WEIGHTS_MAP[cleanTier] || 1;
+  const minAllowed = Math.min(...allowedPlans.map(p => TIER_WEIGHTS_MAP[p.toUpperCase()] || 1));
+  return userWeight >= minAllowed;
+}
+
+// 1. GET /api/dynamic-frames
+app.get("/api/dynamic-frames", async (req, res) => {
+  try {
+    const { aspectRatio, category } = req.query;
+    const isMaster = isAuthorizedMasterAdmin(req);
+    let frames = loadDynamicFramesDatabase();
+
+    // If database is empty, seed defaults
+    if (frames.length === 0) {
+      frames = [
+        {
+          id: 'df_reg_4_5_clean',
+          name: 'रेगुलर क्लासिक 4:5 फ्रेम (Regular Classic)',
+          description: 'दैनिक समाचारों के लिए मानक 4:5 पोर्ट्रेट फोटो फ्रेम।',
+          aspectRatio: '4:5',
+          canvasWidth: 1080,
+          canvasHeight: 1350,
+          designCategory: 'Regular Frames',
+          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+          publicationStatus: 'published',
+          createdBy: 'breakingnewswala.com@gmail.com',
+          createdAt: 1793880000000,
+          updatedAt: 1793880000000,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: 'top_left',
+            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+            showLocation: true,
+            locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
+            locationStyle: 'pill',
+          },
+          footerConfig: {
+            footerHeightRatio: 0.08,
+            enforcePermanentFooter: true,
+            footerBgColor: '#FFFFFF',
+            footerTextColor: '#000000',
+          },
+          photoSlots: [
+            {
+              id: 'slot_main_photo',
+              name: 'मुख्य समाचार फोटो (Main Photo)',
+              slotType: 'normal',
+              rect: { x: 0, y: 0, width: 100, height: 61.33 },
+              required: true,
+              cropMode: 'cover',
+            },
+          ],
+          textSlots: [
+            {
+              id: 'slot_main_headline',
+              name: 'मुख्य हेडलाइन (3 पंक्तियाँ)',
+              role: 'headline',
+              rect: { x: 7.7, y: 64, width: 84.6, height: 26 },
+              fontFamily: 'Noto Sans Devanagari',
+              fontSize: 70,
+              fontWeight: 'bold',
+              textColor: '#FFFFFF',
+              alignment: 'center',
+              maxLines: 3,
+              lineHeight: 1.25,
+              backgroundColor: '#B91C1C',
+            },
+          ],
+        },
+        {
+          id: 'df_bayaan_4_5_red',
+          name: 'बयानबाज़ी रेड कटआउट फ्रेम (Statement Red Cutout)',
+          description: 'वक्ता का बैकग्राउंड रिमूव्ड कटआउट व मुख्य बयान/कोटेशन फ्रेम।',
+          aspectRatio: '4:5',
+          canvasWidth: 1080,
+          canvasHeight: 1350,
+          designCategory: 'बयानबाजी',
+          allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
+          publicationStatus: 'published',
+          createdBy: 'breakingnewswala.com@gmail.com',
+          createdAt: 1793880000000,
+          updatedAt: 1793880000000,
+          version: 1,
+          isStatementFrame: true,
+          statementOptions: { solidBackgroundHex: '#C81E1E' },
+          headerConfig: {
+            showLogo: true,
+            logoPosition: 'top_left',
+            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+            showLocation: true,
+            locationRect: { x: 5, y: 13.5, width: 26, height: 4.5 },
+            locationStyle: 'pill',
+          },
+          footerConfig: {
+            footerHeightRatio: 0.08,
+            enforcePermanentFooter: true,
+            footerBgColor: '#FFFFFF',
+            footerTextColor: '#000000',
+          },
+          photoSlots: [
+            {
+              id: 'slot_speaker_cutout',
+              name: 'वक्ता का फोटो (कटआउट)',
+              slotType: 'cutout',
+              rect: { x: 50, y: 44, width: 48, height: 48 },
+              required: true,
+              bgRemoval: true,
+              cropMode: 'contain',
+            },
+          ],
+          textSlots: [
+            {
+              id: 'slot_statement_quote',
+              name: 'वक्ता का बयान (Quote)',
+              role: 'quote',
+              rect: { x: 8, y: 22, width: 84, height: 26 },
+              fontFamily: 'Noto Sans Devanagari',
+              fontSize: 66,
+              fontWeight: 'bold',
+              textColor: '#FFFFFF',
+              alignment: 'center',
+              maxLines: 4,
+            },
+            {
+              id: 'slot_speaker_name',
+              name: 'वक्ता का नाम',
+              role: 'speaker_name',
+              rect: { x: 8, y: 72, width: 42, height: 7 },
+              fontFamily: 'Noto Sans Devanagari',
+              fontSize: 42,
+              fontWeight: 'bold',
+              textColor: '#FFE600',
+              alignment: 'left',
+              maxLines: 1,
+            },
+            {
+              id: 'slot_speaker_desig',
+              name: 'पद / विवरण',
+              role: 'speaker_designation',
+              rect: { x: 8, y: 79.5, width: 42, height: 6 },
+              fontFamily: 'Noto Sans Devanagari',
+              fontSize: 28,
+              fontWeight: 'normal',
+              textColor: '#F8FAFC',
+              alignment: 'left',
+              maxLines: 2,
+            },
+          ],
+        },
+        {
+          id: 'df_story_9_16_standard',
+          name: 'स्टैंडर्ड सोशल स्टोरी 9:16 (Standard Story)',
+          description: 'सोशल मीडिया इंस्टाग्राम व फेसबुक स्टोरी के लिए 9:16 वर्टिकल न्यूज़ लेआउट।',
+          aspectRatio: '9:16',
+          canvasWidth: 1080,
+          canvasHeight: 1920,
+          designCategory: 'Story Frames',
+          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+          publicationStatus: 'published',
+          createdBy: 'breakingnewswala.com@gmail.com',
+          createdAt: 1793880000000,
+          updatedAt: 1793880000000,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: 'top_left',
+            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+            showLocation: true,
+            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
+            locationStyle: 'pill',
+          },
+          footerConfig: {
+            footerHeightRatio: 0.065,
+            enforcePermanentFooter: true,
+            footerBgColor: '#0F172A',
+            footerTextColor: '#F8FAFC',
+          },
+          photoSlots: [
+            {
+              id: 'slot_story_photo',
+              name: 'स्टोरी मुख्य फोटो',
+              slotType: 'normal',
+              rect: { x: 0, y: 0, width: 100, height: 62 },
+              required: true,
+              cropMode: 'cover',
+            },
+          ],
+          textSlots: [
+            {
+              id: 'slot_story_headline',
+              name: 'स्टोरी हेडलाइन',
+              role: 'headline',
+              rect: { x: 7, y: 66, width: 86, height: 25 },
+              fontFamily: 'Noto Sans Devanagari',
+              fontSize: 72,
+              fontWeight: 'bold',
+              textColor: '#FFFFFF',
+              alignment: 'left',
+              maxLines: 4,
+            },
+          ],
+        },
+        {
+          id: 'df_story_9_16_breaking',
+          name: 'सुपर ब्रेकिंग स्टोरी 9:16 (Super Breaking Story)',
+          description: '3D रिबन, बड़ी ब्रेकिंग हेडलाइन और उच्च प्रभाव वाली 9:16 सोशल स्टोरी।',
+          aspectRatio: '9:16',
+          canvasWidth: 1080,
+          canvasHeight: 1920,
+          designCategory: 'Story Frames',
+          allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
+          publicationStatus: 'published',
+          createdBy: 'breakingnewswala.com@gmail.com',
+          createdAt: 1793880000000,
+          updatedAt: 1793880000000,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: 'top_left',
+            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+            showLocation: true,
+            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
+            locationStyle: 'pill',
+          },
+          footerConfig: {
+            footerHeightRatio: 0.065,
+            enforcePermanentFooter: true,
+            footerBgColor: '#FFE600',
+            footerTextColor: '#000000',
+          },
+          ribbonConfig: {
+            enabled: true,
+            ribbonId: 'speed-blue-red',
+            customRibbonUrl: '/assets/breaking_news_ribbon.svg',
+            rect: { x: 12, y: 60, width: 76, height: 6.8 },
+            scalePct: 76,
+          },
+          photoSlots: [
+            {
+              id: 'slot_story_photo',
+              name: 'स्टोरी फोटो',
+              slotType: 'normal',
+              rect: { x: 0, y: 0, width: 100, height: 64 },
+              required: true,
+              cropMode: 'cover',
+            },
+          ],
+          textSlots: [
+            {
+              id: 'slot_story_headline',
+              name: 'ब्रेकिंग स्टोरी हेडलाइन',
+              role: 'headline',
+              rect: { x: 6, y: 68, width: 88, height: 23 },
+              fontFamily: 'Noto Sans Devanagari',
+              fontSize: 74,
+              fontWeight: 'bold',
+              textColor: '#0A0A0A',
+              alignment: 'center',
+              maxLines: 3,
+            },
+          ],
+        },
+      ];
+      saveDynamicFramesDatabase(frames);
+    }
+
+    // Filter by publication status unless Master Admin requests all
+    let filtered = isMaster
+      ? frames
+      : frames.filter((f) => f.publicationStatus === "published");
+
+    if (aspectRatio) {
+      filtered = filtered.filter((f) => f.aspectRatio === aspectRatio);
+    }
+    if (category && category !== "all") {
+      filtered = filtered.filter((f) => f.designCategory === category);
+    }
+
+    return res.json({ success: true, frames: filtered });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 2. POST /api/dynamic-frames (Master Admin only)
+app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const payload = req.body || {};
+    if (!payload.name || !payload.aspectRatio) {
+      return res.status(400).json({ error: "Frame name and aspectRatio ('4:5' or '9:16') are required." });
+    }
+    if (payload.aspectRatio !== "4:5" && payload.aspectRatio !== "9:16") {
+      return res.status(400).json({ error: "Only '4:5' (1080x1350) and '9:16' (1080x1920) aspect ratios are allowed. 1:1 is strictly disabled." });
+    }
+
+    const newFrame = {
+      id: payload.id && !payload.id.startsWith("temp_") ? payload.id : `df_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: payload.name.trim(),
+      description: payload.description || "",
+      aspectRatio: payload.aspectRatio,
+      canvasWidth: 1080,
+      canvasHeight: payload.aspectRatio === "4:5" ? 1350 : 1920,
+      sampleReferenceUrl: payload.sampleReferenceUrl || "",
+      previewImageUrl: payload.previewImageUrl || "",
+      designCategory: payload.designCategory || (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"),
+      allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      publicationStatus: payload.publicationStatus || "draft",
+      createdBy: (req as any).user?.email || "breakingnewswala.com@gmail.com",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      version: 1,
+      headerConfig: payload.headerConfig || {
+        showLogo: true,
+        logoPosition: "top_left",
+        logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+        showLocation: true,
+        locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
+      },
+      footerConfig: {
+        footerHeightRatio: payload.footerConfig?.footerHeightRatio || (payload.aspectRatio === "4:5" ? 0.08 : 0.065),
+        enforcePermanentFooter: true,
+        footerBgColor: payload.footerConfig?.footerBgColor || "#FFFFFF",
+        footerTextColor: payload.footerConfig?.footerTextColor || "#000000",
+      },
+      photoSlots: Array.isArray(payload.photoSlots) ? payload.photoSlots : [],
+      textSlots: Array.isArray(payload.textSlots) ? payload.textSlots : [],
+      ribbonConfig: payload.ribbonConfig || { enabled: false },
+      layers: Array.isArray(payload.layers) ? payload.layers : [],
+      isStatementFrame: Boolean(payload.isStatementFrame),
+      statementOptions: payload.statementOptions || {},
+    };
+
+    const all = loadDynamicFramesDatabase();
+    const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
+    saveDynamicFramesDatabase(updated);
+
+    return res.json({ success: true, frame: newFrame });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 3. PUT /api/dynamic-frames/:id (Master Admin only)
+app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    const payload = req.body || {};
+    const all = loadDynamicFramesDatabase();
+    const existingIdx = all.findIndex((f) => f.id === id);
+
+    if (existingIdx === -1) {
+      return res.status(404).json({ error: "Frame not found." });
+    }
+
+    const existing = all[existingIdx];
+    const targetRatio = payload.aspectRatio || existing.aspectRatio;
+    if (targetRatio !== "4:5" && targetRatio !== "9:16") {
+      return res.status(400).json({ error: "Only 4:5 and 9:16 are supported." });
+    }
+
+    const updatedFrame = {
+      ...existing,
+      ...payload,
+      id: existing.id,
+      aspectRatio: targetRatio,
+      canvasWidth: 1080,
+      canvasHeight: targetRatio === "4:5" ? 1350 : 1920,
+      footerConfig: {
+        ...(existing.footerConfig || {}),
+        ...(payload.footerConfig || {}),
+        enforcePermanentFooter: true, // Always enforced
+      },
+      updatedAt: Date.now(),
+      version: (existing.version || 1) + 1,
+    };
+
+    all[existingIdx] = updatedFrame;
+    saveDynamicFramesDatabase(all);
+
+    return res.json({ success: true, frame: updatedFrame });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 4. DELETE /api/dynamic-frames/:id (Master Admin only)
+app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    let all = loadDynamicFramesDatabase();
+    all = all.filter((f) => f.id !== id);
+    saveDynamicFramesDatabase(all);
+    return res.json({ success: true, message: "Frame deleted successfully." });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 5. POST /api/dynamic-frames/ai-analyze (Master Admin only: Gemini multimodal analysis)
+app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
+  try {
+    const { sampleBase64, selectedRatio } = req.body || {};
+    if (!selectedRatio || (selectedRatio !== "4:5" && selectedRatio !== "9:16")) {
+      return res.status(400).json({ error: "A valid aspectRatio ('4:5' or '9:16') is required." });
+    }
+
+    const isStory = selectedRatio === "9:16";
+
+    // Default calibrated heuristic layout if Gemini is not available or encounters errors
+    const fallbackLayout = {
+      detectedRatio: selectedRatio,
+      headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : { x: 5, y: 3.5, width: 90, height: 15 },
+      logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : { x: 5, y: 3.5, width: 22, height: 9 },
+      locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
+      headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : { x: 7, y: 63, width: 86, height: 27 },
+      recommendedPhotoSlots: [
+        {
+          name: "मुख्य समाचार फोटो",
+          slotType: "normal",
+          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : { x: 0, y: 0, width: 100, height: 61.33 },
+        },
+      ],
+      statementDetected: false,
+      quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : { x: 8, y: 22, width: 84, height: 26 },
+      speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
+      speakerDesigRect: isStory ? { x: 8, y: 84, width: 44, height: 6 } : { x: 8, y: 79.5, width: 42, height: 6 },
+      ribbonDetected: false,
+      ribbonRect: isStory ? { x: 12, y: 60, width: 76, height: 6.8 } : { x: 15, y: 64, width: 70, height: 9 },
+      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : { x: 0, y: 92, width: 100, height: 8 },
+    };
+
+    if (!sampleBase64 || typeof sampleBase64 !== "string") {
+      return res.json({ success: true, result: fallbackLayout });
+    }
+
+    try {
+      const gemini = getGeminiClient();
+      let cleanBase64 = sampleBase64;
+      let mimeType = "image/png";
+      const match = sampleBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        mimeType = match[1];
+        cleanBase64 = match[2];
+      }
+
+      const prompt = `Analyze this news graphic / jacket template design for creating an automated news frame template in AI News Maker.
+The target aspect ratio is ${selectedRatio} (${isStory ? "1080x1920 Story" : "1080x1350 Portrait"}).
+Detect bounding boxes for layout elements as percentages (0-100) of the canvas:
+- Logo placement
+- Location tag placement
+- Photo slot boundaries (normal photo, cutout/speaker photo, collages)
+- Headline text area
+- Statement / Quote text area (if a statement/bayaan design)
+- Breaking Ribbon (if any ribbon exists)
+- Permanent bottom footer region
+
+Return ONLY a valid JSON object matching this schema without any markdown formatting or code blocks:
+{
+  "detectedRatio": "${selectedRatio}",
+  "headerRect": { "x": 5, "y": 3, "width": 90, "height": 14 },
+  "logoRect": { "x": 5, "y": 3, "width": 22, "height": 8 },
+  "locationRect": { "x": 5, "y": 12, "width": 26, "height": 4 },
+  "headlineRect": { "x": 6, "y": 64, "width": 88, "height": 26 },
+  "recommendedPhotoSlots": [
+    { "name": "Main Photo", "slotType": "normal", "rect": { "x": 0, "y": 0, "width": 100, "height": 62 } }
+  ],
+  "statementDetected": false,
+  "quoteRect": { "x": 8, "y": 20, "width": 84, "height": 28 },
+  "speakerNameRect": { "x": 8, "y": 72, "width": 42, "height": 6 },
+  "speakerDesigRect": { "x": 8, "y": 79, "width": 42, "height": 5 },
+  "ribbonDetected": false,
+  "ribbonRect": { "x": 12, "y": 62, "width": 76, "height": 8 },
+  "footerRect": { "x": 0, "y": 92, "width": 100, "height": 8 }
+}`;
+
+      const aiResponse = await gemini.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType,
+                  data: cleanBase64,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      const responseText = aiResponse.text || "";
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        // Validate footer position protection
+        if (parsed.footerRect) {
+          parsed.footerRect.y = isStory ? 93.5 : 92;
+          parsed.footerRect.height = isStory ? 6.5 : 8;
+        }
+        return res.json({ success: true, result: { ...fallbackLayout, ...parsed } });
+      }
+    } catch (aiErr) {
+      console.warn("Gemini vision analysis error, using calibrated geometric fallback:", aiErr);
+    }
+
+    return res.json({ success: true, result: fallbackLayout });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 6. User Story Preference: GET & POST /api/user/story-preference
+app.get("/api/user/story-preference", (req, res) => {
+  try {
+    const { userId } = req.query;
+    const cleanId = String(userId || "default").toLowerCase().trim();
+    const prefs = loadUserStoryPreferencesDatabase();
+    const userPref = prefs[cleanId] || { primaryStoryFrameId: "df_story_9_16_standard", updatedAt: Date.now() };
+    return res.json({ success: true, preference: userPref });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/user/story-preference", (req, res) => {
+  try {
+    const { userId, primaryStoryFrameId } = req.body || {};
+    const cleanId = String(userId || "default").toLowerCase().trim();
+    const prefs = loadUserStoryPreferencesDatabase();
+    prefs[cleanId] = {
+      primaryStoryFrameId: primaryStoryFrameId || null,
+      updatedAt: Date.now(),
+    };
+    saveUserStoryPreferencesDatabase(prefs);
+    return res.json({ success: true, preference: prefs[cleanId] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 7. POST /api/dynamic-frames/verify-export-permission
+app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
+  try {
+    const { frameId, email, userEmail, userId } = req.body || {};
+    if (!frameId) {
+      return res.status(400).json({ error: "frameId is required" });
+    }
+
+    const cleanEmail = String(email || userEmail || "").toLowerCase().trim();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail);
+
+    if (isMaster) {
+      return res.json({ success: true, authorized: true, plan: "MASTER_ADMIN" });
+    }
+
+    const frames = loadDynamicFramesDatabase();
+    const targetFrame = frames.find((f) => f.id === frameId);
+    if (!targetFrame) {
+      // If frame not found in dynamic db, check if it's standard builtin
+      return res.json({ success: true, authorized: true });
+    }
+
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(
+      (u) =>
+        (u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+        (u.userId && u.userId.toLowerCase().trim() === String(userId || "").trim())
+    );
+
+    const userTier = targetUser?.tier || "basic";
+    const allowedPlans: string[] = targetFrame.allowedPlans || ["BASIC", "ADVANCED", "PRO", "VIP DESK"];
+    const isAllowed = isUserPlanAuthorizedForFrame(userTier, allowedPlans);
+
+    if (!isAllowed) {
+      const requiredPlan = allowedPlans[0] || "ADVANCED";
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        upgradeRequired: true,
+        requiredPlan,
+        error: `यह फ्रेम ${requiredPlan} प्लान के लिए उपलब्ध है। इस डिजाइन का उपयोग करने के लिए अपना प्लान अपग्रेड करें।`,
+      });
+    }
+
+    return res.json({ success: true, authorized: true, userTier });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // --- SECURE AUTHENTICATION ENDPOINT ---
 app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
