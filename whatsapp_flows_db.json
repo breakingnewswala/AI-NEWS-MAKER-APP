@@ -1,0 +1,337 @@
+[
+  {
+    "id": "flow_welcome_menu",
+    "name": "मुख्य मेनू और स्वागत फ्लो (Welcome & Main Menu)",
+    "description": "नए ग्राहकों एवं हाय/हेलो पर मुख्य सहायता मेनू प्रस्तुत करता है।",
+    "version": 1,
+    "status": "published",
+    "isActive": true,
+    "trigger": {
+      "type": "first_message",
+      "keywords": [
+        "hi",
+        "hello",
+        "hey",
+        "नमस्ते",
+        "namaste",
+        "menu",
+        "मेनू",
+        "start",
+        "मदद",
+        "सहायता"
+      ],
+      "exactMatch": false
+    },
+    "startNodeId": "node_welcome",
+    "nodes": [
+      {
+        "id": "node_welcome",
+        "type": "message",
+        "title": "स्वागत संदेश",
+        "config": {
+          "text": "🙏 *नमस्कार! AI News Maker (BREAKING NEWS WALA) में आपका स्वागत है।*\n\nहम पत्रकारों और डिजिटल मीडिया के लिए भारत का अग्रणी AI-पावर्ड न्यूज़ स्टूडियो हैं।",
+          "defaultNextNodeId": "node_menu_options"
+        },
+        "position": {
+          "x": 100,
+          "y": 100
+        }
+      },
+      {
+        "id": "node_menu_options",
+        "type": "option",
+        "title": "मुख्य मेनू विकल्प",
+        "config": {
+          "text": "कृपया नीचे दिए गए विकल्पों में से कोई एक संख्या लिखकर भेजें:\n\n1️⃣ *AI News Maker क्या है?*\n2️⃣ *मुख्य सेवाएँ एवं फीचर्स*\n3️⃣ *ग्राफिक कैसे बनाएँ?*\n4️⃣ *वीडियो रील्स कैसे बनाएँ?*\n5️⃣ *प्लान एवं मूल्य (Pricing)*\n6️⃣ *सहायता प्रतिनिधि से बात करें (Live Agent)*",
+          "options": [
+            {
+              "id": "opt_1",
+              "label": "1. AI News Maker क्या है?",
+              "keyword": "1",
+              "nextNodeId": "node_what_is"
+            },
+            {
+              "id": "opt_2",
+              "label": "2. मुख्य सेवाएँ एवं फीचर्स",
+              "keyword": "2",
+              "nextNodeId": "node_services"
+            },
+            {
+              "id": "opt_3",
+              "label": "3. ग्राफिक कैसे बनाएँ?",
+              "keyword": "3",
+              "nextNodeId": "node_graphic_guide"
+            },
+            {
+              "id": "opt_4",
+              "label": "4. वीडियो रील्स कैसे बनाएँ?",
+              "keyword": "4",
+              "nextNodeId": "node_video_guide"
+            },
+            {
+              "id": "opt_5",
+              "label": "5. प्लान एवं मूल्य",
+              "keyword": "5",
+              "nextNodeId": "node_plans"
+            },
+            {
+              "id": "opt_6",
+              "label": "6. सहायता प्रतिनिधि",
+              "keyword": "6",
+              "nextNodeId": "node_handoff"
+            }
+          ],
+          "defaultNextNodeId": "node_faq_fallback"
+        },
+        "position": {
+          "x": 100,
+          "y": 250
+        }
+      },
+      {
+        "id": "node_what_is",
+        "type": "message",
+        "title": "AI News Maker परिचय",
+        "config": {
+          "text": "📰 *AI News Maker (BREAKING NEWS WALA) क्या है?*\n\nयह पत्रकारों, सोशल मीडिया क्रिएटर्स और न्यूज़ चैनलों के लिए विशेष AI स्टूडियो है। केवल खबर का टेक्स्ट पेस्ट करके टीवी स्टाइल 50+ फ्रेम्स में 4:5 एवं 9:16 ग्राफिक्स और HD वीडियो 1 मिनट में तैयार करें।\n\n🌐 वेबसाइट: https://ainewsmaker.online",
+          "defaultNextNodeId": "node_end"
+        },
+        "position": {
+          "x": -200,
+          "y": 450
+        }
+      },
+      {
+        "id": "node_services",
+        "type": "message",
+        "title": "मुख्य सेवाएँ",
+        "config": {
+          "text": "⚡ *मुख्य सेवाएँ:*\n1. 50+ टीवी स्टाइल न्यूज़ फ्रेम्स\n2. AI हेडलाइन और बुलेटिन जनरेटर\n3. वॉइसओवर और म्यूजिक के साथ वीडियो रील्स\n4. e-Paper सोशल मीडिया कार्ड्स\n5. कस्टम चैनल लोगो और फॉन्ट्स\n\n🌐 देखें: https://ainewsmaker.online/#features",
+          "defaultNextNodeId": "node_end"
+        },
+        "position": {
+          "x": -50,
+          "y": 450
+        }
+      },
+      {
+        "id": "node_graphic_guide",
+        "type": "message",
+        "title": "ग्राफिक गाइड",
+        "config": {
+          "text": "🎨 *ग्राफिक कैसे बनाएँ:*\n1. https://ainewsmaker.online पर लॉगिन करें।\n2. 'स्टूडियो' टैब खोलें।\n3. खबर का टेक्स्ट दर्ज करें, AI हेडलाइन चुनें।\n4. मनपसंद फ्रेम चुनकर 'डाउनलोड' पर क्लिक करें।",
+          "defaultNextNodeId": "node_end"
+        },
+        "position": {
+          "x": 100,
+          "y": 450
+        }
+      },
+      {
+        "id": "node_video_guide",
+        "type": "message",
+        "title": "वीडियो गाइड",
+        "config": {
+          "text": "🎬 *वीडियो रील्स कैसे बनाएँ:*\n1. स्टूडियो में 'वीडियो स्टूडियो' चुनें।\n2. खबर का विवरण डालें और AI वॉइसओवर जनरेट करें।\n3. 9:16 या 4:5 रेश्यो में रेंडर पर क्लिक करें।\n4. 30 सेकंड में HD वीडियो तैयार!",
+          "defaultNextNodeId": "node_end"
+        },
+        "position": {
+          "x": 250,
+          "y": 450
+        }
+      },
+      {
+        "id": "node_plans",
+        "type": "message",
+        "title": "प्लान और कॉइन्स",
+        "config": {
+          "text": "💳 *प्लान और रिचार्ज:*\n- *Basic Desk*: शुरुआती पत्रकारों के लिए मानक फ्रेम्स और 50 कार्ड्स दैनिक।\n- *VIP Desk*: असीमित AI हेडलाइन रीजनरेशन, कस्टम फॉन्ट और 4K वीडियो सपोर्ट।\n\n🌐 वॉलेट रिचार्ज: https://ainewsmaker.online/#plans",
+          "defaultNextNodeId": "node_end"
+        },
+        "position": {
+          "x": 400,
+          "y": 450
+        }
+      },
+      {
+        "id": "node_faq_fallback",
+        "type": "faq",
+        "title": "FAQ मिलान या AI उत्तर",
+        "config": {
+          "defaultNextNodeId": "node_end"
+        },
+        "position": {
+          "x": 550,
+          "y": 450
+        }
+      },
+      {
+        "id": "node_handoff",
+        "type": "human_handoff",
+        "title": "मानव सहायता ट्रांसफर",
+        "config": {
+          "text": "नमस्ते! आपका अनुरोध हमारी सहायता टीम को भेज दिया गया है। हमारे प्रतिनिधि जल्द ही आपसे यहाँ संपर्क करेंगे।",
+          "handoffReason": "user_selected_human"
+        },
+        "position": {
+          "x": 700,
+          "y": 450
+        }
+      },
+      {
+        "id": "node_end",
+        "type": "end",
+        "title": "फ्लो समाप्त",
+        "config": {
+          "text": "किसी अन्य सहायता के लिए आप कभी भी संदेश लिख सकते हैं या मेनू देखने के लिए 'MENU' लिखें।"
+        },
+        "position": {
+          "x": 200,
+          "y": 650
+        }
+      }
+    ],
+    "createdAt": 1793862656184,
+    "updatedAt": 1793862656184,
+    "createdByName": "Master Admin"
+  },
+  {
+    "id": "flow_account_support",
+    "name": "अकाउंट और लॉगिन सहायता (Account & Login Support)",
+    "description": "लॉगिन, पासवर्ड या ब्लॉक खाता संबंधी सहायता प्रदान करता है।",
+    "version": 1,
+    "status": "published",
+    "isActive": true,
+    "trigger": {
+      "type": "keyword",
+      "keywords": [
+        "login",
+        "लॉगिन",
+        "पासवर्ड",
+        "password",
+        "अकाउंट",
+        "खाता",
+        "ब्लॉक",
+        "blocked"
+      ],
+      "exactMatch": false
+    },
+    "startNodeId": "node_account_q",
+    "nodes": [
+      {
+        "id": "node_account_q",
+        "type": "question",
+        "title": "समस्या का प्रकार",
+        "config": {
+          "text": "🔐 *अकाउंट सहायता केंद्र*\n\nआपकी समस्या किस प्रकार की है? कृपया विकल्प नंबर लिखकर भेजें:\n1️⃣ पासवर्ड भूल गए या रीसेट करना है\n2️⃣ खाता ब्लॉक (Account Blocked) संदेश आ रहा है\n3️⃣ Google लॉगिन में समस्या\n4️⃣ सहायता प्रतिनिधि से सीधे बात करनी है",
+          "defaultNextNodeId": "node_account_cond"
+        },
+        "position": {
+          "x": 100,
+          "y": 100
+        }
+      },
+      {
+        "id": "node_account_cond",
+        "type": "condition",
+        "title": "शर्त एवं शाखा",
+        "config": {
+          "conditions": [
+            {
+              "operator": "contains",
+              "value": "1",
+              "nextNodeId": "node_pw_reset"
+            },
+            {
+              "operator": "contains",
+              "value": "2",
+              "nextNodeId": "node_blocked_info"
+            },
+            {
+              "operator": "contains",
+              "value": "3",
+              "nextNodeId": "node_google_login"
+            },
+            {
+              "operator": "contains",
+              "value": "4",
+              "nextNodeId": "node_handoff_agent"
+            }
+          ],
+          "defaultNextNodeId": "node_handoff_agent"
+        },
+        "position": {
+          "x": 100,
+          "y": 250
+        }
+      },
+      {
+        "id": "node_pw_reset",
+        "type": "message",
+        "title": "पासवर्ड रीसेट विधि",
+        "config": {
+          "text": "🔑 *पासवर्ड रीसेट करने की विधि:*\n1. https://ainewsmaker.online खोलें।\n2. 'लॉगिन' बटन पर क्लिक करें।\n3. 'पासवर्ड भूल गए?' (Forgot Password) लिंक पर क्लिक करके अपना पंजीकृत ईमेल दर्ज करें।\n4. आपके ईमेल पर रीसेट लिंक प्राप्त होगा।",
+          "defaultNextNodeId": "node_acc_end"
+        },
+        "position": {
+          "x": -100,
+          "y": 400
+        }
+      },
+      {
+        "id": "node_blocked_info",
+        "type": "message",
+        "title": "ब्लॉक खाता प्रक्रिया",
+        "config": {
+          "text": "⚠️ *खाता ब्लॉक स्थिति:*\nसुरक्षा कारणों अथवा नियमों के उल्लंघन के कारण ब्लॉक किए गए खातों की समीक्षा व्यवस्थापक द्वारा की जाती है। कृपया अपना पंजीकृत ईमेल और मोबाइल नंबर यहाँ भेजें ताकि हमारी अनुपालन टीम आपके मामले की जाँच कर सके।",
+          "defaultNextNodeId": "node_handoff_agent"
+        },
+        "position": {
+          "x": 100,
+          "y": 400
+        }
+      },
+      {
+        "id": "node_google_login",
+        "type": "message",
+        "title": "Google लॉगिन सहायता",
+        "config": {
+          "text": "🌐 *Google लॉगिन सहायता:*\nकृपया सुनिश्चित करें कि आप उसी Google खाते से 'Continue with Google' कर रहे हैं जिससे आपने पहली बार खाता बनाया था। ब्राउज़र का कैश (Cache) साफ़ करके पुनः प्रयास करें।",
+          "defaultNextNodeId": "node_acc_end"
+        },
+        "position": {
+          "x": 300,
+          "y": 400
+        }
+      },
+      {
+        "id": "node_handoff_agent",
+        "type": "human_handoff",
+        "title": "प्रतिनिधि को सौंपें",
+        "config": {
+          "text": "नमस्ते! हमने आपकी अकाउंट संबंधी समस्या सहायता प्रतिनिधि को अग्रेषित कर दी है। कृपया अपने पंजीकृत ईमेल का उल्लेख यहाँ कर दें।",
+          "handoffReason": "account_support_handoff"
+        },
+        "position": {
+          "x": 500,
+          "y": 400
+        }
+      },
+      {
+        "id": "node_acc_end",
+        "type": "end",
+        "title": "समाप्त",
+        "config": {
+          "text": "AI News Maker सहायता केंद्र से जुड़ने के लिए धन्यवाद।"
+        },
+        "position": {
+          "x": 200,
+          "y": 600
+        }
+      }
+    ],
+    "createdAt": 1793862656184,
+    "updatedAt": 1793862656184,
+    "createdByName": "Master Admin"
+  }
+]
