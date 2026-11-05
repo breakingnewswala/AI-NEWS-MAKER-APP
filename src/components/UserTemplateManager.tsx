@@ -2197,6 +2197,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             setIsDynamicFrameModalOpen(false);
             setSelectedEditFrame(null);
             refreshDynamicFrames();
+            window.dispatchEvent(new CustomEvent('template_plans_updated'));
             showToast(`✅ नया AI फ्रेम "${newFrame.name}" सफलतापूर्वक पब्लिश किया गया!`);
           }}
         />

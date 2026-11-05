@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -34,9 +34,38 @@ import {
   getCascadingAllowedPlans,
 } from '../lib/graphicTemplatesRegistry';
 import { getEffectiveFrameOptions, FrameOption } from '../lib/HeaderDesigns';
-import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
-import { fetchDynamicFramesFromApi, getLocalDynamicFrames } from '../lib/dynamicFramesManager';
+import { fetchDynamicFramesFromApi, getLocalDynamicFrames, saveDynamicFrameToApi } from '../lib/dynamicFramesManager';
+import { getAuthToken } from '../lib/apiConfig';
+
+export const CANONICAL_FRAME_CATEGORIES = [
+  'Regular Frames',
+  'Story Frames',
+  'Package Frames',
+  'Super Breaking',
+  'Text Breaking',
+  'बयानबाजी',
+  'Special Frames',
+  'Bonus Frames',
+  'Custom Frames',
+] as const;
+
+export type CanonicalFrameCategory = (typeof CANONICAL_FRAME_CATEGORIES)[number];
+
+export function normalizeToCanonicalCategory(cat?: string): CanonicalFrameCategory {
+  if (!cat) return 'Regular Frames';
+  const c = cat.trim();
+  if (c === 'Regular Frame' || c === 'Regular Frames') return 'Regular Frames';
+  if (c === 'Story Frame' || c === 'Story Frames') return 'Story Frames';
+  if (c === 'Package Frame' || c === 'Package Frames') return 'Package Frames';
+  if (c === 'Super Breaking Frame' || c === 'Super Breaking') return 'Super Breaking';
+  if (c === 'Text Breaking Frame' || c === 'Text Breaking') return 'Text Breaking';
+  if (c === 'बयानबाज़ी फ्रेम' || c === 'बयानबाजी' || c === 'बयानबाज़ी') return 'बयानबाजी';
+  if (c === 'Special Frame' || c === 'Special Frames') return 'Special Frames';
+  if (c === 'Bonus Frame' || c === 'Bonus Frames') return 'Bonus Frames';
+  if (c === 'Custom Frame' || c === 'Custom Frames') return 'Custom Frames';
+  return 'Regular Frames';
+}
 
 interface AdminTemplatePlanManagerProps {
   isAdmin: boolean;
@@ -59,7 +88,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   // New Frame Creation Drawer State
   const [isAddingFrame, setIsAddingFrame] = useState(false);
   const [newFrameName, setNewFrameName] = useState('');
-  const [newFrameCategory, setNewFrameCategory] = useState<FrameCategory>('Regular Frame');
+  const [newFrameCategory, setNewFrameCategory] = useState<string>('Regular Frames');
   const [newFrameTier, setNewFrameTier] = useState<string>('BASIC');
   const [newFrameCoinPrice, setNewFrameCoinPrice] = useState<number>(0);
   const [newFrameAssetUrl, setNewFrameAssetUrl] = useState('');
@@ -67,8 +96,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   const [isCreatingFrame, setIsCreatingFrame] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  // AI Frame Generator Modal State
-  const [isDynamicGeneratorOpen, setIsDynamicGeneratorOpen] = useState(false);
+  // Dynamic Frames List (from D. AI Frame Generator database)
   const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>([]);
 
   const refreshFrames = () => {
@@ -91,6 +119,73 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
       window.removeEventListener('template_plans_updated', handleUpdate);
     };
   }, []);
+
+  // Unified frames: Effective static frames + Published dynamic frames
+  const allFrames: FrameOption[] = useMemo(() => {
+    const staticList = frameOptions.map((f) => {
+      const cfg = templateConfigs[f.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[f.id];
+      const normCat = normalizeToCanonicalCategory(cfg?.category || f.category);
+      return {
+        ...f,
+        category: normCat,
+      };
+    });
+
+    const publishedDynamic = (dynamicFramesList || [])
+      .filter((df) => df.publicationStatus === 'published')
+      .map((df) => {
+        const normCat = normalizeToCanonicalCategory(df.designCategory);
+        return {
+          id: df.id,
+          name: df.name,
+          description: df.description || `AI जनरेटेड ${df.aspectRatio} फ्रेम`,
+          category: normCat,
+          isCustom: true,
+          previewUrl: df.previewImageUrl || df.sampleReferenceUrl,
+          assetUrl: df.sampleReferenceUrl,
+        };
+      });
+
+    const seen = new Set<string>();
+    const combined: FrameOption[] = [];
+    for (const item of [...staticList, ...publishedDynamic]) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        combined.push(item);
+      }
+    }
+    return combined;
+  }, [frameOptions, dynamicFramesList, templateConfigs]);
+
+  const getEffectiveConfig = (frameId: string): TemplatePlanConfig => {
+    if (templateConfigs[frameId]) return templateConfigs[frameId];
+    const df = dynamicFramesList.find((d) => d.id === frameId);
+    if (df) {
+      const normCat = normalizeToCanonicalCategory(df.designCategory);
+      return {
+        allowedPlans: (df.allowedPlans as GraphicPlanCategory[]) || ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+        isActive: df.publicationStatus === 'published',
+        version: 'v1.0',
+        category: normCat,
+        selectedTier: df.allowedPlans?.includes('BASIC')
+          ? 'BASIC'
+          : df.allowedPlans?.includes('ADVANCED')
+          ? 'ADVANCED'
+          : df.allowedPlans?.includes('PRO')
+          ? 'PRO'
+          : 'VIP DESK',
+        coinPrice: 0,
+      };
+    }
+    return DEFAULT_TEMPLATE_PLAN_CONFIGS[frameId] || {
+      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+      isActive: true,
+      version: 'v1.0',
+      category: 'Regular Frames',
+      selectedTier: 'BASIC',
+      coinPrice: 0,
+    };
+  };
 
   const handleStartRename = (id: string, currentName: string) => {
     setEditingId(id);
@@ -119,12 +214,23 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   };
 
   // Cascading tier change handler
-  const handleSelectedTierChange = (templateId: string, tier: string) => {
+  const handleSelectedTierChange = async (templateId: string, tier: string) => {
     const cascadingPlans = getCascadingAllowedPlans(tier);
     saveTemplateConfig(templateId, {
       selectedTier: tier,
       allowedPlans: cascadingPlans,
     });
+
+    const df = dynamicFramesList.find((d) => d.id === templateId);
+    if (df) {
+      try {
+        const token = getAuthToken();
+        await saveDynamicFrameToApi({ id: templateId, allowedPlans: cascadingPlans as any }, token);
+      } catch (e) {
+        console.warn('Error syncing dynamic frame tier:', e);
+      }
+    }
+
     refreshFrames();
     setSuccessToast({
       id: templateId,
@@ -134,12 +240,24 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   };
 
   // Category change handler
-  const handleCategoryChange = (templateId: string, category: FrameCategory) => {
-    saveTemplateConfig(templateId, { category });
+  const handleCategoryChange = async (templateId: string, category: string) => {
+    const normCat = normalizeToCanonicalCategory(category);
+    saveTemplateConfig(templateId, { category: normCat });
+
+    const df = dynamicFramesList.find((d) => d.id === templateId);
+    if (df) {
+      try {
+        const token = getAuthToken();
+        await saveDynamicFrameToApi({ id: templateId, designCategory: normCat as any }, token);
+      } catch (e) {
+        console.warn('Error syncing dynamic frame category:', e);
+      }
+    }
+
     refreshFrames();
     setSuccessToast({
       id: templateId,
-      msg: `कैटेगरी बदली: "${category}"`,
+      msg: `कैटेगरी बदली: "${normCat}"`,
     });
     setTimeout(() => setSuccessToast(null), 2500);
   };
@@ -156,12 +274,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     setTimeout(() => setSuccessToast(null), 2500);
   };
 
-  const handleTogglePlan = (templateId: string, plan: GraphicPlanCategory) => {
-    const current = templateConfigs[templateId] || DEFAULT_TEMPLATE_PLAN_CONFIGS[templateId] || {
-      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-      isActive: true,
-      version: 'v1.0',
-    };
+  const handleTogglePlan = async (templateId: string, plan: GraphicPlanCategory) => {
+    const current = getEffectiveConfig(templateId);
     const exists = current.allowedPlans.includes(plan);
     const updatedPlans = exists
       ? current.allowedPlans.filter((p) => p !== plan)
@@ -173,6 +287,17 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     }
 
     saveTemplateConfig(templateId, { allowedPlans: updatedPlans });
+
+    const df = dynamicFramesList.find((d) => d.id === templateId);
+    if (df) {
+      try {
+        const token = getAuthToken();
+        await saveDynamicFrameToApi({ id: templateId, allowedPlans: updatedPlans as any }, token);
+      } catch (e) {
+        console.warn('Error syncing dynamic frame plan toggle:', e);
+      }
+    }
+
     refreshFrames();
     setSuccessToast({
       id: templateId,
@@ -181,14 +306,21 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     setTimeout(() => setSuccessToast(null), 2500);
   };
 
-  const handleToggleActive = (templateId: string) => {
-    const current = templateConfigs[templateId] || DEFAULT_TEMPLATE_PLAN_CONFIGS[templateId] || {
-      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-      isActive: true,
-      version: 'v1.0',
-    };
+  const handleToggleActive = async (templateId: string) => {
+    const current = getEffectiveConfig(templateId);
     const nextState = !current.isActive;
     saveTemplateConfig(templateId, { isActive: nextState });
+
+    const df = dynamicFramesList.find((d) => d.id === templateId);
+    if (df) {
+      try {
+        const token = getAuthToken();
+        await saveDynamicFrameToApi({ id: templateId, publicationStatus: nextState ? 'published' : 'disabled' }, token);
+      } catch (e) {
+        console.warn('Error syncing dynamic frame active status:', e);
+      }
+    }
+
     refreshFrames();
     setSuccessToast({
       id: templateId,
@@ -254,14 +386,10 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     }
   };
 
-  const filteredFrames = frameOptions.filter((f) => {
-    const cfg = templateConfigs[f.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[f.id] || {
-      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-      isActive: true,
-      version: 'v1.0',
-    };
+  const filteredFrames = allFrames.filter((f) => {
+    const cfg = getEffectiveConfig(f.id);
     const matchesPlan = filterPlan === 'all' || cfg.allowedPlans.includes(filterPlan);
-    const frameCat = cfg.category || 'Regular Frame';
+    const frameCat = normalizeToCanonicalCategory(cfg.category || f.category);
     const matchesCategory = filterCategory === 'all' || frameCat === filterCategory;
     const matchesSearch =
       searchQuery.trim() === '' ||
@@ -296,26 +424,16 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 <span>Admin Tier Access Control</span>
               </h3>
               <span className="px-2 py-0.5 bg-red-600/30 border border-red-500/50 text-red-300 text-[10px] font-bold rounded">
-                8 श्रेणियाँ व कैस्केडिंग टियर
+                9 श्रेणियाँ व कैस्केडिंग टियर
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              फ्रेम्स का 8 श्रेणियों में विभाजन, पैकेज टियर एक्सेस कंट्रोल (Basic, Advance, Pro, VIP Desk) और कॉइन-आधारित दैनिक अनलॉक प्रबंधित करें।
+              फ्रेम्स का 9 श्रेणियों में विभाजन, पैकेज टियर एक्सेस कंट्रोल (Basic, Advance, Pro, VIP Desk) और कॉइन-आधारित दैनिक अनलॉक प्रबंधित करें।
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
-          <button
-            type="button"
-            onClick={() => setIsDynamicGeneratorOpen(true)}
-            className="px-3 py-1.5 bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition cursor-pointer"
-            title="AI फ्रेम जनरेटर (Sample Graphic Upload to Dynamic Frame)"
-          >
-            <Sparkles className="w-4 h-4 text-amber-300" />
-            <span>AI फ्रेम जनरेटर</span>
-          </button>
-
           <button
             type="button"
             onClick={() => setIsAddingFrame(!isAddingFrame)}
@@ -389,13 +507,13 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-slate-300 block mb-1">कैटेगरी असाइन करें * (8 श्रेणियाँ)</label>
+              <label className="text-[11px] font-bold text-slate-300 block mb-1">कैटेगरी असाइन करें * (9 श्रेणियाँ)</label>
               <select
                 value={newFrameCategory}
-                onChange={(e) => setNewFrameCategory(e.target.value as FrameCategory)}
+                onChange={(e) => setNewFrameCategory(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-amber-400"
               >
-                {FRAME_CATEGORIES.map((cat) => (
+                {CANONICAL_FRAME_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>
@@ -472,7 +590,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 
       {/* Plan & Category Filter Bar */}
       <div className="space-y-3">
-        {/* Category Pills (All 8 Categories) */}
+        {/* Category Pills (All 9 Canonical Categories) */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
           <span className="text-[11px] font-bold text-slate-400 shrink-0 mr-1 flex items-center gap-1">
             <Folder className="w-3.5 h-3.5 text-amber-400" />
@@ -487,12 +605,12 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            सभी श्रेणियाँ ({frameOptions.length})
+            सभी श्रेणियाँ ({allFrames.length})
           </button>
-          {FRAME_CATEGORIES.map((cat) => {
-            const count = frameOptions.filter((f) => {
-              const cfg = templateConfigs[f.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[f.id];
-              return (cfg?.category || 'Regular Frame') === cat;
+          {CANONICAL_FRAME_CATEGORIES.map((cat) => {
+            const count = allFrames.filter((f) => {
+              const cfg = getEffectiveConfig(f.id);
+              return normalizeToCanonicalCategory(cfg?.category || f.category) === cat;
             }).length;
             const isSelected = filterCategory === cat;
             return (
@@ -558,17 +676,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
       {/* Frame List with Admin Tier Access Control */}
       <div className="space-y-4">
         {filteredFrames.map((frame, index) => {
-          const cfg = templateConfigs[frame.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[frame.id] || {
-            allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-            isActive: true,
-            version: 'v1.0',
-            category: 'Regular Frame',
-            selectedTier: 'BASIC',
-            coinPrice: 0,
-          };
-
+          const cfg = getEffectiveConfig(frame.id);
           const displayName = cfg.customName || frame.name;
-          const assignedCategory = (cfg.category || 'Regular Frame') as FrameCategory;
+          const assignedCategory = normalizeToCanonicalCategory(cfg.category || frame.category);
           const currentTier = cfg.selectedTier || (cfg.allowedPlans.includes('BASIC') ? 'BASIC' : cfg.allowedPlans.includes('ADVANCED') ? 'ADVANCED' : cfg.allowedPlans.includes('PRO') ? 'PRO' : 'VIP DESK');
           const currentCoinPrice = cfg.coinPrice || 0;
 
@@ -684,10 +794,10 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   </label>
                   <select
                     value={assignedCategory}
-                    onChange={(e) => handleCategoryChange(frame.id, e.target.value as FrameCategory)}
+                    onChange={(e) => handleCategoryChange(frame.id, e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-amber-400"
                   >
-                    {FRAME_CATEGORIES.map((cat) => (
+                    {CANONICAL_FRAME_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}
                       </option>
@@ -788,23 +898,6 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
           </div>
         )}
       </div>
-
-      {/* AI Dynamic Frame Generator Modal */}
-      {isDynamicGeneratorOpen && (
-        <DynamicFrameGeneratorModal
-          isOpen={isDynamicGeneratorOpen}
-          onClose={() => setIsDynamicGeneratorOpen(false)}
-          onFramePublished={(newFrame) => {
-            setIsDynamicGeneratorOpen(false);
-            refreshFrames();
-            setSuccessToast({
-              id: newFrame.name,
-              msg: 'नया AI फ्रेम सफलतापूर्वक पब्लिश किया गया!',
-            });
-            setTimeout(() => setSuccessToast(null), 3000);
-          }}
-        />
-      )}
     </div>
   );
 };

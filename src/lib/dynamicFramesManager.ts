@@ -7,6 +7,14 @@ import {
   DynamicDesignCategory,
   DynamicPlanTier,
   UserStoryPreference,
+  FrameLayer,
+  HeaderConfig,
+  FooterConfig,
+  WatermarkConfig,
+  FullStoryCalloutConfig,
+  PoweredByConfig,
+  SafeZoneConfig,
+  StatementOptions,
 } from '../types/dynamicFrame';
 import { getApiBaseUrl } from './apiConfig';
 
@@ -45,12 +53,296 @@ export function isPlanEligibleForFrame(userTier: string | undefined | null, allo
 }
 
 // -------------------------------------------------------------
+// NORMALIZATION FOR BACKWARD COMPATIBILITY
+// -------------------------------------------------------------
+
+export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
+  if (!raw || typeof raw !== 'object') {
+    return DEFAULT_DYNAMIC_FRAMES[0];
+  }
+
+  const isStory = raw.aspectRatio === '9:16';
+
+  // 1. Header Config
+  const rawH = raw.headerConfig || {};
+  const headerConfig: HeaderConfig = {
+    showLogo: rawH.showLogo !== false,
+    logoPosition: rawH.logoPosition || 'top_left',
+    logoRect: rawH.logoRect || (isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : { x: 5, y: 3.5, width: 22, height: 9 }),
+    logoScalePct: typeof rawH.logoScalePct === 'number' ? rawH.logoScalePct : 100,
+    logoPaddingPx: typeof rawH.logoPaddingPx === 'number' ? rawH.logoPaddingPx : 4,
+    showLocation: rawH.showLocation !== false,
+    locationRect: rawH.locationRect || (isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 }),
+    locationStyle: rawH.locationStyle || 'pill',
+    locationBgColor: rawH.locationBgColor || '#DC2626',
+    locationTextColor: rawH.locationTextColor || '#FFFFFF',
+    locationShowIcon: rawH.locationShowIcon !== false,
+    showDate: Boolean(rawH.showDate),
+    dateRect: rawH.dateRect || (isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : { x: 5, y: 18.5, width: 34, height: 3.5 }),
+    dateFormat: rawH.dateFormat || 'D MMMM YYYY',
+    dateRotation: typeof rawH.dateRotation === 'number' ? rawH.dateRotation : 0,
+    dateFontSize: typeof rawH.dateFontSize === 'number' ? rawH.dateFontSize : 20,
+    dateTextColor: rawH.dateTextColor || '#CBD5E1',
+  };
+
+  // 2. Footer Config
+  const rawF = raw.footerConfig || {};
+  const footerConfig: FooterConfig = {
+    footerHeightRatio: typeof rawF.footerHeightRatio === 'number' ? rawF.footerHeightRatio : (isStory ? 0.065 : 0.08),
+    enforcePermanentFooter: true,
+    footerBgColor: rawF.footerBgColor || (isStory ? '#0F172A' : '#FFFFFF'),
+    footerTextColor: rawF.footerTextColor || (isStory ? '#F8FAFC' : '#000000'),
+    footerWidthPct: typeof rawF.footerWidthPct === 'number' ? Math.max(70, Math.min(100, rawF.footerWidthPct)) : 100,
+    footerAlignment: rawF.footerAlignment || 'center',
+    footerInset: rawF.footerInset,
+  };
+
+  // 3. Watermark Config
+  const rawW = raw.watermarkConfig || {};
+  const watermarkConfig: WatermarkConfig = {
+    enabled: Boolean(rawW.enabled),
+    label: rawW.label === 'प्रतीकात्मक फोटो' ? 'प्रतीकात्मक फोटो' : 'AI GENERATED',
+    rect: rawW.rect || (isStory ? { x: 70, y: 3, width: 25, height: 2.8 } : { x: 72, y: 3.5, width: 23, height: 3.5 }),
+    fontSize: typeof rawW.fontSize === 'number' ? rawW.fontSize : 18,
+    opacity: typeof rawW.opacity === 'number' ? rawW.opacity : 0.8,
+    rotation: typeof rawW.rotation === 'number' ? rawW.rotation : 0,
+  };
+
+  // 4. Full Story Callout Config
+  const rawC = raw.fullStoryCalloutConfig || {};
+  const fullStoryCalloutConfig: FullStoryCalloutConfig = {
+    enabled: Boolean(rawC.enabled),
+    text: rawC.text || 'पूरी खबर डिस्क्रिप्शन में...',
+    rect: rawC.rect || (isStory ? { x: 8, y: 88, width: 84, height: 4.5 } : { x: 8, y: 86, width: 84, height: 5 }),
+    fontSize: typeof rawC.fontSize === 'number' ? rawC.fontSize : 22,
+    bgColor: rawC.bgColor || 'rgba(0,0,0,0.7)',
+    borderColor: rawC.borderColor || '#FFE600',
+    showIcon: rawC.showIcon !== false,
+  };
+
+  // 4b. Optional Powered By Branding Config (Separate from Footer and Watermark)
+  const rawP = raw.poweredByConfig || {};
+  const poweredByConfig: PoweredByConfig = {
+    enabled: Boolean(rawP.enabled),
+    text: rawP.text || 'POWERED BY AINEWSMAKER.ONLINE',
+    rect: rawP.rect || (isStory ? { x: 25, y: 94.5, width: 50, height: 2.2 } : { x: 25, y: 93.5, width: 50, height: 2.5 }),
+    fontSize: typeof rawP.fontSize === 'number' ? rawP.fontSize : 16,
+    textColor: rawP.textColor || '#FFFFFF',
+    bgColor: rawP.bgColor || 'rgba(0,0,0,0.6)',
+    borderColor: rawP.borderColor || 'rgba(255,255,255,0.2)',
+    borderWidth: typeof rawP.borderWidth === 'number' ? rawP.borderWidth : 1,
+    opacity: typeof rawP.opacity === 'number' ? rawP.opacity : 0.8,
+    rotation: typeof rawP.rotation === 'number' ? rawP.rotation : 0,
+    alignment: rawP.alignment || 'center',
+  };
+
+  // 5. Safe Zone Config
+  const rawS = raw.safeZoneConfig || {};
+  const safeZoneConfig: SafeZoneConfig = {
+    enabled: rawS.enabled !== false,
+    topMarginPct: typeof rawS.topMarginPct === 'number' ? rawS.topMarginPct : 5,
+    bottomMarginPct: typeof rawS.bottomMarginPct === 'number' ? rawS.bottomMarginPct : 5,
+    leftMarginPct: typeof rawS.leftMarginPct === 'number' ? rawS.leftMarginPct : 5,
+    rightMarginPct: typeof rawS.rightMarginPct === 'number' ? rawS.rightMarginPct : 5,
+    headerSafeAreaPct: typeof rawS.headerSafeAreaPct === 'number' ? rawS.headerSafeAreaPct : 15,
+    footerSafeAreaPct: typeof rawS.footerSafeAreaPct === 'number' ? rawS.footerSafeAreaPct : 10,
+  };
+
+  // 6. Statement Options
+  const isStatementFrame = Boolean(raw.isStatementFrame);
+  const rawStmt = raw.statementOptions || {};
+  const statementOptions: StatementOptions = {
+    solidBackgroundHex: rawStmt.solidBackgroundHex || '#C81E1E',
+    backgroundMode: rawStmt.backgroundMode || 'solid',
+    curatedBackgroundId: rawStmt.curatedBackgroundId,
+    aiPrompt: rawStmt.aiPrompt,
+    cutoutPosition: rawStmt.cutoutPosition || 'right',
+  };
+
+  // 7. Ribbon Config
+  const rawR = raw.ribbonConfig || {};
+  const ribbonConfig = {
+    ...rawR,
+    enabled: Boolean(rawR.enabled),
+    rotation: typeof rawR.rotation === 'number' ? rawR.rotation : 0,
+  };
+
+  // 8. Rebuild Layers with independent layer registration
+  const rawLayers: FrameLayer[] = Array.isArray(raw.layers) ? raw.layers : [];
+  const layers: FrameLayer[] = [];
+
+  // Background Layer
+  if (isStatementFrame) {
+    layers.push({
+      id: 'layer_bg',
+      name: 'स्टेटमेंट बैकग्राउंड',
+      type: 'background',
+      rect: { x: 0, y: 0, width: 100, height: 100 - footerConfig.footerHeightRatio * 100 },
+      visible: true,
+      locked: true,
+      zIndex: 1,
+    });
+  }
+
+  // Photo Layers
+  const photoSlots = Array.isArray(raw.photoSlots) ? raw.photoSlots : [];
+  photoSlots.forEach((slot: any, idx: number) => {
+    layers.push({
+      id: `layer_photo_${slot.id || idx}`,
+      name: slot.name || `फोटो स्लॉट ${idx + 1}`,
+      type: 'photo',
+      rect: slot.rect,
+      visible: true,
+      locked: false,
+      zIndex: 5 + idx,
+    });
+  });
+
+  // Text Layers
+  const textSlots = Array.isArray(raw.textSlots) ? raw.textSlots : [];
+  textSlots.forEach((slot: any, idx: number) => {
+    layers.push({
+      id: `layer_text_${slot.id || idx}`,
+      name: slot.name || `टेक्स्ट लेयर ${idx + 1}`,
+      type: 'text',
+      rect: slot.rect,
+      visible: true,
+      locked: false,
+      zIndex: 15 + idx,
+    });
+  });
+
+  // Ribbon Layer (if enabled)
+  if (ribbonConfig.enabled && ribbonConfig.rect) {
+    layers.push({
+      id: 'layer_ribbon',
+      name: 'ब्रेकिंग रिबन (Ribbon)',
+      type: 'ribbon',
+      rect: ribbonConfig.rect,
+      visible: true,
+      locked: false,
+      zIndex: 25,
+    });
+  }
+
+  // Logo Layer
+  if (headerConfig.showLogo && headerConfig.logoRect) {
+    layers.push({
+      id: 'layer_logo',
+      name: 'चैनल लोगो (Logo)',
+      type: 'logo',
+      rect: headerConfig.logoRect,
+      visible: true,
+      locked: false,
+      zIndex: 30,
+    });
+  }
+
+  // Location Badge Layer
+  if (headerConfig.showLocation && headerConfig.locationRect) {
+    layers.push({
+      id: 'layer_location',
+      name: 'लोकेशन बैज (Location Badge)',
+      type: 'location',
+      rect: headerConfig.locationRect,
+      visible: true,
+      locked: false,
+      zIndex: 31,
+    });
+  }
+
+  // Date Stamp Layer
+  if (headerConfig.showDate && headerConfig.dateRect) {
+    layers.push({
+      id: 'layer_date',
+      name: 'दिनांक मुहर (Date Stamp)',
+      type: 'date',
+      rect: headerConfig.dateRect,
+      visible: true,
+      locked: false,
+      zIndex: 32,
+    });
+  }
+
+  // AI Watermark Layer
+  if (watermarkConfig.enabled && watermarkConfig.rect) {
+    layers.push({
+      id: 'layer_watermark',
+      name: 'वॉटरमार्क (AI Watermark)',
+      type: 'watermark',
+      rect: watermarkConfig.rect,
+      visible: true,
+      locked: false,
+      zIndex: 33,
+    });
+  }
+
+  // Callout Layer
+  if (fullStoryCalloutConfig.enabled && fullStoryCalloutConfig.rect) {
+    layers.push({
+      id: 'layer_callout',
+      name: 'पूरी खबर कॉलआउट (Callout)',
+      type: 'callout',
+      rect: fullStoryCalloutConfig.rect,
+      visible: true,
+      locked: false,
+      zIndex: 34,
+    });
+  }
+
+  // Optional Powered By Branding Layer (Element ID: POWERED_BY_AINEWSMAKER / layer_powered_by)
+  if (poweredByConfig.enabled && poweredByConfig.rect) {
+    layers.push({
+      id: 'layer_powered_by',
+      name: 'POWERED BY बैज (Optional)',
+      type: 'powered_by',
+      rect: poweredByConfig.rect,
+      visible: true,
+      locked: false,
+      zIndex: 35,
+    });
+  }
+
+  // Footer Layer
+  const footerH = footerConfig.footerHeightRatio * 100;
+  const footerW = footerConfig.footerWidthPct || 100;
+  const footerX = footerConfig.footerAlignment === 'left' ? 0 : footerConfig.footerAlignment === 'right' ? 100 - footerW : (100 - footerW) / 2;
+  layers.push({
+    id: 'layer_footer',
+    name: 'स्थाई फुटर (Permanent Footer)',
+    type: 'footer',
+    rect: { x: footerX, y: 100 - footerH, width: footerW, height: footerH },
+    visible: true,
+    locked: true,
+    zIndex: 50,
+  });
+
+  return {
+    ...raw,
+    canvasWidth: 1080,
+    canvasHeight: isStory ? 1920 : 1350,
+    headerConfig,
+    footerConfig,
+    watermarkConfig,
+    fullStoryCalloutConfig,
+    poweredByConfig,
+    safeZoneConfig,
+    statementOptions,
+    ribbonConfig,
+    isStatementFrame,
+    photoSlots,
+    textSlots,
+    layers: rawLayers.length > 0 ? rawLayers : layers,
+  };
+}
+
+// -------------------------------------------------------------
 // DEFAULT SEED DYNAMIC FRAMES (Production-grade 4:5 and 9:16)
 // -------------------------------------------------------------
 
 export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
   // 1. Regular 4:5 Frame (Basic)
-  {
+  normalizeDynamicFrame({
     id: 'df_reg_4_5_clean',
     name: 'रेगुलर क्लासिक 4:5 फ्रेम (Regular Classic)',
     description: 'दैनिक समाचारों के लिए मानक 4:5 पोर्ट्रेट फोटो फ्रेम।',
@@ -69,15 +361,48 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
       showLogo: true,
       logoPosition: 'top_left',
       logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+      logoScalePct: 100,
+      logoPaddingPx: 4,
       showLocation: true,
       locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
       locationStyle: 'pill',
+      showDate: true,
+      dateRect: { x: 5, y: 18.5, width: 34, height: 3.2 },
+      dateFormat: 'D MMMM YYYY',
+      dateRotation: 0,
+      dateFontSize: 20,
+      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
       footerHeightRatio: 0.08,
       enforcePermanentFooter: true,
       footerBgColor: '#FFFFFF',
       footerTextColor: '#000000',
+      footerWidthPct: 100,
+      footerAlignment: 'center',
+    },
+    watermarkConfig: {
+      enabled: true,
+      label: 'AI GENERATED',
+      rect: { x: 74, y: 3.5, width: 21, height: 3.5 },
+      fontSize: 18,
+      opacity: 0.8,
+      rotation: 0,
+    },
+    fullStoryCalloutConfig: {
+      enabled: false,
+      text: 'पूरी खबर डिस्क्रिप्शन में...',
+      rect: { x: 8, y: 86, width: 84, height: 4.5 },
+      fontSize: 22,
+    },
+    safeZoneConfig: {
+      enabled: true,
+      topMarginPct: 5,
+      bottomMarginPct: 5,
+      leftMarginPct: 5,
+      rightMarginPct: 5,
+      headerSafeAreaPct: 15,
+      footerSafeAreaPct: 10,
     },
     photoSlots: [
       {
@@ -105,16 +430,10 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         backgroundColor: '#B91C1C',
       },
     ],
-    layers: [
-      { id: 'l_photo', name: 'मुख्य फोटो', type: 'photo', rect: { x: 0, y: 0, width: 100, height: 61.33 }, visible: true, locked: true, zIndex: 1 },
-      { id: 'l_headline', name: 'हेडलाइन प्लेट', type: 'text', rect: { x: 0, y: 61.33, width: 100, height: 30.67 }, visible: true, locked: true, zIndex: 5 },
-      { id: 'l_header', name: 'चैनल लोगो व लोकेशन', type: 'header', rect: { x: 5, y: 3.5, width: 90, height: 15 }, visible: true, locked: false, zIndex: 10 },
-      { id: 'l_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 92, width: 100, height: 8 }, visible: true, locked: true, zIndex: 20 },
-    ],
-  },
+  }),
 
   // 2. Statement / Bayaanbaazi 4:5 Frame (Advanced)
-  {
+  normalizeDynamicFrame({
     id: 'df_bayaan_4_5_red',
     name: 'बयानबाज़ी रेड कटआउट फ्रेम (Statement Red Cutout)',
     description: 'वक्ता का बैकग्राउंड रिमूव्ड कटआउट व मुख्य बयान/कोटेशन फ्रेम।',
@@ -132,20 +451,55 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
     isStatementFrame: true,
     statementOptions: {
       solidBackgroundHex: '#C81E1E',
+      backgroundMode: 'solid',
+      cutoutPosition: 'right',
     },
     headerConfig: {
       showLogo: true,
       logoPosition: 'top_left',
       logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+      logoScalePct: 100,
+      logoPaddingPx: 4,
       showLocation: true,
       locationRect: { x: 5, y: 13.5, width: 26, height: 4.5 },
       locationStyle: 'pill',
+      showDate: true,
+      dateRect: { x: 5, y: 18.5, width: 34, height: 3.2 },
+      dateFormat: 'D MMMM YYYY',
+      dateRotation: 0,
+      dateFontSize: 20,
+      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
       footerHeightRatio: 0.08,
       enforcePermanentFooter: true,
       footerBgColor: '#FFFFFF',
       footerTextColor: '#000000',
+      footerWidthPct: 100,
+      footerAlignment: 'center',
+    },
+    watermarkConfig: {
+      enabled: true,
+      label: 'AI GENERATED',
+      rect: { x: 74, y: 3.5, width: 21, height: 3.5 },
+      fontSize: 18,
+      opacity: 0.8,
+      rotation: 0,
+    },
+    fullStoryCalloutConfig: {
+      enabled: false,
+      text: 'पूरी खबर डिस्क्रिप्शन में...',
+      rect: { x: 8, y: 86, width: 84, height: 4.5 },
+      fontSize: 22,
+    },
+    safeZoneConfig: {
+      enabled: true,
+      topMarginPct: 5,
+      bottomMarginPct: 5,
+      leftMarginPct: 5,
+      rightMarginPct: 5,
+      headerSafeAreaPct: 15,
+      footerSafeAreaPct: 10,
     },
     photoSlots: [
       {
@@ -197,18 +551,10 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         maxLines: 2,
       },
     ],
-    layers: [
-      { id: 'l_bg', name: 'रेड सॉलिड बैकग्राउंड', type: 'background', rect: { x: 0, y: 0, width: 100, height: 92 }, visible: true, locked: true, zIndex: 1 },
-      { id: 'l_quote', name: 'बयान कोट टेक्स्ट', type: 'text', rect: { x: 8, y: 22, width: 84, height: 26 }, visible: true, locked: false, zIndex: 4 },
-      { id: 'l_cutout', name: 'वक्ता कटआउट', type: 'photo', rect: { x: 50, y: 44, width: 48, height: 48 }, visible: true, locked: false, zIndex: 5 },
-      { id: 'l_name', name: 'वक्ता नाम व पद', type: 'text', rect: { x: 8, y: 72, width: 42, height: 14 }, visible: true, locked: false, zIndex: 6 },
-      { id: 'l_header', name: 'लोगो व लोकेशन', type: 'header', rect: { x: 5, y: 3.5, width: 90, height: 15 }, visible: true, locked: false, zIndex: 10 },
-      { id: 'l_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 92, width: 100, height: 8 }, visible: true, locked: true, zIndex: 20 },
-    ],
-  },
+  }),
 
   // 3. Super Breaking 4:5 Frame (Pro)
-  {
+  normalizeDynamicFrame({
     id: 'df_super_breaking_4_5',
     name: 'सुपर ब्रेकिंग 3D रिबन फ्रेम (Super Breaking)',
     description: '3D रेड ग्लॉसी ब्रेकिंग रिबन, व्हाइट हेडलाइन बॉक्स और विस्तृत फोटो।',
@@ -227,15 +573,42 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
       showLogo: true,
       logoPosition: 'top_left',
       logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+      logoScalePct: 100,
+      logoPaddingPx: 4,
       showLocation: true,
       locationRect: { x: 5, y: 13.5, width: 26, height: 4.5 },
       locationStyle: 'pill',
+      showDate: true,
+      dateRect: { x: 5, y: 18.5, width: 34, height: 3.2 },
+      dateFormat: 'D MMMM YYYY',
+      dateRotation: 0,
+      dateFontSize: 20,
+      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
       footerHeightRatio: 0.08,
       enforcePermanentFooter: true,
       footerBgColor: '#FFE600',
       footerTextColor: '#000000',
+      footerWidthPct: 100,
+      footerAlignment: 'center',
+    },
+    watermarkConfig: {
+      enabled: true,
+      label: 'AI GENERATED',
+      rect: { x: 74, y: 3.5, width: 21, height: 3.5 },
+      fontSize: 18,
+      opacity: 0.8,
+      rotation: 0,
+    },
+    safeZoneConfig: {
+      enabled: true,
+      topMarginPct: 5,
+      bottomMarginPct: 5,
+      leftMarginPct: 5,
+      rightMarginPct: 5,
+      headerSafeAreaPct: 15,
+      footerSafeAreaPct: 10,
     },
     ribbonConfig: {
       enabled: true,
@@ -243,6 +616,7 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
       customRibbonUrl: '/assets/breaking_news_ribbon.svg',
       rect: { x: 15, y: 64, width: 70, height: 9 },
       scalePct: 70,
+      rotation: 0,
     },
     photoSlots: [
       {
@@ -270,22 +644,14 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         backgroundColor: '#FFFFFF',
       },
     ],
-    layers: [
-      { id: 'l_photo', name: 'फोटो बैकग्राउंड', type: 'photo', rect: { x: 0, y: 0, width: 100, height: 68 }, visible: true, locked: true, zIndex: 1 },
-      { id: 'l_white_box', name: 'व्हाइट हेडलाइन प्लेट', type: 'graphic', rect: { x: 0, y: 70, width: 100, height: 22 }, visible: true, locked: true, zIndex: 3 },
-      { id: 'l_ribbon', name: 'ब्रेकिंग रिबन', type: 'ribbon', rect: { x: 15, y: 64, width: 70, height: 9 }, visible: true, locked: false, zIndex: 5 },
-      { id: 'l_headline', name: 'हेडलाइन टेक्स्ट', type: 'text', rect: { x: 6, y: 74, width: 88, height: 16.5 }, visible: true, locked: false, zIndex: 6 },
-      { id: 'l_header', name: 'लोगो व लोकेशन', type: 'header', rect: { x: 5, y: 3.5, width: 90, height: 15 }, visible: true, locked: false, zIndex: 10 },
-      { id: 'l_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 92, width: 100, height: 8 }, visible: true, locked: true, zIndex: 20 },
-    ],
-  },
+  }),
 
   // -------------------------------------------------------------
   // DEDICATED 9:16 SOCIAL MEDIA STORY FRAMES (1080 x 1920 px)
   // -------------------------------------------------------------
 
   // 4. Social Media Story Frame 1: Full-Impact Portrait Story (Basic)
-  {
+  normalizeDynamicFrame({
     id: 'df_story_9_16_standard',
     name: 'स्टैंडर्ड न्यूज़ स्टोरी 9:16 (Standard Story)',
     description: 'सोशल मीडिया इंस्टाग्राम व फेसबुक स्टोरी के लिए 9:16 वर्टिकल न्यूज़ लेआउट।',
@@ -304,15 +670,42 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
       showLogo: true,
       logoPosition: 'top_left',
       logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+      logoScalePct: 100,
+      logoPaddingPx: 4,
       showLocation: true,
       locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
       locationStyle: 'pill',
+      showDate: true,
+      dateRect: { x: 6, y: 14.5, width: 34, height: 2.5 },
+      dateFormat: 'D MMMM YYYY',
+      dateRotation: 0,
+      dateFontSize: 20,
+      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
       footerHeightRatio: 0.065, // ~125px on 1920 height
       enforcePermanentFooter: true,
       footerBgColor: '#0F172A',
       footerTextColor: '#F8FAFC',
+      footerWidthPct: 100,
+      footerAlignment: 'center',
+    },
+    watermarkConfig: {
+      enabled: true,
+      label: 'AI GENERATED',
+      rect: { x: 70, y: 3, width: 25, height: 2.8 },
+      fontSize: 18,
+      opacity: 0.8,
+      rotation: 0,
+    },
+    safeZoneConfig: {
+      enabled: true,
+      topMarginPct: 5,
+      bottomMarginPct: 5,
+      leftMarginPct: 5,
+      rightMarginPct: 5,
+      headerSafeAreaPct: 15,
+      footerSafeAreaPct: 10,
     },
     photoSlots: [
       {
@@ -340,17 +733,10 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         backgroundColor: '#0F172A',
       },
     ],
-    layers: [
-      { id: 'l_photo', name: 'स्टोरी फोटो', type: 'photo', rect: { x: 0, y: 0, width: 100, height: 62 }, visible: true, locked: true, zIndex: 1 },
-      { id: 'l_scrim', name: 'डार्क ग्रेडिएंट बेस', type: 'graphic', rect: { x: 0, y: 55, width: 100, height: 38.5 }, visible: true, locked: true, zIndex: 3 },
-      { id: 'l_headline', name: 'स्टोरी हेडलाइन', type: 'text', rect: { x: 7, y: 66, width: 86, height: 25 }, visible: true, locked: false, zIndex: 5 },
-      { id: 'l_header', name: 'लोगो व लोकेशन', type: 'header', rect: { x: 6, y: 3, width: 88, height: 12 }, visible: true, locked: false, zIndex: 10 },
-      { id: 'l_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 93.5, width: 100, height: 6.5 }, visible: true, locked: true, zIndex: 20 },
-    ],
-  },
+  }),
 
   // 5. Social Media Story Frame 2: Super Breaking 9:16 Story (Advanced)
-  {
+  normalizeDynamicFrame({
     id: 'df_story_9_16_breaking',
     name: 'सुपर ब्रेकिंग स्टोरी 9:16 (Super Breaking Story)',
     description: '3D रिबन, बड़ी ब्रेकिंग हेडलाइन और उच्च प्रभाव वाली 9:16 सोशल स्टोरी।',
@@ -369,15 +755,42 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
       showLogo: true,
       logoPosition: 'top_left',
       logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+      logoScalePct: 100,
+      logoPaddingPx: 4,
       showLocation: true,
       locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
       locationStyle: 'pill',
+      showDate: true,
+      dateRect: { x: 6, y: 14.5, width: 34, height: 2.5 },
+      dateFormat: 'D MMMM YYYY',
+      dateRotation: 0,
+      dateFontSize: 20,
+      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
       footerHeightRatio: 0.065,
       enforcePermanentFooter: true,
       footerBgColor: '#FFE600',
       footerTextColor: '#000000',
+      footerWidthPct: 100,
+      footerAlignment: 'center',
+    },
+    watermarkConfig: {
+      enabled: true,
+      label: 'AI GENERATED',
+      rect: { x: 70, y: 3, width: 25, height: 2.8 },
+      fontSize: 18,
+      opacity: 0.8,
+      rotation: 0,
+    },
+    safeZoneConfig: {
+      enabled: true,
+      topMarginPct: 5,
+      bottomMarginPct: 5,
+      leftMarginPct: 5,
+      rightMarginPct: 5,
+      headerSafeAreaPct: 15,
+      footerSafeAreaPct: 10,
     },
     ribbonConfig: {
       enabled: true,
@@ -385,6 +798,7 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
       customRibbonUrl: '/assets/breaking_news_ribbon.svg',
       rect: { x: 12, y: 60, width: 76, height: 6.8 },
       scalePct: 76,
+      rotation: 0,
     },
     photoSlots: [
       {
@@ -412,18 +826,10 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         backgroundColor: '#FFFFFF',
       },
     ],
-    layers: [
-      { id: 'l_photo', name: 'स्टोरी फोटो', type: 'photo', rect: { x: 0, y: 0, width: 100, height: 64 }, visible: true, locked: true, zIndex: 1 },
-      { id: 'l_plate', name: 'व्हाइट हेडलाइन प्लेट', type: 'graphic', rect: { x: 0, y: 64, width: 100, height: 29.5 }, visible: true, locked: true, zIndex: 3 },
-      { id: 'l_ribbon', name: 'ब्रेकिंग रिबन', type: 'ribbon', rect: { x: 12, y: 60, width: 76, height: 6.8 }, visible: true, locked: false, zIndex: 5 },
-      { id: 'l_headline', name: 'हेडलाइन टेक्स्ट', type: 'text', rect: { x: 6, y: 68, width: 88, height: 23 }, visible: true, locked: false, zIndex: 6 },
-      { id: 'l_header', name: 'लोगो व लोकेशन', type: 'header', rect: { x: 6, y: 3, width: 88, height: 12 }, visible: true, locked: false, zIndex: 10 },
-      { id: 'l_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 93.5, width: 100, height: 6.5 }, visible: true, locked: true, zIndex: 20 },
-    ],
-  },
+  }),
 
   // 6. Social Media Story Frame 3: Statement / Bayaanbaazi 9:16 Story (Pro / VIP)
-  {
+  normalizeDynamicFrame({
     id: 'df_story_9_16_statement',
     name: 'बयानबाज़ी स्टोरी 9:16 (Statement Story)',
     description: 'वक्ता का 9:16 कटआउट, मुख्य कोटेशन और रॉयल गोल्ड/रेड थीम स्टोरी।',
@@ -441,20 +847,49 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
     isStatementFrame: true,
     statementOptions: {
       solidBackgroundHex: '#991B1B',
+      backgroundMode: 'solid',
+      cutoutPosition: 'right',
     },
     headerConfig: {
       showLogo: true,
       logoPosition: 'top_left',
       logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+      logoScalePct: 100,
+      logoPaddingPx: 4,
       showLocation: true,
       locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
       locationStyle: 'pill',
+      showDate: true,
+      dateRect: { x: 6, y: 14.5, width: 34, height: 2.5 },
+      dateFormat: 'D MMMM YYYY',
+      dateRotation: 0,
+      dateFontSize: 20,
+      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
       footerHeightRatio: 0.065,
       enforcePermanentFooter: true,
       footerBgColor: '#000000',
       footerTextColor: '#FFE600',
+      footerWidthPct: 100,
+      footerAlignment: 'center',
+    },
+    watermarkConfig: {
+      enabled: true,
+      label: 'AI GENERATED',
+      rect: { x: 70, y: 3, width: 25, height: 2.8 },
+      fontSize: 18,
+      opacity: 0.8,
+      rotation: 0,
+    },
+    safeZoneConfig: {
+      enabled: true,
+      topMarginPct: 5,
+      bottomMarginPct: 5,
+      leftMarginPct: 5,
+      rightMarginPct: 5,
+      headerSafeAreaPct: 15,
+      footerSafeAreaPct: 10,
     },
     photoSlots: [
       {
@@ -506,18 +941,10 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         maxLines: 2,
       },
     ],
-    layers: [
-      { id: 'l_bg', name: 'रेड सॉलिड बैकग्राउंड', type: 'background', rect: { x: 0, y: 0, width: 100, height: 93.5 }, visible: true, locked: true, zIndex: 1 },
-      { id: 'l_quote', name: 'बयान कोट', type: 'text', rect: { x: 8, y: 16, width: 84, height: 32 }, visible: true, locked: false, zIndex: 4 },
-      { id: 'l_cutout', name: 'वक्ता कटआउट', type: 'photo', rect: { x: 42, y: 48, width: 56, height: 45.5 }, visible: true, locked: false, zIndex: 5 },
-      { id: 'l_name', name: 'वक्ता नाम व पद', type: 'text', rect: { x: 8, y: 76, width: 44, height: 15 }, visible: true, locked: false, zIndex: 6 },
-      { id: 'l_header', name: 'लोगो व लोकेशन', type: 'header', rect: { x: 6, y: 3, width: 88, height: 12 }, visible: true, locked: false, zIndex: 10 },
-      { id: 'l_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 93.5, width: 100, height: 6.5 }, visible: true, locked: true, zIndex: 20 },
-    ],
-  },
+  }),
 
   // 7. Social Media Story Frame 4: Dual Photo Collage 9:16 Story (VIP Desk)
-  {
+  normalizeDynamicFrame({
     id: 'df_story_9_16_collage',
     name: 'डबल फोटो कोलाज स्टोरी 9:16 (Collage Story VIP)',
     description: 'दो समाचार फोटोग्राफ्स का सुंदर कोलाज और आकर्षक हेडलाइन स्टोरी।',
@@ -536,15 +963,42 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
       showLogo: true,
       logoPosition: 'top_left',
       logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+      logoScalePct: 100,
+      logoPaddingPx: 4,
       showLocation: true,
       locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
       locationStyle: 'pill',
+      showDate: true,
+      dateRect: { x: 6, y: 14.5, width: 34, height: 2.5 },
+      dateFormat: 'D MMMM YYYY',
+      dateRotation: 0,
+      dateFontSize: 20,
+      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
       footerHeightRatio: 0.065,
       enforcePermanentFooter: true,
       footerBgColor: '#000000',
       footerTextColor: '#FFE600',
+      footerWidthPct: 100,
+      footerAlignment: 'center',
+    },
+    watermarkConfig: {
+      enabled: true,
+      label: 'AI GENERATED',
+      rect: { x: 70, y: 3, width: 25, height: 2.8 },
+      fontSize: 18,
+      opacity: 0.8,
+      rotation: 0,
+    },
+    safeZoneConfig: {
+      enabled: true,
+      topMarginPct: 5,
+      bottomMarginPct: 5,
+      leftMarginPct: 5,
+      rightMarginPct: 5,
+      headerSafeAreaPct: 15,
+      footerSafeAreaPct: 10,
     },
     photoSlots: [
       {
@@ -580,14 +1034,7 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         backgroundColor: '#1E293B',
       },
     ],
-    layers: [
-      { id: 'l_photo1', name: 'पहली फोटो', type: 'photo', rect: { x: 0, y: 0, width: 100, height: 32 }, visible: true, locked: true, zIndex: 1 },
-      { id: 'l_photo2', name: 'दूसरी फोटो', type: 'photo', rect: { x: 0, y: 33, width: 100, height: 32 }, visible: true, locked: true, zIndex: 2 },
-      { id: 'l_headline', name: 'हेडलाइन प्लेट', type: 'text', rect: { x: 0, y: 65, width: 100, height: 28.5 }, visible: true, locked: false, zIndex: 5 },
-      { id: 'l_header', name: 'लोगो व लोकेशन', type: 'header', rect: { x: 6, y: 3, width: 88, height: 12 }, visible: true, locked: false, zIndex: 10 },
-      { id: 'l_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 93.5, width: 100, height: 6.5 }, visible: true, locked: true, zIndex: 20 },
-    ],
-  },
+  }),
 ];
 
 // -------------------------------------------------------------
@@ -610,7 +1057,7 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
         merged.push(def);
       }
     }
-    return merged;
+    return merged.map(normalizeDynamicFrame);
   } catch {
     return DEFAULT_DYNAMIC_FRAMES;
   }
@@ -619,8 +1066,9 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
 export function saveLocalDynamicFrames(frames: DynamicFrameTemplate[]) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY_FRAMES, JSON.stringify(frames));
-    window.dispatchEvent(new CustomEvent('ai_news_dynamic_frames_updated', { detail: frames }));
+    const normalized = frames.map(normalizeDynamicFrame);
+    localStorage.setItem(STORAGE_KEY_FRAMES, JSON.stringify(normalized));
+    window.dispatchEvent(new CustomEvent('ai_news_dynamic_frames_updated', { detail: normalized }));
   } catch (e) {
     console.warn('Failed to save dynamic frames locally:', e);
   }
@@ -634,8 +1082,9 @@ export async function fetchDynamicFramesFromApi(filterAspectRatio?: DynamicAspec
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.frames)) {
-        saveLocalDynamicFrames(data.frames);
-        return data.frames;
+        const normalized = data.frames.map(normalizeDynamicFrame);
+        saveLocalDynamicFrames(normalized);
+        return normalized;
       }
     }
   } catch (err) {
@@ -666,10 +1115,11 @@ export async function saveDynamicFrameToApi(
 
     const data = await res.json();
     if (res.ok && data.success && data.frame) {
+      const normalizedFrame = normalizeDynamicFrame(data.frame);
       const local = getLocalDynamicFrames();
-      const updated = [data.frame, ...local.filter((f) => f.id !== data.frame.id)];
+      const updated = [normalizedFrame, ...local.filter((f) => f.id !== normalizedFrame.id)];
       saveLocalDynamicFrames(updated);
-      return { success: true, frame: data.frame };
+      return { success: true, frame: normalizedFrame };
     }
     return { success: false, error: data.error || 'फ़्रेम सहेजने में विफल' };
   } catch (e: any) {
@@ -762,6 +1212,8 @@ export interface AiFrameAnalysisResult {
   ribbonDetected?: boolean;
   ribbonRect?: { x: number; y: number; width: number; height: number };
   footerRect: { x: number; y: number; width: number; height: number };
+  dateRect?: { x: number; y: number; width: number; height: number };
+  watermarkRect?: { x: number; y: number; width: number; height: number };
 }
 
 export async function requestAiFrameAnalysis(

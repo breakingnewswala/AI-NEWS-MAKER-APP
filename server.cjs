@@ -18551,8 +18551,13 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
         footerHeightRatio: payload.footerConfig?.footerHeightRatio || (payload.aspectRatio === "4:5" ? 0.08 : 0.065),
         enforcePermanentFooter: true,
         footerBgColor: payload.footerConfig?.footerBgColor || "#FFFFFF",
-        footerTextColor: payload.footerConfig?.footerTextColor || "#000000"
+        footerTextColor: payload.footerConfig?.footerTextColor || "#000000",
+        footerWidthPct: typeof payload.footerConfig?.footerWidthPct === "number" ? Math.max(70, Math.min(100, payload.footerConfig.footerWidthPct)) : 100,
+        footerAlignment: payload.footerConfig?.footerAlignment || "center"
       },
+      watermarkConfig: payload.watermarkConfig || { enabled: false },
+      fullStoryCalloutConfig: payload.fullStoryCalloutConfig || { enabled: false },
+      safeZoneConfig: payload.safeZoneConfig || { enabled: true },
       photoSlots: Array.isArray(payload.photoSlots) ? payload.photoSlots : [],
       textSlots: Array.isArray(payload.textSlots) ? payload.textSlots : [],
       ribbonConfig: payload.ribbonConfig || { enabled: false },
@@ -18642,7 +18647,9 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
       speakerDesigRect: isStory ? { x: 8, y: 84, width: 44, height: 6 } : { x: 8, y: 79.5, width: 42, height: 6 },
       ribbonDetected: false,
       ribbonRect: isStory ? { x: 12, y: 60, width: 76, height: 6.8 } : { x: 15, y: 64, width: 70, height: 9 },
-      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : { x: 0, y: 92, width: 100, height: 8 }
+      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : { x: 0, y: 92, width: 100, height: 8 },
+      dateRect: isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : { x: 5, y: 18.5, width: 34, height: 3.2 },
+      watermarkRect: isStory ? { x: 70, y: 3, width: 25, height: 2.8 } : { x: 74, y: 3.5, width: 21, height: 3.5 }
     };
     if (!sampleBase64 || typeof sampleBase64 !== "string") {
       return res.json({ success: true, result: fallbackLayout });

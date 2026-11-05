@@ -54,7 +54,7 @@ export interface PhotoSlotConfig {
   cornerRadius?: number;
   border?: { color: string; width: number };
   shadow?: boolean;
-  bgRemoval?: boolean; // True for foreground cutout
+  bgRemoval?: boolean; // True for foreground cutout ONLY
   aspectRatioLabel?: string; // e.g. "16:9", "1:1", "4:5", "Free"
 }
 
@@ -76,17 +76,93 @@ export interface TextSlotConfig {
 }
 
 export interface HeaderConfig {
+  // Independent Channel Logo Configuration
   showLogo: boolean;
   logoPosition: 'top_left' | 'top_right' | 'top_center' | 'custom';
   logoRect: NormalizedRect;
+  logoScalePct?: number; // 10% - 100% (default 100%)
+  logoPaddingPx?: number; // 0 - 30px
+  logoInsetPx?: number;
+  logoOpacity?: number;
+  logoAlign?: 'left' | 'center' | 'right';
+
+  // Independent Location Badge Configuration
   showLocation: boolean;
   locationRect: NormalizedRect;
   locationStyle?: 'box' | 'pill' | 'strip' | 'headline_tag';
+  locationBgColor?: string;
+  locationTextColor?: string;
+  locationFontSize?: number;
+  locationPadding?: number;
+  locationBorderRadius?: number;
+  locationShowIcon?: boolean;
+  locationAlign?: 'left' | 'center' | 'right';
+
   showCategory?: boolean;
   categoryRect?: NormalizedRect;
+
+  // Independent Date Stamp Configuration
   showDate?: boolean;
   dateRect?: NormalizedRect;
+  dateFormat?: 'hi_full' | 'dd_mm_yyyy' | 'en_short' | 'hi_simple';
+  dateFontSize?: number;
+  dateFontWeight?: string;
+  dateTextColor?: string;
+  dateOpacity?: number;
+  dateRotation?: number; // 0, 90, 270
+  dateAlign?: 'left' | 'center' | 'right';
+  dateLetterSpacing?: number;
+
   customHeaderUrl?: string;
+}
+
+export interface WatermarkConfig {
+  enabled: boolean;
+  label: 'AI GENERATED' | 'प्रतीकात्मक फोटो';
+  rect: NormalizedRect;
+  fontSize?: number;
+  textColor?: string;
+  bgColor?: string;
+  opacity?: number;
+  rotation?: number; // 0, 90, 270
+  align?: 'left' | 'center' | 'right';
+}
+
+export interface FullStoryCalloutConfig {
+  enabled: boolean;
+  text: string; // default "पूरी खबर डिस्क्रिप्शन में"
+  rect: NormalizedRect;
+  fontSize?: number;
+  textColor?: string;
+  bgColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  align?: 'left' | 'center' | 'right';
+  showIcon?: boolean;
+}
+
+export interface PoweredByConfig {
+  enabled: boolean;
+  text: string; // default "POWERED BY AINEWSMAKER.ONLINE"
+  rect: NormalizedRect;
+  fontSize?: number; // default 16
+  textColor?: string; // default '#FFFFFF'
+  bgColor?: string; // default 'rgba(0,0,0,0.6)'
+  borderColor?: string; // default 'rgba(255,255,255,0.2)'
+  borderWidth?: number; // default 1
+  opacity?: number; // default 0.8
+  rotation?: number; // default 0
+  alignment?: 'left' | 'center' | 'right';
+}
+
+export interface SafeZoneConfig {
+  enabled: boolean;
+  topMarginPct: number;
+  bottomMarginPct: number;
+  leftMarginPct: number;
+  rightMarginPct: number;
+  headerSafeAreaPct?: number;
+  footerSafeAreaPct?: number;
 }
 
 export interface FooterConfig {
@@ -95,6 +171,9 @@ export interface FooterConfig {
   footerBgColor?: string;
   footerTextColor?: string;
   footerIconStyle?: 'color' | 'dark' | 'neutral';
+  footerWidthPct?: number; // 70% to 100% (default 100%)
+  footerAlignment?: 'center' | 'left' | 'right';
+  footerInset?: number; // Inset %
 }
 
 export interface RibbonConfig {
@@ -103,16 +182,49 @@ export interface RibbonConfig {
   customRibbonUrl?: string;
   rect?: NormalizedRect;
   scalePct?: number;
+  rotation?: number;
 }
+
+export type FrameLayerType =
+  | 'header'
+  | 'logo'
+  | 'location'
+  | 'date'
+  | 'watermark'
+  | 'callout'
+  | 'powered_by'
+  | 'footer'
+  | 'photo'
+  | 'text'
+  | 'ribbon'
+  | 'graphic'
+  | 'background';
 
 export interface FrameLayer {
   id: string;
   name: string;
-  type: 'header' | 'footer' | 'photo' | 'text' | 'ribbon' | 'graphic' | 'background';
+  type: FrameLayerType;
   rect: NormalizedRect;
   visible: boolean;
   locked: boolean;
   zIndex: number;
+}
+
+export type StatementBackgroundMode = 'solid' | 'curated' | 'ai_generated';
+
+export interface StatementOptions {
+  speakerName?: string;
+  speakerDesignation?: string;
+  quoteText?: string;
+  solidBackgroundHex?: string;
+  backgroundMode?: StatementBackgroundMode;
+  curatedBackgroundId?: string;
+  curatedBackgroundUrl?: string;
+  aiPrompt?: string;
+  aiGeneratedBackgroundUrl?: string;
+  cutoutPosition?: 'left' | 'right'; // Left or Right positioning for statement cutout
+  cutoutScale?: number;
+  cutoutOffset?: { x: number; y: number };
 }
 
 export interface DynamicFrameTemplate {
@@ -138,16 +250,15 @@ export interface DynamicFrameTemplate {
   photoSlots: PhotoSlotConfig[];
   textSlots: TextSlotConfig[];
   ribbonConfig?: RibbonConfig;
+  watermarkConfig?: WatermarkConfig;
+  fullStoryCalloutConfig?: FullStoryCalloutConfig;
+  poweredByConfig?: PoweredByConfig;
+  safeZoneConfig?: SafeZoneConfig;
   layers: FrameLayer[];
 
   // Statement / Bayaanbaazi specific options
   isStatementFrame?: boolean;
-  statementOptions?: {
-    speakerName?: string;
-    speakerDesignation?: string;
-    quoteText?: string;
-    solidBackgroundHex?: string;
-  };
+  statementOptions?: StatementOptions;
 }
 
 export interface UserStoryPreference {

@@ -32,11 +32,13 @@ import {
   getLocalPrimaryStoryFrameId,
   savePrimaryStoryPreferenceApi,
   DEFAULT_DYNAMIC_FRAMES,
+  normalizeDynamicFrame,
 } from '../lib/dynamicFramesManager';
 import { getUserSubscription } from '../lib/userPlanManager';
 import { downloadCanvas } from '../lib/CanvasExporter';
 import { getApiBaseUrl } from '../lib/apiConfig';
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
+import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
 
 export interface SocialMediaStoryModalProps {
   isOpen: boolean;
@@ -79,7 +81,7 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
   const [customHeadline, setCustomHeadline] = useState('');
   const [customLocation, setCustomLocation] = useState('');
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
-  const [speakerName, setSpeakerName] = useState('मुख्यमंत्री / प्रवक्ता');
+  const [speakerName, setSpeakerName] = useState('मुख्यमंत्री / वक्ता');
   const [speakerDesignation, setSpeakerDesignation] = useState('मध्य प्रदेश शासन');
   const [photoScale, setPhotoScale] = useState(1);
   const [photoOffsetY, setPhotoOffsetY] = useState(0);
@@ -103,13 +105,15 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
     const loadData = async () => {
       const allFrames = await fetchDynamicFramesFromApi('9:16');
       const storyFrames = allFrames.filter((f) => f.aspectRatio === '9:16' && f.publicationStatus === 'published');
-      setFrames(storyFrames.length > 0 ? storyFrames : DEFAULT_DYNAMIC_FRAMES.filter((f) => f.aspectRatio === '9:16'));
+      const loaded = storyFrames.length > 0 ? storyFrames : DEFAULT_DYNAMIC_FRAMES.filter((f) => f.aspectRatio === '9:16');
+      const normalizedList = loaded.map(normalizeDynamicFrame);
+      setFrames(normalizedList);
 
       const prefId = getLocalPrimaryStoryFrameId(currentUser?.email || currentUser?.userId);
       setPrimaryFrameId(prefId || 'df_story_9_16_standard');
 
       // Select primary frame by default or the first 9:16 frame
-      const initial = storyFrames.find((f) => f.id === prefId) || storyFrames[0] || DEFAULT_DYNAMIC_FRAMES[3];
+      const initial = normalizedList.find((f) => f.id === prefId) || normalizedList[0] || DEFAULT_DYNAMIC_FRAMES[3];
       setSelectedFrame(initial);
     };
 
@@ -142,292 +146,6 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
       setIsSettingPrimary(false);
     }
   };
-
-  // Render high-res Canvas (1080 x 1920) for preview and export
-  useEffect(() => {
-    if (!isOpen || !selectedFrame || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    canvas.width = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let isCancelled = false;
-
-    const renderStory = async () => {
-      // 1. Draw Canvas Background
-      const bgColor = selectedFrame.backgroundColor || '#0F172A';
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, 1080, 1920);
-
-      // If background image exists
-      if (selectedFrame.backgroundImageUrl) {
-        try {
-          const bgImg = await loadImage(selectedFrame.backgroundImageUrl);
-          if (!isCancelled && bgImg) {
-            ctx.drawImage(bgImg, 0, 0, 1080, 1920);
-          }
-        } catch {
-          // ignore bg image load error
-        }
-      }
-
-      // 2. Draw Photo Slot(s)
-      const isStatement = selectedFrame.statementConfig?.isStatementFrame || selectedFrame.designCategory === 'बयानबाजी';
-
-      for (const slot of selectedFrame.photoSlots) {
-        const slotRect = {
-          x: (slot.rect.x / 100) * 1080,
-          y: (slot.rect.y / 100) * 1920,
-          w: (slot.rect.width / 100) * 1080,
-          h: (slot.rect.height / 100) * 1920,
-        };
-
-        const imgUrl = customPhotoUrl || '/assets/preview_placeholder.jpg';
-        try {
-          const photo = await loadImage(imgUrl);
-          if (isCancelled) return;
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(slotRect.x, slotRect.y, slotRect.w, slotRect.h);
-          ctx.clip();
-
-          // Calculate aspect ratio cover
-          const pAspect = photo.width / photo.height;
-          const sAspect = slotRect.w / slotRect.h;
-          let drawW = slotRect.w;
-          let drawH = slotRect.h;
-          let offX = slotRect.x;
-          let offY = slotRect.y;
-
-          if (pAspect > sAspect) {
-            drawW = slotRect.h * pAspect * photoScale;
-            drawH = slotRect.h * photoScale;
-            offX = slotRect.x + (slotRect.w - drawW) / 2;
-            offY = slotRect.y + (slotRect.h - drawH) / 2 + photoOffsetY;
-          } else {
-            drawW = slotRect.w * photoScale;
-            drawH = (slotRect.w / pAspect) * photoScale;
-            offX = slotRect.x + (slotRect.w - drawW) / 2;
-            offY = slotRect.y + (slotRect.h - drawH) / 2 + photoOffsetY;
-          }
-
-          ctx.drawImage(photo, offX, offY, drawW, drawH);
-
-          // Subtle gradient overlay at bottom of photo for text legibility
-          if (slot.slotType === 'normal') {
-            const grad = ctx.createLinearGradient(slotRect.x, slotRect.y + slotRect.h * 0.5, slotRect.x, slotRect.y + slotRect.h);
-            grad.addColorStop(0, 'rgba(0,0,0,0)');
-            grad.addColorStop(1, 'rgba(0,0,0,0.85)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(slotRect.x, slotRect.y + slotRect.h * 0.5, slotRect.w, slotRect.h * 0.5);
-          }
-
-          ctx.restore();
-        } catch {
-          // Draw clean photo placeholder if failed
-          ctx.fillStyle = '#1E293B';
-          ctx.fillRect(slotRect.x, slotRect.y, slotRect.w, slotRect.h);
-          ctx.fillStyle = '#94A3B8';
-          ctx.font = '28px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText('फ़ोटो लोड हो रही है...', slotRect.x + slotRect.w / 2, slotRect.y + slotRect.h / 2);
-        }
-      }
-
-      // 3. Draw Header (Logo + Location Pill)
-      const headerCfg = selectedFrame.headerConfig;
-      if (headerCfg?.showLogo !== false) {
-        const logoRect = headerCfg?.logoRect
-          ? {
-              x: (headerCfg.logoRect.x / 100) * 1080,
-              y: (headerCfg.logoRect.y / 100) * 1920,
-              w: (headerCfg.logoRect.width / 100) * 1080,
-              h: (headerCfg.logoRect.height / 100) * 1920,
-            }
-          : { x: 50, y: 50, w: 260, h: 100 };
-
-        // Draw Channel Logo Badge
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(logoRect.x, logoRect.y, logoRect.w, logoRect.h, 16);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 34px "Noto Sans Devanagari", sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(currentUser?.channelName || 'BREAKING NEWS', logoRect.x + 20, logoRect.y + logoRect.h / 2 + 10);
-      }
-
-      if (headerCfg?.showLocation !== false && customLocation) {
-        const locRect = headerCfg?.locationRect
-          ? {
-              x: (headerCfg.locationRect.x / 100) * 1080,
-              y: (headerCfg.locationRect.y / 100) * 1920,
-              w: (headerCfg.locationRect.width / 100) * 1080,
-              h: (headerCfg.locationRect.height / 100) * 1920,
-            }
-          : { x: 50, y: 170, w: 320, h: 60 };
-
-        ctx.fillStyle = 'rgba(220, 38, 38, 0.95)'; // Vivid red pill
-        ctx.beginPath();
-        ctx.roundRect(locRect.x, locRect.y, locRect.w, locRect.h, 30);
-        ctx.fill();
-
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 28px "Noto Sans Devanagari", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`📍 ${customLocation}`, locRect.x + locRect.w / 2, locRect.y + locRect.h / 2 + 9);
-      }
-
-      // 4. Draw Ribbon (if enabled)
-      if (selectedFrame.ribbonConfig && selectedFrame.ribbonConfig.ribbonType !== 'none') {
-        const ribbonR = selectedFrame.ribbonConfig.rect;
-        const rx = (ribbonR.x / 100) * 1080;
-        const ry = (ribbonR.y / 100) * 1920;
-        const rw = (ribbonR.width / 100) * 1080;
-        const rh = (ribbonR.height / 100) * 1920;
-
-        // 3D Ribbon gradient
-        const ribGrad = ctx.createLinearGradient(rx, ry, rx + rw, ry);
-        ribGrad.addColorStop(0, '#B91C1C');
-        ribGrad.addColorStop(0.5, '#EF4444');
-        ribGrad.addColorStop(1, '#991B1B');
-
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.6)';
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetY = 6;
-        ctx.fillStyle = ribGrad;
-        ctx.beginPath();
-        ctx.roundRect(rx, ry, rw, rh, 12);
-        ctx.fill();
-        ctx.restore();
-
-        // Ribbon text
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '900 42px "Noto Sans Devanagari", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(selectedFrame.ribbonConfig.customRibbonText || '🔥 बड़ी खबर', rx + rw / 2, ry + rh / 2 + 14);
-      }
-
-      // 5. Draw Headline and Text Slots
-      for (const tSlot of selectedFrame.textSlots) {
-        const tx = (tSlot.rect.x / 100) * 1080;
-        const ty = (tSlot.rect.y / 100) * 1920;
-        const tw = (tSlot.rect.width / 100) * 1080;
-        const th = (tSlot.rect.height / 100) * 1920;
-
-        // If slot has background color plate
-        if (tSlot.backgroundColor && tSlot.backgroundColor !== 'transparent') {
-          ctx.fillStyle = tSlot.backgroundColor;
-          ctx.beginPath();
-          ctx.roundRect(tx, ty, tw, th, 16);
-          ctx.fill();
-        }
-
-        if (tSlot.role === 'headline') {
-          ctx.fillStyle = tSlot.textColor || '#FFFFFF';
-          const fontSize = Math.min(tSlot.fontSize || 64, 68);
-          ctx.font = `bold ${fontSize}px "Noto Sans Devanagari", sans-serif`;
-          ctx.textAlign = tSlot.alignment || 'left';
-
-          // Wrap headline text
-          const lines = wrapText(ctx, customHeadline, tw - 40, tSlot.maxLines || 3);
-          const lineHeight = fontSize * (tSlot.lineHeight || 1.3);
-          let startY = ty + 40 + fontSize;
-
-          for (const line of lines) {
-            const drawX = tSlot.alignment === 'center' ? tx + tw / 2 : tx + 20;
-            ctx.fillText(line, drawX, startY);
-            startY += lineHeight;
-          }
-        } else if (tSlot.role === 'quote') {
-          // Statement Quote
-          ctx.fillStyle = tSlot.textColor || '#F8FAFC';
-          ctx.font = 'bold 54px "Noto Sans Devanagari", sans-serif';
-          ctx.textAlign = 'left';
-
-          const quoteText = `“ ${customHeadline} ”`;
-          const lines = wrapText(ctx, quoteText, tw - 40, tSlot.maxLines || 4);
-          let startY = ty + 60;
-          for (const line of lines) {
-            ctx.fillText(line, tx + 20, startY);
-            startY += 70;
-          }
-        } else if (tSlot.role === 'speaker_name') {
-          ctx.fillStyle = tSlot.textColor || '#FFE600'; // Gold accent
-          ctx.font = 'bold 44px "Noto Sans Devanagari", sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText(speakerName, tx + 20, ty + 50);
-        } else if (tSlot.role === 'speaker_designation') {
-          ctx.fillStyle = tSlot.textColor || '#CBD5E1';
-          ctx.font = '30px "Noto Sans Devanagari", sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText(speakerDesignation, tx + 20, ty + 40);
-        }
-      }
-
-      // 6. PERMANENT PREDEFINED FOOTER (Canvas Bottom Protected: 1080 x 125 px)
-      // Height: ~6.5% of 1920 = 125px
-      const footerH = 125;
-      const footerY = 1920 - footerH;
-
-      ctx.save();
-      // Footer background
-      ctx.fillStyle = selectedFrame.footerConfig.footerBgColor || '#0B0F19';
-      ctx.fillRect(0, footerY, 1080, footerH);
-
-      // Top glowing separator line
-      const lineGrad = ctx.createLinearGradient(0, footerY, 1080, footerY);
-      lineGrad.addColorStop(0, '#DC2626');
-      lineGrad.addColorStop(0.5, '#EAB308');
-      lineGrad.addColorStop(1, '#DC2626');
-      ctx.fillStyle = lineGrad;
-      ctx.fillRect(0, footerY, 1080, 5);
-
-      // Footer Content: Left Channel Name & Logo
-      ctx.fillStyle = selectedFrame.footerConfig.footerTextColor || '#FFFFFF';
-      ctx.font = 'bold 32px "Noto Sans Devanagari", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(`⚡ ${currentUser?.channelName || 'AI NEWS MAKER'}`, 40, footerY + 70);
-
-      // Footer Content: Right Protected Platform Badge
-      ctx.fillStyle = '#E2E8F0';
-      ctx.font = 'bold 24px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText('POWERED BY AINEWSMAKER.ONLINE', 1040, footerY + 68);
-
-      // Small secondary text
-      ctx.fillStyle = '#94A3B8';
-      ctx.font = '19px "Noto Sans Devanagari", sans-serif';
-      ctx.fillText('सत्यापित डिजिटल समाचार नेटवर्क', 1040, footerY + 98);
-
-      ctx.restore();
-    };
-
-    renderStory();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [
-    isOpen,
-    selectedFrame,
-    customHeadline,
-    customLocation,
-    customPhotoUrl,
-    speakerName,
-    speakerDesignation,
-    photoScale,
-    photoOffsetY,
-    currentUser,
-  ]);
 
   // Helper to load image
   const loadImage = (src: string): Promise<HTMLImageElement> => {
@@ -465,12 +183,527 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
     return lines;
   };
 
+  // Helper for Hindi formatted date
+  const getFormattedDate = (format?: string): string => {
+    const now = new Date();
+    if (format === 'DD-MM-YYYY') {
+      const d = String(now.getDate()).padStart(2, '0');
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      return `${d}-${m}-${now.getFullYear()}`;
+    }
+    if (format === 'YYYY-MM-DD') {
+      const d = String(now.getDate()).padStart(2, '0');
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      return `${now.getFullYear()}-${m}-${d}`;
+    }
+    const monthsHi = ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'];
+    const daysHi = ['रविवार', 'सोमवार', 'मंगलवार', 'बुधवार', 'गुरुवार', 'शुक्रवार', 'शनिवार'];
+    const dayName = daysHi[now.getDay()];
+    const monthName = monthsHi[now.getMonth()];
+    return `${now.getDate()} ${monthName} ${now.getFullYear()}, ${dayName}`;
+  };
+
+  // Render high-res Canvas (1080 x 1920) for preview and export
+  useEffect(() => {
+    if (!isOpen || !selectedFrame || !canvasRef.current) return;
+
+    const frame = normalizeDynamicFrame(selectedFrame);
+    const canvas = canvasRef.current;
+    canvas.width = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let isCancelled = false;
+
+    const renderStory = async () => {
+      // 1. Draw Canvas Background
+      const isStatement = frame.isStatementFrame || frame.designCategory === 'बयानबाजी';
+
+      if (isStatement) {
+        const bgMode = frame.statementOptions?.backgroundMode || 'solid';
+        if (bgMode === 'curated' && frame.statementOptions?.curatedBackgroundId) {
+          const preset = STATEMENT_BACKGROUND_PRESETS.find((p) => p.id === frame.statementOptions?.curatedBackgroundId);
+          const grad = ctx.createRadialGradient(1080 * 0.65, 1920 * 0.35, 60, 1080 * 0.5, 1920 * 0.5, 1920 * 0.7);
+          if (preset?.category === 'crimson') {
+            grad.addColorStop(0, '#DC2626');
+            grad.addColorStop(0.5, '#991B1B');
+            grad.addColorStop(1, '#450A0A');
+          } else if (preset?.category === 'royal_blue') {
+            grad.addColorStop(0, '#1D4ED8');
+            grad.addColorStop(0.5, '#1E3A8A');
+            grad.addColorStop(1, '#030712');
+          } else if (preset?.category === 'black_gold') {
+            grad.addColorStop(0, '#78350F');
+            grad.addColorStop(0.4, '#1C1917');
+            grad.addColorStop(1, '#09090B');
+          } else if (preset?.category === 'charcoal') {
+            grad.addColorStop(0, '#334155');
+            grad.addColorStop(0.6, '#0F172A');
+            grad.addColorStop(1, '#020617');
+          } else {
+            grad.addColorStop(0, '#991B1B');
+            grad.addColorStop(0.6, '#450A0A');
+            grad.addColorStop(1, '#1A0007');
+          }
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 1080, 1920);
+        } else if (bgMode === 'ai_generated') {
+          const aiGrad = ctx.createLinearGradient(0, 0, 1080, 1920);
+          aiGrad.addColorStop(0, '#1E1B4B');
+          aiGrad.addColorStop(0.5, '#0F172A');
+          aiGrad.addColorStop(1, '#020617');
+          ctx.fillStyle = aiGrad;
+          ctx.fillRect(0, 0, 1080, 1920);
+        } else {
+          ctx.fillStyle = frame.statementOptions?.solidBackgroundHex || '#991B1B';
+          ctx.fillRect(0, 0, 1080, 1920);
+        }
+      } else {
+        const bgColor = frame.backgroundColor || '#0F172A';
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, 1080, 1920);
+
+        if (frame.backgroundImageUrl) {
+          try {
+            const bgImg = await loadImage(frame.backgroundImageUrl);
+            if (!isCancelled && bgImg) {
+              ctx.drawImage(bgImg, 0, 0, 1080, 1920);
+            }
+          } catch {
+            // ignore bg image load error
+          }
+        }
+      }
+
+      // 2. Photo Slots
+      const cutoutPos = frame.statementOptions?.cutoutPosition || 'right';
+
+      for (const slot of frame.photoSlots) {
+        let slotRectX = (slot.rect.x / 100) * 1080;
+        let slotRectY = (slot.rect.y / 100) * 1920;
+        let slotRectW = (slot.rect.width / 100) * 1080;
+        let slotRectH = (slot.rect.height / 100) * 1920;
+
+        // In statement frames, adjust horizontal position based on Left vs Right cutout preference
+        if (isStatement && slot.slotType === 'cutout') {
+          if (cutoutPos === 'left') {
+            slotRectX = (4 / 100) * 1080;
+          } else {
+            slotRectX = (48 / 100) * 1080;
+          }
+        }
+
+        const imgUrl = customPhotoUrl || '/assets/preview_placeholder.jpg';
+        try {
+          const photo = await loadImage(imgUrl);
+          if (isCancelled) return;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(slotRectX, slotRectY, slotRectW, slotRectH);
+          ctx.clip();
+
+          const pAspect = photo.width / photo.height;
+          const sAspect = slotRectW / slotRectH;
+          let drawW = slotRectW;
+          let drawH = slotRectH;
+          let offX = slotRectX;
+          let offY = slotRectY;
+
+          if (pAspect > sAspect) {
+            drawW = slotRectH * pAspect * photoScale;
+            drawH = slotRectH * photoScale;
+            offX = slotRectX + (slotRectW - drawW) / 2;
+            offY = slotRectY + (slotRectH - drawH) / 2 + photoOffsetY;
+          } else {
+            drawW = slotRectW * photoScale;
+            drawH = (slotRectW / pAspect) * photoScale;
+            offX = slotRectX + (slotRectW - drawW) / 2;
+            offY = slotRectY + (slotRectH - drawH) / 2 + photoOffsetY;
+          }
+
+          ctx.drawImage(photo, offX, offY, drawW, drawH);
+
+          // Subtle gradient overlay at bottom of photo for text legibility on normal photos
+          if (slot.slotType === 'normal') {
+            const grad = ctx.createLinearGradient(slotRectX, slotRectY + slotRectH * 0.5, slotRectX, slotRectY + slotRectH);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(1, 'rgba(0,0,0,0.85)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(slotRectX, slotRectY + slotRectH * 0.5, slotRectW, slotRectH * 0.5);
+          }
+
+          ctx.restore();
+        } catch {
+          ctx.fillStyle = '#1E293B';
+          ctx.fillRect(slotRectX, slotRectY, slotRectW, slotRectH);
+          ctx.fillStyle = '#94A3B8';
+          ctx.font = '28px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('फ़ोटो लोड हो रही है...', slotRectX + slotRectW / 2, slotRectY + slotRectH / 2);
+        }
+      }
+
+      // 3. Channel Logo (Independent Element with Scale & Padding)
+      const headerCfg = frame.headerConfig;
+      if (headerCfg?.showLogo !== false && headerCfg?.logoRect) {
+        const lx = (headerCfg.logoRect.x / 100) * 1080;
+        const ly = (headerCfg.logoRect.y / 100) * 1920;
+        const lw = (headerCfg.logoRect.width / 100) * 1080;
+        const lh = (headerCfg.logoRect.height / 100) * 1920;
+
+        const scale = (headerCfg.logoScalePct || 100) / 100;
+        const pad = headerCfg.logoPaddingPx || 4;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(lx, ly, lw, lh, 14);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(lx + pad, ly + pad, lw - pad * 2, lh - pad * 2);
+        ctx.clip();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `bold ${Math.round(32 * scale)}px "Noto Sans Devanagari", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(currentUser?.channelName || 'BREAKING NEWS', lx + lw / 2, ly + lh / 2);
+        ctx.restore();
+      }
+
+      // 4. Location Badge (Independent Element)
+      if (headerCfg?.showLocation !== false && customLocation && headerCfg?.locationRect) {
+        const locX = (headerCfg.locationRect.x / 100) * 1080;
+        const locY = (headerCfg.locationRect.y / 100) * 1920;
+        const locW = (headerCfg.locationRect.width / 100) * 1080;
+        const locH = (headerCfg.locationRect.height / 100) * 1920;
+
+        ctx.fillStyle = headerCfg.locationBgColor || 'rgba(220, 38, 38, 0.95)';
+        ctx.beginPath();
+        ctx.roundRect(locX, locY, locW, locH, locH / 2);
+        ctx.fill();
+
+        ctx.fillStyle = headerCfg.locationTextColor || '#FFFFFF';
+        ctx.font = 'bold 28px "Noto Sans Devanagari", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const iconPrefix = headerCfg.locationShowIcon !== false ? '📍 ' : '';
+        ctx.fillText(`${iconPrefix}${customLocation}`, locX + locW / 2, locY + locH / 2);
+      }
+
+      // 5. Date Stamp (Independent Element with Rotation)
+      if (headerCfg?.showDate !== false && headerCfg?.dateRect) {
+        const dateX = (headerCfg.dateRect.x / 100) * 1080;
+        const dateY = (headerCfg.dateRect.y / 100) * 1920;
+        const dateW = (headerCfg.dateRect.width / 100) * 1080;
+        const dateH = (headerCfg.dateRect.height / 100) * 1920;
+        const dateText = getFormattedDate(headerCfg.dateFormat);
+        const rot = headerCfg.dateRotation || 0;
+
+        ctx.save();
+        ctx.translate(dateX + dateW / 2, dateY + dateH / 2);
+        if (rot !== 0) {
+          ctx.rotate((rot * Math.PI) / 180);
+        }
+
+        ctx.fillStyle = headerCfg.dateTextColor || '#CBD5E1';
+        ctx.font = `600 ${headerCfg.dateFontSize || 22}px "Noto Sans Devanagari", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(dateText, 0, 0);
+        ctx.restore();
+      }
+
+      // 6. AI Watermark (Independent Element)
+      if (frame.watermarkConfig?.enabled && frame.watermarkConfig.rect) {
+        const wmRect = frame.watermarkConfig.rect;
+        const wx = (wmRect.x / 100) * 1080;
+        const wy = (wmRect.y / 100) * 1920;
+        const ww = (wmRect.width / 100) * 1080;
+        const wh = (wmRect.height / 100) * 1920;
+
+        ctx.save();
+        ctx.globalAlpha = frame.watermarkConfig.opacity || 0.8;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.beginPath();
+        ctx.roundRect(wx, wy, ww, wh, 6);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `700 ${frame.watermarkConfig.fontSize || 18}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(frame.watermarkConfig.label || 'AI GENERATED', wx + ww / 2, wy + wh / 2);
+        ctx.restore();
+      }
+
+      // 7. Full Story Callout (Independent Element)
+      if (frame.fullStoryCalloutConfig?.enabled && frame.fullStoryCalloutConfig.rect) {
+        const callRect = frame.fullStoryCalloutConfig.rect;
+        const cx = (callRect.x / 100) * 1080;
+        const cy = (callRect.y / 100) * 1920;
+        const cw = (callRect.width / 100) * 1080;
+        const ch = (callRect.height / 100) * 1920;
+
+        ctx.save();
+        ctx.fillStyle = frame.fullStoryCalloutConfig.bgColor || 'rgba(0, 0, 0, 0.75)';
+        ctx.strokeStyle = frame.fullStoryCalloutConfig.borderColor || '#FFE600';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(cx, cy, cw, ch, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `bold ${frame.fullStoryCalloutConfig.fontSize || 22}px "Noto Sans Devanagari", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const calloutIcon = frame.fullStoryCalloutConfig.showIcon !== false ? '👉 ' : '';
+        ctx.fillText(`${calloutIcon}${frame.fullStoryCalloutConfig.text}`, cx + cw / 2, cy + ch / 2);
+        ctx.restore();
+      }
+
+      // 7.5 Optional POWERED BY Graphic Element (Strictly independent, disabled by default)
+      if (frame.poweredByConfig?.enabled && frame.poweredByConfig.rect) {
+        const pbRect = frame.poweredByConfig.rect;
+        const pbx = (pbRect.x / 100) * 1080;
+        const pby = (pbRect.y / 100) * 1920;
+        const pbw = (pbRect.width / 100) * 1080;
+        const pbh = (pbRect.height / 100) * 1920;
+
+        ctx.save();
+        ctx.globalAlpha = frame.poweredByConfig.opacity ?? 0.85;
+
+        if (frame.poweredByConfig.rotation) {
+          ctx.translate(pbx + pbw / 2, pby + pbh / 2);
+          ctx.rotate((frame.poweredByConfig.rotation * Math.PI) / 180);
+          ctx.translate(-(pbx + pbw / 2), -(pby + pbh / 2));
+        }
+
+        if (frame.poweredByConfig.bgColor) {
+          ctx.fillStyle = frame.poweredByConfig.bgColor;
+          ctx.beginPath();
+          ctx.roundRect(pbx, pby, pbw, pbh, 6);
+          ctx.fill();
+        }
+
+        if (frame.poweredByConfig.borderColor && (frame.poweredByConfig.borderWidth ?? 0) > 0) {
+          ctx.strokeStyle = frame.poweredByConfig.borderColor;
+          ctx.lineWidth = frame.poweredByConfig.borderWidth || 1;
+          ctx.beginPath();
+          ctx.roundRect(pbx, pby, pbw, pbh, 6);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = frame.poweredByConfig.textColor || '#FFFFFF';
+        ctx.font = `700 ${frame.poweredByConfig.fontSize || 18}px sans-serif`;
+        const align = frame.poweredByConfig.alignment || 'center';
+        ctx.textAlign = align;
+        ctx.textBaseline = 'middle';
+        const textX = align === 'left' ? pbx + 12 : align === 'right' ? pbx + pbw - 12 : pbx + pbw / 2;
+        ctx.fillText(frame.poweredByConfig.text || 'POWERED BY AINEWSMAKER.ONLINE', textX, pby + pbh / 2);
+        ctx.restore();
+      }
+
+      // 8. Breaking Ribbon (Configurable Layer Position and Rotation)
+      if (frame.ribbonConfig?.enabled && frame.ribbonConfig.rect) {
+        const ribbonR = frame.ribbonConfig.rect;
+        const rx = (ribbonR.x / 100) * 1080;
+        const ry = (ribbonR.y / 100) * 1920;
+        const rw = (ribbonR.width / 100) * 1080;
+        const rh = (ribbonR.height / 100) * 1920;
+        const rot = frame.ribbonConfig.rotation || 0;
+
+        ctx.save();
+        ctx.translate(rx + rw / 2, ry + rh / 2);
+        if (rot !== 0) {
+          ctx.rotate((rot * Math.PI) / 180);
+        }
+
+        const ribGrad = ctx.createLinearGradient(-rw / 2, -rh / 2, rw / 2, -rh / 2);
+        ribGrad.addColorStop(0, '#B91C1C');
+        ribGrad.addColorStop(0.5, '#EF4444');
+        ribGrad.addColorStop(1, '#991B1B');
+
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetY = 6;
+        ctx.fillStyle = ribGrad;
+        ctx.beginPath();
+        ctx.roundRect(-rw / 2, -rh / 2, rw, rh, 12);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '900 42px "Noto Sans Devanagari", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 0;
+        ctx.fillText(frame.ribbonConfig.customRibbonText || '🔥 बड़ी खबर', 0, 0);
+        ctx.restore();
+      }
+
+      // 9. Text Slots (Headline, Statement Quote, Speaker Attribution)
+      for (const tSlot of frame.textSlots) {
+        let tx = (tSlot.rect.x / 100) * 1080;
+        let ty = (tSlot.rect.y / 100) * 1920;
+        let tw = (tSlot.rect.width / 100) * 1080;
+        let th = (tSlot.rect.height / 100) * 1920;
+
+        // In statement frames, reflow text slots based on Left vs Right cutout preference
+        if (isStatement) {
+          if (cutoutPos === 'left') {
+            if (tSlot.role === 'speaker_name' || tSlot.role === 'speaker_designation') {
+              tx = (54 / 100) * 1080;
+            }
+          } else {
+            if (tSlot.role === 'speaker_name' || tSlot.role === 'speaker_designation') {
+              tx = (6 / 100) * 1080;
+            }
+          }
+        }
+
+        if (tSlot.backgroundColor && tSlot.backgroundColor !== 'transparent') {
+          ctx.fillStyle = tSlot.backgroundColor;
+          ctx.beginPath();
+          ctx.roundRect(tx, ty, tw, th, 16);
+          ctx.fill();
+        }
+
+        if (tSlot.role === 'headline') {
+          ctx.fillStyle = tSlot.textColor || '#FFFFFF';
+          const fontSize = Math.min(tSlot.fontSize || 68, 72);
+          ctx.font = `bold ${fontSize}px "Noto Sans Devanagari", sans-serif`;
+          ctx.textAlign = tSlot.alignment || 'left';
+          ctx.textBaseline = 'alphabetic';
+
+          const lines = wrapText(ctx, customHeadline, tw - 40, tSlot.maxLines || 3);
+          const lineHeight = fontSize * (tSlot.lineHeight || 1.3);
+          let startY = ty + 40 + fontSize;
+
+          for (const line of lines) {
+            const drawX = tSlot.alignment === 'center' ? tx + tw / 2 : tx + 20;
+            ctx.fillText(line, drawX, startY);
+            startY += lineHeight;
+          }
+        } else if (tSlot.role === 'quote') {
+          ctx.fillStyle = tSlot.textColor || '#F8FAFC';
+          const fontSize = Math.min(tSlot.fontSize || 66, 68);
+          ctx.font = `bold ${fontSize}px "Noto Sans Devanagari", sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+
+          const quoteText = `“ ${customHeadline} ”`;
+          const lines = wrapText(ctx, quoteText, tw - 40, tSlot.maxLines || 4);
+          let startY = ty + 60;
+          for (const line of lines) {
+            ctx.fillText(line, tx + 20, startY);
+            startY += fontSize * (tSlot.lineHeight || 1.3);
+          }
+        } else if (tSlot.role === 'speaker_name') {
+          ctx.fillStyle = tSlot.textColor || '#FFE600';
+          ctx.font = 'bold 44px "Noto Sans Devanagari", sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(speakerName, tx + 20, ty + th / 2);
+        } else if (tSlot.role === 'speaker_designation') {
+          ctx.fillStyle = tSlot.textColor || '#CBD5E1';
+          ctx.font = '30px "Noto Sans Devanagari", sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(speakerDesignation, tx + 20, ty + th / 2);
+        }
+      }
+
+      // 10. PERMANENT PREDEFINED FOOTER (Protected with Controlled Width)
+      const footerH = (frame.footerConfig.footerHeightRatio || 0.065) * 1920;
+      const footerWpct = Math.max(70, Math.min(100, frame.footerConfig.footerWidthPct || 100));
+      const footerW = (footerWpct / 100) * 1080;
+      const footerAlign = frame.footerConfig.footerAlignment || 'center';
+      const footerX = footerAlign === 'left' ? 0 : footerAlign === 'right' ? 1080 - footerW : (1080 - footerW) / 2;
+      const footerY = 1920 - footerH;
+
+      ctx.save();
+      ctx.fillStyle = frame.footerConfig.footerBgColor || '#0B0F19';
+      if (footerWpct < 100) {
+        ctx.beginPath();
+        ctx.roundRect(footerX, footerY, footerW, footerH, [16, 16, 0, 0]);
+        ctx.fill();
+      } else {
+        ctx.fillRect(footerX, footerY, footerW, footerH);
+      }
+
+      // Glowing top separator line
+      const lineGrad = ctx.createLinearGradient(footerX, footerY, footerX + footerW, footerY);
+      lineGrad.addColorStop(0, '#DC2626');
+      lineGrad.addColorStop(0.5, '#EAB308');
+      lineGrad.addColorStop(1, '#DC2626');
+      ctx.fillStyle = lineGrad;
+      ctx.fillRect(footerX, footerY, footerW, 5);
+
+      // Left Channel Name & Logo
+      ctx.fillStyle = frame.footerConfig.footerTextColor || '#FFFFFF';
+      ctx.font = 'bold 32px "Noto Sans Devanagari", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(`⚡ ${currentUser?.channelName || 'AI NEWS MAKER'}`, footerX + 40, footerY + footerH * 0.55);
+
+      // Right User Profile Footer Details (Channel Handle / WhatsApp / Phone)
+      const userPhone = currentUser?.phone || currentUser?.whatsappNumber;
+      const userSocial = currentUser?.username ? `@${currentUser.username}` : (currentUser?.email ? currentUser.email.split('@')[0] : '');
+
+      ctx.fillStyle = '#E2E8F0';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'alphabetic';
+      if (userPhone) {
+        ctx.fillText(`📱 ${userPhone}`, footerX + footerW - 40, footerY + footerH * 0.52);
+      } else if (userSocial) {
+        ctx.fillText(`🌐 ${userSocial}`, footerX + footerW - 40, footerY + footerH * 0.52);
+      } else {
+        ctx.fillText('⚡ डिजिटल न्यूज़ नेटवर्क', footerX + footerW - 40, footerY + footerH * 0.52);
+      }
+
+      // Small secondary text
+      ctx.fillStyle = '#94A3B8';
+      ctx.font = '19px "Noto Sans Devanagari", sans-serif';
+      if (userSocial && userPhone) {
+        ctx.fillText(`🌐 ${userSocial}`, footerX + footerW - 40, footerY + footerH * 0.8);
+      } else {
+        ctx.fillText('सत्यापित डिजिटल समाचार नेटवर्क', footerX + footerW - 40, footerY + footerH * 0.8);
+      }
+
+      ctx.restore();
+    };
+
+    renderStory();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    isOpen,
+    selectedFrame,
+    customHeadline,
+    customLocation,
+    customPhotoUrl,
+    speakerName,
+    speakerDesignation,
+    photoScale,
+    photoOffsetY,
+    currentUser,
+  ]);
+
   // Handle Export / Download Story
   const handleExportStory = async () => {
     if (!selectedFrame || !canvasRef.current) return;
     setExportError(null);
 
-    // Double-check backend authorization endpoint
     setIsExporting(true);
     try {
       const baseUrl = getApiBaseUrl();
@@ -700,7 +933,7 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
               </div>
             </div>
 
-            {/* Plan Lock Alert Banner (Strict Requirement) */}
+            {/* Plan Lock Alert Banner */}
             {!isEligible && selectedFrame && (
               <div className="bg-gradient-to-r from-amber-500/10 via-amber-600/15 to-orange-500/10 border-2 border-amber-500/40 rounded-xl p-3.5 flex items-center justify-between gap-3 shadow-lg">
                 <div className="flex items-center gap-2.5">
@@ -764,7 +997,7 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
                     />
                   </div>
 
-                  {selectedFrame?.statementConfig?.isStatementFrame && (
+                  {(selectedFrame?.isStatementFrame || selectedFrame?.designCategory === 'बयानबाजी') && (
                     <div>
                       <label className="text-[10px] text-slate-400 block mb-0.5">वक्ता का नाम:</label>
                       <input
