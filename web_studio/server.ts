@@ -22165,43 +22165,143 @@ async function startServer() {
       path.join(process.cwd(), "dist"),
       path.join(process.cwd(), "web_studio", "dist"),
       path.join(process.cwd(), "public"),
+      path.join(process.cwd(), "app", "src", "main", "assets", "news_studio"),
       safeDirname,
       path.join(safeDirname, "dist"),
     ];
-    const distPath = possibleDistPaths.find((p) => fs.existsSync(path.join(p, "index.html"))) || path.join(process.cwd(), "dist");
 
-    console.log(`Serving static studio files from: ${distPath}`);
-    app.use(
-      express.static(distPath, {
-        setHeaders: (res, filePath) => {
-          if (filePath.endsWith(".html")) {
-            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            res.setHeader("Pragma", "no-cache");
-            res.setHeader("Expires", "0");
-          } else if (filePath.includes("/assets/")) {
-            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    const hasValidBuiltBundle = (dir: string): boolean => {
+      try {
+        const idxPath = path.join(dir, "index.html");
+        if (!fs.existsSync(idxPath)) return false;
+        const html = fs.readFileSync(idxPath, "utf-8");
+        const scriptMatch = html.match(/src=["'](?:\.\/|\/)?assets\/(index-[^"']+\.js)["']/);
+        if (scriptMatch && scriptMatch[1]) {
+          return fs.existsSync(path.join(dir, "assets", scriptMatch[1]));
+        }
+        const assetsDir = path.join(dir, "assets");
+        if (fs.existsSync(assetsDir)) {
+          return fs.readdirSync(assetsDir).some((f) => f.startsWith("index-") && f.endsWith(".js"));
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    };
+
+    const findAnyAvailableIndexJs = (): { dir: string; jsFile: string; cssFile?: string } | null => {
+      for (const p of possibleDistPaths) {
+        try {
+          const assetsDir = path.join(p, "assets");
+          if (fs.existsSync(assetsDir)) {
+            const files = fs.readdirSync(assetsDir);
+            const jsFile = files.find((f) => f.startsWith("index-") && f.endsWith(".js"));
+            if (jsFile) {
+              const cssFile = files.find((f) => f.startsWith("index-") && f.endsWith(".css"));
+              return { dir: p, jsFile, cssFile };
+            }
           }
-        },
-      })
-    );
-    // Permanent 301 Redirect: Complete eradication of Lite Version routes
-    app.get(["/lite", "/lite/*"], (_req, res) => {
-      res.redirect(301, "/");
-    });
+        } catch {}
+      }
+      return null;
+    };
 
-    app.get("*", (req, res) => {
-      if (req.path.startsWith("/api/")) {
-        return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
+    const validDistPath = possibleDistPaths.find((p) => hasValidBuiltBundle(p));
+    const availableBundle = findAnyAvailableIndexJs();
+
+    if (!validDistPath && !availableBundle) {
+      console.warn("⚠️ No pre-built JS bundle found in dist/ or public/; falling back to live Vite server middleware.");
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          host: "0.0.0.0",
+          port: PORT,
+          watch: null,
+        },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+      app.use("*", async (req, res, next) => {
+        const url = req.originalUrl;
+        if (url.startsWith("/api/")) {
+          return res.status(404).json({ success: false, error: `API route not found: ${req.method} ${url}` });
+        }
+        try {
+          const indexPath = path.resolve(process.cwd(), "index.html");
+          let template = fs.readFileSync(indexPath, "utf-8");
+          template = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ "Content-Type": "text/html" }).end(template);
+        } catch (e: any) {
+          next(e);
+        }
+      });
+    } else {
+      const distPath =
+        validDistPath ||
+        (availableBundle ? availableBundle.dir : null) ||
+        possibleDistPaths.find((p) => fs.existsSync(path.join(p, "index.html"))) ||
+        path.join(process.cwd(), "dist");
+
+      console.log(`Serving static studio files from: ${distPath}`);
+
+      const staticPathsToMount = Array.from(new Set([distPath, ...possibleDistPaths.filter((p) => fs.existsSync(p))]));
+      for (const staticDir of staticPathsToMount) {
+        app.use(
+          express.static(staticDir, {
+            setHeaders: (res, filePath) => {
+              if (filePath.endsWith(".html")) {
+                res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                res.setHeader("Pragma", "no-cache");
+                res.setHeader("Expires", "0");
+              } else if (filePath.includes("/assets/")) {
+                res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+              }
+            },
+          })
+        );
       }
-      const ext = path.extname(req.path);
-      if (ext && ext !== ".html") {
-        return res.status(404).json({ success: false, error: "Not Found" });
-      }
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+
+      // Permanent 301 Redirect: Complete eradication of Lite Version routes
+      app.get(["/lite", "/lite/*"], (_req, res) => {
+        res.redirect(301, "/");
+      });
+
+      app.get("*", (req, res) => {
+        if (req.path.startsWith("/api/")) {
+          return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
+        }
+        const ext = path.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+
+        const indexHtmlPath = path.join(distPath, "index.html");
+        try {
+          let html = fs.readFileSync(indexHtmlPath, "utf-8");
+          const scriptMatch = html.match(/src=["'](?:\.\/|\/)?assets\/(index-[^"']+\.js)["']/);
+          if (scriptMatch && scriptMatch[1]) {
+            const expectedJs = scriptMatch[1];
+            const jsExistsAnywhere = staticPathsToMount.some((d) => fs.existsSync(path.join(d, "assets", expectedJs)));
+            if (!jsExistsAnywhere) {
+              const fallbackBundle = findAnyAvailableIndexJs();
+              if (fallbackBundle) {
+                html = html.replace(expectedJs, fallbackBundle.jsFile);
+                if (fallbackBundle.cssFile) {
+                  html = html.replace(/index-[^"']+\.css/, fallbackBundle.cssFile);
+                }
+              }
+            }
+          }
+          return res.status(200).set({ "Content-Type": "text/html" }).send(html);
+        } catch {
+          return res.sendFile(indexHtmlPath);
+        }
+      });
+    }
   }
 
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {

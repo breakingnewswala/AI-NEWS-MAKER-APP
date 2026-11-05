@@ -1,0 +1,26 @@
+{
+  "flowAutomationEnabled": true,
+  "geminiModel": "gemini-3.5-flash",
+  "aiModel": "gemini-3.5-flash",
+  "fallbackReply": "नमस्ते! आपका संदेश हमें मिल गया है। हमारे सहायता प्रतिनिधि जल्द ही आपसे यहाँ संपर्क करेंगे।",
+  "defaultHandoffMessage": "नमस्ते! आपका संदेश हमें मिल गया है। हमारे सहायता प्रतिनिधि जल्द ही आपसे यहाँ संपर्क करेंगे।",
+  "handoffKeywords": [
+    "agent",
+    "human",
+    "support",
+    "person",
+    "executive",
+    "मानव",
+    "व्यक्ति",
+    "प्रतिनिधि",
+    "कस्टमर केयर",
+    "सहायता टीम",
+    "कस्टमर सपोर्ट",
+    "बात करनी है"
+  ],
+  "sessionTimeoutMinutes": 45,
+  "businessHoursEnabled": false,
+  "businessHoursStart": "09:00",
+  "businessHoursEnd": "22:00",
+  "outOfHoursReply": "नमस्ते! हमारे सहायता केंद्र का कार्य समय समाप्त हो गया है। हमारी टीम कार्य समय में आपके संदेश का उत्तर देगी।"
+}
