@@ -186,7 +186,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   currentUser,
 }) => {
   const isAdminOrSuperAdmin = isUserAdmin(currentUser) || isUserSuperAdmin(currentUser);
-  const userPlan = (currentUser?.package || currentUser?.role || currentUser?.tier || 'basic').toLowerCase().trim();
+  const rawPlanField = isAdminOrSuperAdmin
+    ? 'admin'
+    : (currentUser?.tier || currentUser?.package || (currentUser as any)?.planName || currentUser?.role || 'basic');
+  const userPlan = String(rawPlanField).toLowerCase().trim();
   const isVipDeskUser = Boolean(
     isAdminOrSuperAdmin ||
     ['ultra', 'vip_dash', 'vip-dash', 'vip', 'vip_desk', 'vip desk'].includes(userPlan) ||
@@ -461,6 +464,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       if (typeof d.selectedHeadlineIndex === 'number') setSelectedHeadlineIndex(d.selectedHeadlineIndex);
       if (d.linkUrl !== undefined) setLinkUrl(d.linkUrl);
       if (d.inputText !== undefined) setInputText(d.inputText);
+      if (d.canonicalContext) setCanonicalContext(d.canonicalContext);
       if (d.activeGeneratedProvider) setActiveGeneratedProvider(d.activeGeneratedProvider);
       if (d.error) setError(d.error);
       else setError(null);
@@ -835,12 +839,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     setSelectedHeadlineIndex(0);
     setGeneratedAiImageUrl(null);
 
+    const isFromHomeCard = Boolean(extraData?.newsId);
     window.dispatchEvent(
       new CustomEvent('ai_news_show_branded_loader', {
-        detail: {
-          mode: 'ai_generation',
-          title: 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
-        },
+        detail: isFromHomeCard
+          ? {
+              mode: 'graphic_preparation',
+              title: 'संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...',
+              subtitles: [
+                'चुनी गई खबर के तथ्यों के आधार पर हेडलाइन, कैप्शन और ग्राफिक सामग्री तैयार की जा रही है।',
+              ],
+            }
+          : {
+              mode: 'ai_generation',
+              title: 'खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
+            },
       })
     );
 
@@ -848,7 +861,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     const targetMaxLines = tplConfig.headline_max_lines;
 
     try {
-
       const controller = new AbortController();
       currentAbortControllerRef.current = controller;
       isResetRef.current = false;
@@ -857,7 +869,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          input: effectiveText || extraData?.title || undefined,
+          newsId: extraData?.newsId || undefined,
+          title: extraData?.title || undefined,
+          summary: extraData?.summary || undefined,
+          fullNews: extraData?.fullNews || effectiveText || undefined,
+          fromHomeCard: isFromHomeCard,
+          input: effectiveText || extraData?.fullNews || extraData?.summary || extraData?.title || undefined,
           linkUrl: effectiveLink || undefined,
           imageUrl: extraData?.imageUrl || card.images.main || undefined,
           customPrompt: customPrompt.trim() || undefined,
@@ -901,26 +918,19 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       if (res.category) res.category = cleanCategoryField(res.category);
       setResult(res);
       setActiveGeneratedProvider((data.data?.actualProvider as ('gemini' | 'openai')) || aiProvider);
-      if (res.canonicalContext) {
-        setCanonicalContext(res.canonicalContext);
-        try {
-          localStorage.setItem('ai_news_canonical_context', JSON.stringify(res.canonicalContext));
-        } catch {}
-      } else {
-        const derivedCtx = {
-          sourceUrl: linkUrl || extraData?.url || '',
-          title: res.headline || extraData?.title || '',
-          articleText: extraData?.fullNews || extraData?.summary || inputText || '',
-          mainEvent: res.headline || '',
-          location: res.location || '',
-          category: res.category || '',
-          extractedAt: new Date().toISOString(),
-        };
-        setCanonicalContext(derivedCtx);
-        try {
-          localStorage.setItem('ai_news_canonical_context', JSON.stringify(derivedCtx));
-        } catch {}
-      }
+      const syncedCanonicalCtx = res.canonicalContext || {
+        sourceUrl: linkUrl || extraData?.url || '',
+        title: extraData?.title || res.headline || '',
+        articleText: extraData?.fullNews || extraData?.summary || inputText || res.summary || '',
+        mainEvent: res.headline || '',
+        location: res.location || extraData?.location || '',
+        category: res.category || extraData?.category || '',
+        extractedAt: new Date().toISOString(),
+      };
+      setCanonicalContext(syncedCanonicalCtx);
+      try {
+        localStorage.setItem('ai_news_canonical_context', JSON.stringify(syncedCanonicalCtx));
+      } catch {}
 
       let opts: string[] = [];
       if (Array.isArray(res.headlineOptions) && res.headlineOptions.length > 0) {
@@ -1012,6 +1022,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
         headlineOptions: finalOpts,
+        regenerationUsed: false,
+        regeneratedHeadlines: undefined,
         highlightWords: res.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -1041,6 +1053,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             selectedHeadlineIndex: 0,
             linkUrl: effectiveLink || url,
             inputText: effectiveText,
+            canonicalContext: syncedCanonicalCtx,
             activeGeneratedProvider: (data.data?.actualProvider as ('gemini' | 'openai')) || aiProvider,
             error: null,
           },
@@ -1133,7 +1146,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       new CustomEvent('ai_news_show_branded_loader', {
         detail: {
           mode: 'ai_generation',
-          title: 'अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
+          title: 'खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...',
         },
       })
     );
@@ -1186,8 +1199,23 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const res: AIAnalysisResult = data.data;
       if (res.headline) res.headline = cleanHeadlineText(res.headline);
       if (res.formattedHeadline) res.formattedHeadline = cleanHeadlineText(res.formattedHeadline);
+      if (res.location) res.location = cleanLocationField(res.location);
+      if (res.category) res.category = cleanCategoryField(res.category);
       setResult(res);
       setActiveGeneratedProvider((data.data?.actualProvider as ('gemini' | 'openai')) || effectiveProvider);
+      const syncedCanonicalCtx = res.canonicalContext || {
+        sourceUrl: effectiveLink || linkUrl || '',
+        title: res.headline || '',
+        articleText: inputText || res.summary || '',
+        mainEvent: res.headline || '',
+        location: res.location || '',
+        category: res.category || '',
+        extractedAt: new Date().toISOString(),
+      };
+      setCanonicalContext(syncedCanonicalCtx);
+      try {
+        localStorage.setItem('ai_news_canonical_context', JSON.stringify(syncedCanonicalCtx));
+      } catch {}
 
       let rawOpts: string[] = [];
       if (Array.isArray(res.headlineOptions) && res.headlineOptions.length > 0) {
@@ -1238,6 +1266,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
         headlineOptions: finalOpts,
+        regenerationUsed: false,
+        regeneratedHeadlines: undefined,
         highlightWords: res.highlightWords || [],
         location: finalLoc,
         summary: effectiveCaption,
@@ -1250,6 +1280,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         },
         extractedArticlePhotos: card.extractedArticlePhotos,
       });
+
+      window.dispatchEvent(
+        new CustomEvent('ai_tools_state_synced', {
+          detail: {
+            result: res,
+            headlineOptions: finalOpts,
+            selectedHeadlineIndex: 0,
+            linkUrl: effectiveLink || linkUrl,
+            inputText: effectiveText,
+            canonicalContext: syncedCanonicalCtx,
+            activeGeneratedProvider: (data.data?.actualProvider as ('gemini' | 'openai')) || effectiveProvider,
+            error: null,
+          },
+        })
+      );
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(effectiveCaption).catch(() => {});
@@ -1324,8 +1369,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const handleRegenerateHeadlines = async () => {
     if (isRegenerating || loading) return;
 
-    const userRole = (currentUser?.role || '').toLowerCase();
-    const rawTier = (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
+    const userRole = isAdminOrSuperAdmin ? 'admin' : (currentUser?.role || '').toLowerCase();
+    const rawTier = isAdminOrSuperAdmin ? 'admin' : (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
     const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
 
     if (card.regenerationUsed || (result && (result as any).regenerationUsed)) {
@@ -1347,12 +1392,21 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     setError(null);
     setRegenSuccessMsg(null);
 
-    const activeCtx = canonicalContext || result?.canonicalContext || {
-      sourceUrl: linkUrl || card.sourceUrl || '',
-      title: result?.headline || card.headline || '',
-      articleText: inputText || result?.summary || card.summary || '',
-      location: result?.location || card.location || '',
-      category: result?.category || card.category || '',
+    const activeCtx = {
+      ...(canonicalContext || result?.canonicalContext || {}),
+      sourceUrl: canonicalContext?.sourceUrl || result?.canonicalContext?.sourceUrl || linkUrl || autoFillNews?.url || card.sourceUrl || '',
+      title: canonicalContext?.title || result?.canonicalContext?.title || autoFillNews?.title || card.originalHeadline || result?.headline || card.headline || '',
+      articleText:
+        canonicalContext?.articleText ||
+        result?.canonicalContext?.articleText ||
+        autoFillNews?.fullNews ||
+        autoFillNews?.summary ||
+        inputText ||
+        result?.summary ||
+        card.summary ||
+        '',
+      location: canonicalContext?.location || result?.canonicalContext?.location || result?.location || card.location || autoFillNews?.location || '',
+      category: canonicalContext?.category || result?.canonicalContext?.category || result?.category || card.category || autoFillNews?.category || '',
     };
 
     const activeDraftId = card.draftId || card.id || card.sourceNewsId || autoFillNews?.newsId || (result as any)?.draftId || `draft-${Date.now()}`;
@@ -1360,15 +1414,17 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     try {
       const payload = {
         draftId: activeDraftId,
+        newsId: card.sourceNewsId || autoFillNews?.newsId || undefined,
         generationRequestId: `req-regen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         canonicalContext: activeCtx,
-        sourceHeadline: result?.headline || card.headline || '',
-        summary: inputText || result?.summary || card.summary || '',
-        location: result?.location || card.location || '',
+        sourceHeadline: activeCtx.title || result?.headline || card.headline || '',
+        summary: activeCtx.articleText || inputText || result?.summary || card.summary || '',
+        location: activeCtx.location || result?.location || card.location || '',
         previousHeadlines: headlineOptions.slice(0, 5),
         template_id: card.templateId || 'graphic_001',
         channelUsername: card.socialHandle || currentUser?.username || '',
         userTier: rawTier,
+        role: userRole,
         email: currentUser?.email || 'admin.ainewsmaker@gmail.com',
         userId: currentUser?.userId || currentUser?.uid || 'reporter-admin-01',
         aiProvider,
@@ -1444,19 +1500,18 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         setHeadlineOptions(combined10);
         setSelectedHeadlineIndex(initial5.length); // Auto-select the first new option (index 5)
         const topH = new5Options[0];
-        setResult((prev) =>
-          prev
-            ? {
-                ...prev,
-                headline: topH,
-                formattedHeadline: topH,
-                headlineOptions: combined10,
-                regenerationUsed: true,
-                regeneratedHeadlines: new5Options,
-                canonicalContext: (data && data.canonicalContext) || activeCtx,
-              }
-            : null
-        );
+        const updatedResult: AIAnalysisResult | null = result
+          ? {
+              ...result,
+              headline: topH,
+              formattedHeadline: topH,
+              headlineOptions: combined10,
+              regenerationUsed: true,
+              regeneratedHeadlines: new5Options,
+              canonicalContext: (data && data.canonicalContext) || activeCtx,
+            }
+          : null;
+        setResult(updatedResult);
         if (data && data.actualProvider) {
           setActiveGeneratedProvider(data.actualProvider);
         }
@@ -1467,6 +1522,19 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           regenerationUsed: true,
           regeneratedHeadlines: new5Options,
         });
+
+        window.dispatchEvent(
+          new CustomEvent('ai_tools_state_synced', {
+            detail: {
+              result: updatedResult,
+              headlineOptions: combined10,
+              selectedHeadlineIndex: initial5.length,
+              canonicalContext: (data && data.canonicalContext) || activeCtx,
+              activeGeneratedProvider: (data && data.actualProvider) || activeGeneratedProvider || aiProvider,
+              error: null,
+            },
+          })
+        );
 
         if (data && data.remainingCoins !== undefined) {
           setWalletBalance(data.remainingCoins);
@@ -1550,42 +1618,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
   return (
     <div className="space-y-3 relative">
-      {/* Dedicated Viewport-Centered Loading Modal ("खबर जनरेट हो रही है, वेट करें") */}
-      {loading && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-950/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-neutral-900 border-2 border-amber-500/60 rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in zoom-in-95">
-            {/* Spinning glowing circular indicator */}
-            <div className="relative w-20 h-20 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-amber-500/20 animate-ping" />
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 border-2 border-amber-500/60 flex items-center justify-center shadow-lg">
-                <Loader2 className="w-9 h-9 text-yellow-400 animate-spin" />
-              </div>
-              <Sparkles className="w-5 h-5 text-amber-300 absolute -top-1 -right-1 animate-bounce" />
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-lg sm:text-xl font-black text-white font-['Baloo_2'] tracking-wide">
-                अभी खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...
-              </h3>
-              <p className="text-xs sm:text-sm text-amber-300 font-semibold min-h-[36px] flex items-center justify-center transition-all px-2">
-                {loadingStages[loadingStageIndex]}
-              </p>
-            </div>
-
-            {/* Smooth progress bar */}
-            <div className="w-full bg-neutral-800 rounded-full h-2 overflow-hidden">
-              <div
-                className="bg-gradient-to-r from-amber-500 to-yellow-400 h-2 rounded-full animate-pulse transition-all duration-700"
-                style={{ width: `${Math.min(100, (loadingStageIndex + 1) * 25)}%` }}
-              />
-            </div>
-
-            <p className="text-[11px] text-neutral-400">
-              ⚡ AI कुछ ही क्षणों में 5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन प्रस्तुत करेगा
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* AI Card Official Information Banner */}
       <div className="bg-blue-950/40 border border-blue-800/60 rounded-xl p-3 flex items-start gap-2.5 text-blue-200">
@@ -2025,8 +2057,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           </div>
 
           {(() => {
-            const userRole = (currentUser?.role || '').toLowerCase();
-            const rawTier = (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
+            const userRole = isAdminOrSuperAdmin ? 'admin' : (currentUser?.role || '').toLowerCase();
+            const rawTier = isAdminOrSuperAdmin ? 'admin' : (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
             const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
             const isRegenUsed = Boolean(card.regenerationUsed || (result && (result as any).regenerationUsed));
 
@@ -2067,6 +2099,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             );
           })()}
 
+          {error && (
+            <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-800 text-red-200 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{error}</span>
+              </div>
+            </div>
+          )}
+
           {regenSuccessMsg && (
             <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in">
               <Check className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -2074,7 +2115,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Headline Options: Up to 10 Options (Initial 5 + 5 Regenerated) with 5-Tier Graduated Bounds */}
+          {/* Part 2 & Part 3: Clean Headline Options UI (Only विकल्प 1..5 / 6..10, max 120 chars, no category angle boxes) */}
           {headlineOptions.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -2085,9 +2126,6 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       ? `तैयार संतुलित AI हेडलाइन्स (कुल ${headlineOptions.length} विकल्प - कोई एक चुनें):`
                       : 'तैयार 5 संतुलित AI हेडलाइन विकल्प (रेडियो बटन से चुनें):'}
                   </span>
-                </span>
-                <span className="text-[10px] text-amber-300/90 font-mono bg-neutral-950 px-2 py-0.5 rounded border border-neutral-800">
-                  5-टियर श्रेणीबद्ध वर्ण सीमा
                 </span>
               </div>
               <div className="space-y-1.5" role="radiogroup" aria-label="हेडलाइन विकल्प">
@@ -2122,17 +2160,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                             className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
-                            {isRegeneratedOption ? `अतिरिक्त विकल्प ${idx + 1} (रीजेनरेटेड)` : `विकल्प ${idx + 1}`}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            ({tierRule.angle})
+                            {`विकल्प ${idx + 1}`}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                             <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
                             <span className="text-neutral-600">•</span>
-                            <span className={charCount < tierRule.min || charCount > tierRule.max ? 'text-amber-400' : 'text-emerald-400 font-bold'}>
+                            <span className={charCount > 120 ? 'text-amber-400' : 'text-emerald-400 font-bold'}>
                               {charCount} अक्षर (लक्ष्य: {tierRule.min}-{tierRule.max})
                             </span>
                           </span>
@@ -2154,7 +2189,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Selected Headline Direct Edit Box with Live Dynamic Word and Character Counter */}
+          {/* Selected Headline Direct Edit Box with Live Dynamic Word and Character Counter (Max 120 chars) */}
           <div className="space-y-1 bg-neutral-900/90 p-2.5 rounded-lg border border-neutral-800">
             <div className="flex items-center justify-between text-[11px] text-neutral-400 font-bold">
               <div className="flex items-center gap-1.5">
@@ -2168,13 +2203,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       .filter(Boolean).length} शब्द
                   </span>
                   <span className="text-neutral-600">|</span>
-                  <span>{countHeadlineVisibleCharacters(result.headline || '')} / 200 अक्षर (टियर 1-5)</span>
+                  <span>{countHeadlineVisibleCharacters(result.headline || '')} / 120 अक्षर</span>
                 </span>
               </div>
               <VoiceInputButton
                 onTranscript={(transcript) => {
                   setResult((prev) => {
-                    const newText = prev?.headline ? `${prev.headline} ${transcript}` : transcript;
+                    const newText = (prev?.headline ? `${prev.headline} ${transcript}` : transcript).slice(0, 120);
                     onChange({ headline: newText, formattedHeadline: newText });
                     return prev
                       ? {
@@ -2190,9 +2225,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
             <textarea
               rows={2}
+              maxLength={120}
               value={result.headline}
               onChange={(e) => {
-                const val = e.target.value;
+                const val = e.target.value.slice(0, 120);
                 setResult((prev) => (prev ? { ...prev, headline: val, formattedHeadline: val } : null));
                 onChange({ headline: val, formattedHeadline: val });
               }}

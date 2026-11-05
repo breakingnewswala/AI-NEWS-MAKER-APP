@@ -185,8 +185,18 @@ export function cleanHeadlineText(text: any): string {
   // 13. Remove sycophancy and formal honorifics (Part 3)
   cleaned = sanitizePressNoteFlattery(cleaned, true);
 
-  // 14. Remove unnecessary trailing explanatory sentences (e.g. "इससे लोगों को मदद मिलेगी")
-  cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, '');
+  // 14. Remove unnecessary trailing explanatory sentences & prohibited AI filler phrases (Part 1.3)
+  cleaned = cleaned
+    .replace(/\s*[,।;:\-–—]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*शासन\s+स्तर\s+पर\s+(?:संबंधित|संक्षिप्त)?\s*(?:तथ्यों\s+को\s+)?(?:दिए\s+गए\s+)?(?:आवश्यक\s+)?निर्देश(?:\s+दिए\s+गए|\s+जारी\s+किए\s+गए)?.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*संबंधित\s+पक्षों\s+को\s+निर्देश\s+जारी\s+किए\s+गए.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*मामले\s+में\s+नया\s+घटनाक्रम\s+सामने\s+आया(?:\s+है)?.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*(?:यह\s+)?पूरे\s+मामले\s+को\s+लेकर\s+(?:प्रशासनिक\s+व\s+विभागीय\s+स्तर\s+पर\s+जरूरी\s+कदम\s+उठाए\s+जा\s+रहे\s+हैं|कार्रवाई\s+की\s+जा\s+रही\s+है).*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+व\s+विभागीय\s+स्तर\s+पर\s+जरूरी\s+कदम\s+उठाए\s+जा\s+रहे\s+हैं.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*इस\s+घटना\s+के\s+बाद\s+प्रशासन\s+अलर्ट.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*मामले\s+को\s+लेकर\s+विभागीय\s+स्तर\s+पर\s+समीक्षा.*$/u, '')
+    .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+स्तर\s+पर\s+आवश्यक\s+संज्ञान\s+लिया\s+गया(?:\s+है)?.*$/u, '')
+    .replace(/\s*[,।;:\-–—\/]?\s*(?:विशेष\s*डेस्क|विशेष\s*डैश|विशेष\s*संवाददाता|सेंट्रल\s*डेस्क|न्यूज़\s*डेस्क|ब्यूरो\s*डेस्क)\s*/gu, ' ');
 
   // 15. Standard Hindi spelling for compound state/location names (Part 1, Item 5)
   cleaned = cleaned
@@ -216,6 +226,12 @@ const CATEGORY_KEYWORDS = [
   'कारोबार',
   'टेक',
   'विशेष कवरेज',
+  'विशेष डेस्क',
+  'विशेष डैश',
+  'विशेष संवाददाता',
+  'सेंट्रल डेस्क',
+  'न्यूज़ डेस्क',
+  'ब्यूरो डेस्क',
   'ताज़ा ख़बर',
   'ताज़ा समाचार',
   'ताज़ा'
@@ -438,7 +454,18 @@ export const DISTRICT_STATE_LIST: DistrictStateEntry[] = [
 export function formatDistrictWithState(loc: string): string {
   if (!loc || typeof loc !== 'string') return '';
   const trimmed = loc.trim();
-  if (!trimmed || trimmed === 'विशेष कवरेज') return '';
+  if (
+    !trimmed ||
+    trimmed === 'विशेष कवरेज' ||
+    trimmed === 'विशेष डेस्क' ||
+    trimmed === 'विशेष डैश' ||
+    trimmed === 'विशेष संवाददाता' ||
+    trimmed === 'सेंट्रल डेस्क' ||
+    trimmed === 'न्यूज़ डेस्क' ||
+    trimmed === 'ब्यूरो डेस्क'
+  ) {
+    return '';
+  }
 
   // If already contains comma and state (e.g. "शहडोल, मध्य प्रदेश"), verify clean spacing
   if (trimmed.includes(',')) {
@@ -944,15 +971,15 @@ export interface HeadlineTierRange {
 }
 
 export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
-  { min: 80, max: 110, label: 'विकल्प 1: मुख्य समाचार (80-110 अक्षर)' },
-  { min: 100, max: 130, label: 'विकल्प 2: प्रभाव / परिणाम (100-130 अक्षर)' },
-  { min: 125, max: 150, label: 'विकल्प 3: तथ्य व आंकड़े (125-150 अक्षर)' },
-  { min: 130, max: 160, label: 'विकल्प 4: पृष्ठभूमि व संदर्भ (130-160 अक्षर)' },
-  { min: 150, max: 200, label: 'विकल्प 5: विस्तृत जनहित सारांश (150-200 अक्षर)' },
+  { min: 80, max: 95, label: 'विकल्प 1' },
+  { min: 85, max: 100, label: 'विकल्प 2' },
+  { min: 90, max: 105, label: 'विकल्प 3' },
+  { min: 95, max: 110, label: 'विकल्प 4' },
+  { min: 100, max: 120, label: 'विकल्प 5' },
 ];
 
-export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
-export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
+export const HEADLINE_MAX_CHARACTER_LIMIT = 120;
+export const HEADLINE_5_TIER_MAX_LIMITS = [95, 100, 105, 110, 120];
 
 /**
  * Canonical segmenter for user-perceived Unicode grapheme clusters (Devanagari aksharas).
@@ -1116,11 +1143,12 @@ export function sanitizeHeadlineClean(text: string): string {
 
 export function fitSingleHeadlineToTier(
   text: string,
-  maxLimit: number = 200,
+  maxLimit: number = 120,
   minLimit: number = 0,
   factSentence?: string | string[]
 ): string {
   if (!text) return "";
+  const effectiveMax = Math.min(maxLimit || 120, 120);
   let cleaned = sanitizeHeadlineClean(text);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
@@ -1128,31 +1156,34 @@ export function fitSingleHeadlineToTier(
   cleaned = sanitizeHeadlineClean(cleaned);
 
   const currentLen = countHeadlineVisibleCharacters(cleaned);
-  if (currentLen >= minLimit && currentLen <= maxLimit) {
+  if (currentLen <= effectiveMax && (currentLen >= minLimit || currentLen >= 30)) {
     return cleaned;
   }
 
-  // Case 1: Too long -> Truncate cleanly ONLY at natural clause boundaries (never mid-phrase)
-  if (currentLen > maxLimit) {
-    const delimiters = [", ", " - ", ": ", " — ", "; ", " और ", " तथा "];
+  // Case 1: Exceeds target max -> Truncate cleanly ONLY at natural clause boundaries; if <= 120 chars and no clause boundary, preserve complete sentence!
+  if (currentLen > effectiveMax) {
+    const delimiters = [", ", " - ", ": ", " — ", "; "];
     for (const d of delimiters) {
-      const idx = cleaned.lastIndexOf(d, maxLimit);
-      if (idx >= minLimit) {
+      const idx = cleaned.lastIndexOf(d, effectiveMax);
+      if (idx >= Math.min(minLimit, 55)) {
         const candidate = sanitizeHeadlineClean(cleaned.substring(0, idx));
         const cLen = countHeadlineVisibleCharacters(candidate);
-        if (cLen >= minLimit && cLen <= maxLimit) {
+        if (cLen >= 50 && cLen <= effectiveMax) {
           return candidate;
         }
       }
     }
-    const sliced = cleaned.substring(0, maxLimit);
+    if (currentLen <= 120) {
+      return cleaned;
+    }
+    const sliced = cleaned.substring(0, 120);
     const lastSpace = sliced.lastIndexOf(" ");
-    const result = lastSpace >= minLimit ? sliced.substring(0, lastSpace) : sliced;
+    const result = lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced;
     return sanitizeHeadlineClean(result);
   }
 
-  // Case 2: Too short -> Expand ONLY with complete, self-contained factual clauses (NO word-by-word chopping!)
-  if (minLimit > 0 && currentLen < minLimit && factSentence) {
+  // Case 2: Only expand if headline is an incomplete fragment (< 30 chars)
+  if (minLimit > 0 && currentLen < 30 && factSentence) {
     const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence])
       .filter(Boolean)
       .flatMap((f: any) => String(f).split(/[।\n]+/))
@@ -1166,7 +1197,7 @@ export function fitSingleHeadlineToTier(
       for (const sep of [": ", ", "]) {
         const combined = sanitizeHeadlineClean(`${cleaned}${sep}${rawFact}`);
         const cLen = countHeadlineVisibleCharacters(combined);
-        if (cLen >= minLimit && cLen <= maxLimit) {
+        if (cLen >= 35 && cLen <= effectiveMax) {
           return combined;
         }
       }
@@ -1210,19 +1241,6 @@ export function fitHeadlinesTo5TierRanges(
     .map((s: string) => sanitizeHeadlineClean(s))
     .filter((s: string) => s.length >= 12);
 
-  // Extract complete sub-clauses from facts (never chop mid-clause)
-  const subClauses: string[] = [];
-  for (const f of factsList) {
-    const parts = f
-      .split(/[,;:]\s*|\s+(?:जिसमें|जहां|जिसके\s+तहत|जिसके\s+बाद)\s+/)
-      .map((p: string) => sanitizeHeadlineClean(p))
-      .filter((p: string) => p.length >= 12);
-    for (const p of parts) {
-      if (!subClauses.includes(p)) subClauses.push(p);
-    }
-    if (!subClauses.includes(f)) subClauses.push(f);
-  }
-
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5 && baseText) {
     const supp = generate5BalancedHeadlineOptions(baseText, factsList, location);
@@ -1235,60 +1253,45 @@ export function fitHeadlinesTo5TierRanges(
     }
   }
 
+  // Sort workingHeadlines by visible character count ascending so Option 1..5 progress naturally from shortest to longest
+  workingHeadlines.sort((a, b) => countHeadlineVisibleCharacters(a) - countHeadlineVisibleCharacters(b));
+
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: '' };
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 120, label: `विकल्प ${i + 1}` };
+    const effectiveMax = Math.min(tier.max, 120);
     const cand = workingHeadlines[i] || workingHeadlines[0] || baseText || '';
     if (!cand) continue;
     const cleaned = sanitizeHeadlineClean(cand);
     const currentLen = countHeadlineVisibleCharacters(cleaned);
 
-    // Case 1: Already fits
-    if (currentLen >= tier.min && currentLen <= tier.max) {
+    // Case 1: Within tier max (or complete sentence <= 120 chars) -> Keep accurate headline without cutting off the final verb
+    if (currentLen <= effectiveMax) {
       result.push(cleaned);
       continue;
     }
 
-    // Case 2: Too long -> Truncate cleanly at clause boundary (or word boundary without dangling words)
-    if (currentLen > tier.max) {
-      let truncated = cleaned;
-      const delimiters = [", ", " - ", ": ", " — ", "; ", " और ", " तथा "];
-      for (const d of delimiters) {
-        const idx = cleaned.lastIndexOf(d, tier.max);
-        if (idx >= tier.min) {
-          const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
-          const testLen = countHeadlineVisibleCharacters(testCand);
-          if (testLen >= tier.min && testLen <= tier.max) {
-            truncated = testCand;
-            break;
-          }
-        }
-      }
-      if (countHeadlineVisibleCharacters(truncated) > tier.max) {
-        const sliced = cleaned.substring(0, tier.max);
-        const lastSpace = sliced.lastIndexOf(" ");
-        truncated = sanitizeHeadlineClean(lastSpace >= tier.min ? sliced.substring(0, lastSpace) : sliced);
-      }
-      result.push(truncated);
-      continue;
-    }
-
-    // Case 3: Too short -> Expand ONLY using complete factual clauses from the same story (NO word-by-word slicing!)
-    let expanded = cleaned;
-    for (const clause of subClauses) {
-      if (expanded.includes(clause.slice(0, 14)) || calculateHeadlineSimilarity(expanded, clause) >= 0.65) continue;
-      const testCombined = sanitizeHeadlineClean(`${expanded}, ${clause}`);
-      const testLen = countHeadlineVisibleCharacters(testCombined);
-      if (testLen <= tier.max) {
-        expanded = testCombined;
-        if (testLen >= tier.min) {
+    // Case 2: Exceeds tier.max -> Check if there is a clean clause boundary; if not and currentLen <= 120, keep complete sentence
+    let truncated = cleaned;
+    const delimiters = [", ", " - ", ": ", " — ", "; "];
+    for (const d of delimiters) {
+      const idx = cleaned.lastIndexOf(d, effectiveMax);
+      if (idx >= Math.min(tier.min, 55)) {
+        const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
+        const testLen = countHeadlineVisibleCharacters(testCand);
+        if (testLen >= 50 && testLen <= effectiveMax) {
+          truncated = testCand;
           break;
         }
       }
     }
-
-    result.push(sanitizeHeadlineClean(expanded));
+    if (countHeadlineVisibleCharacters(truncated) > 120) {
+      const sliced = cleaned.substring(0, 120);
+      const lastSpace = sliced.lastIndexOf(" ");
+      truncated = sanitizeHeadlineClean(lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced);
+    }
+    result.push(truncated);
   }
 
   return result.slice(0, 5);
@@ -1724,7 +1727,17 @@ export function cleanLocationField(loc: string): string {
   // Clean trailing punctuation and multiple spaces
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
   cleaned = cleaned.replace(/\s{2,}/g, ' ');
-  if (cleaned === 'विशेष कवरेज') return '';
+  if (
+    cleaned === 'विशेष कवरेज' ||
+    cleaned === 'विशेष डेस्क' ||
+    cleaned === 'विशेष डैश' ||
+    cleaned === 'विशेष संवाददाता' ||
+    cleaned === 'सेंट्रल डेस्क' ||
+    cleaned === 'न्यूज़ डेस्क' ||
+    cleaned === 'ब्यूरो डेस्क'
+  ) {
+    return '';
+  }
 
   // Enforce standard "जिला, राज्य" format if a district is detected
   return formatDistrictWithState(cleaned);

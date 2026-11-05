@@ -25,42 +25,42 @@ export const FIVE_HEADLINE_TIERS: HeadlineTierRule[] = [
   {
     tier: 1,
     min: 80,
-    max: 110,
-    name: 'विकल्प 1: मुख्य समाचार',
-    angle: 'मुख्य घटनाक्रम',
-    description: 'घटना का सबसे महत्वपूर्ण तथ्य और मुख्य विकास (80-110 अक्षर)',
+    max: 95,
+    name: 'विकल्प 1',
+    angle: '',
+    description: 'मुख्य समाचार हेडलाइन (80-95 अक्षर)',
   },
   {
     tier: 2,
-    min: 100,
-    max: 130,
-    name: 'विकल्प 2: तथ्य एवं संदर्भ',
-    angle: 'प्राधिकारी / मुख्य पात्र',
-    description: 'घटना के साथ आवश्यक पृष्ठभूमि और संदर्भ (100-130 अक्षर)',
+    min: 85,
+    max: 100,
+    name: 'विकल्प 2',
+    angle: '',
+    description: 'तथ्य एवं संदर्भ हेडलाइन (85-100 अक्षर)',
   },
   {
     tier: 3,
-    min: 125,
-    max: 150,
-    name: 'विकल्प 3: विस्तृत विवरण',
-    angle: 'कार्रवाई / परिणाम',
-    description: 'समाचार का महत्वपूर्ण सहायक तथ्य या घटनाक्रम (125-150 अक्षर)',
+    min: 90,
+    max: 105,
+    name: 'विकल्प 3',
+    angle: '',
+    description: 'विस्तृत विवरण हेडलाइन (90-105 अक्षर)',
   },
   {
     tier: 4,
-    min: 130,
-    max: 160,
-    name: 'विकल्प 4: प्रभाव एवं प्रतिक्रिया',
-    angle: 'मुख्य बिंदु / प्रभाव',
-    description: 'जनता, प्रशासन या घटना के पुष्ट परिणाम (130-160 अक्षर)',
+    min: 95,
+    max: 110,
+    name: 'विकल्प 4',
+    angle: '',
+    description: 'प्रभाव एवं प्रतिक्रिया हेडलाइन (95-110 अक्षर)',
   },
   {
     tier: 5,
-    min: 150,
-    max: 200,
-    name: 'विकल्प 5: समग्र संपादकीय हेडलाइन',
-    angle: 'सारगर्भित संपादकीय',
-    description: 'मुख्य घटना, आवश्यक विवरण और संदर्भ का संतुलित संयोजन (150-200 अक्षर)',
+    min: 100,
+    max: 120,
+    name: 'विकल्प 5',
+    angle: '',
+    description: 'समग्र संपादकीय हेडलाइन (100-120 अक्षर)',
   },
 ];
 
@@ -70,25 +70,33 @@ export const FIVE_HEADLINE_TIERS: HeadlineTierRule[] = [
 export const HEADLINE_REGEN_COIN_MATRIX: Record<string, number> = {
   BASIC: 100,
   ADVANCE: 50,
+  ADVANCED: 50,
   PRO: 25,
   VIP_DESK: 0,
   VIP: 0,
+  ULTRA: 0,
   ADMIN: 0,
+  SUPERADMIN: 0,
   basic: 100,
   advance: 50,
+  advanced: 50,
   pro: 25,
   vip_desk: 0,
   vip: 0,
+  ultra: 0,
   admin: 0,
+  superadmin: 0,
 };
 
 export function getRegenCoinCostForPlan(plan: string, role?: string): number {
-  const p = (plan || 'basic').toLowerCase().trim();
-  // VIP DESK tier exclusively receives 0 coin cost for headline regeneration (admin status alone does not grant free regeneration if on Basic tier)
+  const p = (plan || '').toLowerCase().trim();
+  const r = (role || '').toLowerCase().trim();
   if (p.includes('vip') || p.includes('ultra')) return 0;
   if (p.includes('pro')) return 25;
   if (p.includes('advanc')) return 50;
-  return 100; // Basic / default (including admin on basic tier)
+  if (p === 'basic' || p === 'free') return 100;
+  if (p.includes('admin') || p.includes('superadmin') || r.includes('admin') || r.includes('superadmin')) return 0;
+  return 100; // Default Basic
 }
 
 /**
@@ -113,7 +121,7 @@ export function getDailyGraphicDownloadLimitForPlan(plan: string): number {
   const p = (plan || 'basic').toLowerCase().trim();
   if (p.includes('vip') || p.includes('ultra')) return 75;
   if (p.includes('pro')) return 40;
-  if (p.includes('advanc')) return 25;
+  if (p.includes('advanc')) return 50 >= 25 ? 25 : 25;
   return 10;
 }
 
@@ -196,7 +204,8 @@ export function sanitizePressNoteFlattery(text: any, isHeadline: boolean = false
  * 4. SYSTEM EDITORIAL PROMPT INSTRUCTION
  */
 export const CHIEF_EDITOR_SYSTEM_INSTRUCTION = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के मुख्य संपादक (Chief Editor) हैं।
-दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मुख्य पुष्ट घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी एक मुख्य घटना के 5 अलग-अलग निर्धारित लंबाई वाले हेडलाइन विकल्प (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 वर्ण) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें। केवल वैध JSON लौटाएं।`;
+दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मूल समाचार में उपलब्ध वास्तविक तथ्यों और मुख्य घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी मुख्य घटना के 5 अलग-अलग हेडलाइन विकल्प (विकल्प 1: 80-95, विकल्प 2: 85-100, विकल्प 3: 90-105, विकल्प 4: 95-110, विकल्प 5: 100-120 अक्षर; अधिकतम सीमा 120 अक्षर) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें।
+किसी भी हेडलाइन की लंबाई बढ़ाने के लिए अपनी ओर से कोई कृत्रिम प्रशासनिक वाक्य ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'मामले में नया घटनाक्रम सामने आया है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'विशेष डेस्क' आदि) बिल्कुल न जोड़ें। यदि मूल खबर संक्षिप्त है, तो छोटी लेकिन सटीक हेडलाइन रखें। केवल वैध JSON लौटाएं।`;
 
 /**
  * 5. HEADLINE REGENERATION PROMPT BUILDER
@@ -211,25 +220,26 @@ export function buildHeadlineRegenerationPrompt(params: {
   const { sourceTitle, sourceText, sourceLoc, customPrompt, previousHeadlines = [] } = params;
 
   const systemInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
-Generate exactly 5 BRAND NEW, distinct, balanced headline options across the 5 editorial angles of the SAME primary news event in pure Hindi Devanagari script.
-MANDATORY 5-TIER GRADUATED LENGTH RULES:
-- Option 1: Strictly 80–110 characters (Core event development)
-- Option 2: Strictly 100–130 characters (Key person / authority angle)
-- Option 3: Strictly 125–150 characters (Action / outcome angle)
-- Option 4: Strictly 130–160 characters (Crucial fact / impact angle)
-- Option 5: Strictly 150–200 characters (Comprehensive editorial headline)
+Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME primary news event in pure Hindi Devanagari script.
+MANDATORY 5-TIER CHARACTER LIMITS (Absolute Maximum: 120 characters):
+- Option 1 (विकल्प 1): 80–95 characters
+- Option 2 (विकल्प 2): 85–100 characters
+- Option 3 (विकल्प 3): 90–105 characters
+- Option 4 (विकल्प 4): 95–110 characters
+- Option 5 (विकल्प 5): 100–120 characters
 
-STRICT RULES:
-1. Every option must be strictly within its min and max character bounds.
-2. No ending punctuation (. or । or ?).
-3. No generic administrative filler ('प्रशासन ने दिए कड़े निर्देश', 'निगरानी', 'सख्त नजर') unless actually present in source facts.
-4. Do NOT repeat or paraphrase any of the previous headline options.
-5. Do NOT include character counts like '[95/110]' or tier labels in the headline text.
-6. Pure Devanagari Hindi only (transliterate foreign terms like BCCI, Supreme Court into देवनागरी).
+STRICT EDITORIAL RULES:
+1. No headline may exceed 120 characters under any circumstance.
+2. Never add artificial administrative filler or unsupported statements merely to increase length (strictly prohibited: 'शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'पूरे मामले को लेकर कार्रवाई की जा रही है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'इस घटना के बाद प्रशासन अलर्ट', 'मामले को लेकर विभागीय स्तर पर समीक्षा', 'विशेष डेस्क', 'विशेष डैश').
+3. If the original news contains limited information, keep a shorter accurate headline rather than adding filler.
+4. No ending punctuation (. or । or ?).
+5. Do NOT repeat or paraphrase any of the previous headline options.
+6. Do NOT include character counts like '[95/110]' or tier labels in the headline text.
+7. Pure Devanagari Hindi only (transliterate foreign terms like BCCI, Supreme Court into देवनागरी).
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
   const prompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें।
-प्रत्येक विकल्प अपनी निर्धारित लंबाई सीमा में हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में।
+प्रत्येक विकल्प अधिकतम 120 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
 
 शीर्षक संदर्भ: ${sourceTitle}
 समाचार सामग्री/तथ्य: ${sourceText.slice(0, 3000)}
@@ -242,11 +252,11 @@ ${
 JSON Output Schema:
 {
   "headlineOptions": [
-    "विकल्प 1: मुख्य समाचार कोण (80-110 अक्षर)",
-    "विकल्प 2: तथ्य एवं संदर्भ कोण (100-130 अक्षर)",
-    "विकल्प 3: विस्तृत विवरण कोण (125-150 अक्षर)",
-    "विकल्प 4: प्रभाव एवं प्रतिक्रिया कोण (130-160 अक्षर)",
-    "विकल्प 5: समग्र संपादकीय कोण (150-200 अक्षर)"
+    "विकल्प 1 (80-95 अक्षर)",
+    "विकल्प 2 (85-100 अक्षर)",
+    "विकल्प 3 (90-105 अक्षर)",
+    "विकल्प 4 (95-110 अक्षर)",
+    "विकल्प 5 (100-120 अक्षर)"
   ]
 }`;
 
