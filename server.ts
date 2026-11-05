@@ -544,6 +544,7 @@ export async function requireMasterAdminMiddleware(req: express.Request, res: ex
 registerWhatsAppIntegration(app, centralDb, {
   requireAdminMiddleware,
   requireAuthMiddleware,
+  requireMasterAdminMiddleware,
 });
 
 
@@ -6670,7 +6671,8 @@ app.post("/api/notifications/unsubscribe", (req, res) => {
 // GET /api/notifications/vapid-key
 app.get("/api/notifications/vapid-key", (req, res) => {
   const publicKey = process.env.VAPID_PUBLIC_KEY || "BNo_Official_Web_Push_Public_Key_Standard_Mode";
-  return res.json({ success: true, publicKey });
+  const vapidConfigured = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+  return res.json({ success: true, publicKey, vapidConfigured });
 });
 
 // POST /api/notifications/broadcast - Broadcast in-app & web alert

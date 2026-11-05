@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import { createHmac, createHash, timingSafeEqual, randomBytes, randomUUID } from "crypto";
 import { GoogleGenAI } from "@google/genai";
 // Lazy-loaded GCP Cloud Tasks and Auth clients for resilience across dev, test, and container environments
@@ -37,6 +39,1034 @@ const sha256 = (value: string) => createHash("sha256").update(String(value || ""
 export const conversationCache = new Map<string, any>();
 export const messageCache = new Map<string, any>();
 export const replyIdempotencyCache = new Map<string, number>();
+
+// ============================================================================
+// WHATSAPP AI FLOW BUILDER & FAQ MANAGER — MODELS & PERSISTENCE
+// ============================================================================
+
+export interface FlowOption {
+  id: string;
+  label: string;
+  keyword?: string;
+  nextNodeId?: string;
+}
+
+export interface FlowCondition {
+  field?: string;
+  operator: "contains" | "equals" | "matches_regex";
+  value: string;
+  nextNodeId: string;
+}
+
+export interface FlowNode {
+  id: string;
+  type:
+    | "message"
+    | "question"
+    | "option"
+    | "condition"
+    | "ai_response"
+    | "faq"
+    | "human_handoff"
+    | "end";
+  title: string;
+  config: {
+    text?: string;
+    options?: FlowOption[];
+    conditions?: FlowCondition[];
+    defaultNextNodeId?: string;
+    faqCategory?: string;
+    faqSearchQuery?: string;
+    aiPromptContext?: string;
+    handoffReason?: string;
+  };
+  position?: { x: number; y: number };
+}
+
+export interface WhatsAppFlow {
+  id: string;
+  name: string;
+  description?: string;
+  version: number;
+  status: "draft" | "published" | "inactive";
+  isActive: boolean;
+  trigger: {
+    type: "first_message" | "keyword" | "faq_match" | "all_inbound";
+    keywords?: string[];
+    exactMatch?: boolean;
+  };
+  startNodeId: string;
+  nodes: FlowNode[];
+  createdAt: number;
+  updatedAt: number;
+  createdByName?: string;
+  createdByEmail?: string;
+}
+
+export interface WhatsAppFAQ {
+  id: string;
+  category: string;
+  question: string;
+  questionHi?: string;
+  questionEn?: string;
+  answer: string;
+  answerHi?: string;
+  answerEn?: string;
+  alternativeKeywords: string[];
+  keywords?: string[];
+  isActive: boolean;
+  status?: "draft" | "published" | "inactive";
+  priority?: number;
+  usageCount?: number;
+  lastUsedAt?: number;
+  lastMatchedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface FlowSession {
+  sessionId: string;
+  waId: string;
+  conversationId: string;
+  flowId: string;
+  currentNodeId: string;
+  stepCount: number;
+  variables: Record<string, any>;
+  lastInteractionAt: number;
+  status: "active" | "completed" | "handed_off" | "terminated";
+}
+
+export interface QuickReply {
+  id: string;
+  title: string;
+  shortcut: string;
+  text: string;
+  category: string;
+}
+
+export interface WhatsAppAutomationSettings {
+  flowAutomationEnabled?: boolean;
+  geminiModel: string;
+  aiModel?: string;
+  fallbackReply: string;
+  defaultHandoffMessage?: string;
+  handoffKeywords: string[];
+  sessionTimeoutMinutes?: number;
+  businessHoursEnabled: boolean;
+  businessHoursStart?: string;
+  businessHoursEnd?: string;
+  outOfHoursReply?: string;
+  updatedAt?: number;
+}
+
+// In-memory runtime caches for fast processing
+export const flowCache = new Map<string, WhatsAppFlow>();
+export const faqCache = new Map<string, WhatsAppFAQ>();
+export const flowSessionCache = new Map<string, FlowSession>();
+export const quickReplyCache = new Map<string, QuickReply>();
+
+const WHATSAPP_FLOWS_FILE = path.join(process.cwd(), "whatsapp_flows_db.json");
+const WHATSAPP_FAQS_FILE = path.join(process.cwd(), "whatsapp_faqs_db.json");
+const WHATSAPP_FLOW_SESSIONS_FILE = path.join(process.cwd(), "whatsapp_flow_sessions_db.json");
+const WHATSAPP_QUICK_REPLIES_FILE = path.join(process.cwd(), "whatsapp_quick_replies_db.json");
+const WHATSAPP_SETTINGS_FILE = path.join(process.cwd(), "whatsapp_automation_settings.json");
+
+export const DEFAULT_SEEDED_FLOWS: WhatsAppFlow[] = [
+  {
+    id: "flow_welcome_menu",
+    name: "मुख्य मेनू और स्वागत फ्लो (Welcome & Main Menu)",
+    description: "नए ग्राहकों एवं हाय/हेलो पर मुख्य सहायता मेनू प्रस्तुत करता है।",
+    version: 1,
+    status: "published",
+    isActive: true,
+    trigger: {
+      type: "first_message",
+      keywords: ["hi", "hello", "hey", "नमस्ते", "namaste", "menu", "मेनू", "start", "मदद", "सहायता"],
+      exactMatch: false,
+    },
+    startNodeId: "node_welcome",
+    nodes: [
+      {
+        id: "node_welcome",
+        type: "message",
+        title: "स्वागत संदेश",
+        config: {
+          text: "🙏 *नमस्कार! AI News Maker (BREAKING NEWS WALA) में आपका स्वागत है।*\n\nहम पत्रकारों और डिजिटल मीडिया के लिए भारत का अग्रणी AI-पावर्ड न्यूज़ स्टूडियो हैं।",
+          defaultNextNodeId: "node_menu_options",
+        },
+        position: { x: 100, y: 100 },
+      },
+      {
+        id: "node_menu_options",
+        type: "option",
+        title: "मुख्य मेनू विकल्प",
+        config: {
+          text: "कृपया नीचे दिए गए विकल्पों में से कोई एक संख्या लिखकर भेजें:\n\n1️⃣ *AI News Maker क्या है?*\n2️⃣ *मुख्य सेवाएँ एवं फीचर्स*\n3️⃣ *ग्राफिक कैसे बनाएँ?*\n4️⃣ *वीडियो रील्स कैसे बनाएँ?*\n5️⃣ *प्लान एवं मूल्य (Pricing)*\n6️⃣ *सहायता प्रतिनिधि से बात करें (Live Agent)*",
+          options: [
+            { id: "opt_1", label: "1. AI News Maker क्या है?", keyword: "1", nextNodeId: "node_what_is" },
+            { id: "opt_2", label: "2. मुख्य सेवाएँ एवं फीचर्स", keyword: "2", nextNodeId: "node_services" },
+            { id: "opt_3", label: "3. ग्राफिक कैसे बनाएँ?", keyword: "3", nextNodeId: "node_graphic_guide" },
+            { id: "opt_4", label: "4. वीडियो रील्स कैसे बनाएँ?", keyword: "4", nextNodeId: "node_video_guide" },
+            { id: "opt_5", label: "5. प्लान एवं मूल्य", keyword: "5", nextNodeId: "node_plans" },
+            { id: "opt_6", label: "6. सहायता प्रतिनिधि", keyword: "6", nextNodeId: "node_handoff" },
+          ],
+          defaultNextNodeId: "node_faq_fallback",
+        },
+        position: { x: 100, y: 250 },
+      },
+      {
+        id: "node_what_is",
+        type: "message",
+        title: "AI News Maker परिचय",
+        config: {
+          text: "📰 *AI News Maker (BREAKING NEWS WALA) क्या है?*\n\nयह पत्रकारों, सोशल मीडिया क्रिएटर्स और न्यूज़ चैनलों के लिए विशेष AI स्टूडियो है। केवल खबर का टेक्स्ट पेस्ट करके टीवी स्टाइल 50+ फ्रेम्स में 4:5 एवं 9:16 ग्राफिक्स और HD वीडियो 1 मिनट में तैयार करें।\n\n🌐 वेबसाइट: https://ainewsmaker.online",
+          defaultNextNodeId: "node_end",
+        },
+        position: { x: -200, y: 450 },
+      },
+      {
+        id: "node_services",
+        type: "message",
+        title: "मुख्य सेवाएँ",
+        config: {
+          text: "⚡ *मुख्य सेवाएँ:*\n1. 50+ टीवी स्टाइल न्यूज़ फ्रेम्स\n2. AI हेडलाइन और बुलेटिन जनरेटर\n3. वॉइसओवर और म्यूजिक के साथ वीडियो रील्स\n4. e-Paper सोशल मीडिया कार्ड्स\n5. कस्टम चैनल लोगो और फॉन्ट्स\n\n🌐 देखें: https://ainewsmaker.online/#features",
+          defaultNextNodeId: "node_end",
+        },
+        position: { x: -50, y: 450 },
+      },
+      {
+        id: "node_graphic_guide",
+        type: "message",
+        title: "ग्राफिक गाइड",
+        config: {
+          text: "🎨 *ग्राफिक कैसे बनाएँ:*\n1. https://ainewsmaker.online पर लॉगिन करें।\n2. 'स्टूडियो' टैब खोलें।\n3. खबर का टेक्स्ट दर्ज करें, AI हेडलाइन चुनें।\n4. मनपसंद फ्रेम चुनकर 'डाउनलोड' पर क्लिक करें।",
+          defaultNextNodeId: "node_end",
+        },
+        position: { x: 100, y: 450 },
+      },
+      {
+        id: "node_video_guide",
+        type: "message",
+        title: "वीडियो गाइड",
+        config: {
+          text: "🎬 *वीडियो रील्स कैसे बनाएँ:*\n1. स्टूडियो में 'वीडियो स्टूडियो' चुनें।\n2. खबर का विवरण डालें और AI वॉइसओवर जनरेट करें।\n3. 9:16 या 4:5 रेश्यो में रेंडर पर क्लिक करें।\n4. 30 सेकंड में HD वीडियो तैयार!",
+          defaultNextNodeId: "node_end",
+        },
+        position: { x: 250, y: 450 },
+      },
+      {
+        id: "node_plans",
+        type: "message",
+        title: "प्लान और कॉइन्स",
+        config: {
+          text: "💳 *प्लान और रिचार्ज:*\n- *Basic Desk*: शुरुआती पत्रकारों के लिए मानक फ्रेम्स और 50 कार्ड्स दैनिक।\n- *VIP Desk*: असीमित AI हेडलाइन रीजनरेशन, कस्टम फॉन्ट और 4K वीडियो सपोर्ट।\n\n🌐 वॉलेट रिचार्ज: https://ainewsmaker.online/#plans",
+          defaultNextNodeId: "node_end",
+        },
+        position: { x: 400, y: 450 },
+      },
+      {
+        id: "node_faq_fallback",
+        type: "faq",
+        title: "FAQ मिलान या AI उत्तर",
+        config: {
+          defaultNextNodeId: "node_end",
+        },
+        position: { x: 550, y: 450 },
+      },
+      {
+        id: "node_handoff",
+        type: "human_handoff",
+        title: "मानव सहायता ट्रांसफर",
+        config: {
+          text: "नमस्ते! आपका अनुरोध हमारी सहायता टीम को भेज दिया गया है। हमारे प्रतिनिधि जल्द ही आपसे यहाँ संपर्क करेंगे।",
+          handoffReason: "user_selected_human",
+        },
+        position: { x: 700, y: 450 },
+      },
+      {
+        id: "node_end",
+        type: "end",
+        title: "फ्लो समाप्त",
+        config: {
+          text: "किसी अन्य सहायता के लिए आप कभी भी संदेश लिख सकते हैं या मेनू देखने के लिए 'MENU' लिखें।",
+        },
+        position: { x: 200, y: 650 },
+      },
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    createdByName: "Master Admin",
+  },
+  {
+    id: "flow_account_support",
+    name: "अकाउंट और लॉगिन सहायता (Account & Login Support)",
+    description: "लॉगिन, पासवर्ड या ब्लॉक खाता संबंधी सहायता प्रदान करता है।",
+    version: 1,
+    status: "published",
+    isActive: true,
+    trigger: {
+      type: "keyword",
+      keywords: ["login", "लॉगिन", "पासवर्ड", "password", "अकाउंट", "खाता", "ब्लॉक", "blocked"],
+      exactMatch: false,
+    },
+    startNodeId: "node_account_q",
+    nodes: [
+      {
+        id: "node_account_q",
+        type: "question",
+        title: "समस्या का प्रकार",
+        config: {
+          text: "🔐 *अकाउंट सहायता केंद्र*\n\nआपकी समस्या किस प्रकार की है? कृपया विकल्प नंबर लिखकर भेजें:\n1️⃣ पासवर्ड भूल गए या रीसेट करना है\n2️⃣ खाता ब्लॉक (Account Blocked) संदेश आ रहा है\n3️⃣ Google लॉगिन में समस्या\n4️⃣ सहायता प्रतिनिधि से सीधे बात करनी है",
+          defaultNextNodeId: "node_account_cond",
+        },
+        position: { x: 100, y: 100 },
+      },
+      {
+        id: "node_account_cond",
+        type: "condition",
+        title: "शर्त एवं शाखा",
+        config: {
+          conditions: [
+            { operator: "contains", value: "1", nextNodeId: "node_pw_reset" },
+            { operator: "contains", value: "2", nextNodeId: "node_blocked_info" },
+            { operator: "contains", value: "3", nextNodeId: "node_google_login" },
+            { operator: "contains", value: "4", nextNodeId: "node_handoff_agent" },
+          ],
+          defaultNextNodeId: "node_handoff_agent",
+        },
+        position: { x: 100, y: 250 },
+      },
+      {
+        id: "node_pw_reset",
+        type: "message",
+        title: "पासवर्ड रीसेट विधि",
+        config: {
+          text: "🔑 *पासवर्ड रीसेट करने की विधि:*\n1. https://ainewsmaker.online खोलें।\n2. 'लॉगिन' बटन पर क्लिक करें।\n3. 'पासवर्ड भूल गए?' (Forgot Password) लिंक पर क्लिक करके अपना पंजीकृत ईमेल दर्ज करें।\n4. आपके ईमेल पर रीसेट लिंक प्राप्त होगा।",
+          defaultNextNodeId: "node_acc_end",
+        },
+        position: { x: -100, y: 400 },
+      },
+      {
+        id: "node_blocked_info",
+        type: "message",
+        title: "ब्लॉक खाता प्रक्रिया",
+        config: {
+          text: "⚠️ *खाता ब्लॉक स्थिति:*\nसुरक्षा कारणों अथवा नियमों के उल्लंघन के कारण ब्लॉक किए गए खातों की समीक्षा व्यवस्थापक द्वारा की जाती है। कृपया अपना पंजीकृत ईमेल और मोबाइल नंबर यहाँ भेजें ताकि हमारी अनुपालन टीम आपके मामले की जाँच कर सके।",
+          defaultNextNodeId: "node_handoff_agent",
+        },
+        position: { x: 100, y: 400 },
+      },
+      {
+        id: "node_google_login",
+        type: "message",
+        title: "Google लॉगिन सहायता",
+        config: {
+          text: "🌐 *Google लॉगिन सहायता:*\nकृपया सुनिश्चित करें कि आप उसी Google खाते से 'Continue with Google' कर रहे हैं जिससे आपने पहली बार खाता बनाया था। ब्राउज़र का कैश (Cache) साफ़ करके पुनः प्रयास करें।",
+          defaultNextNodeId: "node_acc_end",
+        },
+        position: { x: 300, y: 400 },
+      },
+      {
+        id: "node_handoff_agent",
+        type: "human_handoff",
+        title: "प्रतिनिधि को सौंपें",
+        config: {
+          text: "नमस्ते! हमने आपकी अकाउंट संबंधी समस्या सहायता प्रतिनिधि को अग्रेषित कर दी है। कृपया अपने पंजीकृत ईमेल का उल्लेख यहाँ कर दें।",
+          handoffReason: "account_support_handoff",
+        },
+        position: { x: 500, y: 400 },
+      },
+      {
+        id: "node_acc_end",
+        type: "end",
+        title: "समाप्त",
+        config: {
+          text: "AI News Maker सहायता केंद्र से जुड़ने के लिए धन्यवाद।",
+        },
+        position: { x: 200, y: 600 },
+      },
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    createdByName: "Master Admin",
+  },
+];
+
+export const DEFAULT_SEEDED_FAQS: WhatsAppFAQ[] = [
+  {
+    id: "faq_account_login",
+    category: "Account Support",
+    question: "मेरा अकाउंट लॉगिन नहीं हो रहा है।",
+    questionEn: "My account is not logging in.",
+    answer: "कृपया अपना पंजीकृत ईमेल और लॉगिन विवरण जाँचें। यदि आप पासवर्ड भूल गए हैं, तो लॉगिन स्क्रीन पर 'पासवर्ड रीसेट' लिंक का उपयोग करें। यदि आपका खाता ब्लॉक किया गया है, तो कृपया 'AGENT' लिखकर सहायता केंद्र से संपर्क करें।",
+    answerEn: "Please verify your registered email and credentials. Use 'Forgot Password' on the login screen if needed. If your account is blocked, text AGENT to contact human support.",
+    alternativeKeywords: ["Login Problem", "अकाउंट नहीं खुल रहा", "लॉगिन समस्या", "पासवर्ड समस्या", "पासवर्ड भूल गया", "login issue", "login help", "forgot password", "reset password", "password"],
+    isActive: true,
+    priority: 1,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+  {
+    id: "faq_what_is",
+    category: "General Info",
+    question: "AI News Maker क्या है?",
+    questionEn: "What is AI News Maker?",
+    answer: "AI News Maker भारत का पहला विशेष AI-पावर्ड डिजिटल न्यूज़ स्टूडियो है, जिसे पत्रकारों, न्यूज़ पोर्टल्स और सोशल मीडिया क्रिएटर्स के लिए डिज़ाइन किया गया है। इसके माध्यम से आप बिना किसी ग्राफिक डिज़ाइनर के केवल 7 चरणों में ब्रेकिंग न्यूज़, टीवी स्टाइल न्यूज़ ग्राफिक्स, AI हेडलाइंस, वॉइसओवर और HD वीडियो रील्स तैयार कर सकते हैं।\n\n🌐 वेबसाइट: https://ainewsmaker.online",
+    answerEn: "AI News Maker is India's leading AI news graphic and video studio tailored for journalists, reporters, and media creators to create TV-style news cards and video reels in 7 easy steps.",
+    alternativeKeywords: ["what is ai news maker", "ai news maker kya hai", "क्या है", "परिचय", "सॉफ्टवेयर क्या है", "about"],
+    isActive: true,
+    priority: 2,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+  {
+    id: "faq_services",
+    category: "Features & Tools",
+    question: "AI News Maker की मुख्य सेवाएँ क्या हैं?",
+    questionEn: "What are the main services and features of AI News Maker?",
+    answer: "⚡ मुख्य सेवाएँ:\n1. 7-Step Quick News Maker: टीवी चैनल जैसे 50+ रेडी-टू-यूज़ न्यूज़ फ्रेम्स।\n2. AI हेडलाइन व बुलेटिन जेनरेटर: खबरों के लिए आकर्षक और वायरल हेडलाइंस।\n3. AI वीडियो स्टूडियो व रील्स: ऑटो वॉइसओवर व डायनामिक एनिमेशन के साथ वीडियो न्यूज़।\n4. e-Paper & सोशल मीडिया पोस्ट: Facebook, Instagram, Twitter और WhatsApp के लिए परफेक्ट साइज।\n5. कस्टम चैनल ब्रांडिंग: आपका चैनल लोगो, नाम, फॉन्ट और कलर्स।\n\n🌐 अधिक जानकारी: https://ainewsmaker.online/#features",
+    answerEn: "Main services: 50+ TV-style news frames, AI headline generation, video reels with auto-voiceover, e-paper cards, and custom channel branding.",
+    alternativeKeywords: ["सेवाएँ", "सुविधाएँ", "services", "features", "सुविधाएं", "टूल्स"],
+    isActive: true,
+    priority: 3,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+  {
+    id: "faq_pricing",
+    category: "Billing & Plans",
+    question: "प्लान और कॉइन्स की कीमत क्या है?",
+    questionEn: "What are the pricing and plans?",
+    answer: "💳 AI News Maker दो मुख्य श्रेणियों में उपलब्ध है:\n- *Basic Desk*: शुरुआती संवाददाताओं के लिए 50 कार्ड्स दैनिक व मानक फ्रेम्स।\n- *VIP Desk*: वरिष्ठ संपादकों के लिए अनलिमिटेड AI हेडलाइन रीजनरेशन, कस्टम फॉन्ट अपलोड, 4K रेंडरिंग और प्राथमिकता सपोर्ट।\n\n🌐 प्लान विवरण एवं तत्काल रिचार्ज: https://ainewsmaker.online/#plans",
+    answerEn: "We offer Basic Desk for daily reporting and VIP Desk with unlimited AI headline regeneration, custom fonts, 4K video rendering, and priority support.",
+    alternativeKeywords: ["plans", "pricing", "मूल्य", "रेट", "कॉइन्स", "coins", "कीमत", "योजना", "प्लान", "plan", "सब्सक्रिप्शन", "subscription", "दाम"],
+    isActive: true,
+    priority: 4,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+  {
+    id: "faq_how_to_graphic",
+    category: "Studio Help",
+    question: "न्यूज़ ग्राफिक कैसे बनाएँ?",
+    questionEn: "How to make a news graphic?",
+    answer: "🎨 AI News Maker पर ग्राफिक कैसे बनाएँ:\n1. https://ainewsmaker.online पर जाएँ और लॉगिन करें।\n2. 'स्टूडियो' टैब पर क्लिक करें।\n3. अपनी खबर का मुख्य विवरण और स्थान दर्ज करें।\n4. AI जनरेटेड हेडलाइंस में से उपयुक्त शीर्षक चुनें।\n5. मनपसंद न्यूज़ फ्रेम और तस्वीर चुनें।\n6. 'ग्राफिक डाउनलोड' पर क्लिक करें और HD इमेज सेकंडों में प्राप्त करें।",
+    answerEn: "To make a graphic: login at ainewsmaker.online, open Studio tab, enter news text, choose an AI headline and frame, then download your graphic.",
+    alternativeKeywords: ["graphic kaise banaye", "how to make graphic", "ग्राफिक कैसे बनाएँ", "फोटो कैसे बनाएँ", "कार्ड कैसे बनाएँ"],
+    isActive: true,
+    priority: 5,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+  {
+    id: "faq_human_support",
+    category: "Human Support",
+    question: "कस्टमर केयर या मानव एजेंट से कैसे संपर्क करें?",
+    questionEn: "How to connect with a human support agent?",
+    answer: "👤 आप कभी भी इस चैट में *'AGENT'* या *'प्रतिनिधि'* लिखकर भेज सकते हैं। हमारे सपोर्ट एग्जीक्यूटिव तुरंत आपसे लाइव चैट पर जुड़ जाएँगे। सहायता का समय: सुबह 9:00 से रात 10:00 तक।",
+    answerEn: "Type AGENT or HUMAN in this chat anytime to directly connect with our customer support executives.",
+    alternativeKeywords: ["agent", "human", "support", "कस्टमर केयर", "प्रतिनिधि", "बात करनी है", "सहायता टीम", "कस्टमर सपोर्ट"],
+    isActive: true,
+    priority: 6,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  },
+];
+
+export const DEFAULT_SEEDED_QUICK_REPLIES: QuickReply[] = [
+  {
+    id: "qr_welcome",
+    title: "स्वागत संदेश",
+    shortcut: "/welcome",
+    category: "General",
+    text: "🙏 नमस्कार! AI News Maker में आपका स्वागत है। बताइए, हम आपकी क्या सहायता कर सकते हैं?",
+  },
+  {
+    id: "qr_plans",
+    title: "प्लान्स व रिचार्ज जानकारी",
+    shortcut: "/plans",
+    category: "Billing",
+    text: "💳 हमारे सभी प्लान्स और कॉइन पैकेजेस की जानकारी https://ainewsmaker.online/#plans पर उपलब्ध है। आप सीधे UPI द्वारा रिचार्ज कर सकते हैं।",
+  },
+  {
+    id: "qr_reset",
+    title: "पासवर्ड रीसेट लिंक",
+    shortcut: "/reset",
+    category: "Account",
+    text: "🔑 कृपया लॉगिन स्क्रीन पर 'पासवर्ड भूल गए?' पर क्लिक करके अपना ईमेल दर्ज करें। रीसेट लिंक आपके इनबॉक्स में प्राप्त होगी।",
+  },
+  {
+    id: "qr_hold",
+    title: "जाँच हेतु प्रतीक्षा",
+    shortcut: "/hold",
+    category: "Support",
+    text: "⏳ कृपया थोड़ा समय दें, हम आपके खाते और विवरण की पुष्टि कर रहे हैं।",
+  },
+  {
+    id: "qr_bye",
+    title: "धन्यवाद व समापन",
+    shortcut: "/bye",
+    category: "General",
+    text: "🙏 AI News Maker से संपर्क करने के लिए धन्यवाद! यदि आपको पुनः सहायता की आवश्यकता हो तो कभी भी संदेश भेज सकते हैं।",
+  },
+];
+
+export const DEFAULT_AUTOMATION_SETTINGS: WhatsAppAutomationSettings = {
+  flowAutomationEnabled: true,
+  geminiModel: "gemini-3.5-flash",
+  aiModel: "gemini-3.5-flash",
+  fallbackReply: "नमस्ते! आपका संदेश हमें मिल गया है। हमारे सहायता प्रतिनिधि जल्द ही आपसे यहाँ संपर्क करेंगे।",
+  defaultHandoffMessage: "नमस्ते! आपका संदेश हमें मिल गया है। हमारे सहायता प्रतिनिधि जल्द ही आपसे यहाँ संपर्क करेंगे।",
+  handoffKeywords: ["agent", "human", "support", "person", "executive", "मानव", "व्यक्ति", "प्रतिनिधि", "कस्टमर केयर", "सहायता टीम", "कस्टमर सपोर्ट", "बात करनी है"],
+  sessionTimeoutMinutes: 30,
+  businessHoursEnabled: false,
+  businessHoursStart: "09:00",
+  businessHoursEnd: "22:00",
+  outOfHoursReply: "नमस्ते! हमारे सहायता केंद्र का कार्य समय समाप्त हो गया है। हमारी टीम कार्य समय में आपके संदेश का उत्तर देगी।",
+};
+
+export function loadFlowsDatabase(): WhatsAppFlow[] {
+  try {
+    if (fs.existsSync(WHATSAPP_FLOWS_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_FLOWS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err: any) {
+    console.error("[WhatsApp:Flows] Error reading flows file:", err.message);
+  }
+  saveFlowsDatabase(DEFAULT_SEEDED_FLOWS);
+  return DEFAULT_SEEDED_FLOWS;
+}
+
+export function saveFlowsDatabase(flows: WhatsAppFlow[], centralDb?: any): boolean {
+  try {
+    fs.writeFileSync(WHATSAPP_FLOWS_FILE, JSON.stringify(flows, null, 2), "utf-8");
+    for (const f of flows) {
+      flowCache.set(f.id, f);
+      if (centralDb?.useFirestore) {
+        centralDb.writeDoc("whatsapp_flows", f.id, f).catch(() => {});
+      }
+    }
+    return true;
+  } catch (err: any) {
+    console.error("[WhatsApp:Flows] Error writing flows file:", err.message);
+    return false;
+  }
+}
+
+export function loadFaqsDatabase(): WhatsAppFAQ[] {
+  try {
+    if (fs.existsSync(WHATSAPP_FAQS_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_FAQS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err: any) {
+    console.error("[WhatsApp:FAQs] Error reading faqs file:", err.message);
+  }
+  saveFaqsDatabase(DEFAULT_SEEDED_FAQS);
+  return DEFAULT_SEEDED_FAQS;
+}
+
+export function saveFaqsDatabase(faqs: WhatsAppFAQ[], centralDb?: any): boolean {
+  try {
+    fs.writeFileSync(WHATSAPP_FAQS_FILE, JSON.stringify(faqs, null, 2), "utf-8");
+    for (const f of faqs) {
+      faqCache.set(f.id, f);
+      if (centralDb?.useFirestore) {
+        centralDb.writeDoc("whatsapp_faqs", f.id, f).catch(() => {});
+        if (f.isActive) {
+          centralDb.writeDoc("whatsapp_knowledge_base", `faq_${f.id}`, {
+            title: f.question,
+            content: f.answer,
+            category: f.category,
+            isActive: true,
+            updatedAt: Date.now(),
+          }).catch(() => {});
+        }
+      }
+    }
+    return true;
+  } catch (err: any) {
+    console.error("[WhatsApp:FAQs] Error writing faqs file:", err.message);
+    return false;
+  }
+}
+
+export function loadFlowSessionsDatabase(): Record<string, FlowSession> {
+  try {
+    if (fs.existsSync(WHATSAPP_FLOW_SESSIONS_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_FLOW_SESSIONS_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return {};
+}
+
+export function saveFlowSessionsDatabase(sessions: Record<string, FlowSession>, centralDb?: any): boolean {
+  try {
+    fs.writeFileSync(WHATSAPP_FLOW_SESSIONS_FILE, JSON.stringify(sessions, null, 2), "utf-8");
+    for (const [k, s] of Object.entries(sessions)) {
+      flowSessionCache.set(k, s);
+      if (centralDb?.useFirestore) {
+        centralDb.writeDoc("whatsapp_flow_sessions", k, s).catch(() => {});
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getActiveFlowSession(conversationId: string): FlowSession | null {
+  if (flowSessionCache.has(conversationId)) {
+    return flowSessionCache.get(conversationId) || null;
+  }
+  const all = loadFlowSessionsDatabase();
+  const session = all[conversationId];
+  if (session) {
+    flowSessionCache.set(conversationId, session);
+    return session;
+  }
+  return null;
+}
+
+export function saveFlowSession(session: FlowSession, centralDb?: any): void {
+  flowSessionCache.set(session.conversationId, session);
+  const all = loadFlowSessionsDatabase();
+  all[session.conversationId] = session;
+  saveFlowSessionsDatabase(all, centralDb);
+}
+
+export function clearFlowSession(conversationId: string, centralDb?: any): void {
+  flowSessionCache.delete(conversationId);
+  const all = loadFlowSessionsDatabase();
+  delete all[conversationId];
+  saveFlowSessionsDatabase(all, centralDb);
+  if (centralDb?.useFirestore && typeof centralDb.deleteDoc === "function") {
+    centralDb.deleteDoc("whatsapp_flow_sessions", conversationId).catch(() => {});
+  }
+}
+
+export function loadQuickRepliesDatabase(): QuickReply[] {
+  try {
+    if (fs.existsSync(WHATSAPP_QUICK_REPLIES_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_QUICK_REPLIES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  saveQuickRepliesDatabase(DEFAULT_SEEDED_QUICK_REPLIES);
+  return DEFAULT_SEEDED_QUICK_REPLIES;
+}
+
+export function saveQuickRepliesDatabase(replies: QuickReply[], centralDb?: any): boolean {
+  try {
+    fs.writeFileSync(WHATSAPP_QUICK_REPLIES_FILE, JSON.stringify(replies, null, 2), "utf-8");
+    for (const r of replies) {
+      quickReplyCache.set(r.id, r);
+      if (centralDb?.useFirestore) {
+        centralDb.writeDoc("whatsapp_quick_replies", r.id, r).catch(() => {});
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadAutomationSettings(): WhatsAppAutomationSettings {
+  try {
+    if (fs.existsSync(WHATSAPP_SETTINGS_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_SETTINGS_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return DEFAULT_AUTOMATION_SETTINGS;
+}
+
+export function saveAutomationSettings(settings: WhatsAppAutomationSettings, centralDb?: any): boolean {
+  try {
+    fs.writeFileSync(WHATSAPP_SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
+    if (centralDb?.useFirestore) {
+      centralDb.writeDoc("system_config", "whatsapp_automation_settings", settings).catch(() => {});
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getActivePublishedFlows(): WhatsAppFlow[] {
+  const all = loadFlowsDatabase();
+  return all.filter((f) => f && f.status === "published" && f.isActive !== false);
+}
+
+export function getFlowById(id: string): WhatsAppFlow | null {
+  const all = loadFlowsDatabase();
+  return all.find((f) => f.id === id) || null;
+}
+
+export function getActiveFaqs(): WhatsAppFAQ[] {
+  const all = loadFaqsDatabase();
+  return all.filter((f) => f && f.isActive !== false);
+}
+
+export function getFaqById(id: string): WhatsAppFAQ | null {
+  const all = loadFaqsDatabase();
+  return all.find((f) => f.id === id) || null;
+}
+
+export function incrementFaqUsage(id: string, centralDb?: any): void {
+  const all = loadFaqsDatabase();
+  const faq = all.find((f) => f.id === id);
+  if (faq) {
+    faq.usageCount = Number(faq.usageCount || 0) + 1;
+    faq.lastUsedAt = Date.now();
+    saveFaqsDatabase(all, centralDb);
+  }
+}
+
+// ============================================================================
+// WHATSAPP MATCHING ENGINES (FLOW TRIGGER & FAQ MATCHER)
+// ============================================================================
+
+export function matchFAQ(queryText: string, faqs: WhatsAppFAQ[]): { faq: WhatsAppFAQ; score: number } | null {
+  const cleanQuery = (queryText || "").toLowerCase().trim();
+  if (!cleanQuery) return null;
+
+  const normalizedQuery = cleanQuery.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+  const queryTokens = normalizedQuery.split(" ").filter((t) => t.length > 1);
+
+  let bestMatch: WhatsAppFAQ | null = null;
+  let bestScore = 0;
+
+  for (const faq of faqs) {
+    if (faq.isActive === false) continue;
+
+    // 1. Direct alternative keyword match
+    const keywordsList = (faq.alternativeKeywords || faq.keywords || []);
+    for (const kw of keywordsList) {
+      const cleanKw = (kw || "").toLowerCase().trim();
+      if (!cleanKw) continue;
+      if (cleanQuery === cleanKw || normalizedQuery === cleanKw) {
+        return { faq, score: 100 };
+      }
+      if (normalizedQuery.includes(cleanKw) || cleanKw.includes(normalizedQuery)) {
+        const score = 80 + Math.min(20, (cleanKw.length / Math.max(normalizedQuery.length, 1)) * 20);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = faq;
+        }
+      }
+    }
+
+    // 2. Question text similarity via token overlap
+    const qStr = (faq.question || faq.questionHi || "").toLowerCase();
+    const normQ = qStr.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+    const qTokens = normQ.split(" ").filter((t) => t.length > 1);
+    let matchedTokens = 0;
+    for (const token of queryTokens) {
+      if (qTokens.includes(token)) matchedTokens++;
+    }
+    const tokenScore = queryTokens.length > 0 ? (matchedTokens / queryTokens.length) * 70 : 0;
+    if (tokenScore > bestScore && tokenScore >= 40) {
+      bestScore = tokenScore;
+      bestMatch = faq;
+    }
+
+    // 3. English question match
+    if (faq.questionEn) {
+      const normQEn = faq.questionEn.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+      if (normalizedQuery.includes(normQEn) || normQEn.includes(normalizedQuery)) {
+        if (75 > bestScore) {
+          bestScore = 75;
+          bestMatch = faq;
+        }
+      }
+    }
+  }
+
+  if (bestMatch && bestScore >= 45) {
+    return { faq: bestMatch, score: Math.round(bestScore) };
+  }
+  return null;
+}
+
+export function matchFlowTrigger(
+  messageText: string,
+  isFirstMessage: boolean,
+  flows: WhatsAppFlow[]
+): WhatsAppFlow | null {
+  const cleanText = (messageText || "").toLowerCase().trim();
+  const normalizedText = cleanText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+
+  // 1. Keyword triggers on active published flows
+  for (const flow of flows) {
+    if (flow.status !== "published" || !flow.isActive) continue;
+    if (flow.trigger?.type === "keyword" && Array.isArray(flow.trigger.keywords)) {
+      for (const kw of flow.trigger.keywords) {
+        const cleanKw = (kw || "").toLowerCase().trim();
+        if (!cleanKw) continue;
+        if (flow.trigger.exactMatch) {
+          if (cleanText === cleanKw || normalizedText === cleanKw) return flow;
+        } else {
+          if (cleanText.includes(cleanKw) || cleanKw.includes(cleanText)) return flow;
+        }
+      }
+    }
+  }
+
+  // 2. First message trigger
+  if (isFirstMessage) {
+    const firstMsgFlow = flows.find(
+      (f) => f.status === "published" && f.isActive && f.trigger?.type === "first_message"
+    );
+    if (firstMsgFlow) return firstMsgFlow;
+  }
+
+  // 3. Fallback / all_inbound trigger
+  const catchAllFlow = flows.find(
+    (f) => f.status === "published" && f.isActive && f.trigger?.type === "all_inbound"
+  );
+  if (catchAllFlow) return catchAllFlow;
+
+  return null;
+}
+
+export async function executeFlowNodes(
+  flowOrId: WhatsAppFlow | string,
+  startNodeIdOrSession: string | FlowSession,
+  userInputOrCentralDb?: string | any,
+  sessionOrDb?: FlowSession | any,
+  centralDbOrAi?: any,
+  generateSupportReplyFn?: (query: string) => Promise<{ reply: string | null; reason?: string }>
+): Promise<{
+  outboundMessages: string[];
+  nextSession: FlowSession;
+  isPaused: boolean;
+  isHandoff: boolean;
+  handoffReason?: string;
+  isCompleted: boolean;
+}> {
+  // 1. Resolve flow
+  let flow: WhatsAppFlow | undefined;
+  if (typeof flowOrId === "string") {
+    const flows = loadFlowsDatabase();
+    flow = flows.find((f) => f.id === flowOrId);
+  } else {
+    flow = flowOrId;
+  }
+
+  // 2. Resolve polymorphic arguments
+  let session: FlowSession;
+  let userInput: string = "";
+  let centralDb: any;
+  let aiFn: ((query: string) => Promise<{ reply: string | null; reason?: string }>) | undefined;
+  let currentNodeId = "";
+
+  if (typeof startNodeIdOrSession === "string") {
+    // Called as: executeFlowNodes(flowId, startNodeId, userInput, session, centralDb, aiFn)
+    currentNodeId = startNodeIdOrSession;
+    userInput = typeof userInputOrCentralDb === "string" ? userInputOrCentralDb : "";
+    session = sessionOrDb || {
+      conversationId: `sim_${Date.now()}`,
+      flowId: flow?.id || "",
+      currentNodeId,
+      variables: {},
+      startedAt: Date.now(),
+      lastInteractionAt: Date.now(),
+      status: "active",
+    };
+    centralDb = centralDbOrAi;
+    aiFn = generateSupportReplyFn;
+  } else {
+    // Called as: executeFlowNodes(flow, session, userInput, centralDb, aiFn)
+    session = startNodeIdOrSession;
+    currentNodeId = session.currentNodeId || (flow?.nodes && flow.nodes[0] ? flow.nodes[0].id : "");
+    userInput = typeof userInputOrCentralDb === "string" ? userInputOrCentralDb : "";
+    centralDb = sessionOrDb;
+    aiFn = centralDbOrAi;
+  }
+
+  const outboundMessages: string[] = [];
+
+  if (!flow || !Array.isArray(flow.nodes) || flow.nodes.length === 0) {
+    return {
+      outboundMessages,
+      nextSession: { ...session, status: "completed" },
+      isPaused: false,
+      isHandoff: false,
+      isCompleted: true,
+    };
+  }
+
+  const nodesMap = new Map<string, FlowNode>();
+  for (const n of flow.nodes) nodesMap.set(n.id, n);
+
+  let isPaused = false;
+  let isHandoff = false;
+  let handoffReason = "";
+  let isCompleted = false;
+
+  let current = nodesMap.get(currentNodeId);
+  if (!current) {
+    return {
+      outboundMessages,
+      nextSession: { ...session, status: "completed" },
+      isPaused: false,
+      isHandoff: false,
+      isCompleted: true,
+    };
+  }
+
+  // If there is user input and current node was paused waiting for answer:
+  if (userInput && (current.type === "question" || current.type === "option" || current.type === "condition")) {
+    session.variables[current.id] = userInput;
+    session.variables.last_input = userInput;
+    session.stepCount++;
+
+    if (current.type === "option") {
+      const cleanInput = userInput.trim().toLowerCase();
+      let matchedNextId = current.config?.defaultNextNodeId;
+      for (const opt of current.config?.options || []) {
+        const kw = (opt.keyword || "").trim().toLowerCase();
+        const lbl = (opt.label || "").trim().toLowerCase();
+        if (cleanInput === kw || cleanInput.includes(kw) || cleanInput.includes(lbl)) {
+          matchedNextId = opt.nextNodeId;
+          break;
+        }
+      }
+      currentNodeId = matchedNextId || current.config?.defaultNextNodeId || "";
+    } else if (current.type === "condition") {
+      let matchedNextId = current.config?.defaultNextNodeId;
+      for (const cond of current.config?.conditions || []) {
+        const val = (cond.value || "").toLowerCase().trim();
+        const cleanInput = userInput.toLowerCase().trim();
+        let matched = false;
+        if (cond.operator === "equals") matched = cleanInput === val;
+        else if (cond.operator === "contains") matched = cleanInput.includes(val);
+        else if (cond.operator === "matches_regex") {
+          try {
+            matched = new RegExp(val, "i").test(cleanInput);
+          } catch {}
+        }
+        if (matched) {
+          matchedNextId = cond.nextNodeId;
+          break;
+        }
+      }
+      currentNodeId = matchedNextId || current.config?.defaultNextNodeId || "";
+    } else {
+      currentNodeId = current.config?.defaultNextNodeId || "";
+    }
+  }
+
+  // Execute sequence of nodes until pause or termination
+  let iterations = 0;
+  while (currentNodeId && iterations < 15) {
+    iterations++;
+    const node = nodesMap.get(currentNodeId);
+    if (!node) {
+      isCompleted = true;
+      break;
+    }
+
+    if (node.type === "message") {
+      if (node.config?.text) outboundMessages.push(node.config.text);
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    } else if (node.type === "question") {
+      if (node.config?.text) outboundMessages.push(node.config.text);
+      isPaused = true;
+      session.currentNodeId = node.id;
+      break;
+    } else if (node.type === "option") {
+      let msg = node.config?.text || "कृपया एक विकल्प चुनें:";
+      outboundMessages.push(msg);
+      isPaused = true;
+      session.currentNodeId = node.id;
+      break;
+    } else if (node.type === "condition") {
+      const lastInput = String(userInput || session.variables.last_input || "").toLowerCase().trim();
+      let matchedNext = node.config?.defaultNextNodeId || "";
+      for (const cond of node.config?.conditions || []) {
+        const val = (cond.value || "").toLowerCase().trim();
+        let matched = false;
+        if (cond.operator === "equals") matched = lastInput === val;
+        else if (cond.operator === "contains") matched = lastInput.includes(val);
+        else if (cond.operator === "matches_regex") {
+          try {
+            matched = new RegExp(val, "i").test(lastInput);
+          } catch {}
+        }
+        if (matched) {
+          matchedNext = cond.nextNodeId;
+          break;
+        }
+      }
+      currentNodeId = matchedNext;
+    } else if (node.type === "ai_response") {
+      if (generateSupportReplyFn) {
+        const query = userInput || session.variables.last_input || "नमस्ते";
+        const aiRes = await generateSupportReplyFn(query);
+        if (aiRes.reply) {
+          outboundMessages.push(aiRes.reply);
+        } else if (aiRes.reason === "knowledge_gap") {
+          isHandoff = true;
+          handoffReason = "ai_knowledge_gap";
+          outboundMessages.push("नमस्ते! आपके सवाल के सटीक उत्तर के लिए हम आपको सहायता प्रतिनिधि से जोड़ रहे हैं।");
+          break;
+        }
+      }
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    } else if (node.type === "faq") {
+      const allFaqs = loadFaqsDatabase();
+      const match = matchFAQ(userInput || String(session.variables.last_input || ""), allFaqs);
+      if (match) {
+        outboundMessages.push(match.faq.answer);
+      } else if (node.config?.text) {
+        outboundMessages.push(node.config.text);
+      }
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    } else if (node.type === "human_handoff") {
+      isHandoff = true;
+      handoffReason = node.config?.handoffReason || "flow_handoff_node";
+      const handoffText = node.config?.text || "नमस्ते! आपकी बातचीत हमारे सहायता प्रतिनिधि को सौंप दी गई है।";
+      outboundMessages.push(handoffText);
+      isCompleted = true;
+      break;
+    } else if (node.type === "end") {
+      if (node.config?.text) outboundMessages.push(node.config.text);
+      isCompleted = true;
+      break;
+    } else {
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    }
+  }
+
+  const nextSession: FlowSession = {
+    ...session,
+    currentNodeId: isPaused ? session.currentNodeId : (isCompleted ? "" : currentNodeId),
+    lastInteractionAt: Date.now(),
+    status: isHandoff ? "handed_off" : (isCompleted ? "completed" : "active"),
+  };
+
+  return {
+    outboundMessages,
+    nextSession,
+    isPaused,
+    isHandoff,
+    handoffReason,
+    isCompleted,
+  };
+}
 
 /**
  * Phase 1B.1 Issue 2 Remediation: Explicit Meta WhatsApp Message State Machine.
@@ -813,7 +1843,7 @@ export const releaseVerifiedPhoneNumber = async (cleanPhone: string, countryCode
 export function registerWhatsAppIntegration(
   app: any,
   centralDb: any,
-  options?: { requireAdminMiddleware?: any; requireAuthMiddleware?: any }
+  options?: { requireAdminMiddleware?: any; requireAuthMiddleware?: any; requireMasterAdminMiddleware?: any }
 ) {
   const webhookPath = "/api/whatsapp/webhook";
 
@@ -1050,46 +2080,57 @@ export function registerWhatsAppIntegration(
   };
 
   const getKnowledgeContext = async (): Promise<{ context: string; count: number; errorCategory?: string }> => {
-    if (!centralDb?.useFirestore) {
-      console.warn("[WhatsApp:KnowledgeBase] FIRESTORE_CONNECTION_ERROR: Firestore is disabled on centralDb");
-      return { context: "", count: 0, errorCategory: "FIRESTORE_CONNECTION_ERROR" };
-    }
-    console.log(`[WhatsApp:KnowledgeBase] Firestore database ID verified: ${centralDb.databaseId || "default"}`);
-    console.log("[WhatsApp:KnowledgeBase] Knowledge Base query started on collection: whatsapp_knowledge_base");
+    const docs: Array<{ title: string; content: string }> = [];
 
-    let result: any;
+    // 1. Ingest active FAQs from local/cached FAQ database
     try {
-      result = await centralDb.listDocs("whatsapp_knowledge_base", 100);
-    } catch (err: any) {
-      console.error("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR:", String(err?.message || err).slice(0, 200));
-      return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_READ_ERROR" };
+      const activeFaqs = loadFaqsDatabase(centralDb).filter((f) => f.isActive && f.status === "published");
+      for (const faq of activeFaqs) {
+        const title = faq.questionHi || faq.questionEn;
+        const kwStr = Array.isArray(faq.keywords) && faq.keywords.length > 0 ? ` (कीवर्ड्स: ${faq.keywords.join(", ")})` : "";
+        const content = `${faq.answerHi || faq.answerEn}${kwStr}`;
+        if (title && content) docs.push({ title, content });
+      }
+    } catch (e: any) {
+      console.warn("[WhatsApp:KnowledgeBase] Warning reading local FAQs database:", e?.message || e);
     }
 
-    if (!result?.success || !Array.isArray(result.documents)) {
-      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR: listDocs returned failure or non-array");
-      return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_READ_ERROR" };
+    // 2. Ingest documents from Firestore whatsapp_knowledge_base if available
+    if (centralDb?.useFirestore) {
+      console.log(`[WhatsApp:KnowledgeBase] Firestore database ID verified: ${centralDb.databaseId || "default"}`);
+      console.log("[WhatsApp:KnowledgeBase] Knowledge Base query started on collection: whatsapp_knowledge_base");
+      try {
+        const result = await centralDb.listDocs("whatsapp_knowledge_base", 100);
+        if (result?.success && Array.isArray(result.documents)) {
+          const activeDocs = result.documents.filter((item: any) => item && item.isActive !== false && item.status !== "disabled");
+          for (const item of activeDocs) {
+            const title = String(item.title || item.question || "").trim();
+            const content = String(item.content || item.answer || item.description || "").trim();
+            if (title || content) docs.push({ title, content });
+          }
+        }
+      } catch (err: any) {
+        console.error("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR:", String(err?.message || err).slice(0, 200));
+      }
     }
 
-    console.log(`[WhatsApp:KnowledgeBase] Knowledge Base documents retrieved: ${result.documents.length}`);
-    const activeDocs = result.documents.filter((item: any) => item && item.isActive !== false && item.status !== "disabled");
-    console.log(`[WhatsApp:KnowledgeBase] Number of active FAQ documents: ${activeDocs.length}`);
-    if (activeDocs.length === 0) {
-      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_EMPTY: No active FAQ documents found in whatsapp_knowledge_base");
+    if (docs.length === 0) {
+      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_EMPTY: No active FAQ documents found in knowledge base");
       return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_EMPTY" };
     }
 
-    const context = activeDocs
-      .map((item: any) => {
-        const title = String(item.title || item.question || "").trim();
-        const content = String(item.content || item.answer || item.description || "").trim();
+    const context = docs
+      .map((item) => {
+        const title = item.title.trim();
+        const content = item.content.trim();
         return title && content ? `प्रश्न/विषय: ${title}\nउत्तर/जानकारी: ${content}` : content || title;
       })
       .filter(Boolean)
       .join("\n\n")
       .slice(0, 14000);
 
-    console.log(`[WhatsApp:KnowledgeBase] Knowledge context generated (${context.length} chars)`);
-    return { context, count: activeDocs.length };
+    console.log(`[WhatsApp:KnowledgeBase] Knowledge context generated (${context.length} chars from ${docs.length} active entries)`);
+    return { context, count: docs.length };
   };
 
   const generateSupportReply = async (userMessage: string): Promise<{ reply: string | null; reason?: string; errorCategory?: string }> => {
@@ -1360,114 +2401,187 @@ export function registerWhatsAppIntegration(
       return;
     }
 
-    // --- GREETING AND INSTANT WELCOME HANDLER ---
-    const isGreeting = /^\s*(hi|hello|hey|namaste|namaskar|नमस्ते|नमस्कार|हैलो|हाय|हॅलो)\s*$/i.test(textBody);
-    if (isGreeting) {
-      console.log(`[WhatsApp:Inbound] Greeting received from ${maskedWa}`);
-      const greetingReply = `🙏 *नमस्कार! AI News Maker (BREAKING NEWS WALA) में आपका स्वागत है।*
+    // --- 1. ACTIVE FLOW SESSION HANDLER ---
+    // If this conversation has an active paused flow waiting for user input, advance it
+    let activeSession = flowSessionCache.get(conversationId);
+    if (!activeSession) {
+      const allSessions = loadFlowSessionsDatabase(centralDb);
+      if (allSessions[conversationId]) {
+        activeSession = allSessions[conversationId];
+        flowSessionCache.set(conversationId, activeSession);
+      }
+    }
 
-हम पत्रकारों और डिजिटल मीडिया के लिए भारत का अग्रणी AI-पावर्ड न्यूज़ ग्राफिक व वीडियो स्टूडियो हैं।
+    if (activeSession && activeSession.status === "active" && activeSession.currentNodeId) {
+      console.log(`[WhatsApp:Flow] Advancing active flow session for ${maskedWa}: flow=${activeSession.flowId}, node=${activeSession.currentNodeId}`);
+      const flowExecResult = await executeFlowNodes(
+        activeSession.flowId,
+        activeSession.currentNodeId,
+        textBody,
+        activeSession,
+        centralDb,
+        generateSupportReply
+      );
 
-बताइए, हम आपकी क्या सहायता कर सकते हैं? आप निम्न में से कोई भी विषय लिख सकते हैं:
-1️⃣ *AI News Maker क्या है?*
-2️⃣ *इसकी सेवाएँ क्या हैं?*
-3️⃣ *ग्राफिक कैसे बनाएँ?*
-4️⃣ *वीडियो कैसे बनाएँ?*
-5️⃣ *मेरा प्लान* (प्लान व वैधता)
-6️⃣ *कोटा* (आज के शेष ग्राफिक)
-7️⃣ *वॉलेट* (कॉइन्स बैलेंस)
-8️⃣ *अकाउंट* (प्रोफाइल विवरण)
+      // Send outbound messages generated by flow
+      for (const msg of flowExecResult.outboundMessages) {
+        const sent = await sendWhatsAppText(waId, msg);
+        const outMsgId = String(sent?.messages?.[0]?.id || `flow-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+        const outRecord = {
+          messageId: outMsgId,
+          metaMessageId: outMsgId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "flow_automation",
+          text: msg,
+          timestamp: Date.now(),
+          status: "sent",
+        };
+        await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord).catch(() => {});
+        messageCache.set(sha256(outMsgId), outRecord);
+      }
 
-🌐 वेबसाइट: https://ainewsmaker.online`;
+      // Handle handoff if requested by flow
+      if (flowExecResult.isHandoff) {
+        console.log(`[WhatsApp:Flow] Human handoff triggered by flow node for ${maskedWa}`);
+        const handoffUpdates = {
+          ...convUpdates,
+          handlingMode: "waiting_human",
+          status: "human_requested",
+          humanHandoff: true,
+          handoffRequestedAt: Date.now(),
+          handoffReason: flowExecResult.handoffReason || "flow_handoff_node",
+          modeUpdatedAt: Date.now(),
+          modeUpdatedBy: "flow_automation",
+          updatedAt: Date.now(),
+        };
+        await requireWrite("whatsapp_conversations", conversationId, handoffUpdates).catch(() => {});
+        conversationCache.set(conversationId, handoffUpdates);
 
-      const sent = await sendWhatsAppText(waId, greetingReply);
-      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
-        conversationId, waId, direction: "outbound", text: greetingReply, timestamp: now, status: "sent",
-      });
+        await recordAuditEvent(centralDb, {
+          conversationId,
+          eventType: "conversation_mode_changed",
+          previousValue: currentHandlingMode,
+          newValue: "waiting_human",
+          actorId: "flow_automation",
+          actorType: "system",
+          metadata: { flowId: activeSession.flowId, reason: flowExecResult.handoffReason },
+        });
+      }
+
+      // Persist updated session
+      const allSessions = loadFlowSessionsDatabase(centralDb);
+      allSessions[conversationId] = flowExecResult.nextSession;
+      saveFlowSessionsDatabase(allSessions, centralDb);
+      flowSessionCache.set(conversationId, flowExecResult.nextSession);
       return;
     }
 
-    // --- DIRECT FAQ PRE-MATCHER ---
-    const isWhatIsNewsMaker = /क्या है|what is ai news maker|ai news maker kya hai/i.test(textBody);
-    const isServicesQuery = /सेवाएँ|सुविधाएँ|services|features|सुविधाएं/i.test(textBody);
-    const isHowToGraphic = /ग्राफिक कैसे|graphic kaise|how to make graphic/i.test(textBody);
-    const isHowToVideo = /वीडियो कैसे|video kaise|how to make video/i.test(textBody);
+    // --- 2. FLOW TRIGGER MATCHER ---
+    // Match inbound message against published flows
+    const isFirstMessage = !existingConv || Number(existingConv.unreadCount || 0) <= 1;
+    const allFlows = loadFlowsDatabase(centralDb);
+    const matchedFlow = matchFlowTrigger(textBody, isFirstMessage, allFlows);
 
-    if (isWhatIsNewsMaker && !isServicesQuery) {
-      console.log(`[WhatsApp:Inbound] FAQ 'what is news maker' matched from ${maskedWa}`);
-      const faqReply = `📰 *AI News Maker (BREAKING NEWS WALA) क्या है?*
+    if (matchedFlow && Array.isArray(matchedFlow.nodes) && matchedFlow.nodes.length > 0) {
+      console.log(`[WhatsApp:Flow] Trigger matched for ${maskedWa}: flow="${matchedFlow.name}" (${matchedFlow.id})`);
+      const startNodeId = matchedFlow.nodes[0].id;
+      const initialSession: FlowSession = {
+        conversationId,
+        flowId: matchedFlow.id,
+        currentNodeId: startNodeId,
+        variables: { initial_input: textBody },
+        startedAt: now,
+        lastInteractionAt: now,
+        status: "active",
+      };
 
-AI News Maker भारत का पहला विशेष AI-पावर्ड डिजिटल न्यूज़ स्टूडियो है, जिसे पत्रकारों, न्यूज़ पोर्टल्स, सोशल मीडिया क्रिएटर्स और मीडिया हाउसों के लिए डिज़ाइन किया गया है।
+      const flowExecResult = await executeFlowNodes(
+        matchedFlow.id,
+        startNodeId,
+        textBody,
+        initialSession,
+        centralDb,
+        generateSupportReply
+      );
 
-इसके माध्यम से आप बिना किसी ग्राफिक डिज़ाइनर के केवल 7 चरणों में ब्रेकिंग न्यूज़, टीवी स्टाइल न्यूज़ ग्राफिक्स, AI हेडलाइंस, वॉइसओवर और 4K/HD वीडियो न्यूज़ रील्स तैयार कर सकते हैं।
+      for (const msg of flowExecResult.outboundMessages) {
+        const sent = await sendWhatsAppText(waId, msg);
+        const outMsgId = String(sent?.messages?.[0]?.id || `flow-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+        const outRecord = {
+          messageId: outMsgId,
+          metaMessageId: outMsgId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "flow_automation",
+          text: msg,
+          timestamp: Date.now(),
+          status: "sent",
+        };
+        await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord).catch(() => {});
+        messageCache.set(sha256(outMsgId), outRecord);
+      }
 
-🌐 वेबसाइट: https://ainewsmaker.online`;
+      if (flowExecResult.isHandoff) {
+        const handoffUpdates = {
+          ...convUpdates,
+          handlingMode: "waiting_human",
+          status: "human_requested",
+          humanHandoff: true,
+          handoffRequestedAt: Date.now(),
+          handoffReason: flowExecResult.handoffReason || "flow_handoff_node",
+          modeUpdatedAt: Date.now(),
+          modeUpdatedBy: "flow_automation",
+          updatedAt: Date.now(),
+        };
+        await requireWrite("whatsapp_conversations", conversationId, handoffUpdates).catch(() => {});
+        conversationCache.set(conversationId, handoffUpdates);
+      }
 
-      const sent = await sendWhatsAppText(waId, faqReply);
-      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
-        conversationId, waId, direction: "outbound", text: faqReply, timestamp: now, status: "sent",
-      });
+      const allSessions = loadFlowSessionsDatabase(centralDb);
+      allSessions[conversationId] = flowExecResult.nextSession;
+      saveFlowSessionsDatabase(allSessions, centralDb);
+      flowSessionCache.set(conversationId, flowExecResult.nextSession);
       return;
     }
 
-    if (isServicesQuery) {
-      console.log(`[WhatsApp:Inbound] FAQ 'services' matched from ${maskedWa}`);
-      const servicesReply = `⚡ *AI News Maker की मुख्य सेवाएँ:*
+    // --- 3. DYNAMIC FAQ MATCHER ---
+    const allFaqs = loadFaqsDatabase(centralDb);
+    const matchedFaq = matchFAQ(textBody, allFaqs);
 
-1. *7-Step Quick News Maker*: टीवी चैनल जैसे 50+ रेडी-टू-यूज़ न्यूज़ फ्रेम्स।
-2. *AI हेडलाइन व बुलेटिन जेनरेटर*: खबरों के लिए आकर्षक और वायरल हेडलाइंस।
-3. *AI वीडियो स्टूडियो व रील्स*: ऑटो वॉइसओवर व डायनामिक एनिमेशन के साथ वीडियो न्यूज़।
-4. *e-Paper & सोशल मीडिया पोस्ट*: Facebook, Instagram, Twitter और WhatsApp के लिए परफेक्ट साइज।
-5. *कस्टम चैनल ब्रांडिंग*: आपका चैनल लोगो, नाम, फॉन्ट और कलर्स।
+    if (matchedFaq && matchedFaq.faq) {
+      console.log(`[WhatsApp:FAQ] FAQ matched for ${maskedWa}: "${matchedFaq.faq.questionHi || matchedFaq.faq.questionEn}" (score: ${matchedFaq.score})`);
+      const answerText = matchedFaq.faq.answerHi || matchedFaq.faq.answerEn;
+      const sent = await sendWhatsAppText(waId, answerText);
+      const outMsgId = String(sent?.messages?.[0]?.id || `faq-${Date.now()}`);
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId,
+        waId,
+        direction: "outbound",
+        senderType: "faq_automation",
+        text: answerText,
+        timestamp: Date.now(),
+        status: "sent",
+      };
+      await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord).catch(() => {});
+      messageCache.set(sha256(outMsgId), outRecord);
 
-🌐 अधिक जानकारी: https://ainewsmaker.online/#features`;
-
-      const sent = await sendWhatsAppText(waId, servicesReply);
-      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
-        conversationId, waId, direction: "outbound", text: servicesReply, timestamp: now, status: "sent",
-      });
-      return;
-    }
-
-    if (isHowToGraphic) {
-      console.log(`[WhatsApp:Inbound] FAQ 'how to graphic' matched from ${maskedWa}`);
-      const graphicReply = `🎨 *AI News Maker पर ग्राफिक कैसे बनाएँ:*
-
-1. https://ainewsmaker.online पर जाएँ और लॉगिन करें।
-2. 'स्टूडियो' टैब पर क्लिक करें।
-3. 50+ टीवी फ्रेम्स में से अपना पसंदीदा टेम्पलेट चुनें।
-4. खबर की हेडलाइन और मुख्य विवरण दर्ज करें (या AI हेडलाइन का उपयोग करें)।
-5. अपनी इमेज अपलोड करें और क्रॉप करें।
-6. 'डाउनलोड' पर क्लिक करें — आपका HD न्यूज़ ग्राफिक तुरंत तैयार!`;
-
-      const sent = await sendWhatsAppText(waId, graphicReply);
-      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
-        conversationId, waId, direction: "outbound", text: graphicReply, timestamp: now, status: "sent",
-      });
-      return;
-    }
-
-    if (isHowToVideo) {
-      console.log(`[WhatsApp:Inbound] FAQ 'how to video' matched from ${maskedWa}`);
-      const videoReply = `🎬 *AI News Maker पर वीडियो कैसे बनाएँ:*
-
-1. https://ainewsmaker.online पर 'वीडियो एंड रील्स' सेक्शन में जाएँ।
-2. अपनी खबर का टेक्स्ट पेस्ट करें।
-3. AI वॉइसओवर (हिंदी आवाज़) चुनें।
-4. न्यूज़ विजुअल्स / इमेज जोड़ें।
-5. 'वीडियो जनरेट करें' पर क्लिक करें — आपकी टीवी-स्टाइल न्यूज़ रील तैयार!
-
-_नोट: वीडियो स्टूडियो एडवांस, प्रो और वीआईपी डेस्क प्लान में उपलब्ध है।_`;
-
-      const sent = await sendWhatsAppText(waId, videoReply);
-      const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha256(outMsgId), {
-        conversationId, waId, direction: "outbound", text: videoReply, timestamp: now, status: "sent",
-      });
+      // Increment usage count on matched FAQ
+      try {
+        matchedFaq.faq.usageCount = Number(matchedFaq.faq.usageCount || 0) + 1;
+        matchedFaq.faq.lastMatchedAt = Date.now();
+        const faqIdx = allFaqs.findIndex((f) => f.id === matchedFaq.faq.id);
+        if (faqIdx !== -1) {
+          allFaqs[faqIdx] = matchedFaq.faq;
+          saveFaqsDatabase(allFaqs, centralDb);
+        }
+      } catch (err: any) {
+        console.warn("[WhatsApp:FAQ] Error incrementing FAQ usage:", err?.message || err);
+      }
       return;
     }
 
@@ -3491,5 +4605,406 @@ AI News Maker परिवार में आपका हार्दिक �
       },
       metaApiStatus
     });
+  });
+
+  // =========================================================================
+  // WHATSAPP AI COMMAND CENTER: FLOW BUILDER ADMIN APIS
+  // =========================================================================
+
+  app.get("/api/admin/whatsapp/flows", requireAdmin, async (_req: any, res: any) => {
+    try {
+      const flows = loadFlowsDatabase(centralDb);
+      return res.json({ success: true, flows });
+    } catch (err: any) {
+      console.error("[WhatsApp:FlowAdmin] Error fetching flows:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load flows" });
+    }
+  });
+
+  app.get("/api/admin/whatsapp/flows/:id", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+      return res.json({ success: true, flow });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to get flow" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/flows", requireAdmin, async (req: any, res: any) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.name) {
+        return res.status(400).json({ success: false, error: "Flow name is required" });
+      }
+      const flows = loadFlowsDatabase(centralDb);
+      const id = payload.id || `flow_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const now = Date.now();
+      const newFlow: WhatsAppFlow = {
+        id,
+        name: payload.name.trim(),
+        description: (payload.description || "").trim(),
+        version: payload.version || "1.0",
+        status: payload.status || "draft",
+        trigger: payload.trigger || { type: "keyword", keywords: [] },
+        nodes: Array.isArray(payload.nodes) ? payload.nodes : [],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const existingIdx = flows.findIndex((f) => f.id === id);
+      if (existingIdx !== -1) {
+        flows[existingIdx] = newFlow;
+      } else {
+        flows.push(newFlow);
+      }
+      saveFlowsDatabase(flows, centralDb);
+      return res.json({ success: true, flow: newFlow });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save flow" });
+    }
+  });
+
+  app.put("/api/admin/whatsapp/flows/:id", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb);
+      const idx = flows.findIndex((f) => f.id === id);
+      if (idx === -1) return res.status(404).json({ success: false, error: "Flow not found" });
+
+      const updated: WhatsAppFlow = {
+        ...flows[idx],
+        ...req.body,
+        id,
+        updatedAt: Date.now(),
+      };
+      flows[idx] = updated;
+      saveFlowsDatabase(flows, centralDb);
+      return res.json({ success: true, flow: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to update flow" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/flows/:id/duplicate", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+
+      const duplicatedId = `${flow.id}_copy_${Date.now().toString(36)}`;
+      const duplicated: WhatsAppFlow = {
+        ...flow,
+        id: duplicatedId,
+        name: `${flow.name} (कॉपी)`,
+        status: "draft",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      flows.push(duplicated);
+      saveFlowsDatabase(flows, centralDb);
+      return res.json({ success: true, flow: duplicated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to duplicate flow" });
+    }
+  });
+
+  app.delete("/api/admin/whatsapp/flows/:id", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb);
+      const filtered = flows.filter((f) => f.id !== id);
+      saveFlowsDatabase(filtered, centralDb);
+      return res.json({ success: true, deletedId: id });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete flow" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/flows/:id/status", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body || {};
+      if (!["draft", "published", "inactive"].includes(status)) {
+        return res.status(400).json({ success: false, error: "Invalid status value ('draft' | 'published' | 'inactive')" });
+      }
+      const flows = loadFlowsDatabase(centralDb);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+      flow.status = status;
+      flow.updatedAt = Date.now();
+      saveFlowsDatabase(flows, centralDb);
+      return res.json({ success: true, flow });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to change flow status" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/flows/:id/test", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { input = "नमस्ते", sessionState, startNodeId } = req.body || {};
+      const flows = loadFlowsDatabase(centralDb);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+
+      const start = startNodeId || (flow.nodes && flow.nodes[0] ? flow.nodes[0].id : "");
+      const session: FlowSession = sessionState || {
+        conversationId: `sim_${Date.now()}`,
+        flowId: id,
+        currentNodeId: start,
+        variables: {},
+        startedAt: Date.now(),
+        lastInteractionAt: Date.now(),
+        status: "active",
+      };
+
+      const result = await executeFlowNodes(
+        id,
+        start,
+        String(input),
+        session,
+        centralDb,
+        generateSupportReply
+      );
+
+      return res.json({ success: true, ...result });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Flow test failed" });
+    }
+  });
+
+  // =========================================================================
+  // WHATSAPP AI COMMAND CENTER: FAQ MANAGER ADMIN APIS
+  // =========================================================================
+
+  app.get("/api/admin/whatsapp/faqs", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { search = "", category = "" } = req.query || {};
+      let faqs = loadFaqsDatabase(centralDb);
+      if (category) {
+        faqs = faqs.filter((f) => f.category === category);
+      }
+      if (search) {
+        const s = String(search).toLowerCase();
+        faqs = faqs.filter(
+          (f) =>
+            (f.questionHi && f.questionHi.toLowerCase().includes(s)) ||
+            (f.questionEn && f.questionEn.toLowerCase().includes(s)) ||
+            (f.answerHi && f.answerHi.toLowerCase().includes(s)) ||
+            (f.answerEn && f.answerEn.toLowerCase().includes(s)) ||
+            (Array.isArray(f.keywords) && f.keywords.some((k) => k.toLowerCase().includes(s)))
+        );
+      }
+      return res.json({ success: true, faqs });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load FAQs" });
+    }
+  });
+
+  app.get("/api/admin/whatsapp/faqs/categories", requireAdmin, async (_req: any, res: any) => {
+    try {
+      const faqs = loadFaqsDatabase(centralDb);
+      const categories = Array.from(new Set(faqs.map((f) => f.category || "सामान्य"))).filter(Boolean);
+      return res.json({ success: true, categories });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to get FAQ categories" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/faqs", requireAdmin, async (req: any, res: any) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.questionHi && !payload.questionEn) {
+        return res.status(400).json({ success: false, error: "Question (Hindi or English) is required" });
+      }
+      if (!payload.answerHi && !payload.answerEn) {
+        return res.status(400).json({ success: false, error: "Answer (Hindi or English) is required" });
+      }
+
+      const faqs = loadFaqsDatabase(centralDb);
+      const id = payload.id || `faq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const now = Date.now();
+      const newFaq: WhatsAppFAQ = {
+        id,
+        category: payload.category || "सामान्य",
+        questionHi: (payload.questionHi || "").trim(),
+        questionEn: (payload.questionEn || "").trim(),
+        answerHi: (payload.answerHi || "").trim(),
+        answerEn: (payload.answerEn || "").trim(),
+        keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
+        isActive: payload.isActive !== false,
+        status: payload.status || "published",
+        usageCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      faqs.push(newFaq);
+      saveFaqsDatabase(faqs, centralDb);
+      return res.json({ success: true, faq: newFaq });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save FAQ" });
+    }
+  });
+
+  app.put("/api/admin/whatsapp/faqs/:id", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const faqs = loadFaqsDatabase(centralDb);
+      const idx = faqs.findIndex((f) => f.id === id);
+      if (idx === -1) return res.status(404).json({ success: false, error: "FAQ not found" });
+
+      const updated: WhatsAppFAQ = {
+        ...faqs[idx],
+        ...req.body,
+        id,
+        updatedAt: Date.now(),
+      };
+      faqs[idx] = updated;
+      saveFaqsDatabase(faqs, centralDb);
+      return res.json({ success: true, faq: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to update FAQ" });
+    }
+  });
+
+  app.delete("/api/admin/whatsapp/faqs/:id", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const faqs = loadFaqsDatabase(centralDb);
+      const filtered = faqs.filter((f) => f.id !== id);
+      saveFaqsDatabase(filtered, centralDb);
+      return res.json({ success: true, deletedId: id });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete FAQ" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/faqs/:id/status", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { status, isActive } = req.body || {};
+      const faqs = loadFaqsDatabase(centralDb);
+      const faq = faqs.find((f) => f.id === id);
+      if (!faq) return res.status(404).json({ success: false, error: "FAQ not found" });
+
+      if (status) faq.status = status;
+      if (typeof isActive === "boolean") faq.isActive = isActive;
+      faq.updatedAt = Date.now();
+      saveFaqsDatabase(faqs, centralDb);
+      return res.json({ success: true, faq });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to update FAQ status" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/faqs/test-match", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { query } = req.body || {};
+      if (!query) return res.status(400).json({ success: false, error: "Query string is required" });
+      const faqs = loadFaqsDatabase(centralDb);
+      const match = matchFAQ(String(query), faqs);
+      return res.json({ success: true, query, match });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "FAQ match test failed" });
+    }
+  });
+
+  // =========================================================================
+  // WHATSAPP AI COMMAND CENTER: QUICK REPLIES ADMIN APIS
+  // =========================================================================
+
+  app.get("/api/admin/whatsapp/quick-replies", requireAdmin, async (_req: any, res: any) => {
+    try {
+      const replies = loadQuickRepliesDatabase(centralDb);
+      return res.json({ success: true, quickReplies: replies });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load quick replies" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/quick-replies", requireAdmin, async (req: any, res: any) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.title || !payload.text) {
+        return res.status(400).json({ success: false, error: "Title and text are required" });
+      }
+      const replies = loadQuickRepliesDatabase(centralDb);
+      const id = payload.id || `qr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const newQr: QuickReply = {
+        id,
+        title: payload.title.trim(),
+        text: payload.text.trim(),
+        shortcut: (payload.shortcut || "").trim(),
+        category: payload.category || "सामान्य",
+        createdAt: Date.now(),
+      };
+      const existingIdx = replies.findIndex((r) => r.id === id);
+      if (existingIdx !== -1) {
+        replies[existingIdx] = newQr;
+      } else {
+        replies.push(newQr);
+      }
+      saveQuickRepliesDatabase(replies, centralDb);
+      return res.json({ success: true, quickReply: newQr });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save quick reply" });
+    }
+  });
+
+  app.delete("/api/admin/whatsapp/quick-replies/:id", requireAdmin, async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const replies = loadQuickRepliesDatabase(centralDb);
+      const filtered = replies.filter((r) => r.id !== id);
+      saveQuickRepliesDatabase(filtered, centralDb);
+      return res.json({ success: true, deletedId: id });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete quick reply" });
+    }
+  });
+
+  // =========================================================================
+  // WHATSAPP AI COMMAND CENTER: AUTOMATION SETTINGS ADMIN APIS
+  // =========================================================================
+
+  app.get("/api/admin/whatsapp/settings", requireAdmin, async (_req: any, res: any) => {
+    try {
+      const settings = loadAutomationSettings(centralDb);
+      return res.json({
+        success: true,
+        settings,
+        metaStatus: {
+          configured: Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
+          phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+          displayNumber: process.env.WHATSAPP_DISPLAY_NUMBER || process.env.WHATSAPP_PHONE_NUMBER || "+1 555-706-1955",
+        },
+        vapidStatus: {
+          configured: Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+          publicKey: process.env.VAPID_PUBLIC_KEY ? `${process.env.VAPID_PUBLIC_KEY.slice(0, 16)}...` : "NOT_CONFIGURED",
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load settings" });
+    }
+  });
+
+  app.post("/api/admin/whatsapp/settings", requireAdmin, async (req: any, res: any) => {
+    try {
+      const current = loadAutomationSettings(centralDb);
+      const updated: WhatsAppAutomationSettings = {
+        ...current,
+        ...req.body,
+        updatedAt: Date.now(),
+      };
+      saveAutomationSettings(updated, centralDb);
+      return res.json({ success: true, settings: updated });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save settings" });
+    }
   });
 }

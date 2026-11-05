@@ -34,13 +34,13 @@ var require_server_firestore_adapter = __commonJS({
   "server_firestore_adapter.cjs"(exports2, module2) {
     var http = require("http");
     var https = require("https");
-    var fs2 = require("fs");
-    var path2 = require("path");
+    var fs3 = require("fs");
+    var path3 = require("path");
     var firebaseConfig = null;
     try {
-      const cfgPath = path2.join(process.cwd(), "firebase-applet-config.json");
-      if (fs2.existsSync(cfgPath)) {
-        firebaseConfig = JSON.parse(fs2.readFileSync(cfgPath, "utf8"));
+      const cfgPath = path3.join(process.cwd(), "firebase-applet-config.json");
+      if (fs3.existsSync(cfgPath)) {
+        firebaseConfig = JSON.parse(fs3.readFileSync(cfgPath, "utf8"));
       }
     } catch {
     }
@@ -561,8 +561,8 @@ var require_server_firestore_adapter = __commonJS({
 // cloud_storage_service.cjs
 var require_cloud_storage_service = __commonJS({
   "cloud_storage_service.cjs"(exports2, module2) {
-    var fs2 = require("fs");
-    var path2 = require("path");
+    var fs3 = require("fs");
+    var path3 = require("path");
     var https = require("https");
     var { getMetadataAccessToken } = require_server_firestore_adapter();
     var httpsAgent = new https.Agent({
@@ -574,8 +574,8 @@ var require_cloud_storage_service = __commonJS({
         this.projectId = options.projectId || process.env.GOOGLE_CLOUD_PROJECT || "ai-news-maker-app";
         this.bucketName = options.bucketName || process.env.GCS_BUCKET_NAME || "ai-news-maker-app.firebasestorage.app";
         this.useGcs = options.useGcs !== void 0 ? Boolean(options.useGcs) : process.env.USE_GCS !== "false";
-        this.localUploadsDir = options.localUploadsDir || path2.join(process.cwd(), "public", "uploads");
-        this.webLocalUploadsDir = path2.join(process.cwd(), "web_studio", "public", "uploads");
+        this.localUploadsDir = options.localUploadsDir || path3.join(process.cwd(), "public", "uploads");
+        this.webLocalUploadsDir = path3.join(process.cwd(), "web_studio", "public", "uploads");
       }
       async getAccessToken() {
         return await getMetadataAccessToken();
@@ -601,14 +601,14 @@ var require_cloud_storage_service = __commonJS({
           throw new Error("Filename is required for saveMedia");
         }
         const gcsPath = `uploads/${category}/${filename}`;
-        const localDir = path2.join(this.localUploadsDir, category);
-        const localFilePath = path2.join(localDir, filename);
+        const localDir = path3.join(this.localUploadsDir, category);
+        const localFilePath = path3.join(localDir, filename);
         try {
-          fs2.mkdirSync(localDir, { recursive: true });
-          fs2.writeFileSync(localFilePath, buffer);
-          const webDir = path2.join(this.webLocalUploadsDir, category);
-          fs2.mkdirSync(webDir, { recursive: true });
-          fs2.writeFileSync(path2.join(webDir, filename), buffer);
+          fs3.mkdirSync(localDir, { recursive: true });
+          fs3.writeFileSync(localFilePath, buffer);
+          const webDir = path3.join(this.webLocalUploadsDir, category);
+          fs3.mkdirSync(webDir, { recursive: true });
+          fs3.writeFileSync(path3.join(webDir, filename), buffer);
         } catch (localErr) {
           console.warn(`[CloudStorageService] Warning: Could not write local cache file:`, localErr.message);
         }
@@ -743,10 +743,10 @@ var require_cloud_storage_service = __commonJS({
           if (parts.length >= 3 && parts[0] === "uploads") {
             const cat = parts[1];
             const fn = parts[2];
-            const p1 = path2.join(this.localUploadsDir, cat, fn);
-            const p2 = path2.join(this.webLocalUploadsDir, cat, fn);
-            if (fs2.existsSync(p1)) fs2.unlinkSync(p1);
-            if (fs2.existsSync(p2)) fs2.unlinkSync(p2);
+            const p1 = path3.join(this.localUploadsDir, cat, fn);
+            const p2 = path3.join(this.webLocalUploadsDir, cat, fn);
+            if (fs3.existsSync(p1)) fs3.unlinkSync(p1);
+            if (fs3.existsSync(p2)) fs3.unlinkSync(p2);
           }
         } catch (err) {
           console.warn(`[CloudStorageService] Warning: Could not remove local cache:`, err.message);
@@ -797,8 +797,8 @@ var require_cloud_storage_service = __commonJS({
       createUploadsMiddleware() {
         return (req, res, next) => {
           const rawPath = req.path.replace(/^\//, "");
-          const localFilePath = path2.join(this.localUploadsDir, rawPath);
-          if (fs2.existsSync(localFilePath)) {
+          const localFilePath = path3.join(this.localUploadsDir, rawPath);
+          if (fs3.existsSync(localFilePath)) {
             return next();
           }
           if (this.isGcsActive()) {
@@ -822,13 +822,13 @@ var require_server_firestore_adapter2 = __commonJS({
   "../server_firestore_adapter.cjs"(exports2, module2) {
     var http = require("http");
     var https = require("https");
-    var fs2 = require("fs");
-    var path2 = require("path");
+    var fs3 = require("fs");
+    var path3 = require("path");
     var firebaseConfig = null;
     try {
-      const cfgPath = path2.join(process.cwd(), "firebase-applet-config.json");
-      if (fs2.existsSync(cfgPath)) {
-        firebaseConfig = JSON.parse(fs2.readFileSync(cfgPath, "utf8"));
+      const cfgPath = path3.join(process.cwd(), "firebase-applet-config.json");
+      if (fs3.existsSync(cfgPath)) {
+        firebaseConfig = JSON.parse(fs3.readFileSync(cfgPath, "utf8"));
       }
     } catch {
     }
@@ -1349,8 +1349,8 @@ var require_server_firestore_adapter2 = __commonJS({
 // ../cloud_storage_service.cjs
 var require_cloud_storage_service2 = __commonJS({
   "../cloud_storage_service.cjs"(exports2, module2) {
-    var fs2 = require("fs");
-    var path2 = require("path");
+    var fs3 = require("fs");
+    var path3 = require("path");
     var https = require("https");
     var { getMetadataAccessToken } = require_server_firestore_adapter2();
     var httpsAgent = new https.Agent({
@@ -1362,8 +1362,8 @@ var require_cloud_storage_service2 = __commonJS({
         this.projectId = options.projectId || process.env.GOOGLE_CLOUD_PROJECT || "ai-news-maker-app";
         this.bucketName = options.bucketName || process.env.GCS_BUCKET_NAME || "ai-news-maker-app.firebasestorage.app";
         this.useGcs = options.useGcs !== void 0 ? Boolean(options.useGcs) : process.env.USE_GCS !== "false";
-        this.localUploadsDir = options.localUploadsDir || path2.join(process.cwd(), "public", "uploads");
-        this.webLocalUploadsDir = path2.join(process.cwd(), "web_studio", "public", "uploads");
+        this.localUploadsDir = options.localUploadsDir || path3.join(process.cwd(), "public", "uploads");
+        this.webLocalUploadsDir = path3.join(process.cwd(), "web_studio", "public", "uploads");
       }
       async getAccessToken() {
         return await getMetadataAccessToken();
@@ -1389,14 +1389,14 @@ var require_cloud_storage_service2 = __commonJS({
           throw new Error("Filename is required for saveMedia");
         }
         const gcsPath = `uploads/${category}/${filename}`;
-        const localDir = path2.join(this.localUploadsDir, category);
-        const localFilePath = path2.join(localDir, filename);
+        const localDir = path3.join(this.localUploadsDir, category);
+        const localFilePath = path3.join(localDir, filename);
         try {
-          fs2.mkdirSync(localDir, { recursive: true });
-          fs2.writeFileSync(localFilePath, buffer);
-          const webDir = path2.join(this.webLocalUploadsDir, category);
-          fs2.mkdirSync(webDir, { recursive: true });
-          fs2.writeFileSync(path2.join(webDir, filename), buffer);
+          fs3.mkdirSync(localDir, { recursive: true });
+          fs3.writeFileSync(localFilePath, buffer);
+          const webDir = path3.join(this.webLocalUploadsDir, category);
+          fs3.mkdirSync(webDir, { recursive: true });
+          fs3.writeFileSync(path3.join(webDir, filename), buffer);
         } catch (localErr) {
           console.warn(`[CloudStorageService] Warning: Could not write local cache file:`, localErr.message);
         }
@@ -1531,10 +1531,10 @@ var require_cloud_storage_service2 = __commonJS({
           if (parts.length >= 3 && parts[0] === "uploads") {
             const cat = parts[1];
             const fn = parts[2];
-            const p1 = path2.join(this.localUploadsDir, cat, fn);
-            const p2 = path2.join(this.webLocalUploadsDir, cat, fn);
-            if (fs2.existsSync(p1)) fs2.unlinkSync(p1);
-            if (fs2.existsSync(p2)) fs2.unlinkSync(p2);
+            const p1 = path3.join(this.localUploadsDir, cat, fn);
+            const p2 = path3.join(this.webLocalUploadsDir, cat, fn);
+            if (fs3.existsSync(p1)) fs3.unlinkSync(p1);
+            if (fs3.existsSync(p2)) fs3.unlinkSync(p2);
           }
         } catch (err) {
           console.warn(`[CloudStorageService] Warning: Could not remove local cache:`, err.message);
@@ -1585,8 +1585,8 @@ var require_cloud_storage_service2 = __commonJS({
       createUploadsMiddleware() {
         return (req, res, next) => {
           const rawPath = req.path.replace(/^\//, "");
-          const localFilePath = path2.join(this.localUploadsDir, rawPath);
-          if (fs2.existsSync(localFilePath)) {
+          const localFilePath = path3.join(this.localUploadsDir, rawPath);
+          if (fs3.existsSync(localFilePath)) {
             return next();
           }
           if (this.isGcsActive()) {
@@ -1610,8 +1610,8 @@ var require_firestore_database_service = __commonJS({
   "firestore_database_service.cjs"(exports2, module2) {
     var http = require("http");
     var https = require("https");
-    var fs2 = require("fs");
-    var path2 = require("path");
+    var fs3 = require("fs");
+    var path3 = require("path");
     var crypto2 = require("crypto");
     var adapter = require_server_firestore_adapter();
     var httpsAgent = new https.Agent({
@@ -1721,7 +1721,7 @@ var require_firestore_database_service = __commonJS({
         if (process.env.FIRESTORE_EMULATOR_HOST) return "owner";
         return adapter.getMetadataAccessToken();
       }
-      async _requestFirestore({ method = "GET", path: path3, body = null, headers = {}, timeout = 6e3 }) {
+      async _requestFirestore({ method = "GET", path: path4, body = null, headers = {}, timeout = 6e3 }) {
         const transportInfo = this._getTransportInfo();
         const token = await this.getAccessToken();
         if (!token) return { success: false, error: "No access token available" };
@@ -1738,7 +1738,7 @@ var require_firestore_database_service = __commonJS({
             {
               host: transportInfo.host,
               port: transportInfo.port,
-              path: path3,
+              path: path4,
               method,
               headers: reqHeaders,
               agent: transportInfo.agent,
@@ -1788,14 +1788,14 @@ var require_firestore_database_service = __commonJS({
       // Authoritative transactional document read via batchGet POST body
       async _readDocInTransaction(collection, docId, transactionId) {
         const docName = `projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${docId}`;
-        const path3 = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:batchGet`;
+        const path4 = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:batchGet`;
         const payload = JSON.stringify({
           documents: [docName],
           transaction: transactionId
         });
         const res = await this._requestFirestore({
           method: "POST",
-          path: path3,
+          path: path4,
           body: payload,
           timeout: 6e3
         });
@@ -3878,18 +3878,18 @@ var require_firestore_database_service = __commonJS({
       }
       _loadLocalJson(file, fallback = null) {
         try {
-          const p = path2.resolve(process.cwd(), file);
-          if (fs2.existsSync(p)) return JSON.parse(fs2.readFileSync(p, "utf8"));
+          const p = path3.resolve(process.cwd(), file);
+          if (fs3.existsSync(p)) return JSON.parse(fs3.readFileSync(p, "utf8"));
         } catch {
         }
         return fallback;
       }
       _saveLocalJson(file, data) {
         try {
-          const p = path2.resolve(process.cwd(), file);
-          const dir = path2.dirname(p);
-          if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
-          fs2.writeFileSync(p, JSON.stringify(data, null, 2), "utf8");
+          const p = path3.resolve(process.cwd(), file);
+          const dir = path3.dirname(p);
+          if (!fs3.existsSync(dir)) fs3.mkdirSync(dir, { recursive: true });
+          fs3.writeFileSync(p, JSON.stringify(data, null, 2), "utf8");
           return true;
         } catch {
           return false;
@@ -3909,8 +3909,8 @@ var require_firestore_database_service2 = __commonJS({
   "../firestore_database_service.cjs"(exports2, module2) {
     var http = require("http");
     var https = require("https");
-    var fs2 = require("fs");
-    var path2 = require("path");
+    var fs3 = require("fs");
+    var path3 = require("path");
     var crypto2 = require("crypto");
     var adapter = require_server_firestore_adapter2();
     var httpsAgent = new https.Agent({
@@ -4020,7 +4020,7 @@ var require_firestore_database_service2 = __commonJS({
         if (process.env.FIRESTORE_EMULATOR_HOST) return "owner";
         return adapter.getMetadataAccessToken();
       }
-      async _requestFirestore({ method = "GET", path: path3, body = null, headers = {}, timeout = 6e3 }) {
+      async _requestFirestore({ method = "GET", path: path4, body = null, headers = {}, timeout = 6e3 }) {
         const transportInfo = this._getTransportInfo();
         const token = await this.getAccessToken();
         if (!token) return { success: false, error: "No access token available" };
@@ -4037,7 +4037,7 @@ var require_firestore_database_service2 = __commonJS({
             {
               host: transportInfo.host,
               port: transportInfo.port,
-              path: path3,
+              path: path4,
               method,
               headers: reqHeaders,
               agent: transportInfo.agent,
@@ -4087,14 +4087,14 @@ var require_firestore_database_service2 = __commonJS({
       // Authoritative transactional document read via batchGet POST body
       async _readDocInTransaction(collection, docId, transactionId) {
         const docName = `projects/${this.projectId}/databases/${this.databaseId}/documents/${collection}/${docId}`;
-        const path3 = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:batchGet`;
+        const path4 = `/v1/projects/${this.projectId}/databases/${this.databaseId}/documents:batchGet`;
         const payload = JSON.stringify({
           documents: [docName],
           transaction: transactionId
         });
         const res = await this._requestFirestore({
           method: "POST",
-          path: path3,
+          path: path4,
           body: payload,
           timeout: 6e3
         });
@@ -6177,18 +6177,18 @@ var require_firestore_database_service2 = __commonJS({
       }
       _loadLocalJson(file, fallback = null) {
         try {
-          const p = path2.resolve(process.cwd(), file);
-          if (fs2.existsSync(p)) return JSON.parse(fs2.readFileSync(p, "utf8"));
+          const p = path3.resolve(process.cwd(), file);
+          if (fs3.existsSync(p)) return JSON.parse(fs3.readFileSync(p, "utf8"));
         } catch {
         }
         return fallback;
       }
       _saveLocalJson(file, data) {
         try {
-          const p = path2.resolve(process.cwd(), file);
-          const dir = path2.dirname(p);
-          if (!fs2.existsSync(dir)) fs2.mkdirSync(dir, { recursive: true });
-          fs2.writeFileSync(p, JSON.stringify(data, null, 2), "utf8");
+          const p = path3.resolve(process.cwd(), file);
+          const dir = path3.dirname(p);
+          if (!fs3.existsSync(dir)) fs3.mkdirSync(dir, { recursive: true });
+          fs3.writeFileSync(p, JSON.stringify(data, null, 2), "utf8");
           return true;
         } catch {
           return false;
@@ -6206,14 +6206,14 @@ var require_firestore_database_service2 = __commonJS({
 // ../migrate_json_to_firestore.cjs
 var require_migrate_json_to_firestore = __commonJS({
   "../migrate_json_to_firestore.cjs"(exports2, module2) {
-    var fs2 = require("fs");
-    var path2 = require("path");
-    var adapter = fs2.existsSync("./web_studio/server_firestore_adapter.cjs") ? require_server_firestore_adapter() : require_server_firestore_adapter2();
+    var fs3 = require("fs");
+    var path3 = require("path");
+    var adapter = fs3.existsSync("./web_studio/server_firestore_adapter.cjs") ? require_server_firestore_adapter() : require_server_firestore_adapter2();
     function backupSourceDatabases() {
       const timestamp = Date.now();
-      const backupDir = path2.resolve(process.cwd(), `backups_phase5/migration_pre_backup_${timestamp}`);
+      const backupDir = path3.resolve(process.cwd(), `backups_phase5/migration_pre_backup_${timestamp}`);
       try {
-        fs2.mkdirSync(backupDir, { recursive: true });
+        fs3.mkdirSync(backupDir, { recursive: true });
         const filesToBackup = [
           "user_profiles_db.json",
           "news_database.json",
@@ -6223,8 +6223,8 @@ var require_migrate_json_to_firestore = __commonJS({
         ];
         let copied = 0;
         for (const f of filesToBackup) {
-          if (fs2.existsSync(f)) {
-            fs2.copyFileSync(f, path2.join(backupDir, f));
+          if (fs3.existsSync(f)) {
+            fs3.copyFileSync(f, path3.join(backupDir, f));
             copied++;
           }
         }
@@ -6253,8 +6253,8 @@ var require_migrate_json_to_firestore = __commonJS({
         rss: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 },
         deletionRequests: { total: 0, wouldCreate: 0, wouldSkip: 0, conflicts: 0 }
       };
-      if (fs2.existsSync("user_profiles_db.json")) {
-        const users = JSON.parse(fs2.readFileSync("user_profiles_db.json", "utf8") || "{}");
+      if (fs3.existsSync("user_profiles_db.json")) {
+        const users = JSON.parse(fs3.readFileSync("user_profiles_db.json", "utf8") || "{}");
         const userKeys = Object.keys(users);
         stats.users.total = userKeys.length;
         for (const [key, profile] of Object.entries(users)) {
@@ -6283,8 +6283,8 @@ var require_migrate_json_to_firestore = __commonJS({
           }
         }
       }
-      if (fs2.existsSync("news_database.json")) {
-        const posts = JSON.parse(fs2.readFileSync("news_database.json", "utf8") || "[]");
+      if (fs3.existsSync("news_database.json")) {
+        const posts = JSON.parse(fs3.readFileSync("news_database.json", "utf8") || "[]");
         stats.news.total = posts.length;
         for (const p of posts) {
           const docId = p.id;
@@ -6314,8 +6314,8 @@ var require_migrate_json_to_firestore = __commonJS({
           }
         }
       }
-      if (fs2.existsSync("account_deletion_requests.json")) {
-        const delReqs = JSON.parse(fs2.readFileSync("account_deletion_requests.json", "utf8") || "[]");
+      if (fs3.existsSync("account_deletion_requests.json")) {
+        const delReqs = JSON.parse(fs3.readFileSync("account_deletion_requests.json", "utf8") || "[]");
         stats.deletionRequests.total = delReqs.length;
         for (const r of delReqs) {
           const docId = r.id || `DEL_${Date.now()}`;
@@ -6415,14 +6415,16 @@ __export(server_exports, {
 });
 module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
-var import_path = __toESM(require("path"), 1);
-var import_fs = __toESM(require("fs"), 1);
+var import_path2 = __toESM(require("path"), 1);
+var import_fs2 = __toESM(require("fs"), 1);
 var import_genai2 = require("@google/genai");
 var import_openai = __toESM(require("openai"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
 var import_crypto2 = __toESM(require("crypto"), 1);
 
 // whatsapp_integration.ts
+var import_fs = __toESM(require("fs"), 1);
+var import_path = __toESM(require("path"), 1);
 var import_crypto = require("crypto");
 var import_genai = require("@google/genai");
 var CloudTasksClientClass = null;
@@ -6447,6 +6449,788 @@ var sha256 = (value) => (0, import_crypto.createHash)("sha256").update(String(va
 var conversationCache = /* @__PURE__ */ new Map();
 var messageCache = /* @__PURE__ */ new Map();
 var replyIdempotencyCache = /* @__PURE__ */ new Map();
+var flowCache = /* @__PURE__ */ new Map();
+var faqCache = /* @__PURE__ */ new Map();
+var flowSessionCache = /* @__PURE__ */ new Map();
+var quickReplyCache = /* @__PURE__ */ new Map();
+var WHATSAPP_FLOWS_FILE = import_path.default.join(process.cwd(), "whatsapp_flows_db.json");
+var WHATSAPP_FAQS_FILE = import_path.default.join(process.cwd(), "whatsapp_faqs_db.json");
+var WHATSAPP_FLOW_SESSIONS_FILE = import_path.default.join(process.cwd(), "whatsapp_flow_sessions_db.json");
+var WHATSAPP_QUICK_REPLIES_FILE = import_path.default.join(process.cwd(), "whatsapp_quick_replies_db.json");
+var WHATSAPP_SETTINGS_FILE = import_path.default.join(process.cwd(), "whatsapp_automation_settings.json");
+var DEFAULT_SEEDED_FLOWS = [
+  {
+    id: "flow_welcome_menu",
+    name: "\u092E\u0941\u0916\u094D\u092F \u092E\u0947\u0928\u0942 \u0914\u0930 \u0938\u094D\u0935\u093E\u0917\u0924 \u092B\u094D\u0932\u094B (Welcome & Main Menu)",
+    description: "\u0928\u090F \u0917\u094D\u0930\u093E\u0939\u0915\u094B\u0902 \u090F\u0935\u0902 \u0939\u093E\u092F/\u0939\u0947\u0932\u094B \u092A\u0930 \u092E\u0941\u0916\u094D\u092F \u0938\u0939\u093E\u092F\u0924\u093E \u092E\u0947\u0928\u0942 \u092A\u094D\u0930\u0938\u094D\u0924\u0941\u0924 \u0915\u0930\u0924\u093E \u0939\u0948\u0964",
+    version: 1,
+    status: "published",
+    isActive: true,
+    trigger: {
+      type: "first_message",
+      keywords: ["hi", "hello", "hey", "\u0928\u092E\u0938\u094D\u0924\u0947", "namaste", "menu", "\u092E\u0947\u0928\u0942", "start", "\u092E\u0926\u0926", "\u0938\u0939\u093E\u092F\u0924\u093E"],
+      exactMatch: false
+    },
+    startNodeId: "node_welcome",
+    nodes: [
+      {
+        id: "node_welcome",
+        type: "message",
+        title: "\u0938\u094D\u0935\u093E\u0917\u0924 \u0938\u0902\u0926\u0947\u0936",
+        config: {
+          text: "\u{1F64F} *\u0928\u092E\u0938\u094D\u0915\u093E\u0930! AI News Maker (BREAKING NEWS WALA) \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948\u0964*\n\n\u0939\u092E \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902 \u0914\u0930 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0947 \u0932\u093F\u090F \u092D\u093E\u0930\u0924 \u0915\u093E \u0905\u0917\u094D\u0930\u0923\u0940 AI-\u092A\u093E\u0935\u0930\u094D\u0921 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0939\u0948\u0902\u0964",
+          defaultNextNodeId: "node_menu_options"
+        },
+        position: { x: 100, y: 100 }
+      },
+      {
+        id: "node_menu_options",
+        type: "option",
+        title: "\u092E\u0941\u0916\u094D\u092F \u092E\u0947\u0928\u0942 \u0935\u093F\u0915\u0932\u094D\u092A",
+        config: {
+          text: "\u0915\u0943\u092A\u092F\u093E \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u092E\u0947\u0902 \u0938\u0947 \u0915\u094B\u0908 \u090F\u0915 \u0938\u0902\u0916\u094D\u092F\u093E \u0932\u093F\u0916\u0915\u0930 \u092D\u0947\u091C\u0947\u0902:\n\n1\uFE0F\u20E3 *AI News Maker \u0915\u094D\u092F\u093E \u0939\u0948?*\n2\uFE0F\u20E3 *\u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901 \u090F\u0935\u0902 \u092B\u0940\u091A\u0930\u094D\u0938*\n3\uFE0F\u20E3 *\u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?*\n4\uFE0F\u20E3 *\u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?*\n5\uFE0F\u20E3 *\u092A\u094D\u0932\u093E\u0928 \u090F\u0935\u0902 \u092E\u0942\u0932\u094D\u092F (Pricing)*\n6\uFE0F\u20E3 *\u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u0938\u0947 \u092C\u093E\u0924 \u0915\u0930\u0947\u0902 (Live Agent)*",
+          options: [
+            { id: "opt_1", label: "1. AI News Maker \u0915\u094D\u092F\u093E \u0939\u0948?", keyword: "1", nextNodeId: "node_what_is" },
+            { id: "opt_2", label: "2. \u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901 \u090F\u0935\u0902 \u092B\u0940\u091A\u0930\u094D\u0938", keyword: "2", nextNodeId: "node_services" },
+            { id: "opt_3", label: "3. \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?", keyword: "3", nextNodeId: "node_graphic_guide" },
+            { id: "opt_4", label: "4. \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?", keyword: "4", nextNodeId: "node_video_guide" },
+            { id: "opt_5", label: "5. \u092A\u094D\u0932\u093E\u0928 \u090F\u0935\u0902 \u092E\u0942\u0932\u094D\u092F", keyword: "5", nextNodeId: "node_plans" },
+            { id: "opt_6", label: "6. \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F", keyword: "6", nextNodeId: "node_handoff" }
+          ],
+          defaultNextNodeId: "node_faq_fallback"
+        },
+        position: { x: 100, y: 250 }
+      },
+      {
+        id: "node_what_is",
+        type: "message",
+        title: "AI News Maker \u092A\u0930\u093F\u091A\u092F",
+        config: {
+          text: "\u{1F4F0} *AI News Maker (BREAKING NEWS WALA) \u0915\u094D\u092F\u093E \u0939\u0948?*\n\n\u092F\u0939 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902, \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u094D\u0930\u093F\u090F\u091F\u0930\u094D\u0938 \u0914\u0930 \u0928\u094D\u092F\u0942\u091C\u093C \u091A\u0948\u0928\u0932\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0935\u093F\u0936\u0947\u0937 AI \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0939\u0948\u0964 \u0915\u0947\u0935\u0932 \u0916\u092C\u0930 \u0915\u093E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0915\u0947 \u091F\u0940\u0935\u0940 \u0938\u094D\u091F\u093E\u0907\u0932 50+ \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u092E\u0947\u0902 4:5 \u090F\u0935\u0902 9:16 \u0917\u094D\u0930\u093E\u092B\u093F\u0915\u094D\u0938 \u0914\u0930 HD \u0935\u0940\u0921\u093F\u092F\u094B 1 \u092E\u093F\u0928\u091F \u092E\u0947\u0902 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964\n\n\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online",
+          defaultNextNodeId: "node_end"
+        },
+        position: { x: -200, y: 450 }
+      },
+      {
+        id: "node_services",
+        type: "message",
+        title: "\u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901",
+        config: {
+          text: "\u26A1 *\u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901:*\n1. 50+ \u091F\u0940\u0935\u0940 \u0938\u094D\u091F\u093E\u0907\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E\u094D\u0938\n2. AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u092C\u0941\u0932\u0947\u091F\u093F\u0928 \u091C\u0928\u0930\u0947\u091F\u0930\n3. \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u0914\u0930 \u092E\u094D\u092F\u0942\u091C\u093F\u0915 \u0915\u0947 \u0938\u093E\u0925 \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938\n4. e-Paper \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u093E\u0930\u094D\u0921\u094D\u0938\n5. \u0915\u0938\u094D\u091F\u092E \u091A\u0948\u0928\u0932 \u0932\u094B\u0917\u094B \u0914\u0930 \u092B\u0949\u0928\u094D\u091F\u094D\u0938\n\n\u{1F310} \u0926\u0947\u0916\u0947\u0902: https://ainewsmaker.online/#features",
+          defaultNextNodeId: "node_end"
+        },
+        position: { x: -50, y: 450 }
+      },
+      {
+        id: "node_graphic_guide",
+        type: "message",
+        title: "\u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0917\u093E\u0907\u0921",
+        config: {
+          text: "\u{1F3A8} *\u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901:*\n1. https://ainewsmaker.online \u092A\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964\n2. '\u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B' \u091F\u0948\u092C \u0916\u094B\u0932\u0947\u0902\u0964\n3. \u0916\u092C\u0930 \u0915\u093E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902, AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091A\u0941\u0928\u0947\u0902\u0964\n4. \u092E\u0928\u092A\u0938\u0902\u0926 \u092B\u094D\u0930\u0947\u092E \u091A\u0941\u0928\u0915\u0930 '\u0921\u093E\u0909\u0928\u0932\u094B\u0921' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964",
+          defaultNextNodeId: "node_end"
+        },
+        position: { x: 100, y: 450 }
+      },
+      {
+        id: "node_video_guide",
+        type: "message",
+        title: "\u0935\u0940\u0921\u093F\u092F\u094B \u0917\u093E\u0907\u0921",
+        config: {
+          text: "\u{1F3AC} *\u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901:*\n1. \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u092E\u0947\u0902 '\u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B' \u091A\u0941\u0928\u0947\u0902\u0964\n2. \u0916\u092C\u0930 \u0915\u093E \u0935\u093F\u0935\u0930\u0923 \u0921\u093E\u0932\u0947\u0902 \u0914\u0930 AI \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0947\u0902\u0964\n3. 9:16 \u092F\u093E 4:5 \u0930\u0947\u0936\u094D\u092F\u094B \u092E\u0947\u0902 \u0930\u0947\u0902\u0921\u0930 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964\n4. 30 \u0938\u0947\u0915\u0902\u0921 \u092E\u0947\u0902 HD \u0935\u0940\u0921\u093F\u092F\u094B \u0924\u0948\u092F\u093E\u0930!",
+          defaultNextNodeId: "node_end"
+        },
+        position: { x: 250, y: 450 }
+      },
+      {
+        id: "node_plans",
+        type: "message",
+        title: "\u092A\u094D\u0932\u093E\u0928 \u0914\u0930 \u0915\u0949\u0907\u0928\u094D\u0938",
+        config: {
+          text: "\u{1F4B3} *\u092A\u094D\u0932\u093E\u0928 \u0914\u0930 \u0930\u093F\u091A\u093E\u0930\u094D\u091C:*\n- *Basic Desk*: \u0936\u0941\u0930\u0941\u0906\u0924\u0940 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u0915 \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u0914\u0930 50 \u0915\u093E\u0930\u094D\u0921\u094D\u0938 \u0926\u0948\u0928\u093F\u0915\u0964\n- *VIP Desk*: \u0905\u0938\u0940\u092E\u093F\u0924 AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0928\u0930\u0947\u0936\u0928, \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F \u0914\u0930 4K \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u092A\u094B\u0930\u094D\u091F\u0964\n\n\u{1F310} \u0935\u0949\u0932\u0947\u091F \u0930\u093F\u091A\u093E\u0930\u094D\u091C: https://ainewsmaker.online/#plans",
+          defaultNextNodeId: "node_end"
+        },
+        position: { x: 400, y: 450 }
+      },
+      {
+        id: "node_faq_fallback",
+        type: "faq",
+        title: "FAQ \u092E\u093F\u0932\u093E\u0928 \u092F\u093E AI \u0909\u0924\u094D\u0924\u0930",
+        config: {
+          defaultNextNodeId: "node_end"
+        },
+        position: { x: 550, y: 450 }
+      },
+      {
+        id: "node_handoff",
+        type: "human_handoff",
+        title: "\u092E\u093E\u0928\u0935 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u094D\u0930\u093E\u0902\u0938\u092B\u0930",
+        config: {
+          text: "\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0939\u092E\u093E\u0930\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0915\u094B \u092D\u0947\u091C \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0939\u092E\u093E\u0930\u0947 \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u091C\u0932\u094D\u0926 \u0939\u0940 \u0906\u092A\u0938\u0947 \u092F\u0939\u093E\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0917\u0947\u0964",
+          handoffReason: "user_selected_human"
+        },
+        position: { x: 700, y: 450 }
+      },
+      {
+        id: "node_end",
+        type: "end",
+        title: "\u092B\u094D\u0932\u094B \u0938\u092E\u093E\u092A\u094D\u0924",
+        config: {
+          text: "\u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0906\u092A \u0915\u092D\u0940 \u092D\u0940 \u0938\u0902\u0926\u0947\u0936 \u0932\u093F\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902 \u092F\u093E \u092E\u0947\u0928\u0942 \u0926\u0947\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F 'MENU' \u0932\u093F\u0916\u0947\u0902\u0964"
+        },
+        position: { x: 200, y: 650 }
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    createdByName: "Master Admin"
+  },
+  {
+    id: "flow_account_support",
+    name: "\u0905\u0915\u093E\u0909\u0902\u091F \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0938\u0939\u093E\u092F\u0924\u093E (Account & Login Support)",
+    description: "\u0932\u0949\u0917\u093F\u0928, \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092F\u093E \u092C\u094D\u0932\u0949\u0915 \u0916\u093E\u0924\u093E \u0938\u0902\u092C\u0902\u0927\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0926\u093E\u0928 \u0915\u0930\u0924\u093E \u0939\u0948\u0964",
+    version: 1,
+    status: "published",
+    isActive: true,
+    trigger: {
+      type: "keyword",
+      keywords: ["login", "\u0932\u0949\u0917\u093F\u0928", "\u092A\u093E\u0938\u0935\u0930\u094D\u0921", "password", "\u0905\u0915\u093E\u0909\u0902\u091F", "\u0916\u093E\u0924\u093E", "\u092C\u094D\u0932\u0949\u0915", "blocked"],
+      exactMatch: false
+    },
+    startNodeId: "node_account_q",
+    nodes: [
+      {
+        id: "node_account_q",
+        type: "question",
+        title: "\u0938\u092E\u0938\u094D\u092F\u093E \u0915\u093E \u092A\u094D\u0930\u0915\u093E\u0930",
+        config: {
+          text: "\u{1F510} *\u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947\u0902\u0926\u094D\u0930*\n\n\u0906\u092A\u0915\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u0915\u093F\u0938 \u092A\u094D\u0930\u0915\u093E\u0930 \u0915\u0940 \u0939\u0948? \u0915\u0943\u092A\u092F\u093E \u0935\u093F\u0915\u0932\u094D\u092A \u0928\u0902\u092C\u0930 \u0932\u093F\u0916\u0915\u0930 \u092D\u0947\u091C\u0947\u0902:\n1\uFE0F\u20E3 \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u090F \u092F\u093E \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0928\u093E \u0939\u0948\n2\uFE0F\u20E3 \u0916\u093E\u0924\u093E \u092C\u094D\u0932\u0949\u0915 (Account Blocked) \u0938\u0902\u0926\u0947\u0936 \u0906 \u0930\u0939\u093E \u0939\u0948\n3\uFE0F\u20E3 Google \u0932\u0949\u0917\u093F\u0928 \u092E\u0947\u0902 \u0938\u092E\u0938\u094D\u092F\u093E\n4\uFE0F\u20E3 \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u0938\u0947 \u0938\u0940\u0927\u0947 \u092C\u093E\u0924 \u0915\u0930\u0928\u0940 \u0939\u0948",
+          defaultNextNodeId: "node_account_cond"
+        },
+        position: { x: 100, y: 100 }
+      },
+      {
+        id: "node_account_cond",
+        type: "condition",
+        title: "\u0936\u0930\u094D\u0924 \u090F\u0935\u0902 \u0936\u093E\u0916\u093E",
+        config: {
+          conditions: [
+            { operator: "contains", value: "1", nextNodeId: "node_pw_reset" },
+            { operator: "contains", value: "2", nextNodeId: "node_blocked_info" },
+            { operator: "contains", value: "3", nextNodeId: "node_google_login" },
+            { operator: "contains", value: "4", nextNodeId: "node_handoff_agent" }
+          ],
+          defaultNextNodeId: "node_handoff_agent"
+        },
+        position: { x: 100, y: 250 }
+      },
+      {
+        id: "node_pw_reset",
+        type: "message",
+        title: "\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0935\u093F\u0927\u093F",
+        config: {
+          text: "\u{1F511} *\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0915\u0930\u0928\u0947 \u0915\u0940 \u0935\u093F\u0927\u093F:*\n1. https://ainewsmaker.online \u0916\u094B\u0932\u0947\u0902\u0964\n2. '\u0932\u0949\u0917\u093F\u0928' \u092C\u091F\u0928 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964\n3. '\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u090F?' (Forgot Password) \u0932\u093F\u0902\u0915 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0915\u0947 \u0905\u092A\u0928\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964\n4. \u0906\u092A\u0915\u0947 \u0908\u092E\u0947\u0932 \u092A\u0930 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B\u0917\u093E\u0964",
+          defaultNextNodeId: "node_acc_end"
+        },
+        position: { x: -100, y: 400 }
+      },
+      {
+        id: "node_blocked_info",
+        type: "message",
+        title: "\u092C\u094D\u0932\u0949\u0915 \u0916\u093E\u0924\u093E \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E",
+        config: {
+          text: "\u26A0\uFE0F *\u0916\u093E\u0924\u093E \u092C\u094D\u0932\u0949\u0915 \u0938\u094D\u0925\u093F\u0924\u093F:*\n\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u093E\u0930\u0923\u094B\u0902 \u0905\u0925\u0935\u093E \u0928\u093F\u092F\u092E\u094B\u0902 \u0915\u0947 \u0909\u0932\u094D\u0932\u0902\u0918\u0928 \u0915\u0947 \u0915\u093E\u0930\u0923 \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u090F \u0917\u090F \u0916\u093E\u0924\u094B\u0902 \u0915\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u0915\u0940 \u091C\u093E\u0924\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0914\u0930 \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u092F\u0939\u093E\u0901 \u092D\u0947\u091C\u0947\u0902 \u0924\u093E\u0915\u093F \u0939\u092E\u093E\u0930\u0940 \u0905\u0928\u0941\u092A\u093E\u0932\u0928 \u091F\u0940\u092E \u0906\u092A\u0915\u0947 \u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u091C\u093E\u0901\u091A \u0915\u0930 \u0938\u0915\u0947\u0964",
+          defaultNextNodeId: "node_handoff_agent"
+        },
+        position: { x: 100, y: 400 }
+      },
+      {
+        id: "node_google_login",
+        type: "message",
+        title: "Google \u0932\u0949\u0917\u093F\u0928 \u0938\u0939\u093E\u092F\u0924\u093E",
+        config: {
+          text: "\u{1F310} *Google \u0932\u0949\u0917\u093F\u0928 \u0938\u0939\u093E\u092F\u0924\u093E:*\n\u0915\u0943\u092A\u092F\u093E \u0938\u0941\u0928\u093F\u0936\u094D\u091A\u093F\u0924 \u0915\u0930\u0947\u0902 \u0915\u093F \u0906\u092A \u0909\u0938\u0940 Google \u0916\u093E\u0924\u0947 \u0938\u0947 'Continue with Google' \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902 \u091C\u093F\u0938\u0938\u0947 \u0906\u092A\u0928\u0947 \u092A\u0939\u0932\u0940 \u092C\u093E\u0930 \u0916\u093E\u0924\u093E \u092C\u0928\u093E\u092F\u093E \u0925\u093E\u0964 \u092C\u094D\u0930\u093E\u0909\u091C\u093C\u0930 \u0915\u093E \u0915\u0948\u0936 (Cache) \u0938\u093E\u092B\u093C \u0915\u0930\u0915\u0947 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964",
+          defaultNextNodeId: "node_acc_end"
+        },
+        position: { x: 300, y: 400 }
+      },
+      {
+        id: "node_handoff_agent",
+        type: "human_handoff",
+        title: "\u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u0915\u094B \u0938\u094C\u0902\u092A\u0947\u0902",
+        config: {
+          text: "\u0928\u092E\u0938\u094D\u0924\u0947! \u0939\u092E\u0928\u0947 \u0906\u092A\u0915\u0940 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0902\u092C\u0902\u0927\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u0915\u094B \u0905\u0917\u094D\u0930\u0947\u0937\u093F\u0924 \u0915\u0930 \u0926\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u0947 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0915\u093E \u0909\u0932\u094D\u0932\u0947\u0916 \u092F\u0939\u093E\u0901 \u0915\u0930 \u0926\u0947\u0902\u0964",
+          handoffReason: "account_support_handoff"
+        },
+        position: { x: 500, y: 400 }
+      },
+      {
+        id: "node_acc_end",
+        type: "end",
+        title: "\u0938\u092E\u093E\u092A\u094D\u0924",
+        config: {
+          text: "AI News Maker \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947\u0902\u0926\u094D\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0927\u0928\u094D\u092F\u0935\u093E\u0926\u0964"
+        },
+        position: { x: 200, y: 600 }
+      }
+    ],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    createdByName: "Master Admin"
+  }
+];
+var DEFAULT_SEEDED_FAQS = [
+  {
+    id: "faq_account_login",
+    category: "Account Support",
+    question: "\u092E\u0947\u0930\u093E \u0905\u0915\u093E\u0909\u0902\u091F \u0932\u0949\u0917\u093F\u0928 \u0928\u0939\u0940\u0902 \u0939\u094B \u0930\u0939\u093E \u0939\u0948\u0964",
+    questionEn: "My account is not logging in.",
+    answer: "\u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0908\u092E\u0947\u0932 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0935\u093F\u0935\u0930\u0923 \u091C\u093E\u0901\u091A\u0947\u0902\u0964 \u092F\u0926\u093F \u0906\u092A \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u090F \u0939\u0948\u0902, \u0924\u094B \u0932\u0949\u0917\u093F\u0928 \u0938\u094D\u0915\u094D\u0930\u0940\u0928 \u092A\u0930 '\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F' \u0932\u093F\u0902\u0915 \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964 \u092F\u0926\u093F \u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948, \u0924\u094B \u0915\u0943\u092A\u092F\u093E 'AGENT' \u0932\u093F\u0916\u0915\u0930 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947\u0902\u0926\u094D\u0930 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+    answerEn: "Please verify your registered email and credentials. Use 'Forgot Password' on the login screen if needed. If your account is blocked, text AGENT to contact human support.",
+    alternativeKeywords: ["Login Problem", "\u0905\u0915\u093E\u0909\u0902\u091F \u0928\u0939\u0940\u0902 \u0916\u0941\u0932 \u0930\u0939\u093E", "\u0932\u0949\u0917\u093F\u0928 \u0938\u092E\u0938\u094D\u092F\u093E", "\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0938\u092E\u0938\u094D\u092F\u093E", "\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u092F\u093E", "login issue", "login help", "forgot password", "reset password", "password"],
+    isActive: true,
+    priority: 1,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: "faq_what_is",
+    category: "General Info",
+    question: "AI News Maker \u0915\u094D\u092F\u093E \u0939\u0948?",
+    questionEn: "What is AI News Maker?",
+    answer: "AI News Maker \u092D\u093E\u0930\u0924 \u0915\u093E \u092A\u0939\u0932\u093E \u0935\u093F\u0936\u0947\u0937 AI-\u092A\u093E\u0935\u0930\u094D\u0921 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0939\u0948, \u091C\u093F\u0938\u0947 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902, \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094B\u0930\u094D\u091F\u0932\u094D\u0938 \u0914\u0930 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u094D\u0930\u093F\u090F\u091F\u0930\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u0921\u093F\u091C\u093C\u093E\u0907\u0928 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0907\u0938\u0915\u0947 \u092E\u093E\u0927\u094D\u092F\u092E \u0938\u0947 \u0906\u092A \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093F\u091C\u093C\u093E\u0907\u0928\u0930 \u0915\u0947 \u0915\u0947\u0935\u0932 7 \u091A\u0930\u0923\u094B\u0902 \u092E\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C, \u091F\u0940\u0935\u0940 \u0938\u094D\u091F\u093E\u0907\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915\u094D\u0938, AI \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938, \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u0914\u0930 HD \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964\n\n\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online",
+    answerEn: "AI News Maker is India's leading AI news graphic and video studio tailored for journalists, reporters, and media creators to create TV-style news cards and video reels in 7 easy steps.",
+    alternativeKeywords: ["what is ai news maker", "ai news maker kya hai", "\u0915\u094D\u092F\u093E \u0939\u0948", "\u092A\u0930\u093F\u091A\u092F", "\u0938\u0949\u092B\u094D\u091F\u0935\u0947\u092F\u0930 \u0915\u094D\u092F\u093E \u0939\u0948", "about"],
+    isActive: true,
+    priority: 2,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: "faq_services",
+    category: "Features & Tools",
+    question: "AI News Maker \u0915\u0940 \u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901 \u0915\u094D\u092F\u093E \u0939\u0948\u0902?",
+    questionEn: "What are the main services and features of AI News Maker?",
+    answer: "\u26A1 \u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901:\n1. 7-Step Quick News Maker: \u091F\u0940\u0935\u0940 \u091A\u0948\u0928\u0932 \u091C\u0948\u0938\u0947 50+ \u0930\u0947\u0921\u0940-\u091F\u0942-\u092F\u0942\u091C\u093C \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E\u094D\u0938\u0964\n2. AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u092C\u0941\u0932\u0947\u091F\u093F\u0928 \u091C\u0947\u0928\u0930\u0947\u091F\u0930: \u0916\u092C\u0930\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0906\u0915\u0930\u094D\u0937\u0915 \u0914\u0930 \u0935\u093E\u092F\u0930\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938\u0964\n3. AI \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0935 \u0930\u0940\u0932\u094D\u0938: \u0911\u091F\u094B \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u0935 \u0921\u093E\u092F\u0928\u093E\u092E\u093F\u0915 \u090F\u0928\u093F\u092E\u0947\u0936\u0928 \u0915\u0947 \u0938\u093E\u0925 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u094D\u092F\u0942\u091C\u093C\u0964\n4. e-Paper & \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u094B\u0938\u094D\u091F: Facebook, Instagram, Twitter \u0914\u0930 WhatsApp \u0915\u0947 \u0932\u093F\u090F \u092A\u0930\u092B\u0947\u0915\u094D\u091F \u0938\u093E\u0907\u091C\u0964\n5. \u0915\u0938\u094D\u091F\u092E \u091A\u0948\u0928\u0932 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917: \u0906\u092A\u0915\u093E \u091A\u0948\u0928\u0932 \u0932\u094B\u0917\u094B, \u0928\u093E\u092E, \u092B\u0949\u0928\u094D\u091F \u0914\u0930 \u0915\u0932\u0930\u094D\u0938\u0964\n\n\u{1F310} \u0905\u0927\u093F\u0915 \u091C\u093E\u0928\u0915\u093E\u0930\u0940: https://ainewsmaker.online/#features",
+    answerEn: "Main services: 50+ TV-style news frames, AI headline generation, video reels with auto-voiceover, e-paper cards, and custom channel branding.",
+    alternativeKeywords: ["\u0938\u0947\u0935\u093E\u090F\u0901", "\u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0901", "services", "features", "\u0938\u0941\u0935\u093F\u0927\u093E\u090F\u0902", "\u091F\u0942\u0932\u094D\u0938"],
+    isActive: true,
+    priority: 3,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: "faq_pricing",
+    category: "Billing & Plans",
+    question: "\u092A\u094D\u0932\u093E\u0928 \u0914\u0930 \u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u0940 \u0915\u0940\u092E\u0924 \u0915\u094D\u092F\u093E \u0939\u0948?",
+    questionEn: "What are the pricing and plans?",
+    answer: "\u{1F4B3} AI News Maker \u0926\u094B \u092E\u0941\u0916\u094D\u092F \u0936\u094D\u0930\u0947\u0923\u093F\u092F\u094B\u0902 \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948:\n- *Basic Desk*: \u0936\u0941\u0930\u0941\u0906\u0924\u0940 \u0938\u0902\u0935\u093E\u0926\u0926\u093E\u0924\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F 50 \u0915\u093E\u0930\u094D\u0921\u094D\u0938 \u0926\u0948\u0928\u093F\u0915 \u0935 \u092E\u093E\u0928\u0915 \u092B\u094D\u0930\u0947\u092E\u094D\u0938\u0964\n- *VIP Desk*: \u0935\u0930\u093F\u0937\u094D\u0920 \u0938\u0902\u092A\u093E\u0926\u0915\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0932\u093F\u092E\u093F\u091F\u0947\u0921 AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0928\u0930\u0947\u0936\u0928, \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F \u0905\u092A\u0932\u094B\u0921, 4K \u0930\u0947\u0902\u0921\u0930\u093F\u0902\u0917 \u0914\u0930 \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E \u0938\u092A\u094B\u0930\u094D\u091F\u0964\n\n\u{1F310} \u092A\u094D\u0932\u093E\u0928 \u0935\u093F\u0935\u0930\u0923 \u090F\u0935\u0902 \u0924\u0924\u094D\u0915\u093E\u0932 \u0930\u093F\u091A\u093E\u0930\u094D\u091C: https://ainewsmaker.online/#plans",
+    answerEn: "We offer Basic Desk for daily reporting and VIP Desk with unlimited AI headline regeneration, custom fonts, 4K video rendering, and priority support.",
+    alternativeKeywords: ["plans", "pricing", "\u092E\u0942\u0932\u094D\u092F", "\u0930\u0947\u091F", "\u0915\u0949\u0907\u0928\u094D\u0938", "coins", "\u0915\u0940\u092E\u0924", "\u092F\u094B\u091C\u0928\u093E", "\u092A\u094D\u0932\u093E\u0928", "plan", "\u0938\u092C\u094D\u0938\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928", "subscription", "\u0926\u093E\u092E"],
+    isActive: true,
+    priority: 4,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: "faq_how_to_graphic",
+    category: "Studio Help",
+    question: "\u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?",
+    questionEn: "How to make a news graphic?",
+    answer: "\u{1F3A8} AI News Maker \u092A\u0930 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901:\n1. https://ainewsmaker.online \u092A\u0930 \u091C\u093E\u090F\u0901 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964\n2. '\u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B' \u091F\u0948\u092C \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964\n3. \u0905\u092A\u0928\u0940 \u0916\u092C\u0930 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0935\u093F\u0935\u0930\u0923 \u0914\u0930 \u0938\u094D\u0925\u093E\u0928 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964\n4. AI \u091C\u0928\u0930\u0947\u091F\u0947\u0921 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u092E\u0947\u0902 \u0938\u0947 \u0909\u092A\u092F\u0941\u0915\u094D\u0924 \u0936\u0940\u0930\u094D\u0937\u0915 \u091A\u0941\u0928\u0947\u0902\u0964\n5. \u092E\u0928\u092A\u0938\u0902\u0926 \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E \u0914\u0930 \u0924\u0938\u094D\u0935\u0940\u0930 \u091A\u0941\u0928\u0947\u0902\u0964\n6. '\u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u0914\u0930 HD \u0907\u092E\u0947\u091C \u0938\u0947\u0915\u0902\u0921\u094B\u0902 \u092E\u0947\u0902 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902\u0964",
+    answerEn: "To make a graphic: login at ainewsmaker.online, open Studio tab, enter news text, choose an AI headline and frame, then download your graphic.",
+    alternativeKeywords: ["graphic kaise banaye", "how to make graphic", "\u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901", "\u092B\u094B\u091F\u094B \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901", "\u0915\u093E\u0930\u094D\u0921 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901"],
+    isActive: true,
+    priority: 5,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  },
+  {
+    id: "faq_human_support",
+    category: "Human Support",
+    question: "\u0915\u0938\u094D\u091F\u092E\u0930 \u0915\u0947\u092F\u0930 \u092F\u093E \u092E\u093E\u0928\u0935 \u090F\u091C\u0947\u0902\u091F \u0938\u0947 \u0915\u0948\u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902?",
+    questionEn: "How to connect with a human support agent?",
+    answer: "\u{1F464} \u0906\u092A \u0915\u092D\u0940 \u092D\u0940 \u0907\u0938 \u091A\u0948\u091F \u092E\u0947\u0902 *'AGENT'* \u092F\u093E *'\u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F'* \u0932\u093F\u0916\u0915\u0930 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964 \u0939\u092E\u093E\u0930\u0947 \u0938\u092A\u094B\u0930\u094D\u091F \u090F\u0917\u094D\u091C\u0940\u0915\u094D\u092F\u0942\u091F\u093F\u0935 \u0924\u0941\u0930\u0902\u0924 \u0906\u092A\u0938\u0947 \u0932\u093E\u0907\u0935 \u091A\u0948\u091F \u092A\u0930 \u091C\u0941\u0921\u093C \u091C\u093E\u090F\u0901\u0917\u0947\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u093E \u0938\u092E\u092F: \u0938\u0941\u092C\u0939 9:00 \u0938\u0947 \u0930\u093E\u0924 10:00 \u0924\u0915\u0964",
+    answerEn: "Type AGENT or HUMAN in this chat anytime to directly connect with our customer support executives.",
+    alternativeKeywords: ["agent", "human", "support", "\u0915\u0938\u094D\u091F\u092E\u0930 \u0915\u0947\u092F\u0930", "\u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F", "\u092C\u093E\u0924 \u0915\u0930\u0928\u0940 \u0939\u0948", "\u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E", "\u0915\u0938\u094D\u091F\u092E\u0930 \u0938\u092A\u094B\u0930\u094D\u091F"],
+    isActive: true,
+    priority: 6,
+    usageCount: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+];
+var DEFAULT_SEEDED_QUICK_REPLIES = [
+  {
+    id: "qr_welcome",
+    title: "\u0938\u094D\u0935\u093E\u0917\u0924 \u0938\u0902\u0926\u0947\u0936",
+    shortcut: "/welcome",
+    category: "General",
+    text: "\u{1F64F} \u0928\u092E\u0938\u094D\u0915\u093E\u0930! AI News Maker \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948\u0964 \u092C\u0924\u093E\u0907\u090F, \u0939\u092E \u0906\u092A\u0915\u0940 \u0915\u094D\u092F\u093E \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902?"
+  },
+  {
+    id: "qr_plans",
+    title: "\u092A\u094D\u0932\u093E\u0928\u094D\u0938 \u0935 \u0930\u093F\u091A\u093E\u0930\u094D\u091C \u091C\u093E\u0928\u0915\u093E\u0930\u0940",
+    shortcut: "/plans",
+    category: "Billing",
+    text: "\u{1F4B3} \u0939\u092E\u093E\u0930\u0947 \u0938\u092D\u0940 \u092A\u094D\u0932\u093E\u0928\u094D\u0938 \u0914\u0930 \u0915\u0949\u0907\u0928 \u092A\u0948\u0915\u0947\u091C\u0947\u0938 \u0915\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 https://ainewsmaker.online/#plans \u092A\u0930 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0906\u092A \u0938\u0940\u0927\u0947 UPI \u0926\u094D\u0935\u093E\u0930\u093E \u0930\u093F\u091A\u093E\u0930\u094D\u091C \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+  },
+  {
+    id: "qr_reset",
+    title: "\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915",
+    shortcut: "/reset",
+    category: "Account",
+    text: "\u{1F511} \u0915\u0943\u092A\u092F\u093E \u0932\u0949\u0917\u093F\u0928 \u0938\u094D\u0915\u094D\u0930\u0940\u0928 \u092A\u0930 '\u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092D\u0942\u0932 \u0917\u090F?' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0915\u0947 \u0905\u092A\u0928\u093E \u0908\u092E\u0947\u0932 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964 \u0930\u0940\u0938\u0947\u091F \u0932\u093F\u0902\u0915 \u0906\u092A\u0915\u0947 \u0907\u0928\u092C\u0949\u0915\u094D\u0938 \u092E\u0947\u0902 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0939\u094B\u0917\u0940\u0964"
+  },
+  {
+    id: "qr_hold",
+    title: "\u091C\u093E\u0901\u091A \u0939\u0947\u0924\u0941 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E",
+    shortcut: "/hold",
+    category: "Support",
+    text: "\u23F3 \u0915\u0943\u092A\u092F\u093E \u0925\u094B\u0921\u093C\u093E \u0938\u092E\u092F \u0926\u0947\u0902, \u0939\u092E \u0906\u092A\u0915\u0947 \u0916\u093E\u0924\u0947 \u0914\u0930 \u0935\u093F\u0935\u0930\u0923 \u0915\u0940 \u092A\u0941\u0937\u094D\u091F\u093F \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902\u0964"
+  },
+  {
+    id: "qr_bye",
+    title: "\u0927\u0928\u094D\u092F\u0935\u093E\u0926 \u0935 \u0938\u092E\u093E\u092A\u0928",
+    shortcut: "/bye",
+    category: "General",
+    text: "\u{1F64F} AI News Maker \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0927\u0928\u094D\u092F\u0935\u093E\u0926! \u092F\u0926\u093F \u0906\u092A\u0915\u094B \u092A\u0941\u0928\u0903 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915\u0924\u093E \u0939\u094B \u0924\u094B \u0915\u092D\u0940 \u092D\u0940 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+  }
+];
+var DEFAULT_AUTOMATION_SETTINGS = {
+  flowAutomationEnabled: true,
+  geminiModel: "gemini-3.5-flash",
+  aiModel: "gemini-3.5-flash",
+  fallbackReply: "\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u093E \u0938\u0902\u0926\u0947\u0936 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948\u0964 \u0939\u092E\u093E\u0930\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u091C\u0932\u094D\u0926 \u0939\u0940 \u0906\u092A\u0938\u0947 \u092F\u0939\u093E\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0917\u0947\u0964",
+  defaultHandoffMessage: "\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u093E \u0938\u0902\u0926\u0947\u0936 \u0939\u092E\u0947\u0902 \u092E\u093F\u0932 \u0917\u092F\u093E \u0939\u0948\u0964 \u0939\u092E\u093E\u0930\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u091C\u0932\u094D\u0926 \u0939\u0940 \u0906\u092A\u0938\u0947 \u092F\u0939\u093E\u0901 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0917\u0947\u0964",
+  handoffKeywords: ["agent", "human", "support", "person", "executive", "\u092E\u093E\u0928\u0935", "\u0935\u094D\u092F\u0915\u094D\u0924\u093F", "\u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F", "\u0915\u0938\u094D\u091F\u092E\u0930 \u0915\u0947\u092F\u0930", "\u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E", "\u0915\u0938\u094D\u091F\u092E\u0930 \u0938\u092A\u094B\u0930\u094D\u091F", "\u092C\u093E\u0924 \u0915\u0930\u0928\u0940 \u0939\u0948"],
+  sessionTimeoutMinutes: 30,
+  businessHoursEnabled: false,
+  businessHoursStart: "09:00",
+  businessHoursEnd: "22:00",
+  outOfHoursReply: "\u0928\u092E\u0938\u094D\u0924\u0947! \u0939\u092E\u093E\u0930\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947\u0902\u0926\u094D\u0930 \u0915\u093E \u0915\u093E\u0930\u094D\u092F \u0938\u092E\u092F \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0939\u092E\u093E\u0930\u0940 \u091F\u0940\u092E \u0915\u093E\u0930\u094D\u092F \u0938\u092E\u092F \u092E\u0947\u0902 \u0906\u092A\u0915\u0947 \u0938\u0902\u0926\u0947\u0936 \u0915\u093E \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0917\u0940\u0964"
+};
+function loadFlowsDatabase() {
+  try {
+    if (import_fs.default.existsSync(WHATSAPP_FLOWS_FILE)) {
+      const raw = import_fs.default.readFileSync(WHATSAPP_FLOWS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.error("[WhatsApp:Flows] Error reading flows file:", err.message);
+  }
+  saveFlowsDatabase(DEFAULT_SEEDED_FLOWS);
+  return DEFAULT_SEEDED_FLOWS;
+}
+function saveFlowsDatabase(flows, centralDb2) {
+  try {
+    import_fs.default.writeFileSync(WHATSAPP_FLOWS_FILE, JSON.stringify(flows, null, 2), "utf-8");
+    for (const f of flows) {
+      flowCache.set(f.id, f);
+      if (centralDb2?.useFirestore) {
+        centralDb2.writeDoc("whatsapp_flows", f.id, f).catch(() => {
+        });
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("[WhatsApp:Flows] Error writing flows file:", err.message);
+    return false;
+  }
+}
+function loadFaqsDatabase() {
+  try {
+    if (import_fs.default.existsSync(WHATSAPP_FAQS_FILE)) {
+      const raw = import_fs.default.readFileSync(WHATSAPP_FAQS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (err) {
+    console.error("[WhatsApp:FAQs] Error reading faqs file:", err.message);
+  }
+  saveFaqsDatabase(DEFAULT_SEEDED_FAQS);
+  return DEFAULT_SEEDED_FAQS;
+}
+function saveFaqsDatabase(faqs, centralDb2) {
+  try {
+    import_fs.default.writeFileSync(WHATSAPP_FAQS_FILE, JSON.stringify(faqs, null, 2), "utf-8");
+    for (const f of faqs) {
+      faqCache.set(f.id, f);
+      if (centralDb2?.useFirestore) {
+        centralDb2.writeDoc("whatsapp_faqs", f.id, f).catch(() => {
+        });
+        if (f.isActive) {
+          centralDb2.writeDoc("whatsapp_knowledge_base", `faq_${f.id}`, {
+            title: f.question,
+            content: f.answer,
+            category: f.category,
+            isActive: true,
+            updatedAt: Date.now()
+          }).catch(() => {
+          });
+        }
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("[WhatsApp:FAQs] Error writing faqs file:", err.message);
+    return false;
+  }
+}
+function loadFlowSessionsDatabase() {
+  try {
+    if (import_fs.default.existsSync(WHATSAPP_FLOW_SESSIONS_FILE)) {
+      const raw = import_fs.default.readFileSync(WHATSAPP_FLOW_SESSIONS_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {
+  }
+  return {};
+}
+function saveFlowSessionsDatabase(sessions, centralDb2) {
+  try {
+    import_fs.default.writeFileSync(WHATSAPP_FLOW_SESSIONS_FILE, JSON.stringify(sessions, null, 2), "utf-8");
+    for (const [k, s] of Object.entries(sessions)) {
+      flowSessionCache.set(k, s);
+      if (centralDb2?.useFirestore) {
+        centralDb2.writeDoc("whatsapp_flow_sessions", k, s).catch(() => {
+        });
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function loadQuickRepliesDatabase() {
+  try {
+    if (import_fs.default.existsSync(WHATSAPP_QUICK_REPLIES_FILE)) {
+      const raw = import_fs.default.readFileSync(WHATSAPP_QUICK_REPLIES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+  }
+  saveQuickRepliesDatabase(DEFAULT_SEEDED_QUICK_REPLIES);
+  return DEFAULT_SEEDED_QUICK_REPLIES;
+}
+function saveQuickRepliesDatabase(replies, centralDb2) {
+  try {
+    import_fs.default.writeFileSync(WHATSAPP_QUICK_REPLIES_FILE, JSON.stringify(replies, null, 2), "utf-8");
+    for (const r of replies) {
+      quickReplyCache.set(r.id, r);
+      if (centralDb2?.useFirestore) {
+        centralDb2.writeDoc("whatsapp_quick_replies", r.id, r).catch(() => {
+        });
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function loadAutomationSettings() {
+  try {
+    if (import_fs.default.existsSync(WHATSAPP_SETTINGS_FILE)) {
+      const raw = import_fs.default.readFileSync(WHATSAPP_SETTINGS_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {
+  }
+  return DEFAULT_AUTOMATION_SETTINGS;
+}
+function saveAutomationSettings(settings, centralDb2) {
+  try {
+    import_fs.default.writeFileSync(WHATSAPP_SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
+    if (centralDb2?.useFirestore) {
+      centralDb2.writeDoc("system_config", "whatsapp_automation_settings", settings).catch(() => {
+      });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function matchFAQ(queryText, faqs) {
+  const cleanQuery = (queryText || "").toLowerCase().trim();
+  if (!cleanQuery) return null;
+  const normalizedQuery = cleanQuery.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+  const queryTokens = normalizedQuery.split(" ").filter((t) => t.length > 1);
+  let bestMatch = null;
+  let bestScore = 0;
+  for (const faq of faqs) {
+    if (faq.isActive === false) continue;
+    const keywordsList = faq.alternativeKeywords || faq.keywords || [];
+    for (const kw of keywordsList) {
+      const cleanKw = (kw || "").toLowerCase().trim();
+      if (!cleanKw) continue;
+      if (cleanQuery === cleanKw || normalizedQuery === cleanKw) {
+        return { faq, score: 100 };
+      }
+      if (normalizedQuery.includes(cleanKw) || cleanKw.includes(normalizedQuery)) {
+        const score = 80 + Math.min(20, cleanKw.length / Math.max(normalizedQuery.length, 1) * 20);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = faq;
+        }
+      }
+    }
+    const qStr = (faq.question || faq.questionHi || "").toLowerCase();
+    const normQ = qStr.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+    const qTokens = normQ.split(" ").filter((t) => t.length > 1);
+    let matchedTokens = 0;
+    for (const token of queryTokens) {
+      if (qTokens.includes(token)) matchedTokens++;
+    }
+    const tokenScore = queryTokens.length > 0 ? matchedTokens / queryTokens.length * 70 : 0;
+    if (tokenScore > bestScore && tokenScore >= 40) {
+      bestScore = tokenScore;
+      bestMatch = faq;
+    }
+    if (faq.questionEn) {
+      const normQEn = faq.questionEn.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+      if (normalizedQuery.includes(normQEn) || normQEn.includes(normalizedQuery)) {
+        if (75 > bestScore) {
+          bestScore = 75;
+          bestMatch = faq;
+        }
+      }
+    }
+  }
+  if (bestMatch && bestScore >= 45) {
+    return { faq: bestMatch, score: Math.round(bestScore) };
+  }
+  return null;
+}
+function matchFlowTrigger(messageText, isFirstMessage, flows) {
+  const cleanText = (messageText || "").toLowerCase().trim();
+  const normalizedText = cleanText.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()।?]/g, " ").replace(/\s+/g, " ").trim();
+  for (const flow of flows) {
+    if (flow.status !== "published" || !flow.isActive) continue;
+    if (flow.trigger?.type === "keyword" && Array.isArray(flow.trigger.keywords)) {
+      for (const kw of flow.trigger.keywords) {
+        const cleanKw = (kw || "").toLowerCase().trim();
+        if (!cleanKw) continue;
+        if (flow.trigger.exactMatch) {
+          if (cleanText === cleanKw || normalizedText === cleanKw) return flow;
+        } else {
+          if (cleanText.includes(cleanKw) || cleanKw.includes(cleanText)) return flow;
+        }
+      }
+    }
+  }
+  if (isFirstMessage) {
+    const firstMsgFlow = flows.find(
+      (f) => f.status === "published" && f.isActive && f.trigger?.type === "first_message"
+    );
+    if (firstMsgFlow) return firstMsgFlow;
+  }
+  const catchAllFlow = flows.find(
+    (f) => f.status === "published" && f.isActive && f.trigger?.type === "all_inbound"
+  );
+  if (catchAllFlow) return catchAllFlow;
+  return null;
+}
+async function executeFlowNodes(flowOrId, startNodeIdOrSession, userInputOrCentralDb, sessionOrDb, centralDbOrAi, generateSupportReplyFn) {
+  let flow;
+  if (typeof flowOrId === "string") {
+    const flows = loadFlowsDatabase();
+    flow = flows.find((f) => f.id === flowOrId);
+  } else {
+    flow = flowOrId;
+  }
+  let session;
+  let userInput = "";
+  let centralDb2;
+  let aiFn;
+  let currentNodeId = "";
+  if (typeof startNodeIdOrSession === "string") {
+    currentNodeId = startNodeIdOrSession;
+    userInput = typeof userInputOrCentralDb === "string" ? userInputOrCentralDb : "";
+    session = sessionOrDb || {
+      conversationId: `sim_${Date.now()}`,
+      flowId: flow?.id || "",
+      currentNodeId,
+      variables: {},
+      startedAt: Date.now(),
+      lastInteractionAt: Date.now(),
+      status: "active"
+    };
+    centralDb2 = centralDbOrAi;
+    aiFn = generateSupportReplyFn;
+  } else {
+    session = startNodeIdOrSession;
+    currentNodeId = session.currentNodeId || (flow?.nodes && flow.nodes[0] ? flow.nodes[0].id : "");
+    userInput = typeof userInputOrCentralDb === "string" ? userInputOrCentralDb : "";
+    centralDb2 = sessionOrDb;
+    aiFn = centralDbOrAi;
+  }
+  const outboundMessages = [];
+  if (!flow || !Array.isArray(flow.nodes) || flow.nodes.length === 0) {
+    return {
+      outboundMessages,
+      nextSession: { ...session, status: "completed" },
+      isPaused: false,
+      isHandoff: false,
+      isCompleted: true
+    };
+  }
+  const nodesMap = /* @__PURE__ */ new Map();
+  for (const n of flow.nodes) nodesMap.set(n.id, n);
+  let isPaused = false;
+  let isHandoff = false;
+  let handoffReason = "";
+  let isCompleted = false;
+  let current = nodesMap.get(currentNodeId);
+  if (!current) {
+    return {
+      outboundMessages,
+      nextSession: { ...session, status: "completed" },
+      isPaused: false,
+      isHandoff: false,
+      isCompleted: true
+    };
+  }
+  if (userInput && (current.type === "question" || current.type === "option" || current.type === "condition")) {
+    session.variables[current.id] = userInput;
+    session.variables.last_input = userInput;
+    session.stepCount++;
+    if (current.type === "option") {
+      const cleanInput = userInput.trim().toLowerCase();
+      let matchedNextId = current.config?.defaultNextNodeId;
+      for (const opt of current.config?.options || []) {
+        const kw = (opt.keyword || "").trim().toLowerCase();
+        const lbl = (opt.label || "").trim().toLowerCase();
+        if (cleanInput === kw || cleanInput.includes(kw) || cleanInput.includes(lbl)) {
+          matchedNextId = opt.nextNodeId;
+          break;
+        }
+      }
+      currentNodeId = matchedNextId || current.config?.defaultNextNodeId || "";
+    } else if (current.type === "condition") {
+      let matchedNextId = current.config?.defaultNextNodeId;
+      for (const cond of current.config?.conditions || []) {
+        const val = (cond.value || "").toLowerCase().trim();
+        const cleanInput = userInput.toLowerCase().trim();
+        let matched = false;
+        if (cond.operator === "equals") matched = cleanInput === val;
+        else if (cond.operator === "contains") matched = cleanInput.includes(val);
+        else if (cond.operator === "matches_regex") {
+          try {
+            matched = new RegExp(val, "i").test(cleanInput);
+          } catch {
+          }
+        }
+        if (matched) {
+          matchedNextId = cond.nextNodeId;
+          break;
+        }
+      }
+      currentNodeId = matchedNextId || current.config?.defaultNextNodeId || "";
+    } else {
+      currentNodeId = current.config?.defaultNextNodeId || "";
+    }
+  }
+  let iterations = 0;
+  while (currentNodeId && iterations < 15) {
+    iterations++;
+    const node = nodesMap.get(currentNodeId);
+    if (!node) {
+      isCompleted = true;
+      break;
+    }
+    if (node.type === "message") {
+      if (node.config?.text) outboundMessages.push(node.config.text);
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    } else if (node.type === "question") {
+      if (node.config?.text) outboundMessages.push(node.config.text);
+      isPaused = true;
+      session.currentNodeId = node.id;
+      break;
+    } else if (node.type === "option") {
+      let msg = node.config?.text || "\u0915\u0943\u092A\u092F\u093E \u090F\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u091A\u0941\u0928\u0947\u0902:";
+      outboundMessages.push(msg);
+      isPaused = true;
+      session.currentNodeId = node.id;
+      break;
+    } else if (node.type === "condition") {
+      const lastInput = String(userInput || session.variables.last_input || "").toLowerCase().trim();
+      let matchedNext = node.config?.defaultNextNodeId || "";
+      for (const cond of node.config?.conditions || []) {
+        const val = (cond.value || "").toLowerCase().trim();
+        let matched = false;
+        if (cond.operator === "equals") matched = lastInput === val;
+        else if (cond.operator === "contains") matched = lastInput.includes(val);
+        else if (cond.operator === "matches_regex") {
+          try {
+            matched = new RegExp(val, "i").test(lastInput);
+          } catch {
+          }
+        }
+        if (matched) {
+          matchedNext = cond.nextNodeId;
+          break;
+        }
+      }
+      currentNodeId = matchedNext;
+    } else if (node.type === "ai_response") {
+      if (generateSupportReplyFn) {
+        const query = userInput || session.variables.last_input || "\u0928\u092E\u0938\u094D\u0924\u0947";
+        const aiRes = await generateSupportReplyFn(query);
+        if (aiRes.reply) {
+          outboundMessages.push(aiRes.reply);
+        } else if (aiRes.reason === "knowledge_gap") {
+          isHandoff = true;
+          handoffReason = "ai_knowledge_gap";
+          outboundMessages.push("\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u0947 \u0938\u0935\u093E\u0932 \u0915\u0947 \u0938\u091F\u0940\u0915 \u0909\u0924\u094D\u0924\u0930 \u0915\u0947 \u0932\u093F\u090F \u0939\u092E \u0906\u092A\u0915\u094B \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u0938\u0947 \u091C\u094B\u0921\u093C \u0930\u0939\u0947 \u0939\u0948\u0902\u0964");
+          break;
+        }
+      }
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    } else if (node.type === "faq") {
+      const allFaqs = loadFaqsDatabase();
+      const match = matchFAQ(userInput || String(session.variables.last_input || ""), allFaqs);
+      if (match) {
+        outboundMessages.push(match.faq.answer);
+      } else if (node.config?.text) {
+        outboundMessages.push(node.config.text);
+      }
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    } else if (node.type === "human_handoff") {
+      isHandoff = true;
+      handoffReason = node.config?.handoffReason || "flow_handoff_node";
+      const handoffText = node.config?.text || "\u0928\u092E\u0938\u094D\u0924\u0947! \u0906\u092A\u0915\u0940 \u092C\u093E\u0924\u091A\u0940\u0924 \u0939\u092E\u093E\u0930\u0947 \u0938\u0939\u093E\u092F\u0924\u093E \u092A\u094D\u0930\u0924\u093F\u0928\u093F\u0927\u093F \u0915\u094B \u0938\u094C\u0902\u092A \u0926\u0940 \u0917\u0908 \u0939\u0948\u0964";
+      outboundMessages.push(handoffText);
+      isCompleted = true;
+      break;
+    } else if (node.type === "end") {
+      if (node.config?.text) outboundMessages.push(node.config.text);
+      isCompleted = true;
+      break;
+    } else {
+      currentNodeId = node.config?.defaultNextNodeId || "";
+    }
+  }
+  const nextSession = {
+    ...session,
+    currentNodeId: isPaused ? session.currentNodeId : isCompleted ? "" : currentNodeId,
+    lastInteractionAt: Date.now(),
+    status: isHandoff ? "handed_off" : isCompleted ? "completed" : "active"
+  };
+  return {
+    outboundMessages,
+    nextSession,
+    isPaused,
+    isHandoff,
+    handoffReason,
+    isCompleted
+  };
+}
 var VALID_STATUS_TRANSITIONS = {
   pending: ["sent", "failed"],
   sent: ["delivered", "failed"],
@@ -7261,38 +8045,47 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     return await sendWhatsAppText(to, fallbackTextMessage);
   };
   const getKnowledgeContext = async () => {
-    if (!centralDb2?.useFirestore) {
-      console.warn("[WhatsApp:KnowledgeBase] FIRESTORE_CONNECTION_ERROR: Firestore is disabled on centralDb");
-      return { context: "", count: 0, errorCategory: "FIRESTORE_CONNECTION_ERROR" };
-    }
-    console.log(`[WhatsApp:KnowledgeBase] Firestore database ID verified: ${centralDb2.databaseId || "default"}`);
-    console.log("[WhatsApp:KnowledgeBase] Knowledge Base query started on collection: whatsapp_knowledge_base");
-    let result;
+    const docs = [];
     try {
-      result = await centralDb2.listDocs("whatsapp_knowledge_base", 100);
-    } catch (err) {
-      console.error("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR:", String(err?.message || err).slice(0, 200));
-      return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_READ_ERROR" };
+      const activeFaqs = loadFaqsDatabase(centralDb2).filter((f) => f.isActive && f.status === "published");
+      for (const faq of activeFaqs) {
+        const title = faq.questionHi || faq.questionEn;
+        const kwStr = Array.isArray(faq.keywords) && faq.keywords.length > 0 ? ` (\u0915\u0940\u0935\u0930\u094D\u0921\u094D\u0938: ${faq.keywords.join(", ")})` : "";
+        const content = `${faq.answerHi || faq.answerEn}${kwStr}`;
+        if (title && content) docs.push({ title, content });
+      }
+    } catch (e) {
+      console.warn("[WhatsApp:KnowledgeBase] Warning reading local FAQs database:", e?.message || e);
     }
-    if (!result?.success || !Array.isArray(result.documents)) {
-      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR: listDocs returned failure or non-array");
-      return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_READ_ERROR" };
+    if (centralDb2?.useFirestore) {
+      console.log(`[WhatsApp:KnowledgeBase] Firestore database ID verified: ${centralDb2.databaseId || "default"}`);
+      console.log("[WhatsApp:KnowledgeBase] Knowledge Base query started on collection: whatsapp_knowledge_base");
+      try {
+        const result = await centralDb2.listDocs("whatsapp_knowledge_base", 100);
+        if (result?.success && Array.isArray(result.documents)) {
+          const activeDocs = result.documents.filter((item) => item && item.isActive !== false && item.status !== "disabled");
+          for (const item of activeDocs) {
+            const title = String(item.title || item.question || "").trim();
+            const content = String(item.content || item.answer || item.description || "").trim();
+            if (title || content) docs.push({ title, content });
+          }
+        }
+      } catch (err) {
+        console.error("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_READ_ERROR:", String(err?.message || err).slice(0, 200));
+      }
     }
-    console.log(`[WhatsApp:KnowledgeBase] Knowledge Base documents retrieved: ${result.documents.length}`);
-    const activeDocs = result.documents.filter((item) => item && item.isActive !== false && item.status !== "disabled");
-    console.log(`[WhatsApp:KnowledgeBase] Number of active FAQ documents: ${activeDocs.length}`);
-    if (activeDocs.length === 0) {
-      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_EMPTY: No active FAQ documents found in whatsapp_knowledge_base");
+    if (docs.length === 0) {
+      console.warn("[WhatsApp:KnowledgeBase] KNOWLEDGE_BASE_EMPTY: No active FAQ documents found in knowledge base");
       return { context: "", count: 0, errorCategory: "KNOWLEDGE_BASE_EMPTY" };
     }
-    const context = activeDocs.map((item) => {
-      const title = String(item.title || item.question || "").trim();
-      const content = String(item.content || item.answer || item.description || "").trim();
+    const context = docs.map((item) => {
+      const title = item.title.trim();
+      const content = item.content.trim();
       return title && content ? `\u092A\u094D\u0930\u0936\u094D\u0928/\u0935\u093F\u0937\u092F: ${title}
 \u0909\u0924\u094D\u0924\u0930/\u091C\u093E\u0928\u0915\u093E\u0930\u0940: ${content}` : content || title;
     }).filter(Boolean).join("\n\n").slice(0, 14e3);
-    console.log(`[WhatsApp:KnowledgeBase] Knowledge context generated (${context.length} chars)`);
-    return { context, count: activeDocs.length };
+    console.log(`[WhatsApp:KnowledgeBase] Knowledge context generated (${context.length} chars from ${docs.length} active entries)`);
+    return { context, count: docs.length };
   };
   const generateSupportReply = async (userMessage) => {
     const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
@@ -7536,127 +8329,169 @@ ${knowledge.slice(0, 1e3)}` };
       });
       return;
     }
-    const isGreeting = /^\s*(hi|hello|hey|namaste|namaskar|नमस्ते|नमस्कार|हैलो|हाय|हॅलो)\s*$/i.test(textBody);
-    if (isGreeting) {
-      console.log(`[WhatsApp:Inbound] Greeting received from ${maskedWa}`);
-      const greetingReply = `\u{1F64F} *\u0928\u092E\u0938\u094D\u0915\u093E\u0930! AI News Maker (BREAKING NEWS WALA) \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948\u0964*
-
-\u0939\u092E \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902 \u0914\u0930 \u0921\u093F\u091C\u093F\u091F\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0947 \u0932\u093F\u090F \u092D\u093E\u0930\u0924 \u0915\u093E \u0905\u0917\u094D\u0930\u0923\u0940 AI-\u092A\u093E\u0935\u0930\u094D\u0921 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0935 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0939\u0948\u0902\u0964
-
-\u092C\u0924\u093E\u0907\u090F, \u0939\u092E \u0906\u092A\u0915\u0940 \u0915\u094D\u092F\u093E \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902? \u0906\u092A \u0928\u093F\u092E\u094D\u0928 \u092E\u0947\u0902 \u0938\u0947 \u0915\u094B\u0908 \u092D\u0940 \u0935\u093F\u0937\u092F \u0932\u093F\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902:
-1\uFE0F\u20E3 *AI News Maker \u0915\u094D\u092F\u093E \u0939\u0948?*
-2\uFE0F\u20E3 *\u0907\u0938\u0915\u0940 \u0938\u0947\u0935\u093E\u090F\u0901 \u0915\u094D\u092F\u093E \u0939\u0948\u0902?*
-3\uFE0F\u20E3 *\u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?*
-4\uFE0F\u20E3 *\u0935\u0940\u0921\u093F\u092F\u094B \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901?*
-5\uFE0F\u20E3 *\u092E\u0947\u0930\u093E \u092A\u094D\u0932\u093E\u0928* (\u092A\u094D\u0932\u093E\u0928 \u0935 \u0935\u0948\u0927\u0924\u093E)
-6\uFE0F\u20E3 *\u0915\u094B\u091F\u093E* (\u0906\u091C \u0915\u0947 \u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u092B\u093F\u0915)
-7\uFE0F\u20E3 *\u0935\u0949\u0932\u0947\u091F* (\u0915\u0949\u0907\u0928\u094D\u0938 \u092C\u0948\u0932\u0947\u0902\u0938)
-8\uFE0F\u20E3 *\u0905\u0915\u093E\u0909\u0902\u091F* (\u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0935\u093F\u0935\u0930\u0923)
-
-\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
-      const sent2 = await sendWhatsAppText(waId, greetingReply);
-      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
-        conversationId,
-        waId,
-        direction: "outbound",
-        text: greetingReply,
-        timestamp: now,
-        status: "sent"
-      });
+    let activeSession = flowSessionCache.get(conversationId);
+    if (!activeSession) {
+      const allSessions = loadFlowSessionsDatabase(centralDb2);
+      if (allSessions[conversationId]) {
+        activeSession = allSessions[conversationId];
+        flowSessionCache.set(conversationId, activeSession);
+      }
+    }
+    if (activeSession && activeSession.status === "active" && activeSession.currentNodeId) {
+      console.log(`[WhatsApp:Flow] Advancing active flow session for ${maskedWa}: flow=${activeSession.flowId}, node=${activeSession.currentNodeId}`);
+      const flowExecResult = await executeFlowNodes(
+        activeSession.flowId,
+        activeSession.currentNodeId,
+        textBody,
+        activeSession,
+        centralDb2,
+        generateSupportReply
+      );
+      for (const msg of flowExecResult.outboundMessages) {
+        const sent2 = await sendWhatsAppText(waId, msg);
+        const outMsgId2 = String(sent2?.messages?.[0]?.id || `flow-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+        const outRecord = {
+          messageId: outMsgId2,
+          metaMessageId: outMsgId2,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "flow_automation",
+          text: msg,
+          timestamp: Date.now(),
+          status: "sent"
+        };
+        await requireWrite("whatsapp_messages", sha2562(outMsgId2), outRecord).catch(() => {
+        });
+        messageCache.set(sha2562(outMsgId2), outRecord);
+      }
+      if (flowExecResult.isHandoff) {
+        console.log(`[WhatsApp:Flow] Human handoff triggered by flow node for ${maskedWa}`);
+        const handoffUpdates = {
+          ...convUpdates,
+          handlingMode: "waiting_human",
+          status: "human_requested",
+          humanHandoff: true,
+          handoffRequestedAt: Date.now(),
+          handoffReason: flowExecResult.handoffReason || "flow_handoff_node",
+          modeUpdatedAt: Date.now(),
+          modeUpdatedBy: "flow_automation",
+          updatedAt: Date.now()
+        };
+        await requireWrite("whatsapp_conversations", conversationId, handoffUpdates).catch(() => {
+        });
+        conversationCache.set(conversationId, handoffUpdates);
+        await recordAuditEvent(centralDb2, {
+          conversationId,
+          eventType: "conversation_mode_changed",
+          previousValue: currentHandlingMode,
+          newValue: "waiting_human",
+          actorId: "flow_automation",
+          actorType: "system",
+          metadata: { flowId: activeSession.flowId, reason: flowExecResult.handoffReason }
+        });
+      }
+      const allSessions = loadFlowSessionsDatabase(centralDb2);
+      allSessions[conversationId] = flowExecResult.nextSession;
+      saveFlowSessionsDatabase(allSessions, centralDb2);
+      flowSessionCache.set(conversationId, flowExecResult.nextSession);
       return;
     }
-    const isWhatIsNewsMaker = /क्या है|what is ai news maker|ai news maker kya hai/i.test(textBody);
-    const isServicesQuery = /सेवाएँ|सुविधाएँ|services|features|सुविधाएं/i.test(textBody);
-    const isHowToGraphic = /ग्राफिक कैसे|graphic kaise|how to make graphic/i.test(textBody);
-    const isHowToVideo = /वीडियो कैसे|video kaise|how to make video/i.test(textBody);
-    if (isWhatIsNewsMaker && !isServicesQuery) {
-      console.log(`[WhatsApp:Inbound] FAQ 'what is news maker' matched from ${maskedWa}`);
-      const faqReply = `\u{1F4F0} *AI News Maker (BREAKING NEWS WALA) \u0915\u094D\u092F\u093E \u0939\u0948?*
-
-AI News Maker \u092D\u093E\u0930\u0924 \u0915\u093E \u092A\u0939\u0932\u093E \u0935\u093F\u0936\u0947\u0937 AI-\u092A\u093E\u0935\u0930\u094D\u0921 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0939\u0948, \u091C\u093F\u0938\u0947 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u094B\u0902, \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u094B\u0930\u094D\u091F\u0932\u094D\u0938, \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u094D\u0930\u093F\u090F\u091F\u0930\u094D\u0938 \u0914\u0930 \u092E\u0940\u0921\u093F\u092F\u093E \u0939\u093E\u0909\u0938\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0921\u093F\u091C\u093C\u093E\u0907\u0928 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964
-
-\u0907\u0938\u0915\u0947 \u092E\u093E\u0927\u094D\u092F\u092E \u0938\u0947 \u0906\u092A \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093F\u091C\u093C\u093E\u0907\u0928\u0930 \u0915\u0947 \u0915\u0947\u0935\u0932 7 \u091A\u0930\u0923\u094B\u0902 \u092E\u0947\u0902 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C, \u091F\u0940\u0935\u0940 \u0938\u094D\u091F\u093E\u0907\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915\u094D\u0938, AI \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938, \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u0914\u0930 4K/HD \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0940\u0932\u094D\u0938 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964
-
-\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F: https://ainewsmaker.online`;
-      const sent2 = await sendWhatsAppText(waId, faqReply);
-      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
+    const isFirstMessage = !existingConv || Number(existingConv.unreadCount || 0) <= 1;
+    const allFlows = loadFlowsDatabase(centralDb2);
+    const matchedFlow = matchFlowTrigger(textBody, isFirstMessage, allFlows);
+    if (matchedFlow && Array.isArray(matchedFlow.nodes) && matchedFlow.nodes.length > 0) {
+      console.log(`[WhatsApp:Flow] Trigger matched for ${maskedWa}: flow="${matchedFlow.name}" (${matchedFlow.id})`);
+      const startNodeId = matchedFlow.nodes[0].id;
+      const initialSession = {
         conversationId,
-        waId,
-        direction: "outbound",
-        text: faqReply,
-        timestamp: now,
-        status: "sent"
-      });
+        flowId: matchedFlow.id,
+        currentNodeId: startNodeId,
+        variables: { initial_input: textBody },
+        startedAt: now,
+        lastInteractionAt: now,
+        status: "active"
+      };
+      const flowExecResult = await executeFlowNodes(
+        matchedFlow.id,
+        startNodeId,
+        textBody,
+        initialSession,
+        centralDb2,
+        generateSupportReply
+      );
+      for (const msg of flowExecResult.outboundMessages) {
+        const sent2 = await sendWhatsAppText(waId, msg);
+        const outMsgId2 = String(sent2?.messages?.[0]?.id || `flow-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+        const outRecord = {
+          messageId: outMsgId2,
+          metaMessageId: outMsgId2,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "flow_automation",
+          text: msg,
+          timestamp: Date.now(),
+          status: "sent"
+        };
+        await requireWrite("whatsapp_messages", sha2562(outMsgId2), outRecord).catch(() => {
+        });
+        messageCache.set(sha2562(outMsgId2), outRecord);
+      }
+      if (flowExecResult.isHandoff) {
+        const handoffUpdates = {
+          ...convUpdates,
+          handlingMode: "waiting_human",
+          status: "human_requested",
+          humanHandoff: true,
+          handoffRequestedAt: Date.now(),
+          handoffReason: flowExecResult.handoffReason || "flow_handoff_node",
+          modeUpdatedAt: Date.now(),
+          modeUpdatedBy: "flow_automation",
+          updatedAt: Date.now()
+        };
+        await requireWrite("whatsapp_conversations", conversationId, handoffUpdates).catch(() => {
+        });
+        conversationCache.set(conversationId, handoffUpdates);
+      }
+      const allSessions = loadFlowSessionsDatabase(centralDb2);
+      allSessions[conversationId] = flowExecResult.nextSession;
+      saveFlowSessionsDatabase(allSessions, centralDb2);
+      flowSessionCache.set(conversationId, flowExecResult.nextSession);
       return;
     }
-    if (isServicesQuery) {
-      console.log(`[WhatsApp:Inbound] FAQ 'services' matched from ${maskedWa}`);
-      const servicesReply = `\u26A1 *AI News Maker \u0915\u0940 \u092E\u0941\u0916\u094D\u092F \u0938\u0947\u0935\u093E\u090F\u0901:*
-
-1. *7-Step Quick News Maker*: \u091F\u0940\u0935\u0940 \u091A\u0948\u0928\u0932 \u091C\u0948\u0938\u0947 50+ \u0930\u0947\u0921\u0940-\u091F\u0942-\u092F\u0942\u091C\u093C \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E\u094D\u0938\u0964
-2. *AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u092C\u0941\u0932\u0947\u091F\u093F\u0928 \u091C\u0947\u0928\u0930\u0947\u091F\u0930*: \u0916\u092C\u0930\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u0906\u0915\u0930\u094D\u0937\u0915 \u0914\u0930 \u0935\u093E\u092F\u0930\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938\u0964
-3. *AI \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0935 \u0930\u0940\u0932\u094D\u0938*: \u0911\u091F\u094B \u0935\u0949\u0907\u0938\u0913\u0935\u0930 \u0935 \u0921\u093E\u092F\u0928\u093E\u092E\u093F\u0915 \u090F\u0928\u093F\u092E\u0947\u0936\u0928 \u0915\u0947 \u0938\u093E\u0925 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u094D\u092F\u0942\u091C\u093C\u0964
-4. *e-Paper & \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u094B\u0938\u094D\u091F*: Facebook, Instagram, Twitter \u0914\u0930 WhatsApp \u0915\u0947 \u0932\u093F\u090F \u092A\u0930\u092B\u0947\u0915\u094D\u091F \u0938\u093E\u0907\u091C\u0964
-5. *\u0915\u0938\u094D\u091F\u092E \u091A\u0948\u0928\u0932 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917*: \u0906\u092A\u0915\u093E \u091A\u0948\u0928\u0932 \u0932\u094B\u0917\u094B, \u0928\u093E\u092E, \u092B\u0949\u0928\u094D\u091F \u0914\u0930 \u0915\u0932\u0930\u094D\u0938\u0964
-
-\u{1F310} \u0905\u0927\u093F\u0915 \u091C\u093E\u0928\u0915\u093E\u0930\u0940: https://ainewsmaker.online/#features`;
-      const sent2 = await sendWhatsAppText(waId, servicesReply);
-      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
+    const allFaqs = loadFaqsDatabase(centralDb2);
+    const matchedFaq = matchFAQ(textBody, allFaqs);
+    if (matchedFaq && matchedFaq.faq) {
+      console.log(`[WhatsApp:FAQ] FAQ matched for ${maskedWa}: "${matchedFaq.faq.questionHi || matchedFaq.faq.questionEn}" (score: ${matchedFaq.score})`);
+      const answerText = matchedFaq.faq.answerHi || matchedFaq.faq.answerEn;
+      const sent2 = await sendWhatsAppText(waId, answerText);
+      const outMsgId2 = String(sent2?.messages?.[0]?.id || `faq-${Date.now()}`);
+      const outRecord = {
+        messageId: outMsgId2,
+        metaMessageId: outMsgId2,
         conversationId,
         waId,
         direction: "outbound",
-        text: servicesReply,
-        timestamp: now,
+        senderType: "faq_automation",
+        text: answerText,
+        timestamp: Date.now(),
         status: "sent"
+      };
+      await requireWrite("whatsapp_messages", sha2562(outMsgId2), outRecord).catch(() => {
       });
-      return;
-    }
-    if (isHowToGraphic) {
-      console.log(`[WhatsApp:Inbound] FAQ 'how to graphic' matched from ${maskedWa}`);
-      const graphicReply = `\u{1F3A8} *AI News Maker \u092A\u0930 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901:*
-
-1. https://ainewsmaker.online \u092A\u0930 \u091C\u093E\u090F\u0901 \u0914\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964
-2. '\u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B' \u091F\u0948\u092C \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964
-3. 50+ \u091F\u0940\u0935\u0940 \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u092E\u0947\u0902 \u0938\u0947 \u0905\u092A\u0928\u093E \u092A\u0938\u0902\u0926\u0940\u0926\u093E \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u091A\u0941\u0928\u0947\u0902\u0964
-4. \u0916\u092C\u0930 \u0915\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0935\u093F\u0935\u0930\u0923 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902 (\u092F\u093E AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0947\u0902)\u0964
-5. \u0905\u092A\u0928\u0940 \u0907\u092E\u0947\u091C \u0905\u092A\u0932\u094B\u0921 \u0915\u0930\u0947\u0902 \u0914\u0930 \u0915\u094D\u0930\u0949\u092A \u0915\u0930\u0947\u0902\u0964
-6. '\u0921\u093E\u0909\u0928\u0932\u094B\u0921' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u2014 \u0906\u092A\u0915\u093E HD \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0924\u0941\u0930\u0902\u0924 \u0924\u0948\u092F\u093E\u0930!`;
-      const sent2 = await sendWhatsAppText(waId, graphicReply);
-      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
-        conversationId,
-        waId,
-        direction: "outbound",
-        text: graphicReply,
-        timestamp: now,
-        status: "sent"
-      });
-      return;
-    }
-    if (isHowToVideo) {
-      console.log(`[WhatsApp:Inbound] FAQ 'how to video' matched from ${maskedWa}`);
-      const videoReply = `\u{1F3AC} *AI News Maker \u092A\u0930 \u0935\u0940\u0921\u093F\u092F\u094B \u0915\u0948\u0938\u0947 \u092C\u0928\u093E\u090F\u0901:*
-
-1. https://ainewsmaker.online \u092A\u0930 '\u0935\u0940\u0921\u093F\u092F\u094B \u090F\u0902\u0921 \u0930\u0940\u0932\u094D\u0938' \u0938\u0947\u0915\u094D\u0936\u0928 \u092E\u0947\u0902 \u091C\u093E\u090F\u0901\u0964
-2. \u0905\u092A\u0928\u0940 \u0916\u092C\u0930 \u0915\u093E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u092A\u0947\u0938\u094D\u091F \u0915\u0930\u0947\u0902\u0964
-3. AI \u0935\u0949\u0907\u0938\u0913\u0935\u0930 (\u0939\u093F\u0902\u0926\u0940 \u0906\u0935\u093E\u091C\u093C) \u091A\u0941\u0928\u0947\u0902\u0964
-4. \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093F\u091C\u0941\u0905\u0932\u094D\u0938 / \u0907\u092E\u0947\u091C \u091C\u094B\u0921\u093C\u0947\u0902\u0964
-5. '\u0935\u0940\u0921\u093F\u092F\u094B \u091C\u0928\u0930\u0947\u091F \u0915\u0930\u0947\u0902' \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902 \u2014 \u0906\u092A\u0915\u0940 \u091F\u0940\u0935\u0940-\u0938\u094D\u091F\u093E\u0907\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0940\u0932 \u0924\u0948\u092F\u093E\u0930!
-
-_\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u090F\u0921\u0935\u093E\u0902\u0938, \u092A\u094D\u0930\u094B \u0914\u0930 \u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964_`;
-      const sent2 = await sendWhatsAppText(waId, videoReply);
-      const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
-      await requireWrite("whatsapp_messages", sha2562(outMsgId2), {
-        conversationId,
-        waId,
-        direction: "outbound",
-        text: videoReply,
-        timestamp: now,
-        status: "sent"
-      });
+      messageCache.set(sha2562(outMsgId2), outRecord);
+      try {
+        matchedFaq.faq.usageCount = Number(matchedFaq.faq.usageCount || 0) + 1;
+        matchedFaq.faq.lastMatchedAt = Date.now();
+        const faqIdx = allFaqs.findIndex((f) => f.id === matchedFaq.faq.id);
+        if (faqIdx !== -1) {
+          allFaqs[faqIdx] = matchedFaq.faq;
+          saveFaqsDatabase(allFaqs, centralDb2);
+        }
+      } catch (err) {
+        console.warn("[WhatsApp:FAQ] Error incrementing FAQ usage:", err?.message || err);
+      }
       return;
     }
     const codeMatch = textBody.match(/^\s*(\d{6})\s*$/);
@@ -9416,13 +10251,363 @@ ${finalMessage}`);
       metaApiStatus
     });
   });
+  app2.get("/api/admin/whatsapp/flows", requireAdmin, async (_req, res) => {
+    try {
+      const flows = loadFlowsDatabase(centralDb2);
+      return res.json({ success: true, flows });
+    } catch (err) {
+      console.error("[WhatsApp:FlowAdmin] Error fetching flows:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load flows" });
+    }
+  });
+  app2.get("/api/admin/whatsapp/flows/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb2);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+      return res.json({ success: true, flow });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to get flow" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/flows", requireAdmin, async (req, res) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.name) {
+        return res.status(400).json({ success: false, error: "Flow name is required" });
+      }
+      const flows = loadFlowsDatabase(centralDb2);
+      const id = payload.id || `flow_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const now = Date.now();
+      const newFlow = {
+        id,
+        name: payload.name.trim(),
+        description: (payload.description || "").trim(),
+        version: payload.version || "1.0",
+        status: payload.status || "draft",
+        trigger: payload.trigger || { type: "keyword", keywords: [] },
+        nodes: Array.isArray(payload.nodes) ? payload.nodes : [],
+        createdAt: now,
+        updatedAt: now
+      };
+      const existingIdx = flows.findIndex((f) => f.id === id);
+      if (existingIdx !== -1) {
+        flows[existingIdx] = newFlow;
+      } else {
+        flows.push(newFlow);
+      }
+      saveFlowsDatabase(flows, centralDb2);
+      return res.json({ success: true, flow: newFlow });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save flow" });
+    }
+  });
+  app2.put("/api/admin/whatsapp/flows/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb2);
+      const idx = flows.findIndex((f) => f.id === id);
+      if (idx === -1) return res.status(404).json({ success: false, error: "Flow not found" });
+      const updated = {
+        ...flows[idx],
+        ...req.body,
+        id,
+        updatedAt: Date.now()
+      };
+      flows[idx] = updated;
+      saveFlowsDatabase(flows, centralDb2);
+      return res.json({ success: true, flow: updated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to update flow" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/flows/:id/duplicate", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb2);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+      const duplicatedId = `${flow.id}_copy_${Date.now().toString(36)}`;
+      const duplicated = {
+        ...flow,
+        id: duplicatedId,
+        name: `${flow.name} (\u0915\u0949\u092A\u0940)`,
+        status: "draft",
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      flows.push(duplicated);
+      saveFlowsDatabase(flows, centralDb2);
+      return res.json({ success: true, flow: duplicated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to duplicate flow" });
+    }
+  });
+  app2.delete("/api/admin/whatsapp/flows/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const flows = loadFlowsDatabase(centralDb2);
+      const filtered = flows.filter((f) => f.id !== id);
+      saveFlowsDatabase(filtered, centralDb2);
+      return res.json({ success: true, deletedId: id });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete flow" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/flows/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body || {};
+      if (!["draft", "published", "inactive"].includes(status)) {
+        return res.status(400).json({ success: false, error: "Invalid status value ('draft' | 'published' | 'inactive')" });
+      }
+      const flows = loadFlowsDatabase(centralDb2);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+      flow.status = status;
+      flow.updatedAt = Date.now();
+      saveFlowsDatabase(flows, centralDb2);
+      return res.json({ success: true, flow });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to change flow status" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/flows/:id/test", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { input = "\u0928\u092E\u0938\u094D\u0924\u0947", sessionState, startNodeId } = req.body || {};
+      const flows = loadFlowsDatabase(centralDb2);
+      const flow = flows.find((f) => f.id === id);
+      if (!flow) return res.status(404).json({ success: false, error: "Flow not found" });
+      const start = startNodeId || (flow.nodes && flow.nodes[0] ? flow.nodes[0].id : "");
+      const session = sessionState || {
+        conversationId: `sim_${Date.now()}`,
+        flowId: id,
+        currentNodeId: start,
+        variables: {},
+        startedAt: Date.now(),
+        lastInteractionAt: Date.now(),
+        status: "active"
+      };
+      const result = await executeFlowNodes(
+        id,
+        start,
+        String(input),
+        session,
+        centralDb2,
+        generateSupportReply
+      );
+      return res.json({ success: true, ...result });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Flow test failed" });
+    }
+  });
+  app2.get("/api/admin/whatsapp/faqs", requireAdmin, async (req, res) => {
+    try {
+      const { search = "", category = "" } = req.query || {};
+      let faqs = loadFaqsDatabase(centralDb2);
+      if (category) {
+        faqs = faqs.filter((f) => f.category === category);
+      }
+      if (search) {
+        const s = String(search).toLowerCase();
+        faqs = faqs.filter(
+          (f) => f.questionHi && f.questionHi.toLowerCase().includes(s) || f.questionEn && f.questionEn.toLowerCase().includes(s) || f.answerHi && f.answerHi.toLowerCase().includes(s) || f.answerEn && f.answerEn.toLowerCase().includes(s) || Array.isArray(f.keywords) && f.keywords.some((k) => k.toLowerCase().includes(s))
+        );
+      }
+      return res.json({ success: true, faqs });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load FAQs" });
+    }
+  });
+  app2.get("/api/admin/whatsapp/faqs/categories", requireAdmin, async (_req, res) => {
+    try {
+      const faqs = loadFaqsDatabase(centralDb2);
+      const categories = Array.from(new Set(faqs.map((f) => f.category || "\u0938\u093E\u092E\u093E\u0928\u094D\u092F"))).filter(Boolean);
+      return res.json({ success: true, categories });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to get FAQ categories" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/faqs", requireAdmin, async (req, res) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.questionHi && !payload.questionEn) {
+        return res.status(400).json({ success: false, error: "Question (Hindi or English) is required" });
+      }
+      if (!payload.answerHi && !payload.answerEn) {
+        return res.status(400).json({ success: false, error: "Answer (Hindi or English) is required" });
+      }
+      const faqs = loadFaqsDatabase(centralDb2);
+      const id = payload.id || `faq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const now = Date.now();
+      const newFaq = {
+        id,
+        category: payload.category || "\u0938\u093E\u092E\u093E\u0928\u094D\u092F",
+        questionHi: (payload.questionHi || "").trim(),
+        questionEn: (payload.questionEn || "").trim(),
+        answerHi: (payload.answerHi || "").trim(),
+        answerEn: (payload.answerEn || "").trim(),
+        keywords: Array.isArray(payload.keywords) ? payload.keywords : [],
+        isActive: payload.isActive !== false,
+        status: payload.status || "published",
+        usageCount: 0,
+        createdAt: now,
+        updatedAt: now
+      };
+      faqs.push(newFaq);
+      saveFaqsDatabase(faqs, centralDb2);
+      return res.json({ success: true, faq: newFaq });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save FAQ" });
+    }
+  });
+  app2.put("/api/admin/whatsapp/faqs/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const faqs = loadFaqsDatabase(centralDb2);
+      const idx = faqs.findIndex((f) => f.id === id);
+      if (idx === -1) return res.status(404).json({ success: false, error: "FAQ not found" });
+      const updated = {
+        ...faqs[idx],
+        ...req.body,
+        id,
+        updatedAt: Date.now()
+      };
+      faqs[idx] = updated;
+      saveFaqsDatabase(faqs, centralDb2);
+      return res.json({ success: true, faq: updated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to update FAQ" });
+    }
+  });
+  app2.delete("/api/admin/whatsapp/faqs/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const faqs = loadFaqsDatabase(centralDb2);
+      const filtered = faqs.filter((f) => f.id !== id);
+      saveFaqsDatabase(filtered, centralDb2);
+      return res.json({ success: true, deletedId: id });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete FAQ" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/faqs/:id/status", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, isActive } = req.body || {};
+      const faqs = loadFaqsDatabase(centralDb2);
+      const faq = faqs.find((f) => f.id === id);
+      if (!faq) return res.status(404).json({ success: false, error: "FAQ not found" });
+      if (status) faq.status = status;
+      if (typeof isActive === "boolean") faq.isActive = isActive;
+      faq.updatedAt = Date.now();
+      saveFaqsDatabase(faqs, centralDb2);
+      return res.json({ success: true, faq });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to update FAQ status" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/faqs/test-match", requireAdmin, async (req, res) => {
+    try {
+      const { query } = req.body || {};
+      if (!query) return res.status(400).json({ success: false, error: "Query string is required" });
+      const faqs = loadFaqsDatabase(centralDb2);
+      const match = matchFAQ(String(query), faqs);
+      return res.json({ success: true, query, match });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "FAQ match test failed" });
+    }
+  });
+  app2.get("/api/admin/whatsapp/quick-replies", requireAdmin, async (_req, res) => {
+    try {
+      const replies = loadQuickRepliesDatabase(centralDb2);
+      return res.json({ success: true, quickReplies: replies });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load quick replies" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/quick-replies", requireAdmin, async (req, res) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.title || !payload.text) {
+        return res.status(400).json({ success: false, error: "Title and text are required" });
+      }
+      const replies = loadQuickRepliesDatabase(centralDb2);
+      const id = payload.id || `qr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const newQr = {
+        id,
+        title: payload.title.trim(),
+        text: payload.text.trim(),
+        shortcut: (payload.shortcut || "").trim(),
+        category: payload.category || "\u0938\u093E\u092E\u093E\u0928\u094D\u092F",
+        createdAt: Date.now()
+      };
+      const existingIdx = replies.findIndex((r) => r.id === id);
+      if (existingIdx !== -1) {
+        replies[existingIdx] = newQr;
+      } else {
+        replies.push(newQr);
+      }
+      saveQuickRepliesDatabase(replies, centralDb2);
+      return res.json({ success: true, quickReply: newQr });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save quick reply" });
+    }
+  });
+  app2.delete("/api/admin/whatsapp/quick-replies/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const replies = loadQuickRepliesDatabase(centralDb2);
+      const filtered = replies.filter((r) => r.id !== id);
+      saveQuickRepliesDatabase(filtered, centralDb2);
+      return res.json({ success: true, deletedId: id });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete quick reply" });
+    }
+  });
+  app2.get("/api/admin/whatsapp/settings", requireAdmin, async (_req, res) => {
+    try {
+      const settings = loadAutomationSettings(centralDb2);
+      return res.json({
+        success: true,
+        settings,
+        metaStatus: {
+          configured: Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
+          phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+          displayNumber: process.env.WHATSAPP_DISPLAY_NUMBER || process.env.WHATSAPP_PHONE_NUMBER || "+1 555-706-1955"
+        },
+        vapidStatus: {
+          configured: Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+          publicKey: process.env.VAPID_PUBLIC_KEY ? `${process.env.VAPID_PUBLIC_KEY.slice(0, 16)}...` : "NOT_CONFIGURED"
+        }
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load settings" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/settings", requireAdmin, async (req, res) => {
+    try {
+      const current = loadAutomationSettings(centralDb2);
+      const updated = {
+        ...current,
+        ...req.body,
+        updatedAt: Date.now()
+      };
+      saveAutomationSettings(updated, centralDb2);
+      return res.json({ success: true, settings: updated });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to save settings" });
+    }
+  });
 }
 
 // server.ts
 var import_app = require("firebase-admin/app");
 var import_auth = require("firebase-admin/auth");
 var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd();
-var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path.default.dirname(safeFilename);
+var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path2.default.dirname(safeFilename);
 import_dotenv.default.config();
 if (!process.env.GEMINI_API_KEY && process.env["GEMINI_API-KEY"]) {
   process.env.GEMINI_API_KEY = process.env["GEMINI_API-KEY"];
@@ -9552,13 +10737,13 @@ app.use((req, res, next) => {
   }
   next();
 });
-var publicUploadsDir = import_path.default.join(process.cwd(), "public", "uploads");
-if (!import_fs.default.existsSync(publicUploadsDir)) {
-  import_fs.default.mkdirSync(publicUploadsDir, { recursive: true });
+var publicUploadsDir = import_path2.default.join(process.cwd(), "public", "uploads");
+if (!import_fs2.default.existsSync(publicUploadsDir)) {
+  import_fs2.default.mkdirSync(publicUploadsDir, { recursive: true });
 }
-var logosDir = import_path.default.join(publicUploadsDir, "logos");
-if (!import_fs.default.existsSync(logosDir)) {
-  import_fs.default.mkdirSync(logosDir, { recursive: true });
+var logosDir = import_path2.default.join(publicUploadsDir, "logos");
+if (!import_fs2.default.existsSync(logosDir)) {
+  import_fs2.default.mkdirSync(logosDir, { recursive: true });
 }
 if (cloudStorage) {
   app.use("/uploads", cloudStorage.createUploadsMiddleware());
@@ -9607,9 +10792,9 @@ try {
   let projectId = process.env.FIREBASE_PROJECT_ID;
   if (!projectId) {
     try {
-      const cfgPath = import_path.default.join(process.cwd(), "firebase-applet-config.json");
-      if (import_fs.default.existsSync(cfgPath)) {
-        const cfg = JSON.parse(import_fs.default.readFileSync(cfgPath, "utf-8"));
+      const cfgPath = import_path2.default.join(process.cwd(), "firebase-applet-config.json");
+      if (import_fs2.default.existsSync(cfgPath)) {
+        const cfg = JSON.parse(import_fs2.default.readFileSync(cfgPath, "utf-8"));
         projectId = cfg.projectId;
       }
     } catch {
@@ -9844,13 +11029,14 @@ async function requireMasterAdminMiddleware(req, res, next) {
 }
 registerWhatsAppIntegration(app, centralDb, {
   requireAdminMiddleware,
-  requireAuthMiddleware
+  requireAuthMiddleware,
+  requireMasterAdminMiddleware
 });
-var CREDENTIALS_DB_FILE = import_path.default.join(process.cwd(), "auth_credentials_db.json");
+var CREDENTIALS_DB_FILE = import_path2.default.join(process.cwd(), "auth_credentials_db.json");
 function loadCredentialsDatabase() {
   try {
-    if (import_fs.default.existsSync(CREDENTIALS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(CREDENTIALS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(CREDENTIALS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(CREDENTIALS_DB_FILE, "utf-8");
       return JSON.parse(raw);
     }
   } catch (err) {
@@ -9864,9 +11050,9 @@ function saveCredentialsDatabase(db) {
     const jsonStr = JSON.stringify(db, null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -10023,14 +11209,14 @@ function apiRateLimiter(limit = 60, windowMs = 6e4) {
     next();
   };
 }
-var AUDIT_LOG_FILE = import_path.default.join(process.cwd(), "admin_audit_log.json");
+var AUDIT_LOG_FILE = import_path2.default.join(process.cwd(), "admin_audit_log.json");
 function loadAuditLogs() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.auditLogs && centralDb.cache.auditLogs.length > 0) {
     return centralDb.cache.auditLogs;
   }
   try {
-    if (import_fs.default.existsSync(AUDIT_LOG_FILE)) {
-      const data = JSON.parse(import_fs.default.readFileSync(AUDIT_LOG_FILE, "utf-8"));
+    if (import_fs2.default.existsSync(AUDIT_LOG_FILE)) {
+      const data = JSON.parse(import_fs2.default.readFileSync(AUDIT_LOG_FILE, "utf-8"));
       if (Array.isArray(data)) return data;
     }
   } catch (e) {
@@ -10057,7 +11243,7 @@ function logAdminAudit(adminEmail, action, target, details, ip) {
     }
     logs.unshift(entry);
     if (logs.length > 500) logs.length = 500;
-    import_fs.default.writeFileSync(AUDIT_LOG_FILE, JSON.stringify(logs, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(AUDIT_LOG_FILE, JSON.stringify(logs, null, 2), "utf-8");
   } catch (e) {
     console.error("Error writing audit log:", e);
   }
@@ -10108,10 +11294,10 @@ app.get("/api/admin/audit-logs", (req, res) => {
 var dynamicOpenAiKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "MY_OPENAI_API_KEY" ? process.env.OPENAI_API_KEY : "";
 var dynamicCustomDomain = "";
 try {
-  const cfgLocs = [import_path.default.resolve(process.cwd(), "ai_features_config.json"), import_path.default.resolve(process.cwd(), "web_studio", "ai_features_config.json")];
+  const cfgLocs = [import_path2.default.resolve(process.cwd(), "ai_features_config.json"), import_path2.default.resolve(process.cwd(), "web_studio", "ai_features_config.json")];
   for (const c of cfgLocs) {
-    if (import_fs.default.existsSync(c)) {
-      const raw = JSON.parse(import_fs.default.readFileSync(c, "utf8"));
+    if (import_fs2.default.existsSync(c)) {
+      const raw = JSON.parse(import_fs2.default.readFileSync(c, "utf8"));
       if (raw.openaiKey) dynamicOpenAiKey = raw.openaiKey;
       if (raw.customDomain) dynamicCustomDomain = raw.customDomain;
       if (raw.geminiKey && String(raw.geminiKey).trim().length > 5) process.env.GEMINI_API_KEY = String(raw.geminiKey).trim();
@@ -10229,33 +11415,33 @@ app.post("/api/admin/set-ai-keys", requireMasterAdminMiddleware, async (req, res
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var NEWS_DB_FILE = import_path.default.join(process.cwd(), "news_database.json");
-var EDITORIAL_APPROVED_DB_FILE = import_path.default.join(process.cwd(), "approved_editorial_database.json");
-var PROFILES_DB_FILE = import_path.default.join(process.cwd(), "user_profiles_db.json");
-var LOGO_REQUESTS_DB_FILE = import_path.default.join(process.cwd(), "logo_change_requests_db.json");
-var REWARDS_DB_FILE = import_path.default.join(process.cwd(), "rewards_database.json");
-var SUB_USERS_DB_FILE = import_path.default.join(process.cwd(), "sub_users_db.json");
-var UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "logos");
-var WEB_UPLOAD_LOGOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
-var UPLOAD_VIDEOS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "videos");
-var WEB_UPLOAD_VIDEOS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "videos");
-var UPLOAD_THUMBNAILS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "thumbnails");
-var WEB_UPLOAD_THUMBNAILS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "thumbnails");
-var UPLOAD_SCREENSHOTS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "screenshots");
-var WEB_UPLOAD_SCREENSHOTS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "screenshots");
-var UPLOAD_FONTS_DIR = import_path.default.join(process.cwd(), "public", "uploads", "fonts");
-var WEB_UPLOAD_FONTS_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "fonts");
+var NEWS_DB_FILE = import_path2.default.join(process.cwd(), "news_database.json");
+var EDITORIAL_APPROVED_DB_FILE = import_path2.default.join(process.cwd(), "approved_editorial_database.json");
+var PROFILES_DB_FILE = import_path2.default.join(process.cwd(), "user_profiles_db.json");
+var LOGO_REQUESTS_DB_FILE = import_path2.default.join(process.cwd(), "logo_change_requests_db.json");
+var REWARDS_DB_FILE = import_path2.default.join(process.cwd(), "rewards_database.json");
+var SUB_USERS_DB_FILE = import_path2.default.join(process.cwd(), "sub_users_db.json");
+var UPLOAD_LOGOS_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "logos");
+var WEB_UPLOAD_LOGOS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "logos");
+var UPLOAD_VIDEOS_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "videos");
+var WEB_UPLOAD_VIDEOS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "videos");
+var UPLOAD_THUMBNAILS_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "thumbnails");
+var WEB_UPLOAD_THUMBNAILS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "thumbnails");
+var UPLOAD_SCREENSHOTS_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "screenshots");
+var WEB_UPLOAD_SCREENSHOTS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "screenshots");
+var UPLOAD_FONTS_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "fonts");
+var WEB_UPLOAD_FONTS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "fonts");
 try {
-  import_fs.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(UPLOAD_SCREENSHOTS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_SCREENSHOTS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(UPLOAD_FONTS_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_FONTS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_VIDEOS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_VIDEOS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_THUMBNAILS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_THUMBNAILS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_SCREENSHOTS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_SCREENSHOTS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_FONTS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_FONTS_DIR, { recursive: true });
 } catch {
 }
 function loadRewardsDatabase() {
@@ -10283,8 +11469,8 @@ function loadRewardsDatabase() {
     };
   }
   try {
-    if (import_fs.default.existsSync(REWARDS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(REWARDS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(REWARDS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(REWARDS_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       return {
         claims: Array.isArray(parsed.claims) ? parsed.claims : [],
@@ -10334,9 +11520,9 @@ function saveRewardsDatabase(db) {
     const jsonStr = JSON.stringify(db, null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -10348,8 +11534,8 @@ function saveRewardsDatabase(db) {
 }
 function loadSubUsersDatabase() {
   try {
-    if (import_fs.default.existsSync(SUB_USERS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(SUB_USERS_DB_FILE, "utf-8").replace(/^\uFEFF/, "").trim();
+    if (import_fs2.default.existsSync(SUB_USERS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(SUB_USERS_DB_FILE, "utf-8").replace(/^\uFEFF/, "").trim();
       if (!raw || raw === "[]" || raw === "{}") return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
@@ -10365,9 +11551,9 @@ function saveSubUsersDatabase(data) {
     const jsonStr = JSON.stringify(data, null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -10379,8 +11565,8 @@ function saveSubUsersDatabase(data) {
 }
 function loadLogoRequestsDatabase() {
   try {
-    if (import_fs.default.existsSync(LOGO_REQUESTS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(LOGO_REQUESTS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(LOGO_REQUESTS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(LOGO_REQUESTS_DB_FILE, "utf-8");
       const list = JSON.parse(raw);
       if (Array.isArray(list)) return list;
     }
@@ -10391,7 +11577,7 @@ function loadLogoRequestsDatabase() {
 }
 function saveLogoRequestsDatabase(list) {
   try {
-    import_fs.default.writeFileSync(LOGO_REQUESTS_DB_FILE, JSON.stringify(list, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(LOGO_REQUESTS_DB_FILE, JSON.stringify(list, null, 2), "utf-8");
     return true;
   } catch (err) {
     console.error("Error saving logo requests database:", err.message);
@@ -10575,20 +11761,20 @@ var THREE_DAYS_MS = FOUR_DAYS_MS;
 function resolveAllDatabaseLocations(filename) {
   const cwd = process.cwd();
   const candidates = [
-    import_path.default.join(cwd, filename),
-    import_path.default.join(cwd, "web_studio", filename)
+    import_path2.default.join(cwd, filename),
+    import_path2.default.join(cwd, "web_studio", filename)
   ];
   try {
-    const parent = import_path.default.resolve(cwd, "..");
-    candidates.push(import_path.default.join(parent, filename));
-    candidates.push(import_path.default.join(parent, "web_studio", filename));
+    const parent = import_path2.default.resolve(cwd, "..");
+    candidates.push(import_path2.default.join(parent, filename));
+    candidates.push(import_path2.default.join(parent, "web_studio", filename));
   } catch {
   }
   try {
     if (typeof __dirname !== "undefined" && __dirname) {
-      candidates.push(import_path.default.join(__dirname, filename));
-      candidates.push(import_path.default.join(__dirname, "..", filename));
-      candidates.push(import_path.default.join(__dirname, "web_studio", filename));
+      candidates.push(import_path2.default.join(__dirname, filename));
+      candidates.push(import_path2.default.join(__dirname, "..", filename));
+      candidates.push(import_path2.default.join(__dirname, "web_studio", filename));
     }
   } catch {
   }
@@ -10598,8 +11784,8 @@ function loadDeletedNewsIds() {
   try {
     const locations = resolveAllDatabaseLocations("deleted_news_ids.json");
     for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const list = JSON.parse(raw);
         if (Array.isArray(list)) return new Set(list);
       }
@@ -10617,9 +11803,9 @@ function saveDeletedNewsId(id) {
     const locations = resolveAllDatabaseLocations("deleted_news_ids.json");
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -10632,8 +11818,8 @@ function loadNewsDatabase() {
   try {
     const locations = resolveAllDatabaseLocations("news_database.json");
     for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const cleaned = parsed.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
@@ -10704,8 +11890,8 @@ function saveNewsDatabase(posts) {
     const locations = resolveAllDatabaseLocations("news_database.json");
     for (const loc of locations) {
       try {
-        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
-          import_fs.default.writeFileSync(loc, JSON.stringify(cleaned, null, 2), "utf-8");
+        if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+          import_fs2.default.writeFileSync(loc, JSON.stringify(cleaned, null, 2), "utf-8");
         }
       } catch {
       }
@@ -10729,8 +11915,8 @@ function loadApprovedEditorialDatabase() {
   try {
     const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
     for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === "object") {
           return parsed;
@@ -10757,8 +11943,8 @@ function saveApprovedEditorialDatabase(data) {
     const locations = resolveAllDatabaseLocations("approved_editorial_database.json");
     for (const loc of locations) {
       try {
-        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
-          import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+          import_fs2.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
         }
       } catch {
       }
@@ -11389,14 +12575,14 @@ app.post("/api/news-posts/reset", (_req, res) => {
   saveNewsDatabase(fresh);
   return res.json({ success: true, posts: fresh });
 });
-var DRAFTS_DB_FILE = import_path.default.join(process.cwd(), "drafts_database.json");
+var DRAFTS_DB_FILE = import_path2.default.join(process.cwd(), "drafts_database.json");
 function loadDraftsDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.drafts.size > 0) {
     return Array.from(centralDb.cache.drafts.values());
   }
   try {
-    if (import_fs.default.existsSync(DRAFTS_DB_FILE)) {
-      const content = import_fs.default.readFileSync(DRAFTS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(DRAFTS_DB_FILE)) {
+      const content = import_fs2.default.readFileSync(DRAFTS_DB_FILE, "utf-8");
       const parsed = JSON.parse(content);
       if (Array.isArray(parsed)) return parsed;
     }
@@ -11416,7 +12602,7 @@ function saveDraftsDatabase(drafts) {
     return true;
   }
   try {
-    import_fs.default.writeFileSync(DRAFTS_DB_FILE, JSON.stringify(drafts, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(DRAFTS_DB_FILE, JSON.stringify(drafts, null, 2), "utf-8");
     return true;
   } catch (e) {
     console.error("Error writing drafts_database.json:", e);
@@ -11587,11 +12773,11 @@ app.post("/api/rewards/upload-screenshot", async (req, res) => {
         url = uploadRes.url;
       }
     } else {
-      const filePath = import_path.default.join(UPLOAD_SCREENSHOTS_DIR, filename);
-      const webFilePath = import_path.default.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
-      import_fs.default.writeFileSync(filePath, buf);
+      const filePath = import_path2.default.join(UPLOAD_SCREENSHOTS_DIR, filename);
+      const webFilePath = import_path2.default.join(WEB_UPLOAD_SCREENSHOTS_DIR, filename);
+      import_fs2.default.writeFileSync(filePath, buf);
       try {
-        import_fs.default.writeFileSync(webFilePath, buf);
+        import_fs2.default.writeFileSync(webFilePath, buf);
       } catch {
       }
     }
@@ -11851,8 +13037,8 @@ function loadAnalyticsDatabase() {
   try {
     const locs = resolveAllDatabaseLocations("analytics_database.json");
     for (const loc of locs) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed) {
           return {
@@ -11875,8 +13061,8 @@ function saveAnalyticsDatabase(data) {
   try {
     const locs = resolveAllDatabaseLocations("analytics_database.json");
     for (const loc of locs) {
-      if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
-        import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+      if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+        import_fs2.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
       }
     }
   } catch (e) {
@@ -12181,11 +13367,11 @@ app.post("/api/upload-logo", async (req, res) => {
         logoUrl = uploadRes.url;
       }
     } else {
-      const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
-      const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
-      import_fs.default.writeFileSync(filePath, buf);
+      const filePath = import_path2.default.join(UPLOAD_LOGOS_DIR, filename);
+      const webFilePath = import_path2.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
+      import_fs2.default.writeFileSync(filePath, buf);
       try {
-        import_fs.default.writeFileSync(webFilePath, buf);
+        import_fs2.default.writeFileSync(webFilePath, buf);
       } catch {
       }
     }
@@ -12839,7 +14025,7 @@ app.post("/api/admin/videos/:id/coin-value", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var CHANNELS_DB_FILE = import_path.default.join(process.cwd(), "restricted_channels_db.json");
+var CHANNELS_DB_FILE = import_path2.default.join(process.cwd(), "restricted_channels_db.json");
 var DEFAULT_SEED_CHANNELS = [
   { id: "res_aajtak", channelName: "\u0906\u091C \u0924\u0915 (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
   { id: "res_abp", channelName: "\u090F\u092C\u0940\u092A\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (ABP News)", websiteUrl: "abplive.com", username: "abpnews", logoUrl: "https://static.abplive.com/frontend/images/ABP_Hindi.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
@@ -12856,8 +14042,8 @@ function loadChannelsDatabase() {
     return Array.from(centralDb.cache.channels.values());
   }
   try {
-    if (import_fs.default.existsSync(CHANNELS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(CHANNELS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(CHANNELS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(CHANNELS_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
@@ -12883,9 +14069,9 @@ function saveChannelsDatabase(channels) {
     const jsonStr = JSON.stringify(channels, null, 2);
     for (const loc of locs) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -12970,9 +14156,9 @@ app.delete(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var USERS_MASTER_FILE = import_path.default.join(process.cwd(), "users_master_database.json");
-var USERS_DB_FILE = import_path.default.join(process.cwd(), "users_accounts_db.json");
-var NOTIFICATIONS_DB_FILE = import_path.default.join(process.cwd(), "notifications_database.json");
+var USERS_MASTER_FILE = import_path2.default.join(process.cwd(), "users_master_database.json");
+var USERS_DB_FILE = import_path2.default.join(process.cwd(), "users_accounts_db.json");
+var NOTIFICATIONS_DB_FILE = import_path2.default.join(process.cwd(), "notifications_database.json");
 function cleanGenerateUsername(requestedUsername, fullName, existingUsername, channelNameEn) {
   const users = loadUsersMasterDatabase();
   const taken = new Set(users.map((u) => (u.username || "").toLowerCase().trim().replace(/^@+/, "")));
@@ -13048,8 +14234,8 @@ function loadUsersAccountsDatabase() {
   try {
     const locs = resolveAllDatabaseLocations("users_accounts_db.json");
     for (const loc of locs) {
-      if (import_fs.default.existsSync(loc)) {
-        return JSON.parse(import_fs.default.readFileSync(loc, "utf-8")) || [];
+      if (import_fs2.default.existsSync(loc)) {
+        return JSON.parse(import_fs2.default.readFileSync(loc, "utf-8")) || [];
       }
     }
   } catch {
@@ -13060,7 +14246,7 @@ function saveUsersAccountsDatabase(accounts) {
   try {
     const locs = resolveAllDatabaseLocations("users_accounts_db.json");
     for (const loc of locs) {
-      import_fs.default.writeFileSync(loc, JSON.stringify(accounts, null, 2), "utf-8");
+      import_fs2.default.writeFileSync(loc, JSON.stringify(accounts, null, 2), "utf-8");
     }
   } catch {
   }
@@ -13090,8 +14276,8 @@ function loadUsersMasterDatabase() {
   try {
     const locations = resolveAllDatabaseLocations("users_master_database.json");
     for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           parsed.sort((a, b) => {
@@ -13141,17 +14327,17 @@ function saveUsersMasterDatabase(users) {
     const jsonStr = JSON.stringify(users, null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
     for (const loc of accountLocations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -13169,8 +14355,8 @@ function saveUsersDatabase(users) {
 }
 function loadNotificationsDatabase() {
   try {
-    if (import_fs.default.existsSync(NOTIFICATIONS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(NOTIFICATIONS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(NOTIFICATIONS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(NOTIFICATIONS_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
@@ -13181,7 +14367,7 @@ function loadNotificationsDatabase() {
 }
 function saveNotificationsDatabase(notifs) {
   try {
-    import_fs.default.writeFileSync(NOTIFICATIONS_DB_FILE, JSON.stringify(notifs, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(NOTIFICATIONS_DB_FILE, JSON.stringify(notifs, null, 2), "utf-8");
   } catch (err) {
     console.error("Error writing notifications_database.json:", err);
   }
@@ -13583,8 +14769,8 @@ function loadDeletedUsersTombstones() {
   try {
     const locations = resolveAllDatabaseLocations("deleted_users_tombstones.json");
     for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8").replace(/^\uFEFF/, "").trim();
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8").replace(/^\uFEFF/, "").trim();
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
@@ -13607,9 +14793,9 @@ function saveDeletedUsersTombstones(records) {
     const jsonStr = JSON.stringify(records, null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -13989,14 +15175,14 @@ function runTrialExpirationAndNotificationCheck() {
 }
 runTrialExpirationAndNotificationCheck();
 setInterval(runTrialExpirationAndNotificationCheck, 10 * 60 * 1e3);
-var VIDEOS_DB_FILE = import_path.default.join(process.cwd(), "videos_database.json");
-var DELETED_VIDEOS_FILE = import_path.default.join(process.cwd(), "deleted_videos_ids.json");
+var VIDEOS_DB_FILE = import_path2.default.join(process.cwd(), "videos_database.json");
+var DELETED_VIDEOS_FILE = import_path2.default.join(process.cwd(), "deleted_videos_ids.json");
 function loadDeletedVideoIds() {
   try {
     const locations = resolveAllDatabaseLocations("deleted_videos_ids.json");
     for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const list = JSON.parse(raw);
         if (Array.isArray(list)) return new Set(list);
       }
@@ -14014,9 +15200,9 @@ function saveDeletedVideoId(id) {
     const locations = resolveAllDatabaseLocations("deleted_videos_ids.json");
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -14033,8 +15219,8 @@ function loadVideosDatabase() {
     if (videos.length === 0) {
       const locations = resolveAllDatabaseLocations("videos_database.json");
       for (const loc of locations) {
-        if (import_fs.default.existsSync(loc)) {
-          const raw = import_fs.default.readFileSync(loc, "utf-8");
+        if (import_fs2.default.existsSync(loc)) {
+          const raw = import_fs2.default.readFileSync(loc, "utf-8");
           try {
             const list = JSON.parse(raw);
             if (Array.isArray(list) && list.length > 0) {
@@ -14093,9 +15279,9 @@ function saveVideosDatabase(videos) {
     const jsonStr = JSON.stringify(videos || [], null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -14254,11 +15440,11 @@ app.delete("/api/admin/videos/:id", requireAdminMiddleware, async (req, res) => 
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var MUSIC_LIBRARY_FILE = import_path.default.join(process.cwd(), "music_library_db.json");
+var MUSIC_LIBRARY_FILE = import_path2.default.join(process.cwd(), "music_library_db.json");
 function loadMusicLibrary() {
   try {
-    if (import_fs.default.existsSync(MUSIC_LIBRARY_FILE)) {
-      const raw = import_fs.default.readFileSync(MUSIC_LIBRARY_FILE, "utf-8");
+    if (import_fs2.default.existsSync(MUSIC_LIBRARY_FILE)) {
+      const raw = import_fs2.default.readFileSync(MUSIC_LIBRARY_FILE, "utf-8");
       const list = JSON.parse(raw);
       if (Array.isArray(list)) {
         return list.map((t) => ({
@@ -14275,7 +15461,7 @@ function loadMusicLibrary() {
 }
 function saveMusicLibrary(tracks) {
   try {
-    import_fs.default.writeFileSync(MUSIC_LIBRARY_FILE, JSON.stringify(tracks, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(MUSIC_LIBRARY_FILE, JSON.stringify(tracks, null, 2), "utf-8");
   } catch (err) {
     console.error("Error saving music library:", err.message);
   }
@@ -14772,15 +15958,15 @@ app.get("/api/notifications", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var WEB_PUSH_SUBS_FILE = import_path.default.join(process.cwd(), "web_push_subscriptions_db.json");
+var WEB_PUSH_SUBS_FILE = import_path2.default.join(process.cwd(), "web_push_subscriptions_db.json");
 function loadWebPushSubscriptions() {
   if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("web_push_subscriptions")) {
     const data = centralDb.cache.systemConfig.get("web_push_subscriptions");
     if (Array.isArray(data)) return data;
   }
   try {
-    if (import_fs.default.existsSync(WEB_PUSH_SUBS_FILE)) {
-      return JSON.parse(import_fs.default.readFileSync(WEB_PUSH_SUBS_FILE, "utf-8"));
+    if (import_fs2.default.existsSync(WEB_PUSH_SUBS_FILE)) {
+      return JSON.parse(import_fs2.default.readFileSync(WEB_PUSH_SUBS_FILE, "utf-8"));
     }
   } catch {
   }
@@ -14794,7 +15980,7 @@ function saveWebPushSubscriptions(subs) {
     const locs = resolveAllDatabaseLocations("web_push_subscriptions_db.json");
     const json = JSON.stringify(subs, null, 2);
     for (const loc of locs) {
-      import_fs.default.writeFileSync(loc, json, "utf-8");
+      import_fs2.default.writeFileSync(loc, json, "utf-8");
     }
   } catch {
   }
@@ -14845,7 +16031,8 @@ app.post("/api/notifications/unsubscribe", (req, res) => {
 });
 app.get("/api/notifications/vapid-key", (req, res) => {
   const publicKey = process.env.VAPID_PUBLIC_KEY || "BNo_Official_Web_Push_Public_Key_Standard_Mode";
-  return res.json({ success: true, publicKey });
+  const vapidConfigured = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+  return res.json({ success: true, publicKey, vapidConfigured });
 });
 app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
   try {
@@ -14910,7 +16097,7 @@ app.post("/api/notifications/mark-read", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var ADMIN_NOTIFS_READ_FILE = import_path.default.join(process.cwd(), "admin_notifications_read_db.json");
+var ADMIN_NOTIFS_READ_FILE = import_path2.default.join(process.cwd(), "admin_notifications_read_db.json");
 function loadAdminReadNotificationIds() {
   if (centralDb && centralDb.useFirestore) {
     if (centralDb.cache.systemConfig.has("admin_notifs_read")) {
@@ -14919,8 +16106,8 @@ function loadAdminReadNotificationIds() {
     }
   }
   try {
-    if (import_fs.default.existsSync(ADMIN_NOTIFS_READ_FILE)) {
-      const raw = import_fs.default.readFileSync(ADMIN_NOTIFS_READ_FILE, "utf-8");
+    if (import_fs2.default.existsSync(ADMIN_NOTIFS_READ_FILE)) {
+      const raw = import_fs2.default.readFileSync(ADMIN_NOTIFS_READ_FILE, "utf-8");
       const list = JSON.parse(raw);
       if (Array.isArray(list)) return new Set(list);
     }
@@ -14940,9 +16127,9 @@ function saveAdminReadNotificationIds(ids) {
     const jsonStr = JSON.stringify(readArray, null, 2);
     for (const loc of locs) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -15257,7 +16444,7 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
     return res.status(500).send(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Error</title><description>${err.message}</description></channel></rss>`);
   }
 });
-var RSS_SOURCES_FILE = import_path.default.join(process.cwd(), "rss_sources_database.json");
+var RSS_SOURCES_FILE = import_path2.default.join(process.cwd(), "rss_sources_database.json");
 function loadRssSourcesDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
     const list = Array.from(centralDb.cache.rssSources.values());
@@ -15267,8 +16454,8 @@ function loadRssSourcesDatabase() {
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const valid = parsed.filter((s) => Boolean(s && s.url));
@@ -15306,9 +16493,9 @@ function saveRssSourcesDatabase(sources) {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
       try {
-        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
-          import_fs.default.writeFileSync(loc + ".bak", JSON.stringify(cleaned, null, 2), "utf-8");
-          import_fs.default.writeFileSync(loc, JSON.stringify(cleaned, null, 2), "utf-8");
+        if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+          import_fs2.default.writeFileSync(loc + ".bak", JSON.stringify(cleaned, null, 2), "utf-8");
+          import_fs2.default.writeFileSync(loc, JSON.stringify(cleaned, null, 2), "utf-8");
         }
       } catch {
       }
@@ -16198,11 +17385,11 @@ app.post("/api/admin/rss-sync", requireAdminMiddleware, async (_req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-var ACCOUNT_DELETIONS_FILE = import_path.default.join(process.cwd(), "account_deletion_requests.json");
+var ACCOUNT_DELETIONS_FILE = import_path2.default.join(process.cwd(), "account_deletion_requests.json");
 function loadAccountDeletionRequests() {
   try {
-    if (import_fs.default.existsSync(ACCOUNT_DELETIONS_FILE)) {
-      const raw = import_fs.default.readFileSync(ACCOUNT_DELETIONS_FILE, "utf-8");
+    if (import_fs2.default.existsSync(ACCOUNT_DELETIONS_FILE)) {
+      const raw = import_fs2.default.readFileSync(ACCOUNT_DELETIONS_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
@@ -16217,9 +17404,9 @@ function saveAccountDeletionRequests(records) {
     const jsonStr = JSON.stringify(records, null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -16391,7 +17578,7 @@ app.all("/api/user-data/delete-account", (req, res) => {
 app.get("/api/account-deletion-requests", (_req, res) => {
   return res.json({ success: true, requests: loadAccountDeletionRequests() });
 });
-app.use("/uploads", import_express.default.static(import_path.default.join(process.cwd(), "public", "uploads")));
+app.use("/uploads", import_express.default.static(import_path2.default.join(process.cwd(), "public", "uploads")));
 function loadProfilesDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
     const dict = {};
@@ -16401,8 +17588,8 @@ function loadProfilesDatabase() {
     return dict;
   }
   try {
-    if (import_fs.default.existsSync(PROFILES_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(PROFILES_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(PROFILES_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(PROFILES_DB_FILE, "utf-8");
       return JSON.parse(raw);
     }
   } catch (err) {
@@ -16423,9 +17610,9 @@ function saveProfilesDatabase(data) {
     const jsonStr = JSON.stringify(data, null, 2);
     for (const loc of locations) {
       try {
-        const dir = import_path.default.dirname(loc);
-        if (!import_fs.default.existsSync(dir)) import_fs.default.mkdirSync(dir, { recursive: true });
-        import_fs.default.writeFileSync(loc, jsonStr, "utf-8");
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
       } catch {
       }
     }
@@ -16902,14 +18089,14 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     release();
   }
 });
-var ADMIN_BRANDING_FILE = import_path.default.join(process.cwd(), "admin_branding_db.json");
+var ADMIN_BRANDING_FILE = import_path2.default.join(process.cwd(), "admin_branding_db.json");
 function loadAdminBranding() {
   if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("admin_branding")) {
     return centralDb.cache.systemConfig.get("admin_branding");
   }
   try {
-    if (import_fs.default.existsSync(ADMIN_BRANDING_FILE)) {
-      const raw = import_fs.default.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
+    if (import_fs2.default.existsSync(ADMIN_BRANDING_FILE)) {
+      const raw = import_fs2.default.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
       return JSON.parse(raw);
     }
   } catch (e) {
@@ -16936,7 +18123,7 @@ function saveAdminBranding(data) {
     return true;
   }
   try {
-    import_fs.default.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
     return true;
   } catch (e) {
     console.error("Error saving admin_branding_db.json:", e);
@@ -16965,14 +18152,14 @@ app.post("/api/admin/branding", requireMasterAdminMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var CUSTOM_FRAMES_FILE = import_path.default.join(process.cwd(), "custom_frames_db.json");
+var CUSTOM_FRAMES_FILE = import_path2.default.join(process.cwd(), "custom_frames_db.json");
 function loadCustomFramesDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("custom_frames")) {
     return centralDb.cache.systemConfig.get("custom_frames");
   }
   try {
-    if (import_fs.default.existsSync(CUSTOM_FRAMES_FILE)) {
-      const raw = import_fs.default.readFileSync(CUSTOM_FRAMES_FILE, "utf-8");
+    if (import_fs2.default.existsSync(CUSTOM_FRAMES_FILE)) {
+      const raw = import_fs2.default.readFileSync(CUSTOM_FRAMES_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
@@ -16990,7 +18177,7 @@ function saveCustomFramesDatabase(frames) {
     return true;
   }
   try {
-    import_fs.default.writeFileSync(CUSTOM_FRAMES_FILE, JSON.stringify(frames, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(CUSTOM_FRAMES_FILE, JSON.stringify(frames, null, 2), "utf-8");
     return true;
   } catch (e) {
     console.error("Error writing custom_frames_db.json:", e);
@@ -17201,12 +18388,12 @@ app.get("/api/auth/me", (req, res) => {
     user
   });
 });
-var SUPPORT_DB_FILE = import_path.default.join(process.cwd(), "support_requests_database.json");
-var UPLOAD_SUPPORT_DIR = import_path.default.join(process.cwd(), "public", "uploads", "support");
-var WEB_UPLOAD_SUPPORT_DIR = import_path.default.join(process.cwd(), "web_studio", "public", "uploads", "support");
+var SUPPORT_DB_FILE = import_path2.default.join(process.cwd(), "support_requests_database.json");
+var UPLOAD_SUPPORT_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "support");
+var WEB_UPLOAD_SUPPORT_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "support");
 try {
-  import_fs.default.mkdirSync(UPLOAD_SUPPORT_DIR, { recursive: true });
-  import_fs.default.mkdirSync(WEB_UPLOAD_SUPPORT_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_SUPPORT_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_SUPPORT_DIR, { recursive: true });
 } catch {
 }
 function loadSupportRequestsDatabase() {
@@ -17214,8 +18401,8 @@ function loadSupportRequestsDatabase() {
     return centralDb.cache.systemConfig.get("support_requests");
   }
   try {
-    if (import_fs.default.existsSync(SUPPORT_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(SUPPORT_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(SUPPORT_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(SUPPORT_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
@@ -17233,7 +18420,7 @@ function saveSupportRequestsDatabase(requests) {
     return true;
   }
   try {
-    import_fs.default.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
     return true;
   } catch (e) {
     console.error("Error writing support_requests_database.json:", e);
@@ -17287,9 +18474,9 @@ app.post("/api/support/requests", async (req, res) => {
         });
         finalAttachmentUrl = uploadRes && uploadRes.url ? uploadRes.url : `/uploads/support/${filename}`;
       } else {
-        import_fs.default.writeFileSync(import_path.default.join(UPLOAD_SUPPORT_DIR, filename), buf);
+        import_fs2.default.writeFileSync(import_path2.default.join(UPLOAD_SUPPORT_DIR, filename), buf);
         try {
-          import_fs.default.writeFileSync(import_path.default.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf);
+          import_fs2.default.writeFileSync(import_path2.default.join(WEB_UPLOAD_SUPPORT_DIR, filename), buf);
         } catch {
         }
         finalAttachmentUrl = `/uploads/support/${filename}`;
@@ -17360,11 +18547,11 @@ app.delete("/api/support/requests/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var RAW_NEWS_DB_FILE = import_path.default.join(process.cwd(), "raw_news_database.json");
+var RAW_NEWS_DB_FILE = import_path2.default.join(process.cwd(), "raw_news_database.json");
 function loadRawNewsDatabase() {
   try {
-    if (import_fs.default.existsSync(RAW_NEWS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(RAW_NEWS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(RAW_NEWS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(RAW_NEWS_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
     }
@@ -17375,7 +18562,7 @@ function loadRawNewsDatabase() {
 }
 function saveRawNewsDatabase(items) {
   try {
-    import_fs.default.writeFileSync(RAW_NEWS_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(RAW_NEWS_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
     return true;
   } catch (e) {
     console.error("Error writing raw_news_database.json:", e);
@@ -17599,11 +18786,11 @@ app.post("/api/logo-change-requests", (req, res) => {
         const savedFilename = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const base64Data = newLogoUrl.replace(/^data:image\/\w+;base64,/, "");
         const buffer = Buffer.from(base64Data, "base64");
-        const filePath = import_path.default.join(UPLOAD_LOGOS_DIR, savedFilename);
-        const webFilePath = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, savedFilename);
-        import_fs.default.writeFileSync(filePath, buffer);
+        const filePath = import_path2.default.join(UPLOAD_LOGOS_DIR, savedFilename);
+        const webFilePath = import_path2.default.join(WEB_UPLOAD_LOGOS_DIR, savedFilename);
+        import_fs2.default.writeFileSync(filePath, buffer);
         try {
-          import_fs.default.writeFileSync(webFilePath, buffer);
+          import_fs2.default.writeFileSync(webFilePath, buffer);
         } catch {
         }
         finalNewLogoUrl = `/uploads/logos/${savedFilename}`;
@@ -17736,11 +18923,11 @@ app.post("/api/admin/videos/upload-file", requireAdminMiddleware, async (req, re
         videoUrl = uploadRes.url;
       }
     } else {
-      const filePath = import_path.default.join(UPLOAD_VIDEOS_DIR, savedFilename);
-      const webFilePath = import_path.default.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
-      import_fs.default.writeFileSync(filePath, buffer);
+      const filePath = import_path2.default.join(UPLOAD_VIDEOS_DIR, savedFilename);
+      const webFilePath = import_path2.default.join(WEB_UPLOAD_VIDEOS_DIR, savedFilename);
+      import_fs2.default.writeFileSync(filePath, buffer);
       try {
-        import_fs.default.writeFileSync(webFilePath, buffer);
+        import_fs2.default.writeFileSync(webFilePath, buffer);
       } catch {
       }
     }
@@ -17779,11 +18966,11 @@ app.post("/api/admin/videos/upload-thumbnail", requireAdminMiddleware, async (re
         thumbnailUrl = uploadRes.url;
       }
     } else {
-      const filePath = import_path.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
-      const webFilePath = import_path.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
-      import_fs.default.writeFileSync(filePath, buffer);
+      const filePath = import_path2.default.join(UPLOAD_THUMBNAILS_DIR, savedFilename);
+      const webFilePath = import_path2.default.join(WEB_UPLOAD_THUMBNAILS_DIR, savedFilename);
+      import_fs2.default.writeFileSync(filePath, buffer);
       try {
-        import_fs.default.writeFileSync(webFilePath, buffer);
+        import_fs2.default.writeFileSync(webFilePath, buffer);
       } catch {
       }
     }
@@ -17844,11 +19031,11 @@ app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
         fontUrl = uploadRes.url;
       }
     } else {
-      const fontFilePath = import_path.default.join(UPLOAD_FONTS_DIR, safeBaseName);
-      const webFontFilePath = import_path.default.join(WEB_UPLOAD_FONTS_DIR, safeBaseName);
-      import_fs.default.writeFileSync(fontFilePath, fontBuffer);
+      const fontFilePath = import_path2.default.join(UPLOAD_FONTS_DIR, safeBaseName);
+      const webFontFilePath = import_path2.default.join(WEB_UPLOAD_FONTS_DIR, safeBaseName);
+      import_fs2.default.writeFileSync(fontFilePath, fontBuffer);
       try {
-        import_fs.default.writeFileSync(webFontFilePath, fontBuffer);
+        import_fs2.default.writeFileSync(webFontFilePath, fontBuffer);
       } catch {
       }
     }
@@ -18146,15 +19333,15 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
     try {
       const sheetLocations = resolveAllDatabaseLocations("users_sheet_database.json");
       for (const loc of sheetLocations) {
-        if (import_fs.default.existsSync(loc)) {
-          let sheetUsers = JSON.parse(import_fs.default.readFileSync(loc, "utf-8"));
+        if (import_fs2.default.existsSync(loc)) {
+          let sheetUsers = JSON.parse(import_fs2.default.readFileSync(loc, "utf-8"));
           if (Array.isArray(sheetUsers)) {
             sheetUsers = sheetUsers.filter((u) => {
               const uEmail = (u.email || "").toLowerCase().trim();
               const uId = (u.userId || "").toLowerCase().trim();
               return uEmail !== targetEmailClean && uId !== targetUserIdClean && uEmail !== identifier && uId !== identifier;
             });
-            import_fs.default.writeFileSync(loc, JSON.stringify(sheetUsers, null, 2), "utf-8");
+            import_fs2.default.writeFileSync(loc, JSON.stringify(sheetUsers, null, 2), "utf-8");
           }
         }
       }
@@ -18163,11 +19350,11 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
     try {
       const logoUrl = targetUser?.channelLogoUrl || targetUser?.channelLogoPngUrl || targetUser?.channelLogoGifUrl;
       if (logoUrl && (logoUrl.includes("/uploads/logos/") || logoUrl.startsWith("/uploads/"))) {
-        const filename = import_path.default.basename(logoUrl);
-        const p1 = import_path.default.join(UPLOAD_LOGOS_DIR, filename);
-        const p2 = import_path.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
-        if (import_fs.default.existsSync(p1)) import_fs.default.unlinkSync(p1);
-        if (import_fs.default.existsSync(p2)) import_fs.default.unlinkSync(p2);
+        const filename = import_path2.default.basename(logoUrl);
+        const p1 = import_path2.default.join(UPLOAD_LOGOS_DIR, filename);
+        const p2 = import_path2.default.join(WEB_UPLOAD_LOGOS_DIR, filename);
+        if (import_fs2.default.existsSync(p1)) import_fs2.default.unlinkSync(p1);
+        if (import_fs2.default.existsSync(p2)) import_fs2.default.unlinkSync(p2);
       }
     } catch {
     }
@@ -18309,8 +19496,8 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
       try {
         const sheetLocations = resolveAllDatabaseLocations("users_sheet_database.json");
         for (const sheetPath of sheetLocations) {
-          if (import_fs.default.existsSync(sheetPath)) {
-            const sheet = JSON.parse(import_fs.default.readFileSync(sheetPath, "utf-8"));
+          if (import_fs2.default.existsSync(sheetPath)) {
+            const sheet = JSON.parse(import_fs2.default.readFileSync(sheetPath, "utf-8"));
             if (Array.isArray(sheet)) {
               const sIdx = sheet.findIndex(
                 (u) => u.email && u.email.toLowerCase().trim() === identifier || u.userId && u.userId.toLowerCase().trim() === identifier
@@ -18323,7 +19510,7 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
                   planName: updatedUser.planName,
                   expiresAt: updatedUser.expiresAt
                 };
-                import_fs.default.writeFileSync(sheetPath, JSON.stringify(sheet, null, 2), "utf-8");
+                import_fs2.default.writeFileSync(sheetPath, JSON.stringify(sheet, null, 2), "utf-8");
               }
             }
           }
@@ -18523,7 +19710,7 @@ app.post("/api/twilio/verify-otp", authRateLimiter, (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-var RESTRICTED_CHANNELS_FILE = import_path.default.join(process.cwd(), "restricted_channels_db.json");
+var RESTRICTED_CHANNELS_FILE = import_path2.default.join(process.cwd(), "restricted_channels_db.json");
 function getInitialRestrictedChannels() {
   return [
     { id: "res_aajtak", channelName: "\u0906\u091C \u0924\u0915 (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
@@ -18542,8 +19729,8 @@ function getInitialRestrictedChannels() {
 }
 function loadRestrictedChannels() {
   try {
-    if (import_fs.default.existsSync(RESTRICTED_CHANNELS_FILE)) {
-      const raw = import_fs.default.readFileSync(RESTRICTED_CHANNELS_FILE, "utf-8");
+    if (import_fs2.default.existsSync(RESTRICTED_CHANNELS_FILE)) {
+      const raw = import_fs2.default.readFileSync(RESTRICTED_CHANNELS_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
@@ -18556,7 +19743,7 @@ function loadRestrictedChannels() {
 }
 function saveRestrictedChannels(list) {
   try {
-    import_fs.default.writeFileSync(RESTRICTED_CHANNELS_FILE, JSON.stringify(list, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(RESTRICTED_CHANNELS_FILE, JSON.stringify(list, null, 2), "utf-8");
     return true;
   } catch (err) {
     console.error("Error writing restricted_channels_db.json:", err);
@@ -18606,12 +19793,12 @@ app.delete("/api/restricted-channels/:id", (req, res) => {
 });
 var serveAccountDeletionHtml = (_req, res) => {
   const possiblePaths = [
-    import_path.default.join(process.cwd(), "public", "delete-account", "index.html"),
-    import_path.default.join(process.cwd(), "dist", "delete-account", "index.html"),
-    import_path.default.join(process.cwd(), "web_studio", "public", "delete-account", "index.html")
+    import_path2.default.join(process.cwd(), "public", "delete-account", "index.html"),
+    import_path2.default.join(process.cwd(), "dist", "delete-account", "index.html"),
+    import_path2.default.join(process.cwd(), "web_studio", "public", "delete-account", "index.html")
   ];
   for (const p of possiblePaths) {
-    if (import_fs.default.existsSync(p)) {
+    if (import_fs2.default.existsSync(p)) {
       return res.sendFile(p);
     }
   }
@@ -18811,11 +19998,11 @@ function getTemplateConfig(templateId2) {
     aspect_ratio: "4:5"
   };
 }
-var AI_FEATURES_CONFIG_PATH = import_fs.default.existsSync(import_path.default.resolve(__dirname, "ai_features_config.json")) ? import_path.default.resolve(__dirname, "ai_features_config.json") : import_fs.default.existsSync(import_path.default.resolve(process.cwd(), "ai_features_config.json")) ? import_path.default.resolve(process.cwd(), "ai_features_config.json") : import_path.default.resolve(__dirname, "..", "ai_features_config.json");
+var AI_FEATURES_CONFIG_PATH = import_fs2.default.existsSync(import_path2.default.resolve(__dirname, "ai_features_config.json")) ? import_path2.default.resolve(__dirname, "ai_features_config.json") : import_fs2.default.existsSync(import_path2.default.resolve(process.cwd(), "ai_features_config.json")) ? import_path2.default.resolve(process.cwd(), "ai_features_config.json") : import_path2.default.resolve(__dirname, "..", "ai_features_config.json");
 function getAiFeaturesConfig() {
   try {
-    if (import_fs.default.existsSync(AI_FEATURES_CONFIG_PATH)) {
-      const raw = import_fs.default.readFileSync(AI_FEATURES_CONFIG_PATH, "utf-8");
+    if (import_fs2.default.existsSync(AI_FEATURES_CONFIG_PATH)) {
+      const raw = import_fs2.default.readFileSync(AI_FEATURES_CONFIG_PATH, "utf-8");
       return JSON.parse(raw);
     }
   } catch (err) {
@@ -18838,11 +20025,11 @@ function getAiFeaturesConfig() {
 }
 function saveAiFeaturesConfig(cfg) {
   try {
-    import_fs.default.writeFileSync(AI_FEATURES_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
-    const alternatePath = AI_FEATURES_CONFIG_PATH.includes("web_studio") ? import_path.default.resolve(AI_FEATURES_CONFIG_PATH, "..", "..", "ai_features_config.json") : import_path.default.resolve(import_path.default.dirname(AI_FEATURES_CONFIG_PATH), "web_studio", "ai_features_config.json");
-    if (import_fs.default.existsSync(import_path.default.dirname(alternatePath))) {
+    import_fs2.default.writeFileSync(AI_FEATURES_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
+    const alternatePath = AI_FEATURES_CONFIG_PATH.includes("web_studio") ? import_path2.default.resolve(AI_FEATURES_CONFIG_PATH, "..", "..", "ai_features_config.json") : import_path2.default.resolve(import_path2.default.dirname(AI_FEATURES_CONFIG_PATH), "web_studio", "ai_features_config.json");
+    if (import_fs2.default.existsSync(import_path2.default.dirname(alternatePath))) {
       try {
-        import_fs.default.writeFileSync(alternatePath, JSON.stringify(cfg, null, 2), "utf-8");
+        import_fs2.default.writeFileSync(alternatePath, JSON.stringify(cfg, null, 2), "utf-8");
       } catch {
       }
     }
@@ -18990,7 +20177,7 @@ async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPe
   }
   throw lastError;
 }
-var API_KEYS_VAULT_FILE = import_path.default.join(process.cwd(), "gemini_api_keys_vault.json");
+var API_KEYS_VAULT_FILE = import_path2.default.join(process.cwd(), "gemini_api_keys_vault.json");
 function maskApiKey(key) {
   if (!key || typeof key !== "string") return "";
   const trimmed = key.trim();
@@ -19155,9 +20342,9 @@ function loadApiKeysVault() {
     return cachedApiKeysVault;
   }
   const secureServerCandidates = [
-    import_path.default.join(process.cwd(), "gemini_api_keys_vault.json"),
-    import_path.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json"),
-    import_path.default.join(process.cwd(), "api_keys_database.json")
+    import_path2.default.join(process.cwd(), "gemini_api_keys_vault.json"),
+    import_path2.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json"),
+    import_path2.default.join(process.cwd(), "api_keys_database.json")
   ];
   for (const loc of secureServerCandidates) {
     try {
@@ -19165,8 +20352,8 @@ function loadApiKeysVault() {
       if (normalized.includes("/public/") || normalized.includes("/dist/") || normalized.includes("/assets/")) {
         continue;
       }
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed && (Array.isArray(parsed.freeKeys) || parsed.paidKey)) {
           const vaultData = {
@@ -19224,8 +20411,8 @@ async function saveApiKeysVault(vault) {
   vaultLastLoadedAt = Date.now();
   let savedAtLeastOne = false;
   const secureServerTargets = [
-    import_path.default.join(process.cwd(), "gemini_api_keys_vault.json"),
-    import_path.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json")
+    import_path2.default.join(process.cwd(), "gemini_api_keys_vault.json"),
+    import_path2.default.join(process.cwd(), "web_studio", "gemini_api_keys_vault.json")
   ];
   for (const loc of secureServerTargets) {
     try {
@@ -19234,9 +20421,9 @@ async function saveApiKeysVault(vault) {
         console.warn(`[Security Alert] Blocked attempt to write vault to public location: ${loc}`);
         continue;
       }
-      const dir = import_path.default.dirname(loc);
-      if (import_fs.default.existsSync(dir)) {
-        import_fs.default.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
+      const dir = import_path2.default.dirname(loc);
+      if (import_fs2.default.existsSync(dir)) {
+        import_fs2.default.writeFileSync(loc, JSON.stringify(vault, null, 2), "utf-8");
         savedAtLeastOne = true;
       }
     } catch (err) {
@@ -24310,8 +25497,8 @@ Strictly return valid JSON object matching these keys.`;
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var TEMPLATE_CONFIGS_FILE = import_path.default.join(process.cwd(), "news_template_configs.json");
-var LIMIT_INCREASE_REQUESTS_FILE = import_path.default.join(process.cwd(), "limit_increase_requests.json");
+var TEMPLATE_CONFIGS_FILE = import_path2.default.join(process.cwd(), "news_template_configs.json");
+var LIMIT_INCREASE_REQUESTS_FILE = import_path2.default.join(process.cwd(), "limit_increase_requests.json");
 var FRAME_CATEGORIES = [
   "Regular Frame",
   "Package Frame",
@@ -24363,8 +25550,8 @@ function getStoredTemplateConfigs() {
     return dict;
   }
   try {
-    if (import_fs.default.existsSync(TEMPLATE_CONFIGS_FILE)) {
-      const data = import_fs.default.readFileSync(TEMPLATE_CONFIGS_FILE, "utf-8");
+    if (import_fs2.default.existsSync(TEMPLATE_CONFIGS_FILE)) {
+      const data = import_fs2.default.readFileSync(TEMPLATE_CONFIGS_FILE, "utf-8");
       return JSON.parse(data);
     }
   } catch (e) {
@@ -24490,7 +25677,7 @@ app.post("/api/admin/save-template-config", requireMasterAdminMiddleware, (req, 
       ...logoArea ? { logoArea: String(logoArea).trim() } : {},
       updatedAt: Date.now()
     };
-    import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
       message: `Template config updated for ${templateId2}`,
@@ -24549,7 +25736,7 @@ app.post("/api/admin/create-frame", requireMasterAdminMiddleware, (req, res) => 
       centralDb.saveTemplateConfig(templateId, current[templateId]).catch(() => {
       });
     }
-    import_fs.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(TEMPLATE_CONFIGS_FILE, JSON.stringify(current, null, 2), "utf-8");
     return res.json({
       success: true,
       message: `New frame created successfully with ID ${frameId}`,
@@ -24747,8 +25934,8 @@ function loadLimitIncreaseRequests() {
     if (Array.isArray(cached) && cached.length > 0) return cached;
   }
   try {
-    if (import_fs.default.existsSync(LIMIT_INCREASE_REQUESTS_FILE)) {
-      const data = import_fs.default.readFileSync(LIMIT_INCREASE_REQUESTS_FILE, "utf-8");
+    if (import_fs2.default.existsSync(LIMIT_INCREASE_REQUESTS_FILE)) {
+      const data = import_fs2.default.readFileSync(LIMIT_INCREASE_REQUESTS_FILE, "utf-8");
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed)) return parsed;
     }
@@ -24765,7 +25952,7 @@ function saveLimitIncreaseRequests(reqs) {
     }
   }
   try {
-    import_fs.default.writeFileSync(LIMIT_INCREASE_REQUESTS_FILE, JSON.stringify(reqs, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(LIMIT_INCREASE_REQUESTS_FILE, JSON.stringify(reqs, null, 2), "utf-8");
   } catch {
   }
 }
@@ -24816,7 +26003,7 @@ app.get("/api/admin/limit-increase-requests", requireAdminMiddleware, (_req, res
     requests: loadLimitIncreaseRequests()
   });
 });
-var CATEGORIES_DB_FILE = import_path.default.join(process.cwd(), "categories_database.json");
+var CATEGORIES_DB_FILE = import_path2.default.join(process.cwd(), "categories_database.json");
 var DEFAULT_CATEGORIES_PRESET = [
   { id: "breaking", name: "\u26A1 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C", isActive: true, order: 1 },
   { id: "politics", name: "\u{1F3DB}\uFE0F \u0930\u093E\u091C\u0928\u0940\u0924\u093F \u0935 \u091A\u0941\u0928\u093E\u0935", isActive: true, order: 2 },
@@ -24840,8 +26027,8 @@ function loadCategoriesDatabase() {
     return Array.from(centralDb.cache.categories.values());
   }
   try {
-    if (import_fs.default.existsSync(CATEGORIES_DB_FILE)) {
-      const data = import_fs.default.readFileSync(CATEGORIES_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(CATEGORIES_DB_FILE)) {
+      const data = import_fs2.default.readFileSync(CATEGORIES_DB_FILE, "utf-8");
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
@@ -24861,7 +26048,7 @@ function saveCategoriesDatabase(categories) {
     return;
   }
   try {
-    import_fs.default.writeFileSync(CATEGORIES_DB_FILE, JSON.stringify(categories, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(CATEGORIES_DB_FILE, JSON.stringify(categories, null, 2), "utf-8");
   } catch (e) {
     console.error("Failed to write categories_database.json:", e);
   }
@@ -24948,7 +26135,7 @@ app.delete(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var PLANS_CATALOG_DB_FILE = import_path.default.join(process.cwd(), "plans_catalog_database.json");
+var PLANS_CATALOG_DB_FILE = import_path2.default.join(process.cwd(), "plans_catalog_database.json");
 var DEFAULT_PLANS_CATALOG = [
   {
     id: "basic",
@@ -25090,8 +26277,8 @@ function loadPlansCatalogDatabase() {
     return sortPlansByCanonicalOrder(Array.from(centralDb.cache.plans.values()));
   }
   try {
-    if (import_fs.default.existsSync(PLANS_CATALOG_DB_FILE)) {
-      const data = import_fs.default.readFileSync(PLANS_CATALOG_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(PLANS_CATALOG_DB_FILE)) {
+      const data = import_fs2.default.readFileSync(PLANS_CATALOG_DB_FILE, "utf-8");
       const parsed = JSON.parse(data);
       if (Array.isArray(parsed) && parsed.length >= 4) return sortPlansByCanonicalOrder(parsed);
     }
@@ -25112,7 +26299,7 @@ function savePlansCatalogDatabase(plans) {
     return;
   }
   try {
-    import_fs.default.writeFileSync(PLANS_CATALOG_DB_FILE, JSON.stringify(orderedPlans, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(PLANS_CATALOG_DB_FILE, JSON.stringify(orderedPlans, null, 2), "utf-8");
   } catch (e) {
     console.error("Failed to write plans_catalog_database.json:", e);
   }
@@ -25144,8 +26331,8 @@ function loadPaymentsDatabase() {
   try {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
@@ -25168,8 +26355,8 @@ function savePaymentsDatabase(data) {
     const locs = resolveAllDatabaseLocations("payments_transactions_db.json");
     for (const loc of locs) {
       try {
-        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
-          import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+          import_fs2.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
         }
       } catch {
       }
@@ -25185,8 +26372,8 @@ function loadPackageCouponsDatabase() {
   try {
     const locs = resolveAllDatabaseLocations("package_coupons_db.json");
     for (const loc of locs) {
-      if (import_fs.default.existsSync(loc)) {
-        const raw = import_fs.default.readFileSync(loc, "utf-8");
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
         return JSON.parse(raw);
       }
     }
@@ -25218,8 +26405,8 @@ function savePackageCouponsDatabase(data) {
     const locs = resolveAllDatabaseLocations("package_coupons_db.json");
     for (const loc of locs) {
       try {
-        if (import_fs.default.existsSync(import_path.default.dirname(loc))) {
-          import_fs.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
+        if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+          import_fs2.default.writeFileSync(loc, JSON.stringify(data, null, 2), "utf-8");
         }
       } catch {
       }
@@ -26050,11 +27237,11 @@ app.get("/api/payment/gateways-status", (_req, res) => {
     }
   });
 });
-var DAILY_GRAPHIC_CREATIONS_DB_FILE = import_path.default.join(process.cwd(), "daily_graphic_creations_db.json");
+var DAILY_GRAPHIC_CREATIONS_DB_FILE = import_path2.default.join(process.cwd(), "daily_graphic_creations_db.json");
 function loadDailyGraphicCreationsDatabase() {
   try {
-    if (import_fs.default.existsSync(DAILY_GRAPHIC_CREATIONS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(DAILY_GRAPHIC_CREATIONS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, "utf-8");
       return JSON.parse(raw);
     }
   } catch {
@@ -26063,7 +27250,7 @@ function loadDailyGraphicCreationsDatabase() {
 }
 function saveDailyGraphicCreationsDatabase(data) {
   try {
-    import_fs.default.writeFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
   } catch (err) {
     console.warn("[DailyGraphicCreations] Save failed:", err.message);
   }
@@ -26252,11 +27439,11 @@ app.post("/api/membership/calculate-upgrade", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-var DAILY_DOWNLOADS_DB_FILE = import_path.default.join(process.cwd(), "daily_downloads_database.json");
+var DAILY_DOWNLOADS_DB_FILE = import_path2.default.join(process.cwd(), "daily_downloads_database.json");
 function loadDailyDownloadsDatabase() {
   try {
-    if (import_fs.default.existsSync(DAILY_DOWNLOADS_DB_FILE)) {
-      const raw = import_fs.default.readFileSync(DAILY_DOWNLOADS_DB_FILE, "utf-8");
+    if (import_fs2.default.existsSync(DAILY_DOWNLOADS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(DAILY_DOWNLOADS_DB_FILE, "utf-8");
       return JSON.parse(raw);
     }
   } catch {
@@ -26265,7 +27452,7 @@ function loadDailyDownloadsDatabase() {
 }
 function saveDailyDownloadsDatabase(data) {
   try {
-    import_fs.default.writeFileSync(DAILY_DOWNLOADS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    import_fs2.default.writeFileSync(DAILY_DOWNLOADS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
   } catch (err) {
     console.warn("[DailyDownloads] Persistent save failed:", err.message);
   }
@@ -26706,19 +27893,19 @@ app.get(
   ],
   (_req, res) => {
     const possibleApkLocations = [
-      import_path.default.join(process.cwd(), "app-release.apk"),
-      import_path.default.join(process.cwd(), "ainewsmaker-app.apk"),
-      import_path.default.join(process.cwd(), "public", "app-release.apk"),
-      import_path.default.join(process.cwd(), "public", "ainewsmaker-app.apk"),
-      import_path.default.join(process.cwd(), "dist", "app-release.apk"),
-      import_path.default.join(process.cwd(), "dist", "ainewsmaker-app.apk"),
-      import_path.default.join(process.cwd(), "web_studio", "dist", "app-release.apk"),
-      import_path.default.join(process.cwd(), "web_studio", "public", "app-release.apk"),
-      import_path.default.join(safeDirname, "app-release.apk"),
-      import_path.default.join(safeDirname, "ainewsmaker-app.apk"),
-      import_path.default.join(safeDirname, "..", "app-release.apk"),
-      import_path.default.join(safeDirname, "..", "public", "app-release.apk"),
-      import_path.default.join(safeDirname, "..", "dist", "app-release.apk"),
+      import_path2.default.join(process.cwd(), "app-release.apk"),
+      import_path2.default.join(process.cwd(), "ainewsmaker-app.apk"),
+      import_path2.default.join(process.cwd(), "public", "app-release.apk"),
+      import_path2.default.join(process.cwd(), "public", "ainewsmaker-app.apk"),
+      import_path2.default.join(process.cwd(), "dist", "app-release.apk"),
+      import_path2.default.join(process.cwd(), "dist", "ainewsmaker-app.apk"),
+      import_path2.default.join(process.cwd(), "web_studio", "dist", "app-release.apk"),
+      import_path2.default.join(process.cwd(), "web_studio", "public", "app-release.apk"),
+      import_path2.default.join(safeDirname, "app-release.apk"),
+      import_path2.default.join(safeDirname, "ainewsmaker-app.apk"),
+      import_path2.default.join(safeDirname, "..", "app-release.apk"),
+      import_path2.default.join(safeDirname, "..", "public", "app-release.apk"),
+      import_path2.default.join(safeDirname, "..", "dist", "app-release.apk"),
       "/app/applet/app-release.apk",
       "/app/applet/public/app-release.apk",
       "/app/applet/dist/app-release.apk",
@@ -26730,15 +27917,15 @@ app.get(
     ];
     const foundPath = possibleApkLocations.find((p) => {
       try {
-        return import_fs.default.existsSync(p) && import_fs.default.statSync(p).size > 1e3;
+        return import_fs2.default.existsSync(p) && import_fs2.default.statSync(p).size > 1e3;
       } catch {
         return false;
       }
     });
     if (foundPath) {
       try {
-        const absPath = import_path.default.resolve(foundPath);
-        const stat = import_fs.default.statSync(absPath);
+        const absPath = import_path2.default.resolve(foundPath);
+        const stat = import_fs2.default.statSync(absPath);
         res.writeHead(200, {
           "Content-Type": "application/vnd.android.package-archive",
           "Content-Length": stat.size,
@@ -26746,7 +27933,7 @@ app.get(
           "Cache-Control": "public, max-age=3600",
           "Access-Control-Allow-Origin": "*"
         });
-        const stream = import_fs.default.createReadStream(absPath);
+        const stream = import_fs2.default.createReadStream(absPath);
         stream.pipe(res);
         return;
       } catch (err) {
@@ -26756,12 +27943,12 @@ app.get(
     return res.status(404).send("APK file is currently being prepared. Please refresh in a moment.");
   }
 );
-var USERS_SHEET_FILE = import_path.default.join(process.cwd(), "users_sheet_database.json");
+var USERS_SHEET_FILE = import_path2.default.join(process.cwd(), "users_sheet_database.json");
 app.post("/api/admin/sync-users-sheet", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { users } = req.body;
     if (Array.isArray(users)) {
-      import_fs.default.writeFileSync(USERS_SHEET_FILE, JSON.stringify(users, null, 2), "utf-8");
+      import_fs2.default.writeFileSync(USERS_SHEET_FILE, JSON.stringify(users, null, 2), "utf-8");
       for (const u of users) {
         if (u.email || u.userId) {
           try {
@@ -26987,8 +28174,8 @@ async function startServer() {
         return res.status(404).json({ success: false, error: `API route not found: ${req.method} ${url}` });
       }
       try {
-        const indexPath = import_path.default.resolve(process.cwd(), "index.html");
-        let template = import_fs.default.readFileSync(indexPath, "utf-8");
+        const indexPath = import_path2.default.resolve(process.cwd(), "index.html");
+        let template = import_fs2.default.readFileSync(indexPath, "utf-8");
         template = await vite.transformIndexHtml(url, template);
         res.status(200).set({ "Content-Type": "text/html" }).end(template);
       } catch (e) {
@@ -26998,13 +28185,13 @@ async function startServer() {
     });
   } else {
     const possibleDistPaths = [
-      import_path.default.join(process.cwd(), "dist"),
-      import_path.default.join(process.cwd(), "web_studio", "dist"),
-      import_path.default.join(process.cwd(), "public"),
+      import_path2.default.join(process.cwd(), "dist"),
+      import_path2.default.join(process.cwd(), "web_studio", "dist"),
+      import_path2.default.join(process.cwd(), "public"),
       safeDirname,
-      import_path.default.join(safeDirname, "dist")
+      import_path2.default.join(safeDirname, "dist")
     ];
-    const distPath = possibleDistPaths.find((p) => import_fs.default.existsSync(import_path.default.join(p, "index.html"))) || import_path.default.join(process.cwd(), "dist");
+    const distPath = possibleDistPaths.find((p) => import_fs2.default.existsSync(import_path2.default.join(p, "index.html"))) || import_path2.default.join(process.cwd(), "dist");
     console.log(`Serving static studio files from: ${distPath}`);
     app.use(
       import_express.default.static(distPath, {
@@ -27026,14 +28213,14 @@ async function startServer() {
       if (req.path.startsWith("/api/")) {
         return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
       }
-      const ext = import_path.default.extname(req.path);
+      const ext = import_path2.default.extname(req.path);
       if (ext && ext !== ".html") {
         return res.status(404).json({ success: false, error: "Not Found" });
       }
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
-      res.sendFile(import_path.default.join(distPath, "index.html"));
+      res.sendFile(import_path2.default.join(distPath, "index.html"));
     });
   }
   const serverInstance = app.listen(PORT, "0.0.0.0", () => {
