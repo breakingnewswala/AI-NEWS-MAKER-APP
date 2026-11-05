@@ -31,8 +31,342 @@ const otpRateLimits = new Map<string, { lastSent: number; countInHour: number; h
 // In-memory verification cache for fast lookup and dev fallback
 const otpVerificationCache = new Map<string, any>();
 
-export function registerWhatsAppIntegration(app: any, centralDb: any) {
+/**
+ * Task B & C: Canonical international phone normalization.
+ * Normalizes numbers with country codes into standard E.164 without leading '+'.
+ * Examples: '9876543210', '+91' -> '919876543210', '+1 555-706-1955' -> '15557061955'.
+ */
+export const normalizeToWaId = (rawPhone: string, defaultCountryCode: string = "+91"): string => {
+  let cleaned = String(rawPhone || "").trim().replace(/[^\d+]/g, "");
+  if (!cleaned) return "";
+  if (cleaned.startsWith("+")) cleaned = cleaned.slice(1);
+  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+  const defCC = String(defaultCountryCode || "+91").replace(/\D/g, "") || "91";
+
+  // Standard 10-digit number
+  if (/^\d{10}$/.test(cleaned)) {
+    return `${defCC}${cleaned}`;
+  }
+  // Leading 0 on 10-digit Indian number (e.g. 09876543210)
+  if (cleaned.startsWith("0") && /^\d{11}$/.test(cleaned) && defCC === "91") {
+    return `91${cleaned.slice(1)}`;
+  }
+  return cleaned;
+};
+
+/**
+ * Task B & Remediation 1A.1: Synchronizes WhatsApp STOP/UNSUBSCRIBE across both whatsapp_subscribers AND matching users collection records.
+ * Reconciles legacy subscriber document IDs (both canonical E.164 SHA-256 and legacy candidate hashes),
+ * revokes consent across all matching subscriber documents without leaving orphaned opt-ins,
+ * and updates matching users collection records using country-aware normalized phone matching.
+ * Idempotent, safe, and updates centralDb cache.
+ */
+export const syncWhatsAppOptOut = async (waId: string, reason: string = "inbound_whatsapp_stop", centralDb: any) => {
+  const normWaId = normalizeToWaId(waId);
+  if (!normWaId) return { success: false, reason: "empty_waid" };
+  const canonicalDocId = createHash("sha256").update(normWaId).digest("hex");
+  const now = Date.now();
+
+  const subData = {
+    waId: normWaId,
+    newsAlertsConsent: false,
+    whatsappBreakingNewsConsent: false,
+    whatsappProductUpdatesConsent: false,
+    newsAlertsOptedOutAt: now,
+    optOutReason: reason,
+    updatedAt: now,
+  };
+
+  // 1. Identify all legacy and canonical subscriber document IDs
+  const targetDocIds = new Set<string>();
+  targetDocIds.add(canonicalDocId);
+
+  // Generate candidate legacy document IDs that might have been stored
+  const candidateLegacyIds = new Set<string>();
+  const rawTrimmed = String(waId || "").trim();
+  if (rawTrimmed) {
+    candidateLegacyIds.add(createHash("sha256").update(rawTrimmed).digest("hex"));
+  }
+  const cleanDigits = rawTrimmed.replace(/\D/g, "");
+  if (cleanDigits) {
+    candidateLegacyIds.add(createHash("sha256").update(cleanDigits).digest("hex"));
+  }
+  if (normWaId.startsWith("91") && normWaId.length === 12) {
+    const clean10 = normWaId.slice(2);
+    candidateLegacyIds.add(createHash("sha256").update(clean10).digest("hex"));
+    candidateLegacyIds.add(createHash("sha256").update(`+91${clean10}`).digest("hex"));
+    candidateLegacyIds.add(createHash("sha256").update(`+91 ${clean10}`).digest("hex"));
+    candidateLegacyIds.add(createHash("sha256").update(`+91 ${clean10.slice(0, 5)} ${clean10.slice(5)}`).digest("hex"));
+    candidateLegacyIds.add(createHash("sha256").update(`0${clean10}`).digest("hex"));
+  }
+
+  // Scan existing subscriber documents if centralDb can list them
+  if (centralDb?.listDocs) {
+    try {
+      const subRes = await centralDb.listDocs("whatsapp_subscribers", 1000);
+      for (const s of subRes?.documents || []) {
+        if (!s || !s.id) continue;
+        const sWa = s.waId || s.phone || s.normalizedPhone || "";
+        const sNorm = sWa ? normalizeToWaId(sWa) : "";
+        if (candidateLegacyIds.has(s.id) || (sNorm && sNorm === normWaId)) {
+          targetDocIds.add(s.id);
+        }
+      }
+    } catch (listErr: any) {
+      console.warn("[WhatsApp:Consent] Warning scanning whatsapp_subscribers:", listErr?.message || listErr);
+    }
+  } else if (centralDb?.readDoc) {
+    // Probe candidate legacy IDs
+    for (const candId of candidateLegacyIds) {
+      try {
+        const candRes = await centralDb.readDoc("whatsapp_subscribers", candId);
+        if (candRes?.success && candRes?.data) {
+          targetDocIds.add(candId);
+        }
+      } catch {}
+    }
+  }
+
+  // Revoke consent across ALL identified subscriber documents (canonical + legacy)
+  const updatedDocIds: string[] = [];
+  if (centralDb?.writeDoc) {
+    for (const docId of targetDocIds) {
+      await centralDb.writeDoc("whatsapp_subscribers", docId, subData).catch((err: any) => {
+        console.error(`[WhatsApp:Consent] Error writing to whatsapp_subscribers doc (${docId}):`, err?.message || err);
+      });
+      updatedDocIds.push(docId);
+    }
+  }
+
+  // 2. Identify and update all matching user accounts in Firestore & cache
+  const updatedUserEmails: string[] = [];
+  try {
+    const userDocs = centralDb?.cache?.users
+      ? Array.from(centralDb.cache.users.values())
+      : (await centralDb?.listDocs("users", 500))?.documents || [];
+
+    for (const u of userDocs) {
+      if (!u || !u.email) continue;
+      const uEmail = u.email.toLowerCase().trim();
+
+      // Check verified WhatsApp ID match
+      const isDirectWaMatch = Boolean(u.linkedWhatsAppWaId && normalizeToWaId(u.linkedWhatsAppWaId) === normWaId);
+
+      // Check verified primary / whatsapp / mobile number match with country code awareness
+      const uCountry = u.countryCode || "+91";
+      const uWaNorm = normalizeToWaId(u.whatsappNumber || "", uCountry);
+      const uPrimaryNorm = normalizeToWaId(u.primaryNumber || u.mobileNumber || u.primaryPhone || u.mobile || "", uCountry);
+      const isPhoneMatch = Boolean((uWaNorm && uWaNorm === normWaId) || (uPrimaryNorm && uPrimaryNorm === normWaId));
+
+      if (isDirectWaMatch || isPhoneMatch) {
+        const userUpdates = {
+          ...u,
+          whatsappBreakingNewsConsent: false,
+          newsAlertsConsent: false,
+          whatsappProductUpdatesConsent: false,
+          whatsappOptedOutAt: now,
+          whatsappOptOutReason: reason,
+          updatedAt: now,
+        };
+
+        if (centralDb?.writeDoc) {
+          await centralDb.writeDoc("users", uEmail, userUpdates).catch(() => {});
+        }
+        if (centralDb?.cache?.users) {
+          centralDb.cache.users.set(uEmail, userUpdates);
+        }
+        updatedUserEmails.push(uEmail);
+      }
+    }
+  } catch (err: any) {
+    console.error("[WhatsApp:Consent] Error syncing user record for opt-out:", err?.message || err);
+  }
+
+  console.log(`[WhatsApp:Consent] Opt-out synced for waId ${maskWaId(normWaId)}. Sub docs updated: [${updatedDocIds.join(", ")}]. Users updated: [${updatedUserEmails.map(maskWaId).join(", ")}]`);
+  return { success: true, conversationId: canonicalDocId, normWaId, targetDocIds: updatedDocIds, updatedUserEmails };
+};
+
+/**
+ * Task C: Atomically checks and claims a WhatsApp phone number for an account.
+ * Prevents duplicate WhatsApp phone number ownership across multiple user accounts.
+ * Returns { conflict: true, existingEmail, errorCode: "PHONE_ALREADY_LINKED" } if already linked to another active account.
+ */
+export const claimVerifiedPhoneNumber = async (cleanPhone: string, countryCode: string, email: string, centralDb: any) => {
+  const normWaId = normalizeToWaId(cleanPhone, countryCode);
+  const targetEmail = String(email || "").toLowerCase().trim();
+  if (!normWaId || !targetEmail) return { success: false, error: "Invalid phone or email" };
+
+  const registryDocId = `phone_${normWaId}`;
+  const now = Date.now();
+
+  // 1. In-memory pre-check against existing verified users
+  if (centralDb?.cache?.users) {
+    for (const [existingEmail, u] of centralDb.cache.users.entries()) {
+      if (existingEmail.toLowerCase() === targetEmail) continue;
+      const isVerified = Boolean(u.whatsappVerified || u.primaryMobileVerified || (u.whatsappLinkStatus === "linked" && u.linkedWhatsAppWaId));
+      if (!isVerified) continue;
+      const uCountry = u.countryCode || "+91";
+      const uNorm = normalizeToWaId(u.whatsappNumber || u.primaryNumber || u.mobileNumber || u.primaryPhone || "", uCountry);
+      const uLinkedWaId = u.linkedWhatsAppWaId ? normalizeToWaId(u.linkedWhatsAppWaId) : "";
+      if ((uNorm && uNorm === normWaId) || (uLinkedWaId && uLinkedWaId === normWaId)) {
+        return {
+          conflict: true,
+          existingEmail,
+          errorCode: "PHONE_ALREADY_LINKED",
+          reason: "cache_verified_user_conflict"
+        };
+      }
+    }
+  }
+
+  // 2. Transactional claim on whatsapp_phone_registry if Firestore is enabled
+  if (centralDb?.useFirestore && typeof centralDb.beginTransaction === "function") {
+    const tx = await centralDb.beginTransaction();
+    if (tx?.success && tx.transaction) {
+      try {
+        const existingReg = await centralDb._readDocInTransaction("whatsapp_phone_registry", registryDocId, tx.transaction);
+        if (existingReg?.success && existingReg.data && existingReg.data.status === "active") {
+          const ownerEmail = (existingReg.data.verifiedEmail || "").toLowerCase().trim();
+          if (ownerEmail && ownerEmail !== targetEmail) {
+            await centralDb.rollbackTransaction(tx.transaction);
+            return {
+              conflict: true,
+              existingEmail: ownerEmail,
+              errorCode: "PHONE_ALREADY_LINKED",
+              reason: "registry_conflict"
+            };
+          }
+        }
+
+        // Write atomic ownership in transaction
+        const record = {
+          normalizedPhone: normWaId,
+          cleanPhone,
+          countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
+          verifiedEmail: targetEmail,
+          verifiedAt: now,
+          status: "active",
+          updatedAt: now,
+        };
+        const fields: any = {};
+        for (const [key, value] of Object.entries(record)) {
+          fields[key] = centralDb._toFirestoreField(value);
+        }
+        const name = `projects/${centralDb.projectId}/databases/${centralDb.databaseId}/documents/whatsapp_phone_registry/${registryDocId}`;
+        const write: any = { update: { name, fields } };
+        write.currentDocument = (existingReg && existingReg.updateTime)
+          ? { updateTime: existingReg.updateTime }
+          : { exists: false };
+
+        const committed = await centralDb.commitTransaction(tx.transaction, [write]);
+        if (!committed?.success) {
+          throw new Error("Could not commit phone registry transaction");
+        }
+        return { success: true, normalizedPhone: normWaId };
+      } catch (err: any) {
+        await centralDb.rollbackTransaction(tx.transaction).catch(() => {});
+        throw err;
+      }
+    }
+  }
+
+  // Fallback for local / non-transactional mode
+  const localDoc = {
+    normalizedPhone: normWaId,
+    cleanPhone,
+    countryCode,
+    verifiedEmail: targetEmail,
+    verifiedAt: now,
+    status: "active",
+    updatedAt: now,
+  };
+  if (centralDb?.writeDoc) {
+    await centralDb.writeDoc("whatsapp_phone_registry", registryDocId, localDoc).catch(() => {});
+  }
+  return { success: true, normalizedPhone: normWaId };
+};
+
+/**
+ * Task C & Remediation 1A.1: Releases a WhatsApp phone number from whatsapp_phone_registry upon account unlinking.
+ * Verifies that the registry entry is actually owned by the requesting email before releasing.
+ * Prevents unauthorized release or overwriting of another user's registry claim.
+ */
+export const releaseVerifiedPhoneNumber = async (cleanPhone: string, countryCode: string, email: string, centralDb: any) => {
+  const normWaId = normalizeToWaId(cleanPhone, countryCode);
+  const targetEmail = String(email || "").toLowerCase().trim();
+  if (!normWaId || !targetEmail) return { success: false, reason: "invalid_phone_or_email" };
+  const registryDocId = `phone_${normWaId}`;
+  const now = Date.now();
+
+  // Guard: Only release if the registry entry belongs to targetEmail or is already unlinked/not found
+  if (centralDb?.readDoc) {
+    try {
+      const existingReg = await centralDb.readDoc("whatsapp_phone_registry", registryDocId);
+      if (existingReg?.success && existingReg?.data) {
+        const currentOwner = (existingReg.data.verifiedEmail || "").toLowerCase().trim();
+        const currentStatus = existingReg.data.status || "active";
+        if (currentOwner && currentOwner !== targetEmail && currentStatus === "active") {
+          console.warn(`[WhatsApp:Registry] Security: Refusing to release phone ${maskWaId(normWaId)} owned by ${maskWaId(currentOwner)} on behalf of different user ${maskWaId(targetEmail)}`);
+          return {
+            success: false,
+            conflict: true,
+            reason: "owner_mismatch",
+            existingOwner: currentOwner,
+          };
+        }
+      }
+    } catch (checkErr: any) {
+      console.warn("[WhatsApp:Registry] Warning checking existing registry owner before release:", checkErr?.message || checkErr);
+    }
+  }
+
+  const record = {
+    normalizedPhone: normWaId,
+    cleanPhone,
+    countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
+    verifiedEmail: null,
+    unlinkedByEmail: targetEmail,
+    unlinkedAt: now,
+    status: "unlinked",
+    updatedAt: now,
+  };
+
+  if (centralDb?.writeDoc) {
+    await centralDb.writeDoc("whatsapp_phone_registry", registryDocId, record).catch((err: any) => {
+      console.warn("[WhatsApp:Registry] Error releasing phone registry doc:", err?.message || err);
+    });
+  }
+  console.log(`[WhatsApp:Registry] Released phone ${maskWaId(normWaId)} from account ${maskWaId(targetEmail)}`);
+  return { success: true, normalizedPhone: normWaId };
+};
+
+export function registerWhatsAppIntegration(
+  app: any,
+  centralDb: any,
+  options?: { requireAdminMiddleware?: any; requireAuthMiddleware?: any }
+) {
   const webhookPath = "/api/whatsapp/webhook";
+
+  // Task A: Fallback admin guard if not injected via options
+  const requireAdmin = options?.requireAdminMiddleware || ((req: any, res: any, next: any) => {
+    const authUser = req.user;
+    if (!authUser) {
+      return res.status(401).json({
+        success: false,
+        error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): कृपया वैध टोकन के साथ लॉगिन करें।",
+      });
+    }
+    const role = (authUser.role || "").toLowerCase();
+    const email = (authUser.email || "").toLowerCase();
+    const isMaster = email === "breakingnewswala.com@gmail.com" || email === "breakingnewsvala.com@gmail.com";
+    if (role !== "admin" && role !== "superadmin" && !isMaster) {
+      return res.status(403).json({
+        success: false,
+        error: "अनधिकृत (403 Forbidden): इस कार्य के लिए व्यवस्थापक (Admin) अधिकार आवश्यक हैं।",
+      });
+    }
+    next();
+  });
 
   const safeEqual = (a: string, b: string) => {
     const left = Buffer.from(String(a || ""));
@@ -368,12 +702,8 @@ export function registerWhatsAppIntegration(app: any, centralDb: any) {
 
     if (textBody.toUpperCase() === "STOP" || textBody.toUpperCase() === "UNSUBSCRIBE") {
       console.log(`[WhatsApp:Inbound] STOP/UNSUBSCRIBE received from ${maskedWa}`);
-      await requireWrite("whatsapp_subscribers", conversationId, {
-        waId,
-        newsAlertsConsent: false,
-        newsAlertsOptedOutAt: now,
-        updatedAt: now,
-      });
+      // Task B: Atomically sync opt-out to both whatsapp_subscribers AND matching users collection records
+      await syncWhatsAppOptOut(waId, "inbound_whatsapp_stop", centralDb);
       const optOutReply = "आपकी WhatsApp समाचार सूचनाएँ बंद कर दी गई हैं। ग्राहक सहायता के लिए आप हमें संदेश भेज सकते हैं।";
       const sent = await sendWhatsAppText(waId, optOutReply);
       const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
@@ -593,19 +923,11 @@ _नोट: वीडियो स्टूडियो एडवांस, प�
       if (matchedRequest) {
         const targetEmail = (matchedRequest.email || "").toLowerCase().trim();
         
-        // Anti-overwriting: Check if waId is already linked to another active account
-        let conflictUser: any = null;
-        for (const u of centralDb.cache.users.values()) {
-          const uEmail = (u.email || "").toLowerCase().trim();
-          if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked" && uEmail !== targetEmail) {
-            conflictUser = u;
-            break;
-          }
-        }
-
-        if (conflictUser) {
-          console.warn(`[WhatsApp:Link] waId ${maskedWa} is already linked to ${conflictUser.email}`);
-          const conflictReply = `⚠️ यह WhatsApp नंबर पहले से किसी अन्य AI NEWS MAKER अकाउंट (${maskWaId(conflictUser.email)}) से लिंक है।\n\nएक WhatsApp नंबर को एक समय में केवल एक ही अकाउंट से जोड़ा जा सकता है। कृपया पहले उस अकाउंट से इसे अनलिंक करें।`;
+        // Task C: Anti-overwriting & Uniqueness Claim
+        const claimResult = await claimVerifiedPhoneNumber(waId, "+91", targetEmail, centralDb);
+        if (claimResult?.conflict) {
+          console.warn(`[WhatsApp:Link] waId ${maskedWa} is already linked to another account.`);
+          const conflictReply = `⚠️ यह WhatsApp नंबर पहले से किसी अन्य AI NEWS MAKER अकाउंट से लिंक है।\n\nएक WhatsApp नंबर को एक समय में केवल एक ही अकाउंट से जोड़ा जा सकता है। कृपया पहले उस अकाउंट से इसे अनलिंक करें।`;
           const sent = await sendWhatsAppText(waId, conflictReply);
           const outMsgId = String(sent?.messages?.[0]?.id || `out-${messageId}`);
           await requireWrite("whatsapp_messages", sha256(outMsgId), {
@@ -1183,7 +1505,7 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
       }
 
       let record = otpVerificationCache.get(verificationId);
-      if (!record && centralDb?.useFirestore) {
+      if (!record && (centralDb?.useFirestore || centralDb?.readDoc)) {
         const fsDoc = await centralDb.readDoc("whatsapp_otp_verifications", verificationId);
         if (fsDoc?.success && fsDoc?.data) {
           record = fsDoc.data;
@@ -1262,7 +1584,22 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
 
       const verificationToken = createHash("sha256").update(`${verificationId}:${cleanPhone}:${record.salt}:${now}`).digest("hex");
 
-      if (email && centralDb?.useFirestore) {
+      // Task C: Duplicate WhatsApp Phone Number Ownership Prevention & Atomic Claim
+      const countryCode = record.countryCode || "+91";
+      if (email) {
+        const claimResult = await claimVerifiedPhoneNumber(cleanPhone, countryCode, email, centralDb);
+        if (claimResult?.conflict) {
+          console.warn(`[WhatsApp:OTP:Conflict] Phone ${maskWaId(cleanPhone)} is already linked to another active account.`);
+          return res.status(409).json({
+            success: false,
+            error: "यह WhatsApp नंबर पहले से किसी अन्य अकाउंट से जुड़ा हुआ है। कृपया सही अकाउंट से लॉगिन करें।",
+            errorCode: "PHONE_ALREADY_LINKED",
+          });
+        }
+      }
+
+      // Task 4 Remediation: Verify user profile write success; safely rollback registry claim if write fails
+      if (email && (centralDb?.useFirestore || centralDb?.writeDoc)) {
         try {
           const userDocRes = await centralDb.readDoc("users", email);
           const uData = userDocRes?.data || {};
@@ -1274,16 +1611,32 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
             whatsappVerified: true,
             whatsappVerifiedAt: now,
             whatsappVerificationMethod: "whatsapp_otp",
-            countryCode: "+91",
+            countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
             updatedAt: now
           };
-          await centralDb.writeDoc("users", email, updatedUser);
+          const writeRes = await centralDb.writeDoc("users", email, updatedUser);
+          if (writeRes && writeRes.success === false) {
+            throw new Error(writeRes.error || "writeDoc failed");
+          }
           if (centralDb.cache?.users) {
             centralDb.cache.users.set(email, updatedUser);
           }
           console.log(`[WhatsApp:OTP] User ${email} verified and updated with primaryNumber: ${cleanPhone}`);
         } catch (uErr: any) {
-          console.warn(`[WhatsApp:OTP] Warning updating user record for ${email}:`, uErr.message);
+          console.error(`[WhatsApp:OTP:PartialFailure] Failed to write user profile for ${maskWaId(email)}. Rolling back registry claim:`, uErr?.message || uErr);
+          // Safe compensation: Release registry claim ONLY for this email
+          await releaseVerifiedPhoneNumber(cleanPhone, countryCode, email, centralDb);
+          // Reset OTP record status to pending so immediate retry is possible
+          record.status = "pending";
+          otpVerificationCache.set(verificationId, record);
+          if (centralDb?.useFirestore) {
+            await centralDb.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => undefined);
+          }
+          return res.status(500).json({
+            success: false,
+            errorCode: "USER_PROFILE_UPDATE_FAILED",
+            error: "उपयोगकर्ता प्रोफ़ाइल सहेजने में त्रुटि हुई। फ़ोन नंबर लिंक नहीं किया जा सका। कृपया पुनः प्रयास करें।",
+          });
         }
       }
 
@@ -1398,16 +1751,21 @@ AI News Maker परिवार में आपका हार्दिक �
     }
   });
 
-  // --- ADMIN WHATSAPP NOTIFICATION CENTER CAMPAIGN ENDPOINT ---
-  app.post("/api/admin/whatsapp/campaign", async (req: any, res: any) => {
+  // --- ADMIN WHATSAPP NOTIFICATION CENTER CAMPAIGN ENDPOINT (Task A & Task B) ---
+  app.post("/api/admin/whatsapp/campaign", requireAdmin, async (req: any, res: any) => {
     try {
-      const adminEmail = (req.headers["x-admin-email"] || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-      const adminRole = (req.headers["x-user-role"] || "").toString().toLowerCase().trim();
-      const isAuthAdmin = adminEmail === 'admin.ainewsmaker@gmail.com' || adminEmail === 'breakingnewswala.com@gmail.com' || adminRole === "superadmin" || adminRole === "admin" || adminEmail.includes("admin") || adminEmail.includes("breakingnewswala");
+      const authUser = req.user;
+      const adminEmail = (authUser?.email || "").toLowerCase().trim();
+      const adminRole = (authUser?.role || "").toLowerCase().trim();
 
-      if (!isAuthAdmin) {
-        return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत एडमिन ही व्हाट्सएप नोटिफिकेशन कैंपेन चला सकते हैं।" });
+      if (!adminEmail) {
+        return res.status(401).json({
+          success: false,
+          error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): मान्य व्यवस्थापक टोकन आवश्यक है।",
+        });
       }
+
+      console.log(`[WhatsApp:Campaign:Auth] Authorized admin ${adminEmail} (role=${adminRole}) initiating campaign`);
 
       const {
         targetAudience = "all",
@@ -1433,8 +1791,7 @@ AI News Maker परिवार में आपका हार्दिक �
 
       // Test Mode
       if (testPhone) {
-        const cleanTest = String(testPhone).replace(/\D/g, "").slice(-10);
-        const testWaId = cleanTest.length === 10 ? `91${cleanTest}` : cleanTest;
+        const testWaId = normalizeToWaId(testPhone);
         const testSent = await sendWhatsAppText(testWaId, `[TEST PREVIEW]\n\n${finalMessage}`);
         return res.json({
           success: true,
@@ -1444,25 +1801,49 @@ AI News Maker परिवार में आपका हार्दिक �
         });
       }
 
-      // Resolve Recipients
+      // Resolve Recipients with Strict Opt-Out Verification (Task B)
       const recipientNumbers = new Set<string>();
+
+      // Prefetch all opted-out subscribers to prevent sending to unsubscribed users
+      const optedOutWaIds = new Set<string>();
+      try {
+        if (centralDb?.listDocs) {
+          const subRes = await centralDb.listDocs("whatsapp_subscribers", 1000);
+          for (const s of subRes?.documents || []) {
+            if (s && (s.newsAlertsConsent === false || s.whatsappBreakingNewsConsent === false)) {
+              if (s.waId) optedOutWaIds.add(normalizeToWaId(s.waId));
+            }
+          }
+        }
+      } catch (subErr: any) {
+        console.warn("[WhatsApp:Campaign] Could not prefetch opted-out subscribers:", subErr?.message || subErr);
+      }
 
       if (targetAudience === "custom" && Array.isArray(customNumbers)) {
         for (const num of customNumbers) {
-          const clean = String(num || "").replace(/\D/g, "").slice(-10);
-          if (clean.length === 10) recipientNumbers.add(`91${clean}`);
+          const normWa = normalizeToWaId(num);
+          if (normWa && normWa.length >= 10) {
+            if (optedOutWaIds.has(normWa)) {
+              console.log(`[WhatsApp:Campaign] Skipping custom number due to active opt-out: ${maskWaId(normWa)}`);
+              continue;
+            }
+            recipientNumbers.add(normWa);
+          }
         }
       } else {
         const usersList: any[] = centralDb?.cache?.users
           ? Array.from(centralDb.cache.users.values())
-          : [];
+          : (await centralDb?.listDocs("users", 500))?.documents || [];
 
         for (const u of usersList) {
+          if (!u) continue;
           const uEmail = (u.email || "").toLowerCase().trim();
           const uTier = (u.tier || "basic").toLowerCase().trim();
-          const uPhone = (u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || "").replace(/\D/g, "").slice(-10);
+          const rawPhone = u.whatsappNumber || u.primaryNumber || u.mobileNumber || u.primaryPhone || u.mobile || "";
+          const uCountry = u.countryCode || "+91";
+          const normWa = normalizeToWaId(rawPhone, uCountry);
 
-          if (!uPhone || uPhone.length !== 10) continue;
+          if (!normWa || normWa.length < 10) continue;
 
           if (targetAudience === "selected") {
             if (!targetUserEmails.includes(uEmail)) continue;
@@ -1471,10 +1852,15 @@ AI News Maker परिवार में आपका हार्दिक �
             else if (targetAudience !== "vip" && uTier !== targetAudience) continue;
           }
 
+          // Strict consent check: user doc flags AND pre-fetched subscriber opt-outs
           if (category === "Breaking News" && u.whatsappBreakingNewsConsent === false) continue;
           if (u.newsAlertsConsent === false) continue;
+          if (optedOutWaIds.has(normWa)) {
+            console.log(`[WhatsApp:Campaign] Skipping opted-out user (${maskWaId(uEmail)}): ${maskWaId(normWa)}`);
+            continue;
+          }
 
-          recipientNumbers.add(`91${uPhone}`);
+          recipientNumbers.add(normWa);
         }
       }
 

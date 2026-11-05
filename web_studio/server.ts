@@ -6,7 +6,11 @@ import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import crypto from "crypto";
-import { registerWhatsAppIntegration } from "./whatsapp_integration";
+import {
+  registerWhatsAppIntegration,
+  releaseVerifiedPhoneNumber,
+  normalizeToWaId,
+} from "./whatsapp_integration";
 import { initializeApp as initFirebaseAdmin, getApps as getFirebaseAdminApps } from "firebase-admin/app";
 import { getAuth as getFirebaseAdminAuth } from "firebase-admin/auth";
 
@@ -84,9 +88,6 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
-
-// WhatsApp Cloud API webhook + customer support integration
-registerWhatsAppIntegration(app, centralDb);
 
 // ============================================================================
 // SECURITY HARDENING: SENSITIVE FILE ACCESS DENYLIST & EXPOSURE ELIMINATION
@@ -498,6 +499,12 @@ export async function requireMasterAdminMiddleware(req: express.Request, res: ex
   }
   next();
 }
+
+// WhatsApp Cloud API webhook + customer support integration with authenticated middlewares (Task A)
+registerWhatsAppIntegration(app, centralDb, {
+  requireAdminMiddleware,
+  requireAuthMiddleware,
+});
 
 
 // ============================================================================
@@ -8444,6 +8451,29 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req: any, re
     const userEmail = (authUser?.email || "").toLowerCase().trim();
     if (!userEmail) return res.status(400).json({ success: false, error: "ईमेल पता आवश्यक है।" });
 
+    // Look up the phone being unlinked so we can release it in whatsapp_phone_registry (Task C & Task 3)
+    let unlinkingPhone = "";
+    let unlinkingCountryCode = "+91";
+    if (centralDb && centralDb.cache?.users?.has(userEmail)) {
+      const u = centralDb.cache.users.get(userEmail);
+      unlinkingPhone = u?.linkedWhatsAppWaId || u?.whatsappNumber || u?.primaryNumber || "";
+      unlinkingCountryCode = u?.countryCode || "+91";
+    }
+
+    // Task 3: Firestore Fallback Read if Cache Miss
+    if (!unlinkingPhone && centralDb?.readDoc) {
+      try {
+        const dbRes = await centralDb.readDoc("users", userEmail);
+        if (dbRes?.success && dbRes?.data) {
+          const u = dbRes.data;
+          unlinkingPhone = u?.linkedWhatsAppWaId || u?.whatsappNumber || u?.primaryNumber || "";
+          unlinkingCountryCode = u?.countryCode || "+91";
+        }
+      } catch (readErr: any) {
+        console.warn("[WhatsApp:Unlink] Warning reading user record from Firestore for unlink:", readErr?.message || readErr);
+      }
+    }
+
     const unlinkedUpdates = {
       linkedWhatsAppWaId: null,
       whatsappVerified: false,
@@ -8457,6 +8487,14 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req: any, re
       if (centralDb.cache?.users?.has(userEmail)) {
         const cached = centralDb.cache.users.get(userEmail);
         centralDb.cache.users.set(userEmail, { ...cached, ...unlinkedUpdates });
+      }
+    }
+
+    // Task C & Task 3: Atomically release the phone in whatsapp_phone_registry (with owner verification)
+    if (unlinkingPhone) {
+      const releaseRes = await releaseVerifiedPhoneNumber(unlinkingPhone, unlinkingCountryCode, userEmail, centralDb);
+      if (releaseRes?.conflict) {
+        console.warn(`[WhatsApp:Unlink] Note: Phone ${unlinkingPhone} was owned by another account (${releaseRes.existingOwner}), registry was not modified.`);
       }
     }
 

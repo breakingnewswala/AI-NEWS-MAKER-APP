@@ -6443,8 +6443,273 @@ var maskWaId = (id) => {
 };
 var otpRateLimits = /* @__PURE__ */ new Map();
 var otpVerificationCache = /* @__PURE__ */ new Map();
-function registerWhatsAppIntegration(app2, centralDb2) {
+var normalizeToWaId = (rawPhone, defaultCountryCode = "+91") => {
+  let cleaned = String(rawPhone || "").trim().replace(/[^\d+]/g, "");
+  if (!cleaned) return "";
+  if (cleaned.startsWith("+")) cleaned = cleaned.slice(1);
+  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+  const defCC = String(defaultCountryCode || "+91").replace(/\D/g, "") || "91";
+  if (/^\d{10}$/.test(cleaned)) {
+    return `${defCC}${cleaned}`;
+  }
+  if (cleaned.startsWith("0") && /^\d{11}$/.test(cleaned) && defCC === "91") {
+    return `91${cleaned.slice(1)}`;
+  }
+  return cleaned;
+};
+var syncWhatsAppOptOut = async (waId, reason = "inbound_whatsapp_stop", centralDb2) => {
+  const normWaId = normalizeToWaId(waId);
+  if (!normWaId) return { success: false, reason: "empty_waid" };
+  const canonicalDocId = (0, import_crypto.createHash)("sha256").update(normWaId).digest("hex");
+  const now = Date.now();
+  const subData = {
+    waId: normWaId,
+    newsAlertsConsent: false,
+    whatsappBreakingNewsConsent: false,
+    whatsappProductUpdatesConsent: false,
+    newsAlertsOptedOutAt: now,
+    optOutReason: reason,
+    updatedAt: now
+  };
+  const targetDocIds = /* @__PURE__ */ new Set();
+  targetDocIds.add(canonicalDocId);
+  const candidateLegacyIds = /* @__PURE__ */ new Set();
+  const rawTrimmed = String(waId || "").trim();
+  if (rawTrimmed) {
+    candidateLegacyIds.add((0, import_crypto.createHash)("sha256").update(rawTrimmed).digest("hex"));
+  }
+  const cleanDigits = rawTrimmed.replace(/\D/g, "");
+  if (cleanDigits) {
+    candidateLegacyIds.add((0, import_crypto.createHash)("sha256").update(cleanDigits).digest("hex"));
+  }
+  if (normWaId.startsWith("91") && normWaId.length === 12) {
+    const clean10 = normWaId.slice(2);
+    candidateLegacyIds.add((0, import_crypto.createHash)("sha256").update(clean10).digest("hex"));
+    candidateLegacyIds.add((0, import_crypto.createHash)("sha256").update(`+91${clean10}`).digest("hex"));
+    candidateLegacyIds.add((0, import_crypto.createHash)("sha256").update(`+91 ${clean10}`).digest("hex"));
+    candidateLegacyIds.add((0, import_crypto.createHash)("sha256").update(`+91 ${clean10.slice(0, 5)} ${clean10.slice(5)}`).digest("hex"));
+    candidateLegacyIds.add((0, import_crypto.createHash)("sha256").update(`0${clean10}`).digest("hex"));
+  }
+  if (centralDb2?.listDocs) {
+    try {
+      const subRes = await centralDb2.listDocs("whatsapp_subscribers", 1e3);
+      for (const s of subRes?.documents || []) {
+        if (!s || !s.id) continue;
+        const sWa = s.waId || s.phone || s.normalizedPhone || "";
+        const sNorm = sWa ? normalizeToWaId(sWa) : "";
+        if (candidateLegacyIds.has(s.id) || sNorm && sNorm === normWaId) {
+          targetDocIds.add(s.id);
+        }
+      }
+    } catch (listErr) {
+      console.warn("[WhatsApp:Consent] Warning scanning whatsapp_subscribers:", listErr?.message || listErr);
+    }
+  } else if (centralDb2?.readDoc) {
+    for (const candId of candidateLegacyIds) {
+      try {
+        const candRes = await centralDb2.readDoc("whatsapp_subscribers", candId);
+        if (candRes?.success && candRes?.data) {
+          targetDocIds.add(candId);
+        }
+      } catch {
+      }
+    }
+  }
+  const updatedDocIds = [];
+  if (centralDb2?.writeDoc) {
+    for (const docId of targetDocIds) {
+      await centralDb2.writeDoc("whatsapp_subscribers", docId, subData).catch((err) => {
+        console.error(`[WhatsApp:Consent] Error writing to whatsapp_subscribers doc (${docId}):`, err?.message || err);
+      });
+      updatedDocIds.push(docId);
+    }
+  }
+  const updatedUserEmails = [];
+  try {
+    const userDocs = centralDb2?.cache?.users ? Array.from(centralDb2.cache.users.values()) : (await centralDb2?.listDocs("users", 500))?.documents || [];
+    for (const u of userDocs) {
+      if (!u || !u.email) continue;
+      const uEmail = u.email.toLowerCase().trim();
+      const isDirectWaMatch = Boolean(u.linkedWhatsAppWaId && normalizeToWaId(u.linkedWhatsAppWaId) === normWaId);
+      const uCountry = u.countryCode || "+91";
+      const uWaNorm = normalizeToWaId(u.whatsappNumber || "", uCountry);
+      const uPrimaryNorm = normalizeToWaId(u.primaryNumber || u.mobileNumber || u.primaryPhone || u.mobile || "", uCountry);
+      const isPhoneMatch = Boolean(uWaNorm && uWaNorm === normWaId || uPrimaryNorm && uPrimaryNorm === normWaId);
+      if (isDirectWaMatch || isPhoneMatch) {
+        const userUpdates = {
+          ...u,
+          whatsappBreakingNewsConsent: false,
+          newsAlertsConsent: false,
+          whatsappProductUpdatesConsent: false,
+          whatsappOptedOutAt: now,
+          whatsappOptOutReason: reason,
+          updatedAt: now
+        };
+        if (centralDb2?.writeDoc) {
+          await centralDb2.writeDoc("users", uEmail, userUpdates).catch(() => {
+          });
+        }
+        if (centralDb2?.cache?.users) {
+          centralDb2.cache.users.set(uEmail, userUpdates);
+        }
+        updatedUserEmails.push(uEmail);
+      }
+    }
+  } catch (err) {
+    console.error("[WhatsApp:Consent] Error syncing user record for opt-out:", err?.message || err);
+  }
+  console.log(`[WhatsApp:Consent] Opt-out synced for waId ${maskWaId(normWaId)}. Sub docs updated: [${updatedDocIds.join(", ")}]. Users updated: [${updatedUserEmails.map(maskWaId).join(", ")}]`);
+  return { success: true, conversationId: canonicalDocId, normWaId, targetDocIds: updatedDocIds, updatedUserEmails };
+};
+var claimVerifiedPhoneNumber = async (cleanPhone, countryCode, email, centralDb2) => {
+  const normWaId = normalizeToWaId(cleanPhone, countryCode);
+  const targetEmail = String(email || "").toLowerCase().trim();
+  if (!normWaId || !targetEmail) return { success: false, error: "Invalid phone or email" };
+  const registryDocId = `phone_${normWaId}`;
+  const now = Date.now();
+  if (centralDb2?.cache?.users) {
+    for (const [existingEmail, u] of centralDb2.cache.users.entries()) {
+      if (existingEmail.toLowerCase() === targetEmail) continue;
+      const isVerified = Boolean(u.whatsappVerified || u.primaryMobileVerified || u.whatsappLinkStatus === "linked" && u.linkedWhatsAppWaId);
+      if (!isVerified) continue;
+      const uCountry = u.countryCode || "+91";
+      const uNorm = normalizeToWaId(u.whatsappNumber || u.primaryNumber || u.mobileNumber || u.primaryPhone || "", uCountry);
+      const uLinkedWaId = u.linkedWhatsAppWaId ? normalizeToWaId(u.linkedWhatsAppWaId) : "";
+      if (uNorm && uNorm === normWaId || uLinkedWaId && uLinkedWaId === normWaId) {
+        return {
+          conflict: true,
+          existingEmail,
+          errorCode: "PHONE_ALREADY_LINKED",
+          reason: "cache_verified_user_conflict"
+        };
+      }
+    }
+  }
+  if (centralDb2?.useFirestore && typeof centralDb2.beginTransaction === "function") {
+    const tx = await centralDb2.beginTransaction();
+    if (tx?.success && tx.transaction) {
+      try {
+        const existingReg = await centralDb2._readDocInTransaction("whatsapp_phone_registry", registryDocId, tx.transaction);
+        if (existingReg?.success && existingReg.data && existingReg.data.status === "active") {
+          const ownerEmail = (existingReg.data.verifiedEmail || "").toLowerCase().trim();
+          if (ownerEmail && ownerEmail !== targetEmail) {
+            await centralDb2.rollbackTransaction(tx.transaction);
+            return {
+              conflict: true,
+              existingEmail: ownerEmail,
+              errorCode: "PHONE_ALREADY_LINKED",
+              reason: "registry_conflict"
+            };
+          }
+        }
+        const record = {
+          normalizedPhone: normWaId,
+          cleanPhone,
+          countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
+          verifiedEmail: targetEmail,
+          verifiedAt: now,
+          status: "active",
+          updatedAt: now
+        };
+        const fields = {};
+        for (const [key, value] of Object.entries(record)) {
+          fields[key] = centralDb2._toFirestoreField(value);
+        }
+        const name = `projects/${centralDb2.projectId}/databases/${centralDb2.databaseId}/documents/whatsapp_phone_registry/${registryDocId}`;
+        const write = { update: { name, fields } };
+        write.currentDocument = existingReg && existingReg.updateTime ? { updateTime: existingReg.updateTime } : { exists: false };
+        const committed = await centralDb2.commitTransaction(tx.transaction, [write]);
+        if (!committed?.success) {
+          throw new Error("Could not commit phone registry transaction");
+        }
+        return { success: true, normalizedPhone: normWaId };
+      } catch (err) {
+        await centralDb2.rollbackTransaction(tx.transaction).catch(() => {
+        });
+        throw err;
+      }
+    }
+  }
+  const localDoc = {
+    normalizedPhone: normWaId,
+    cleanPhone,
+    countryCode,
+    verifiedEmail: targetEmail,
+    verifiedAt: now,
+    status: "active",
+    updatedAt: now
+  };
+  if (centralDb2?.writeDoc) {
+    await centralDb2.writeDoc("whatsapp_phone_registry", registryDocId, localDoc).catch(() => {
+    });
+  }
+  return { success: true, normalizedPhone: normWaId };
+};
+var releaseVerifiedPhoneNumber = async (cleanPhone, countryCode, email, centralDb2) => {
+  const normWaId = normalizeToWaId(cleanPhone, countryCode);
+  const targetEmail = String(email || "").toLowerCase().trim();
+  if (!normWaId || !targetEmail) return { success: false, reason: "invalid_phone_or_email" };
+  const registryDocId = `phone_${normWaId}`;
+  const now = Date.now();
+  if (centralDb2?.readDoc) {
+    try {
+      const existingReg = await centralDb2.readDoc("whatsapp_phone_registry", registryDocId);
+      if (existingReg?.success && existingReg?.data) {
+        const currentOwner = (existingReg.data.verifiedEmail || "").toLowerCase().trim();
+        const currentStatus = existingReg.data.status || "active";
+        if (currentOwner && currentOwner !== targetEmail && currentStatus === "active") {
+          console.warn(`[WhatsApp:Registry] Security: Refusing to release phone ${maskWaId(normWaId)} owned by ${maskWaId(currentOwner)} on behalf of different user ${maskWaId(targetEmail)}`);
+          return {
+            success: false,
+            conflict: true,
+            reason: "owner_mismatch",
+            existingOwner: currentOwner
+          };
+        }
+      }
+    } catch (checkErr) {
+      console.warn("[WhatsApp:Registry] Warning checking existing registry owner before release:", checkErr?.message || checkErr);
+    }
+  }
+  const record = {
+    normalizedPhone: normWaId,
+    cleanPhone,
+    countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
+    verifiedEmail: null,
+    unlinkedByEmail: targetEmail,
+    unlinkedAt: now,
+    status: "unlinked",
+    updatedAt: now
+  };
+  if (centralDb2?.writeDoc) {
+    await centralDb2.writeDoc("whatsapp_phone_registry", registryDocId, record).catch((err) => {
+      console.warn("[WhatsApp:Registry] Error releasing phone registry doc:", err?.message || err);
+    });
+  }
+  console.log(`[WhatsApp:Registry] Released phone ${maskWaId(normWaId)} from account ${maskWaId(targetEmail)}`);
+  return { success: true, normalizedPhone: normWaId };
+};
+function registerWhatsAppIntegration(app2, centralDb2, options) {
   const webhookPath = "/api/whatsapp/webhook";
+  const requireAdmin = options?.requireAdminMiddleware || ((req, res, next) => {
+    const authUser = req.user;
+    if (!authUser) {
+      return res.status(401).json({
+        success: false,
+        error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u0915\u0943\u092A\u092F\u093E \u0935\u0948\u0927 \u091F\u094B\u0915\u0928 \u0915\u0947 \u0938\u093E\u0925 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    const role = (authUser.role || "").toLowerCase();
+    const email = (authUser.email || "").toLowerCase();
+    const isMaster = email === "breakingnewswala.com@gmail.com" || email === "breakingnewsvala.com@gmail.com";
+    if (role !== "admin" && role !== "superadmin" && !isMaster) {
+      return res.status(403).json({
+        success: false,
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0907\u0938 \u0915\u093E\u0930\u094D\u092F \u0915\u0947 \u0932\u093F\u090F \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0905\u0927\u093F\u0915\u093E\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964"
+      });
+    }
+    next();
+  });
   const safeEqual = (a, b) => {
     const left = Buffer.from(String(a || ""));
     const right = Buffer.from(String(b || ""));
@@ -6742,12 +7007,7 @@ ${knowledge.slice(0, 1e3)}` };
     });
     if (textBody.toUpperCase() === "STOP" || textBody.toUpperCase() === "UNSUBSCRIBE") {
       console.log(`[WhatsApp:Inbound] STOP/UNSUBSCRIBE received from ${maskedWa}`);
-      await requireWrite("whatsapp_subscribers", conversationId, {
-        waId,
-        newsAlertsConsent: false,
-        newsAlertsOptedOutAt: now,
-        updatedAt: now
-      });
+      await syncWhatsAppOptOut(waId, "inbound_whatsapp_stop", centralDb2);
       const optOutReply = "\u0906\u092A\u0915\u0940 WhatsApp \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0942\u091A\u0928\u093E\u090F\u0901 \u092C\u0902\u0926 \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0902\u0964 \u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0906\u092A \u0939\u092E\u0947\u0902 \u0938\u0902\u0926\u0947\u0936 \u092D\u0947\u091C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964";
       const sent2 = await sendWhatsAppText(waId, optOutReply);
       const outMsgId2 = String(sent2?.messages?.[0]?.id || `out-${messageId}`);
@@ -6985,17 +7245,10 @@ _\u0928\u094B\u091F: \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u09
       }
       if (matchedRequest) {
         const targetEmail = (matchedRequest.email || "").toLowerCase().trim();
-        let conflictUser = null;
-        for (const u of centralDb2.cache.users.values()) {
-          const uEmail = (u.email || "").toLowerCase().trim();
-          if (u.linkedWhatsAppWaId === waId && u.whatsappLinkStatus === "linked" && uEmail !== targetEmail) {
-            conflictUser = u;
-            break;
-          }
-        }
-        if (conflictUser) {
-          console.warn(`[WhatsApp:Link] waId ${maskedWa} is already linked to ${conflictUser.email}`);
-          const conflictReply = `\u26A0\uFE0F \u092F\u0939 WhatsApp \u0928\u0902\u092C\u0930 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F AI NEWS MAKER \u0905\u0915\u093E\u0909\u0902\u091F (${maskWaId(conflictUser.email)}) \u0938\u0947 \u0932\u093F\u0902\u0915 \u0939\u0948\u0964
+        const claimResult = await claimVerifiedPhoneNumber(waId, "+91", targetEmail, centralDb2);
+        if (claimResult?.conflict) {
+          console.warn(`[WhatsApp:Link] waId ${maskedWa} is already linked to another account.`);
+          const conflictReply = `\u26A0\uFE0F \u092F\u0939 WhatsApp \u0928\u0902\u092C\u0930 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F AI NEWS MAKER \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u0932\u093F\u0902\u0915 \u0939\u0948\u0964
 
 \u090F\u0915 WhatsApp \u0928\u0902\u092C\u0930 \u0915\u094B \u090F\u0915 \u0938\u092E\u092F \u092E\u0947\u0902 \u0915\u0947\u0935\u0932 \u090F\u0915 \u0939\u0940 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u091C\u094B\u0921\u093C\u093E \u091C\u093E \u0938\u0915\u0924\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u0909\u0938 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u0907\u0938\u0947 \u0905\u0928\u0932\u093F\u0902\u0915 \u0915\u0930\u0947\u0902\u0964`;
           const sent3 = await sendWhatsAppText(waId, conflictReply);
@@ -7553,7 +7806,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
         });
       }
       let record = otpVerificationCache.get(verificationId);
-      if (!record && centralDb2?.useFirestore) {
+      if (!record && (centralDb2?.useFirestore || centralDb2?.readDoc)) {
         const fsDoc = await centralDb2.readDoc("whatsapp_otp_verifications", verificationId);
         if (fsDoc?.success && fsDoc?.data) {
           record = fsDoc.data;
@@ -7622,7 +7875,19 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
         await centralDb2.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => void 0);
       }
       const verificationToken = (0, import_crypto.createHash)("sha256").update(`${verificationId}:${cleanPhone}:${record.salt}:${now}`).digest("hex");
-      if (email && centralDb2?.useFirestore) {
+      const countryCode = record.countryCode || "+91";
+      if (email) {
+        const claimResult = await claimVerifiedPhoneNumber(cleanPhone, countryCode, email, centralDb2);
+        if (claimResult?.conflict) {
+          console.warn(`[WhatsApp:OTP:Conflict] Phone ${maskWaId(cleanPhone)} is already linked to another active account.`);
+          return res.status(409).json({
+            success: false,
+            error: "\u092F\u0939 WhatsApp \u0928\u0902\u092C\u0930 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0915\u093F\u0938\u0940 \u0905\u0928\u094D\u092F \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u091C\u0941\u0921\u093C\u093E \u0939\u0941\u0906 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0938\u0939\u0940 \u0905\u0915\u093E\u0909\u0902\u091F \u0938\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964",
+            errorCode: "PHONE_ALREADY_LINKED"
+          });
+        }
+      }
+      if (email && (centralDb2?.useFirestore || centralDb2?.writeDoc)) {
         try {
           const userDocRes = await centralDb2.readDoc("users", email);
           const uData = userDocRes?.data || {};
@@ -7634,16 +7899,30 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
             whatsappVerified: true,
             whatsappVerifiedAt: now,
             whatsappVerificationMethod: "whatsapp_otp",
-            countryCode: "+91",
+            countryCode: countryCode.startsWith("+") ? countryCode : `+${countryCode}`,
             updatedAt: now
           };
-          await centralDb2.writeDoc("users", email, updatedUser);
+          const writeRes = await centralDb2.writeDoc("users", email, updatedUser);
+          if (writeRes && writeRes.success === false) {
+            throw new Error(writeRes.error || "writeDoc failed");
+          }
           if (centralDb2.cache?.users) {
             centralDb2.cache.users.set(email, updatedUser);
           }
           console.log(`[WhatsApp:OTP] User ${email} verified and updated with primaryNumber: ${cleanPhone}`);
         } catch (uErr) {
-          console.warn(`[WhatsApp:OTP] Warning updating user record for ${email}:`, uErr.message);
+          console.error(`[WhatsApp:OTP:PartialFailure] Failed to write user profile for ${maskWaId(email)}. Rolling back registry claim:`, uErr?.message || uErr);
+          await releaseVerifiedPhoneNumber(cleanPhone, countryCode, email, centralDb2);
+          record.status = "pending";
+          otpVerificationCache.set(verificationId, record);
+          if (centralDb2?.useFirestore) {
+            await centralDb2.writeDoc("whatsapp_otp_verifications", verificationId, record).catch(() => void 0);
+          }
+          return res.status(500).json({
+            success: false,
+            errorCode: "USER_PROFILE_UPDATE_FAILED",
+            error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0939\u0947\u091C\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F \u0939\u0941\u0908\u0964 \u092B\u093C\u094B\u0928 \u0928\u0902\u092C\u0930 \u0932\u093F\u0902\u0915 \u0928\u0939\u0940\u0902 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u093E\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964"
+          });
         }
       }
       try {
@@ -7746,14 +8025,18 @@ AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u09
       return res.status(500).json({ error: String(err?.message || err) });
     }
   });
-  app2.post("/api/admin/whatsapp/campaign", async (req, res) => {
+  app2.post("/api/admin/whatsapp/campaign", requireAdmin, async (req, res) => {
     try {
-      const adminEmail = (req.headers["x-admin-email"] || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-      const adminRole = (req.headers["x-user-role"] || "").toString().toLowerCase().trim();
-      const isAuthAdmin = adminEmail === "admin.ainewsmaker@gmail.com" || adminEmail === "breakingnewswala.com@gmail.com" || adminRole === "superadmin" || adminRole === "admin" || adminEmail.includes("admin") || adminEmail.includes("breakingnewswala");
-      if (!isAuthAdmin) {
-        return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A \u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0915\u0948\u0902\u092A\u0947\u0928 \u091A\u0932\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      const authUser = req.user;
+      const adminEmail = (authUser?.email || "").toLowerCase().trim();
+      const adminRole = (authUser?.role || "").toLowerCase().trim();
+      if (!adminEmail) {
+        return res.status(401).json({
+          success: false,
+          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u092E\u093E\u0928\u094D\u092F \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
+        });
       }
+      console.log(`[WhatsApp:Campaign:Auth] Authorized admin ${adminEmail} (role=${adminRole}) initiating campaign`);
       const {
         targetAudience = "all",
         targetUserEmails = [],
@@ -7783,8 +8066,7 @@ AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u09
       finalMessage += `_AI News Maker (\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E) - \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0947\u0935\u093E_
 _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F STOP \u0932\u093F\u0916\u0947\u0902_`;
       if (testPhone) {
-        const cleanTest = String(testPhone).replace(/\D/g, "").slice(-10);
-        const testWaId = cleanTest.length === 10 ? `91${cleanTest}` : cleanTest;
+        const testWaId = normalizeToWaId(testPhone);
         const testSent = await sendWhatsAppText(testWaId, `[TEST PREVIEW]
 
 ${finalMessage}`);
@@ -7796,18 +8078,40 @@ ${finalMessage}`);
         });
       }
       const recipientNumbers = /* @__PURE__ */ new Set();
+      const optedOutWaIds = /* @__PURE__ */ new Set();
+      try {
+        if (centralDb2?.listDocs) {
+          const subRes = await centralDb2.listDocs("whatsapp_subscribers", 1e3);
+          for (const s of subRes?.documents || []) {
+            if (s && (s.newsAlertsConsent === false || s.whatsappBreakingNewsConsent === false)) {
+              if (s.waId) optedOutWaIds.add(normalizeToWaId(s.waId));
+            }
+          }
+        }
+      } catch (subErr) {
+        console.warn("[WhatsApp:Campaign] Could not prefetch opted-out subscribers:", subErr?.message || subErr);
+      }
       if (targetAudience === "custom" && Array.isArray(customNumbers)) {
         for (const num of customNumbers) {
-          const clean = String(num || "").replace(/\D/g, "").slice(-10);
-          if (clean.length === 10) recipientNumbers.add(`91${clean}`);
+          const normWa = normalizeToWaId(num);
+          if (normWa && normWa.length >= 10) {
+            if (optedOutWaIds.has(normWa)) {
+              console.log(`[WhatsApp:Campaign] Skipping custom number due to active opt-out: ${maskWaId(normWa)}`);
+              continue;
+            }
+            recipientNumbers.add(normWa);
+          }
         }
       } else {
-        const usersList = centralDb2?.cache?.users ? Array.from(centralDb2.cache.users.values()) : [];
+        const usersList = centralDb2?.cache?.users ? Array.from(centralDb2.cache.users.values()) : (await centralDb2?.listDocs("users", 500))?.documents || [];
         for (const u of usersList) {
+          if (!u) continue;
           const uEmail = (u.email || "").toLowerCase().trim();
           const uTier = (u.tier || "basic").toLowerCase().trim();
-          const uPhone = (u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || "").replace(/\D/g, "").slice(-10);
-          if (!uPhone || uPhone.length !== 10) continue;
+          const rawPhone = u.whatsappNumber || u.primaryNumber || u.mobileNumber || u.primaryPhone || u.mobile || "";
+          const uCountry = u.countryCode || "+91";
+          const normWa = normalizeToWaId(rawPhone, uCountry);
+          if (!normWa || normWa.length < 10) continue;
           if (targetAudience === "selected") {
             if (!targetUserEmails.includes(uEmail)) continue;
           } else if (targetAudience !== "all") {
@@ -7816,7 +8120,11 @@ ${finalMessage}`);
           }
           if (category === "Breaking News" && u.whatsappBreakingNewsConsent === false) continue;
           if (u.newsAlertsConsent === false) continue;
-          recipientNumbers.add(`91${uPhone}`);
+          if (optedOutWaIds.has(normWa)) {
+            console.log(`[WhatsApp:Campaign] Skipping opted-out user (${maskWaId(uEmail)}): ${maskWaId(normWa)}`);
+            continue;
+          }
+          recipientNumbers.add(normWa);
         }
       }
       const recipientsList = Array.from(recipientNumbers);
@@ -8008,7 +8316,6 @@ app.use(import_express.default.json({
   }
 }));
 app.use(import_express.default.urlencoded({ extended: true, limit: "100mb" }));
-registerWhatsAppIntegration(app, centralDb);
 var SENSITIVE_STATIC_PATTERNS = [
   /gemini_api_keys_vault/i,
   /api_keys_database/i,
@@ -8323,6 +8630,10 @@ async function requireMasterAdminMiddleware(req, res, next) {
   }
   next();
 }
+registerWhatsAppIntegration(app, centralDb, {
+  requireAdminMiddleware,
+  requireAuthMiddleware
+});
 var CREDENTIALS_DB_FILE = import_path.default.join(process.cwd(), "auth_credentials_db.json");
 function loadCredentialsDatabase() {
   try {
@@ -14801,6 +15112,25 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req, res) =>
     const authUser = req.user;
     const userEmail = (authUser?.email || "").toLowerCase().trim();
     if (!userEmail) return res.status(400).json({ success: false, error: "\u0908\u092E\u0947\u0932 \u092A\u0924\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    let unlinkingPhone = "";
+    let unlinkingCountryCode = "+91";
+    if (centralDb && centralDb.cache?.users?.has(userEmail)) {
+      const u = centralDb.cache.users.get(userEmail);
+      unlinkingPhone = u?.linkedWhatsAppWaId || u?.whatsappNumber || u?.primaryNumber || "";
+      unlinkingCountryCode = u?.countryCode || "+91";
+    }
+    if (!unlinkingPhone && centralDb?.readDoc) {
+      try {
+        const dbRes = await centralDb.readDoc("users", userEmail);
+        if (dbRes?.success && dbRes?.data) {
+          const u = dbRes.data;
+          unlinkingPhone = u?.linkedWhatsAppWaId || u?.whatsappNumber || u?.primaryNumber || "";
+          unlinkingCountryCode = u?.countryCode || "+91";
+        }
+      } catch (readErr) {
+        console.warn("[WhatsApp:Unlink] Warning reading user record from Firestore for unlink:", readErr?.message || readErr);
+      }
+    }
     const unlinkedUpdates = {
       linkedWhatsAppWaId: null,
       whatsappVerified: false,
@@ -14813,6 +15143,12 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req, res) =>
       if (centralDb.cache?.users?.has(userEmail)) {
         const cached = centralDb.cache.users.get(userEmail);
         centralDb.cache.users.set(userEmail, { ...cached, ...unlinkedUpdates });
+      }
+    }
+    if (unlinkingPhone) {
+      const releaseRes = await releaseVerifiedPhoneNumber(unlinkingPhone, unlinkingCountryCode, userEmail, centralDb);
+      if (releaseRes?.conflict) {
+        console.warn(`[WhatsApp:Unlink] Note: Phone ${unlinkingPhone} was owned by another account (${releaseRes.existingOwner}), registry was not modified.`);
       }
     }
     const allProfiles = loadProfilesDatabase();
