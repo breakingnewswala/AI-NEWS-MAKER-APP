@@ -282,6 +282,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   });
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | null>(null);
 
+  // WhatsApp Marketing & Promotional Consent (Optional, default unchecked/false)
+  const [whatsappMarketingConsent, setWhatsappMarketingConsent] = useState<boolean>(false);
+
   // Login Form States (for Admin Login)
   const [loginErrorMsg, setLoginErrorMsg] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
@@ -611,6 +614,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         channelLogoType: detailChannelLogoType,
         websiteUrl,
         acceptedTerms,
+        whatsappMarketingConsent,
       };
       try {
         safeLocalStorageSet(`onboarding_draft_${activeEmail}`, JSON.stringify(draftObj));
@@ -629,6 +633,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     detailChannelLogoType,
     websiteUrl,
     acceptedTerms,
+    whatsappMarketingConsent,
     currentStep,
     currentUser,
     tempRegisteredUser,
@@ -667,6 +672,22 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
 
 
+  // Helper to generate a clean username strictly from display name (never from Google email)
+  const generateSafeUsernameFromName = (displayName?: string, channelName?: string): string => {
+    let base = '';
+    if (displayName && typeof displayName === 'string') {
+      const clean = displayName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
+      if (clean.length >= 3) base = clean.slice(0, 16);
+    }
+    if (!base && channelName && typeof channelName === 'string') {
+      const clean = channelName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
+      if (clean.length >= 3) base = clean.slice(0, 16);
+    }
+    if (!base) base = 'reporter';
+    base = base.replace(/@.*$/, '').replace(/\..*$/, '');
+    return base || 'reporter';
+  };
+
   // 1. Google User Success Handler (Handles Existing User vs New Google User -> Direct Home Feed)
   const handleGoogleUserSuccess = async (email: string, name?: string, picture?: string) => {
     activateFreeTrial();
@@ -686,13 +707,18 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     // 0. Check Server Database for Existing Profile Across Devices (Part N Fix for PC vs Mobile)
     const userProfileKey = `user_profile_${cleanEmail}`;
     let serverProfile: any = null;
+    let isAccountBlocked = localStorage.getItem(`user_blocked_${cleanEmail}`) === 'true';
+
     try {
       const res = await fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`));
       if (res.ok) {
         const data = await res.json();
         const prof = (data?.profile || data);
-        if (prof && (prof.channelNameHi || prof.channelLogoUrl || prof.district || prof.fullName)) {
+        if (prof) {
           serverProfile = prof;
+          if (prof.isBlocked || data.isBlocked) {
+            isAccountBlocked = true;
+          }
         }
       }
     } catch {}
@@ -704,7 +730,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           const uList = await uRes.json();
           if (Array.isArray(uList)) {
             const found = uList.find((u: any) => u.email && u.email.toLowerCase().trim() === cleanEmail);
-            if (found && (found.channelNameHi || found.channelLogoUrl || found.district || found.name)) {
+            if (found) {
               serverProfile = {
                 fullName: found.fullName || found.name,
                 username: found.username,
@@ -720,36 +746,47 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 websiteUrl: found.websiteUrl,
                 role: found.role,
                 tier: found.tier,
+                isBlocked: Boolean(found.isBlocked),
+                isProfileComplete: found.isProfileComplete,
+                whatsappMarketingConsent: found.whatsappMarketingConsent,
               };
+              if (found.isBlocked) {
+                isAccountBlocked = true;
+              }
             }
           }
         }
       } catch {}
     }
 
-    const isProfileGenuinelyComplete = Boolean(
-      serverProfile &&
-      serverProfile.isProfileComplete &&
-      serverProfile.channelNameHi &&
-      serverProfile.channelNameHi !== 'सेटअप अधूरा (Incomplete)' &&
-      serverProfile.channelNameHi !== 'एआई न्यूज़ मेकर' &&
-      (serverProfile.channelLogoUrl || serverProfile.channelLogoPngUrl)
-    );
-
-    if (isProfileGenuinelyComplete) {
-      try {
-        localStorage.setItem(userProfileKey, JSON.stringify(serverProfile));
-        localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
-      } catch {}
-    } else {
-      localStorage.removeItem(`onboarding_completed_${cleanEmail}`);
+    // =========================================================================
+    // PART 4B SPECIAL RULE: Blocked Account Protection (e.g. riturajtomarorchha@gmail.com)
+    // Blocked accounts must NEVER be unblocked or redirected to Signup/Onboarding!
+    // =========================================================================
+    if (isAccountBlocked) {
+      safeLocalStorageSet(`user_blocked_${cleanEmail}`, 'true');
+      const blockedUser: ReporterUser = {
+        username: serverProfile?.username || generateSafeUsernameFromName(name || serverProfile?.fullName),
+        name: serverProfile?.fullName || serverProfile?.name || name || 'यूज़र',
+        role: serverProfile?.role || 'user',
+        district: serverProfile?.district || 'डिजिटल डेस्क',
+        email: cleanEmail,
+        avatarUrl: picture,
+        isBlocked: true,
+      };
+      safeLocalStorageSet('reporter_auth_session', JSON.stringify(blockedUser));
+      safeLocalStorageSet(`channel_profile_locked_${cleanEmail}`, 'true');
+      safeLocalStorageRemove('auth_current_step');
+      window.dispatchEvent(new CustomEvent('user_account_blocked', { detail: blockedUser }));
+      setIsLoggingIn(false);
+      onLoginSuccess(blockedUser);
+      return;
     }
 
     // 1. Check known registered users dictionary
     const knownProfile = KNOWN_REGISTERED_USERS[cleanEmail];
 
     // 2. Check local storage for user profile & onboarding flag
-    const isCompletedFlag = localStorage.getItem(`onboarding_completed_${cleanEmail}`) === 'true';
     const userSpecificProfileStr = localStorage.getItem(userProfileKey);
     let parsedProfile: any = null;
     if (userSpecificProfileStr) {
@@ -760,43 +797,65 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    const hasCompletedProfile = Boolean(
+    // An existing user is any user already registered on the server/DB with account details
+    const isExistingUser = Boolean(
       (isAdmin && !cleanEmail.includes('reporter')) ||
-      (serverProfile &&
-        serverProfile.isProfileComplete &&
-        serverProfile.channelLogoUrl &&
-        serverProfile.channelNameHi &&
-        serverProfile.channelNameHi !== 'सेटअप अधूरा (Incomplete)' &&
-        serverProfile.channelNameHi !== 'एआई न्यूज़ मेकर') ||
-      (parsedProfile &&
-        parsedProfile.isProfileComplete &&
-        parsedProfile.channelLogoUrl &&
-        parsedProfile.channelNameHi &&
-        parsedProfile.channelNameHi !== 'सेटअप अधूरा (Incomplete)' &&
-        parsedProfile.channelNameHi !== 'एआई न्यूज़ मेकर')
+      (serverProfile && (
+        serverProfile.isProfileComplete === true ||
+        serverProfile.channelNameHi ||
+        serverProfile.channelName ||
+        serverProfile.fullName ||
+        serverProfile.name ||
+        serverProfile.mobileNumber ||
+        serverProfile.mobile ||
+        serverProfile.channelLogoUrl ||
+        serverProfile.channelLogoPngUrl ||
+        serverProfile.username ||
+        serverProfile.userId ||
+        serverProfile.uid
+      )) ||
+      (parsedProfile && (
+        parsedProfile.channelNameHi ||
+        parsedProfile.channelLogoUrl ||
+        parsedProfile.fullName
+      )) ||
+      Boolean(knownProfile)
     );
-
-    // Only genuine existing users with completed setup (or admins) bypass onboarding directly to Home
-    const isExistingUser = (isAdmin && !cleanEmail.includes('reporter')) || (hasCompletedProfile && isCompletedFlag);
 
     if (isExistingUser) {
       // EXISTING user: direct Home
-      const existingLogo =
+      // Strictly preserve custom logos in Firebase Storage / uploads - NEVER overwrite with default placeholder
+      const candidateLogo =
         serverProfile?.channelLogoUrl ||
+        serverProfile?.channelLogoPngUrl ||
         parsedProfile?.channelLogoUrl ||
+        parsedProfile?.channelLogoPngUrl ||
         knownProfile?.channelLogoUrl ||
-        (isAdmin ? '/assets/breaking_news_wala_logo.png' : '');
+        '';
+
+      const existingLogo = candidateLogo || (isAdmin ? '/assets/breaking_news_wala_logo.png' : '');
 
       const isBreakingNewsWala = cleanEmail === 'breakingnewswala.com@gmail.com';
       const isAiNewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+
+      // Username must be independent of email address
+      const recoveredUsername =
+        serverProfile?.username ||
+        parsedProfile?.username ||
+        knownProfile?.username ||
+        (isBreakingNewsWala
+          ? 'breakingnewswala'
+          : (isAiNewsAdmin
+              ? 'AI News Maker'
+              : generateSafeUsernameFromName(name || serverProfile?.fullName || parsedProfile?.fullName, serverProfile?.channelNameEn)));
 
       const finalProfile: ChannelProfile = {
         fullName: serverProfile?.fullName || (isBreakingNewsWala ? 'मुख्य संपादक' : (isAiNewsAdmin ? 'सुपर एडमिन (Super Admin)' : (name || (isAdmin ? 'एडमिन' : 'संपादक')))),
         district: serverProfile?.district || (isBreakingNewsWala ? 'सेंट्रल डेस्क / भोपाल' : (isAiNewsAdmin ? 'हेडक्वार्टर सेंट्रल डेस्क' : (parsedProfile?.district || knownProfile?.district || 'डिजिटल डेस्क'))),
         channelNameHi: serverProfile?.channelNameHi || (isBreakingNewsWala ? 'ब्रेकिंग न्यूज़ वाला' : (isAiNewsAdmin ? 'एआई न्यूज़ मेकर' : (parsedProfile?.channelNameHi || knownProfile?.channelNameHi || 'एआई न्यूज़ मेकर'))),
         channelNameEn: serverProfile?.channelNameEn || (isBreakingNewsWala ? 'BREAKING NEWS WALA' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.channelNameEn || knownProfile?.channelNameEn || 'AI News Maker'))),
-        channelLogoUrl: serverProfile?.channelLogoUrl || (isBreakingNewsWala ? '/assets/breaking_news_wala_logo.png' : (isAiNewsAdmin ? '/assets/ai_news_maker_logo.png' : existingLogo)),
-        channelLogoPngUrl: serverProfile?.channelLogoPngUrl || (isBreakingNewsWala ? '/assets/breaking_news_wala_logo.png' : (isAiNewsAdmin ? '/assets/ai_news_maker_logo.png' : (existingLogo && !existingLogo.includes('.gif') ? existingLogo : ''))),
+        channelLogoUrl: existingLogo || (isBreakingNewsWala ? '/assets/breaking_news_wala_logo.png' : (isAiNewsAdmin ? '/assets/ai_news_maker_logo.png' : '')),
+        channelLogoPngUrl: (existingLogo && !existingLogo.includes('.gif')) ? existingLogo : (serverProfile?.channelLogoPngUrl || ''),
         channelLogoGifUrl: serverProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
         channelLogoType: serverProfile?.channelLogoType || parsedProfile?.channelLogoType || knownProfile?.channelLogoType || 'png',
         socialIcons: serverProfile?.socialIcons || parsedProfile?.socialIcons || {
@@ -807,11 +866,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           telegram: false,
           whatsapp: true,
         },
-        username: serverProfile?.username || (isBreakingNewsWala ? 'breakingnewswala' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.username || knownProfile?.username || (name ? name.toLowerCase().replace(/[^a-z0-9]/g, '') : '')))),
+        username: recoveredUsername,
         mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '',
         whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '',
         showMobileNumber: true,
         websiteUrl: serverProfile?.websiteUrl || (isBreakingNewsWala ? 'breakingnewswala.com' : (isAiNewsAdmin ? 'ainewsmaker.online' : (parsedProfile?.websiteUrl || knownProfile?.websiteUrl || ''))),
+        whatsappMarketingConsent: serverProfile?.whatsappMarketingConsent ?? parsedProfile?.whatsappMarketingConsent ?? false,
+        whatsappMarketingConsentAt: serverProfile?.whatsappMarketingConsentAt ?? parsedProfile?.whatsappMarketingConsentAt ?? null,
+        whatsappMarketingConsentPhone: serverProfile?.whatsappMarketingConsentPhone ?? parsedProfile?.whatsappMarketingConsentPhone ?? null,
+        isProfileComplete: true,
       };
 
       const googleUser: ReporterUser = {
@@ -849,6 +912,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         tier: isAdmin ? 'ultra' : 'basic',
         role: googleUser.role,
         isLocked: !isAdmin,
+        isProfileComplete: true,
       });
 
       // Background sync to server to preserve login state and profile across restarts
@@ -867,6 +931,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             channelLogoUrl: finalProfile.channelLogoUrl,
             tier: isAdmin ? 'ultra' : 'basic',
             role: googleUser.role,
+            isProfileComplete: true,
           }),
         }).catch(() => {});
       } catch {}
@@ -890,8 +955,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       if (draftStr) draftData = JSON.parse(draftStr);
     } catch {}
 
+    const safeNewUsername = draftData?.username || generateSafeUsernameFromName(name, draftData?.channelNameEn);
+
     const pendingUser: ReporterUser = {
-      username: draftData?.username || '',
+      username: safeNewUsername,
       name: draftData?.fullName || name || 'संपादक',
       role: 'user',
       district: draftData?.district || '',
@@ -949,7 +1016,23 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     setDetailChannelNameEn(draftData?.channelNameEn || '');
     setUsername(draftData?.username || '');
     setIsUsernameCustomized(Boolean(draftData?.username));
-    setPrimaryMobileNumber(draftData?.mobileNumber || '');
+
+    const existingVerifiedMobile = subscription.primaryMobile || (serverProfile as any)?.whatsappNumber || (serverProfile as any)?.mobileNumber || draftData?.mobileNumber || '';
+    if (existingVerifiedMobile && (subscription.isMobileLocked || (serverProfile as any)?.whatsappVerified)) {
+      const clean10 = existingVerifiedMobile.replace(/\D/g, '').slice(-10);
+      setPrimaryMobileNumber(clean10);
+      setVerifiedWhatsappNumber(clean10);
+      setIsWhatsappVerified(true);
+    } else {
+      setPrimaryMobileNumber(draftData?.mobileNumber || '');
+    }
+
+    if ((serverProfile as any)?.whatsappMarketingConsent !== undefined) {
+      setWhatsappMarketingConsent(Boolean((serverProfile as any).whatsappMarketingConsent));
+    } else if (draftData?.whatsappMarketingConsent !== undefined) {
+      setWhatsappMarketingConsent(Boolean(draftData.whatsappMarketingConsent));
+    }
+
     setGraphicContactNumber(draftData?.graphicContactNumber || '');
     setDetailChannelLogoUrl(draftData?.channelLogoUrl || '');
     setDetailChannelLogoGifUrl(draftData?.channelLogoGifUrl || '');
@@ -997,7 +1080,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     try {
       localStorage.setItem('user_channel_rules_agreed', 'true');
       setChannelRulesAgreed(true);
-      await handleGoogleUserSuccess(clean, clean.split('@')[0]);
+      await handleGoogleUserSuccess(clean);
     } catch (err: any) {
       console.warn('Direct email login err:', err);
       setIsLoggingIn(false);
@@ -1310,6 +1393,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         whatsappVerificationMethod: 'whatsapp_otp',
         showMobileNumber,
         websiteUrl: websiteUrl.trim(),
+        whatsappMarketingConsent: Boolean(whatsappMarketingConsent),
+        whatsappMarketingConsentAt: whatsappMarketingConsent ? new Date().toISOString() : null,
+        whatsappMarketingConsentSource: 'signup_step2',
+        whatsappMarketingConsentPhone: cleanDigits,
+        whatsappMarketingConsentUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         isLocked: !isAdm,
       };
 
@@ -1361,6 +1449,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             showMobileNumber: finalProfile.showMobileNumber,
             websiteUrl: finalProfile.websiteUrl,
             socialIcons: finalProfile.socialIcons,
+            whatsappMarketingConsent: Boolean(whatsappMarketingConsent),
+            whatsappMarketingConsentAt: whatsappMarketingConsent ? new Date().toISOString() : null,
+            whatsappMarketingConsentSource: 'signup_step2',
+            whatsappMarketingConsentPhone: cleanDigits,
+            whatsappMarketingConsentUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
             tier: isAdm ? 'ultra' : 'basic',
             profileIncomplete: false,
             isProfileComplete: true,
@@ -2502,6 +2595,26 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         गोपनीयता नीति (Privacy Policy)
                       </button>{' '}
                       को ध्यानपूर्वक पढ़ लिया है और मैं इनसे सहमत हूँ। *
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Optional WhatsApp Marketing & Promotional Consent Checkbox (Default Unchecked) */}
+              <div className="p-3 bg-slate-950/90 rounded-xl border border-emerald-900/40 space-y-1.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={whatsappMarketingConsent}
+                    onChange={(e) => setWhatsappMarketingConsent(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                  />
+                  <div className="text-xs text-slate-300 leading-relaxed">
+                    <span className="font-bold text-white block">
+                      हाँ, मैं AI NEWS MAKER / BREAKING NEWS WALA से WhatsApp पर समाचार अपडेट, मार्केटिंग और प्रमोशनल सामग्री प्राप्त करना चाहता/चाहती हूँ।
+                    </span>
+                    <span className="text-[11px] text-slate-400 block mt-0.5">
+                      यह वैकल्पिक है। आप इसे किसी भी समय अपनी प्रोफ़ाइल सेटिंग से बदल सकते हैं। इससे आपका खाता या सेवा प्रभावित नहीं होगी।
                     </span>
                   </div>
                 </label>

@@ -284,6 +284,7 @@ export interface VerifiedUser {
   role: "superadmin" | "admin" | "reporter" | "user";
   username?: string;
   authType: "firebase" | "session";
+  isBlocked?: boolean;
 }
 
 const MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
@@ -325,15 +326,29 @@ export async function resolveAuthenticatedUser(req: express.Request): Promise<Ve
         const userId = decoded.uid || (decoded as any).user_id || email;
 
         let userRole: "superadmin" | "admin" | "reporter" | "user" = "user";
+        let isBlocked = false;
         try {
           if (typeof loadUsersMasterDatabase === "function") {
             const users = loadUsersMasterDatabase();
             const dbUser = users.find(
               (u: any) => (u.email && u.email.toLowerCase().trim() === email) || (u.userId && u.userId === userId)
             );
-            if (dbUser && dbUser.role) {
-              userRole = dbUser.role;
+            if (dbUser) {
+              if (dbUser.role) userRole = dbUser.role;
+              if (dbUser.isBlocked) isBlocked = true;
             }
+          }
+          if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
+            for (const [k, u] of centralDb.cache.users.entries()) {
+              if ((k && k.toLowerCase().trim() === email) || (u?.email && u.email.toLowerCase().trim() === email) || (u?.userId && u.userId === userId)) {
+                if (u?.isBlocked) { isBlocked = true; break; }
+              }
+            }
+          }
+          if (!isBlocked && typeof loadProfilesDatabase === "function") {
+            const profiles = loadProfilesDatabase();
+            const prof = profiles[email] || Object.values(profiles).find((p: any) => (p.email && p.email.toLowerCase().trim() === email) || (p.userId && p.userId === userId));
+            if (prof?.isBlocked) isBlocked = true;
           }
         } catch {}
 
@@ -349,6 +364,7 @@ export async function resolveAuthenticatedUser(req: express.Request): Promise<Ve
           role: userRole,
           username: decoded.name || email.split("@")[0],
           authType: "firebase",
+          isBlocked,
         };
         (req as any).user = verified;
         return verified;
@@ -363,6 +379,29 @@ export async function resolveAuthenticatedUser(req: express.Request): Promise<Ve
   if (internalPayload && internalPayload.email) {
     const email = internalPayload.email.toLowerCase().trim();
     let userRole = internalPayload.role || "user";
+    let isBlocked = false;
+
+    try {
+      if (typeof loadUsersMasterDatabase === "function") {
+        const users = loadUsersMasterDatabase();
+        const dbUser = users.find(
+          (u: any) => (u.email && u.email.toLowerCase().trim() === email) || (u.userId && u.userId === internalPayload.userId)
+        );
+        if (dbUser && dbUser.isBlocked) isBlocked = true;
+      }
+      if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
+        for (const [k, u] of centralDb.cache.users.entries()) {
+          if ((k && k.toLowerCase().trim() === email) || (u?.email && u.email.toLowerCase().trim() === email)) {
+            if (u?.isBlocked) { isBlocked = true; break; }
+          }
+        }
+      }
+      if (!isBlocked && typeof loadProfilesDatabase === "function") {
+        const profiles = loadProfilesDatabase();
+        const prof = profiles[email] || Object.values(profiles).find((p: any) => (p.email && p.email.toLowerCase().trim() === email));
+        if (prof?.isBlocked) isBlocked = true;
+      }
+    } catch {}
 
     if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
       userRole = "superadmin";
@@ -376,6 +415,7 @@ export async function resolveAuthenticatedUser(req: express.Request): Promise<Ve
       role: userRole,
       username: internalPayload.username || email.split("@")[0],
       authType: "session",
+      isBlocked,
     };
     (req as any).user = verified;
     return verified;
@@ -4444,29 +4484,42 @@ interface StoredNotification {
   linkTab?: string;
 }
 
-function cleanGenerateUsername(requestedUsername?: string, fullName?: string, existingUsername?: string): string {
+function cleanGenerateUsername(requestedUsername?: string, fullName?: string, existingUsername?: string, channelNameEn?: string): string {
   const users = loadUsersMasterDatabase();
   const taken = new Set(users.map(u => (u.username || '').toLowerCase().trim().replace(/^@+/, '')));
 
-  if (requestedUsername && typeof requestedUsername === 'string') {
-    const clean = requestedUsername.trim().replace(/^@+/, '');
-    if (clean && !clean.includes('@') && !clean.includes('.') && !taken.has(clean.toLowerCase())) {
-      return clean;
-    }
-  }
   if (existingUsername && typeof existingUsername === 'string') {
     const clean = existingUsername.trim().replace(/^@+/, '');
     if (clean && !clean.includes('@') && !clean.includes('.')) {
       return clean;
     }
   }
-  let base = 'reporter';
+  if (requestedUsername && typeof requestedUsername === 'string') {
+    const clean = requestedUsername.trim().replace(/^@+/, '');
+    if (clean && !clean.includes('@') && !clean.includes('.') && !taken.has(clean.toLowerCase())) {
+      return clean;
+    }
+  }
+  let base = '';
   if (fullName && typeof fullName === 'string') {
     const englishName = fullName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
     if (englishName.length >= 3) {
       base = englishName.slice(0, 16);
     }
   }
+  if (!base && channelNameEn && typeof channelNameEn === 'string') {
+    const englishChannel = channelNameEn.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().trim();
+    if (englishChannel.length >= 3) {
+      base = englishChannel.slice(0, 16);
+    }
+  }
+  if (!base) {
+    base = 'reporter';
+  }
+  // Remove email domain or symbols if inadvertently passed
+  base = base.replace(/@.*$/, '').replace(/\..*$/, '');
+  if (!base) base = 'reporter';
+
   let candidate = base;
   let counter = 1;
   while (taken.has(candidate.toLowerCase())) {
@@ -4543,7 +4596,14 @@ function loadUsersMasterDatabase(): AuthoritativeUser[] {
     const unique = new Map<string, any>();
     for (const u of centralDb.cache.users.values()) {
       const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
-      if (key && !unique.has(key)) unique.set(key, u);
+      if (!key) continue;
+      if (!unique.has(key)) {
+        unique.set(key, u);
+      } else {
+        const existing = unique.get(key);
+        const isBlocked = Boolean(existing.isBlocked || u.isBlocked);
+        unique.set(key, { ...existing, ...u, isBlocked });
+      }
     }
     const list = Array.from(unique.values()) as AuthoritativeUser[];
     list.sort((a, b) => {
@@ -4748,6 +4808,42 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
   const clean = userEmailOrUid.toString().toLowerCase().trim();
   if (isProtectedAdminAccount(clean)) return { allowed: true };
 
+  // 1. Direct CentralDb Firestore Cache Check (catches any document for this user marked blocked)
+  if (centralDb && centralDb.cache?.users) {
+    for (const [k, u] of centralDb.cache.users.entries()) {
+      const kClean = (k || '').toLowerCase().trim();
+      const uEmail = (u?.email || '').toLowerCase().trim();
+      const uId = (u?.userId || u?.id || u?.uid || '').toLowerCase().trim();
+      if (kClean === clean || uEmail === clean || uId === clean) {
+        if (u?.isBlocked) {
+          return {
+            allowed: false,
+            status: 403,
+            error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।",
+            blocked: true
+          };
+        }
+      }
+    }
+  }
+
+  // 2. Direct Profiles Database Check
+  try {
+    const profiles = loadProfilesDatabase();
+    const profMatch = profiles[clean] || Object.values(profiles).find((p: any) =>
+      (p.email && p.email.toLowerCase().trim() === clean) ||
+      (p.userId && p.userId.toLowerCase().trim() === clean)
+    );
+    if (profMatch && profMatch.isBlocked) {
+      return {
+        allowed: false,
+        status: 403,
+        error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।",
+        blocked: true
+      };
+    }
+  } catch {}
+
   const users = loadUsersMasterDatabase();
   const match = users.find(u =>
     (u.email && u.email.toLowerCase().trim() === clean) ||
@@ -4898,6 +4994,43 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
           ? 'breakingnewswala'
           : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
 
+    const safeIncomingLogo = (userPayload.channelLogoUrl && !userPayload.channelLogoUrl.includes('/assets/ai_news_maker_logo.png'))
+      ? userPayload.channelLogoUrl
+      : (existing.channelLogoUrl || userPayload.channelLogoUrl || '');
+    const safeIncomingLogoPng = (userPayload.channelLogoPngUrl && !userPayload.channelLogoPngUrl.includes('/assets/ai_news_maker_logo.png'))
+      ? userPayload.channelLogoPngUrl
+      : (existing.channelLogoPngUrl || existing.channelLogoUrl || userPayload.channelLogoPngUrl);
+
+    const oldNormPhone = (existing.mobileNumber || existing.mobile || '').toString().replace(/\D/g, '').slice(-10);
+    const newNormPhone = (userPayload.mobileNumber || userPayload.mobile || '').toString().replace(/\D/g, '').slice(-10);
+    const isPhoneChanged = Boolean(oldNormPhone && newNormPhone && oldNormPhone !== newNormPhone);
+
+    let finalMarketingConsent = false;
+    let finalConsentPhone = null;
+    let finalConsentAt = null;
+
+    if (isPhoneChanged) {
+      if (userPayload.whatsappMarketingConsent === true && userPayload.whatsappMarketingConsentPhone && userPayload.whatsappMarketingConsentPhone.toString().replace(/\D/g, '').slice(-10) === newNormPhone) {
+        finalMarketingConsent = true;
+        finalConsentPhone = userPayload.whatsappMarketingConsentPhone;
+        finalConsentAt = userPayload.whatsappMarketingConsentAt || now;
+      } else {
+        finalMarketingConsent = false;
+        finalConsentPhone = null;
+        finalConsentAt = null;
+      }
+    } else {
+      if (userPayload.whatsappMarketingConsent !== undefined) {
+        finalMarketingConsent = Boolean(userPayload.whatsappMarketingConsent);
+        finalConsentPhone = finalMarketingConsent ? (userPayload.whatsappMarketingConsentPhone || existing.whatsappMarketingConsentPhone || newNormPhone || null) : null;
+        finalConsentAt = finalMarketingConsent ? (userPayload.whatsappMarketingConsentAt || existing.whatsappMarketingConsentAt || now) : null;
+      } else {
+        finalMarketingConsent = Boolean(existing.whatsappMarketingConsent);
+        finalConsentPhone = existing.whatsappMarketingConsentPhone || null;
+        finalConsentAt = existing.whatsappMarketingConsentAt || null;
+      }
+    }
+
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
@@ -4907,8 +5040,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || '',
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || '',
       channelNameEn: userPayload.channelNameEn || existing.channelNameEn || '',
-      channelLogoUrl: userPayload.channelLogoUrl || existing.channelLogoUrl || '',
-      channelLogoPngUrl: userPayload.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoUrl: safeIncomingLogo,
+      channelLogoPngUrl: safeIncomingLogoPng,
       channelLogoGifUrl: userPayload.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || 'png',
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || '',
@@ -4920,6 +5053,12 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       pincode: userPayload.pincode || existing.pincode || '',
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || '',
       socialIcons: userPayload.socialIcons !== undefined ? userPayload.socialIcons : existing.socialIcons,
+      whatsappMarketingConsent: finalMarketingConsent,
+      whatsappMarketingConsentAt: finalConsentAt,
+      whatsappMarketingConsentPhone: finalConsentPhone,
+      whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
+      whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
+      whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
       role: isSuper ? 'superadmin' : (userPayload.role || existing.role || 'user'),
       tier: isSuper ? 'ultra' : (existing.tier && existing.tier !== 'basic' ? existing.tier : (userPayload.tier || existing.tier || 'basic')),
       planName: isSuper ? 'VIP DESK' : (existing.tier && existing.tier !== 'basic' ? (existing.planName || existing.tier.toUpperCase()) : (userPayload.planName || existing.planName || 'BASIC')),
@@ -4970,6 +5109,12 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       pincode: userPayload.pincode || '',
       websiteUrl: userPayload.websiteUrl || '',
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false, twitter: false, x: false, linkedin: false },
+      whatsappMarketingConsent: userPayload.whatsappMarketingConsent !== undefined ? Boolean(userPayload.whatsappMarketingConsent) : false,
+      whatsappMarketingConsentAt: userPayload.whatsappMarketingConsentAt || (userPayload.whatsappMarketingConsent ? now : null),
+      whatsappMarketingConsentPhone: userPayload.whatsappMarketingConsentPhone || null,
+      whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || null,
+      whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || null,
+      whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || null,
       role: isSuper ? 'superadmin' : (userPayload.role || 'user'),
       tier: isSuper ? 'ultra' : (userPayload.tier || 'basic'),
       planName: isSuper ? 'VIP DESK' : (userPayload.planName || 'BASIC'),
@@ -6306,6 +6451,17 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
 
     // Mass-assignment protection: Only authorized admins can assign privileged roles or change subscription status
     const isAdmin = isAuthorizedAdmin(req);
+    const targetEmail = (profile.email || "").toLowerCase().trim();
+    const targetUid = (profile.userId || profile.uid || "").toLowerCase().trim();
+    if (!isAdmin && (targetEmail || targetUid)) {
+      const accessCheck = checkUserAccess(targetEmail || targetUid);
+      if (accessCheck.blocked) {
+        return res.status(403).json({
+          error: "यह खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है।",
+          blocked: true
+        });
+      }
+    }
     if (!isAdmin) {
       delete profile.role;
       delete profile.tier;
@@ -6366,6 +6522,13 @@ app.get("/api/user-subscription", (req, res) => {
       });
     }
 
+    const rawMob = (match.mobile || '').toString().replace(/\D/g, '').slice(-10);
+    let isCertifiedVerified = Boolean(match.whatsappVerified);
+    if (!isCertifiedVerified && rawMob && centralDb?.cache?.whatsapp_phone_registry) {
+      const reg = centralDb.cache.whatsapp_phone_registry.get(`phone_91${rawMob}`);
+      if (reg && reg.verified) isCertifiedVerified = true;
+    }
+
     const trialFields = computeTrialFields(match, now);
     return res.json({
       success: true,
@@ -6384,7 +6547,8 @@ app.get("/api/user-subscription", (req, res) => {
         blockedAt: match.blockedAt || null,
         blockedBy: match.blockedBy || null,
         primaryMobile: match.mobile,
-        isMobileLocked: Boolean(match.mobile),
+        whatsappVerified: isCertifiedVerified,
+        isMobileLocked: isCertifiedVerified,
         activatedAt: match.activatedAt,
         expiresAt: match.expiresAt,
       }
@@ -6415,6 +6579,100 @@ app.get("/api/notifications", (req, res) => {
   }
 });
 
+interface WebPushSubscription {
+  id: string;
+  endpoint: string;
+  keys?: {
+    p256dh: string;
+    auth: string;
+  };
+  userEmail?: string;
+  userAgent?: string;
+  createdAt: number;
+}
+
+const WEB_PUSH_SUBS_FILE = path.join(process.cwd(), "web_push_subscriptions_db.json");
+
+function loadWebPushSubscriptions(): WebPushSubscription[] {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has('web_push_subscriptions')) {
+    const data = centralDb.cache.systemConfig.get('web_push_subscriptions');
+    if (Array.isArray(data)) return data;
+  }
+  try {
+    if (fs.existsSync(WEB_PUSH_SUBS_FILE)) {
+      return JSON.parse(fs.readFileSync(WEB_PUSH_SUBS_FILE, "utf-8"));
+    }
+  } catch {}
+  return [];
+}
+
+function saveWebPushSubscriptions(subs: WebPushSubscription[]): void {
+  if (centralDb && centralDb.useFirestore) {
+    centralDb.cache.systemConfig.set('web_push_subscriptions', subs);
+  }
+  try {
+    const locs = resolveAllDatabaseLocations("web_push_subscriptions_db.json");
+    const json = JSON.stringify(subs, null, 2);
+    for (const loc of locs) {
+      fs.writeFileSync(loc, json, "utf-8");
+    }
+  } catch {}
+}
+
+// POST /api/notifications/subscribe - Register device for Web Push / FCM
+app.post("/api/notifications/subscribe", (req, res) => {
+  try {
+    const { subscription, email, userAgent } = req.body;
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ error: "Invalid subscription payload" });
+    }
+    const subs = loadWebPushSubscriptions();
+    const cleanEmail = (email || '').toLowerCase().trim();
+    const existingIdx = subs.findIndex(s => s.endpoint === subscription.endpoint);
+    const record: WebPushSubscription = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      userEmail: cleanEmail,
+      userAgent: userAgent || req.headers['user-agent'] || '',
+      createdAt: Date.now(),
+    };
+    if (existingIdx >= 0) {
+      subs[existingIdx] = { ...subs[existingIdx], ...record, id: subs[existingIdx].id };
+    } else {
+      subs.push(record);
+    }
+    saveWebPushSubscriptions(subs);
+    return res.json({ success: true, subscribed: true, totalActiveDevices: subs.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// POST /api/notifications/unsubscribe - Unregister device on logout or user opt-out
+app.post("/api/notifications/unsubscribe", (req, res) => {
+  try {
+    const { endpoint, email } = req.body;
+    let subs = loadWebPushSubscriptions();
+    const cleanEmail = (email || '').toLowerCase().trim();
+    if (endpoint) {
+      subs = subs.filter(s => s.endpoint !== endpoint);
+    } else if (cleanEmail) {
+      subs = subs.filter(s => (s.userEmail || '').toLowerCase().trim() !== cleanEmail);
+    }
+    saveWebPushSubscriptions(subs);
+    return res.json({ success: true, unsubscribed: true, totalActiveDevices: subs.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// GET /api/notifications/vapid-key
+app.get("/api/notifications/vapid-key", (req, res) => {
+  const publicKey = process.env.VAPID_PUBLIC_KEY || "BNo_Official_Web_Push_Public_Key_Standard_Mode";
+  return res.json({ success: true, publicKey });
+});
+
 // POST /api/notifications/broadcast - Broadcast in-app & web alert
 app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
   try {
@@ -6434,7 +6692,28 @@ app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (re
     };
     const notifs = loadNotificationsDatabase();
     saveNotificationsDatabase([newNotif, ...notifs]);
-    return res.json({ success: true, notification: newNotif });
+
+    const subs = loadWebPushSubscriptions();
+    const cleanTarget = (targetUserEmail || 'all').toLowerCase().trim();
+    const eligibleSubs = subs.filter(s => {
+      if (!cleanTarget || cleanTarget === 'all') return true;
+      return s.userEmail && (s.userEmail === cleanTarget || (cleanTarget === 'admin' && isProtectedAdminAccount(s.userEmail)));
+    });
+
+    const hasVapid = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+    return res.json({
+      success: true,
+      notification: newNotif,
+      delivery: {
+        inAppSaved: true,
+        totalRegisteredDevices: subs.length,
+        targetedDevices: eligibleSubs.length,
+        providerAccepted: eligibleSubs.length > 0 && hasVapid,
+        providerStatus: hasVapid ? "dispatched" : "vapid_unconfigured_pending_setup",
+        actualDeliveryVerified: false,
+        timestamp: Date.now(),
+      }
+    });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -8579,6 +8858,21 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
       match.blockedAt = mMatch.blockedAt || match.blockedAt;
       match.isLocked = Boolean(mMatch.isLocked);
     }
+    // If existing user has basic profile setup, ensure isProfileComplete is true so login is idempotent
+    if (match.isProfileComplete === undefined && (match.channelNameHi || match.fullName || match.name || match.mobileNumber || match.mobile)) {
+      match.isProfileComplete = true;
+    }
+    // Certify verified phone status if registered in whatsapp_phone_registry
+    const rawMob = match.whatsappNumber || match.mobileNumber || match.mobile;
+    const cleanMob = (rawMob || '').toString().replace(/\D/g, '').slice(-10);
+    if (cleanMob && centralDb && centralDb.cache?.whatsapp_phone_registry) {
+      const regKey = `phone_91${cleanMob}`;
+      const reg = centralDb.cache.whatsapp_phone_registry.get(regKey);
+      if (reg && reg.verified) {
+        match.whatsappVerified = true;
+        match.whatsappVerifiedAt = reg.verifiedAt || match.whatsappVerifiedAt || Date.now();
+      }
+    }
     return res.json({ success: true, profile: match });
   }
   return res.json({ success: true, profile: null });
@@ -8614,6 +8908,11 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
 
     const existing: any = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles['breakingnewswala.com@gmail.com'] || allProfiles['usr_627265616b69'] : null) || {};
+
+    const isTargetBlocked = Boolean(existing.isBlocked) || checkUserAccess(cleanId).blocked || (profile.email && checkUserAccess(profile.email).blocked);
+    if (isTargetBlocked && !isAdmin) {
+      return res.status(403).json({ success: false, error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है।", blocked: true });
+    }
 
     // Username and Mobile locking:
     // If user is non-admin and username/mobileNumber already exists in profile, keep existing
@@ -8690,9 +8989,38 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       (profile.isProfileComplete !== undefined ? profile.isProfileComplete : existing.isProfileComplete) &&
       finalChannelHi &&
       finalChannelHi !== "सेटअप अधूरा (Incomplete)" &&
-      finalChannelHi !== "एआई न्यूज़ मेकर" &&
       (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
     );
+
+    const oldPhone = (existing.mobileNumber || existing.whatsappNumber || '').toString().replace(/\D/g, '').slice(-10);
+    const newPhone = (finalMobile || profile.whatsappNumber || '').toString().replace(/\D/g, '').slice(-10);
+    const isPhoneChanged = Boolean(oldPhone && newPhone && oldPhone !== newPhone);
+
+    let finalMarketingConsent = false;
+    let finalConsentAt = null;
+    let finalConsentPhone = null;
+
+    if (isPhoneChanged) {
+      if (profile.whatsappMarketingConsent === true && profile.whatsappMarketingConsentPhone && profile.whatsappMarketingConsentPhone.toString().replace(/\D/g, '').slice(-10) === newPhone) {
+        finalMarketingConsent = true;
+        finalConsentPhone = profile.whatsappMarketingConsentPhone;
+        finalConsentAt = profile.whatsappMarketingConsentAt || Date.now();
+      } else {
+        finalMarketingConsent = false;
+        finalConsentPhone = null;
+        finalConsentAt = null;
+      }
+    } else {
+      if (profile.whatsappMarketingConsent !== undefined) {
+        finalMarketingConsent = Boolean(profile.whatsappMarketingConsent);
+        finalConsentPhone = finalMarketingConsent ? (profile.whatsappMarketingConsentPhone || existing.whatsappMarketingConsentPhone || newPhone || null) : null;
+        finalConsentAt = finalMarketingConsent ? (profile.whatsappMarketingConsentAt || existing.whatsappMarketingConsentAt || Date.now()) : null;
+      } else {
+        finalMarketingConsent = Boolean(existing.whatsappMarketingConsent);
+        finalConsentPhone = existing.whatsappMarketingConsentPhone || null;
+        finalConsentAt = existing.whatsappMarketingConsentAt || null;
+      }
+    }
 
     const safeIsLocked = isAdmin
       ? (profile.isLocked !== undefined ? Boolean(profile.isLocked) : Boolean(existing.isLocked))
@@ -8716,13 +9044,19 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || "",
-      channelLogoPngUrl: profile.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoUrl: (profile.channelLogoUrl && !profile.channelLogoUrl.includes('/assets/ai_news_maker_logo.png')) ? profile.channelLogoUrl : (existing.channelLogoUrl || profile.channelLogoUrl || ""),
+      channelLogoPngUrl: (profile.channelLogoPngUrl && !profile.channelLogoPngUrl.includes('/assets/ai_news_maker_logo.png')) ? profile.channelLogoPngUrl : (existing.channelLogoPngUrl || existing.channelLogoUrl || profile.channelLogoPngUrl),
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || "",
       whatsappNumber: existing.whatsappNumber || finalMobile || "",
       whatsappDisplayNumber: profile.whatsappDisplayNumber || existing.whatsappDisplayNumber || profile.whatsappNumber || finalMobile || "",
+      whatsappMarketingConsent: finalMarketingConsent,
+      whatsappMarketingConsentAt: finalConsentAt,
+      whatsappMarketingConsentPhone: finalConsentPhone,
+      whatsappMarketingConsentSource: profile.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
+      whatsappMarketingConsentVersion: profile.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
+      whatsappMarketingConsentUpdatedAt: profile.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
       activeLogoUrl: existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : undefined),
       logoApprovalStatus: existing.logoApprovalStatus || "none",
       approvedLogoRequestId: existing.approvedLogoRequestId,
@@ -9060,12 +9394,13 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         );
 
         // Check blocked account
-        if (existing && existing.isBlocked) {
+        const accessCheck = checkUserAccess(cleanId);
+        if ((existing && existing.isBlocked) || accessCheck.blocked) {
           return res.status(403).json({
             success: false,
             isBlocked: true,
             error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
-            user: existing,
+            user: existing || { email: cleanId, isBlocked: true },
           });
         }
 
@@ -9079,7 +9414,6 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           existing.isProfileComplete &&
           existing.channelNameHi &&
           existing.channelNameHi !== "सेटअप अधूरा (Incomplete)" &&
-          existing.channelNameHi !== "एआई न्यूज़ मेकर" &&
           (existing.channelLogoUrl || existing.channelLogoPngUrl)
         );
 
@@ -9175,6 +9509,16 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       (p) => (p.email && p.email.toLowerCase() === targetEmail) || (p.username && p.username.toLowerCase() === cleanId)
     );
 
+    const accessCheck = checkUserAccess(targetEmail);
+    if ((match && match.isBlocked) || accessCheck.blocked) {
+      return res.status(403).json({
+        success: false,
+        isBlocked: true,
+        error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
+        user: match || { email: targetEmail, isBlocked: true },
+      });
+    }
+
     const user = match || {
       username: credEntry?.username || cleanId,
       fullName: targetEmail.includes("admin") ? "सुपर एडमिन (Super Admin)" : "यूज़र",
@@ -9203,7 +9547,8 @@ app.get("/api/auth/me", (req, res) => {
   if (!user) {
     return res.status(401).json({ authenticated: false, error: "अनधिकृत: मान्य सत्र टोकन नहीं मिला" });
   }
-  if (user.isBlocked) {
+  const accessCheck = checkUserAccess(user.email);
+  if (user.isBlocked || accessCheck.blocked) {
     return res.status(403).json({ authenticated: true, isBlocked: true, error: "खाता व्यवस्थापक द्वारा ब्लॉक किया गया है।", user });
   }
   return res.json({

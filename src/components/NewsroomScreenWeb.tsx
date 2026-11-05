@@ -33,6 +33,7 @@ import {
   Download,
 } from 'lucide-react';
 import { InstallPwaModal } from './InstallPwaModal';
+import { WhatsAppLiveInbox } from './WhatsAppLiveInbox';
 import { NewsDraft } from '../types';
 import { getSavedDrafts, deleteDraft } from '../lib/draftsManager';
 import { ReporterUser } from './LoginModal';
@@ -102,27 +103,46 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   onNavigateToVideos,
   currentUser,
 }) => {
-  // Expandable Accordion sections: drafts, support, epaper
-  // Expandable Accordion sections: support, history, drafts, epaper
+  // Expandable Accordion sections: whatsapp (Master Admin only), support, history, drafts, epaper
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<{
+    whatsapp: boolean;
     support: boolean;
     history: boolean;
     drafts: boolean;
     epaper: boolean;
   }>({
+    whatsapp: false,
     support: false,
     history: false,
     drafts: false,
     epaper: false,
   });
 
-  const toggleSection = (section: 'support' | 'history' | 'drafts' | 'epaper') => {
+  const toggleSection = (section: 'whatsapp' | 'support' | 'history' | 'drafts' | 'epaper') => {
     setExpandedSections((prev) => ({
       ...prev,
       [section]: !prev[section],
     }));
   };
+
+  useEffect(() => {
+    const handleOpenInbox = () => {
+      setExpandedSections((prev) => ({ ...prev, whatsapp: true }));
+      setTimeout(() => {
+        const el = document.getElementById('section-whatsapp-live-inbox');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
+    };
+    window.addEventListener('open_whatsapp_inbox', handleOpenInbox);
+    window.addEventListener('ai_news_open_whatsapp_inbox', handleOpenInbox);
+    window.addEventListener('ai_news_open_newsroom_whatsapp_inbox', handleOpenInbox);
+    return () => {
+      window.removeEventListener('open_whatsapp_inbox', handleOpenInbox);
+      window.removeEventListener('ai_news_open_whatsapp_inbox', handleOpenInbox);
+      window.removeEventListener('ai_news_open_newsroom_whatsapp_inbox', handleOpenInbox);
+    };
+  }, []);
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryItem[]>(() => loadUserProjectHistory());
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'graphic' | 'video'>('all');
@@ -535,8 +555,45 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         </button>
       </div>
 
-      {/* 3. The 4 Clean Accordion Sections in exact order: Support -> History -> Drafts -> ePaper */}
+      {/* 3. The Clean Accordion Sections: WhatsApp Live Inbox (Master Admin) -> Support -> History -> Drafts -> ePaper */}
       <div className="space-y-4">
+        {/* Master Admin Only: WhatsApp AI Command Center — Live Inbox */}
+        {isAdmin && (
+          <div id="section-whatsapp-live-inbox" className="bg-white dark:bg-slate-900/90 border border-emerald-500/40 dark:border-emerald-500/40 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl transition-all">
+            <button
+              type="button"
+              onClick={() => toggleSection('whatsapp')}
+              className="w-full p-4 sm:p-5 flex items-center justify-between text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition select-none"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-500 dark:text-emerald-400">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+                      WhatsApp AI Command Center — Live Inbox
+                    </h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                      Master Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                    रीयल-टाइम WhatsApp ग्राहक सहायता, AI / ह्यूमन टेकओवर एवं डिलीवरी स्टेटस
+                  </p>
+                </div>
+              </div>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${expandedSections.whatsapp ? 'rotate-180 text-emerald-400' : ''}`} />
+            </button>
+
+            {expandedSections.whatsapp && (
+              <div className="p-2 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-950">
+                <WhatsAppLiveInbox currentUser={currentUser} />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Section 1: Support Inbox (Theme-aware for Light & Dark mode) */}
         <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm dark:shadow-xl transition-all">
           <button

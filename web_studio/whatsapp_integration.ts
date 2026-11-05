@@ -538,6 +538,8 @@ export const syncWhatsAppOptOut = async (waId: string, reason: string = "inbound
     newsAlertsConsent: false,
     whatsappBreakingNewsConsent: false,
     whatsappProductUpdatesConsent: false,
+    whatsappMarketingConsent: false,
+    whatsappMarketingConsentRevokedAt: now,
     newsAlertsOptedOutAt: now,
     optOutReason: reason,
     updatedAt: now,
@@ -630,6 +632,8 @@ export const syncWhatsAppOptOut = async (waId: string, reason: string = "inbound
           whatsappBreakingNewsConsent: false,
           newsAlertsConsent: false,
           whatsappProductUpdatesConsent: false,
+          whatsappMarketingConsent: false,
+          whatsappMarketingConsentRevokedAt: now,
           whatsappOptedOutAt: now,
           whatsappOptOutReason: reason,
           updatedAt: now,
@@ -2522,6 +2526,24 @@ AI News Maker परिवार में आपका हार्दिक �
           if (optedOutWaIds.has(normWa)) {
             console.log(`[WhatsApp:Campaign] Skipping opted-out user (${maskWaId(uEmail)}): ${maskWaId(normWa)}`);
             continue;
+          }
+
+          // Strict Marketing Consent Enforcement:
+          // Marketing, Promotional, and Offers campaigns REQUIRE explicit whatsappMarketingConsent === true
+          const isMarketing = (category === "Marketing" || category === "Promotional" || category === "Offers" || req.body.isMarketing === true || req.body.type === "marketing");
+          if (isMarketing) {
+            if (u.whatsappMarketingConsent !== true) {
+              console.log(`[WhatsApp:Campaign] Skipping user without marketing consent (${maskWaId(uEmail)}): ${maskWaId(normWa)}`);
+              continue;
+            }
+            if (u.whatsappMarketingConsentPhone) {
+              const consentPhoneNorm = u.whatsappMarketingConsentPhone.toString().replace(/\D/g, '').slice(-10);
+              const targetPhoneNorm = normWa.toString().replace(/\D/g, '').slice(-10);
+              if (consentPhoneNorm !== targetPhoneNorm) {
+                console.log(`[WhatsApp:Campaign] Skipping user whose marketing consent phone (${maskWaId(consentPhoneNorm)}) does not match recipient phone (${maskWaId(targetPhoneNorm)})`);
+                continue;
+              }
+            }
           }
 
           recipientNumbers.add(normWa);

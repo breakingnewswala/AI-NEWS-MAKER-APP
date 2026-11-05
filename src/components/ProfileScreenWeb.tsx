@@ -267,6 +267,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               socialLinks: { ...DEFAULT_SOCIAL_LINKS, ...(cloudP.socialLinks || prev.socialLinks || {}) },
               customHeaderPng: cloudP.customHeaderPng !== undefined ? cloudP.customHeaderPng : (prev.customHeaderPng || ''),
               customFooterPng: cloudP.customFooterPng !== undefined ? cloudP.customFooterPng : (prev.customFooterPng || ''),
+              whatsappMarketingConsent: cloudP.whatsappMarketingConsent !== undefined ? Boolean(cloudP.whatsappMarketingConsent) : prev.whatsappMarketingConsent,
+              whatsappMarketingConsentAt: cloudP.whatsappMarketingConsentAt || prev.whatsappMarketingConsentAt,
             };
             try {
               localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(merged));
@@ -1816,6 +1818,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         pincode: channelProfile.pincode || '',
         socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
         socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
+        whatsappMarketingConsent: Boolean(channelProfile.whatsappMarketingConsent),
+        whatsappMarketingConsentAt: channelProfile.whatsappMarketingConsent ? (channelProfile.whatsappMarketingConsentAt || new Date().toISOString()) : null,
+        whatsappMarketingConsentSource: 'profile_settings',
+        whatsappMarketingConsentPhone: finalPhone,
+        whatsappMarketingConsentUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
       };
       const res = await fetch(getApiUrl('/api/user-profile'), {
         method: 'POST',
@@ -3063,6 +3070,33 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
+              {/* WhatsApp Marketing & Promotional Consent Setting */}
+              <div className="p-3.5 bg-slate-900/60 rounded-xl border border-emerald-900/40 space-y-1.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(channelProfile.whatsappMarketingConsent)}
+                    onChange={(e) =>
+                      setChannelProfile((p) => ({
+                        ...p,
+                        whatsappMarketingConsent: e.target.checked,
+                        whatsappMarketingConsentAt: e.target.checked ? new Date().toISOString() : null,
+                        whatsappMarketingConsentSource: 'profile_settings',
+                      }))
+                    }
+                    className="w-4 h-4 mt-0.5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                  />
+                  <div className="text-xs text-slate-300 leading-relaxed">
+                    <span className="font-bold text-white block">
+                      हाँ, मैं AI NEWS MAKER / BREAKING NEWS WALA से WhatsApp पर समाचार अपडेट, मार्केटिंग और प्रमोशनल सामग्री प्राप्त करना चाहता/चाहती हूँ।
+                    </span>
+                    <span className="text-[11px] text-slate-400 block mt-0.5">
+                      यह वैकल्पिक है। आप इसे किसी भी समय अपनी प्रोफ़ाइल सेटिंग से बदल सकते हैं। इससे आपका खाता या सेवा प्रभावित नहीं होगी।
+                    </span>
+                  </div>
+                </label>
+              </div>
+
               {/* Social Media Icons Toggles */}
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-2">
@@ -3268,18 +3302,34 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                   )}
 
-                  {/* Primary WhatsApp Status - Strictly Verified & Locked */}
-                  <div className="pt-1.5 flex items-center flex-wrap gap-2 text-xs">
-                    <div className="flex items-center gap-1.5 font-mono text-emerald-400 font-bold text-xs sm:text-sm">
-                      <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>प्राइमरी WhatsApp: {subscription.primaryMobile || channelProfile.whatsappNumber || channelProfile.mobileNumber ? `+91 ${subscription.primaryMobile || channelProfile.whatsappNumber || channelProfile.mobileNumber}` : 'दर्ज नहीं (Not Set)'}</span>
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800">
-                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                      <span>सत्यापित / Locked</span>
-                    </span>
-
-                  </div>
+                  {/* Primary WhatsApp Status - Strictly Verified & Locked (Matching Email Style) */}
+                  {(() => {
+                    const rawDigits = String(channelProfile.whatsappNumber || channelProfile.mobileNumber || subscription.primaryMobile || '').replace(/\D/g, '').slice(-10);
+                    if (!rawDigits || rawDigits.length !== 10) return null;
+                    const isVerified = Boolean(
+                      channelProfile.whatsappVerified ||
+                      waLinkStatus.isLinked ||
+                      subscription.whatsappVerified
+                    );
+                    return (
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-600 dark:text-slate-300 pt-1">
+                        <Phone className={`w-3.5 h-3.5 ${isVerified ? 'text-emerald-500 dark:text-emerald-400' : 'text-amber-500'} shrink-0`} />
+                        <span className="text-slate-700 dark:text-slate-200 font-mono font-bold">
+                          +91 {rawDigits}
+                        </span>
+                        {isVerified ? (
+                          <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-bold ml-1 flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                            सत्यापित / Locked
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-amber-400 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800 font-bold ml-1 flex items-center gap-1">
+                            अपुष्ट (Unverified)
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 

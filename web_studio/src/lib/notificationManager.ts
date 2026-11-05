@@ -99,14 +99,47 @@ export function addNotification(notif: Omit<AppNotification, 'id' | 'timestamp' 
   const list = [full, ...getNotifications().filter((n) => n.id !== full.id)].slice(0, 30);
   saveNotifications(list);
 
-  // Trigger Native Browser Notification if permitted
+  // Trigger Native Browser / Service Worker Notification if permitted
   if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-    try {
-      new Notification(full.title, {
-        body: full.message || 'AI News Maker नया नोटिफिकेशन',
-        icon: '/assets/ai_news_maker_logo.png',
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification(full.title, {
+          body: full.message || 'AI News Maker नया नोटिफिकेशन',
+          icon: '/assets/ai_news_maker_logo.png',
+          badge: '/assets/ai_news_maker_logo.png',
+          data: {
+            url: full.linkTab ? `/?tab=${full.linkTab}` : '/',
+            linkTab: full.linkTab || 'home',
+          },
+        }).catch(() => {
+          try {
+            new Notification(full.title, {
+              body: full.message || 'AI News Maker नया नोटिफिकेशन',
+              icon: '/assets/ai_news_maker_logo.png',
+            });
+          } catch {}
+        });
+      }).catch(() => {
+        try {
+          new Notification(full.title, {
+            body: full.message || 'AI News Maker नया नोटिफिकेशन',
+            icon: '/assets/ai_news_maker_logo.png',
+          });
+        } catch {}
       });
-    } catch {}
+    } else {
+      try {
+        new Notification(full.title, {
+          body: full.message || 'AI News Maker नया नोटिफिकेशन',
+          icon: '/assets/ai_news_maker_logo.png',
+        });
+      } catch {}
+    }
+  }
+
+  // Dispatch In-App Live Notification Event for active session toast/banner
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai_news_notification_received', { detail: full }));
   }
 
   return full;
@@ -145,6 +178,51 @@ export function getNotificationPermissionStatus(): NotificationPermission | 'uns
     return 'unsupported';
   }
   return Notification.permission;
+}
+
+export async function registerWebPushSubscription(userEmail?: string): Promise<boolean> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return false;
+  }
+  if (Notification.permission !== 'granted') {
+    return false;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      // Fetch VAPID key
+      let appServerKey: string | undefined;
+      try {
+        const vRes = await fetch('/api/notifications/vapid-key');
+        if (vRes.ok) {
+          const vData = await vRes.json();
+          if (vData.publicKey) appServerKey = vData.publicKey;
+        }
+      } catch {}
+
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: appServerKey || undefined,
+      }).catch(() => null);
+    }
+
+    if (sub) {
+      await fetch('/api/notifications/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: sub.toJSON(),
+          email: userEmail || '',
+          userAgent: navigator.userAgent,
+        }),
+      }).catch(() => {});
+      return true;
+    }
+  } catch (err) {
+    console.warn('Web push registration notice:', err);
+  }
+  return false;
 }
 
 // ==========================================

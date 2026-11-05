@@ -1414,11 +1414,19 @@ export default function App() {
       }
     };
 
+    const handleInAppNotification = (e: any) => {
+      const title = e.detail?.title || 'नई सूचना';
+      const body = e.detail?.body || e.detail?.message || '';
+      showToast(`🔔 ${title}${body ? ': ' + body.slice(0, 45) : ''}`);
+    };
+
     window.addEventListener('ai_news_open_specific_post', handleDeepLinkPost);
     window.addEventListener('ai_news_open_specific_video', handleDeepLinkVideo);
+    window.addEventListener('ai_news_notification_received', handleInAppNotification);
     return () => {
       window.removeEventListener('ai_news_open_specific_post', handleDeepLinkPost);
       window.removeEventListener('ai_news_open_specific_video', handleDeepLinkVideo);
+      window.removeEventListener('ai_news_notification_received', handleInAppNotification);
     };
   }, [posts, videos]);
 
@@ -1434,6 +1442,8 @@ export default function App() {
   );
   const isUserBlocked = !isAdminUser && Boolean(
     userSubscription?.isBlocked ||
+    currentUser?.isBlocked ||
+    (currentUser as any)?.isAccountBlocked ||
     (currentUser?.email && localStorage.getItem(`user_blocked_${currentUser.email.toLowerCase().trim()}`) === 'true')
   );
   const [blockReviewMessage, setBlockReviewMessage] = useState('');

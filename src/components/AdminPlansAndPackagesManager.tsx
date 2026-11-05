@@ -132,7 +132,6 @@ import {
   deleteCategoryItem,
 } from '../lib/categoryManager';
 import { AdminApiKeysManager } from './AdminApiKeysManager';
-import { WhatsAppLiveInbox } from './WhatsAppLiveInbox';
 interface AdminPlansAndPackagesManagerProps {
   currentUser?: any;
   onPlanChanged?: () => void;
@@ -153,13 +152,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   onDeleteCategory,
 }) => {
   // Sub-tabs: main accordions in exact order - initially closed per requirement
-  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'package_coupons' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'whatsapp_inbox' | 'policies' | 'analytics' | ''>(() => {
-    if (typeof window !== 'undefined') {
-      const h = window.location.hash.toLowerCase();
-      if (h.includes('whatsapp') || h.includes('inbox') || h.includes('support')) {
-        return 'whatsapp_inbox';
-      }
-    }
+  const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'package_coupons' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | 'analytics' | ''>(() => {
     return '';
   });
   const [analyticsTab, setAnalyticsTab] = useState<'news' | 'video' | 'users'>('news');
@@ -371,11 +364,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   useEffect(() => {
     const handleOpenInbox = () => {
-      setSubTab('whatsapp_inbox');
-      setTimeout(() => {
-        const el = document.getElementById('section-whatsapp-inbox');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+      // Dispatch event to open WhatsApp Live Inbox in Newsroom
+      window.dispatchEvent(new CustomEvent('ai_news_open_newsroom_whatsapp_inbox'));
     };
     window.addEventListener('open_whatsapp_inbox', handleOpenInbox);
     window.addEventListener('ai_news_open_whatsapp_inbox', handleOpenInbox);
@@ -6514,48 +6504,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           )}
         </div>
         )}
-
-        {/* ========================================================================= */}
-        {/* STEP 11C.1: WhatsApp AI कमांड सेंटर व लाइव इनबॉक्स (WHATSAPP LIVE INBOX) */}
-        {/* ========================================================================= */}
-        <div id="section-whatsapp-inbox" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'whatsapp_inbox' ? 'border-emerald-400 bg-slate-900/95 ring-2 ring-emerald-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
-          <button
-            type="button"
-            onClick={() => setSubTab(subTab === 'whatsapp_inbox' ? '' : 'whatsapp_inbox')}
-            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'whatsapp_inbox' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black text-sm shrink-0 shadow-md">
-                <MessageSquare className="w-5 h-5 text-slate-950" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm sm:text-base font-black text-white block truncate">
-                    WhatsApp AI कमांड सेंटर व लाइव इनबॉक्स (Live Support Inbox)
-                  </span>
-                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-black rounded uppercase border border-emerald-500/30">
-                    Phase 1B
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  रीयल-टाइम ग्राहक सहायता, ह्यूमन टेकओवर, डिलीवरी स्टेटस व ऑपरेटर कंसोल
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-emerald-400 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
-                लाइव कंसोल
-              </span>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'whatsapp_inbox' ? 'rotate-180 text-emerald-400' : ''}`} />
-            </div>
-          </button>
-
-          {subTab === 'whatsapp_inbox' && (
-            <div className="p-2 sm:p-4 border-t border-slate-800/80 bg-slate-950 animate-in fade-in slide-in-from-top-2 duration-200">
-              <WhatsAppLiveInbox currentUser={currentUser} />
-            </div>
-          )}
-        </div>
 
         {/* ========================================================================= */}
         {/* STEP 11D: एनालिटिक्स बोर्ड (ADMIN ANALYTICS BOARD - NEWS & VIDEO ANALYTICS) */}

@@ -6828,6 +6828,8 @@ var syncWhatsAppOptOut = async (waId, reason = "inbound_whatsapp_stop", centralD
     newsAlertsConsent: false,
     whatsappBreakingNewsConsent: false,
     whatsappProductUpdatesConsent: false,
+    whatsappMarketingConsent: false,
+    whatsappMarketingConsentRevokedAt: now,
     newsAlertsOptedOutAt: now,
     optOutReason: reason,
     updatedAt: now
@@ -6902,6 +6904,8 @@ var syncWhatsAppOptOut = async (waId, reason = "inbound_whatsapp_stop", centralD
           whatsappBreakingNewsConsent: false,
           newsAlertsConsent: false,
           whatsappProductUpdatesConsent: false,
+          whatsappMarketingConsent: false,
+          whatsappMarketingConsentRevokedAt: now,
           whatsappOptedOutAt: now,
           whatsappOptOutReason: reason,
           updatedAt: now
@@ -8625,6 +8629,21 @@ ${finalMessage}`);
             console.log(`[WhatsApp:Campaign] Skipping opted-out user (${maskWaId(uEmail)}): ${maskWaId(normWa)}`);
             continue;
           }
+          const isMarketing = category === "Marketing" || category === "Promotional" || category === "Offers" || req.body.isMarketing === true || req.body.type === "marketing";
+          if (isMarketing) {
+            if (u.whatsappMarketingConsent !== true) {
+              console.log(`[WhatsApp:Campaign] Skipping user without marketing consent (${maskWaId(uEmail)}): ${maskWaId(normWa)}`);
+              continue;
+            }
+            if (u.whatsappMarketingConsentPhone) {
+              const consentPhoneNorm = u.whatsappMarketingConsentPhone.toString().replace(/\D/g, "").slice(-10);
+              const targetPhoneNorm = normWa.toString().replace(/\D/g, "").slice(-10);
+              if (consentPhoneNorm !== targetPhoneNorm) {
+                console.log(`[WhatsApp:Campaign] Skipping user whose marketing consent phone (${maskWaId(consentPhoneNorm)}) does not match recipient phone (${maskWaId(targetPhoneNorm)})`);
+                continue;
+              }
+            }
+          }
           recipientNumbers.add(normWa);
         }
       }
@@ -9635,15 +9654,32 @@ async function resolveAuthenticatedUser(req) {
         const email = decoded.email.toLowerCase().trim();
         const userId = decoded.uid || decoded.user_id || email;
         let userRole = "user";
+        let isBlocked = false;
         try {
           if (typeof loadUsersMasterDatabase === "function") {
             const users = loadUsersMasterDatabase();
             const dbUser = users.find(
               (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === userId
             );
-            if (dbUser && dbUser.role) {
-              userRole = dbUser.role;
+            if (dbUser) {
+              if (dbUser.role) userRole = dbUser.role;
+              if (dbUser.isBlocked) isBlocked = true;
             }
+          }
+          if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
+            for (const [k, u] of centralDb.cache.users.entries()) {
+              if (k && k.toLowerCase().trim() === email || u?.email && u.email.toLowerCase().trim() === email || u?.userId && u.userId === userId) {
+                if (u?.isBlocked) {
+                  isBlocked = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (!isBlocked && typeof loadProfilesDatabase === "function") {
+            const profiles = loadProfilesDatabase();
+            const prof = profiles[email] || Object.values(profiles).find((p) => p.email && p.email.toLowerCase().trim() === email || p.userId && p.userId === userId);
+            if (prof?.isBlocked) isBlocked = true;
           }
         } catch {
         }
@@ -9657,7 +9693,8 @@ async function resolveAuthenticatedUser(req) {
           email,
           role: userRole,
           username: decoded.name || email.split("@")[0],
-          authType: "firebase"
+          authType: "firebase",
+          isBlocked
         };
         req.user = verified;
         return verified;
@@ -9669,6 +9706,32 @@ async function resolveAuthenticatedUser(req) {
   if (internalPayload && internalPayload.email) {
     const email = internalPayload.email.toLowerCase().trim();
     let userRole = internalPayload.role || "user";
+    let isBlocked = false;
+    try {
+      if (typeof loadUsersMasterDatabase === "function") {
+        const users = loadUsersMasterDatabase();
+        const dbUser = users.find(
+          (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === internalPayload.userId
+        );
+        if (dbUser && dbUser.isBlocked) isBlocked = true;
+      }
+      if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
+        for (const [k, u] of centralDb.cache.users.entries()) {
+          if (k && k.toLowerCase().trim() === email || u?.email && u.email.toLowerCase().trim() === email) {
+            if (u?.isBlocked) {
+              isBlocked = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!isBlocked && typeof loadProfilesDatabase === "function") {
+        const profiles = loadProfilesDatabase();
+        const prof = profiles[email] || Object.values(profiles).find((p) => p.email && p.email.toLowerCase().trim() === email);
+        if (prof?.isBlocked) isBlocked = true;
+      }
+    } catch {
+    }
     if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
       userRole = "superadmin";
     } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
@@ -9679,7 +9742,8 @@ async function resolveAuthenticatedUser(req) {
       email,
       role: userRole,
       username: internalPayload.username || email.split("@")[0],
-      authType: "session"
+      authType: "session",
+      isBlocked
     };
     req.user = verified;
     return verified;
@@ -12909,28 +12973,39 @@ app.delete(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
 var USERS_MASTER_FILE = import_path.default.join(process.cwd(), "users_master_database.json");
 var USERS_DB_FILE = import_path.default.join(process.cwd(), "users_accounts_db.json");
 var NOTIFICATIONS_DB_FILE = import_path.default.join(process.cwd(), "notifications_database.json");
-function cleanGenerateUsername(requestedUsername, fullName, existingUsername) {
+function cleanGenerateUsername(requestedUsername, fullName, existingUsername, channelNameEn) {
   const users = loadUsersMasterDatabase();
   const taken = new Set(users.map((u) => (u.username || "").toLowerCase().trim().replace(/^@+/, "")));
-  if (requestedUsername && typeof requestedUsername === "string") {
-    const clean = requestedUsername.trim().replace(/^@+/, "");
-    if (clean && !clean.includes("@") && !clean.includes(".") && !taken.has(clean.toLowerCase())) {
-      return clean;
-    }
-  }
   if (existingUsername && typeof existingUsername === "string") {
     const clean = existingUsername.trim().replace(/^@+/, "");
     if (clean && !clean.includes("@") && !clean.includes(".")) {
       return clean;
     }
   }
-  let base = "reporter";
+  if (requestedUsername && typeof requestedUsername === "string") {
+    const clean = requestedUsername.trim().replace(/^@+/, "");
+    if (clean && !clean.includes("@") && !clean.includes(".") && !taken.has(clean.toLowerCase())) {
+      return clean;
+    }
+  }
+  let base = "";
   if (fullName && typeof fullName === "string") {
     const englishName = fullName.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase().trim();
     if (englishName.length >= 3) {
       base = englishName.slice(0, 16);
     }
   }
+  if (!base && channelNameEn && typeof channelNameEn === "string") {
+    const englishChannel = channelNameEn.replace(/[^a-zA-Z0-9_]/g, "").toLowerCase().trim();
+    if (englishChannel.length >= 3) {
+      base = englishChannel.slice(0, 16);
+    }
+  }
+  if (!base) {
+    base = "reporter";
+  }
+  base = base.replace(/@.*$/, "").replace(/\..*$/, "");
+  if (!base) base = "reporter";
   let candidate = base;
   let counter = 1;
   while (taken.has(candidate.toLowerCase())) {
@@ -12995,7 +13070,14 @@ function loadUsersMasterDatabase() {
     const unique = /* @__PURE__ */ new Map();
     for (const u of centralDb.cache.users.values()) {
       const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
-      if (key && !unique.has(key)) unique.set(key, u);
+      if (!key) continue;
+      if (!unique.has(key)) {
+        unique.set(key, u);
+      } else {
+        const existing = unique.get(key);
+        const isBlocked = Boolean(existing.isBlocked || u.isBlocked);
+        unique.set(key, { ...existing, ...u, isBlocked });
+      }
     }
     const list = Array.from(unique.values());
     list.sort((a, b) => {
@@ -13192,6 +13274,38 @@ function checkUserAccess(userEmailOrUid) {
   if (!userEmailOrUid) return { allowed: true };
   const clean = userEmailOrUid.toString().toLowerCase().trim();
   if (isProtectedAdminAccount(clean)) return { allowed: true };
+  if (centralDb && centralDb.cache?.users) {
+    for (const [k, u] of centralDb.cache.users.entries()) {
+      const kClean = (k || "").toLowerCase().trim();
+      const uEmail = (u?.email || "").toLowerCase().trim();
+      const uId = (u?.userId || u?.id || u?.uid || "").toLowerCase().trim();
+      if (kClean === clean || uEmail === clean || uId === clean) {
+        if (u?.isBlocked) {
+          return {
+            allowed: false,
+            status: 403,
+            error: "\u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0921\u0947\u0938\u094D\u0915 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+            blocked: true
+          };
+        }
+      }
+    }
+  }
+  try {
+    const profiles = loadProfilesDatabase();
+    const profMatch = profiles[clean] || Object.values(profiles).find(
+      (p) => p.email && p.email.toLowerCase().trim() === clean || p.userId && p.userId.toLowerCase().trim() === clean
+    );
+    if (profMatch && profMatch.isBlocked) {
+      return {
+        allowed: false,
+        status: 403,
+        error: "\u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0921\u0947\u0938\u094D\u0915 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+        blocked: true
+      };
+    }
+  } catch {
+  }
   const users = loadUsersMasterDatabase();
   const match = users.find(
     (u) => u.email && u.email.toLowerCase().trim() === clean || u.email && u.email.toLowerCase().replace(/\s+/g, "") === clean.replace(/\s+/g, "") || u.userId && u.userId.toLowerCase().trim() === clean
@@ -13315,6 +13429,35 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
     const safeUsername = rawReqUser || existing.username || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name, existing.username));
+    const safeIncomingLogo = userPayload.channelLogoUrl && !userPayload.channelLogoUrl.includes("/assets/ai_news_maker_logo.png") ? userPayload.channelLogoUrl : existing.channelLogoUrl || userPayload.channelLogoUrl || "";
+    const safeIncomingLogoPng = userPayload.channelLogoPngUrl && !userPayload.channelLogoPngUrl.includes("/assets/ai_news_maker_logo.png") ? userPayload.channelLogoPngUrl : existing.channelLogoPngUrl || existing.channelLogoUrl || userPayload.channelLogoPngUrl;
+    const oldNormPhone = (existing.mobileNumber || existing.mobile || "").toString().replace(/\D/g, "").slice(-10);
+    const newNormPhone = (userPayload.mobileNumber || userPayload.mobile || "").toString().replace(/\D/g, "").slice(-10);
+    const isPhoneChanged = Boolean(oldNormPhone && newNormPhone && oldNormPhone !== newNormPhone);
+    let finalMarketingConsent = false;
+    let finalConsentPhone = null;
+    let finalConsentAt = null;
+    if (isPhoneChanged) {
+      if (userPayload.whatsappMarketingConsent === true && userPayload.whatsappMarketingConsentPhone && userPayload.whatsappMarketingConsentPhone.toString().replace(/\D/g, "").slice(-10) === newNormPhone) {
+        finalMarketingConsent = true;
+        finalConsentPhone = userPayload.whatsappMarketingConsentPhone;
+        finalConsentAt = userPayload.whatsappMarketingConsentAt || now;
+      } else {
+        finalMarketingConsent = false;
+        finalConsentPhone = null;
+        finalConsentAt = null;
+      }
+    } else {
+      if (userPayload.whatsappMarketingConsent !== void 0) {
+        finalMarketingConsent = Boolean(userPayload.whatsappMarketingConsent);
+        finalConsentPhone = finalMarketingConsent ? userPayload.whatsappMarketingConsentPhone || existing.whatsappMarketingConsentPhone || newNormPhone || null : null;
+        finalConsentAt = finalMarketingConsent ? userPayload.whatsappMarketingConsentAt || existing.whatsappMarketingConsentAt || now : null;
+      } else {
+        finalMarketingConsent = Boolean(existing.whatsappMarketingConsent);
+        finalConsentPhone = existing.whatsappMarketingConsentPhone || null;
+        finalConsentAt = existing.whatsappMarketingConsentAt || null;
+      }
+    }
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
@@ -13324,8 +13467,8 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || "",
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || "",
       channelNameEn: userPayload.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: userPayload.channelLogoUrl || existing.channelLogoUrl || "",
-      channelLogoPngUrl: userPayload.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoUrl: safeIncomingLogo,
+      channelLogoPngUrl: safeIncomingLogoPng,
       channelLogoGifUrl: userPayload.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
@@ -13337,6 +13480,12 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       pincode: userPayload.pincode || existing.pincode || "",
       websiteUrl: userPayload.websiteUrl || existing.websiteUrl || "",
       socialIcons: userPayload.socialIcons !== void 0 ? userPayload.socialIcons : existing.socialIcons,
+      whatsappMarketingConsent: finalMarketingConsent,
+      whatsappMarketingConsentAt: finalConsentAt,
+      whatsappMarketingConsentPhone: finalConsentPhone,
+      whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
+      whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
+      whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
       role: isSuper2 ? "superadmin" : userPayload.role || existing.role || "user",
       tier: isSuper2 ? "ultra" : existing.tier && existing.tier !== "basic" ? existing.tier : userPayload.tier || existing.tier || "basic",
       planName: isSuper2 ? "VIP DESK" : existing.tier && existing.tier !== "basic" ? existing.planName || existing.tier.toUpperCase() : userPayload.planName || existing.planName || "BASIC",
@@ -13380,6 +13529,12 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       pincode: userPayload.pincode || "",
       websiteUrl: userPayload.websiteUrl || "",
       socialIcons: userPayload.socialIcons || { youtube: false, facebook: false, instagram: false, whatsapp: false, twitter: false, x: false, linkedin: false },
+      whatsappMarketingConsent: userPayload.whatsappMarketingConsent !== void 0 ? Boolean(userPayload.whatsappMarketingConsent) : false,
+      whatsappMarketingConsentAt: userPayload.whatsappMarketingConsentAt || (userPayload.whatsappMarketingConsent ? now : null),
+      whatsappMarketingConsentPhone: userPayload.whatsappMarketingConsentPhone || null,
+      whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || null,
+      whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || null,
+      whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || null,
       role: isSuper2 ? "superadmin" : userPayload.role || "user",
       tier: isSuper2 ? "ultra" : userPayload.tier || "basic",
       planName: isSuper2 ? "VIP DESK" : userPayload.planName || "BASIC",
@@ -14501,6 +14656,17 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
       }
     }
     const isAdmin2 = isAuthorizedAdmin(req);
+    const targetEmail = (profile.email || "").toLowerCase().trim();
+    const targetUid = (profile.userId || profile.uid || "").toLowerCase().trim();
+    if (!isAdmin2 && (targetEmail || targetUid)) {
+      const accessCheck = checkUserAccess(targetEmail || targetUid);
+      if (accessCheck.blocked) {
+        return res.status(403).json({
+          error: "\u092F\u0939 \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964",
+          blocked: true
+        });
+      }
+    }
     if (!isAdmin2) {
       delete profile.role;
       delete profile.tier;
@@ -14553,6 +14719,12 @@ app.get("/api/user-subscription", (req, res) => {
         }
       });
     }
+    const rawMob = (match.mobile || "").toString().replace(/\D/g, "").slice(-10);
+    let isCertifiedVerified = Boolean(match.whatsappVerified);
+    if (!isCertifiedVerified && rawMob && centralDb?.cache?.whatsapp_phone_registry) {
+      const reg = centralDb.cache.whatsapp_phone_registry.get(`phone_91${rawMob}`);
+      if (reg && reg.verified) isCertifiedVerified = true;
+    }
     const trialFields = computeTrialFields(match, now);
     return res.json({
       success: true,
@@ -14571,7 +14743,8 @@ app.get("/api/user-subscription", (req, res) => {
         blockedAt: match.blockedAt || null,
         blockedBy: match.blockedBy || null,
         primaryMobile: match.mobile,
-        isMobileLocked: Boolean(match.mobile),
+        whatsappVerified: isCertifiedVerified,
+        isMobileLocked: isCertifiedVerified,
         activatedAt: match.activatedAt,
         expiresAt: match.expiresAt
       }
@@ -14599,6 +14772,81 @@ app.get("/api/notifications", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+var WEB_PUSH_SUBS_FILE = import_path.default.join(process.cwd(), "web_push_subscriptions_db.json");
+function loadWebPushSubscriptions() {
+  if (centralDb && centralDb.useFirestore && centralDb.cache.systemConfig.has("web_push_subscriptions")) {
+    const data = centralDb.cache.systemConfig.get("web_push_subscriptions");
+    if (Array.isArray(data)) return data;
+  }
+  try {
+    if (import_fs.default.existsSync(WEB_PUSH_SUBS_FILE)) {
+      return JSON.parse(import_fs.default.readFileSync(WEB_PUSH_SUBS_FILE, "utf-8"));
+    }
+  } catch {
+  }
+  return [];
+}
+function saveWebPushSubscriptions(subs) {
+  if (centralDb && centralDb.useFirestore) {
+    centralDb.cache.systemConfig.set("web_push_subscriptions", subs);
+  }
+  try {
+    const locs = resolveAllDatabaseLocations("web_push_subscriptions_db.json");
+    const json = JSON.stringify(subs, null, 2);
+    for (const loc of locs) {
+      import_fs.default.writeFileSync(loc, json, "utf-8");
+    }
+  } catch {
+  }
+}
+app.post("/api/notifications/subscribe", (req, res) => {
+  try {
+    const { subscription, email, userAgent } = req.body;
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ error: "Invalid subscription payload" });
+    }
+    const subs = loadWebPushSubscriptions();
+    const cleanEmail = (email || "").toLowerCase().trim();
+    const existingIdx = subs.findIndex((s) => s.endpoint === subscription.endpoint);
+    const record = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      userEmail: cleanEmail,
+      userAgent: userAgent || req.headers["user-agent"] || "",
+      createdAt: Date.now()
+    };
+    if (existingIdx >= 0) {
+      subs[existingIdx] = { ...subs[existingIdx], ...record, id: subs[existingIdx].id };
+    } else {
+      subs.push(record);
+    }
+    saveWebPushSubscriptions(subs);
+    return res.json({ success: true, subscribed: true, totalActiveDevices: subs.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/notifications/unsubscribe", (req, res) => {
+  try {
+    const { endpoint, email } = req.body;
+    let subs = loadWebPushSubscriptions();
+    const cleanEmail = (email || "").toLowerCase().trim();
+    if (endpoint) {
+      subs = subs.filter((s) => s.endpoint !== endpoint);
+    } else if (cleanEmail) {
+      subs = subs.filter((s) => (s.userEmail || "").toLowerCase().trim() !== cleanEmail);
+    }
+    saveWebPushSubscriptions(subs);
+    return res.json({ success: true, unsubscribed: true, totalActiveDevices: subs.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/notifications/vapid-key", (req, res) => {
+  const publicKey = process.env.VAPID_PUBLIC_KEY || "BNo_Official_Web_Push_Public_Key_Standard_Mode";
+  return res.json({ success: true, publicKey });
+});
 app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
   try {
     const { title, message, newsId, postId, category, imageUrl, linkTab, targetUserEmail } = req.body;
@@ -14617,7 +14865,26 @@ app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (re
     };
     const notifs = loadNotificationsDatabase();
     saveNotificationsDatabase([newNotif, ...notifs]);
-    return res.json({ success: true, notification: newNotif });
+    const subs = loadWebPushSubscriptions();
+    const cleanTarget = (targetUserEmail || "all").toLowerCase().trim();
+    const eligibleSubs = subs.filter((s) => {
+      if (!cleanTarget || cleanTarget === "all") return true;
+      return s.userEmail && (s.userEmail === cleanTarget || cleanTarget === "admin" && isProtectedAdminAccount(s.userEmail));
+    });
+    const hasVapid = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+    return res.json({
+      success: true,
+      notification: newNotif,
+      delivery: {
+        inAppSaved: true,
+        totalRegisteredDevices: subs.length,
+        targetedDevices: eligibleSubs.length,
+        providerAccepted: eligibleSubs.length > 0 && hasVapid,
+        providerStatus: hasVapid ? "dispatched" : "vapid_unconfigured_pending_setup",
+        actualDeliveryVerified: false,
+        timestamp: Date.now()
+      }
+    });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -16363,6 +16630,19 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
       match.blockedAt = mMatch.blockedAt || match.blockedAt;
       match.isLocked = Boolean(mMatch.isLocked);
     }
+    if (match.isProfileComplete === void 0 && (match.channelNameHi || match.fullName || match.name || match.mobileNumber || match.mobile)) {
+      match.isProfileComplete = true;
+    }
+    const rawMob = match.whatsappNumber || match.mobileNumber || match.mobile;
+    const cleanMob = (rawMob || "").toString().replace(/\D/g, "").slice(-10);
+    if (cleanMob && centralDb && centralDb.cache?.whatsapp_phone_registry) {
+      const regKey = `phone_91${cleanMob}`;
+      const reg = centralDb.cache.whatsapp_phone_registry.get(regKey);
+      if (reg && reg.verified) {
+        match.whatsappVerified = true;
+        match.whatsappVerifiedAt = reg.verifiedAt || match.whatsappVerifiedAt || Date.now();
+      }
+    }
     return res.json({ success: true, profile: match });
   }
   return res.json({ success: true, profile: null });
@@ -16385,6 +16665,10 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
     const existing = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : null) || {};
+    const isTargetBlocked = Boolean(existing.isBlocked) || checkUserAccess(cleanId).blocked || profile.email && checkUserAccess(profile.email).blocked;
+    if (isTargetBlocked && !isAdmin2) {
+      return res.status(403).json({ success: false, error: "\u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964", blocked: true });
+    }
     let finalUsername = profile.username !== void 0 ? profile.username : existing.username;
     if (!isAdmin2 && existing.username && existing.username.trim() && existing.isProfileComplete && existing.isProfileLocked) {
       finalUsername = existing.username;
@@ -16430,8 +16714,35 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const safeIsBlocked = isAdmin2 ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
     const finalChannelHi = (profile.channelNameHi || profile.channelName || existing.channelNameHi || existing.channelName || "").toString().trim();
     const isProfileComplete = Boolean(
-      (profile.isProfileComplete !== void 0 ? profile.isProfileComplete : existing.isProfileComplete) && finalChannelHi && finalChannelHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && finalChannelHi !== "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" && (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
+      (profile.isProfileComplete !== void 0 ? profile.isProfileComplete : existing.isProfileComplete) && finalChannelHi && finalChannelHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
     );
+    const oldPhone = (existing.mobileNumber || existing.whatsappNumber || "").toString().replace(/\D/g, "").slice(-10);
+    const newPhone = (finalMobile || profile.whatsappNumber || "").toString().replace(/\D/g, "").slice(-10);
+    const isPhoneChanged = Boolean(oldPhone && newPhone && oldPhone !== newPhone);
+    let finalMarketingConsent = false;
+    let finalConsentAt = null;
+    let finalConsentPhone = null;
+    if (isPhoneChanged) {
+      if (profile.whatsappMarketingConsent === true && profile.whatsappMarketingConsentPhone && profile.whatsappMarketingConsentPhone.toString().replace(/\D/g, "").slice(-10) === newPhone) {
+        finalMarketingConsent = true;
+        finalConsentPhone = profile.whatsappMarketingConsentPhone;
+        finalConsentAt = profile.whatsappMarketingConsentAt || Date.now();
+      } else {
+        finalMarketingConsent = false;
+        finalConsentPhone = null;
+        finalConsentAt = null;
+      }
+    } else {
+      if (profile.whatsappMarketingConsent !== void 0) {
+        finalMarketingConsent = Boolean(profile.whatsappMarketingConsent);
+        finalConsentPhone = finalMarketingConsent ? profile.whatsappMarketingConsentPhone || existing.whatsappMarketingConsentPhone || newPhone || null : null;
+        finalConsentAt = finalMarketingConsent ? profile.whatsappMarketingConsentAt || existing.whatsappMarketingConsentAt || Date.now() : null;
+      } else {
+        finalMarketingConsent = Boolean(existing.whatsappMarketingConsent);
+        finalConsentPhone = existing.whatsappMarketingConsentPhone || null;
+        finalConsentAt = existing.whatsappMarketingConsentAt || null;
+      }
+    }
     const safeIsLocked = isAdmin2 ? profile.isLocked !== void 0 ? Boolean(profile.isLocked) : Boolean(existing.isLocked) : isProfileComplete ? true : false;
     const updated = {
       ...existing,
@@ -16451,13 +16762,19 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       district: profile.district || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || "",
-      channelLogoPngUrl: profile.channelLogoPngUrl || existing.channelLogoPngUrl,
+      channelLogoUrl: profile.channelLogoUrl && !profile.channelLogoUrl.includes("/assets/ai_news_maker_logo.png") ? profile.channelLogoUrl : existing.channelLogoUrl || profile.channelLogoUrl || "",
+      channelLogoPngUrl: profile.channelLogoPngUrl && !profile.channelLogoPngUrl.includes("/assets/ai_news_maker_logo.png") ? profile.channelLogoPngUrl : existing.channelLogoPngUrl || existing.channelLogoUrl || profile.channelLogoPngUrl,
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || "",
       whatsappNumber: existing.whatsappNumber || finalMobile || "",
       whatsappDisplayNumber: profile.whatsappDisplayNumber || existing.whatsappDisplayNumber || profile.whatsappNumber || finalMobile || "",
+      whatsappMarketingConsent: finalMarketingConsent,
+      whatsappMarketingConsentAt: finalConsentAt,
+      whatsappMarketingConsentPhone: finalConsentPhone,
+      whatsappMarketingConsentSource: profile.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
+      whatsappMarketingConsentVersion: profile.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
+      whatsappMarketingConsentUpdatedAt: profile.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
       activeLogoUrl: existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
       logoApprovalStatus: existing.logoApprovalStatus || "none",
       approvedLogoRequestId: existing.approvedLogoRequestId,
@@ -16742,19 +17059,20 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         const existing = Object.values(allProfiles2).find(
           (p) => p.uid && p.uid === googleUid || p.userId && p.userId === googleUid || p.email && p.email.toLowerCase() === cleanId
         );
-        if (existing && existing.isBlocked) {
+        const accessCheck2 = checkUserAccess(cleanId);
+        if (existing && existing.isBlocked || accessCheck2.blocked) {
           return res.status(403).json({
             success: false,
             isBlocked: true,
             error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0938\u092A\u094B\u0930\u094D\u091F \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
-            user: existing
+            user: existing || { email: cleanId, isBlocked: true }
           });
         }
         const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
         const isSuper2 = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, "") === "admin.ainewsmaker@gmail.com";
         const isAdmin2 = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, "") === "breakingnewswala.com@gmail.com";
         const isProfileComplete = Boolean(
-          !isDeletedTombstoned && existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && existing.channelNameHi !== "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" && (existing.channelLogoUrl || existing.channelLogoPngUrl)
+          !isDeletedTombstoned && existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && (existing.channelLogoUrl || existing.channelLogoPngUrl)
         );
         let safeUsername;
         if (isSuper2) {
@@ -16837,6 +17155,15 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
     const match = Object.values(allProfiles).find(
       (p) => p.email && p.email.toLowerCase() === targetEmail || p.username && p.username.toLowerCase() === cleanId
     );
+    const accessCheck = checkUserAccess(targetEmail);
+    if (match && match.isBlocked || accessCheck.blocked) {
+      return res.status(403).json({
+        success: false,
+        isBlocked: true,
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0938\u092A\u094B\u0930\u094D\u091F \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+        user: match || { email: targetEmail, isBlocked: true }
+      });
+    }
     const user = match || {
       username: credEntry?.username || cleanId,
       fullName: targetEmail.includes("admin") ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : "\u092F\u0942\u091C\u093C\u0930",
@@ -16862,7 +17189,8 @@ app.get("/api/auth/me", (req, res) => {
   if (!user) {
     return res.status(401).json({ authenticated: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u092E\u093E\u0928\u094D\u092F \u0938\u0924\u094D\u0930 \u091F\u094B\u0915\u0928 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
   }
-  if (user.isBlocked) {
+  const accessCheck = checkUserAccess(user.email);
+  if (user.isBlocked || accessCheck.blocked) {
     return res.status(403).json({ authenticated: true, isBlocked: true, error: "\u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964", user });
   }
   return res.json({

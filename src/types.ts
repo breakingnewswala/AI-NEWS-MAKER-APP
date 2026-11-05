@@ -482,6 +482,12 @@ export interface ChannelProfile {
   whatsappConsentSource?: string;
   whatsappWelcomeSentAt?: number;
   whatsappOnboardingStatus?: 'pending' | 'completed';
+  whatsappMarketingConsent?: boolean;
+  whatsappMarketingConsentAt?: string | number | null;
+  whatsappMarketingConsentSource?: string;
+  whatsappMarketingConsentPhone?: string;
+  whatsappMarketingConsentIp?: string;
+  whatsappMarketingConsentUserAgent?: string;
   showMobileNumber: boolean; // visible on card or not
   websiteUrl: string; // direct without https:// or www
   showWebsite?: boolean; // visible on card or not
