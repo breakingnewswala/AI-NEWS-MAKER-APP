@@ -9385,6 +9385,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
     // 1. Google OAuth Authentication (Google UID)
     if (googleUid) {
+      const isSuper = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, '') === "admin.ainewsmaker@gmail.com";
+      const isAdmin = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, '') === "breakingnewswala.com@gmail.com";
       const release = await userDbLock.acquire();
       let savedUser: AuthoritativeUser;
       try {
@@ -9405,8 +9407,6 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         }
 
         const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
-        const isSuper = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, '') === "admin.ainewsmaker@gmail.com";
-        const isAdmin = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, '') === "breakingnewswala.com@gmail.com";
 
         const isProfileComplete = Boolean(
           !isDeletedTombstoned &&
@@ -9488,6 +9488,21 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       targetEmail = "admin.ainewsmaker@gmail.com";
     }
 
+    const allProfiles = loadProfilesDatabase();
+    const match = Object.values(allProfiles).find(
+      (p) => (p.email && p.email.toLowerCase() === targetEmail) || (p.username && p.username.toLowerCase() === cleanId)
+    );
+
+    const accessCheck = checkUserAccess(targetEmail);
+    if ((match && match.isBlocked) || accessCheck.blocked) {
+      return res.status(403).json({
+        success: false,
+        isBlocked: true,
+        error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
+        user: match || { email: targetEmail, isBlocked: true },
+      });
+    }
+
     let credEntry: StoredCredential | undefined = creds[targetEmail];
     if (!credEntry) {
       credEntry = Object.values(creds).find(
@@ -9502,21 +9517,6 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
     if (!isPasswordValid) {
       return res.status(401).json({ error: "अमान्य यूज़रनेम या पासवर्ड" });
-    }
-
-    const allProfiles = loadProfilesDatabase();
-    const match = Object.values(allProfiles).find(
-      (p) => (p.email && p.email.toLowerCase() === targetEmail) || (p.username && p.username.toLowerCase() === cleanId)
-    );
-
-    const accessCheck = checkUserAccess(targetEmail);
-    if ((match && match.isBlocked) || accessCheck.blocked) {
-      return res.status(403).json({
-        success: false,
-        isBlocked: true,
-        error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
-        user: match || { email: targetEmail, isBlocked: true },
-      });
     }
 
     const user = match || {

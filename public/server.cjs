@@ -7819,9 +7819,9 @@ _\u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0938\u0939\u093E\u092F\u0924\u093E
       const planName = linkedUser.planName || "BASIC";
       const tier = (linkedUser.tier || "basic").toLowerCase();
       const isPaid = Boolean(linkedUser.hasActivePaidPlan);
-      const isSuper2 = linkedUser.role === "superadmin" || linkedUser.role === "admin";
+      const isSuper = linkedUser.role === "superadmin" || linkedUser.role === "admin";
       let maxAllowed = 10;
-      if (isSuper2) {
+      if (isSuper) {
         maxAllowed = 99999;
       } else if (tier === "ultra" || tier === "vip" || tier === "vip_desk") {
         maxAllowed = 99999;
@@ -7872,7 +7872,7 @@ _\u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0938\u0939\u093E\u092F\u0924\u093E
         }
       };
       const expiryStr = linkedUser.expiresAt ? formatExpiryHindi(linkedUser.expiresAt) : isPaid ? "\u0935\u093E\u0930\u094D\u0937\u093F\u0915 \u092A\u094D\u0932\u093E\u0928 \u0938\u0915\u094D\u0930\u093F\u092F" : "7 \u0926\u093F\u0928 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932";
-      const hasVideoStudio = isSuper2 || tier === "advanced" || tier === "professional" || tier === "ultra" || tier === "vip";
+      const hasVideoStudio = isSuper || tier === "advanced" || tier === "professional" || tier === "ultra" || tier === "vip";
       const videoStatus = hasVideoStudio ? "\u0938\u0915\u094D\u0930\u093F\u092F (\u0935\u0940\u0921\u093F\u092F\u094B \u092C\u0928\u093E\u0928\u0947 \u0915\u0940 \u0938\u0941\u0935\u093F\u0927\u093E \u0909\u092A\u0932\u092C\u094D\u0927 \u2705)" : "\u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u274C (\u0915\u0947\u0935\u0932 \u090F\u0921\u0935\u093E\u0902\u0938/\u092A\u094D\u0930\u094B/\u0935\u0940\u0906\u0908\u092A\u0940 \u0921\u0947\u0938\u094D\u0915 \u092E\u0947\u0902)";
       let replyText = "";
       if (isQuotaQuery && !isAccountQuery) {
@@ -8769,9 +8769,9 @@ ${finalMessage}`);
     }
     if (customer.email && centralDb2?.readDoc) {
       try {
-        const isSuper2 = customer.tier === "superadmin" || customer.tier === "admin";
+        const isSuper = customer.tier === "superadmin" || customer.tier === "admin";
         let maxAllowed = 10;
-        if (isSuper2 || customer.tier === "ultra" || customer.tier === "vip") maxAllowed = 99999;
+        if (isSuper || customer.tier === "ultra" || customer.tier === "vip") maxAllowed = 99999;
         else if (customer.tier === "professional" || customer.tier === "pro") maxAllowed = 50;
         else if (customer.tier === "advanced" || customer.tier === "advance") maxAllowed = 25;
         const todayStr = new Intl.DateTimeFormat("en-CA", {
@@ -12445,11 +12445,11 @@ app.get("/api/user/sub-users", requireAuthMiddleware, (req, res) => {
     }
     const allProfiles = loadProfilesDatabase();
     const prof = allProfiles[rawEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === rawEmail) || {};
-    const isAdmin2 = isAuthorizedAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
     const tier = (prof.tier || "basic").toString().toLowerCase();
     const planName = (prof.planName || "").toString().toUpperCase();
     let allowedLimit = 0;
-    if (isAdmin2) {
+    if (isAdmin) {
       allowedLimit = 99;
     } else if (tier === "ultra" || planName.includes("VIP")) {
       allowedLimit = 3;
@@ -12492,11 +12492,11 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
     }
     const allProfiles = loadProfilesDatabase();
     const prof = allProfiles[cleanPrimary] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanPrimary) || {};
-    const isAdmin2 = isAuthorizedAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
     const tier = (prof.tier || "basic").toString().toLowerCase();
     const planName = (prof.planName || "").toString().toUpperCase();
     let allowedLimit = 0;
-    if (isAdmin2) {
+    if (isAdmin) {
       allowedLimit = 99;
     } else if (tier === "ultra" || planName.includes("VIP")) {
       allowedLimit = 3;
@@ -13240,12 +13240,12 @@ function broadcastVideoPublishedNotification(videoId, title) {
   }
 }
 function computeTrialFields(u, now = Date.now()) {
-  const isSuper2 = u.role === "superadmin" || isProtectedAdminAccount(u.email);
-  const isUpgraded = isSuper2 || u.tier && u.tier !== "basic" || Boolean(u.hasActivePaidPlan) || u.expiresAt && u.expiresAt > now && (Boolean(u.activatedVia) || Boolean(u.hasActivePaidPlan)) || u.planName && u.planName !== "TRIAL" && u.planName !== "BASIC" && (!u.expiresAt || u.expiresAt > now);
+  const isSuper = u.role === "superadmin" || isProtectedAdminAccount(u.email);
+  const isUpgraded = isSuper || u.tier && u.tier !== "basic" || Boolean(u.hasActivePaidPlan) || u.expiresAt && u.expiresAt > now && (Boolean(u.activatedVia) || Boolean(u.hasActivePaidPlan)) || u.planName && u.planName !== "TRIAL" && u.planName !== "BASIC" && (!u.expiresAt || u.expiresAt > now);
   if (isUpgraded) {
     const effectiveExpiresAt = u.expiresAt && u.expiresAt > now ? u.expiresAt : now + 365 * 864e5;
     const msRemaining2 = Math.max(0, effectiveExpiresAt - now);
-    const daysRemaining2 = isSuper2 ? 3650 : Math.max(1, Math.ceil(msRemaining2 / (24 * 3600 * 1e3)));
+    const daysRemaining2 = isSuper ? 3650 : Math.max(1, Math.ceil(msRemaining2 / (24 * 3600 * 1e3)));
     return {
       daysRemaining: daysRemaining2,
       hoursRemaining: 24,
@@ -13413,7 +13413,7 @@ function registerOrUpdateUserAuthoritative(userPayload) {
   const cleanEmail = emailRaw.toLowerCase();
   const cleanUserId = (userPayload.userId || userPayload.uid || "").toString().toLowerCase().trim();
   const rawMobile = (userPayload.mobile || userPayload.mobileNumber || "").toString().replace(/[^0-9]/g, "").slice(-10);
-  const isSuper2 = cleanEmail === "admin.ainewsmaker@gmail.com" || cleanEmail === "breakingnewswala.com@gmail.com";
+  const isSuper = cleanEmail === "admin.ainewsmaker@gmail.com" || cleanEmail === "breakingnewswala.com@gmail.com";
   const isBreakingNewsWala = cleanEmail === "breakingnewswala.com@gmail.com";
   const users = loadUsersMasterDatabase();
   const idx = users.findIndex((u) => {
@@ -13486,20 +13486,20 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      role: isSuper2 ? "superadmin" : userPayload.role || existing.role || "user",
-      tier: isSuper2 ? "ultra" : existing.tier && existing.tier !== "basic" ? existing.tier : userPayload.tier || existing.tier || "basic",
-      planName: isSuper2 ? "VIP DESK" : existing.tier && existing.tier !== "basic" ? existing.planName || existing.tier.toUpperCase() : userPayload.planName || existing.planName || "BASIC",
+      role: isSuper ? "superadmin" : userPayload.role || existing.role || "user",
+      tier: isSuper ? "ultra" : existing.tier && existing.tier !== "basic" ? existing.tier : userPayload.tier || existing.tier || "basic",
+      planName: isSuper ? "VIP DESK" : existing.tier && existing.tier !== "basic" ? existing.planName || existing.tier.toUpperCase() : userPayload.planName || existing.planName || "BASIC",
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
       createdAt: existing.createdAt || now,
       trialStartedAt: preservedTrialStart,
       trialEndsAt: preservedTrialEnds,
-      isTrialExpired: isSuper2 || existing.tier && existing.tier !== "basic" ? false : Date.now() >= preservedTrialEnds,
+      isTrialExpired: isSuper || existing.tier && existing.tier !== "basic" ? false : Date.now() >= preservedTrialEnds,
       lastLoginAt: now,
-      activatedAt: existing.activatedAt || (isSuper2 ? now : preservedTrialStart),
-      expiresAt: existing.expiresAt && existing.expiresAt > now ? existing.expiresAt : isSuper2 ? 2107057518060 : existing.tier && existing.tier !== "basic" ? now + 365 * 864e5 : preservedTrialEnds,
-      activatedVia: existing.activatedVia || (isSuper2 ? "Super Admin Preset" : "Google Registration")
+      activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
+      expiresAt: existing.expiresAt && existing.expiresAt > now ? existing.expiresAt : isSuper ? 2107057518060 : existing.tier && existing.tier !== "basic" ? now + 365 * 864e5 : preservedTrialEnds,
+      activatedVia: existing.activatedVia || (isSuper ? "Super Admin Preset" : "Google Registration")
     };
     users[idx] = updatedRecord;
   } else {
@@ -13535,9 +13535,9 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || null,
-      role: isSuper2 ? "superadmin" : userPayload.role || "user",
-      tier: isSuper2 ? "ultra" : userPayload.tier || "basic",
-      planName: isSuper2 ? "VIP DESK" : userPayload.planName || "BASIC",
+      role: isSuper ? "superadmin" : userPayload.role || "user",
+      tier: isSuper ? "ultra" : userPayload.tier || "basic",
+      planName: isSuper ? "VIP DESK" : userPayload.planName || "BASIC",
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
@@ -13546,9 +13546,9 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       trialEndsAt: newTrialEnds,
       isTrialExpired: false,
       lastLoginAt: now,
-      activatedAt: isSuper2 ? now : newTrialStart,
-      expiresAt: isSuper2 ? 2107057518060 : newTrialEnds,
-      activatedVia: isSuper2 ? "Super Admin Preset" : "Google Registration"
+      activatedAt: isSuper ? now : newTrialStart,
+      expiresAt: isSuper ? 2107057518060 : newTrialEnds,
+      activatedVia: isSuper ? "Super Admin Preset" : "Google Registration"
     };
     users.unshift(updatedRecord);
   }
@@ -14285,8 +14285,8 @@ app.get("/api/music-library", (req, res) => {
     const { mode, tier } = req.query;
     const userEmail = req.headers["x-user-email"] || req.query.email || "";
     const tracks = loadMusicLibrary();
-    const isAdmin2 = userEmail && isProtectedAdminAccount(userEmail);
-    if (isAdmin2) {
+    const isAdmin = userEmail && isProtectedAdminAccount(userEmail);
+    if (isAdmin) {
       return res.json({ success: true, tracks });
     }
     const filtered = tracks.filter((t) => {
@@ -14447,13 +14447,13 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
       const emailKey = (u.email || "").toLowerCase().trim();
       const idKey = (u.userId || "").toLowerCase().trim();
       const w = rDb.wallets[emailKey] || (idKey ? rDb.wallets[idKey] : null) || { coinBalance: 0 };
-      const isSuper2 = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
+      const isSuper = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
       return {
         ...u,
         coins: w.coinBalance || 0,
         coinBalance: w.coinBalance || 0,
-        permanentLock: isSuper2,
-        isLocked: isSuper2,
+        permanentLock: isSuper,
+        isLocked: isSuper,
         ...computeTrialFields(u, now)
       };
     });
@@ -14511,8 +14511,8 @@ app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, 
   const release = await userDbLock.acquire();
   try {
     const isMaster = isAuthorizedMasterAdmin(req);
-    const isAdmin2 = isAuthorizedAdmin(req);
-    if (!isAdmin2) {
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0938\u0902\u092A\u093E\u0926\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902" });
     }
     const { userId } = req.params;
@@ -14655,10 +14655,10 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
         console.warn("Could not save password credential:", credErr.message);
       }
     }
-    const isAdmin2 = isAuthorizedAdmin(req);
+    const isAdmin = isAuthorizedAdmin(req);
     const targetEmail = (profile.email || "").toLowerCase().trim();
     const targetUid = (profile.userId || profile.uid || "").toLowerCase().trim();
-    if (!isAdmin2 && (targetEmail || targetUid)) {
+    if (!isAdmin && (targetEmail || targetUid)) {
       const accessCheck = checkUserAccess(targetEmail || targetUid);
       if (accessCheck.blocked) {
         return res.status(403).json({
@@ -14667,7 +14667,7 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
         });
       }
     }
-    if (!isAdmin2) {
+    if (!isAdmin) {
       delete profile.role;
       delete profile.tier;
       delete profile.planName;
@@ -14684,7 +14684,7 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
       ...u,
       ...computeTrialFields(u, Date.now())
     }));
-    return res.json({ success: true, user: saved, users: isAdmin2 ? users : [saved], totalUsers: users.length });
+    return res.json({ success: true, user: saved, users: isAdmin ? users : [saved], totalUsers: users.length });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   } finally {
@@ -14953,8 +14953,8 @@ app.get("/api/admin/notifications", (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
     const reqEmail = (req.query.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin2 = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin2) {
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
+    if (!isAdmin) {
       return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
     const readIds = loadAdminReadNotificationIds();
@@ -15102,8 +15102,8 @@ app.post("/api/admin/support/update-status", (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
     const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin2 = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin2) {
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
+    if (!isAdmin) {
       return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
     const { id, type, status, adminNotes } = req.body || {};
@@ -15138,8 +15138,8 @@ app.post("/api/admin/news/publish-rss", (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
     const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin2 = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin2) {
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
+    if (!isAdmin) {
       return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
     const { id } = req.body || {};
@@ -15165,8 +15165,8 @@ app.post("/api/admin/notifications/mark-read", (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
     const reqEmail = (req.body?.email || req.body?.adminEmail || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin2 = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin2) {
+    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
+    if (!isAdmin) {
       return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
     const { id, all, ids, category } = req.body || {};
@@ -16660,21 +16660,21 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const reqRole = (req.headers["x-user-role"] || "").toString().toLowerCase();
     const reqEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
     const isMasterAdminEmail = profile.email && (profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || profile.email.toLowerCase() === "breakingnewswala.com@gmail.com") || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69" || cleanId === "admin";
-    const isAdmin2 = isAuthorizedAdmin(req) || reqKey === "master-admin" || (reqRole === "superadmin" || reqRole === "admin") || (reqEmail.includes("breakingnewswala") || reqEmail.includes("admin"));
-    if ((cleanId === "admin" || isMasterAdminEmail) && !isAdmin2) {
+    const isAdmin = isAuthorizedAdmin(req) || reqKey === "master-admin" || (reqRole === "superadmin" || reqRole === "admin") || (reqEmail.includes("breakingnewswala") || reqEmail.includes("admin"));
+    if ((cleanId === "admin" || isMasterAdminEmail) && !isAdmin) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
     const existing = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : null) || {};
     const isTargetBlocked = Boolean(existing.isBlocked) || checkUserAccess(cleanId).blocked || profile.email && checkUserAccess(profile.email).blocked;
-    if (isTargetBlocked && !isAdmin2) {
+    if (isTargetBlocked && !isAdmin) {
       return res.status(403).json({ success: false, error: "\u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964", blocked: true });
     }
     let finalUsername = profile.username !== void 0 ? profile.username : existing.username;
-    if (!isAdmin2 && existing.username && existing.username.trim() && existing.isProfileComplete && existing.isProfileLocked) {
+    if (!isAdmin && existing.username && existing.username.trim() && existing.isProfileComplete && existing.isProfileLocked) {
       finalUsername = existing.username;
     }
     let finalMobile = (profile.mobileNumber || profile.mobile) !== void 0 ? profile.mobileNumber || profile.mobile : existing.mobileNumber;
-    if (!isAdmin2 && existing.mobileNumber && existing.mobileNumber.trim()) {
+    if (!isAdmin && existing.mobileNumber && existing.mobileNumber.trim()) {
       finalMobile = existing.mobileNumber;
     }
     const normUsername = (finalUsername || "").toString().toLowerCase().trim().replace(/^@/, "");
@@ -16709,9 +16709,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         }
       }
     }
-    const safeRole = isAdmin2 ? profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter") : existing.role || (isMasterAdminEmail ? "admin" : "reporter");
-    const safeTier = isAdmin2 ? profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic") : existing.tier || (isMasterAdminEmail ? "ultra" : "basic");
-    const safeIsBlocked = isAdmin2 ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
+    const safeRole = isAdmin ? profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter") : existing.role || (isMasterAdminEmail ? "admin" : "reporter");
+    const safeTier = isAdmin ? profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic") : existing.tier || (isMasterAdminEmail ? "ultra" : "basic");
+    const safeIsBlocked = isAdmin ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
     const finalChannelHi = (profile.channelNameHi || profile.channelName || existing.channelNameHi || existing.channelName || "").toString().trim();
     const isProfileComplete = Boolean(
       (profile.isProfileComplete !== void 0 ? profile.isProfileComplete : existing.isProfileComplete) && finalChannelHi && finalChannelHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
@@ -16743,7 +16743,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         finalConsentAt = existing.whatsappMarketingConsentAt || null;
       }
     }
-    const safeIsLocked = isAdmin2 ? profile.isLocked !== void 0 ? Boolean(profile.isLocked) : Boolean(existing.isLocked) : isProfileComplete ? true : false;
+    const safeIsLocked = isAdmin ? profile.isLocked !== void 0 ? Boolean(profile.isLocked) : Boolean(existing.isLocked) : isProfileComplete ? true : false;
     const updated = {
       ...existing,
       ...profile,
@@ -16787,7 +16787,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       customFooterPng: profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng,
       updatedAt: Date.now()
     };
-    if (!isAdmin2 && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
+    if (!isAdmin && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
       if (!profile.channelLogoUrl || profile.channelLogoUrl.includes("ai_news_maker_logo.png") || profile.channelLogoUrl.trim() === "") {
         updated.channelLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
         updated.channelLogoPngUrl = existing.channelLogoPngUrl || existing.activeLogoUrl || existing.channelLogoUrl;
@@ -17052,6 +17052,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
     const { identifier, password, googleUid, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
     if (googleUid) {
+      const isSuper = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, "") === "admin.ainewsmaker@gmail.com";
+      const isAdmin = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, "") === "breakingnewswala.com@gmail.com";
       const release = await userDbLock.acquire();
       let savedUser;
       try {
@@ -17069,15 +17071,13 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           });
         }
         const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
-        const isSuper2 = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, "") === "admin.ainewsmaker@gmail.com";
-        const isAdmin2 = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, "") === "breakingnewswala.com@gmail.com";
         const isProfileComplete = Boolean(
           !isDeletedTombstoned && existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && (existing.channelLogoUrl || existing.channelLogoPngUrl)
         );
         let safeUsername;
-        if (isSuper2) {
+        if (isSuper) {
           safeUsername = "AI News Maker";
-        } else if (isAdmin2) {
+        } else if (isAdmin) {
           safeUsername = "breakingnewswala";
         } else if (isProfileComplete && existing?.username) {
           safeUsername = existing.username;
@@ -17091,25 +17091,25 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           uid: existing?.uid || googleUid,
           email: cleanId,
           username: safeUsername,
-          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper2 ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : isAdmin2 ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : "\u092F\u0942\u091C\u093C\u0930"),
-          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper2 ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : isAdmin2 ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : "\u092F\u0942\u091C\u093C\u0930"),
-          role: isSuper2 ? "superadmin" : isAdmin2 ? "superadmin" : existing?.role || "user",
-          tier: isSuper2 ? "ultra" : isAdmin2 ? "ultra" : existing?.tier || "basic",
-          planName: isSuper2 ? "VIP DESK" : isAdmin2 ? "VIP DESK" : existing?.planName || "BASIC",
-          channelName: isSuper2 ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin2 ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isProfileComplete ? existing?.channelNameHi || existing?.channelName || "" : profileData?.channelName || "",
-          channelNameHi: isSuper2 ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin2 ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isProfileComplete ? existing?.channelNameHi || "" : profileData?.channelNameHi || "",
-          channelNameEn: isSuper2 ? "AI News Maker" : isAdmin2 ? "Breaking News Wala" : isProfileComplete ? existing?.channelNameEn || "" : profileData?.channelNameEn || "",
-          channelLogoUrl: isSuper2 ? "/assets/ai_news_maker_logo.png" : isAdmin2 ? "/assets/breaking_news_wala_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
-          channelLogoPngUrl: isSuper2 ? "/assets/ai_news_maker_logo.png" : isAdmin2 ? "/assets/breaking_news_wala_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
+          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : isAdmin ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : "\u092F\u0942\u091C\u093C\u0930"),
+          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : isAdmin ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : "\u092F\u0942\u091C\u093C\u0930"),
+          role: isSuper ? "superadmin" : isAdmin ? "superadmin" : existing?.role || "user",
+          tier: isSuper ? "ultra" : isAdmin ? "ultra" : existing?.tier || "basic",
+          planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : existing?.planName || "BASIC",
+          channelName: isSuper ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isProfileComplete ? existing?.channelNameHi || existing?.channelName || "" : profileData?.channelName || "",
+          channelNameHi: isSuper ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isProfileComplete ? existing?.channelNameHi || "" : profileData?.channelNameHi || "",
+          channelNameEn: isSuper ? "AI News Maker" : isAdmin ? "Breaking News Wala" : isProfileComplete ? existing?.channelNameEn || "" : profileData?.channelNameEn || "",
+          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
+          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
           channelLogoGifUrl: isProfileComplete ? existing?.channelLogoGifUrl || "" : "",
           channelLogoType: existing?.channelLogoType || "png",
-          mobile: isSuper2 || isAdmin2 ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
-          mobileNumber: isSuper2 || isAdmin2 ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
-          district: isSuper2 ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : isAdmin2 ? "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" : existing?.district || "",
-          websiteUrl: isSuper2 ? "ainewsmaker.online" : isAdmin2 ? "breakingnewswala.com" : isProfileComplete ? existing?.websiteUrl || "" : profileData?.websiteUrl || "",
-          isProfileLocked: isSuper2 || isAdmin2 ? true : Boolean(isProfileComplete && existing?.isProfileLocked),
-          isProfileComplete: isSuper2 || isAdmin2 ? true : isProfileComplete,
-          profileStatus: isSuper2 || isAdmin2 ? "active" : isProfileComplete ? "active" : "incomplete"
+          mobile: isSuper || isAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
+          mobileNumber: isSuper || isAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
+          district: isSuper ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : isAdmin ? "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" : existing?.district || "",
+          websiteUrl: isSuper ? "ainewsmaker.online" : isAdmin ? "breakingnewswala.com" : isProfileComplete ? existing?.websiteUrl || "" : profileData?.websiteUrl || "",
+          isProfileLocked: isSuper || isAdmin ? true : Boolean(isProfileComplete && existing?.isProfileLocked),
+          isProfileComplete: isSuper || isAdmin ? true : isProfileComplete,
+          profileStatus: isSuper || isAdmin ? "active" : isProfileComplete ? "active" : "incomplete"
         };
         savedUser = registerOrUpdateUserAuthoritative(userPayload);
       } finally {
@@ -17138,19 +17138,6 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
     if (cleanId === "admin" || cleanId === "superadmin") {
       targetEmail = "admin.ainewsmaker@gmail.com";
     }
-    let credEntry = creds[targetEmail];
-    if (!credEntry) {
-      credEntry = Object.values(creds).find(
-        (c) => c.username && c.username.toLowerCase() === cleanId || c.email && c.email.toLowerCase() === cleanId
-      );
-    }
-    let isPasswordValid = false;
-    if (credEntry && credEntry.salt && credEntry.hash) {
-      isPasswordValid = verifyPassword(String(password), credEntry.salt, credEntry.hash);
-    }
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921" });
-    }
     const allProfiles = loadProfilesDatabase();
     const match = Object.values(allProfiles).find(
       (p) => p.email && p.email.toLowerCase() === targetEmail || p.username && p.username.toLowerCase() === cleanId
@@ -17163,6 +17150,19 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0938\u092A\u094B\u0930\u094D\u091F \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
         user: match || { email: targetEmail, isBlocked: true }
       });
+    }
+    let credEntry = creds[targetEmail];
+    if (!credEntry) {
+      credEntry = Object.values(creds).find(
+        (c) => c.username && c.username.toLowerCase() === cleanId || c.email && c.email.toLowerCase() === cleanId
+      );
+    }
+    let isPasswordValid = false;
+    if (credEntry && credEntry.salt && credEntry.hash) {
+      isPasswordValid = verifyPassword(String(password), credEntry.salt, credEntry.hash);
+    }
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921" });
     }
     const user = match || {
       username: credEntry?.username || cleanId,
@@ -17243,10 +17243,10 @@ function saveSupportRequestsDatabase(requests) {
 app.get("/api/support/requests", (req, res) => {
   const { userId, userEmail } = req.query;
   const all = loadSupportRequestsDatabase();
-  const isAdmin2 = isAuthorizedAdmin(req);
+  const isAdmin = isAuthorizedAdmin(req);
   const now = Date.now();
   const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1e3;
-  if (isAdmin2) {
+  if (isAdmin) {
     return res.json({ success: true, requests: all });
   }
   const authUser = getAuthenticatedUser(req);
@@ -17800,8 +17800,8 @@ app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
     const explicitTier = (req.body?.userTier || req.headers["x-user-tier"])?.toString().toLowerCase().trim();
     const userTier = (explicitTier || req.user?.tier || req.user?.subscriptionTier || "basic").toString().toLowerCase().trim();
     const isExplicitTest = Boolean(explicitTier);
-    const isAdmin2 = !isExplicitTest && (req.user?.role === "admin" || req.user?.role === "superadmin");
-    const isVipDash = isAdmin2 || userTier === "vip_dash" || userTier === "vip-dash" || userTier === "vip desk" || userTier === "ultra" || userTier === "vip";
+    const isAdmin = !isExplicitTest && (req.user?.role === "admin" || req.user?.role === "superadmin");
+    const isVipDash = isAdmin || userTier === "vip_dash" || userTier === "vip-dash" || userTier === "vip desk" || userTier === "ultra" || userTier === "vip";
     if (!isVipDash) {
       return res.status(403).json({
         success: false,
@@ -17890,8 +17890,8 @@ app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
     const caller = getAuthenticatedUser(req);
     const callerEmail = (caller?.email || "").toLowerCase().trim();
     const isMaster = isAuthorizedMasterAdmin(req);
-    const isAdmin2 = isAuthorizedAdmin(req);
-    if (!isAdmin2 && !isMaster) {
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const { userId, userEmail, blockedBy, reason } = req.body;
@@ -17957,8 +17957,8 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     const caller = getAuthenticatedUser(req);
     const callerEmail = (caller?.email || "").toLowerCase().trim();
     const isMaster = isAuthorizedMasterAdmin(req);
-    const isAdmin2 = isAuthorizedAdmin(req);
-    if (!isAdmin2 && !isMaster) {
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const { userId, userEmail, unblockedBy } = req.body;
@@ -18009,8 +18009,8 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
     const caller = getAuthenticatedUser(req);
     const callerEmail = (caller?.email || "").toLowerCase().trim();
     const isMaster = isAuthorizedMasterAdmin(req);
-    const isAdmin2 = isAuthorizedAdmin(req);
-    if (!isAdmin2 && !isMaster) {
+    const isAdmin = isAuthorizedAdmin(req);
+    if (!isAdmin && !isMaster) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u0921\u093F\u0932\u0940\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
     const paramId = req.params?.id;
