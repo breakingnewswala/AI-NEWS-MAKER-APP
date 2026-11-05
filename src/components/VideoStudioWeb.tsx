@@ -1839,6 +1839,31 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       return;
     }
 
+    // Daily Video Creation Quota Enforcement (Basic: 2, Advanced: 5, Pro: 15, VIP: 30)
+    if (currentUser?.email && !isEffectiveSuperAdmin(currentUser)) {
+      try {
+        const requestId = `req_vid_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const targetVidId = initialVideo?.id || `vid_${activeHeadline.slice(0, 30).replace(/\s+/g, '_')}`;
+        const quotaRes = await fetch(getApiUrl('/api/user/consume-video-creation-quota'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.email,
+            userId: currentUser.userId,
+            requestId,
+            videoId: targetVidId,
+          }),
+        });
+        const quotaData = await quotaRes.json();
+        if (quotaRes.status === 403 || quotaData.exhausted) {
+          showToast(quotaData.error || 'आज की वीडियो निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।');
+          return;
+        }
+      } catch (e) {
+        console.warn('Video quota consumption check failed, proceeding safely:', e);
+      }
+    }
+
     const currentExportId = `export_${Date.now()}`;
     activeExportIdRef.current = currentExportId;
     cancelExportRef.current = false;

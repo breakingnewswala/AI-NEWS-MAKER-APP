@@ -240,35 +240,53 @@ export function getAdminAuthHeaders(): Record<string, string> {
 
 // Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated
 if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-  const originalFetch = window.fetch;
-  window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
-    const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
-    if (urlStr.includes('/api/')) {
-      let token = getAuthToken();
-      if (!token && (urlStr.includes('/api/admin') || urlStr.includes('/api/process-news') || urlStr.includes('/api/generate-video'))) {
-        try {
-          token = await ensureAuthToken();
-        } catch {}
-      }
-      if (token) {
-        init = init || {};
-        if (init.headers instanceof Headers) {
-          if (!init.headers.has('Authorization')) {
-            init.headers.set('Authorization', `Bearer ${token}`);
+  try {
+    const originalFetch = window.fetch.bind(window);
+    const customFetch = async function (this: any, input: RequestInfo | URL, init?: RequestInit) {
+      const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
+      if (urlStr.includes('/api/')) {
+        let token = getAuthToken();
+        if (!token && (urlStr.includes('/api/admin') || urlStr.includes('/api/process-news') || urlStr.includes('/api/generate-video'))) {
+          try {
+            token = await ensureAuthToken();
+          } catch {}
+        }
+        if (token) {
+          init = init || {};
+          if (init.headers instanceof Headers) {
+            if (!init.headers.has('Authorization')) {
+              init.headers.set('Authorization', `Bearer ${token}`);
+            }
+          } else if (Array.isArray(init.headers)) {
+            const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
+            if (!hasAuth) {
+              init.headers.push(['Authorization', `Bearer ${token}`]);
+            }
+          } else {
+            init.headers = {
+              ...(init.headers || {}),
+              Authorization: (init.headers as any)?.Authorization || `Bearer ${token}`,
+            };
           }
-        } else if (Array.isArray(init.headers)) {
-          const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
-          if (!hasAuth) {
-            init.headers.push(['Authorization', `Bearer ${token}`]);
-          }
-        } else {
-          init.headers = {
-            ...(init.headers || {}),
-            Authorization: (init.headers as any)?.Authorization || `Bearer ${token}`,
-          };
         }
       }
+      return originalFetch(input, init);
+    };
+
+    const desc = Object.getOwnPropertyDescriptor(window, 'fetch') || Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window), 'fetch');
+    const canDefine = !desc || desc.configurable || desc.writable || Boolean(desc.set);
+    if (canDefine) {
+      try {
+        Object.defineProperty(window, 'fetch', {
+          value: customFetch,
+          writable: true,
+          configurable: true,
+        });
+      } catch {
+        // Window.fetch in this context cannot be redefined (e.g. strict sandboxed iframe). Skip silently.
+      }
     }
-    return originalFetch.call(this, input, init);
-  };
+  } catch {
+    // Fail silently in environments where window.fetch is protected
+  }
 }

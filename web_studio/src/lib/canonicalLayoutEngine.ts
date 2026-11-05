@@ -172,42 +172,40 @@ export function getTemplateLayoutSpec(
   let bannerY = photoH;
   let bannerH = height - photoH - footerH;
 
-  // Title safe bounds provide universal baseline
-  let headlineSafeLeft = titleSafe.x;
-  let headlineSafeRight = titleSafe.right;
-  let headlineSafeTop = bannerY + 20;
-  let headlineSafeBottom = bannerY + bannerH - 20;
-  let maxHeadlineW = titleSafe.width;
+  // Action Safe 90% bounds provide headline expansion baseline per Part 6
+  let headlineSafeLeft = actionSafe.x + 8;
+  let headlineSafeRight = actionSafe.right - 8;
+  let headlineSafeTop = bannerY + 18;
+  let headlineSafeBottom = bannerY + bannerH - 18;
+  let maxHeadlineW = headlineSafeRight - headlineSafeLeft;
   let maxHeadlineH = headlineSafeBottom - headlineSafeTop;
   let maxLines = 3;
   let supportsFourLines = false;
-  let defaultFontSize = 66;
+  let defaultFontSize = 70;
   let minFontSize = 36;
-  let maxFontSize = 72;
+  let maxFontSize = 84;
 
   if (templateId === 'graphic_001') {
-    // Graphic 1: Red Headline Banner with Left & Right Chevrons (chevrons occupy x=0..90 and x=990..1080)
-    // Headline must comfortably stay inside Title Safe (108..972) and clear chevrons + shadow blur
+    // Graphic 1: Red Headline Banner with Left & Right Chevrons
+    // Headline expands up to 90% Action Safe boundary (84..996), clearing chevrons while utilizing full space
     photoH = Math.round(height * 0.6133); // ~828px
     bannerY = photoH;
-    bannerH = Math.round(height * 0.3067); // ~414px (covers 61.33% to 92.0%, leaving exactly 8.0% footer)
+    bannerH = Math.round(height * 0.3067); // ~414px
     footerH = height - (bannerY + bannerH); // ~108px (8.0%)
 
-    // Buffer 12px inside Title Safe to ensure 14px shadow blur never touches chevrons or edge
-    headlineSafeLeft = 114;
-    headlineSafeRight = 966;
-    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 852px (well inside 864px Title Safe)
+    headlineSafeLeft = 84;
+    headlineSafeRight = 996;
+    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 912px (expands to Action Safe while clearing chevrons)
 
-    // Vertical safe padding: Brings headline down into optical center of red banner and reduces gap above footer
-    headlineSafeTop = bannerY + 24; // ~852px
-    headlineSafeBottom = bannerY + bannerH - 14; // ~1228px
+    headlineSafeTop = bannerY + 22;
+    headlineSafeBottom = bannerY + bannerH - 12;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
     maxLines = 4;
     supportsFourLines = true;
-    defaultFontSize = 68;
+    defaultFontSize = 72;
     minFontSize = 38;
-    maxFontSize = 74;
+    maxFontSize = 86;
   } else if (templateId === 'graphic_002') {
     // Graphic 2: Orange Border, Comment Box CTA, Photo ~54%
     photoH = Math.round(height * 0.54);
@@ -216,18 +214,18 @@ export function getTemplateLayoutSpec(
     bannerH = ctaLineY - photoH;
     footerH = Math.round(height * 0.098);
 
-    headlineSafeLeft = 114;
-    headlineSafeRight = 966;
-    maxHeadlineW = 852;
-    headlineSafeTop = bannerY + 16;
-    headlineSafeBottom = bannerY + bannerH - 16;
+    headlineSafeLeft = actionSafe.x + 10;
+    headlineSafeRight = actionSafe.right - 10;
+    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 952px
+    headlineSafeTop = bannerY + 14;
+    headlineSafeBottom = bannerY + bannerH - 14;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
     maxLines = 3;
     supportsFourLines = false;
-    defaultFontSize = 66;
+    defaultFontSize = 72;
     minFontSize = 36;
-    maxFontSize = 70;
+    maxFontSize = 84;
   } else if (templateId === 'graphic_003') {
     // Graphic 3: Modern Minimalist Pro News
     photoH = Math.round(height * 0.58);
@@ -235,73 +233,73 @@ export function getTemplateLayoutSpec(
     bannerH = Math.round(height * 0.31);
     footerH = height - (bannerY + bannerH);
 
-    headlineSafeLeft = 114;
-    headlineSafeRight = 966;
-    maxHeadlineW = 852;
-    headlineSafeTop = bannerY + 20;
-    headlineSafeBottom = bannerY + bannerH - 20;
+    headlineSafeLeft = actionSafe.x + 10;
+    headlineSafeRight = actionSafe.right - 10;
+    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 952px
+    headlineSafeTop = bannerY + 16;
+    headlineSafeBottom = bannerY + bannerH - 16;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
     maxLines = 3;
     supportsFourLines = false;
-    defaultFontSize = 68;
+    defaultFontSize = 74;
     minFontSize = 38;
-    maxFontSize = 72;
+    maxFontSize = 88;
   } else if (templateId === 'graphic_004') {
     // Graphic 4: Top Headline, Photo Middle, Footer Bottom
-    bannerY = actionSafe.y + 10;
+    bannerY = actionSafe.y + 8;
     bannerH = Math.round(height * 0.26);
     photoH = Math.round(height * 0.60);
     footerH = height - (bannerY + bannerH + photoH);
 
-    headlineSafeLeft = 114;
-    headlineSafeRight = 966;
-    maxHeadlineW = 852;
-    headlineSafeTop = bannerY + 10;
-    headlineSafeBottom = bannerY + bannerH - 10;
+    headlineSafeLeft = actionSafe.x + 10;
+    headlineSafeRight = actionSafe.right - 10;
+    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 952px
+    headlineSafeTop = bannerY + 8;
+    headlineSafeBottom = bannerY + bannerH - 8;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
     maxLines = 3;
     supportsFourLines = false;
-    defaultFontSize = 76;
+    defaultFontSize = 82;
     minFontSize = 42;
-    maxFontSize = 84;
+    maxFontSize = 94;
   } else if (templateId === 'jacket-morning') {
     // Morning Jacket (Suvichar / Quotes)
-    bannerY = actionSafe.y + 40;
+    bannerY = actionSafe.y + 36;
     footerH = Math.round(height * 0.10);
-    bannerH = height - bannerY - footerH - 20;
+    bannerH = height - bannerY - footerH - 16;
 
-    headlineSafeLeft = 114;
-    headlineSafeRight = 966;
-    maxHeadlineW = 852;
-    headlineSafeTop = bannerY + 10;
-    headlineSafeBottom = bannerY + bannerH - 10;
+    headlineSafeLeft = actionSafe.x + 10;
+    headlineSafeRight = actionSafe.right - 10;
+    maxHeadlineW = headlineSafeRight - headlineSafeLeft;
+    headlineSafeTop = bannerY + 8;
+    headlineSafeBottom = bannerY + bannerH - 8;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
     maxLines = 6;
     supportsFourLines = true;
-    defaultFontSize = 64;
+    defaultFontSize = 68;
     minFontSize = 34;
-    maxFontSize = 80;
+    maxFontSize = 88;
   } else if (templateId === 'jacket-quote') {
     // Quote Template
     photoH = Math.round(height * 0.52);
     bannerY = photoH;
     bannerH = height - photoH - footerH;
 
-    headlineSafeLeft = 120;
-    headlineSafeRight = 960;
-    maxHeadlineW = 840;
-    headlineSafeTop = bannerY + 16;
-    headlineSafeBottom = bannerY + bannerH - 16;
+    headlineSafeLeft = actionSafe.x + 14;
+    headlineSafeRight = actionSafe.right - 14;
+    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 944px
+    headlineSafeTop = bannerY + 14;
+    headlineSafeBottom = bannerY + bannerH - 14;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
     maxLines = 4;
     supportsFourLines = true;
-    defaultFontSize = 60;
+    defaultFontSize = 66;
     minFontSize = 36;
-    maxFontSize = 72;
+    maxFontSize = 84;
   }
 
   return {

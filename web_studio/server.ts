@@ -20768,7 +20768,7 @@ app.get("/api/payment/gateways-status", (_req, res) => {
 // --- DAILY GRAPHIC CREATION LIMIT SYSTEM (Click-based) ---
 const DAILY_GRAPHIC_CREATIONS_DB_FILE = path.join(process.cwd(), "daily_graphic_creations_db.json");
 
-function loadDailyGraphicCreationsDatabase(): Record<string, Record<string, { count: number; processedRequestIds?: string[]; updatedAt?: number }>> {
+function loadDailyGraphicCreationsDatabase(): Record<string, Record<string, { count: number; processedRequestIds?: string[]; processedPostIds?: string[]; updatedAt?: number }>> {
   try {
     if (fs.existsSync(DAILY_GRAPHIC_CREATIONS_DB_FILE)) {
       const raw = fs.readFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, "utf-8");
@@ -20778,7 +20778,7 @@ function loadDailyGraphicCreationsDatabase(): Record<string, Record<string, { co
   return {};
 }
 
-function saveDailyGraphicCreationsDatabase(data: Record<string, Record<string, { count: number; processedRequestIds?: string[]; updatedAt?: number }>>) {
+function saveDailyGraphicCreationsDatabase(data: Record<string, Record<string, { count: number; processedRequestIds?: string[]; processedPostIds?: string[]; updatedAt?: number }>>) {
   try {
     fs.writeFileSync(DAILY_GRAPHIC_CREATIONS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
   } catch (err: any) {
@@ -20796,7 +20796,7 @@ function getDailyGraphicLimitForTier(tier = "basic"): number {
 
 app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
   try {
-    const { email, userEmail, userId, requestId, postId } = req.body || {};
+    const { email, userEmail, userId, requestId, postId, newsId, id } = req.body || {};
     const cleanEmail = (email || userEmail || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || "").toString().trim();
     const userKey = cleanEmail || cleanUserId;
@@ -20831,13 +20831,30 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
     const db = loadDailyGraphicCreationsDatabase();
     if (!db[dateStr]) db[dateStr] = {};
     if (!db[dateStr][userKey]) {
-      db[dateStr][userKey] = { count: 0, processedRequestIds: [], updatedAt: Date.now() };
+      db[dateStr][userKey] = { count: 0, processedRequestIds: [], processedPostIds: [], updatedAt: Date.now() };
     }
 
     const userEntry = db[dateStr][userKey];
     if (!userEntry.processedRequestIds) userEntry.processedRequestIds = [];
+    if (!userEntry.processedPostIds) userEntry.processedPostIds = [];
 
     const cleanReqId = (requestId || "").trim();
+    const cleanPostId = (postId || newsId || id || "").toString().trim();
+
+    // 1. One News Card = One Count Per User Per Day (Deduplication)
+    if (cleanPostId && userEntry.processedPostIds.includes(cleanPostId)) {
+      return res.json({
+        success: true,
+        unlimited: false,
+        limit: dailyLimit,
+        usedToday: userEntry.count,
+        remainingToday: Math.max(0, dailyLimit - userEntry.count),
+        deduplicated: true,
+        message: "यह समाचार कार्ड आज पहले ही उपयोग किया जा चुका है। कोटा पुनः नहीं काटा गया।",
+      });
+    }
+
+    // 2. Request deduplication
     if (cleanReqId && userEntry.processedRequestIds.includes(cleanReqId)) {
       return res.json({
         success: true,
@@ -20862,6 +20879,7 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
 
     userEntry.count += 1;
     if (cleanReqId) userEntry.processedRequestIds.push(cleanReqId);
+    if (cleanPostId) userEntry.processedPostIds.push(cleanPostId);
     userEntry.updatedAt = Date.now();
     saveDailyGraphicCreationsDatabase(db);
 
@@ -20920,6 +20938,206 @@ app.get("/api/user/graphic-creation-quota", (req, res) => {
       usedToday,
       remainingToday: Math.max(0, dailyLimit - usedToday),
       isExhausted: usedToday >= dailyLimit,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// --- DAILY VIDEO CREATION LIMIT SYSTEM (Generation/Creation-based) ---
+// Basic: 2 Videos/day, Advanced: 5 Videos/day, Pro: 15 Videos/day, VIP: Unlimited (capped at 30 Videos/day)
+const DAILY_VIDEO_CREATIONS_DB_FILE = path.join(process.cwd(), "daily_video_creations_db.json");
+
+function loadDailyVideoCreationsDatabase(): Record<string, Record<string, { count: number; processedRequestIds?: string[]; processedVideoIds?: string[]; updatedAt?: number }>> {
+  try {
+    if (fs.existsSync(DAILY_VIDEO_CREATIONS_DB_FILE)) {
+      const raw = fs.readFileSync(DAILY_VIDEO_CREATIONS_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return {};
+}
+
+function saveDailyVideoCreationsDatabase(data: Record<string, Record<string, { count: number; processedRequestIds?: string[]; processedVideoIds?: string[]; updatedAt?: number }>>) {
+  try {
+    fs.writeFileSync(DAILY_VIDEO_CREATIONS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err: any) {
+    console.warn("[DailyVideoCreations] Save failed:", err.message);
+  }
+}
+
+function getDailyVideoLimitForTier(tier = "basic"): { limit: number; displayLimit: string; isUnlimitedDisplay: boolean } {
+  const clean = (tier || "basic").toLowerCase().trim();
+  if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) {
+    return { limit: 30, displayLimit: "Unlimited", isUnlimitedDisplay: true };
+  }
+  if (clean.includes("pro") || clean.includes("professional")) {
+    return { limit: 15, displayLimit: "15", isUnlimitedDisplay: false };
+  }
+  if (clean.includes("advance") || clean.includes("advanced")) {
+    return { limit: 5, displayLimit: "5", isUnlimitedDisplay: false };
+  }
+  return { limit: 2, displayLimit: "2", isUnlimitedDisplay: false };
+}
+
+app.post("/api/user/consume-video-creation-quota", async (req, res) => {
+  try {
+    const { email, userEmail, userId, requestId, videoId, newsId, id } = req.body || {};
+    const cleanEmail = (email || userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || "").toString().trim();
+    const userKey = cleanEmail || cleanUserId;
+
+    if (!userKey) {
+      return res.status(400).json({ error: "User identity required" });
+    }
+
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+      (u.userId && u.userId.toLowerCase().trim() === cleanUserId)
+    );
+    const userRole = (targetUser?.role || "").toLowerCase();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === 'admin' || userRole === 'superadmin';
+
+    if (isMaster) {
+      return res.json({
+        success: true,
+        unlimited: true,
+        limit: 999999,
+        displayLimit: "Unlimited",
+        isUnlimitedDisplay: true,
+        usedToday: 0,
+        remainingToday: 999999,
+        message: "एडमिन/मास्टर एडमिन: असीमित वीडियो निर्माण",
+      });
+    }
+
+    const tier = targetUser?.tier || "basic";
+    const videoRule = getDailyVideoLimitForTier(tier);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+
+    const db = loadDailyVideoCreationsDatabase();
+    if (!db[dateStr]) db[dateStr] = {};
+    if (!db[dateStr][userKey]) {
+      db[dateStr][userKey] = { count: 0, processedRequestIds: [], processedVideoIds: [], updatedAt: Date.now() };
+    }
+
+    const userEntry = db[dateStr][userKey];
+    if (!userEntry.processedRequestIds) userEntry.processedRequestIds = [];
+    if (!userEntry.processedVideoIds) userEntry.processedVideoIds = [];
+
+    const cleanReqId = (requestId || "").trim();
+    const cleanVideoId = (videoId || newsId || id || "").toString().trim();
+
+    // 1. One Video = One Count Per User Per Day (Deduplication)
+    if (cleanVideoId && userEntry.processedVideoIds.includes(cleanVideoId)) {
+      return res.json({
+        success: true,
+        unlimited: videoRule.isUnlimitedDisplay,
+        limit: videoRule.limit,
+        displayLimit: videoRule.displayLimit,
+        isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+        usedToday: userEntry.count,
+        remainingToday: Math.max(0, videoRule.limit - userEntry.count),
+        deduplicated: true,
+        message: "यह वीडियो आज पहले ही उपयोग किया जा चुका है। कोटा पुनः नहीं काटा गया।",
+      });
+    }
+
+    // 2. Request deduplication
+    if (cleanReqId && userEntry.processedRequestIds.includes(cleanReqId)) {
+      return res.json({
+        success: true,
+        unlimited: videoRule.isUnlimitedDisplay,
+        limit: videoRule.limit,
+        displayLimit: videoRule.displayLimit,
+        isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+        usedToday: userEntry.count,
+        remainingToday: Math.max(0, videoRule.limit - userEntry.count),
+        deduplicated: true,
+      });
+    }
+
+    if (userEntry.count >= videoRule.limit) {
+      return res.status(403).json({
+        success: false,
+        exhausted: true,
+        limit: videoRule.limit,
+        displayLimit: videoRule.displayLimit,
+        isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+        usedToday: userEntry.count,
+        remainingToday: 0,
+        error: `आज की वीडियो निर्माण दैनिक सीमा (${videoRule.limit}/${videoRule.limit}) समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।`,
+      });
+    }
+
+    userEntry.count += 1;
+    if (cleanReqId) userEntry.processedRequestIds.push(cleanReqId);
+    if (cleanVideoId) userEntry.processedVideoIds.push(cleanVideoId);
+    userEntry.updatedAt = Date.now();
+    saveDailyVideoCreationsDatabase(db);
+
+    return res.json({
+      success: true,
+      unlimited: videoRule.isUnlimitedDisplay,
+      limit: videoRule.limit,
+      displayLimit: videoRule.displayLimit,
+      isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+      usedToday: userEntry.count,
+      remainingToday: Math.max(0, videoRule.limit - userEntry.count),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.get("/api/user/video-creation-quota", (req, res) => {
+  try {
+    const cleanEmail = (req.query.email || req.query.userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (req.query.userId || "").toString().trim();
+    const userKey = cleanEmail || cleanUserId;
+
+    if (!userKey) {
+      return res.status(400).json({ error: "User identity required" });
+    }
+
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(u =>
+      (u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+      (u.userId && u.userId.toLowerCase().trim() === cleanUserId)
+    );
+    const userRole = (targetUser?.role || "").toLowerCase();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === 'admin' || userRole === 'superadmin';
+
+    if (isMaster) {
+      return res.json({
+        success: true,
+        unlimited: true,
+        limit: 999999,
+        displayLimit: "Unlimited",
+        isUnlimitedDisplay: true,
+        usedToday: 0,
+        remainingToday: 999999,
+      });
+    }
+
+    const tier = targetUser?.tier || "basic";
+    const videoRule = getDailyVideoLimitForTier(tier);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+
+    const db = loadDailyVideoCreationsDatabase();
+    const userEntry = db[dateStr]?.[userKey] || { count: 0 };
+    const usedToday = userEntry.count || 0;
+
+    return res.json({
+      success: true,
+      unlimited: videoRule.isUnlimitedDisplay,
+      limit: videoRule.limit,
+      displayLimit: videoRule.displayLimit,
+      isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+      usedToday,
+      remainingToday: Math.max(0, videoRule.limit - usedToday),
+      isExhausted: usedToday >= videoRule.limit,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

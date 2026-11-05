@@ -45,16 +45,18 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       return res;
     };
 
-    try {
-      Object.defineProperty(window, 'fetch', {
-        value: customFetch,
-        writable: true,
-        configurable: true,
-      });
-    } catch {
+    const desc = Object.getOwnPropertyDescriptor(window, 'fetch') || Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window), 'fetch');
+    const canDefine = !desc || desc.configurable || desc.writable || Boolean(desc.set);
+    if (canDefine) {
       try {
-        (window as any).fetch = customFetch;
-      } catch {}
+        Object.defineProperty(window, 'fetch', {
+          value: customFetch,
+          writable: true,
+          configurable: true,
+        });
+      } catch {
+        // Sandboxed window.fetch cannot be redefined. Skip silently.
+      }
     }
   } catch (err) {
     console.warn('Global fetch interceptor skipped:', err);

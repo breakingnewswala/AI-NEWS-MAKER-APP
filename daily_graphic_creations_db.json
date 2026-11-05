@@ -1,1 +1,23 @@
-{}
+{
+  "2026-11-05": {
+    "testuser@example.com": {
+      "count": 2,
+      "processedRequestIds": [],
+      "updatedAt": 1793879806057
+    },
+    "testreporter1@ainewsmaker.online": {
+      "count": 2,
+      "processedRequestIds": [],
+      "updatedAt": 1793879943891
+    },
+    "testuser_dedup@test.com": {
+      "count": 2,
+      "processedRequestIds": [],
+      "processedPostIds": [
+        "card_alpha",
+        "card_beta"
+      ],
+      "updatedAt": 1793880022841
+    }
+  }
+}

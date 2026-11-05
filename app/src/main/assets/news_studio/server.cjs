@@ -27264,7 +27264,7 @@ function getDailyGraphicLimitForTier(tier = "basic") {
 }
 app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
   try {
-    const { email, userEmail, userId, requestId, postId } = req.body || {};
+    const { email, userEmail, userId, requestId, postId, newsId, id } = req.body || {};
     const cleanEmail = (email || userEmail || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || "").toString().trim();
     const userKey = cleanEmail || cleanUserId;
@@ -27293,11 +27293,24 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
     const db = loadDailyGraphicCreationsDatabase();
     if (!db[dateStr]) db[dateStr] = {};
     if (!db[dateStr][userKey]) {
-      db[dateStr][userKey] = { count: 0, processedRequestIds: [], updatedAt: Date.now() };
+      db[dateStr][userKey] = { count: 0, processedRequestIds: [], processedPostIds: [], updatedAt: Date.now() };
     }
     const userEntry = db[dateStr][userKey];
     if (!userEntry.processedRequestIds) userEntry.processedRequestIds = [];
+    if (!userEntry.processedPostIds) userEntry.processedPostIds = [];
     const cleanReqId = (requestId || "").trim();
+    const cleanPostId = (postId || newsId || id || "").toString().trim();
+    if (cleanPostId && userEntry.processedPostIds.includes(cleanPostId)) {
+      return res.json({
+        success: true,
+        unlimited: false,
+        limit: dailyLimit,
+        usedToday: userEntry.count,
+        remainingToday: Math.max(0, dailyLimit - userEntry.count),
+        deduplicated: true,
+        message: "\u092F\u0939 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u093E\u0930\u094D\u0921 \u0906\u091C \u092A\u0939\u0932\u0947 \u0939\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0915\u094B\u091F\u093E \u092A\u0941\u0928\u0903 \u0928\u0939\u0940\u0902 \u0915\u093E\u091F\u093E \u0917\u092F\u093E\u0964"
+      });
+    }
     if (cleanReqId && userEntry.processedRequestIds.includes(cleanReqId)) {
       return res.json({
         success: true,
@@ -27320,6 +27333,7 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
     }
     userEntry.count += 1;
     if (cleanReqId) userEntry.processedRequestIds.push(cleanReqId);
+    if (cleanPostId) userEntry.processedPostIds.push(cleanPostId);
     userEntry.updatedAt = Date.now();
     saveDailyGraphicCreationsDatabase(db);
     return res.json({
@@ -27369,6 +27383,177 @@ app.get("/api/user/graphic-creation-quota", (req, res) => {
       usedToday,
       remainingToday: Math.max(0, dailyLimit - usedToday),
       isExhausted: usedToday >= dailyLimit
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var DAILY_VIDEO_CREATIONS_DB_FILE = import_path2.default.join(process.cwd(), "daily_video_creations_db.json");
+function loadDailyVideoCreationsDatabase() {
+  try {
+    if (import_fs2.default.existsSync(DAILY_VIDEO_CREATIONS_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(DAILY_VIDEO_CREATIONS_DB_FILE, "utf-8");
+      return JSON.parse(raw);
+    }
+  } catch {
+  }
+  return {};
+}
+function saveDailyVideoCreationsDatabase(data) {
+  try {
+    import_fs2.default.writeFileSync(DAILY_VIDEO_CREATIONS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("[DailyVideoCreations] Save failed:", err.message);
+  }
+}
+function getDailyVideoLimitForTier(tier = "basic") {
+  const clean = (tier || "basic").toLowerCase().trim();
+  if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) {
+    return { limit: 30, displayLimit: "Unlimited", isUnlimitedDisplay: true };
+  }
+  if (clean.includes("pro") || clean.includes("professional")) {
+    return { limit: 15, displayLimit: "15", isUnlimitedDisplay: false };
+  }
+  if (clean.includes("advance") || clean.includes("advanced")) {
+    return { limit: 5, displayLimit: "5", isUnlimitedDisplay: false };
+  }
+  return { limit: 2, displayLimit: "2", isUnlimitedDisplay: false };
+}
+app.post("/api/user/consume-video-creation-quota", async (req, res) => {
+  try {
+    const { email, userEmail, userId, requestId, videoId, newsId, id } = req.body || {};
+    const cleanEmail = (email || userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (userId || "").toString().trim();
+    const userKey = cleanEmail || cleanUserId;
+    if (!userKey) {
+      return res.status(400).json({ error: "User identity required" });
+    }
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.userId && u.userId.toLowerCase().trim() === cleanUserId
+    );
+    const userRole = (targetUser?.role || "").toLowerCase();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === "admin" || userRole === "superadmin";
+    if (isMaster) {
+      return res.json({
+        success: true,
+        unlimited: true,
+        limit: 999999,
+        displayLimit: "Unlimited",
+        isUnlimitedDisplay: true,
+        usedToday: 0,
+        remainingToday: 999999,
+        message: "\u090F\u0921\u092E\u093F\u0928/\u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928: \u0905\u0938\u0940\u092E\u093F\u0924 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923"
+      });
+    }
+    const tier = targetUser?.tier || "basic";
+    const videoRule = getDailyVideoLimitForTier(tier);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const db = loadDailyVideoCreationsDatabase();
+    if (!db[dateStr]) db[dateStr] = {};
+    if (!db[dateStr][userKey]) {
+      db[dateStr][userKey] = { count: 0, processedRequestIds: [], processedVideoIds: [], updatedAt: Date.now() };
+    }
+    const userEntry = db[dateStr][userKey];
+    if (!userEntry.processedRequestIds) userEntry.processedRequestIds = [];
+    if (!userEntry.processedVideoIds) userEntry.processedVideoIds = [];
+    const cleanReqId = (requestId || "").trim();
+    const cleanVideoId = (videoId || newsId || id || "").toString().trim();
+    if (cleanVideoId && userEntry.processedVideoIds.includes(cleanVideoId)) {
+      return res.json({
+        success: true,
+        unlimited: videoRule.isUnlimitedDisplay,
+        limit: videoRule.limit,
+        displayLimit: videoRule.displayLimit,
+        isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+        usedToday: userEntry.count,
+        remainingToday: Math.max(0, videoRule.limit - userEntry.count),
+        deduplicated: true,
+        message: "\u092F\u0939 \u0935\u0940\u0921\u093F\u092F\u094B \u0906\u091C \u092A\u0939\u0932\u0947 \u0939\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0915\u094B\u091F\u093E \u092A\u0941\u0928\u0903 \u0928\u0939\u0940\u0902 \u0915\u093E\u091F\u093E \u0917\u092F\u093E\u0964"
+      });
+    }
+    if (cleanReqId && userEntry.processedRequestIds.includes(cleanReqId)) {
+      return res.json({
+        success: true,
+        unlimited: videoRule.isUnlimitedDisplay,
+        limit: videoRule.limit,
+        displayLimit: videoRule.displayLimit,
+        isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+        usedToday: userEntry.count,
+        remainingToday: Math.max(0, videoRule.limit - userEntry.count),
+        deduplicated: true
+      });
+    }
+    if (userEntry.count >= videoRule.limit) {
+      return res.status(403).json({
+        success: false,
+        exhausted: true,
+        limit: videoRule.limit,
+        displayLimit: videoRule.displayLimit,
+        isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+        usedToday: userEntry.count,
+        remainingToday: 0,
+        error: `\u0906\u091C \u0915\u0940 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E (${videoRule.limit}/${videoRule.limit}) \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902 \u092F\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`
+      });
+    }
+    userEntry.count += 1;
+    if (cleanReqId) userEntry.processedRequestIds.push(cleanReqId);
+    if (cleanVideoId) userEntry.processedVideoIds.push(cleanVideoId);
+    userEntry.updatedAt = Date.now();
+    saveDailyVideoCreationsDatabase(db);
+    return res.json({
+      success: true,
+      unlimited: videoRule.isUnlimitedDisplay,
+      limit: videoRule.limit,
+      displayLimit: videoRule.displayLimit,
+      isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+      usedToday: userEntry.count,
+      remainingToday: Math.max(0, videoRule.limit - userEntry.count)
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/user/video-creation-quota", (req, res) => {
+  try {
+    const cleanEmail = (req.query.email || req.query.userEmail || "").toString().toLowerCase().trim();
+    const cleanUserId = (req.query.userId || "").toString().trim();
+    const userKey = cleanEmail || cleanUserId;
+    if (!userKey) {
+      return res.status(400).json({ error: "User identity required" });
+    }
+    const masterUsers = loadUsersMasterDatabase();
+    const targetUser = masterUsers.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.userId && u.userId.toLowerCase().trim() === cleanUserId
+    );
+    const userRole = (targetUser?.role || "").toLowerCase();
+    const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === "admin" || userRole === "superadmin";
+    if (isMaster) {
+      return res.json({
+        success: true,
+        unlimited: true,
+        limit: 999999,
+        displayLimit: "Unlimited",
+        isUnlimitedDisplay: true,
+        usedToday: 0,
+        remainingToday: 999999
+      });
+    }
+    const tier = targetUser?.tier || "basic";
+    const videoRule = getDailyVideoLimitForTier(tier);
+    const { dateStr } = getAsiaKolkataDateAndExpiry();
+    const db = loadDailyVideoCreationsDatabase();
+    const userEntry = db[dateStr]?.[userKey] || { count: 0 };
+    const usedToday = userEntry.count || 0;
+    return res.json({
+      success: true,
+      unlimited: videoRule.isUnlimitedDisplay,
+      limit: videoRule.limit,
+      displayLimit: videoRule.displayLimit,
+      isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
+      usedToday,
+      remainingToday: Math.max(0, videoRule.limit - usedToday),
+      isExhausted: usedToday >= videoRule.limit
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });

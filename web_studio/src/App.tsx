@@ -2607,7 +2607,29 @@ export default function App() {
     }
   };
 
-  const handleOpenStudioWithVideo = (vid: VideoFeedItem) => {
+  const handleOpenStudioWithVideo = async (vid: VideoFeedItem) => {
+    if (currentUser?.email && !isUserAdmin(currentUser)) {
+      try {
+        const requestId = `req_vid_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const res = await fetch(getApiBaseUrl() + '/api/user/consume-video-creation-quota', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.email,
+            userId: currentUser.userId,
+            requestId,
+            videoId: vid.id,
+          }),
+        });
+        const data = await res.json();
+        if (res.status === 403 || data.exhausted) {
+          alert(data.error || 'आज की वीडियो निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।');
+          return;
+        }
+      } catch (e) {
+        console.warn('Video quota consumption check error:', e);
+      }
+    }
     setStudioMode('video');
     setStudioInitialItem(vid);
     setStudioInitialVideo(vid.videoUrl || null);
