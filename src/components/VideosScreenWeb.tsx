@@ -893,8 +893,28 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   src={vid.videoUrl}
                   autoPlay
                   controls
+                  controlsList="nodownload"
+                  onContextMenu={(e) => e.preventDefault()}
                   playsInline
                   className="w-full h-full object-contain"
+                  onPlay={() => {
+                    try {
+                      fetch('/api/analytics/track', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: vid.id, type: 'video', event: 'video_play' }),
+                      }).catch(() => {});
+                    } catch {}
+                  }}
+                  onEnded={() => {
+                    try {
+                      fetch('/api/analytics/track', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: vid.id, type: 'video', event: 'video_complete' }),
+                      }).catch(() => {});
+                    } catch {}
+                  }}
                   onError={() => {
                     setVideoPlaybackError(true);
                     setActiveVideo(vid);
@@ -1589,10 +1609,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   {[
-                    { idx: 0, label: 'हेडलाइन 1 (डायरेक्ट ब्रेकिंग / मुख्य)', placeholder: 'उदा. संसद में डिजिटल मीडिया बिल पास, पत्रकारों के लिए नए नियम' },
-                    { idx: 1, label: 'हेडलाइन 2 (तथ्य व कार्रवाई एंगल)', placeholder: 'उदा. नए प्रेस दिशानिर्देश तत्काल प्रभाव से लागू, नियमों की समीक्षा' },
-                    { idx: 2, label: 'हेडलाइन 3 (बैकग्राउंड / संक्षिप्त विवरण)', placeholder: 'उदा. डिजिटल संवाददाताओं के अधिकार सुरक्षित, बड़ा फैसला' },
-                    { idx: 3, label: 'हेडलाइन 4 (बोल्ड 2-लाइन पंच अलर्ट)', placeholder: 'उदा. मीडिया कानून में ऐतिहासिक संशोधन, सख्त दिशानिर्देश' },
+                    { idx: 0, label: 'हेडलाइन 1', placeholder: 'उदा. संसद में डिजिटल मीडिया बिल पास, पत्रकारों के लिए नए नियम' },
+                    { idx: 1, label: 'हेडलाइन 2', placeholder: 'उदा. नए प्रेस दिशानिर्देश तत्काल प्रभाव से लागू, नियमों की समीक्षा' },
+                    { idx: 2, label: 'हेडलाइन 3', placeholder: 'उदा. डिजिटल संवाददाताओं के अधिकार सुरक्षित, बड़ा फैसला' },
+                    { idx: 3, label: 'हेडलाइन 4', placeholder: 'उदा. मीडिया कानून में ऐतिहासिक संशोधन, सख्त दिशानिर्देश' },
                   ].map((hItem) => (
                     <div key={hItem.idx} className="space-y-1 p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                       <div className="flex items-center justify-between text-[10px] text-slate-300 font-bold">
@@ -1991,10 +2011,30 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <video
                   src={activeVideo.videoUrl}
                   controls
+                  controlsList="nodownload"
+                  onContextMenu={(e) => e.preventDefault()}
                   autoPlay
                   preload="metadata"
                   playsInline
                   className="w-full h-full object-contain"
+                  onPlay={() => {
+                    try {
+                      fetch('/api/analytics/track', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: activeVideo.id, type: 'video', event: 'video_play' }),
+                      }).catch(() => {});
+                    } catch {}
+                  }}
+                  onEnded={() => {
+                    try {
+                      fetch('/api/analytics/track', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: activeVideo.id, type: 'video', event: 'video_complete' }),
+                      }).catch(() => {});
+                    } catch {}
+                  }}
                   onError={() => setVideoPlaybackError(true)}
                   onLoadedData={() => setVideoPlaybackError(false)}
                 />

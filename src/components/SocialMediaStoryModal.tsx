@@ -727,6 +727,27 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
       const cleanTitle = (newsPost?.title || 'story').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '_').slice(0, 30);
       const filename = `Story_${cleanTitle}_${Date.now()}.png`;
       await downloadCanvas(canvasRef.current, filename, 'image/png', 0.98);
+      try {
+        const baseUrl = getApiBaseUrl();
+        fetch(`${baseUrl}/api/analytics/track`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newsPost?.id || selectedFrame.id,
+            type: 'story',
+            event: 'story_download',
+          }),
+        }).catch(() => {});
+        fetch(`${baseUrl}/api/analytics/track`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newsPost?.id || selectedFrame.id,
+            type: 'story',
+            event: 'story_gen',
+          }),
+        }).catch(() => {});
+      } catch {}
 
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 4000);
@@ -740,6 +761,18 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
 
   // Handle Open in Graphic Studio
   const handleOpenStudio = () => {
+    try {
+      const baseUrl = getApiBaseUrl();
+      fetch(`${baseUrl}/api/analytics/track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newsPost?.id || selectedFrame?.id || 'story',
+          type: 'story',
+          event: 'story_gen',
+        }),
+      }).catch(() => {});
+    } catch {}
     if (onOpenStudioWithStory && selectedFrame) {
       onOpenStudioWithStory({
         frameId: selectedFrame.id,

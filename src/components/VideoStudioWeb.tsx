@@ -108,6 +108,8 @@ interface DrawCompositionOptions {
   socialHandle: string;
   mobileNumber: string;
   showMobileNumber: boolean;
+  showWebsite?: boolean;
+  showWhatsapp?: boolean;
   cropRegion: { x: number; y: number; width: number; height: number; aspectRatio: '4:5' } | null;
   aspect: VideoAspect;
   zoomScale: number;
@@ -240,7 +242,9 @@ function drawVideoCompositionToCanvas(
     socialHandle,
     mobileNumber,
     showMobileNumber,
-    cropRegion,
+        showWebsite,
+        showWhatsapp,
+        cropRegion,
     zoomScale,
     offsetY,
     isExclusiveBadge,
@@ -443,7 +447,7 @@ function drawVideoCompositionToCanvas(
     });
 
     // Website text (Right-aligned)
-    if (websiteUrl && websiteUrl.trim()) {
+    if (opts.showWebsite !== false && websiteUrl && websiteUrl.trim()) {
       ctx.save();
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 22px Arial, sans-serif';
@@ -776,8 +780,8 @@ function drawVideoCompositionToCanvas(
     ctx.font = 'bold 16px Arial, sans-serif';
     const footerParts: string[] = [];
     if (socialHandle && socialHandle.trim()) footerParts.push(socialHandle.trim());
-    if (websiteUrl && websiteUrl.trim()) footerParts.push(`🌐 ${websiteUrl.trim()}`);
-    if (showMobileNumber && mobileNumber && mobileNumber.trim()) footerParts.push(`📞 ${mobileNumber.trim()}`);
+    if (opts.showWebsite !== false && websiteUrl && websiteUrl.trim()) footerParts.push(`🌐 ${websiteUrl.trim()}`);
+    if ((opts.showWhatsapp !== false && opts.showMobileNumber !== false) && mobileNumber && mobileNumber.trim()) footerParts.push(`📞 ${mobileNumber.trim()}`);
     const footerText = footerParts.join('   •   ');
     if (footerText) {
       ctx.textAlign = 'center';
@@ -1068,6 +1072,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [showMobileNumber, setShowMobileNumber] = useState<boolean>(
     profile?.showMobileNumber ?? true
   );
+  const [showWebsite, setShowWebsite] = useState<boolean>(true);
+  const [showWhatsapp, setShowWhatsapp] = useState<boolean>(true);
 
   // Compatible Frames List
   const compatibleFrames = useMemo(() => {
@@ -1763,6 +1769,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         socialHandle,
         mobileNumber,
         showMobileNumber,
+        showWebsite,
+        showWhatsapp,
         cropRegion,
         aspect,
         zoomScale,
@@ -1910,9 +1918,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       originalLoop = video.loop;
       video.loop = false;
 
-      // Full Resolution Dimensions (Section 9: Export at exact intended output dimensions)
-      const width = aspect === '9:16' ? 1080 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1080 : aspect === '4:3' ? 1440 : 1080;
-      const height = aspect === '9:16' ? 1920 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1350 : aspect === '4:3' ? 1080 : 1080;
+      // Full Resolution Dimensions with source quality preservation
+      let width = aspect === '9:16' ? 1080 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1080 : aspect === '4:3' ? 1440 : 1080;
+      let height = aspect === '9:16' ? 1920 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1350 : aspect === '4:3' ? 1080 : 1080;
+      if (video.videoWidth && video.videoHeight) {
+        if (video.videoWidth >= width && Math.abs((video.videoWidth / video.videoHeight) - (width / height)) < 0.05) {
+          width = video.videoWidth;
+          height = video.videoHeight;
+        }
+      }
 
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -2031,7 +2045,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
       if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
 
-      const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {};
+      const recorderOptions: MediaRecorderOptions = {
+        ...(mimeType ? { mimeType } : {}),
+        videoBitsPerSecond: 8000000,
+      };
       let recorder: MediaRecorder;
       try {
         recorder = new MediaRecorder(combinedStream, recorderOptions);
@@ -2089,6 +2106,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         socialHandle,
         mobileNumber,
         showMobileNumber,
+        showWebsite,
+        showWhatsapp,
         cropRegion,
         aspect,
         zoomScale,
@@ -2169,7 +2188,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             socialHandle,
             mobileNumber,
             showMobileNumber,
-            cropRegion,
+        showWebsite,
+        showWhatsapp,
+        cropRegion,
             aspect,
             zoomScale,
             offsetY,
@@ -2258,6 +2279,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       const ext = isMp4 ? 'mp4' : 'webm';
       const filename = generateVideoDownloadFileName(ext);
       const downloadUrl = URL.createObjectURL(finalBlob);
+      try {
+        fetch('/api/analytics/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: initialVideo?.id || filename,
+            type: 'video',
+            event: 'video_gen',
+          }),
+        }).catch(() => {});
+        fetch('/api/analytics/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: initialVideo?.id || filename,
+            type: 'video',
+            event: 'video_download',
+          }),
+        }).catch(() => {});
+      } catch {}
       setCompletedDownloadUrl(downloadUrl);
       setCompletedDownloadFilename(filename);
 
@@ -2896,12 +2937,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         <Twitter className="w-2.5 h-2.5 text-sky-400" />
                       </div>
                       <span className="font-bold text-amber-300">{socialHandle}</span>
-                      <span>•</span>
-                      <span className="font-bold text-neutral-300 flex items-center gap-0.5">
-                        <Globe className="w-2.5 h-2.5 text-amber-400" />
-                        {websiteUrl}
-                      </span>
-                      {showMobileNumber && mobileNumber && (
+                      {showWebsite && websiteUrl && (
+                        <>
+                          <span>•</span>
+                          <span className="font-bold text-neutral-300 flex items-center gap-0.5">
+                            <Globe className="w-2.5 h-2.5 text-amber-400" />
+                            {websiteUrl}
+                          </span>
+                        </>
+                      )}
+                      {showWhatsapp && showMobileNumber && mobileNumber && (
                         <>
                           <span>•</span>
                           <span className="font-bold text-neutral-300 flex items-center gap-0.5">
@@ -2931,7 +2976,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center select-none"
                   style={{ opacity: watermarkOpacity }}
                 >
-                  <span className="text-white text-sm sm:text-lg font-black uppercase tracking-widest border border-white/30 px-3 py-1 rounded bg-black/20 backdrop-blur-2xs drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+                  <span className="text-white text-sm sm:text-lg font-black uppercase tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]">
                     {watermarkText || profile?.channelNameHi || 'AI NEWS MAKER'}
                   </span>
                 </div>
@@ -3701,6 +3746,35 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       <Type className="w-4 h-4 text-amber-400" />
                       3. मुख्य हेडलाइन (Main News Headline)
                     </span>
+
+                  {/* Available Headlines Selector from Admin Video Upload */}
+                  {headlineVariants && headlineVariants.filter(Boolean).length > 0 && (
+                    <div className="space-y-2 p-3 bg-slate-950/90 border border-amber-500/30 rounded-xl">
+                      <span className="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>उपलब्ध हेडलाइन्स चुनें (1-क्लिक में सेट करें):</span>
+                      </span>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {headlineVariants.filter(Boolean).map((hVariant, hIdx) => (
+                          <button
+                            key={hIdx}
+                            type="button"
+                            onClick={() => setHeadline(hVariant.trim())}
+                            className={`text-left p-2 rounded-lg text-xs font-bold transition flex items-start gap-2 cursor-pointer ${
+                              headline.trim() === hVariant.trim()
+                                ? 'bg-amber-400/20 text-amber-200 border border-amber-400/50'
+                                : 'bg-slate-900 text-slate-300 hover:bg-slate-850 hover:text-white border border-slate-800'
+                            }`}
+                          >
+                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-amber-400 font-mono shrink-0">
+                              #{hIdx + 1}
+                            </span>
+                            <span className="leading-snug">{hVariant.trim()}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                     <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
                       आवश्यक (Required)
                     </span>
@@ -3737,12 +3811,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     />
                   </div>
 
-                  {/* AI Rewrite Buttons */}
+                  {/* Single Manual AI Generation Button */}
                   <div className="flex items-center gap-2 flex-wrap pt-1">
                     <span className="text-[11px] font-bold text-slate-400">AI सहायता:</span>
                     <button
                       type="button"
-                      disabled={isAiGenerating || !headline.trim()}
+                      disabled={isAiGenerating || (!headline.trim() && !rawScriptText.trim())}
                       onClick={async () => {
                         setIsAiGenerating(true);
                         try {
@@ -3751,26 +3825,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           setIsAiGenerating(false);
                         }
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 disabled:opacity-40 transition"
+                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-black flex items-center gap-1.5 disabled:opacity-40 transition cursor-pointer shadow-sm"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{isAiGenerating ? 'AI लिख रहा है...' : '⚡ 2-लाइन AI रीराइट'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isAiGenerating || !headline.trim()}
-                      onClick={async () => {
-                        setIsAiGenerating(true);
-                        try {
-                          await handleGenerateAiHeadline(3);
-                        } finally {
-                          setIsAiGenerating(false);
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-slate-700 flex items-center gap-1.5 disabled:opacity-40 transition"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>⚡ 3-लाइन AI रीराइट</span>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{isAiGenerating ? 'AI हेडलाइन बना रहा है...' : 'AI से हेडलाइन जनरेट करें'}</span>
                     </button>
                   </div>
 
@@ -3849,20 +3907,21 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     />
                   </div>
 
-                  <div className="p-3 bg-slate-950/50 border border-slate-800 rounded-xl space-y-1.5">
-                    <span className="text-[10px] font-bold text-slate-400">त्वरित लोकेशन सुझाव (वैकल्पिक):</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {['नई दिल्ली', 'लखनऊ', 'भोपाल', 'पटना', 'जयपुर', 'मुंबई', 'चंडीगढ़', 'रायपुर'].map((city) => (
-                        <button
-                          key={city}
-                          type="button"
-                          onClick={() => setLocation(city)}
-                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition"
-                        >
-                          {city}
-                        </button>
-                      ))}
+                  {/* Location ON/OFF toggle respecting frame location rules */}
+                  <div className="flex items-center justify-between p-3 bg-slate-950/70 border border-slate-800 rounded-xl">
+                    <div>
+                      <span className="text-xs font-bold text-white block">लोकेशन प्रदर्शित करें (Show Location)</span>
+                      <span className="text-[10px] text-slate-400">फ्रेम पर स्थान / लोकेशन स्ट्रिप चालू या बंद करें</span>
                     </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showLocation}
+                        onChange={(e) => setShowLocation(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
                   </div>
                 </div>
               )}
@@ -4103,6 +4162,44 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           placeholder="BREAKING NEWS WALA"
                           className="w-full p-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:border-amber-400 focus:outline-none"
                         />
+                      </div>
+                    </div>
+
+                    {/* Independent Footer Element Toggles */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                      <div className="flex items-center justify-between p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <Globe className="w-4 h-4 text-cyan-400" />
+                          <span className="text-xs font-bold text-slate-200">वेबसाइट पता दिखाएं</span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showWebsite}
+                            onChange={(e) => setShowWebsite(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-emerald-400" />
+                          <span className="text-xs font-bold text-slate-200">व्हाट्सएप / नंबर दिखाएं</span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showWhatsapp}
+                            onChange={(e) => {
+                              setShowWhatsapp(e.target.checked);
+                              setShowMobileNumber(e.target.checked);
+                            }}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                        </label>
                       </div>
                     </div>
                   </div>

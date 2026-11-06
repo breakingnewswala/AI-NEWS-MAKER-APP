@@ -374,7 +374,19 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
   } catch {}
 }
 
-export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNewItems?: number; error?: string }> {
+export interface RssSyncResult {
+  success: boolean;
+  totalNewItems?: number;
+  totalSourcesSynced?: number;
+  newArticlesCount?: number;
+  updatedArticlesCount?: number;
+  skippedDuplicatesCount?: number;
+  failedSourcesCount?: number;
+  durationMs?: number;
+  error?: string;
+}
+
+export async function syncAllSourcesLive(): Promise<RssSyncResult> {
   try {
     const syncUrl = getApiUrl('/api/admin/rss-sync');
     const res = await fetch(syncUrl, {
@@ -418,7 +430,16 @@ export async function syncAllSourcesLive(): Promise<{ success: boolean; totalNew
         window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
         window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
       }
-      return { success: true, totalNewItems: data.count || data.totalNewItems || 0 };
+      return {
+        success: true,
+        totalNewItems: data.newArticlesCount ?? data.count ?? data.totalNewItems ?? 0,
+        totalSourcesSynced: data.totalSourcesSynced,
+        newArticlesCount: data.newArticlesCount,
+        updatedArticlesCount: data.updatedArticlesCount,
+        skippedDuplicatesCount: data.skippedDuplicatesCount,
+        failedSourcesCount: data.failedSourcesCount,
+        durationMs: data.durationMs,
+      };
     }
   } catch (err: any) {
     console.warn('Live RSS sync error:', err);

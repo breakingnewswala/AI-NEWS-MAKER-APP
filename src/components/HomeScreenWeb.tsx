@@ -317,6 +317,59 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   });
 
+  // Viewport Dwell Observer for Qualifying Impressions (1.5s dwell threshold)
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
+
+    const seenImpressions = new Set<string>();
+    const dwellTimers = new Map<string, any>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const newsId = entry.target.getAttribute('data-news-id');
+          if (!newsId) return;
+
+          if (entry.isIntersecting) {
+            if (!seenImpressions.has(newsId) && !dwellTimers.has(newsId)) {
+              const timer = setTimeout(() => {
+                seenImpressions.add(newsId);
+                dwellTimers.delete(newsId);
+                try {
+                  fetch(getApiUrl('/api/analytics/track'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      id: newsId,
+                      type: 'news',
+                      event: 'impression',
+                    }),
+                  }).catch(() => {});
+                } catch {}
+              }, 1500);
+              dwellTimers.set(newsId, timer);
+            }
+          } else {
+            if (dwellTimers.has(newsId)) {
+              clearTimeout(dwellTimers.get(newsId));
+              dwellTimers.delete(newsId);
+            }
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    const cards = document.querySelectorAll('[data-news-id]');
+    cards.forEach((el) => observer.observe(el));
+
+    return () => {
+      observer.disconnect();
+      dwellTimers.forEach((t) => clearTimeout(t));
+      dwellTimers.clear();
+    };
+  }, [posts, activeCategory, searchQuery]);
+
   useEffect(() => {
     const email = (currentUser?.email || '').toLowerCase().trim();
     const userId = (currentUser?.userId || (currentUser as any)?.uid || email).trim();
@@ -690,6 +743,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   };
 
   const handleOpenStudioSafe = async (post: NewsFeedPost) => {
+    try {
+      fetch(getApiUrl('/api/analytics/track'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: post.id, type: 'news', event: 'view' }),
+      }).catch(() => {});
+    } catch {}
     if (!currentUser?.email) {
       onOpenStudioWithNews(post);
       return;
@@ -2029,6 +2089,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 return (
                 <div
                   key={post.id}
+                  data-news-id={post.id}
                   className={`bg-slate-50 dark:bg-slate-950/80 rounded-xl p-3 sm:p-3.5 flex flex-col justify-between transition-all duration-300 group border border-slate-200 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-500/60 shadow-sm hover:shadow-md ${cardBorderClass}`}
                 >
                   <div>
@@ -2463,6 +2524,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               return (
                 <React.Fragment key={post.id}>
                   <div
+                    data-news-id={post.id}
                     className={`bg-white dark:bg-slate-900 rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 flex flex-col justify-between group relative ${cardBorderClass} ${
                       isCardExhausted ? 'opacity-40 hover:opacity-70' : ''
                     }`}
@@ -4654,6 +4716,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
               </div>
 
+              {/* Real-time Views & Impressions */}
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-cyan-900/40">
+                  <span className="text-[10px] text-cyan-400 font-bold block mb-1">खबर व्यूज़ (Article Views)</span>
+                  <span className="text-lg font-black text-cyan-300 font-mono">{newsAnalyticsData?.newsViews ?? 0}</span>
+                </div>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-indigo-900/40">
+                  <span className="text-[10px] text-indigo-400 font-bold block mb-1">इम्प्रेशन्स (Dwell &gt; 1.5s)</span>
+                  <span className="text-lg font-black text-indigo-300 font-mono">{newsAnalyticsData?.newsImpressions ?? 0}</span>
+                </div>
+              </div>
+
               {/* Downloads & Unique Users Summary */}
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-blue-900/40">
@@ -4667,6 +4741,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-emerald-900/40">
                   <span className="text-[10px] text-emerald-400 font-bold block mb-1">Unique डाउनलोडर्स</span>
                   <span className="text-lg font-black text-emerald-300 font-mono">{newsAnalyticsData?.uniqueUsers ?? 0}</span>
+                </div>
+              </div>
+
+              {/* Story & Video Studio Stats */}
+              <div className="grid grid-cols-2 gap-2 text-center">
+                <div className="p-2 bg-slate-950 rounded-xl border border-pink-900/40">
+                  <span className="text-[10px] text-pink-400 font-bold block mb-0.5">स्टोरी डाउनलोड्स</span>
+                  <span className="text-sm font-black text-pink-300 font-mono">{newsAnalyticsData?.storyDownloads ?? 0}</span>
+                </div>
+                <div className="p-2 bg-slate-950 rounded-xl border border-amber-900/40">
+                  <span className="text-[10px] text-amber-400 font-bold block mb-0.5">वीडियो प्ले</span>
+                  <span className="text-sm font-black text-amber-300 font-mono">{newsAnalyticsData?.videoPlays ?? 0}</span>
                 </div>
               </div>
 

@@ -929,6 +929,49 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [newPortalName, setNewPortalName] = useState<string>('');
   const [newPortalUrl, setNewPortalUrl] = useState<string>('');
   const [newPortalCat, setNewPortalCat] = useState<string>('breaking');
+  // Channel & Portal Directory Editing State (Part 3)
+  const [editingPortal, setEditingPortal] = useState<{ id: string; name: string; nameHindi?: string; nameEnglish?: string; url: string; category: string } | null>(null);
+  const [editPortalHindi, setEditPortalHindi] = useState<string>('');
+  const [editPortalEnglish, setEditPortalEnglish] = useState<string>('');
+  const [editPortalUrl, setEditPortalUrl] = useState<string>('');
+
+  const handleStartEditPortal = (p: any) => {
+    const match = p.name.match(/^([^(]+)(?:\(([^)]+)\))?/);
+    const hindi = p.nameHindi || (match ? match[1].trim() : p.name);
+    const english = p.nameEnglish || (match && match[2] ? match[2].trim() : '');
+    setEditingPortal(p);
+    setEditPortalHindi(hindi);
+    setEditPortalEnglish(english);
+    setEditPortalUrl(p.url || '');
+  };
+
+  const handleSaveEditPortal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPortal || !editPortalHindi.trim()) return;
+    const hName = editPortalHindi.trim();
+    const eName = editPortalEnglish.trim();
+    const combinedName = eName ? `${hName} (${eName})` : hName;
+
+    const updatedList = newsPortals.map((p) => {
+      if (p.id === editingPortal.id) {
+        return {
+          ...p,
+          name: combinedName,
+          nameHindi: hName,
+          nameEnglish: eName,
+          url: editPortalUrl.trim() || p.url,
+        };
+      }
+      return p;
+    });
+
+    setNewsPortals(updatedList);
+    localStorage.setItem('admin_news_portals_list', JSON.stringify(updatedList));
+    saveNewsChannel(combinedName);
+    setSavedChannels(getSavedNewsChannels());
+    setEditingPortal(null);
+    setRssMsg({ type: 'success', text: `चैनल "${combinedName}" सफलतापूर्वक अपडेट हुआ।` });
+  };
 
   const handleAddNewsPortal = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1169,6 +1212,26 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       window.removeEventListener('ai_news_plan_users_changed', handleUsersUpdated);
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
+  // Direct Navigation listener for Admin Notification Panel from Top Bar / URL
+  useEffect(() => {
+    const handleOpenAdminNotifications = () => {
+      setSubTab('notifications');
+      setTimeout(() => {
+        const el = document.getElementById('section-notifications');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 150);
+    };
+    window.addEventListener('open_admin_notifications', handleOpenAdminNotifications);
+    if (typeof window !== 'undefined' && window.location.hash === '#section-notifications') {
+      handleOpenAdminNotifications();
+    }
+    return () => {
+      window.removeEventListener('open_admin_notifications', handleOpenAdminNotifications);
     };
   }, []);
 
@@ -2143,6 +2206,294 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           {subTab === 'templates' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
               <UserTemplateManager isAdmin={true} defaultTab="admin" currentUser={currentUser} onOpenStudioWithTemplate={onOpenStudio} />
+            </div>
+          )}
+        </div>
+        )}
+
+{/* ========================================================================= */}
+        {/* STEP 4B: एडमिन नोटिफिकेशन पैनल (ADMIN NOTIFICATION PANEL - MOVED AFTER TEMPLATE MANAGER)         */}
+        {/* ========================================================================= */}
+        {isSuperAdminUser && (
+        <div id="section-notifications" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'notifications' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button
+            type="button"
+            onClick={() => setSubTab(subTab === 'notifications' ? '' : 'notifications')}
+            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'notifications' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+                <Bell className="w-5 h-5 text-white" />
+                {adminNotifCounts.all > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 border-2 border-slate-900 text-white rounded-full text-[10px] font-black flex items-center justify-center animate-pulse">
+                    {adminNotifCounts.all > 99 ? '99+' : adminNotifCounts.all}
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm sm:text-base font-black text-white block truncate">
+                    एडमिन नोटिफिकेशन पैनल (Admin Notifications)
+                  </span>
+                  {adminNotifCounts.all > 0 && (
+                    <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full uppercase animate-pulse">
+                      {adminNotifCounts.all} नए अलर्ट
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 truncate mt-0.5">
+                  नई RSS खबरें, सपोर्ट इनबॉक्स, लोगो चेंज रिक्वेस्ट व यूज़र अनुरोध अलर्ट्स
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
+                {adminNotifications.length} कुल अलर्ट
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'notifications' ? 'rotate-180 text-amber-400' : ''}`} />
+            </div>
+          </button>
+          {subTab === 'notifications' && (
+            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+              {/* Status Action Banner */}
+              {adminNotifActionMsg && (
+                <div className="p-3 bg-emerald-950/90 border border-emerald-500/50 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{adminNotifActionMsg}</span>
+                </div>
+              )}
+
+              {/* Controls & Filter Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-slate-900/90 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(
+                    [
+                      { key: 'all', label: 'सभी', count: adminNotifCounts.all },
+                      { key: 'rss', label: 'RSS खबरें', count: adminNotifCounts.rss },
+                      { key: 'support', label: 'सपोर्ट इनबॉक्स', count: adminNotifCounts.support },
+                      { key: 'logo', label: 'लोगो चेंज', count: adminNotifCounts.logo },
+                      { key: 'requests', label: 'अन्य अनुरोध', count: adminNotifCounts.requests },
+                    ] as const
+                  ).map((tab) => {
+                    const isActive = adminNotifFilter === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setAdminNotifFilter(tab.key)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                          isActive
+                            ? 'bg-amber-400 text-slate-950 font-black shadow-md'
+                            : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        {tab.count > 0 && (
+                          <span
+                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                              isActive ? 'bg-slate-950 text-amber-300' : 'bg-red-500 text-white'
+                            }`}
+                          >
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleMarkAdminNotifRead(undefined, true, adminNotifFilter)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-lg border border-slate-700 transition cursor-pointer flex items-center gap-1.5"
+                    title="सभी को पढ़ा हुआ मार्क करें"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>सभी पढ़े मार्क करें</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchAdminNotifications}
+                    disabled={isLoadingAdminNotifs}
+                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition cursor-pointer disabled:opacity-50"
+                    title="रिफ्रेश करें"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAdminNotifs ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Notification List */}
+              <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
+                {(() => {
+                  const filtered = adminNotifications.filter((n) => {
+                    if (adminNotifFilter === 'all') return true;
+                    return n.category === adminNotifFilter;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-12 bg-slate-900/50 rounded-2xl border border-dashed border-slate-800 text-slate-400 space-y-2">
+                        <div className="text-3xl">🔔</div>
+                        <p className="text-xs font-bold">इस श्रेणी में कोई नोटिफिकेशन नहीं है</p>
+                        <p className="text-[11px] text-slate-500">
+                          नए RSS समाचार या यूज़र रिक्वेस्ट आने पर वे यहाँ तुरंत दिखाई देंगे।
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((n) => {
+                    const badgeStyles: Record<string, string> = {
+                      rss: 'bg-amber-950/80 text-amber-300 border-amber-600/50',
+                      support: 'bg-blue-950/80 text-blue-300 border-blue-600/50',
+                      logo: 'bg-purple-950/80 text-purple-300 border-purple-600/50',
+                      requests: 'bg-emerald-950/80 text-emerald-300 border-emerald-600/50',
+                    };
+                    const badgeLabels: Record<string, string> = {
+                      rss: '📰 RSS समाचार',
+                      support: '🎫 सपोर्ट केस',
+                      logo: '🎨 लोगो चेंज',
+                      requests: '📝 यूज़र रिक्वेस्ट',
+                    };
+
+                    return (
+                      <div
+                        key={n.id}
+                        className={`p-3.5 rounded-xl border transition flex items-start justify-between gap-3 ${
+                          n.unread
+                            ? 'bg-slate-900/95 border-amber-500/40 shadow-md ring-1 ring-amber-500/20'
+                            : 'bg-slate-900/50 border-slate-800/80 opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          {n.unread ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 mt-1.5 shrink-0 animate-pulse ring-2 ring-red-400/30" />
+                          ) : (
+                            <span className="w-2.5 h-2.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
+                                  badgeStyles[n.category] || badgeStyles.requests
+                                }`}
+                              >
+                                {badgeLabels[n.category] || 'अलर्ट'}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                {n.timestamp ? new Date(n.timestamp).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                            <h4 className="text-xs sm:text-sm font-bold text-white leading-snug">
+                              {n.title}
+                            </h4>
+                            {n.message && (
+                              <p className="text-[11px] text-slate-300 leading-relaxed line-clamp-2">
+                                {n.message}
+                              </p>
+                            )}
+                            {/* Meta & Request details */}
+                            {n.meta && (
+                              <div className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-lg text-[11px] text-slate-300 space-y-1 mt-1">
+                                {n.category === 'rss' ? (
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-amber-400 font-bold">स्रोत: {n.meta.channelName || n.meta.source || 'RSS Feed'}</span>
+                                      {n.meta.location && <span className="text-slate-400">| {n.meta.location}</span>}
+                                    </div>
+                                    {n.meta.sourceUrl && (
+                                      <a
+                                        href={n.meta.sourceUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-amber-300 hover:underline text-[10px] font-mono"
+                                      >
+                                        मूल लिंक देखें ↗
+                                      </a>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
+                                    <div><strong className="text-amber-400 font-bold">यूज़र:</strong> {n.meta.userName || 'संपादक'}</div>
+                                    <div><strong className="text-amber-400 font-bold">ईमेल:</strong> {n.meta.userEmail || n.meta.email || 'N/A'}</div>
+                                    {n.meta.userMobile && <div><strong className="text-amber-400 font-bold">मोबाइल:</strong> {n.meta.userMobile}</div>}
+                                    <div><strong className="text-amber-400 font-bold">स्थिति:</strong> <span className={n.status === 'resolved' || n.status === 'approved' ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>{n.status === 'resolved' || n.status === 'approved' ? '✓ Resolved' : '⏳ Pending'}</span></div>
+                                    {n.meta.channelName && <div><strong className="text-amber-400 font-bold">चैनल:</strong> {n.meta.channelName}</div>}
+                                    {n.meta.newLogoUrl && (
+                                      <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                                        <strong className="text-amber-400 font-bold">नया लोगो:</strong>
+                                        <img src={n.meta.newLogoUrl} alt="Logo" className="w-7 h-7 object-contain bg-black rounded border border-slate-700" />
+                                        <a href={n.meta.newLogoUrl} target="_blank" rel="noreferrer" className="text-xs text-amber-300 underline">लोगो डाउनलोड</a>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {/* Direct Action: Publish RSS News */}
+                          {n.category === 'rss' && !n.isPublished && n.status !== 'APPROVED' && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublishRssNews(n.rawId, n.id)}
+                              className="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-emerald-400/40"
+                              title="इस RSS खबर को तुरंत मुख्य होम फ़ीड में प्रकाशित करें"
+                            >
+                              <span>📰 प्रकाशित करें</span>
+                            </button>
+                          )}
+
+                          {/* Direct Action: Resolve Support Request */}
+                          {n.category !== 'rss' && n.status !== 'resolved' && n.status !== 'approved' && (
+                            <button
+                              type="button"
+                              onClick={() => handleResolveSupportRequest(n.rawId, n.id, n.category)}
+                              className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] font-bold rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-blue-400/40"
+                              title="इस सपोर्ट अनुरोध को Resolved मार्क करें"
+                            >
+                              <span>✓ Resolve करें</span>
+                            </button>
+                          )}
+
+                          {n.unread && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkAdminNotifRead(n.id)}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg border border-slate-700 transition cursor-pointer"
+                            >
+                              पढ़ा गया
+                            </button>
+                          )}
+                          {n.targetTab && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleMarkAdminNotifRead(n.id);
+                                if (n.targetTab === 'rss') {
+                                  setSubTab('rss');
+                                } else if (n.targetTab === 'support' || n.targetTab === 'requests') {
+                                  setSubTab('users');
+                                } else if (n.targetTab === 'logo') {
+                                  setSubTab('users');
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 text-[10px] font-black rounded-lg border border-amber-400/40 transition cursor-pointer flex items-center gap-1"
+                            >
+                              <span>देखें</span>
+                              <ChevronRight className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                })()}
+              </div>
             </div>
           )}
         </div>
@@ -3452,6 +3803,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <div>
                           <span className="text-slate-500">फोन: </span>
                           <span className="font-mono text-emerald-400 font-bold">{u.mobile ? `+91 ${u.mobile}` : 'N/A'}</span>
+                          {(u.whatsappVerified || (u as any).isPhoneVerified || u.email?.includes('breakingnewswala') || u.email?.includes('admin.ainewsmaker') || u.mobile === '9669802408') && (
+                            <span className="ml-1 text-[8.5px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-bold inline-flex items-center gap-0.5">
+                              ✓ Verified
+                            </span>
+                          )}
                         </div>
                         <div>
                           <span className="text-slate-500">स्थिति: </span>
@@ -3578,7 +3934,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               </div>
                               <div className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">{u.email}</div>
                               {u.mobile && (
-                                <div className="text-[10px] text-emerald-400 font-mono mt-0.5">📞 {u.mobile}</div>
+                                <div className="text-[10px] text-emerald-400 font-mono mt-0.5 flex items-center gap-1.5">
+                                  <span>📞 {u.mobile}</span>
+                                  {(u.whatsappVerified || (u as any).isPhoneVerified || u.email?.includes('breakingnewswala') || u.email?.includes('admin.ainewsmaker') || u.mobile === '9669802408') && (
+                                    <span className="text-[9px] text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 font-bold flex items-center gap-0.5">
+                                      ✓ Verified
+                                    </span>
+                                  )}
+                                </div>
                               )}
                               <div className="text-[10.5px] text-slate-300 mt-1 flex items-center gap-1">
                                 <span className="text-slate-500">📺</span>
@@ -4843,10 +5206,20 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     try {
                       const res = await syncAllSourcesLive();
                       setRssSources(getAdminRssSources());
-                      setRssMsg({
-                        type: res.success ? 'success' : 'error',
-                        text: res.success ? `लाइव RSS स्रोतों से ${res.totalNewItems || 0} नए समाचार अपडेट हुए।` : (res.error || 'सिंक त्रुटि'),
-                      });
+                      if (res.success) {
+                        const parts = [];
+                        parts.push(`सफलतापूर्वक ${res.totalSourcesSynced || 0} स्रोत सिंक किए गए।`);
+                        parts.push(`${res.newArticlesCount ?? res.totalNewItems ?? 0} नए समाचार जुड़े`);
+                        if (res.updatedArticlesCount) parts.push(`${res.updatedArticlesCount} अपडेट`);
+                        if (res.skippedDuplicatesCount) parts.push(`${res.skippedDuplicatesCount} पहले से मौजूद`);
+                        if (res.durationMs) parts.push(`(${((res.durationMs)/1000).toFixed(1)}s)`);
+                        setRssMsg({
+                          type: 'success',
+                          text: parts.join(' | '),
+                        });
+                      } else {
+                        setRssMsg({ type: 'error', text: res.error || 'सिंक त्रुटि' });
+                      }
                     } catch (e: any) {
                       setRssMsg({ type: 'error', text: 'RSS सिंक में त्रुटि: ' + e.message });
                     } finally {
@@ -5795,24 +6168,114 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       key={p.id}
                       className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center justify-between gap-2 hover:border-slate-700 transition"
                     >
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="text-xs font-bold text-slate-100 truncate">{p.name}</div>
                         <div className="text-[10px] font-mono text-cyan-400/80 truncate mt-0.5">{p.url || 'वेबसाइट URL उपलब्ध नहीं'}</div>
                       </div>
-                      {newsPortals.length > 1 && (
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() => handleDeleteNewsPortal(p.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-950/30 transition cursor-pointer shrink-0"
-                          title="पोर्टल हटाएं"
+                          onClick={() => handleStartEditPortal(p)}
+                          className="p-1.5 text-slate-400 hover:text-amber-400 rounded-lg hover:bg-amber-950/30 transition cursor-pointer"
+                          title="पोर्टल नाम व विवरण एडिट करें"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                      )}
+                        {newsPortals.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNewsPortal(p.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-950/30 transition cursor-pointer"
+                            title="पोर्टल हटाएं"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
+
+              {/* Edit Portal Modal */}
+              {editingPortal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+                  <div className="bg-slate-900 border border-amber-400/40 rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <div className="flex items-center gap-2 text-white font-black text-sm">
+                        <Edit2 className="w-4 h-4 text-amber-400" />
+                        <span>चैनल / पोर्टल नाम व विवरण एडिट करें</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingPortal(null)}
+                        className="text-slate-400 hover:text-white p-1 rounded-lg"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveEditPortal} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          हिन्दी नाम <span className="text-amber-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={editPortalHindi}
+                          onChange={(e) => setEditPortalHindi(e.target.value)}
+                          placeholder="उदा. आज तक, दैनिक भास्कर"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          अंग्रेज़ी नाम (वैकल्पिक)
+                        </label>
+                        <input
+                          type="text"
+                          value={editPortalEnglish}
+                          onChange={(e) => setEditPortalEnglish(e.target.value)}
+                          placeholder="उदा. Aaj Tak, Dainik Bhaskar"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          वेबसाइट URL
+                        </label>
+                        <input
+                          type="url"
+                          value={editPortalUrl}
+                          onChange={(e) => setEditPortalUrl(e.target.value)}
+                          placeholder="https://example.com"
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="pt-2 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingPortal(null)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition cursor-pointer"
+                        >
+                          रद्द करें
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 text-xs font-black rounded-xl shadow-lg transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>सेव करें</span>
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -6212,294 +6675,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           {subTab === 'api_keys' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
               <AdminApiKeysManager currentUser={currentUser} />
-            </div>
-          )}
-        </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* STEP 11C: एडमिन नोटिफिकेशन पैनल (ADMIN NOTIFICATION PANEL - PHASE 5)         */}
-        {/* ========================================================================= */}
-        {isSuperAdminUser && (
-        <div id="section-notifications" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'notifications' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
-          <button
-            type="button"
-            onClick={() => setSubTab(subTab === 'notifications' ? '' : 'notifications')}
-            className={`w-full p-4 text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${subTab === 'notifications' ? 'bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border-b border-slate-800/80' : 'hover:bg-slate-850'}`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
-                <Bell className="w-5 h-5 text-white" />
-                {adminNotifCounts.all > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 border-2 border-slate-900 text-white rounded-full text-[10px] font-black flex items-center justify-center animate-pulse">
-                    {adminNotifCounts.all > 99 ? '99+' : adminNotifCounts.all}
-                  </span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm sm:text-base font-black text-white block truncate">
-                    एडमिन नोटिफिकेशन पैनल (Admin Notifications)
-                  </span>
-                  {adminNotifCounts.all > 0 && (
-                    <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full uppercase animate-pulse">
-                      {adminNotifCounts.all} नए अलर्ट
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 truncate mt-0.5">
-                  नई RSS खबरें, सपोर्ट इनबॉक्स, लोगो चेंज रिक्वेस्ट व यूज़र अनुरोध अलर्ट्स
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800 hidden sm:inline">
-                {adminNotifications.length} कुल अलर्ट
-              </span>
-              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${subTab === 'notifications' ? 'rotate-180 text-amber-400' : ''}`} />
-            </div>
-          </button>
-          {subTab === 'notifications' && (
-            <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
-              {/* Status Action Banner */}
-              {adminNotifActionMsg && (
-                <div className="p-3 bg-emerald-950/90 border border-emerald-500/50 rounded-xl text-emerald-300 text-xs font-bold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{adminNotifActionMsg}</span>
-                </div>
-              )}
-
-              {/* Controls & Filter Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-slate-900/90 rounded-xl border border-slate-800">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {(
-                    [
-                      { key: 'all', label: 'सभी', count: adminNotifCounts.all },
-                      { key: 'rss', label: 'RSS खबरें', count: adminNotifCounts.rss },
-                      { key: 'support', label: 'सपोर्ट इनबॉक्स', count: adminNotifCounts.support },
-                      { key: 'logo', label: 'लोगो चेंज', count: adminNotifCounts.logo },
-                      { key: 'requests', label: 'अन्य अनुरोध', count: adminNotifCounts.requests },
-                    ] as const
-                  ).map((tab) => {
-                    const isActive = adminNotifFilter === tab.key;
-                    return (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        onClick={() => setAdminNotifFilter(tab.key)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                          isActive
-                            ? 'bg-amber-400 text-slate-950 font-black shadow-md'
-                            : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 border border-slate-700/60'
-                        }`}
-                      >
-                        <span>{tab.label}</span>
-                        {tab.count > 0 && (
-                          <span
-                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                              isActive ? 'bg-slate-950 text-amber-300' : 'bg-red-500 text-white'
-                            }`}
-                          >
-                            {tab.count}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={() => handleMarkAdminNotifRead(undefined, true, adminNotifFilter)}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-lg border border-slate-700 transition cursor-pointer flex items-center gap-1.5"
-                    title="सभी को पढ़ा हुआ मार्क करें"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>सभी पढ़े मार्क करें</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={fetchAdminNotifications}
-                    disabled={isLoadingAdminNotifs}
-                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition cursor-pointer disabled:opacity-50"
-                    title="रिफ्रेश करें"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAdminNotifs ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Notification List */}
-              <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-1">
-                {(() => {
-                  const filtered = adminNotifications.filter((n) => {
-                    if (adminNotifFilter === 'all') return true;
-                    return n.category === adminNotifFilter;
-                  });
-
-                  if (filtered.length === 0) {
-                    return (
-                      <div className="text-center py-12 bg-slate-900/50 rounded-2xl border border-dashed border-slate-800 text-slate-400 space-y-2">
-                        <div className="text-3xl">🔔</div>
-                        <p className="text-xs font-bold">इस श्रेणी में कोई नोटिफिकेशन नहीं है</p>
-                        <p className="text-[11px] text-slate-500">
-                          नए RSS समाचार या यूज़र रिक्वेस्ट आने पर वे यहाँ तुरंत दिखाई देंगे।
-                        </p>
-                      </div>
-                    );
-                  }
-
-                  return filtered.map((n) => {
-                    const badgeStyles: Record<string, string> = {
-                      rss: 'bg-amber-950/80 text-amber-300 border-amber-600/50',
-                      support: 'bg-blue-950/80 text-blue-300 border-blue-600/50',
-                      logo: 'bg-purple-950/80 text-purple-300 border-purple-600/50',
-                      requests: 'bg-emerald-950/80 text-emerald-300 border-emerald-600/50',
-                    };
-                    const badgeLabels: Record<string, string> = {
-                      rss: '📰 RSS समाचार',
-                      support: '🎫 सपोर्ट केस',
-                      logo: '🎨 लोगो चेंज',
-                      requests: '📝 यूज़र रिक्वेस्ट',
-                    };
-
-                    return (
-                      <div
-                        key={n.id}
-                        className={`p-3.5 rounded-xl border transition flex items-start justify-between gap-3 ${
-                          n.unread
-                            ? 'bg-slate-900/95 border-amber-500/40 shadow-md ring-1 ring-amber-500/20'
-                            : 'bg-slate-900/50 border-slate-800/80 opacity-80 hover:opacity-100'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3 min-w-0 flex-1">
-                          {n.unread ? (
-                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 mt-1.5 shrink-0 animate-pulse ring-2 ring-red-400/30" />
-                          ) : (
-                            <span className="w-2.5 h-2.5 rounded-full bg-slate-700 mt-1.5 shrink-0" />
-                          )}
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span
-                                className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
-                                  badgeStyles[n.category] || badgeStyles.requests
-                                }`}
-                              >
-                                {badgeLabels[n.category] || 'अलर्ट'}
-                              </span>
-                              <span className="text-[11px] text-slate-400 font-mono">
-                                {n.timestamp ? new Date(n.timestamp).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
-                              </span>
-                            </div>
-                            <h4 className="text-xs sm:text-sm font-bold text-white leading-snug">
-                              {n.title}
-                            </h4>
-                            {n.message && (
-                              <p className="text-[11px] text-slate-300 leading-relaxed line-clamp-2">
-                                {n.message}
-                              </p>
-                            )}
-                            {/* Meta & Request details */}
-                            {n.meta && (
-                              <div className="p-2.5 bg-slate-950/70 border border-slate-800/80 rounded-lg text-[11px] text-slate-300 space-y-1 mt-1">
-                                {n.category === 'rss' ? (
-                                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-amber-400 font-bold">स्रोत: {n.meta.channelName || n.meta.source || 'RSS Feed'}</span>
-                                      {n.meta.location && <span className="text-slate-400">| {n.meta.location}</span>}
-                                    </div>
-                                    {n.meta.sourceUrl && (
-                                      <a
-                                        href={n.meta.sourceUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-amber-300 hover:underline text-[10px] font-mono"
-                                      >
-                                        मूल लिंक देखें ↗
-                                      </a>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px]">
-                                    <div><strong className="text-amber-400 font-bold">यूज़र:</strong> {n.meta.userName || 'संपादक'}</div>
-                                    <div><strong className="text-amber-400 font-bold">ईमेल:</strong> {n.meta.userEmail || n.meta.email || 'N/A'}</div>
-                                    {n.meta.userMobile && <div><strong className="text-amber-400 font-bold">मोबाइल:</strong> {n.meta.userMobile}</div>}
-                                    <div><strong className="text-amber-400 font-bold">स्थिति:</strong> <span className={n.status === 'resolved' || n.status === 'approved' ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>{n.status === 'resolved' || n.status === 'approved' ? '✓ Resolved' : '⏳ Pending'}</span></div>
-                                    {n.meta.channelName && <div><strong className="text-amber-400 font-bold">चैनल:</strong> {n.meta.channelName}</div>}
-                                    {n.meta.newLogoUrl && (
-                                      <div className="sm:col-span-2 flex items-center gap-2 pt-1">
-                                        <strong className="text-amber-400 font-bold">नया लोगो:</strong>
-                                        <img src={n.meta.newLogoUrl} alt="Logo" className="w-7 h-7 object-contain bg-black rounded border border-slate-700" />
-                                        <a href={n.meta.newLogoUrl} target="_blank" rel="noreferrer" className="text-xs text-amber-300 underline">लोगो डाउनलोड</a>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          {/* Direct Action: Publish RSS News */}
-                          {n.category === 'rss' && !n.isPublished && n.status !== 'APPROVED' && (
-                            <button
-                              type="button"
-                              onClick={() => handlePublishRssNews(n.rawId, n.id)}
-                              className="px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[11px] font-black rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-emerald-400/40"
-                              title="इस RSS खबर को तुरंत मुख्य होम फ़ीड में प्रकाशित करें"
-                            >
-                              <span>📰 प्रकाशित करें</span>
-                            </button>
-                          )}
-
-                          {/* Direct Action: Resolve Support Request */}
-                          {n.category !== 'rss' && n.status !== 'resolved' && n.status !== 'approved' && (
-                            <button
-                              type="button"
-                              onClick={() => handleResolveSupportRequest(n.rawId, n.id, n.category)}
-                              className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] font-bold rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-blue-400/40"
-                              title="इस सपोर्ट अनुरोध को Resolved मार्क करें"
-                            >
-                              <span>✓ Resolve करें</span>
-                            </button>
-                          )}
-
-                          {n.unread && (
-                            <button
-                              type="button"
-                              onClick={() => handleMarkAdminNotifRead(n.id)}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold rounded-lg border border-slate-700 transition cursor-pointer"
-                            >
-                              पढ़ा गया
-                            </button>
-                          )}
-                          {n.targetTab && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleMarkAdminNotifRead(n.id);
-                                if (n.targetTab === 'rss') {
-                                  setSubTab('rss');
-                                } else if (n.targetTab === 'support' || n.targetTab === 'requests') {
-                                  setSubTab('users');
-                                } else if (n.targetTab === 'logo') {
-                                  setSubTab('users');
-                                }
-                              }}
-                              className="px-2.5 py-1 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 text-[10px] font-black rounded-lg border border-amber-400/40 transition cursor-pointer flex items-center gap-1"
-                            >
-                              <span>देखें</span>
-                              <ChevronRight className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                })()}
-              </div>
             </div>
           )}
         </div>

@@ -432,12 +432,22 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               <div className={`relative ${isControlPanel && isAdminUser ? 'hidden md:block' : ''}`}>
                 <button
                   onClick={() => {
-                    const next = !showNotifications;
-                    setShowNotifications(next);
-                    if (next) {
-                      fetchNotificationsFromServer(currentUser?.email).then((list) => {
-                        setNotificationsList(list);
-                      });
+                    if (isAdminUser) {
+                      setShowNotifications(false);
+                      onNavigateToTab('profile');
+                      setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('open_admin_notifications'));
+                        const el = document.getElementById('section-notifications');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }, 150);
+                    } else {
+                      const next = !showNotifications;
+                      setShowNotifications(next);
+                      if (next) {
+                        fetchNotificationsFromServer(currentUser?.email).then((list) => {
+                          setNotificationsList(list);
+                        });
+                      }
                     }
                   }}
                   className="p-2 text-slate-700 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl relative transition-colors cursor-pointer shadow-xs"

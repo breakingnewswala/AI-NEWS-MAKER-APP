@@ -2107,6 +2107,17 @@ export default function App() {
       const filename = `${baseFilename}${ext}`;
 
       await downloadCanvas(canvas, filename, fmt);
+      try {
+        fetch(getApiUrl('/api/analytics/track'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: card?.sourceNewsId || card?.id || 'graphic',
+            type: 'graphic',
+            event: 'graphic_download',
+          }),
+        }).catch(() => {});
+      } catch {}
 
       // Confirm actual completion of download export to decrement quota atomically (Phase 3.0B-S)
       try {
@@ -2261,6 +2272,17 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = (post: NewsFeedPost) => {
+    try {
+      fetch(getApiUrl('/api/analytics/track'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: post.id,
+          type: 'graphic',
+          event: 'graphic_gen',
+        }),
+      }).catch(() => {});
+    } catch {}
     const rawUrl = (post.sourceUrl || (post as any).url || (post as any).link || '').trim();
     const hasExternalSource = Boolean(
       rawUrl &&
