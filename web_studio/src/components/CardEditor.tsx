@@ -74,6 +74,42 @@ import {
   getAssignedCustomHeaderFooter,
 } from '../lib/userPlanManager';
 import {
+  fetchDynamicFramesFromApi,
+  getLocalDynamicFrames,
+} from '../lib/dynamicFramesManager';
+import { DynamicFrameTemplate } from '../types/dynamicFrame';
+import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
+
+function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[]): FrameOption[] {
+  const staticFrames = getEffectiveFrameOptions();
+  const publishedDynamic: FrameOption[] = (dynamicFrames || [])
+    .filter((df) => df.publicationStatus === 'published')
+    .map((df) => {
+      const normCat = normalizeToCanonicalCategory(df.designCategory);
+      const tier = df.allowedPlans && df.allowedPlans.length > 0 ? df.allowedPlans[0] : 'BASIC';
+      return {
+        id: df.id as FrameDesign,
+        name: df.name,
+        description: df.description || `AI जनरेटेड ${df.aspectRatio} फ्रेम`,
+        badge: tier,
+        requiredTier: (tier.toLowerCase() === 'vip desk' ? 'ultra' : tier.toLowerCase()) as any,
+        planCategory: tier as any,
+        categoryLabel: normCat,
+        aspectRatio: '4:5' as const,
+      };
+    });
+
+  const seen = new Set<string>();
+  const combined: FrameOption[] = [];
+  for (const item of [...staticFrames, ...publishedDynamic]) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      combined.push(item);
+    }
+  }
+  return combined;
+}
+import {
   registerCustomFont,
   canUserUploadCustomFont,
   isFontAllowedForTier,
@@ -280,15 +316,38 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     }
   }, [isBasicUser, card.headlineFontFamily]);
 
-  const [currentFrameOptions, setCurrentFrameOptions] = React.useState<FrameOption[]>(() => getEffectiveFrameOptions());
+  const [currentFrameOptions, setCurrentFrameOptions] = React.useState<FrameOption[]>(() => {
+    return buildUnifiedFrameOptions(getLocalDynamicFrames());
+  });
 
   React.useEffect(() => {
+    let isMounted = true;
+    const refreshOptions = async () => {
+      let dfs = getLocalDynamicFrames();
+      try {
+        const fromApi = await fetchDynamicFramesFromApi();
+        if (fromApi && fromApi.length > 0) {
+          dfs = fromApi;
+        }
+      } catch {}
+      if (isMounted) {
+        setCurrentFrameOptions(buildUnifiedFrameOptions(dfs));
+      }
+    };
+
+    refreshOptions();
+
     const handlePlansUpdated = () => {
-      setCurrentFrameOptions(getEffectiveFrameOptions());
+      refreshOptions();
     };
     window.addEventListener('template_plans_updated', handlePlansUpdated);
+    window.addEventListener('ai_news_dynamic_frames_updated', handlePlansUpdated);
+    window.addEventListener('dynamic_frames_updated', handlePlansUpdated);
     return () => {
+      isMounted = false;
       window.removeEventListener('template_plans_updated', handlePlansUpdated);
+      window.removeEventListener('ai_news_dynamic_frames_updated', handlePlansUpdated);
+      window.removeEventListener('dynamic_frames_updated', handlePlansUpdated);
     };
   }, []);
 
@@ -413,11 +472,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         const savedCount = savedCustomFramesList.length;
         return { id: catName, label: catName, badge: `${savedCount + 1}` };
       }
+      const normCatName = normalizeToCanonicalCategory(catName);
       const count = currentFrameOptions.filter((f) => {
         const cfg = getTemplateConfig(f.id);
         if (!cfg.isActive) return false;
-        const c = cfg.category || 'Regular Frame';
-        return c === catName;
+        const c = normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
+        return c === normCatName;
       }).length;
       return { id: catName, label: catName, badge: `${count}` };
     });
@@ -1396,8 +1456,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 .filter((f) => {
                   const cfg = getTemplateConfig(f.id);
                   if (!cfg.isActive) return false;
-                  const cat = cfg.category || 'Regular Frame';
-                  return cat === selectedFrameCategory;
+                  const cat = normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
+                  const selectedNorm = normalizeToCanonicalCategory(selectedFrameCategory);
+                  return cat === selectedNorm;
                 })
                 .map((f) => {
                   const isSelected = (card.frameDesign || 'graphic_001') === f.id;

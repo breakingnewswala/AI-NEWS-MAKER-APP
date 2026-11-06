@@ -1,7 +1,13 @@
 // AI NEWS MAKER — Dynamic Frame Generator & Template System Types
-// Strictly supports 4:5 (1080x1350) and 9:16 (1080x1920) aspect ratios
+// Strictly supports 4:5 (1080x1350) and 9:16 (1080x1920) for Photo Frames
+// Video Frames support 9:16 (1080x1920), 1:1 (1080x1080), 4:5 (1080x1350), 4:3 (1440x1080)
 
-export type DynamicAspectRatio = '4:5' | '9:16';
+export type FrameMode = 'photo' | 'video';
+
+export type DynamicAspectRatio = '4:5' | '9:16' | '1:1' | '4:3';
+
+export const PHOTO_ALLOWED_ASPECT_RATIOS: DynamicAspectRatio[] = ['4:5', '9:16'];
+export const VIDEO_ALLOWED_ASPECT_RATIOS: DynamicAspectRatio[] = ['9:16', '1:1', '4:5', '4:3'];
 
 export type DynamicDesignCategory =
   | 'Regular Frames'
@@ -58,6 +64,17 @@ export interface PhotoSlotConfig {
   aspectRatioLabel?: string; // e.g. "16:9", "1:1", "4:5", "Free"
 }
 
+// Multi-Photo Layout Variants (Step 5)
+export type PhotoLayoutMode = 'single' | 'dual_50_50' | 'dual_vertical' | 'triple' | 'quad';
+
+export interface PhotoLayoutVariantConfig {
+  id: string;
+  mode: PhotoLayoutMode;
+  label: string;
+  slots: PhotoSlotConfig[];
+  enabled: boolean;
+}
+
 export interface TextSlotConfig {
   id: string;
   name: string;
@@ -74,6 +91,9 @@ export interface TextSlotConfig {
   padding?: number;
   backgroundColor?: string;
 }
+
+export type LocationBadgeMode = 'dynamic_overlay' | 'static_image';
+export type DateStampStyle = 'only_text' | 'white_on_black' | 'custom_bg_text' | 'circular_badge' | 'rounded_badge';
 
 export interface HeaderConfig {
   // Independent Channel Logo Configuration
@@ -97,6 +117,8 @@ export interface HeaderConfig {
   locationBorderRadius?: number;
   locationShowIcon?: boolean;
   locationAlign?: 'left' | 'center' | 'right';
+  locationBadgeMode?: LocationBadgeMode;
+  manualLocationAsset?: string; // Uploaded manual badge skin or static badge
 
   showCategory?: boolean;
   categoryRect?: NormalizedRect;
@@ -108,13 +130,17 @@ export interface HeaderConfig {
   dateFontSize?: number;
   dateFontWeight?: string;
   dateTextColor?: string;
+  dateBgColor?: string;
   dateOpacity?: number;
-  dateRotation?: number; // 0, 90, 270
+  dateRotation?: number; // 0, 90, 270 or arbitrary
   dateAlign?: 'left' | 'center' | 'right';
   dateLetterSpacing?: number;
+  dateStampStyle?: DateStampStyle;
 
   customHeaderUrl?: string;
 }
+
+export type WatermarkStyle = 'badge' | 'subtle_text' | 'boxed' | 'chip';
 
 export interface WatermarkConfig {
   enabled: boolean;
@@ -126,7 +152,11 @@ export interface WatermarkConfig {
   opacity?: number;
   rotation?: number; // 0, 90, 270
   align?: 'left' | 'center' | 'right';
+  watermarkStyle?: WatermarkStyle;
 }
+
+export type CalloutVisibilityPolicy = 'optional' | 'forced_on' | 'disabled';
+export type CalloutAssetMode = 'dynamic_overlay' | 'static_image';
 
 export interface FullStoryCalloutConfig {
   enabled: boolean;
@@ -139,6 +169,10 @@ export interface FullStoryCalloutConfig {
   borderWidth?: number;
   align?: 'left' | 'center' | 'right';
   showIcon?: boolean;
+  rotation?: number;
+  manualCalloutAsset?: string;
+  calloutAssetMode?: CalloutAssetMode;
+  calloutVisibilityPolicy?: CalloutVisibilityPolicy;
 }
 
 export interface PoweredByConfig {
@@ -227,14 +261,20 @@ export interface StatementOptions {
   cutoutOffset?: { x: number; y: number };
 }
 
+export type PrimaryBackgroundMode = 'image' | 'solid';
+
 export interface DynamicFrameTemplate {
   id: string;
   name: string;
   description?: string;
+  frameMode?: FrameMode; // 'photo' | 'video' (default: 'photo')
   aspectRatio: DynamicAspectRatio;
-  canvasWidth: 1080;
-  canvasHeight: 1350 | 1920; // 1350 for 4:5, 1920 for 9:16
+  canvasWidth: number; // 1080 for 4:5, 9:16, 1:1; 1440 for 4:3
+  canvasHeight: number; // 1350 for 4:5, 1920 for 9:16, 1080 for 1:1, 1080 for 4:3
   sampleReferenceUrl?: string;
+  primaryBackgroundAsset?: string;
+  primaryBackgroundMode?: PrimaryBackgroundMode;
+  primaryBackgroundHex?: string;
   previewImageUrl?: string;
   designCategory: DynamicDesignCategory;
   allowedPlans: DynamicPlanTier[];
@@ -248,6 +288,8 @@ export interface DynamicFrameTemplate {
   headerConfig: HeaderConfig;
   footerConfig: FooterConfig;
   photoSlots: PhotoSlotConfig[];
+  photoLayoutVariants?: PhotoLayoutVariantConfig[];
+  activePhotoLayoutMode?: PhotoLayoutMode;
   textSlots: TextSlotConfig[];
   ribbonConfig?: RibbonConfig;
   watermarkConfig?: WatermarkConfig;

@@ -1,5 +1,6 @@
 // AI News Graphic Template System - Registry & Access Control
 // Strictly 4:5 Ratio, Modular & Independent Graphic Templates
+import { getDynamicFrameById } from './dynamicFramesManager';
 
 export type GraphicPlanCategory = 'BASIC' | 'ADVANCED' | 'PRO' | 'VIP DESK';
 
@@ -458,14 +459,30 @@ export function getAllTemplateConfigs(): Record<string, TemplatePlanConfig> {
 
 export function getTemplateConfig(templateId: string): TemplatePlanConfig {
   const configs = getAllTemplateConfigs();
-  return (
-    configs[templateId] ||
-    DEFAULT_TEMPLATE_PLAN_CONFIGS[templateId] || {
-      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-      isActive: true,
-      version: 'v1.0',
+  if (configs[templateId]) return configs[templateId];
+  if (DEFAULT_TEMPLATE_PLAN_CONFIGS[templateId]) return DEFAULT_TEMPLATE_PLAN_CONFIGS[templateId];
+
+  try {
+    const df = getDynamicFrameById(templateId);
+    if (df) {
+      return {
+        allowedPlans: (df.allowedPlans as GraphicPlanCategory[]) || ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+        isActive: df.publicationStatus === 'published',
+        version: 'v1.0',
+        customName: df.name,
+        category: df.designCategory,
+        selectedTier: df.allowedPlans?.[0] || 'BASIC',
+        previewUrl: df.previewImageUrl || df.sampleReferenceUrl,
+        assetUrl: df.sampleReferenceUrl,
+      };
     }
-  );
+  } catch {}
+
+  return {
+    allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+    isActive: true,
+    version: 'v1.0',
+  };
 }
 
 export function saveTemplateConfig(templateId: string, update: Partial<TemplatePlanConfig>): void {

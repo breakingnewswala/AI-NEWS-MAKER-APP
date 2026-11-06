@@ -103,6 +103,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
 
   // Section D: AI Frame Generator Modal & Frame Management State
   const [isDynamicFrameModalOpen, setIsDynamicFrameModalOpen] = useState(false);
+  const [selectedGeneratorMode, setSelectedGeneratorMode] = useState<'photo' | 'video'>('photo');
   const [selectedEditFrame, setSelectedEditFrame] = useState<DynamicFrameTemplate | null>(null);
   const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>(() =>
     typeof window !== 'undefined' ? getLocalDynamicFrames() : []
@@ -839,17 +840,33 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedEditFrame(null);
-              setIsDynamicFrameModalOpen(true);
-            }}
-            className="shrink-0 px-4 py-2.5 bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-pink-600/25 flex items-center gap-2 cursor-pointer transition transform active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ नया AI फ्रेम बनाएं (Launch Generator)</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedEditFrame(null);
+                setSelectedGeneratorMode('photo');
+                setIsDynamicFrameModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg shadow-pink-600/25 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-95"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>A. फोटो फ्रेम जनरेटर (Photo Frame)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedEditFrame(null);
+                setSelectedGeneratorMode('video');
+                setIsDynamicFrameModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 hover:from-purple-600 hover:to-blue-600 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-700/25 flex items-center justify-center gap-2 cursor-pointer transition transform active:scale-95"
+            >
+              <Film className="w-4 h-4 text-indigo-300" />
+              <span>B. वीडियो फ्रेम जनरेटर (Video Frame)</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter and Search Bar */}
@@ -2187,6 +2204,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
       {isDynamicFrameModalOpen && (
         <DynamicFrameGeneratorModal
           isOpen={isDynamicFrameModalOpen}
+          initialMode={selectedGeneratorMode}
           onClose={() => {
             setIsDynamicFrameModalOpen(false);
             setSelectedEditFrame(null);
@@ -2198,6 +2216,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             setSelectedEditFrame(null);
             refreshDynamicFrames();
             window.dispatchEvent(new CustomEvent('template_plans_updated'));
+            window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
             showToast(`✅ नया AI फ्रेम "${newFrame.name}" सफलतापूर्वक पब्लिश किया गया!`);
           }}
         />

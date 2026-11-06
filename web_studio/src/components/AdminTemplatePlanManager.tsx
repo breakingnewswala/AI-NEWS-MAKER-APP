@@ -691,13 +691,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   : 'bg-slate-950/40 border-slate-800/50 opacity-60'
               }`}
             >
-              {/* Header row: ID, Name with inline Rename, Category Badge, Active Toggle, Preview */}
+              {/* Header row: Name with inline Rename, Category Badge, Active Toggle, Preview (Technical ID hidden) */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="font-mono text-xs font-black text-amber-400 px-2.5 py-0.5 bg-amber-400/10 rounded-lg border border-amber-400/20">
-                    {frame.id}
-                  </span>
-
                   {editingId === frame.id ? (
                     <div className="flex items-center gap-1.5 bg-slate-900 border border-amber-400/80 rounded-xl p-1 shadow-md">
                       <input

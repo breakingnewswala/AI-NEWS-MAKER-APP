@@ -77,12 +77,16 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     locationBgColor: rawH.locationBgColor || '#DC2626',
     locationTextColor: rawH.locationTextColor || '#FFFFFF',
     locationShowIcon: rawH.locationShowIcon !== false,
+    locationBadgeMode: rawH.locationBadgeMode || 'dynamic_overlay',
+    manualLocationAsset: rawH.manualLocationAsset,
     showDate: Boolean(rawH.showDate),
     dateRect: rawH.dateRect || (isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : { x: 5, y: 18.5, width: 34, height: 3.5 }),
     dateFormat: rawH.dateFormat || 'D MMMM YYYY',
     dateRotation: typeof rawH.dateRotation === 'number' ? rawH.dateRotation : 0,
     dateFontSize: typeof rawH.dateFontSize === 'number' ? rawH.dateFontSize : 20,
     dateTextColor: rawH.dateTextColor || '#CBD5E1',
+    dateBgColor: rawH.dateBgColor,
+    dateStampStyle: rawH.dateStampStyle || 'only_text',
   };
 
   // 2. Footer Config
@@ -106,6 +110,7 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     fontSize: typeof rawW.fontSize === 'number' ? rawW.fontSize : 18,
     opacity: typeof rawW.opacity === 'number' ? rawW.opacity : 0.8,
     rotation: typeof rawW.rotation === 'number' ? rawW.rotation : 0,
+    watermarkStyle: rawW.watermarkStyle || 'badge',
   };
 
   // 4. Full Story Callout Config
@@ -118,6 +123,10 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     bgColor: rawC.bgColor || 'rgba(0,0,0,0.7)',
     borderColor: rawC.borderColor || '#FFE600',
     showIcon: rawC.showIcon !== false,
+    manualCalloutAsset: rawC.manualCalloutAsset,
+    calloutAssetMode: rawC.calloutAssetMode || 'dynamic_overlay',
+    calloutVisibilityPolicy: rawC.calloutVisibilityPolicy || 'optional',
+    rotation: typeof rawC.rotation === 'number' ? rawC.rotation : 0,
   };
 
   // 4b. Optional Powered By Branding Config (Separate from Footer and Watermark)
@@ -319,8 +328,14 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
 
   return {
     ...raw,
-    canvasWidth: 1080,
-    canvasHeight: isStory ? 1920 : 1350,
+    frameMode: raw.frameMode || 'photo',
+    canvasWidth: raw.aspectRatio === '4:3' ? 1440 : 1080,
+    canvasHeight: isStory ? 1920 : raw.aspectRatio === '1:1' ? 1080 : raw.aspectRatio === '4:3' ? 1080 : 1350,
+    primaryBackgroundAsset: raw.primaryBackgroundAsset,
+    primaryBackgroundMode: raw.primaryBackgroundMode || 'image',
+    primaryBackgroundHex: raw.primaryBackgroundHex,
+    photoLayoutVariants: Array.isArray(raw.photoLayoutVariants) ? raw.photoLayoutVariants : [],
+    activePhotoLayoutMode: raw.activePhotoLayoutMode || 'single',
     headerConfig,
     footerConfig,
     watermarkConfig,
@@ -1061,6 +1076,15 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
   } catch {
     return DEFAULT_DYNAMIC_FRAMES;
   }
+}
+
+export function getDynamicFrameById(id: string): DynamicFrameTemplate | null {
+  if (!id) return null;
+  const local = getLocalDynamicFrames();
+  const found = local.find((f) => f.id === id);
+  if (found) return found;
+  const def = DEFAULT_DYNAMIC_FRAMES.find((f) => f.id === id);
+  return def || null;
 }
 
 export function saveLocalDynamicFrames(frames: DynamicFrameTemplate[]) {

@@ -24,7 +24,9 @@ export type FrameDesign =
   | 'jacket-text-breaking'
   | 'jacket-morning'
   | 'jacket-epaper'
-  | 'custom-png';
+  | 'custom-png'
+  | `df_${string}`
+  | (string & {});
 
 export interface TemplateConfig {
   id: string;
