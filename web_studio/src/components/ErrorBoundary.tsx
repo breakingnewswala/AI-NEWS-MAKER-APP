@@ -33,34 +33,48 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleReset = () => {
-    if (this.state.hasError) {
-      // First attempt local recovery, fallback to full page reload to bust any stale cache
-      this.setState({ hasError: false, error: null });
-      setTimeout(() => {
-        if (this.state.hasError) {
-          window.location.reload();
-        }
-      }, 50);
-    }
-  };
-
-  private handleStudioReset = () => {
     try {
-      this.setState({ hasError: false, error: null });
       if ('caches' in window) {
         caches.keys().then((names) => {
           names.forEach((name) => caches.delete(name));
         });
       }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => reg.unregister());
+        });
+      }
+      try {
+        sessionStorage.clear();
+      } catch {}
+    } catch {}
+    this.setState({ hasError: false, error: null });
+    window.location.href = window.location.origin + window.location.pathname + '?reload=' + Date.now();
+  };
+
+  private handleStudioReset = () => {
+    try {
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => caches.delete(name));
+        });
+      }
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((reg) => reg.unregister());
+        });
+      }
       try {
         sessionStorage.clear();
         localStorage.removeItem('active_app_tab');
+        localStorage.removeItem('news_studio_draft');
       } catch {}
       if (typeof (window as any).setAppTab === 'function') {
         (window as any).setAppTab('home');
       }
     } catch {}
-    window.location.href = '/?fresh=' + Date.now();
+    this.setState({ hasError: false, error: null });
+    window.location.href = window.location.origin + '/?fresh=' + Date.now();
   };
 
   public render() {

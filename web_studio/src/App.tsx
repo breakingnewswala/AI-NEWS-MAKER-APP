@@ -2502,6 +2502,7 @@ export default function App() {
         setCard((prev) => ({
           ...prev,
           sourceNewsId: post.id,
+          sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
           isBonus: Boolean(post.isBonus),
           originalHeadline: post.title,
           frameDesign: 'graphic_001',
@@ -2589,6 +2590,7 @@ export default function App() {
       setCard((prev) => ({
         ...prev,
         sourceNewsId: post.id,
+        sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
         isBonus: Boolean(post.isBonus),
         originalHeadline: post.title,
         frameDesign: 'graphic_001',

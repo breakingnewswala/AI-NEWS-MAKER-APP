@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Bell, Volume2, ShieldCheck, Zap, X, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Bell, Volume2, ShieldCheck, Zap, X, CheckCircle2, RotateCw } from 'lucide-react';
 import {
   requestNotificationPermission,
   getNotificationPermissionStatus,
   unlockAudioPlayback,
-  playNormalNotificationSound,
+  registerWebPushSubscription,
 } from '../lib/notificationManager';
 
 interface NotificationPermissionModalProps {
@@ -17,79 +17,126 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isActivating, setIsActivating] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
-  const [isDenied, setIsDenied] = useState<boolean>(() => {
-    if (typeof window !== 'undefined' && typeof Notification !== 'undefined') {
-      return Notification.permission === 'denied';
-    }
-    return false;
-  });
+  const [isDenied, setIsDenied] = useState<boolean>(false);
 
-  useEffect(() => {
+  // Sync state accurately with true browser status
+  const evaluatePermission = useCallback(() => {
     if (typeof window === 'undefined') return;
 
-    // Check if user already enabled or dismissed in this session
-    const isAlreadyEnabled = localStorage.getItem('ai_news_sound_permission_enabled_v1') === 'true';
+    const realBrowserStatus = getNotificationPermissionStatus();
+
+    // A. GRANTED: Never show blocked popup, auto-persist & trigger push registration
+    if (realBrowserStatus === 'granted') {
+      try {
+        localStorage.setItem('ai_news_sound_permission_enabled_v1', 'true');
+        localStorage.setItem('ai_news_sound_notice_dismissed_v1', 'true');
+        localStorage.removeItem('browser_notifications_blocked_flag');
+      } catch {}
+      setIsDenied(false);
+      setIsOpen(false);
+      // Ensure web push registration runs safely in the background
+      registerWebPushSubscription().catch(() => {});
+      return;
+    }
+
+    // Check if dismissed in this session or dismissed within 24 hours
     const isDismissedThisSession = sessionStorage.getItem('ai_news_notif_modal_dismissed') === 'true';
-    const currentStatus = getNotificationPermissionStatus();
+    const dismissedUntil = Number(localStorage.getItem('ai_news_notif_dismissed_until') || 0);
+    const isTemporarilyDismissed = Date.now() < dismissedUntil;
 
-    // If notification is already granted AND audio enabled, don't show
-    if (isAlreadyEnabled && currentStatus === 'granted') {
+    if (isDismissedThisSession || isTemporarilyDismissed) {
+      setIsOpen(false);
       return;
     }
 
-    if (isDismissedThisSession) {
-      return;
+    if (realBrowserStatus === 'denied') {
+      setIsDenied(true);
+    } else {
+      setIsDenied(false);
     }
 
-    // Show after a gentle 1.5s delay after page load so user sees the interface first
+    // Show gentle banner after user has seen the UI (1.8s delay)
     const timer = setTimeout(() => {
-      setIsOpen(true);
-    }, 1500);
+      // Re-verify before opening so granted users are never prompted
+      const freshStatus = getNotificationPermissionStatus();
+      if (freshStatus !== 'granted') {
+        setIsOpen(true);
+      }
+    }, 1800);
 
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    evaluatePermission();
+
+    const handlePermissionChange = () => {
+      evaluatePermission();
+    };
+
+    window.addEventListener('ai_news_notification_permission_changed', handlePermissionChange);
+    window.addEventListener('focus', handlePermissionChange);
+
+    return () => {
+      window.removeEventListener('ai_news_notification_permission_changed', handlePermissionChange);
+      window.removeEventListener('focus', handlePermissionChange);
+    };
+  }, [evaluatePermission]);
 
   const handleEnableAlerts = async () => {
     setIsActivating(true);
     try {
       // 1. Request Browser System Notification Permission
       const perm = await requestNotificationPermission();
-      if (perm === 'denied') {
+
+      // Check the fresh actual state
+      const freshStatus = getNotificationPermissionStatus();
+
+      if (perm === 'granted' || freshStatus === 'granted') {
+        setIsDenied(false);
+        unlockAudioPlayback(true);
+
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try {
+            navigator.vibrate([100, 50, 100]);
+          } catch {}
+        }
+
+        try {
+          localStorage.setItem('ai_news_sound_permission_enabled_v1', 'true');
+          localStorage.setItem('ai_news_sound_notice_dismissed_v1', 'true');
+          localStorage.removeItem('browser_notifications_blocked_flag');
+        } catch {}
+
+        setIsSuccess(true);
+
+        if (onPermissionGranted) {
+          onPermissionGranted();
+        }
+
+        window.dispatchEvent(new Event('ai_news_notification_permission_changed'));
+        window.dispatchEvent(new Event('ai_news_sound_settings_updated'));
+
+        registerWebPushSubscription().catch(() => {});
+
+        setTimeout(() => {
+          setIsOpen(false);
+        }, 1200);
+        return;
+      }
+
+      if (perm === 'denied' || freshStatus === 'denied') {
         setIsDenied(true);
         unlockAudioPlayback(true);
         setIsActivating(false);
         return;
       }
 
-      // 2. Unlock AudioContext & play test chime on user click (Crucial for Mobile Chrome & Safari)
+      // If dismissed or default, unlock audio and safely dismiss
       unlockAudioPlayback(true);
-
-      // 3. Trigger tactile mobile vibration if supported
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        try {
-          navigator.vibrate([100, 50, 100]);
-        } catch {}
-      }
-
-      // 4. Persist user choice in localStorage
-      localStorage.setItem('ai_news_sound_permission_enabled_v1', 'true');
-      localStorage.setItem('ai_news_sound_notice_dismissed_v1', 'true');
-
-      setIsSuccess(true);
-
-      if (onPermissionGranted) {
-        onPermissionGranted();
-      }
-
-      window.dispatchEvent(new Event('ai_news_notification_permission_changed'));
-      window.dispatchEvent(new Event('ai_news_sound_settings_updated'));
-
-      setTimeout(() => {
-        setIsOpen(false);
-      }, 1400);
+      handleDismiss();
     } catch (err) {
       console.warn('Error enabling notifications/sound:', err);
-      // Fallback: still unlock audio
       unlockAudioPlayback(true);
       setIsOpen(false);
     } finally {
@@ -100,6 +147,8 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
   const handleDismiss = () => {
     try {
       sessionStorage.setItem('ai_news_notif_modal_dismissed', 'true');
+      // Gentle 24h snooze so user is not annoyed on every visit
+      localStorage.setItem('ai_news_notif_dismissed_until', String(Date.now() + 24 * 60 * 60 * 1000));
     } catch {}
     setIsOpen(false);
   };
@@ -129,7 +178,7 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
               <ol className="list-decimal pl-4 space-y-1 text-slate-300">
                 <li>ऊपर एड्रेस बार में <b>ताला (🔒) या ट्यून आइकन</b> दबाएँ।</li>
                 <li><b>'Notifications' / 'अनुमतियाँ'</b> पर टैप करके <b>'Allow'</b> करें।</li>
-                <li>नीचे दिए गए बटन पर टैप करके रीलोड करें।</li>
+                <li>नीचे दिए गए बटन पर टैप करके पुनः जाँचें या रीलोड करें।</li>
               </ol>
             </div>
             <div className="space-y-2 pt-1">
@@ -137,11 +186,17 @@ export const NotificationPermissionModal: React.FC<NotificationPermissionModalPr
                 type="button"
                 onClick={() => {
                   unlockAudioPlayback(true);
-                  if (typeof window !== 'undefined') window.location.reload();
+                  const status = getNotificationPermissionStatus();
+                  if (status === 'granted') {
+                    evaluatePermission();
+                  } else if (typeof window !== 'undefined') {
+                    window.location.reload();
+                  }
                 }}
-                className="w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer"
+                className="w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer flex items-center justify-center gap-1.5"
               >
-                🔄 सेटिंग्स बदलने के बाद पेज रीलोड करें
+                <RotateCw className="w-3.5 h-3.5 text-slate-950" />
+                <span>🔄 सेटिंग्स बदलने के बाद जाँचें / रीलोड करें</span>
               </button>
               <button
                 type="button"

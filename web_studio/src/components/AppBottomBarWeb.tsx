@@ -24,8 +24,8 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
   const isAdmin = isUserAdmin(currentUser);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/90 shadow-2xl md:hidden">
-      <div className="max-w-md mx-auto px-2 sm:px-4 h-16 flex items-center justify-between relative">
+    <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/90 shadow-2xl xl:hidden">
+      <div className="max-w-md sm:max-w-lg md:max-w-2xl mx-auto px-2 sm:px-4 md:px-6 h-16 flex items-center justify-between relative">
         {/* Tab 1: Home (होम) */}
         <button
           onClick={() => onSelectTab('home')}

@@ -1612,6 +1612,7 @@ export interface LogoChangeRequest {
   createdAt: number;
   requestType?: 'logo' | 'gif';
   adminNotes?: string;
+  cropConfig?: any;
 }
 
 export function getLogoChangeRequests(): LogoChangeRequest[] {
@@ -1665,7 +1666,8 @@ export async function submitLogoChangeRequest(
   newLogoUrl?: string,
   userName?: string,
   username?: string,
-  requestType: 'logo' | 'gif' = 'logo'
+  requestType: 'logo' | 'gif' = 'logo',
+  cropConfig?: any
 ): Promise<LogoChangeRequest> {
   const cleanEmail = userEmail.toLowerCase().trim();
   const reqs = getLogoChangeRequests();
@@ -1681,6 +1683,7 @@ export async function submitLogoChangeRequest(
     status: 'pending',
     createdAt: Date.now(),
     requestType,
+    cropConfig,
   };
 
   // Immediate optimistic update to local cache
@@ -1704,6 +1707,7 @@ export async function submitLogoChangeRequest(
         userName,
         username,
         requestType,
+        cropConfig,
       }),
     });
     if (res.ok) {

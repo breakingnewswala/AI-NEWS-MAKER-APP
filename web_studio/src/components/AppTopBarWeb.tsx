@@ -283,8 +283,8 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               </div>
             </div>
 
-            {/* Desktop Tab Links (md+) - Exact 5 Primary Options */}
-            <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0 shadow-xs">
+            {/* Desktop Tab Links (xl+) - Exact 5 Primary Options, Tablets use Bottom Bar */}
+            <nav className="hidden xl:flex items-center gap-1 bg-slate-900/90 border border-slate-800/80 rounded-xl p-1 shrink-0 shadow-xs">
               <button
                 onClick={() => onNavigateToTab('home')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
@@ -429,7 +429,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               )}
 
               {/* Real-time Notifications */}
-              <div className={`relative ${isControlPanel && isAdminUser ? 'hidden md:block' : ''}`}>
+              <div className="relative">
                 <button
                   onClick={() => {
                     if (isAdminUser) {

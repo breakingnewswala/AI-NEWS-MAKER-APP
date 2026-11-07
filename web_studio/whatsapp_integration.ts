@@ -2022,61 +2022,152 @@ export function registerWhatsAppIntegration(
       return await sendWhatsAppText(to, fallbackTextMessage);
     }
 
-    // Attempt sending via Meta Authentication Template 'profile_otp'
-    try {
-      console.log(`[WhatsApp:OTP] Attempting to send OTP via Meta template '${templateName}' (${templateLang}) to ${maskedTo}`);
-      const payload: any = {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: templateLang },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                { type: "text", text: String(otpCode) },
-              ],
-            },
-            {
-              type: "button",
-              sub_type: "url",
-              index: "0",
-              parameters: [
-                { type: "text", text: String(otpCode) }
+    // Attempt sending via Meta Authentication Templates (supports Body-only, Copy-code button, URL button)
+    const candidateTemplates = Array.from(new Set([configuredTemplate, "profile_otp", "auth_otp", "otp_verification", "verification_code"])).filter(Boolean);
+    const candidateLangs = Array.from(new Set([configuredLang, "en_US", "en", "hi"])).filter(Boolean);
+
+    let lastError: any = null;
+
+    for (const tName of candidateTemplates) {
+      for (const tLang of candidateLangs) {
+        // Variation 1: Body-only parameter (Most compatible for custom approved templates)
+        try {
+          const payloadBodyOnly: any = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to,
+            type: "template",
+            template: {
+              name: tName,
+              language: { code: tLang },
+              components: [
+                {
+                  type: "body",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                }
               ]
             }
-          ]
+          };
+
+          const res1 = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payloadBodyOnly),
+          });
+
+          const result1 = await res1.json().catch(() => ({}));
+          if (res1.ok && result1?.messages?.[0]?.id) {
+            console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${tName}' (${tLang}) [body-only]: id=${result1.messages[0].id}`);
+            return result1;
+          }
+          lastError = result1?.error || result1;
+        } catch (err: any) {
+          lastError = err;
         }
-      };
 
-      const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+        // Variation 2: Copy-Code Button parameter (Official Meta Authentication template schema)
+        try {
+          const payloadCopyCode: any = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to,
+            type: "template",
+            template: {
+              name: tName,
+              language: { code: tLang },
+              components: [
+                {
+                  type: "body",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                },
+                {
+                  type: "button",
+                  sub_type: "copy_code",
+                  index: "0",
+                  parameters: [{ type: "coupon_code", text: String(otpCode) }]
+                }
+              ]
+            }
+          };
 
-      const result = await response.json().catch(() => ({}));
-      if (response.ok && result?.messages?.[0]?.id) {
-        console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${templateName}': id=${result.messages[0].id}`);
-        return result;
+          const res2 = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payloadCopyCode),
+          });
+
+          const result2 = await res2.json().catch(() => ({}));
+          if (res2.ok && result2?.messages?.[0]?.id) {
+            console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${tName}' (${tLang}) [copy_code]: id=${result2.messages[0].id}`);
+            return result2;
+          }
+          lastError = result2?.error || result2;
+        } catch (err: any) {
+          lastError = err;
+        }
+
+        // Variation 3: URL Button parameter
+        try {
+          const payloadUrlBtn: any = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to,
+            type: "template",
+            template: {
+              name: tName,
+              language: { code: tLang },
+              components: [
+                {
+                  type: "body",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                },
+                {
+                  type: "button",
+                  sub_type: "url",
+                  index: "0",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                }
+              ]
+            }
+          };
+
+          const res3 = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payloadUrlBtn),
+          });
+
+          const result3 = await res3.json().catch(() => ({}));
+          if (res3.ok && result3?.messages?.[0]?.id) {
+            console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${tName}' (${tLang}) [url_button]: id=${result3.messages[0].id}`);
+            return result3;
+          }
+          lastError = result3?.error || result3;
+        } catch (err: any) {
+          lastError = err;
+        }
       }
-
-      console.warn(`[WhatsApp:OTP] Meta Template '${templateName}' request returned HTTP ${response.status}:`, JSON.stringify(result?.error || result));
-      if (response.status === 401 || (result as any)?.error?.code === 190) {
-        return await sendWhatsAppText(to, fallbackTextMessage);
-      }
-      console.log("[WhatsApp:OTP] Gracefully falling back to direct formatted text message...");
-    } catch (templateErr: any) {
-      console.warn("[WhatsApp:OTP] Template send threw exception:", templateErr?.message, "- falling back to direct text");
     }
 
-    return await sendWhatsAppText(to, fallbackTextMessage);
+    console.warn(`[WhatsApp:OTP] All Meta template attempts failed for ${maskedTo}. Last error:`, JSON.stringify(lastError));
+
+    // Fallback to direct session text message if session exists
+    try {
+      console.log("[WhatsApp:OTP] Attempting direct formatted text message as final fallback...");
+      return await sendWhatsAppText(to, fallbackTextMessage);
+    } catch (sessionErr: any) {
+      console.error("[WhatsApp:OTP] Session fallback text failed:", sessionErr?.message);
+      throw new Error(`WhatsApp OTP प्रेषण विफल: Meta टेम्पलेट स्वीकृत नहीं हुआ (${lastError?.message || 'अमान्य टेम्पलेट कॉन्फ़िगरेशन'})`);
+    }
   };
 
   const getKnowledgeContext = async (): Promise<{ context: string; count: number; errorCategory?: string }> => {

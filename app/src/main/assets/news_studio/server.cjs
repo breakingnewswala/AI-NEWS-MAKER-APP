@@ -7994,56 +7994,135 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
       console.warn("[WhatsApp:OTP] Credentials missing, delegating to sendWhatsAppText to log config missing error");
       return await sendWhatsAppText(to, fallbackTextMessage);
     }
-    try {
-      console.log(`[WhatsApp:OTP] Attempting to send OTP via Meta template '${templateName}' (${templateLang}) to ${maskedTo}`);
-      const payload = {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: templateLang },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                { type: "text", text: String(otpCode) }
-              ]
-            },
-            {
-              type: "button",
-              sub_type: "url",
-              index: "0",
-              parameters: [
-                { type: "text", text: String(otpCode) }
+    const candidateTemplates = Array.from(/* @__PURE__ */ new Set([configuredTemplate, "profile_otp", "auth_otp", "otp_verification", "verification_code"])).filter(Boolean);
+    const candidateLangs = Array.from(/* @__PURE__ */ new Set([configuredLang, "en_US", "en", "hi"])).filter(Boolean);
+    let lastError = null;
+    for (const tName of candidateTemplates) {
+      for (const tLang of candidateLangs) {
+        try {
+          const payloadBodyOnly = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to,
+            type: "template",
+            template: {
+              name: tName,
+              language: { code: tLang },
+              components: [
+                {
+                  type: "body",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                }
               ]
             }
-          ]
+          };
+          const res1 = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payloadBodyOnly)
+          });
+          const result1 = await res1.json().catch(() => ({}));
+          if (res1.ok && result1?.messages?.[0]?.id) {
+            console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${tName}' (${tLang}) [body-only]: id=${result1.messages[0].id}`);
+            return result1;
+          }
+          lastError = result1?.error || result1;
+        } catch (err) {
+          lastError = err;
         }
-      };
-      const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json().catch(() => ({}));
-      if (response.ok && result?.messages?.[0]?.id) {
-        console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${templateName}': id=${result.messages[0].id}`);
-        return result;
+        try {
+          const payloadCopyCode = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to,
+            type: "template",
+            template: {
+              name: tName,
+              language: { code: tLang },
+              components: [
+                {
+                  type: "body",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                },
+                {
+                  type: "button",
+                  sub_type: "copy_code",
+                  index: "0",
+                  parameters: [{ type: "coupon_code", text: String(otpCode) }]
+                }
+              ]
+            }
+          };
+          const res2 = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payloadCopyCode)
+          });
+          const result2 = await res2.json().catch(() => ({}));
+          if (res2.ok && result2?.messages?.[0]?.id) {
+            console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${tName}' (${tLang}) [copy_code]: id=${result2.messages[0].id}`);
+            return result2;
+          }
+          lastError = result2?.error || result2;
+        } catch (err) {
+          lastError = err;
+        }
+        try {
+          const payloadUrlBtn = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to,
+            type: "template",
+            template: {
+              name: tName,
+              language: { code: tLang },
+              components: [
+                {
+                  type: "body",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                },
+                {
+                  type: "button",
+                  sub_type: "url",
+                  index: "0",
+                  parameters: [{ type: "text", text: String(otpCode) }]
+                }
+              ]
+            }
+          };
+          const res3 = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payloadUrlBtn)
+          });
+          const result3 = await res3.json().catch(() => ({}));
+          if (res3.ok && result3?.messages?.[0]?.id) {
+            console.log(`[WhatsApp:OTP] Template OTP sent successfully via '${tName}' (${tLang}) [url_button]: id=${result3.messages[0].id}`);
+            return result3;
+          }
+          lastError = result3?.error || result3;
+        } catch (err) {
+          lastError = err;
+        }
       }
-      console.warn(`[WhatsApp:OTP] Meta Template '${templateName}' request returned HTTP ${response.status}:`, JSON.stringify(result?.error || result));
-      if (response.status === 401 || result?.error?.code === 190) {
-        return await sendWhatsAppText(to, fallbackTextMessage);
-      }
-      console.log("[WhatsApp:OTP] Gracefully falling back to direct formatted text message...");
-    } catch (templateErr) {
-      console.warn("[WhatsApp:OTP] Template send threw exception:", templateErr?.message, "- falling back to direct text");
     }
-    return await sendWhatsAppText(to, fallbackTextMessage);
+    console.warn(`[WhatsApp:OTP] All Meta template attempts failed for ${maskedTo}. Last error:`, JSON.stringify(lastError));
+    try {
+      console.log("[WhatsApp:OTP] Attempting direct formatted text message as final fallback...");
+      return await sendWhatsAppText(to, fallbackTextMessage);
+    } catch (sessionErr) {
+      console.error("[WhatsApp:OTP] Session fallback text failed:", sessionErr?.message);
+      throw new Error(`WhatsApp OTP \u092A\u094D\u0930\u0947\u0937\u0923 \u0935\u093F\u092B\u0932: Meta \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0928\u0939\u0940\u0902 \u0939\u0941\u0906 (${lastError?.message || "\u0905\u092E\u093E\u0928\u094D\u092F \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930\u0947\u0936\u0928"})`);
+    }
   };
   const getKnowledgeContext = async () => {
     const docs = [];
@@ -11967,7 +12046,8 @@ function formatRelativeTime(timestamp) {
 }
 app.get("/api/news-posts", async (req, res) => {
   const user = await resolveAuthenticatedUser(req);
-  const isAdmin = Boolean(user && isAuthorizedAdmin(req));
+  if (user) req.user = user;
+  const isAdmin = Boolean(user && (user.role === "admin" || user.role === "superadmin" || isAuthorizedAdmin(req)));
   const includePending = isAdmin && (req.query.includePending === "true" || req.query.includePending === "1");
   const posts = loadNewsDatabase();
   const editorialDb = loadApprovedEditorialDatabase();
@@ -12403,6 +12483,7 @@ app.post("/api/editorial/approved/:id", (req, res) => {
     const isPrePublished = body.isPrePublished !== void 0 ? Boolean(body.isPrePublished) : true;
     const db = loadApprovedEditorialDatabase();
     const existing = db[id] || {};
+    const passedPhotos = Array.isArray(body.additionalPhotos) ? body.additionalPhotos : Array.isArray(body.approvedPhotos) ? body.approvedPhotos : null;
     const updated = {
       ...existing,
       newsId: id,
@@ -12416,10 +12497,22 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       location: body.location || existing.location || "",
       category: body.category || existing.category || "",
       imageUrl: body.imageUrl || existing.imageUrl || "",
-      additionalPhotos: Array.isArray(body.additionalPhotos) ? body.additionalPhotos : existing.additionalPhotos || [],
+      additionalPhotos: passedPhotos !== null ? passedPhotos : existing.additionalPhotos || [],
+      approvedPhotos: passedPhotos !== null ? passedPhotos : existing.approvedPhotos || existing.additionalPhotos || [],
       manualThumbnailUrl: body.manualThumbnailUrl || existing.manualThumbnailUrl || "",
       additionalImages: Array.isArray(body.additionalImages) ? body.additionalImages : existing.additionalImages || [],
       featuredPhotoUrl: body.featuredPhotoUrl || existing.featuredPhotoUrl || "",
+      sourceUrl: body.sourceUrl || existing.sourceUrl || body.url || existing.url || "",
+      url: body.url || existing.url || body.sourceUrl || existing.sourceUrl || "",
+      originalUrl: body.originalUrl || existing.originalUrl || body.sourceUrl || existing.sourceUrl || "",
+      fullNews: body.fullNews || existing.fullNews || body.fullContent || existing.fullContent || "",
+      fullContent: body.fullContent || existing.fullContent || body.fullNews || existing.fullNews || "",
+      articleText: body.articleText || existing.articleText || body.fullNews || existing.fullNews || body.captionDetailed || "",
+      isBonus: body.isBonus !== void 0 ? Boolean(body.isBonus) : existing.isBonus !== void 0 ? Boolean(existing.isBonus) : false,
+      rewardCoins: Number(body.rewardCoins ?? existing.rewardCoins ?? 0),
+      coinCost: Number(body.coinCost ?? existing.coinCost ?? body.coinPrice ?? 0),
+      coinPrice: Number(body.coinCost ?? existing.coinCost ?? body.coinPrice ?? 0),
+      restrictedPlans: Array.isArray(body.restrictedPlans) ? body.restrictedPlans : existing.restrictedPlans || [],
       approvedAt: Date.now(),
       approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
       status: "APPROVED",
@@ -12452,11 +12545,16 @@ app.post("/api/editorial/approved/:id", (req, res) => {
             sourceUrl: updated.sourceUrl || p.sourceUrl,
             image: updated.imageUrl || p.image,
             imageUrl: updated.imageUrl || p.imageUrl,
-            additionalPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.additionalPhotos,
-            approvedPhotos: updated.additionalPhotos.length > 0 ? updated.additionalPhotos : p.approvedPhotos,
+            additionalPhotos: passedPhotos !== null ? passedPhotos : p.additionalPhotos || [],
+            approvedPhotos: passedPhotos !== null ? passedPhotos : p.approvedPhotos || [],
             manualThumbnailUrl: updated.manualThumbnailUrl || p.manualThumbnailUrl || "",
             additionalImages: updated.additionalImages && updated.additionalImages.length > 0 ? updated.additionalImages : p.additionalImages || [],
-            featuredPhotoUrl: updated.featuredPhotoUrl || p.featuredPhotoUrl || ""
+            featuredPhotoUrl: updated.featuredPhotoUrl || p.featuredPhotoUrl || "",
+            isBonus: updated.isBonus,
+            rewardCoins: updated.rewardCoins,
+            coinCost: updated.coinCost,
+            coinPrice: updated.coinPrice,
+            restrictedPlans: updated.restrictedPlans
           };
         }
         return p;
@@ -19980,7 +20078,8 @@ app.post("/api/logo-change-requests", (req, res) => {
       reason: reason.trim(),
       status: "pending",
       createdAt: Date.now(),
-      requestType: requestType === "gif" ? "gif" : "logo"
+      requestType: requestType === "gif" ? "gif" : "logo",
+      cropConfig: req.body.cropConfig || void 0
     };
     allRequests.unshift(newRequest);
     saveLogoRequestsDatabase(allRequests);
@@ -21240,23 +21339,11 @@ function getHeadlineRegenCoinCost(tier, role) {
 function isRegenerateAllowed(config, effectiveTier) {
   if (!config) return true;
   if (config.headlineRegeneration?.enabled === false) return false;
-  const cleanTier = (effectiveTier || "basic").toLowerCase().trim().replace(/[\-_]/g, " ");
-  if ([
-    "admin",
-    "superadmin",
-    "super admin",
-    "ultra",
-    "vip",
-    "vip desk",
-    "vip dash",
-    "pro",
-    "professional",
-    "advance",
-    "advanced",
-    "basic",
-    "free"
-  ].includes(cleanTier)) {
-    return true;
+  const cleanTier = (effectiveTier || "basic").toLowerCase().trim().replace(/[\-_]/g, "");
+  const perm = config.permissions?.regenerateHeadlines || config.headlineRegeneration?.permissions;
+  if (perm && perm.allowAllTiers === false && Array.isArray(perm.allowedTiers)) {
+    const allowed = perm.allowedTiers.map((t) => String(t || "").toLowerCase().trim().replace(/[\-_]/g, ""));
+    return allowed.includes(cleanTier) || cleanTier === "admin" || cleanTier === "superadmin";
   }
   return true;
 }
@@ -21282,6 +21369,8 @@ function isTierAllowedForOpenAI(tier, role) {
   return false;
 }
 function isTierAllowedForUrlGeneration(tier, role) {
+  const cleanRole = (role || "").toLowerCase().trim();
+  if (cleanRole === "admin" || cleanRole === "superadmin") return true;
   const cleanTier = (tier || "basic").toLowerCase().trim();
   const allowed = [
     "advance",
@@ -21298,12 +21387,7 @@ function isTierAllowedForUrlGeneration(tier, role) {
     "admin",
     "superadmin"
   ];
-  if (allowed.includes(cleanTier)) return true;
-  const cleanRole = (role || "").toLowerCase().trim();
-  if ((cleanRole === "admin" || cleanRole === "superadmin") && cleanTier !== "basic") {
-    return true;
-  }
-  return false;
+  return allowed.includes(cleanTier);
 }
 function resolveUserTierAndRole(req) {
   const explicitTier = (req.body?.userTier || req.body?.tier || req.headers["x-user-tier"] || req.query?.tier)?.toString().toLowerCase().trim();
@@ -22448,7 +22532,7 @@ function extractFactsFromUrlString(rawUrl) {
       jaipur: "\u091C\u092F\u092A\u0941\u0930"
     };
     let locationHint = void 0;
-    let categoryHint = void 0;
+    let categoryHint2 = void 0;
     const meaningfulWords = [];
     const rawSegments = parsed.pathname.split("/").filter(Boolean);
     for (const segment of rawSegments) {
@@ -22464,15 +22548,15 @@ function extractFactsFromUrlString(rawUrl) {
         }
       }
       if (/crime|police|murder|arrest|fraud|fir|loot|chori|hatya|thana|scam/i.test(decoded)) {
-        categoryHint = "\u0905\u092A\u0930\u093E\u0927";
+        categoryHint2 = "\u0905\u092A\u0930\u093E\u0927";
       } else if (/accident|hadsa|takkar|injured|death|maut|ghayal/i.test(decoded)) {
-        categoryHint = "\u0939\u093E\u0926\u0938\u093E";
+        categoryHint2 = "\u0939\u093E\u0926\u0938\u093E";
       } else if (/politics|chunav|election|cm|bjp|congress|mantri|sarkar|yojana/i.test(decoded)) {
-        categoryHint = "\u0930\u093E\u091C\u0928\u0940\u0924\u093F";
+        categoryHint2 = "\u0930\u093E\u091C\u0928\u0940\u0924\u093F";
       } else if (/weather|rain|barish|mosam|mausam|alert/i.test(decoded)) {
-        categoryHint = "\u092E\u094C\u0938\u092E";
+        categoryHint2 = "\u092E\u094C\u0938\u092E";
       } else if (/vikas|prashasan|collector|order|circular/i.test(decoded)) {
-        categoryHint = "\u092A\u094D\u0930\u0936\u093E\u0938\u0928";
+        categoryHint2 = "\u092A\u094D\u0930\u0936\u093E\u0938\u0928";
       }
       if (decoded.includes("-") || decoded.includes("_") || decoded.length > 15) {
         const cleanedSlug = decoded.replace(/\.(html?|amp|php|aspx?)$/i, "").replace(/[-_]\d{4,}$/, "").replace(/[-_]+/g, " ").trim();
@@ -22488,7 +22572,7 @@ function extractFactsFromUrlString(rawUrl) {
       slugWords: meaningfulWords,
       titleHint,
       locationHint,
-      categoryHint
+      categoryHint: categoryHint2
     };
   } catch {
     return {
@@ -24654,7 +24738,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       rawLink = effectiveInput;
       effectiveInput = "";
     }
-    if (rawLink && !requestedNewsId) {
+    if (rawLink && !requestedNewsId && (!effectiveInput || effectiveInput.trim().length === 0)) {
       if (!isTierAllowedForUrlGeneration(userTier, userResolution.role)) {
         return res.status(403).json({
           success: false,
@@ -25155,6 +25239,42 @@ ${factSentences.slice(0, 5).join("\n")}
       parsedData.headline_line_count = targetMaxLines;
     }
     if (!parsedData) {
+      const fallbackTitle = cleanHeadlineText(effectiveArticleTitle || rawInputText.split(/[।\n.]/)[0] || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930");
+      const fallbackFacts = (rawInputText || effectiveArticleDesc || fetchedArticleSnippet || fallbackTitle).trim();
+      const detectedLoc = cleanLocationField(categoryLocation || fallbackFacts.slice(0, 100) || "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936");
+      const factSentences = fallbackFacts.split(/[।\n]+|\.\s+/).map((s) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter((s) => s.length > 15 && /[\u0900-\u097F]/.test(s));
+      const generatedOptions = fitHeadlinesTo5TierRanges([], factSentences, fallbackTitle, detectedLoc).slice(0, 5);
+      const topH = generatedOptions[0] || fallbackTitle;
+      const variants = formatCaptionVariants(topH, detectedLoc, fallbackFacts, channelUsername);
+      const words = topH.split(/\s+/).filter(Boolean);
+      const hlWords = [];
+      for (const w of words) {
+        const cleanW = w.replace(/[.,:;!?'"()]/g, "");
+        if (/\d+/.test(cleanW) || cleanW.length >= 4 && !/के|की|का|में|पर|से|को|ने|है|और|था|थे|थी/.test(cleanW)) {
+          if (!hlWords.includes(cleanW) && hlWords.length < 3) {
+            hlWords.push(cleanW);
+          }
+        }
+      }
+      parsedData = {
+        headline: topH,
+        headlineOptions: generatedOptions.length >= 4 ? generatedOptions : [topH, ...generatedOptions],
+        summary: cleanCaptionParagraphs(variants.captionDetailed, "detailed", channelUsername, detectedLoc, topH),
+        captionDetailed: cleanCaptionParagraphs(variants.captionDetailed, "detailed", channelUsername, detectedLoc, topH),
+        captionBullets: cleanCaptionParagraphs(variants.captionBullets, "bullet", channelUsername, detectedLoc, topH),
+        captionShort: cleanCaptionParagraphs(variants.captionShort, "short", channelUsername, detectedLoc, topH),
+        location: detectedLoc,
+        category: categoryHint || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930",
+        highlightWords: hlWords.slice(0, 3),
+        formattedHeadline: hlWords.length > 0 && topH.includes(hlWords[0]) ? topH.replace(new RegExp(`(${hlWords[0]})`, "g"), "[yellow]$1[/yellow]") : topH,
+        template_id: tplConfig.template_id,
+        headline_max_lines: targetMaxLines,
+        headline_area: targetArea,
+        headline_line_count: targetMaxLines
+      };
+      actualProvider = "local-fallback";
+    }
+    if (!parsedData) {
       return res.status(503).json({
         success: false,
         code: "ALL_API_KEYS_UNAVAILABLE",
@@ -25428,9 +25548,34 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     }
     const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
     const excludeTitles = rawPrev.map((h) => cleanHeadlineText(String(h || "")).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter(Boolean);
-    const sourceTitle = canonicalContext.title || req.body.title || req.body.sourceHeadline || "";
-    const sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
-    const sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
+    let sourceTitle = canonicalContext.title || req.body.title || req.body.sourceHeadline || "";
+    let sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
+    let sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
+    if (!sourceText || sourceText.trim().length < 50) {
+      const targetNewsId = draftId || req.body.newsId || canonicalContext.newsId || canonicalContext.sourceNewsId || "";
+      try {
+        const edDb = loadApprovedEditorialDatabase();
+        const edRecord = targetNewsId ? edDb[targetNewsId] : null;
+        if (edRecord) {
+          sourceTitle = sourceTitle || edRecord.title || "";
+          sourceText = edRecord.fullNews || edRecord.fullContent || edRecord.articleText || edRecord.captionDetailed || edRecord.summary || sourceText;
+          sourceLoc = sourceLoc || edRecord.location || "";
+        }
+      } catch {
+      }
+      if (!sourceText || sourceText.trim().length < 50) {
+        try {
+          const nDb = loadNewsDatabase();
+          const nPost = nDb.find((p) => p.id === targetNewsId || sourceTitle && p.title && p.title.trim() === sourceTitle.trim());
+          if (nPost) {
+            sourceTitle = sourceTitle || nPost.title || "";
+            sourceText = nPost.fullNews || nPost.fullContent || nPost.articleText || nPost.captionDetailed || nPost.summary || sourceText;
+            sourceLoc = sourceLoc || nPost.location || nPost.district || "";
+          }
+        } catch {
+        }
+      }
+    }
     const articleSentences = (sourceText || sourceTitle).split(/[।\n]+|\.\s+/).map((s) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter((s) => {
       if (s.length <= 15 || !/[\u0900-\u097F]/.test(s)) return false;
       if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s)) return false;

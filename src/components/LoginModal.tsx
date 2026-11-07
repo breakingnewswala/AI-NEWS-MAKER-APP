@@ -307,9 +307,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setTimeout(() => {
         setLoading(false);
         onLoginSuccess(user);
-        if (onOpenProfileSetup) {
-          onOpenProfileSetup(user);
-        }
+        onClose();
       }, 400);
     };
 

@@ -2072,8 +2072,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             {/* Grid of Highlight Cards: 3 on desktop, 2 on tablet, 1 on mobile (Proper 16:9 Thumbnail preview) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {visibleHighlightPosts.map((post) => {
-                const isPaid = !!(post.coinCost && post.coinCost > 0);
-                const isBonus = !!post.isBonus;
+                const effectiveCoinCost = Number(post.coinCost ?? post.coinValue ?? (post as any).coinPrice ?? 0);
+                const isPaid = effectiveCoinCost > 0;
+                const isBonus = Boolean(post.isBonus || (post as any).bonusNews || (post.rewardCoins && post.rewardCoins > 0));
                 const isUnlocked = unlockedNewsIds.has(post.id);
                 const isRestricted = isPostRestricted(post);
                 const isBonusClaimed = claimedBonusNewsIds.has(post.id);
@@ -2118,7 +2119,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           ) : (
                             <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-950/90 text-amber-300 border border-amber-500/80 shadow flex items-center gap-1 backdrop-blur-sm">
                               <Coins className="w-2.5 h-2.5 text-amber-400" />
-                              <span>🪙 पेड खबर • {post.coinCost} कॉइन</span>
+                              <span>🪙 पेड खबर • {effectiveCoinCost} कॉइन</span>
                             </span>
                           )
                         )}
@@ -2225,7 +2226,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         ) : (
                           <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
                             <Coins className="w-2.5 h-2.5 text-amber-400" />
-                            <span>{post.coinCost} कॉइन</span>
+                            <span>{effectiveCoinCost} कॉइन</span>
                           </span>
                         )
                       )}
@@ -2500,8 +2501,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const catTheme = getCategoryVisualTheme(post.category, post.categoryName);
               const isDefaultThumbActive = defaultThumbnailIds.has(post.id);
               const displayThumbnail = getPostThumbnail(post);
-              const isPaid = !!(post.coinCost && post.coinCost > 0);
-              const isBonus = !!post.isBonus;
+              const effectiveCoinCost = Number(post.coinCost ?? post.coinValue ?? (post as any).coinPrice ?? 0);
+              const isPaid = effectiveCoinCost > 0;
+              const isBonus = Boolean(post.isBonus || (post as any).bonusNews || (post.rewardCoins && post.rewardCoins > 0));
               const isUnlocked = unlockedNewsIds.has(post.id);
               const isRestricted = isPostRestricted(post);
               const isBonusClaimed = claimedBonusNewsIds.has(post.id);
@@ -2588,7 +2590,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           ) : (
                             <span className="px-2 py-0.5 bg-amber-950/90 text-amber-300 border border-amber-500/80 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
                               <Coins className="w-2.5 h-2.5 text-amber-400" />
-                              <span>🪙 पेड खबर • {post.coinCost} कॉइन</span>
+                              <span>🪙 पेड खबर • {effectiveCoinCost} कॉइन</span>
                             </span>
                           )
                         )}
@@ -2672,7 +2674,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           ) : (
                             <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-black flex items-center gap-1 shrink-0 ml-1.5">
                               <Coins className="w-2.5 h-2.5 text-amber-400" />
-                              <span>{post.coinCost} कॉइन</span>
+                              <span>{effectiveCoinCost} कॉइन</span>
                             </span>
                           )
                         )}
@@ -3350,6 +3352,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             setEditingPost({
                               ...editingPost,
                               additionalPhotos: updated,
+                              approvedPhotos: updated,
                               featuredPhotoUrl: editingPost.featuredPhotoUrl === imgUrl ? (updated[0] || '') : editingPost.featuredPhotoUrl,
                               additionalImages: updated.map((u, i) => ({
                                 imageId: `img_${i}`,
@@ -3358,10 +3361,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               })),
                             });
                           }}
-                          className="absolute top-1 right-1 p-1 bg-red-600/90 text-white rounded-md opacity-80 hover:opacity-100 transition cursor-pointer"
+                          className="absolute top-1 right-1 p-1 bg-red-600/90 hover:bg-red-600 text-white rounded-md opacity-90 hover:opacity-100 transition cursor-pointer shadow"
                           title="फोटो हटाएं"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                         <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[9px] text-white font-bold">
                           फोटो {idx + 1}
@@ -3387,9 +3390,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               if (ev.target?.result) {
                                 const currentList = editingPost.additionalPhotos || [];
                                 if (currentList.length < 3) {
+                                  const updated = [...currentList, String(ev.target.result)];
                                   setEditingPost({
                                     ...editingPost,
-                                    additionalPhotos: [...currentList, String(ev.target.result)],
+                                    additionalPhotos: updated,
+                                    approvedPhotos: updated,
                                   });
                                 }
                               }
@@ -3616,38 +3621,89 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   </div>
                 </div>
 
-                {/* Photos & Layout Selection */}
-                {editingPost.approvedPhotos && editingPost.approvedPhotos.length > 0 && (
-                  <div className="space-y-2 pt-2 border-t border-slate-800">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-bold text-slate-300">
-                        स्वीकृत फोटो ({editingPost.approvedPhotos.length}):
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] text-slate-400">लेआउट:</label>
-                        <select
-                          value={editingPost.approvedPhotoLayout || 'single'}
-                          onChange={(e) => setEditingPost({ ...editingPost, approvedPhotoLayout: e.target.value as any })}
-                          className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-amber-300 text-[11px] font-bold focus:outline-hidden"
-                        >
-                          <option value="single">1 फोटो</option>
-                          <option value="two_vertical">2 फोटो (लंबवत)</option>
-                          <option value="three_grid">3 फोटो (ग्रिड)</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                      {editingPost.approvedPhotos.map((pUrl, pIdx) => (
-                        <div key={pIdx} className="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-700 shrink-0">
-                          <img src={pUrl} alt={`Photo ${pIdx + 1}`} className="w-full h-full object-cover" />
-                          <span className="absolute bottom-0 right-0 px-1 bg-black/70 text-[9px] text-amber-400 font-bold">
-                            #{pIdx + 1}
-                          </span>
-                        </div>
-                      ))}
+                {/* Photos & Layout Selection (Synchronized with Additional Photos) */}
+                <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-300">
+                      स्वीकृत फोटो ({(editingPost.approvedPhotos || editingPost.additionalPhotos || []).length} / 3):
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-[10px] text-slate-400">लेआउट:</label>
+                      <select
+                        value={editingPost.approvedPhotoLayout || 'single'}
+                        onChange={(e) => setEditingPost({ ...editingPost, approvedPhotoLayout: e.target.value as any })}
+                        className="px-2 py-0.5 bg-slate-900 border border-slate-700 rounded text-amber-300 text-[11px] font-bold focus:outline-hidden"
+                      >
+                        <option value="single">1 फोटो</option>
+                        <option value="two_vertical">2 फोटो (लंबवत)</option>
+                        <option value="three_grid">3 फोटो (ग्रिड)</option>
+                      </select>
                     </div>
                   </div>
-                )}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {(editingPost.approvedPhotos || editingPost.additionalPhotos || []).map((pUrl, pIdx) => (
+                      <div key={pIdx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-700 shrink-0 group">
+                        <img src={pUrl} alt={`Photo ${pIdx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = (editingPost.approvedPhotos || editingPost.additionalPhotos || []).filter((_, i) => i !== pIdx);
+                            setEditingPost({
+                              ...editingPost,
+                              additionalPhotos: updated,
+                              approvedPhotos: updated,
+                              featuredPhotoUrl: editingPost.featuredPhotoUrl === pUrl ? (updated[0] || '') : editingPost.featuredPhotoUrl,
+                              additionalImages: updated.map((u, i) => ({
+                                imageId: `img_${i}`,
+                                imageUrl: u,
+                                isFeatured: i === 0,
+                              })),
+                            });
+                          }}
+                          className="absolute top-0.5 right-0.5 p-0.5 bg-red-600 hover:bg-red-500 text-white rounded cursor-pointer transition shadow"
+                          title="फोटो हटाएं"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <span className="absolute bottom-0 right-0 px-1 bg-black/70 text-[9px] text-amber-400 font-bold">
+                          #{pIdx + 1}
+                        </span>
+                      </div>
+                    ))}
+
+                    {(editingPost.approvedPhotos || editingPost.additionalPhotos || []).length < 3 && (
+                      <label className="w-16 h-16 border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 rounded-lg flex flex-col items-center justify-center gap-0.5 cursor-pointer bg-cyan-500/5 hover:bg-cyan-500/15 transition text-cyan-300 shrink-0">
+                        <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="text-[9px] font-bold">+ जोड़ें</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                if (ev.target?.result) {
+                                  const currentList = editingPost.approvedPhotos || editingPost.additionalPhotos || [];
+                                  if (currentList.length < 3) {
+                                    const updated = [...currentList, String(ev.target.result)];
+                                    setEditingPost({
+                                      ...editingPost,
+                                      additionalPhotos: updated,
+                                      approvedPhotos: updated,
+                                    });
+                                  }
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
               </div>
 
               </div>

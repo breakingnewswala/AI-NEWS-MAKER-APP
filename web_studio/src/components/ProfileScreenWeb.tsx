@@ -48,6 +48,7 @@ import { NewsFeedPost } from '../data/newsFeedData';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
+import { AdvancedLogoCropEditor, CropConfig } from './AdvancedLogoCropEditor';
 import {
   getUserSubscription,
   fetchAuthoritativeSubscription,
@@ -307,6 +308,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [isSubmittingLogoReq, setIsSubmittingLogoReq] = useState(false);
   const [logoReqReason, setLogoReqReason] = useState("नया आधिकारिक चैनल लोगो अपडेट करना है");
   const [newRequestedLogoUrl, setNewRequestedLogoUrl] = useState<string>('');
+  const [rawUploadedLogoUrl, setRawUploadedLogoUrl] = useState<string>('');
+  const [logoCropConfig, setLogoCropConfig] = useState<CropConfig | null>(null);
+  const [showCropEditor, setShowCropEditor] = useState<boolean>(false);
   const [logoReqStatus, setLogoReqStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>(() =>
     getUserLogoChangeRequestStatus(currentUser?.email || '', 'logo')
   );
@@ -602,7 +606,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const reader = new FileReader();
     reader.onload = (ev) => {
       const res = ev.target?.result as string;
-      if (res) setNewRequestedLogoUrl(res);
+      if (res) {
+        setRawUploadedLogoUrl(res);
+        setNewRequestedLogoUrl(res);
+        if (logoReqType !== 'gif') {
+          setShowCropEditor(true);
+        }
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -2606,47 +2616,91 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         </div>
 
                         {/* 2. New Asset Upload & Preview */}
-                        <div className={`p-3 bg-slate-950 rounded-xl border space-y-2 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
+                        <div className={`p-3 bg-slate-950 rounded-xl border space-y-2.5 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
                           <span className={`text-[11px] font-bold block flex items-center justify-between ${logoReqType === 'gif' ? 'text-red-300' : 'text-amber-300'}`}>
-                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो (New Logo Upload):'}</span>
+                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो (New Logo Upload - PNG, JPG, WebP):'}</span>
                             {newRequestedLogoUrl && (
                               <button
                                 type="button"
-                                onClick={() => setNewRequestedLogoUrl('')}
-                                className="text-[10px] text-red-400 hover:underline"
+                                onClick={() => {
+                                  setNewRequestedLogoUrl('');
+                                  setRawUploadedLogoUrl('');
+                                  setLogoCropConfig(null);
+                                  setShowCropEditor(false);
+                                }}
+                                className="text-[10px] text-red-400 hover:underline cursor-pointer"
                               >
                                 हटाएं
                               </button>
                             )}
                           </span>
-                          <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
-                            {newRequestedLogoUrl ? (
-                              <img
-                                src={newRequestedLogoUrl}
-                                alt="New Asset Preview"
-                                className="max-h-20 w-auto object-contain"
-                              />
-                            ) : (
-                              <div className="text-center text-slate-500 space-y-1">
-                                {logoReqType === 'gif' ? <Film className="w-6 h-6 mx-auto opacity-60" /> : <ImageIcon className="w-6 h-6 mx-auto opacity-60" />}
-                                <span className="text-[10px] block">{logoReqType === 'gif' ? 'GIF फ़ाइल चुनें' : 'लोगो फ़ाइल चुनें'}</span>
-                              </div>
-                            )}
-                          </div>
-                          <label className={`w-full py-1.5 px-2.5 border text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition ${
-                            logoReqType === 'gif'
-                              ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/40 text-red-300'
-                              : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
-                          }`}>
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>{newRequestedLogoUrl ? (logoReqType === 'gif' ? 'GIF बदलें' : 'लोगो बदलें') : (logoReqType === 'gif' ? '📁 नया GIF चुनें' : '📁 नया लोगो चुनें')}</span>
-                            <input
-                              type="file"
-                              accept={logoReqType === 'gif' ? 'image/gif,.gif' : 'image/png,image/jpeg,image/webp,image/*'}
-                              onChange={handleNewRequestedLogoUpload}
-                              className="hidden"
+
+                          {/* Visual Advanced Crop Editor (In-place inside New Logo Box) */}
+                          {logoReqType !== 'gif' && rawUploadedLogoUrl && showCropEditor ? (
+                            <AdvancedLogoCropEditor
+                              imageSrc={rawUploadedLogoUrl}
+                              initialCrop={logoCropConfig || undefined}
+                              onApplyCrop={(croppedPng, config) => {
+                                setNewRequestedLogoUrl(croppedPng);
+                                setLogoCropConfig(config);
+                                setShowCropEditor(false);
+                              }}
+                              onCancel={() => setShowCropEditor(false)}
                             />
-                          </label>
+                          ) : (
+                            <>
+                              <div className="w-full h-28 bg-slate-900 rounded-lg border border-slate-800 p-2 flex flex-col items-center justify-center overflow-hidden relative">
+                                {newRequestedLogoUrl ? (
+                                  <>
+                                    <img
+                                      src={newRequestedLogoUrl}
+                                      alt="New Asset Preview"
+                                      className="max-h-20 w-auto object-contain"
+                                    />
+                                    {logoCropConfig && (
+                                      <span className="absolute bottom-1 right-2 px-1.5 py-0.5 rounded bg-black/80 text-[9px] font-mono text-emerald-300 border border-emerald-500/30">
+                                        ✓ PNG Cropped ({logoCropConfig.width}×{logoCropConfig.height})
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="text-center text-slate-500 space-y-1">
+                                    {logoReqType === 'gif' ? <Film className="w-6 h-6 mx-auto opacity-60" /> : <ImageIcon className="w-6 h-6 mx-auto opacity-60" />}
+                                    <span className="text-[10px] block">{logoReqType === 'gif' ? 'GIF फ़ाइल चुनें' : 'लोगो फ़ाइल चुनें (PNG, JPG, WebP)'}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <label className={`flex-1 py-1.5 px-2.5 border text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition ${
+                                  logoReqType === 'gif'
+                                    ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/40 text-red-300'
+                                    : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
+                                }`}>
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{newRequestedLogoUrl ? (logoReqType === 'gif' ? 'GIF बदलें' : 'लोगो बदलें') : (logoReqType === 'gif' ? '📁 नया GIF चुनें' : '📁 नया लोगो चुनें')}</span>
+                                  <input
+                                    type="file"
+                                    accept={logoReqType === 'gif' ? 'image/gif,.gif' : 'image/png,image/jpeg,image/webp,image/*'}
+                                    onChange={handleNewRequestedLogoUpload}
+                                    className="hidden"
+                                  />
+                                </label>
+
+                                {logoReqType !== 'gif' && rawUploadedLogoUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowCropEditor(true)}
+                                    className="py-1.5 px-3 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+                                    title="क्रॉप व पारदर्शी PNG एडजस्ट करें"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                                    <span>क्रॉप व PNG</span>
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -2684,44 +2738,40 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         />
                       </div>
 
-                      {/* Support Email & Central Contact Number Display */}
-                      <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-1.5 text-xs text-slate-300">
+                      {/* Support Email Display - Phone number removed per Section 3 */}
+                      <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-1 text-xs text-slate-300">
                         <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
                           <AlertCircle className="w-3.5 h-3.5" />
                           <span>आधिकारिक सहायता व सत्यापन डेस्क (Support Info):</span>
                         </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-slate-300">
-                          <div className="flex items-center gap-1.5">
-                            <Mail className="w-3.5 h-3.5 text-slate-400" />
-                            <a
-                              href={`mailto:${APP_SUPPORT_CONFIG.supportEmail}`}
-                              className="text-amber-300 hover:underline font-mono"
-                            >
-                              {APP_SUPPORT_CONFIG.supportEmail}
-                            </a>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                            <a
-                              href={`tel:${APP_SUPPORT_CONFIG.supportPhone}`}
-                              className="text-emerald-300 hover:underline font-mono font-bold"
-                            >
-                              {APP_SUPPORT_CONFIG.supportPhone}
-                            </a>
-                          </div>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-300 pt-0.5">
+                          <Mail className="w-3.5 h-3.5 text-slate-400" />
+                          <a
+                            href={`mailto:${APP_SUPPORT_CONFIG.supportEmail}`}
+                            className="text-amber-300 hover:underline font-mono"
+                          >
+                            {APP_SUPPORT_CONFIG.supportEmail}
+                          </a>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                      {/* Compact Red Cross Cancel/Close Button per Section 3 */}
                       <button
                         type="button"
-                        onClick={() => setIsLogoReqModalOpen(false)}
+                        onClick={() => {
+                          setIsLogoReqModalOpen(false);
+                          setShowCropEditor(false);
+                        }}
                         disabled={isSubmittingLogoReq}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer transition disabled:opacity-50"
+                        className="p-2.5 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/50 rounded-xl transition cursor-pointer disabled:opacity-50 flex items-center justify-center shrink-0"
+                        title="रद्द करें / Cancel"
+                        aria-label="Cancel"
                       >
-                        रद्द करें
+                        <X className="w-4 h-4 stroke-[3]" />
                       </button>
+                      {/* Submit Request Button (Exact English Label per Section 3) */}
                       <button
                         type="button"
                         disabled={isSubmittingLogoReq || !newRequestedLogoUrl || !logoReqReason.trim()}
@@ -2747,7 +2797,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               newRequestedLogoUrl,
                               currentUser?.name || channelProfile.fullName || 'यूज़र',
                               channelProfile.username || currentUser?.username || '',
-                              logoReqType
+                              logoReqType,
+                              logoCropConfig || undefined
                             );
                             if (logoReqType === 'gif') {
                               setGifReqStatus('pending');
@@ -2755,32 +2806,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               setLogoReqStatus('pending');
                             }
                             setIsLogoReqModalOpen(false);
+                            setShowCropEditor(false);
                             alert(
                               logoReqType === 'gif'
                                 ? '✅ आपका GIF बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया GIF स्वतः सक्रिय हो जाएगा। तब तक आपका वर्तमान GIF चालू रहेगा।'
-                                : '✅ आपका लोगो बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया लोगो स्वतः सक्रिय हो जाएगा।'
+                                : '✅ आपका नया लोगो बदलने का अनुरोध (Submit Request) सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा और अनुमोदन के बाद यह स्वतः लागू हो जाएगा। तब तक वर्तमान लोगो सक्रिय रहेगा।'
                             );
                           } catch (err: any) {
                             console.error('Logo request error:', err);
-                            alert('अनुरोध सबमिट करने में त्रुटि: ' + (err?.message || 'कृपया पुनः प्रयास करें।'));
+                            alert(`अनुरोध सबमिट करने में विफल: ${err.message || 'नेटवर्क समस्या'}`);
                           } finally {
                             setIsSubmittingLogoReq(false);
                           }
                         }}
-                        className={`px-5 py-2.5 font-black text-xs rounded-xl shadow-lg cursor-pointer transition active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-                          logoReqType === 'gif'
-                            ? 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 text-white'
-                            : 'bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 text-slate-950'
-                        }`}
+                        className="px-5 py-2.5 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition active:scale-95"
                       >
-                        {isSubmittingLogoReq ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                            <span>सबमिट हो रहा है...</span>
-                          </>
-                        ) : (
-                          <span>अनुरोध सबमिट करें (Submit Request)</span>
-                        )}
+                        <Check className="w-4 h-4 text-slate-950 stroke-[3]" />
+                        <span>{isSubmittingLogoReq ? 'Submitting...' : 'Submit Request'}</span>
                       </button>
                     </div>
                   </div>
