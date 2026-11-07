@@ -417,6 +417,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       : '#FFE600';
 
     const highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
+    const isBlackText = baseTextColor.toLowerCase() === '#000000' || baseTextColor.toLowerCase() === 'black' || baseTextColor.toLowerCase() === '#0f172a';
 
     const effectiveFontSize = Math.max(13, Math.round(canonicalLayout.fontSize * previewScale));
     const effectiveLineHeight = Math.max(16, Math.round(canonicalLayout.lineHeight * previewScale));
@@ -443,7 +444,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     fontSize: `${effectiveFontSize}px`,
                     fontFamily: card.headlineFontFamily || 'Baloo 2',
                     fontWeight: 900,
-                    textShadow: isIvory ? 'none' : (isLightTemplate ? 'none' : '0 2px 6px rgba(0,0,0,0.85)'),
+                    textShadow: isIvory || isBlackText ? 'none' : (isLightTemplate ? 'none' : '0 2px 6px rgba(0,0,0,0.85)'),
                     marginRight: (tIdx < line.length - 1 && !isNextPunctuation)
                       ? `${Math.max(2, Math.round(effectiveFontSize * 0.28))}px`
                       : undefined,
@@ -551,6 +552,53 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
+      {/* 0B. DYNAMIC FRAME PHOTO SLOTS (Multi-Photo Double Layout Support e.g. TESTING 1) */}
+      {(() => {
+        const df = getDynamicFrameById(card.frameDesign || '');
+        if (!df || !df.photoSlots || df.photoSlots.length === 0) return null;
+        return (
+          <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
+            {df.photoSlots.map((slot, sIdx) => {
+              const defaultAsset = slot.defaultAssetUrl || (sIdx === 0
+                ? (df.id === 'df_testing_1_double'
+                  ? 'https://images.unsplash.com/photo-1531415074868-036b107e7752?w=800&q=80'
+                  : undefined)
+                : (df.id === 'df_testing_1_double'
+                  ? 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&q=80'
+                  : undefined));
+              const src = sIdx === 0
+                ? (mainPhotoSrc || defaultAsset)
+                : (card.secondaryPhoto || card.images?.second || defaultAsset || mainPhotoSrc);
+              if (!src) return null;
+              return (
+                <div
+                  key={slot.id || sIdx}
+                  className="absolute overflow-hidden"
+                  style={{
+                    left: `${slot.rect.x}%`,
+                    top: `${slot.rect.y}%`,
+                    width: `${slot.rect.width}%`,
+                    height: `${slot.rect.height}%`,
+                    borderRadius: slot.borderRadius ? `${slot.borderRadius}px` : undefined,
+                  }}
+                >
+                  <img
+                    src={src}
+                    alt={slot.name || `Photo Slot ${sIdx + 1}`}
+                    className="w-full h-full"
+                    style={{
+                      objectFit: (slot.cropMode as any) || 'cover',
+                      filter: getFilterCss(card.imageFilters),
+                    }}
+                    crossOrigin="anonymous"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
       {/* 0. BASE BACKGROUND FOR GRAPHIC_001 */}
       {card.frameDesign === 'graphic_001' && (
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
@@ -631,7 +679,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </>
           )}
         </div>
-      ) : (
+      ) : (!getDynamicFrameById(card.frameDesign || '')) ? (
       <div
         className={`absolute inset-x-0 z-10 overflow-hidden transition-all duration-150 ${card.frameDesign === 'graphic_001' ? 'bg-transparent' : 'bg-neutral-950'}`}
         style={{
@@ -1022,7 +1070,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           </div>
         )}
       </div>
-      )}
+      ) : null}
 
       {/* 2. THEME HEADER JACKET - Set to topmost layer z-40 so it stays above all borders and photo */}
       <div className="relative z-40">
@@ -3278,7 +3326,32 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                     }}
                   >
-                    <span className="truncate px-2">{card.location}</span>
+                    {df.headerConfig.textRegion ? (
+                      <div
+                        className="absolute flex items-center overflow-hidden"
+                        style={{
+                          left: `${df.headerConfig.textRegion.x}%`,
+                          top: `${df.headerConfig.textRegion.y}%`,
+                          width: `${df.headerConfig.textRegion.width}%`,
+                          height: `${df.headerConfig.textRegion.height}%`,
+                          justifyContent: df.headerConfig.typographyConfig?.align === 'left' ? 'flex-start' : df.headerConfig.typographyConfig?.align === 'right' ? 'flex-end' : 'center',
+                        }}
+                      >
+                        <span
+                          className="truncate"
+                          style={{
+                            color: df.headerConfig.typographyConfig?.color || df.headerConfig.locationTextColor || '#FFFFFF',
+                            fontFamily: df.headerConfig.typographyConfig?.fontFamily ? `"${df.headerConfig.typographyConfig.fontFamily}", sans-serif` : undefined,
+                            fontWeight: df.headerConfig.typographyConfig?.weight || 800,
+                            fontSize: `${Math.max(9, Math.round((df.headerConfig.typographyConfig?.fontSize || df.headerConfig.locationFontSize || 20) * previewScale))}px`,
+                          }}
+                        >
+                          {card.location}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="truncate px-2">{card.location}</span>
+                    )}
                   </div>
                 ) : (
                   <div
@@ -3360,7 +3433,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
               {/* Full Story Callout */}
               {df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && (
-                (df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset) ? (
+                (card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset) ? (
                   <div
                     className="absolute pointer-events-auto flex items-center justify-center"
                     style={{
@@ -3372,7 +3445,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     }}
                   >
                     <img
-                      src={df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset}
+                      src={card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset}
                       alt="Callout"
                       className="w-full h-full object-contain"
                     />
@@ -3442,7 +3515,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     fontSize: `${effectivePreviewFontSize}px`,
                   }}
                 >
-                  {renderFormattedHeadline()}
+                  {renderFormattedHeadline(df.textSlots[0]?.textColor || card.headlineTextColor || card.textColor)}
                 </h1>
               </div>
 

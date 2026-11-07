@@ -138,6 +138,8 @@ export interface NewsCardData {
   customLogoUrl?: string;
   customLogoPngUrl?: string; // Dedicated PNG logo
   customLogoGifUrl?: string; // Dedicated GIF animated logo
+  customCalloutAssetUrl?: string;
+  customLocationBadgeAssetUrl?: string;
   logoScale?: number; // Scaling percentage of brand logo (0.5 to 2.0, default 1.0)
   logoSizePercent?: number; // Scaling percentage alias (50 to 180, default 125)
   showTextGraphic?: boolean; // Text graphic toggle (default OFF: showTextGraphic: false)

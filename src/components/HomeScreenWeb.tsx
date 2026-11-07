@@ -2373,16 +2373,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedStoryPost(item);
-                          setIsStoryModalOpen(true);
-                        }}
-                        className="flex-1 py-1 px-1.5 bg-gradient-to-r from-pink-600/90 to-purple-600/90 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-[10.5px] rounded-lg border border-pink-500/40 flex items-center justify-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
-                        title="सोशल मीडिया स्टोरी बनाएँ (9:16 HD)"
+                        disabled={true}
+                        className="flex-1 py-1 px-1.5 bg-slate-800/80 text-slate-400 font-bold text-[10.5px] rounded-lg border border-slate-700/60 flex items-center justify-center gap-1 cursor-not-allowed opacity-75 shadow-sm"
+                        title="सोशल मीडिया स्टोरी बनाएँ — Coming Soon"
                       >
-                        <Film className="w-3 h-3 text-pink-200" />
+                        <Film className="w-3 h-3 text-slate-400 shrink-0" />
                         <span className="truncate">सोशल मीडिया स्टोरी बनाएँ</span>
-                        <span className="text-[9px] px-1 py-0.2 rounded bg-pink-400/30 text-white font-bold">9:16</span>
+                        <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-black border border-amber-500/40">Coming Soon</span>
                       </button>
                     </div>
                   </div>
@@ -2860,16 +2857,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedStoryPost(post);
-                          setIsStoryModalOpen(true);
-                        }}
-                        className="flex-1 py-1 px-2 bg-gradient-to-r from-pink-600/90 to-purple-600/90 hover:from-pink-500 hover:to-purple-500 text-white border border-pink-500/40 rounded-lg text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-sm transition-all cursor-pointer active:scale-95"
-                        title="सोशल मीडिया स्टोरी बनाएँ (9:16 HD)"
+                        disabled={true}
+                        className="flex-1 py-1 px-2 bg-slate-800/80 text-slate-400 font-bold text-[10.5px] rounded-lg border border-slate-700/60 flex items-center justify-center gap-1 cursor-not-allowed opacity-75 shadow-sm"
+                        title="सोशल मीडिया स्टोरी बनाएँ — Coming Soon"
                       >
-                        <Film className="w-3 h-3 text-pink-200 shrink-0" />
+                        <Film className="w-3 h-3 text-slate-400 shrink-0" />
                         <span>सोशल मीडिया स्टोरी बनाएँ</span>
-                        <span className="text-[9px] bg-pink-400/30 text-white px-1 py-0.2 rounded font-bold">9:16</span>
+                        <span className="text-[8.5px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 font-black border border-amber-500/40">Coming Soon</span>
                       </button>
                     </div>
 

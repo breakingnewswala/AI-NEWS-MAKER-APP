@@ -35,6 +35,15 @@ export interface AssetLibraryItem {
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
+  // Normalized internal text-marking region relative to the badge image (0 to 100 percentage or 0 to 1 fraction)
+  textRegion?: NormalizedRect;
+  typographyConfig?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: string | number;
+    textColor?: string;
+    textAlign?: 'left' | 'center' | 'right';
+  };
 }
 
 export type DynamicAspectRatio = '4:5' | '9:16' | '1:1' | '4:3';
@@ -152,6 +161,15 @@ export interface HeaderConfig {
   locationAlign?: 'left' | 'center' | 'right';
   locationBadgeMode?: LocationBadgeMode;
   manualLocationAsset?: string; // Uploaded manual badge skin or static badge
+  locationBadgeAssetId?: string;
+  textRegion?: NormalizedRect;
+  typographyConfig?: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: string | number;
+    textColor?: string;
+    textAlign?: 'left' | 'center' | 'right';
+  };
 
   showCategory?: boolean;
   categoryRect?: NormalizedRect;
@@ -191,6 +209,19 @@ export interface WatermarkConfig {
 export type CalloutVisibilityPolicy = 'optional' | 'forced_on' | 'disabled';
 export type CalloutAssetMode = 'dynamic_overlay' | 'static_image';
 
+export interface PlanCalloutRule {
+  defaultCalloutAsset?: string;
+  defaultCalloutAssetId?: string;
+  allowedAlternativeAssets?: { id: string; name: string; url: string }[];
+}
+
+export interface PlanBasedCalloutSettings {
+  basic?: PlanCalloutRule;
+  advanced?: PlanCalloutRule;
+  pro?: PlanCalloutRule;
+  vipDesk?: PlanCalloutRule;
+}
+
 export interface FullStoryCalloutConfig {
   enabled: boolean;
   text: string; // default "पूरी खबर डिस्क्रिप्शन में"
@@ -204,8 +235,10 @@ export interface FullStoryCalloutConfig {
   showIcon?: boolean;
   rotation?: number;
   manualCalloutAsset?: string;
+  calloutAssetId?: string;
   calloutAssetMode?: CalloutAssetMode;
   calloutVisibilityPolicy?: CalloutVisibilityPolicy;
+  planCalloutSettings?: PlanBasedCalloutSettings;
 }
 
 export interface PoweredByConfig {

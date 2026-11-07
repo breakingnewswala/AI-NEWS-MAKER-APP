@@ -76,6 +76,7 @@ import {
 import {
   fetchDynamicFramesFromApi,
   getLocalDynamicFrames,
+  getDynamicFrameById,
 } from '../lib/dynamicFramesManager';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
@@ -1675,6 +1676,67 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             );
           }
           return null;
+        })()}
+
+        {/* Dynamic Frame Story Callout Selector for PRO & VIP DESK Users (Part 8) */}
+        {(() => {
+          const df = getDynamicFrameById(card.frameDesign || '');
+          if (!df || !df.fullStoryCalloutConfig?.enabled) return null;
+          const planSettings = df.fullStoryCalloutConfig.planCalloutSettings;
+          const isProOrVip = effectiveAdmin || effectiveTier === 'pro' || effectiveTier === 'vip';
+          const rule = effectiveTier === 'vip' ? (planSettings?.vipDesk || planSettings?.pro) : planSettings?.pro;
+          const alternatives = rule?.allowedAlternativeAssets || [];
+
+          if (!isProOrVip || alternatives.length === 0) {
+            return null; // Basic & Advanced users are locked to Admin default
+          }
+
+          return (
+            <div className="mt-3 p-3 bg-slate-900/90 border border-amber-500/30 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  स्टोरी कॉलआउट डिज़ाइन (Pro / VIP Desk)
+                </span>
+                <span className="text-[10px] text-slate-400">वैकल्पिक डिज़ाइन चुनें</span>
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {/* Default option */}
+                <button
+                  type="button"
+                  onClick={() => onChange({ customCalloutAssetUrl: undefined })}
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                    !card.customCalloutAssetUrl
+                      ? 'bg-amber-500 text-black border-amber-400 shadow'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
+                  }`}
+                >
+                  डिफ़ॉल्ट (Default)
+                </button>
+                {/* Allowed alternatives */}
+                {alternatives.map((alt) => {
+                  const isSelected = card.customCalloutAssetUrl === alt.url;
+                  return (
+                    <button
+                      key={alt.id}
+                      type="button"
+                      onClick={() => onChange({ customCalloutAssetUrl: alt.url })}
+                      className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-500 text-black border-amber-400 shadow'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
+                      }`}
+                    >
+                      {alt.url && (
+                        <img src={alt.url} alt={alt.name} className="h-4 object-contain" />
+                      )}
+                      <span>{alt.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
         })()}
 
         {/* Step 1 Mobile Nav Button */}

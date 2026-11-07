@@ -55,6 +55,91 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
   // Preview Modal
   const [previewItem, setPreviewItem] = useState<AssetLibraryItem | null>(null);
 
+  // Visual Text Marking Editor for Location Badges (Part 5)
+  const [textMarkingItem, setTextMarkingItem] = useState<AssetLibraryItem | null>(null);
+  const [markedRegion, setMarkedRegion] = useState<{ x: number; y: number; width: number; height: number }>({
+    x: 25,
+    y: 15,
+    width: 68,
+    height: 70,
+  });
+  const [markedTypography, setMarkedTypography] = useState<{
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: string;
+    textColor: string;
+    textAlign: 'left' | 'center' | 'right';
+  }>({
+    fontFamily: 'Noto Sans Devanagari',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textColor: '#FFFFFF',
+    textAlign: 'center',
+  });
+  const [sampleLocationText, setSampleLocationText] = useState<'भोपाल' | 'ओरछा' | 'निवाड़ी'>('भोपाल');
+  const [isSavingMarking, setIsSavingMarking] = useState(false);
+
+  const openTextMarkingEditor = (item: AssetLibraryItem) => {
+    setTextMarkingItem(item);
+    if (item.textRegion) {
+      setMarkedRegion({
+        x: item.textRegion.x ?? 25,
+        y: item.textRegion.y ?? 15,
+        width: item.textRegion.width ?? 68,
+        height: item.textRegion.height ?? 70,
+      });
+    } else {
+      setMarkedRegion({ x: 25, y: 15, width: 68, height: 70 });
+    }
+    if (item.typographyConfig) {
+      setMarkedTypography({
+        fontFamily: item.typographyConfig.fontFamily || 'Noto Sans Devanagari',
+        fontSize: item.typographyConfig.fontSize || 16,
+        fontWeight: String(item.typographyConfig.fontWeight || 'bold'),
+        textColor: item.typographyConfig.textColor || '#FFFFFF',
+        textAlign: item.typographyConfig.textAlign || 'center',
+      });
+    } else {
+      setMarkedTypography({
+        fontFamily: 'Noto Sans Devanagari',
+        fontSize: 16,
+        fontWeight: 'bold',
+        textColor: '#FFFFFF',
+        textAlign: 'center',
+      });
+    }
+  };
+
+  const handleSaveTextRegion = async () => {
+    if (!textMarkingItem) return;
+    setIsSavingMarking(true);
+    try {
+      const token = getAuthToken();
+      const updates = {
+        textRegion: {
+          x: Math.max(0, Math.min(100, markedRegion.x)),
+          y: Math.max(0, Math.min(100, markedRegion.y)),
+          width: Math.max(5, Math.min(100, markedRegion.width)),
+          height: Math.max(5, Math.min(100, markedRegion.height)),
+        },
+        typographyConfig: markedTypography,
+      };
+
+      const res = await updateAssetLibraryItem(textMarkingItem.id, updates, token || undefined);
+      if (res.success && res.item) {
+        setItems((prev) => prev.map((it) => (it.id === textMarkingItem.id ? res.item! : it)));
+        setTextMarkingItem(null);
+        showToast('✅ लोकेशन टेक्स्ट क्षेत्र व टाइपोग्राफी सफलतापूर्वक सुरक्षित हुई!');
+      } else {
+        alert(res.error || 'टेक्स्ट क्षेत्र सुरक्षित करने में समस्या आई');
+      }
+    } catch (err: any) {
+      alert('नेटवर्क त्रुटि: ' + (err.message || 'त्रुटि'));
+    } finally {
+      setIsSavingMarking(false);
+    }
+  };
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -528,6 +613,17 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
                 </button>
 
                 <div className="flex items-center gap-1">
+                  {item.type === 'location_badge' && (
+                    <button
+                      type="button"
+                      onClick={() => openTextMarkingEditor(item)}
+                      className="px-2 py-0.5 bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white rounded text-[9px] font-bold transition cursor-pointer flex items-center gap-1"
+                      title="विजुअल टेक्स्ट क्षेत्र मार्क करें"
+                    >
+                      <MapPin className="w-2.5 h-2.5" />
+                      <span>टेक्स्ट मार्क</span>
+                    </button>
+                  )}
                   {onSelectAsset && (
                     <button
                       type="button"
@@ -554,10 +650,245 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
       </div>
 
       {filteredItems.length === 0 && (
-        <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-slate-800 text-slate-400 text-xs space-y-1">
+        <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-slate-800 text-slate-400 text-xs space-y-2">
           <ImageIcon className="w-8 h-8 text-slate-600 mx-auto" />
-          <p className="font-bold text-slate-300">कोई एसेट नहीं मिला</p>
-          <p className="text-[10px] text-slate-500">ऊपर दिए गए बटन से नया एसेट अपलोड करें।</p>
+          <p className="font-bold text-slate-200 text-sm">
+            {activeTab === 'location_badge'
+              ? 'अभी कोई Location Badge उपलब्ध नहीं है। नया PNG अपलोड करें।'
+              : activeTab === 'callout_png'
+              ? 'अभी कोई Story Callout उपलब्ध नहीं है। नया PNG अपलोड करें।'
+              : 'कोई एसेट नहीं मिला'}
+          </p>
+          <p className="text-[11px] text-slate-500">ऊपर दिए गए "+ नया जोड़ें" बटन से पारदर्शी PNG अपलोड करें।</p>
+        </div>
+      )}
+
+      {/* Visual Text Marking Editor Modal for Location Badges (Part 5) */}
+      {textMarkingItem && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 space-y-5 shadow-2xl animate-in fade-in">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-white">लोकेशन बैज विजुअल टेक्स्ट-मार्किंग</h4>
+                  <p className="text-[11px] text-slate-400">{textMarkingItem.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTextMarkingItem(null)}
+                className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded bg-slate-800 cursor-pointer"
+              >
+                बंद करें ✕
+              </button>
+            </div>
+
+            {/* Visual Canvas Area with transparency preservation */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-300 block">
+                1. बैज पर टेक्स्ट क्षेत्र का दृश्य पूर्वावलोकन (Live Text Positioning Area):
+              </label>
+              <div className="relative w-full h-56 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center p-4">
+                {/* Checkerboard transparency background */}
+                <div
+                  className="absolute inset-0 opacity-15"
+                  style={{
+                    backgroundImage: `linear-gradient(45deg, #334155 25%, transparent 25%), linear-gradient(-45deg, #334155 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #334155 75%), linear-gradient(-45deg, transparent 75%, #334155 75%)`,
+                    backgroundSize: '16px 16px',
+                    backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                  }}
+                />
+
+                {/* Badge Image Container */}
+                <div className="relative max-h-full max-w-full flex items-center justify-center">
+                  <img
+                    src={textMarkingItem.url}
+                    alt={textMarkingItem.name}
+                    className="max-h-48 max-w-full object-contain pointer-events-none select-none"
+                  />
+
+                  {/* Normalized Visual Overlay Bounding Box */}
+                  <div
+                    className="absolute border-2 border-dashed border-amber-400 bg-amber-500/20 rounded flex items-center justify-center shadow-lg transition-all"
+                    style={{
+                      left: `${markedRegion.x}%`,
+                      top: `${markedRegion.y}%`,
+                      width: `${markedRegion.width}%`,
+                      height: `${markedRegion.height}%`,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: `"${markedTypography.fontFamily}", sans-serif`,
+                        fontSize: `${markedTypography.fontSize}px`,
+                        fontWeight: markedTypography.fontWeight === '900' ? 900 : markedTypography.fontWeight === 'bold' ? 700 : 400,
+                        color: markedTypography.textColor,
+                        textAlign: markedTypography.textAlign,
+                      }}
+                      className="truncate px-1 select-none pointer-events-none drop-shadow"
+                    >
+                      {sampleLocationText}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sample Location Buttons */}
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-[11px] font-bold text-slate-400">टेस्ट लोकेशन नाम:</span>
+                {(['भोपाल', 'ओरछा', 'निवाड़ी'] as const).map((loc) => (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => setSampleLocationText(loc)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition ${
+                      sampleLocationText === loc
+                        ? 'bg-rose-500 text-white shadow'
+                        : 'bg-slate-800 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {loc}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Geometry Coordinates (x, y, width, height in %) */}
+            <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+              <span className="text-xs font-bold text-amber-300 block">2. टेक्स्ट बॉक्स स्थिति व आकार (Normalized Percentages):</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">X स्थिति (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={markedRegion.x}
+                    onChange={(e) => setMarkedRegion({ ...markedRegion, x: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Y स्थिति (%)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={markedRegion.y}
+                    onChange={(e) => setMarkedRegion({ ...markedRegion, y: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">चौड़ाई / Width (%)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="100"
+                    value={markedRegion.width}
+                    onChange={(e) => setMarkedRegion({ ...markedRegion, width: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">ऊंचाई / Height (%)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="100"
+                    value={markedRegion.height}
+                    onChange={(e) => setMarkedRegion({ ...markedRegion, height: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Typography Configuration */}
+            <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+              <span className="text-xs font-bold text-amber-300 block">3. टाइपोग्राफी सेटिंग्स (Font & Color):</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">फॉन्ट फैमिली</label>
+                  <select
+                    value={markedTypography.fontFamily}
+                    onChange={(e) => setMarkedTypography({ ...markedTypography, fontFamily: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                  >
+                    <option value="Noto Sans Devanagari">Noto Sans Devanagari</option>
+                    <option value="Baloo 2">Baloo 2</option>
+                    <option value="Hind">Hind</option>
+                    <option value="Mukta">Mukta</option>
+                    <option value="Poppins">Poppins</option>
+                    <option value="Rajdhani">Rajdhani</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">फॉन्ट साइज़ (px)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="60"
+                    value={markedTypography.fontSize}
+                    onChange={(e) => setMarkedTypography({ ...markedTypography, fontSize: Number(e.target.value) })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">फॉन्ट वेट</label>
+                  <select
+                    value={markedTypography.fontWeight}
+                    onChange={(e) => setMarkedTypography({ ...markedTypography, fontWeight: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
+                  >
+                    <option value="normal">सामान्य (Normal)</option>
+                    <option value="bold">बोल्ड (Bold)</option>
+                    <option value="900">ब्लैक (900 Heavy)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">टेक्स्ट रंग (Color)</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={markedTypography.textColor}
+                      onChange={(e) => setMarkedTypography({ ...markedTypography, textColor: e.target.value })}
+                      className="w-8 h-7 bg-transparent border-0 cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={markedTypography.textColor}
+                      onChange={(e) => setMarkedTypography({ ...markedTypography, textColor: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTextMarkingItem(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                disabled={isSavingMarking}
+                onClick={handleSaveTextRegion}
+                className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-xl shadow-lg cursor-pointer flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>{isSavingMarking ? 'सुरक्षित हो रहा है...' : 'सुरक्षित करें (Save Text Region)'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

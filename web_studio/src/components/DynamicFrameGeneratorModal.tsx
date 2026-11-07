@@ -349,6 +349,26 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     initialFrame?.calloutAssetUrl || initialFrame?.fullStoryCalloutConfig?.manualCalloutAsset || ''
   );
 
+  // Central Asset Libraries for Location Badge & Story Callout (Part 6 & Part 7)
+  const [locationBadgeLibrary, setLocationBadgeLibrary] = useState<any[]>([]);
+  const [calloutLibrary, setCalloutLibrary] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/admin/asset-libraries?category=location_badge')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.items)) setLocationBadgeLibrary(d.items);
+      })
+      .catch(() => {});
+
+    fetch('/api/admin/asset-libraries?category=callout_png')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.items)) setCalloutLibrary(d.items);
+      })
+      .catch(() => {});
+  }, []);
+
   const [selectedRatio, setSelectedRatio] = useState<DynamicAspectRatio>(
     initialFrame?.aspectRatio || '4:5'
   );
@@ -1887,9 +1907,53 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
 
                       {headerConfig.locationBadgeMode === 'static_image' ? (
-                        <div className="pt-1">
-                          <label className="text-[10px] text-slate-400 block mb-1">मैनुअल लोकेशन बॉक्स अपलोड करें</label>
-                          <input type="file" accept="image/*" onChange={handleManualLocationUpload} className="text-[11px] text-slate-400" />
+                        <div className="pt-1 space-y-2">
+                          <label className="text-[10px] text-slate-400 block mb-1">
+                            लोकेशन बैज लाइब्रेरी से चुनें (Location Badge Library)
+                          </label>
+                          {locationBadgeLibrary.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto p-1 bg-slate-900/60 rounded border border-slate-800">
+                              {locationBadgeLibrary.map((item) => {
+                                const isSelected = headerConfig.locationBadgeAssetId === item.id || headerConfig.manualLocationAsset === item.assetUrl;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setHeaderConfig({
+                                        ...headerConfig,
+                                        locationBadgeAssetId: item.id,
+                                        manualLocationAsset: item.assetUrl,
+                                        textRegion: item.textRegion,
+                                        typographyConfig: item.typographyConfig,
+                                        locationBadgeMode: 'static_image',
+                                      });
+                                    }}
+                                    className={`p-1.5 rounded border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
+                                      isSelected
+                                        ? 'border-amber-400 bg-amber-500/20'
+                                        : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                                    }`}
+                                  >
+                                    <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
+                                      <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
+                                      {item.name}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
+                              अभी कोई Location Badge उपलब्ध नहीं है। नया PNG अपलोड करें।
+                            </div>
+                          )}
+                          <div className="pt-1">
+                            <label className="text-[10px] text-slate-400 block mb-1">अथवा नया लोकेशन बैज PNG अपलोड करें</label>
+                            <input type="file" accept="image/*" onChange={handleManualLocationUpload} className="text-[11px] text-slate-400" />
+                          </div>
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 gap-2">
@@ -2050,8 +2114,64 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           </select>
                         </div>
                         <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">मैनुअल कॉलआउट अपलोड</label>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">अथवा नया कॉलआउट अपलोड</label>
                           <input type="file" accept="image/*" onChange={handleManualCalloutUpload} className="text-[10px] text-slate-400" />
+                        </div>
+                      </div>
+
+                      {/* Story Callout PNG Library Picker (Part 7) */}
+                      <div className="space-y-1 pt-1">
+                        <label className="text-[10px] text-slate-400 block">
+                          कॉलआउट लाइब्रेरी से चुनें (Callout PNG Library)
+                        </label>
+                        {calloutLibrary.length > 0 ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto p-1 bg-slate-900/60 rounded border border-slate-800">
+                            {calloutLibrary.map((item) => {
+                              const isSelected = manualCalloutAssetUrl === item.assetUrl || fullStoryCalloutConfig.manualCalloutAsset === item.assetUrl;
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setManualCalloutAssetUrl(item.assetUrl);
+                                    setFullStoryCalloutConfig({
+                                      ...fullStoryCalloutConfig,
+                                      calloutAssetId: item.id,
+                                      manualCalloutAsset: item.assetUrl,
+                                      calloutAssetMode: 'static_image',
+                                    });
+                                  }}
+                                  className={`p-1.5 rounded border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
+                                    isSelected
+                                      ? 'border-amber-400 bg-amber-500/20'
+                                      : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                                  }`}
+                                >
+                                  <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
+                                    <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
+                                    {item.name}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
+                            अभी कोई Story Callout उपलब्ध नहीं है। नया PNG अपलोड करें।
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Plan-Based Story Callout Controls (Part 8) */}
+                      <div className="pt-2 border-t border-slate-800 space-y-2">
+                        <span className="text-[11px] font-black text-amber-400 block">
+                          प्लान आधारित कॉलआउट अनुमतियाँ (Subscription Plan Rules)
+                        </span>
+                        <div className="p-2.5 bg-slate-900/80 rounded border border-slate-800 text-[10px] text-slate-300 space-y-1.5">
+                          <p><strong className="text-white">Basic & Advanced:</strong> केवल एडमिन द्वारा चुना गया डिफ़ॉल्ट कॉलआउट दिखेगा (फिक्स, लॉक)।</p>
+                          <p><strong className="text-white">Pro & VIP Desk:</strong> डिफ़ॉल्ट के अलावा 2–3 वैकल्पिक कॉलआउट डिज़ाइनों का चयन उपलब्ध रहेगा।</p>
                         </div>
                       </div>
                     </div>

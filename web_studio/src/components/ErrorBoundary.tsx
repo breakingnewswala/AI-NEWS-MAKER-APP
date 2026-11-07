@@ -33,7 +33,34 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleReset = () => {
-    (this as any).setState({ hasError: false, error: null });
+    if (this.state.hasError) {
+      // First attempt local recovery, fallback to full page reload to bust any stale cache
+      this.setState({ hasError: false, error: null });
+      setTimeout(() => {
+        if (this.state.hasError) {
+          window.location.reload();
+        }
+      }, 50);
+    }
+  };
+
+  private handleStudioReset = () => {
+    try {
+      this.setState({ hasError: false, error: null });
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => caches.delete(name));
+        });
+      }
+      try {
+        sessionStorage.clear();
+        localStorage.removeItem('active_app_tab');
+      } catch {}
+      if (typeof (window as any).setAppTab === 'function') {
+        (window as any).setAppTab('home');
+      }
+    } catch {}
+    window.location.href = '/?fresh=' + Date.now();
   };
 
   public render() {
@@ -58,14 +85,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <span>पुनः प्रयास करें (Retry)</span>
             </button>
             <button
-              onClick={() => {
-                this.handleReset();
-                try {
-                  if (typeof (window as any).setAppTab === 'function') {
-                    (window as any).setAppTab('studio');
-                  }
-                } catch {}
-              }}
+              onClick={this.handleStudioReset}
               className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold rounded-xl cursor-pointer transition-all"
             >
               स्टूडियो रीसेट करें

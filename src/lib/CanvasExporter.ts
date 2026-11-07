@@ -21,6 +21,8 @@ import {
 } from './HeaderDesigns';
 import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 import { getApiUrl } from './apiConfig';
+import { getDynamicFrameById } from './dynamicFramesManager';
+import { DynamicFrame } from '../types/dynamicFrame';
 
 const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
 
@@ -360,7 +362,14 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     }
   }
 
-  // 1. Draw Images or Geometric Background
+  // 1. Draw Authoritative Dynamic Frame if matched
+  const dynamicFrame = getDynamicFrameById(card.frameDesign || '');
+  if (dynamicFrame) {
+    await drawAuthoritativeDynamicFrameCanvas(ctx, width, height, card, dynamicFrame, customLogoImg);
+    return canvas;
+  }
+
+  // 1B. Draw Legacy Static Templates
   if (card.frameDesign === 'graphic_001') {
     await drawGraphic001Canvas(ctx, width, height, card, customLogoImg);
     return canvas;
@@ -1530,6 +1539,300 @@ async function drawMorningJacketBackground(
 // GRAPHIC 1 — NEWS GRAPHIC TEMPLATE (graphic_001)
 // Aspect Ratio: STRICT 4:5 (1080 x 1350)
 // Plan: BASIC
+// ============================================================================
+// AUTHORITATIVE DYNAMIC FRAME CANVAS EXPORTER
+// Single source of truth rendering identical to Studio preview:
+// Background, Multi-Photo Slots, Logo, Location Badge with internal textRegion,
+// Story Callout PNG, Headline Typography (supporting #000000 black text), Footer.
+// ============================================================================
+async function drawAuthoritativeDynamicFrameCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  card: NewsCardData,
+  df: DynamicFrame,
+  customLogoImg?: HTMLImageElement
+) {
+  ctx.save();
+
+  // 1. PRIMARY BACKGROUND
+  if (df.primaryBackgroundHex) {
+    ctx.fillStyle = df.primaryBackgroundHex;
+    ctx.fillRect(0, 0, width, height);
+  }
+  const bgUrl = df.primaryBackgroundAsset || df.sampleReferenceUrl;
+  if (bgUrl) {
+    try {
+      const bgImg = await loadImage(bgUrl);
+      ctx.drawImage(bgImg, 0, 0, width, height);
+    } catch (e) {
+      console.warn('Dynamic frame bg load error:', e);
+    }
+  }
+
+  // 2. PHOTO SLOTS (Supporting multi-photo double layout e.g. TESTING 1)
+  if (df.photoSlots && df.photoSlots.length > 0) {
+    for (let sIdx = 0; sIdx < df.photoSlots.length; sIdx++) {
+      const slot = df.photoSlots[sIdx];
+      const defaultAsset = slot.defaultAssetUrl || (sIdx === 0
+        ? (df.id === 'df_testing_1_double'
+          ? 'https://images.unsplash.com/photo-1531415074868-036b107e7752?w=800&q=80'
+          : undefined)
+        : (df.id === 'df_testing_1_double'
+          ? 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&q=80'
+          : undefined));
+      const src = sIdx === 0
+        ? (card.images?.main || defaultAsset)
+        : (card.secondaryPhoto || card.images?.second || defaultAsset || card.images?.main);
+      if (!src) continue;
+
+      try {
+        const pImg = await loadImage(src);
+        const slotX = (slot.rect.x / 100) * width;
+        const slotY = (slot.rect.y / 100) * height;
+        const slotW = (slot.rect.width / 100) * width;
+        const slotH = (slot.rect.height / 100) * height;
+
+        ctx.save();
+        ctx.beginPath();
+        if (slot.borderRadius) {
+          ctx.roundRect(slotX, slotY, slotW, slotH, slot.borderRadius);
+        } else {
+          ctx.rect(slotX, slotY, slotW, slotH);
+        }
+        ctx.clip();
+
+        // Object-fit: cover
+        const imgAspect = pImg.width / pImg.height;
+        const slotAspect = slotW / slotH;
+        let dw = slotW;
+        let dh = slotH;
+        let dx = slotX;
+        let dy = slotY;
+        if (imgAspect > slotAspect) {
+          dw = slotH * imgAspect;
+          dx = slotX - (dw - slotW) / 2;
+        } else {
+          dh = slotW / imgAspect;
+          dy = slotY - (dh - slotH) / 2;
+        }
+        ctx.drawImage(pImg, dx, dy, dw, dh);
+        ctx.restore();
+      } catch (e) {
+        console.warn('Photo slot load error:', e);
+      }
+    }
+  }
+
+  // 3. LOGO
+  if (df.headerConfig?.showLogo) {
+    const lRect = df.headerConfig.logoRect || { x: 5, y: 3.5, width: 22, height: 9 };
+    const lx = (lRect.x / 100) * width;
+    const ly = (lRect.y / 100) * height;
+    const lw = (lRect.width / 100) * width;
+    const lh = (lRect.height / 100) * height;
+    const logoToDraw = customLogoImg || (card.customLogoUrl ? await loadImage(card.customLogoUrl).catch(() => null) : null);
+    if (logoToDraw) {
+      ctx.save();
+      if (df.headerConfig.logoOpacity !== undefined) {
+        ctx.globalAlpha = df.headerConfig.logoOpacity;
+      }
+      const lAspect = logoToDraw.width / logoToDraw.height;
+      let drawW = lw;
+      let drawH = lh;
+      if (lAspect > lw / lh) {
+        drawH = lw / lAspect;
+      } else {
+        drawW = lh * lAspect;
+      }
+      ctx.drawImage(logoToDraw, lx + (lw - drawW) / 2, ly + (lh - drawH) / 2, drawW, drawH);
+      ctx.restore();
+    }
+  }
+
+  // 4. LOCATION BADGE
+  if (df.headerConfig?.showLocation && card.location) {
+    const locRect = df.headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 };
+    const bx = (locRect.x / 100) * width;
+    const by = (locRect.y / 100) * height;
+    const bw = (locRect.width / 100) * width;
+    const bh = (locRect.height / 100) * height;
+
+    if (df.headerConfig.manualLocationAsset) {
+      try {
+        const badgeImg = await loadImage(df.headerConfig.manualLocationAsset);
+        ctx.drawImage(badgeImg, bx, by, bw, bh);
+
+        const textReg = df.headerConfig.textRegion;
+        const tx = textReg ? bx + (textReg.x / 100) * bw : bx;
+        const ty = textReg ? by + (textReg.y / 100) * bh : by;
+        const tw = textReg ? (textReg.width / 100) * bw : bw;
+        const th = textReg ? (textReg.height / 100) * bh : bh;
+
+        ctx.save();
+        const typo = df.headerConfig.typographyConfig;
+        const fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
+        ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
+        ctx.fillStyle = typo?.color || df.headerConfig.locationTextColor || '#FFFFFF';
+        ctx.textBaseline = 'middle';
+        const align = typo?.align || 'center';
+        ctx.textAlign = align === 'left' ? 'left' : align === 'right' ? 'right' : 'center';
+        const drawTx = align === 'left' ? tx + 4 : align === 'right' ? tx + tw - 4 : tx + tw / 2;
+        ctx.fillText(card.location, drawTx, ty + th / 2);
+        ctx.restore();
+      } catch (e) {
+        console.warn('Location badge image load warning:', e);
+      }
+    } else {
+      ctx.save();
+      ctx.fillStyle = df.headerConfig.locationBgColor || '#DC2626';
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, df.headerConfig.locationStyle === 'pill' ? bh / 2 : 6);
+      ctx.fill();
+
+      ctx.fillStyle = df.headerConfig.locationTextColor || '#FFFFFF';
+      const fontSize = Math.round((df.headerConfig.locationFontSize || 20) * (width / 1080));
+      ctx.font = `800 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(card.location, bx + bw / 2, by + bh / 2);
+      ctx.restore();
+    }
+  }
+
+  // 5. FULL STORY CALLOUT
+  if (df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled') {
+    const cRect = df.fullStoryCalloutConfig.rect || { x: 10, y: 88, width: 80, height: 3.5 };
+    const cx = (cRect.x / 100) * width;
+    const cy = (cRect.y / 100) * height;
+    const cw = (cRect.width / 100) * width;
+    const ch = (cRect.height / 100) * height;
+    const calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
+
+    if (calloutAsset) {
+      try {
+        const cImg = await loadImage(calloutAsset);
+        ctx.drawImage(cImg, cx, cy, cw, ch);
+      } catch (e) {
+        console.warn('Callout asset load warning:', e);
+      }
+    } else {
+      ctx.save();
+      ctx.fillStyle = df.fullStoryCalloutConfig.bgColor || '#DC2626';
+      ctx.strokeStyle = df.fullStoryCalloutConfig.borderColor || '#FACC15';
+      ctx.lineWidth = df.fullStoryCalloutConfig.borderWidth ?? 2;
+      ctx.beginPath();
+      ctx.roundRect(cx, cy, cw, ch, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = df.fullStoryCalloutConfig.textColor || '#FFFFFF';
+      const fontSize = Math.round((df.fullStoryCalloutConfig.fontSize || 18) * (width / 1080));
+      ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में', cx + cw / 2, cy + ch / 2);
+      ctx.restore();
+    }
+  }
+
+  // 6. PRIMARY HEADLINE TEXT (Respecting #000000 Black Text without white/dark shadow collision)
+  const textSlot = df.textSlots[0] || { rect: { x: 7, y: 63, width: 86, height: 27 }, textColor: '#FFFFFF' };
+  const hx = (textSlot.rect.x / 100) * width;
+  const hy = (textSlot.rect.y / 100) * height;
+  const hw = (textSlot.rect.width / 100) * width;
+  const hh = (textSlot.rect.height / 100) * height;
+
+  if (textSlot.backgroundColor && textSlot.backgroundColor !== 'transparent') {
+    ctx.save();
+    ctx.fillStyle = textSlot.backgroundColor;
+    ctx.fillRect(hx, hy, hw, hh);
+    ctx.restore();
+  }
+
+  const rawHeadline = card.formattedHeadline || card.headline;
+  if (rawHeadline && rawHeadline.trim().length > 0) {
+    ctx.save();
+    const fontFam = card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || textSlot.fontFamily || 'Baloo 2';
+    const textColor = textSlot.textColor || card.headlineTextColor || card.textColor || '#FFFFFF';
+    const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black' || textColor.toLowerCase() === '#0f172a';
+    const highlightColor = card.highlightColor || (isBlack ? '#DC2626' : '#FFE600');
+
+    const layout = computeCanonicalHeadlineLayout({
+      headline: rawHeadline,
+      highlightWords: card.highlightWords,
+      fontFamily: fontFam,
+      templateId: 'graphic_001',
+      aspectRatio: card.aspectRatio || '4:5',
+      userFontSize: card.headlineFontSize,
+      ctx,
+    });
+
+    const lines = layout.lines || [];
+    const totalLines = lines.length;
+    const lineHeight = layout.lineHeight || 60;
+    const startY = hy + (hh - totalLines * lineHeight) / 2 + lineHeight / 2;
+
+    ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
+    ctx.textBaseline = 'middle';
+    if (!isBlack) {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 3;
+    } else {
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+    }
+
+    lines.forEach((line, lIdx) => {
+      const lineY = startY + lIdx * lineHeight;
+      let totalLineWidth = 0;
+      const spaceWidth = ctx.measureText(' ').width;
+      const tokenWidths: number[] = [];
+
+      line.forEach((token, tIdx) => {
+        const tw = ctx.measureText(token.text).width;
+        tokenWidths.push(tw);
+        totalLineWidth += tw;
+        if (tIdx < line.length - 1) totalLineWidth += spaceWidth;
+      });
+
+      let curX = hx + (hw - totalLineWidth) / 2;
+      line.forEach((token, tIdx) => {
+        ctx.fillStyle = token.isHighlight ? highlightColor : textColor;
+        ctx.textAlign = 'left';
+        ctx.fillText(token.text, curX, lineY);
+        curX += tokenWidths[tIdx] + spaceWidth;
+      });
+    });
+    ctx.restore();
+  }
+
+  // 7. PERMANENT THEME FOOTER
+  const footerH = Math.round((df.footerConfig?.footerHeightRatio || 0.08) * height);
+  const activeFooter = getActiveFooterPng(card);
+  if (card.showMasterBranding !== false || Boolean(activeFooter)) {
+    await drawThemeFooterBar(
+      ctx,
+      width,
+      height,
+      footerH,
+      card.socialHandle,
+      card.whatsappNumber,
+      activeFooter,
+      card.websiteUrl,
+      card.activeSocialIcons,
+      card.showMobileNumber,
+      df.footerConfig?.footerBgColor || card.footerBgColor || '#FFFFFF',
+      df.footerConfig?.footerTextColor || card.footerTextColor || '#000000',
+      card.footerIconStyle || 'color',
+      card.showWebsite
+    );
+  }
+
+  ctx.restore();
+}
+
 // ============================================================================
 // GRAPHIC 001: AUTHENTIC 4:5 DEFAULT PRIMARY NEWS GRAPHIC
 // Loads real background image (/assets/primary_news_graphic_bg.jpg),

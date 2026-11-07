@@ -1,1 +1,13 @@
-[]
+[
+  {
+    "id": "req-limit-1794063140228-hh6e",
+    "email": "reporter_1794063140194@example.com",
+    "userId": "reporter_1794063140194@example.com",
+    "tier": "basic",
+    "currentLimit": 10,
+    "reason": "विशेष कवरेज हेतु अतिरिक्त लिमिट की आवश्यकता है",
+    "dateStr": "2026-11-07",
+    "requestedAt": 1794063140228,
+    "status": "pending"
+  }
+]

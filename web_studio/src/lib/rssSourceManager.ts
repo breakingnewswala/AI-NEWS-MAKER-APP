@@ -411,7 +411,8 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
   try {
     const approvedSet = getApprovedRssIds();
     const normalized = posts.map((p) => {
-      if (p.id && p.id.startsWith('rss-')) {
+      const isFeed = Boolean(p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')));
+      if (isFeed) {
         const isApproved = p.status === 'APPROVED' || approvedSet.has(p.id);
         return {
           ...p,
@@ -420,7 +421,7 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
       }
       return {
         ...p,
-        status: (p.status || 'APPROVED') as any,
+        status: (p.status || 'PENDING_APPROVAL') as any,
       };
     });
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(normalized));

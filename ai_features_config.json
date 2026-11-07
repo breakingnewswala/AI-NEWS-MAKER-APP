@@ -28,21 +28,14 @@
   "permissions": {
     "regenerateHeadlines": {
       "allowedTiers": [
-        "basic",
-        "advance",
-        "advanced",
-        "pro",
-        "professional",
         "ultra",
         "vip",
         "vip-dash",
         "vip_dash",
         "vip_desk",
-        "vip desk",
-        "admin",
-        "superadmin"
+        "vip desk"
       ],
-      "allowAllTiers": true
+      "allowAllTiers": false
     }
   },
   "aiModelAccess": {

@@ -1859,8 +1859,10 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
 }
 
 // 1. GET all news posts (Applies 3-day expiry, filters obsolete seeds, and respects admin RSS approval)
-app.get("/api/news-posts", (req, res) => {
-  const { role, includePending } = req.query;
+app.get("/api/news-posts", async (req, res) => {
+  const user = await resolveAuthenticatedUser(req);
+  const isAdmin = Boolean(user && isAuthorizedAdmin(req));
+  const includePending = isAdmin && (req.query.includePending === "true" || req.query.includePending === "1");
   const posts = loadNewsDatabase();
   const editorialDb = loadApprovedEditorialDatabase();
   const now = Date.now();
@@ -1871,7 +1873,7 @@ app.get("/api/news-posts", (req, res) => {
 
   const activePosts = posts.filter((p) => {
     // 0. Explicitly rejected items should never appear in home feed
-    if (p.status === "REJECTED") return false;
+    if (p.status === "REJECTED" && !isAdmin) return false;
 
     // 1. Never show obsolete live-post seeds
     if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) return false;
@@ -1907,7 +1909,7 @@ app.get("/api/news-posts", (req, res) => {
       }
 
       if (p.status !== "APPROVED") {
-        if (role !== "admin" && role !== "superadmin" && !includePending) {
+        if (!includePending) {
           return false;
         }
       }
@@ -1924,10 +1926,10 @@ app.get("/api/news-posts", (req, res) => {
     const expiresAt = p.expiresAt || (postTime + THREE_DAYS_MS);
     if (now > expiresAt) return false;
 
-    if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
+    if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && !includePending) {
       return false;
     }
-    if ((p.status === "REJECTED" || (p as any).status === "rejected") && role !== "admin" && role !== "superadmin") {
+    if ((p.status === "REJECTED" || (p as any).status === "rejected") && !isAdmin) {
       return false;
     }
 
@@ -1954,7 +1956,7 @@ app.get("/api/news-posts", (req, res) => {
           return false;
         }
         if (p.status !== "APPROVED") {
-          if (role !== "admin" && role !== "superadmin" && !includePending) return false;
+          if (!includePending) return false;
         }
       }
 
@@ -1962,13 +1964,13 @@ app.get("/api/news-posts", (req, res) => {
       if (isApprovedStory) return true;
 
       // Ensure pending and rejected posts are NEVER used for backfill for regular users
-      if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
+      if ((p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && !includePending) {
         return false;
       }
-      if ((p.status === "REJECTED" || (p as any).status === "rejected") && role !== "admin" && role !== "superadmin") {
+      if ((p.status === "REJECTED" || (p as any).status === "rejected") && !isAdmin) {
         return false;
       }
-      if (p.status !== "APPROVED" && role !== "admin" && role !== "superadmin" && !includePending) {
+      if (p.status !== "APPROVED" && !includePending) {
         return false;
       }
 
@@ -2034,8 +2036,8 @@ app.get("/api/news-posts", (req, res) => {
   return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
 });
 
-// 2. POST add or sync news posts
-app.post("/api/news-posts", (req, res) => {
+// 2. POST add or sync news posts (Restricted strictly to authenticated admins)
+app.post("/api/news-posts", requireAdminMiddleware, (req, res) => {
   try {
     const payload = req.body;
     let existing = loadNewsDatabase();
@@ -2585,6 +2587,41 @@ app.post("/api/drafts", (req, res) => {
     }
     saveDraftsDatabase(drafts);
     return res.json({ success: true, draft });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 7B. Validate Plan-Based Story Callout Access (Part 8 Backend Enforcement)
+app.post("/api/validate-callout-access", async (req, res) => {
+  try {
+    const { frameId, calloutUrl, planTier } = req.body || {};
+    const user = await resolveAuthenticatedUser(req);
+    const isAdmin = Boolean(user && isAuthorizedAdmin(req));
+    if (isAdmin) {
+      return res.json({ success: true, allowed: true, reason: "Admin privilege granted" });
+    }
+
+    const effectiveTier = (user?.role === "superadmin" || user?.role === "admin")
+      ? "vip"
+      : (planTier || "basic").toString().toLowerCase().trim();
+
+    // If no custom alternative is chosen, default is always allowed
+    if (!calloutUrl) {
+      return res.json({ success: true, allowed: true, reason: "Default callout allowed for all plans" });
+    }
+
+    // Basic & Advanced plans are strictly locked to default design
+    if (effectiveTier === "basic" || effectiveTier === "advanced" || effectiveTier === "free") {
+      return res.json({
+        success: true,
+        allowed: false,
+        reason: "बेसिक और एडवांस प्लान में केवल एडमिन द्वारा निर्धारित डिफ़ॉल्ट कॉलआउट का उपयोग किया जा सकता है।",
+      });
+    }
+
+    // Pro and VIP Desk: Authorized alternative permitted
+    return res.json({ success: true, allowed: true, reason: "Authorized plan alternative permitted" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -8427,8 +8464,10 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
           continue;
         }
 
-        // Active authorized RSS feed items are approved for the production feed
-        p.status = "APPROVED";
+        // Editorial Rule: Newly imported RSS feed items require explicit Admin approval.
+        p.status = "PENDING_APPROVAL";
+        (p as any).pendingCreatedAt = Date.now();
+        (p as any).editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
 
@@ -8450,14 +8489,13 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
               ep.title.trim().toLowerCase().slice(0, 40) === titleKey
           );
           if (match) {
-            // Never overwrite admin edits or approved status
+            // Never overwrite existing admin edits or approved status
             const isApproved =
               match.status === "APPROVED" ||
               Boolean(match.isPrePublished) ||
               Boolean(editorialDb[match.id]?.isPrePublished);
-            if (!match.status || match.status === "PENDING_APPROVAL") {
+            if (isApproved) {
               match.status = "APPROVED";
-              updatedArticlesCount++;
             }
           }
         }
@@ -8598,7 +8636,10 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
           continue;
         }
 
-        p.status = "APPROVED";
+        // Editorial Rule: Newly scraped web feed items require explicit Admin approval.
+        p.status = "PENDING_APPROVAL";
+        (p as any).pendingCreatedAt = Date.now();
+        (p as any).editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || (normUrl && existingUrls.has(normUrl)) || existingTitles.has(titleKey);
@@ -9761,78 +9802,19 @@ const USER_STORY_PREF_DB_FILE = path.join(process.cwd(), "user_story_preferences
 
 const ASSET_LIBRARIES_DB_FILE = path.join(process.cwd(), "asset_libraries_db.json");
 
+const DUMMY_ASSET_IDS = new Set([
+  "loc_badge_red_pin",
+  "loc_badge_blue_modern",
+  "loc_badge_gold_vip",
+  "loc_badge_dark_glass",
+  "callout_yellow_banner",
+  "callout_crimson_strip",
+  "callout_neon_blue_tag",
+]);
+
 function getDefaultAssetLibraries(): any[] {
+  // Pure genuine assets only: Dummy / sample Location Badges and Callouts removed per Part 9 policy.
   return [
-    {
-      id: "loc_badge_red_pin",
-      name: "रेड रिबन लोकेशन बैज (Classic Pin)",
-      category: "general",
-      type: "location_badge",
-      url: "/assets/location_badge_red_pin.png",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "loc_badge_blue_modern",
-      name: "मॉडर्न ब्लू लोकेशन पिल (Modern Blue Pill)",
-      category: "general",
-      type: "location_badge",
-      url: "/assets/location_badge_blue_modern.png",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "loc_badge_gold_vip",
-      name: "गोल्डन वीआईपी लोकेशन स्ट्रिप (Gold Strip)",
-      category: "vip",
-      type: "location_badge",
-      url: "/assets/location_badge_gold_vip.png",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "loc_badge_dark_glass",
-      name: "डार्क ग्लास लोकेशन बॉक्स (Glassmorphism)",
-      category: "dark",
-      type: "location_badge",
-      url: "/assets/location_badge_dark_glass.png",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "callout_yellow_banner",
-      name: "गोल्डन 'पूरी खबर डिस्क्रिप्शन में' बैज",
-      category: "yellow",
-      type: "callout_png",
-      url: "/assets/callout_yellow_banner.png",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "callout_crimson_strip",
-      name: "क्रिमसन रेड 3D कॉलआउट स्ट्रिप",
-      category: "red",
-      type: "callout_png",
-      url: "/assets/callout_crimson_strip.png",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "callout_neon_blue_tag",
-      name: "हाई-कंट्रास्ट नियॉन ब्लू कॉलआउट टैग",
-      category: "blue",
-      type: "callout_png",
-      url: "/assets/callout_neon_blue_tag.png",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
     {
       id: "suvichar_sunrise_morning",
       name: "स्वर्णिम सूर्योदय व प्रकृति (Morning Suvichar)",
@@ -9881,7 +9863,9 @@ function loadAssetLibrariesDatabase(): any[] {
     if (fs.existsSync(ASSET_LIBRARIES_DB_FILE)) {
       const raw = fs.readFileSync(ASSET_LIBRARIES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((it: any) => !DUMMY_ASSET_IDS.has(it.id));
+      }
     }
   } catch {}
   return getDefaultAssetLibraries();
@@ -10019,6 +10003,80 @@ app.get("/api/dynamic-frames", async (req, res) => {
               fontSize: 70,
               fontWeight: 'bold',
               textColor: '#FFFFFF',
+              alignment: 'center',
+              maxLines: 3,
+              lineHeight: 1.25,
+              backgroundColor: 'transparent',
+            },
+          ],
+        },
+        {
+          id: 'df_testing_1_double',
+          name: 'TESTING 1',
+          description: 'डबल फोटो कोलाज टेस्ट फ्रेम (क्रिकेट फोटो व सीएम मोहन यादव फोटो)',
+          aspectRatio: '4:5',
+          canvasWidth: 1080,
+          canvasHeight: 1350,
+          previewImageUrl: '/assets/sample_graphic_preview.png',
+          designCategory: 'Special Frames',
+          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+          publicationStatus: 'published',
+          createdBy: 'breakingnewswala.com@gmail.com',
+          createdAt: 1793880000000,
+          updatedAt: 1793880000000,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: 'top_left',
+            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+            showLocation: true,
+            locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
+            locationStyle: 'pill',
+          },
+          footerConfig: {
+            footerHeightRatio: 0.08,
+            enforcePermanentFooter: true,
+            footerBgColor: '#FFFFFF',
+            footerTextColor: '#000000',
+          },
+          watermarkConfig: {
+            enabled: true,
+            label: 'AI GENERATED',
+            rect: { x: 74, y: 3.5, width: 21, height: 3.5 },
+          },
+          fullStoryCalloutConfig: {
+            enabled: true,
+            text: 'पूरी खबर डिस्क्रिप्शन में',
+            rect: { x: 8, y: 88, width: 84, height: 3.8 },
+          },
+          photoSlots: [
+            {
+              id: 'slot_cricket_photo',
+              name: 'क्रिकेट फोटो (Cricket Photo)',
+              slotType: 'normal',
+              rect: { x: 0, y: 0, width: 50, height: 61.33 },
+              required: true,
+              cropMode: 'cover',
+            },
+            {
+              id: 'slot_cm_photo',
+              name: 'सीएम मोहन यादव फोटो (CM Mohan Yadav)',
+              slotType: 'normal',
+              rect: { x: 50, y: 0, width: 50, height: 61.33 },
+              required: true,
+              cropMode: 'cover',
+            },
+          ],
+          textSlots: [
+            {
+              id: 'slot_main_headline',
+              name: 'मुख्य हेडलाइन (3 पंक्तियाँ)',
+              role: 'headline',
+              rect: { x: 7.7, y: 64, width: 84.6, height: 24 },
+              fontFamily: 'Noto Sans Devanagari',
+              fontSize: 68,
+              fontWeight: 'bold',
+              textColor: '#000000', // STRICTLY BLACK AS CONFIGURED
               alignment: 'center',
               maxLines: 3,
               lineHeight: 1.25,
@@ -10405,7 +10463,7 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled } = req.body || {};
+    const { name, type, category, url, enabled, textRegion, typographyConfig } = req.body || {};
     if (!name || !type || !url) {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background'), and URL are required." });
     }
@@ -10416,6 +10474,8 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
       category: category || "general",
       url,
       enabled: enabled !== false,
+      textRegion: textRegion || undefined,
+      typographyConfig: typographyConfig || undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -10431,7 +10491,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url } = req.body || {};
+    const { name, category, enabled, url, textRegion, typographyConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
@@ -10443,6 +10503,8 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
       ...(category !== undefined ? { category } : {}),
       ...(enabled !== undefined ? { enabled: Boolean(enabled) } : {}),
       ...(url !== undefined ? { url } : {}),
+      ...(textRegion !== undefined ? { textRegion } : {}),
+      ...(typographyConfig !== undefined ? { typographyConfig } : {}),
       updatedAt: Date.now(),
     };
     items[idx] = updated;

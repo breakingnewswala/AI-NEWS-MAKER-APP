@@ -11965,8 +11965,10 @@ function formatRelativeTime(timestamp) {
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays} \u0926\u093F\u0928 \u092A\u0939\u0932\u0947`;
 }
-app.get("/api/news-posts", (req, res) => {
-  const { role, includePending } = req.query;
+app.get("/api/news-posts", async (req, res) => {
+  const user = await resolveAuthenticatedUser(req);
+  const isAdmin = Boolean(user && isAuthorizedAdmin(req));
+  const includePending = isAdmin && (req.query.includePending === "true" || req.query.includePending === "1");
   const posts = loadNewsDatabase();
   const editorialDb = loadApprovedEditorialDatabase();
   const now = Date.now();
@@ -11974,7 +11976,7 @@ app.get("/api/news-posts", (req, res) => {
   const activeSourceIds = new Set(activeSources.map((s) => s.id));
   const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
   const activePosts = posts.filter((p) => {
-    if (p.status === "REJECTED") return false;
+    if (p.status === "REJECTED" && !isAdmin) return false;
     if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) return false;
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
@@ -12001,7 +12003,7 @@ app.get("/api/news-posts", (req, res) => {
         return false;
       }
       if (p.status !== "APPROVED") {
-        if (role !== "admin" && role !== "superadmin" && !includePending) {
+        if (!includePending) {
           return false;
         }
       }
@@ -12013,10 +12015,10 @@ app.get("/api/news-posts", (req, res) => {
     const postTime = p.timestamp || now;
     const expiresAt = p.expiresAt || postTime + THREE_DAYS_MS;
     if (now > expiresAt) return false;
-    if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
+    if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
       return false;
     }
-    if ((p.status === "REJECTED" || p.status === "rejected") && role !== "admin" && role !== "superadmin") {
+    if ((p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
       return false;
     }
     return true;
@@ -12039,18 +12041,18 @@ app.get("/api/news-posts", (req, res) => {
           return false;
         }
         if (p.status !== "APPROVED") {
-          if (role !== "admin" && role !== "superadmin" && !includePending) return false;
+          if (!includePending) return false;
         }
       }
       const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
       if (isApprovedStory) return true;
-      if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && role !== "admin" && role !== "superadmin" && !includePending) {
+      if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
         return false;
       }
-      if ((p.status === "REJECTED" || p.status === "rejected") && role !== "admin" && role !== "superadmin") {
+      if ((p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
         return false;
       }
-      if (p.status !== "APPROVED" && role !== "admin" && role !== "superadmin" && !includePending) {
+      if (p.status !== "APPROVED" && !includePending) {
         return false;
       }
       return true;
@@ -12102,7 +12104,7 @@ app.get("/api/news-posts", (req, res) => {
   });
   return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
 });
-app.post("/api/news-posts", (req, res) => {
+app.post("/api/news-posts", requireAdminMiddleware, (req, res) => {
   try {
     const payload = req.body;
     let existing = loadNewsDatabase();
@@ -12592,6 +12594,30 @@ app.post("/api/drafts", (req, res) => {
     }
     saveDraftsDatabase(drafts);
     return res.json({ success: true, draft });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/validate-callout-access", async (req, res) => {
+  try {
+    const { frameId, calloutUrl, planTier } = req.body || {};
+    const user = await resolveAuthenticatedUser(req);
+    const isAdmin = Boolean(user && isAuthorizedAdmin(req));
+    if (isAdmin) {
+      return res.json({ success: true, allowed: true, reason: "Admin privilege granted" });
+    }
+    const effectiveTier = user?.role === "superadmin" || user?.role === "admin" ? "vip" : (planTier || "basic").toString().toLowerCase().trim();
+    if (!calloutUrl) {
+      return res.json({ success: true, allowed: true, reason: "Default callout allowed for all plans" });
+    }
+    if (effectiveTier === "basic" || effectiveTier === "advanced" || effectiveTier === "free") {
+      return res.json({
+        success: true,
+        allowed: false,
+        reason: "\u092C\u0947\u0938\u093F\u0915 \u0914\u0930 \u090F\u0921\u0935\u093E\u0902\u0938 \u092A\u094D\u0932\u093E\u0928 \u092E\u0947\u0902 \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0928\u093F\u0930\u094D\u0927\u093E\u0930\u093F\u0924 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u0915\u0949\u0932\u0906\u0909\u091F \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u0938\u0915\u0924\u093E \u0939\u0948\u0964"
+      });
+    }
+    return res.json({ success: true, allowed: true, reason: "Authorized plan alternative permitted" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -17425,7 +17451,9 @@ async function executeRssSynchronization() {
           skippedDuplicatesCount++;
           continue;
         }
-        p.status = "APPROVED";
+        p.status = "PENDING_APPROVAL";
+        p.pendingCreatedAt = Date.now();
+        p.editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || normUrl && existingUrls.has(normUrl) || existingTitles.has(titleKey);
@@ -17442,9 +17470,8 @@ async function executeRssSynchronization() {
           );
           if (match) {
             const isApproved = match.status === "APPROVED" || Boolean(match.isPrePublished) || Boolean(editorialDb[match.id]?.isPrePublished);
-            if (!match.status || match.status === "PENDING_APPROVAL") {
+            if (isApproved) {
               match.status = "APPROVED";
-              updatedArticlesCount++;
             }
           }
         }
@@ -17572,7 +17599,9 @@ async function executeWebScrapeSynchronization() {
           skippedDuplicatesCount++;
           continue;
         }
-        p.status = "APPROVED";
+        p.status = "PENDING_APPROVAL";
+        p.pendingCreatedAt = Date.now();
+        p.editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || normUrl && existingUrls.has(normUrl) || existingTitles.has(titleKey);
@@ -18508,78 +18537,17 @@ app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) =>
 var DYNAMIC_FRAMES_DB_FILE = import_path2.default.join(process.cwd(), "dynamic_frames_db.json");
 var USER_STORY_PREF_DB_FILE = import_path2.default.join(process.cwd(), "user_story_preferences_db.json");
 var ASSET_LIBRARIES_DB_FILE = import_path2.default.join(process.cwd(), "asset_libraries_db.json");
+var DUMMY_ASSET_IDS = /* @__PURE__ */ new Set([
+  "loc_badge_red_pin",
+  "loc_badge_blue_modern",
+  "loc_badge_gold_vip",
+  "loc_badge_dark_glass",
+  "callout_yellow_banner",
+  "callout_crimson_strip",
+  "callout_neon_blue_tag"
+]);
 function getDefaultAssetLibraries() {
   return [
-    {
-      id: "loc_badge_red_pin",
-      name: "\u0930\u0947\u0921 \u0930\u093F\u092C\u0928 \u0932\u094B\u0915\u0947\u0936\u0928 \u092C\u0948\u091C (Classic Pin)",
-      category: "general",
-      type: "location_badge",
-      url: "/assets/location_badge_red_pin.png",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "loc_badge_blue_modern",
-      name: "\u092E\u0949\u0921\u0930\u094D\u0928 \u092C\u094D\u0932\u0942 \u0932\u094B\u0915\u0947\u0936\u0928 \u092A\u093F\u0932 (Modern Blue Pill)",
-      category: "general",
-      type: "location_badge",
-      url: "/assets/location_badge_blue_modern.png",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "loc_badge_gold_vip",
-      name: "\u0917\u094B\u0932\u094D\u0921\u0928 \u0935\u0940\u0906\u0908\u092A\u0940 \u0932\u094B\u0915\u0947\u0936\u0928 \u0938\u094D\u091F\u094D\u0930\u093F\u092A (Gold Strip)",
-      category: "vip",
-      type: "location_badge",
-      url: "/assets/location_badge_gold_vip.png",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "loc_badge_dark_glass",
-      name: "\u0921\u093E\u0930\u094D\u0915 \u0917\u094D\u0932\u093E\u0938 \u0932\u094B\u0915\u0947\u0936\u0928 \u092C\u0949\u0915\u094D\u0938 (Glassmorphism)",
-      category: "dark",
-      type: "location_badge",
-      url: "/assets/location_badge_dark_glass.png",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "callout_yellow_banner",
-      name: "\u0917\u094B\u0932\u094D\u0921\u0928 '\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902' \u092C\u0948\u091C",
-      category: "yellow",
-      type: "callout_png",
-      url: "/assets/callout_yellow_banner.png",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "callout_crimson_strip",
-      name: "\u0915\u094D\u0930\u093F\u092E\u0938\u0928 \u0930\u0947\u0921 3D \u0915\u0949\u0932\u0906\u0909\u091F \u0938\u094D\u091F\u094D\u0930\u093F\u092A",
-      category: "red",
-      type: "callout_png",
-      url: "/assets/callout_crimson_strip.png",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "callout_neon_blue_tag",
-      name: "\u0939\u093E\u0908-\u0915\u0902\u091F\u094D\u0930\u093E\u0938\u094D\u091F \u0928\u093F\u092F\u0949\u0928 \u092C\u094D\u0932\u0942 \u0915\u0949\u0932\u0906\u0909\u091F \u091F\u0948\u0917",
-      category: "blue",
-      type: "callout_png",
-      url: "/assets/callout_neon_blue_tag.png",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
     {
       id: "suvichar_sunrise_morning",
       name: "\u0938\u094D\u0935\u0930\u094D\u0923\u093F\u092E \u0938\u0942\u0930\u094D\u092F\u094B\u0926\u092F \u0935 \u092A\u094D\u0930\u0915\u0943\u0924\u093F (Morning Suvichar)",
@@ -18627,7 +18595,9 @@ function loadAssetLibrariesDatabase() {
     if (import_fs2.default.existsSync(ASSET_LIBRARIES_DB_FILE)) {
       const raw = import_fs2.default.readFileSync(ASSET_LIBRARIES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((it) => !DUMMY_ASSET_IDS.has(it.id));
+      }
     }
   } catch {
   }
@@ -18755,6 +18725,81 @@ app.get("/api/dynamic-frames", async (req, res) => {
               fontSize: 70,
               fontWeight: "bold",
               textColor: "#FFFFFF",
+              alignment: "center",
+              maxLines: 3,
+              lineHeight: 1.25,
+              backgroundColor: "transparent"
+            }
+          ]
+        },
+        {
+          id: "df_testing_1_double",
+          name: "TESTING 1",
+          description: "\u0921\u092C\u0932 \u092B\u094B\u091F\u094B \u0915\u094B\u0932\u093E\u091C \u091F\u0947\u0938\u094D\u091F \u092B\u094D\u0930\u0947\u092E (\u0915\u094D\u0930\u093F\u0915\u0947\u091F \u092B\u094B\u091F\u094B \u0935 \u0938\u0940\u090F\u092E \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935 \u092B\u094B\u091F\u094B)",
+          aspectRatio: "4:5",
+          canvasWidth: 1080,
+          canvasHeight: 1350,
+          previewImageUrl: "/assets/sample_graphic_preview.png",
+          designCategory: "Special Frames",
+          allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+          publicationStatus: "published",
+          createdBy: "breakingnewswala.com@gmail.com",
+          createdAt: 179388e7,
+          updatedAt: 179388e7,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: "top_left",
+            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+            showLocation: true,
+            locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
+            locationStyle: "pill"
+          },
+          footerConfig: {
+            footerHeightRatio: 0.08,
+            enforcePermanentFooter: true,
+            footerBgColor: "#FFFFFF",
+            footerTextColor: "#000000"
+          },
+          watermarkConfig: {
+            enabled: true,
+            label: "AI GENERATED",
+            rect: { x: 74, y: 3.5, width: 21, height: 3.5 }
+          },
+          fullStoryCalloutConfig: {
+            enabled: true,
+            text: "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902",
+            rect: { x: 8, y: 88, width: 84, height: 3.8 }
+          },
+          photoSlots: [
+            {
+              id: "slot_cricket_photo",
+              name: "\u0915\u094D\u0930\u093F\u0915\u0947\u091F \u092B\u094B\u091F\u094B (Cricket Photo)",
+              slotType: "normal",
+              rect: { x: 0, y: 0, width: 50, height: 61.33 },
+              required: true,
+              cropMode: "cover"
+            },
+            {
+              id: "slot_cm_photo",
+              name: "\u0938\u0940\u090F\u092E \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935 \u092B\u094B\u091F\u094B (CM Mohan Yadav)",
+              slotType: "normal",
+              rect: { x: 50, y: 0, width: 50, height: 61.33 },
+              required: true,
+              cropMode: "cover"
+            }
+          ],
+          textSlots: [
+            {
+              id: "slot_main_headline",
+              name: "\u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (3 \u092A\u0902\u0915\u094D\u0924\u093F\u092F\u093E\u0901)",
+              role: "headline",
+              rect: { x: 7.7, y: 64, width: 84.6, height: 24 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 68,
+              fontWeight: "bold",
+              textColor: "#000000",
+              // STRICTLY BLACK AS CONFIGURED
               alignment: "center",
               maxLines: 3,
               lineHeight: 1.25,
@@ -19116,7 +19161,7 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 });
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled } = req.body || {};
+    const { name, type, category, url, enabled, textRegion, typographyConfig } = req.body || {};
     if (!name || !type || !url) {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background'), and URL are required." });
     }
@@ -19127,6 +19172,8 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
       category: category || "general",
       url,
       enabled: enabled !== false,
+      textRegion: textRegion || void 0,
+      typographyConfig: typographyConfig || void 0,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -19141,7 +19188,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url } = req.body || {};
+    const { name, category, enabled, url, textRegion, typographyConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
@@ -19153,6 +19200,8 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
       ...category !== void 0 ? { category } : {},
       ...enabled !== void 0 ? { enabled: Boolean(enabled) } : {},
       ...url !== void 0 ? { url } : {},
+      ...textRegion !== void 0 ? { textRegion } : {},
+      ...typographyConfig !== void 0 ? { typographyConfig } : {},
       updatedAt: Date.now()
     };
     items[idx] = updated;
