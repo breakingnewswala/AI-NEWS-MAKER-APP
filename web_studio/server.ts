@@ -1073,6 +1073,10 @@ app.post("/api/admin/set-ai-keys", requireMasterAdminMiddleware, async (req, res
 // ==========================================
 interface StoredNewsPost {
   id: string;
+  sourceId?: string;
+  sourceFeedUrl?: string;
+  sourceChannelId?: string;
+  sourceCategoryId?: string;
   title: string;
   summary: string;
   sourceChannel: string;
@@ -1894,7 +1898,10 @@ app.get("/api/news-posts", (req, res) => {
           }
         })
       ));
-      const hasActiveSource = Boolean(matchesSourceId || matchesUrl || activeSources.length > 0);
+      const matchesFeedUrl = Boolean(
+        p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase())
+      );
+      const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl);
       if (!hasActiveSource) {
         return false;
       }
@@ -1938,9 +1945,11 @@ app.get("/api/news-posts", (req, res) => {
       if (isFeedSource) {
         if (activeSources.length === 0) return false;
         const parts = String(p.id).split("-");
-        const srcId = parts.length >= 2 ? parts[1] : "";
-        const matchesUrl = p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase());
-        const hasActiveSource = Boolean((srcId && activeSourceIds.has(srcId)) || matchesUrl);
+        const srcId = (p as any).sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
+        const matchesSourceId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
+        const matchesFeedUrl = Boolean(p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()));
+        const matchesUrl = Boolean(p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()));
+        const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl);
         if (!hasActiveSource) {
           return false;
         }
@@ -7605,9 +7614,13 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
 
     posts.push({
       id: postId,
+      sourceId: source.id,
+      sourceFeedUrl: source.url,
+      sourceChannel: source.name,
+      sourceChannelId: (source as any).channelId || source.name,
+      sourceCategoryId: source.category,
       title: editorial.title,
       summary: editorial.summary,
-      sourceChannel: source.name,
       sourceUrl: link, // PRESERVE original article URL
 
       category: catKey,
@@ -7739,9 +7752,13 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
 
     return [{
       id: postId,
+      sourceId: source.id,
+      sourceFeedUrl: source.url,
+      sourceChannel: source.name,
+      sourceChannelId: (source as any).channelId || source.name,
+      sourceCategoryId: source.category,
       title: editorial.title,
       summary: editorial.summary,
-      sourceChannel: source.name,
       sourceUrl: source.url, // PRESERVE original article URL
 
       category: catKey,
@@ -8501,6 +8518,142 @@ app.post("/api/admin/rss-sync", requireAdminMiddleware, async (req, res) => {
       return res.status(403).json({ success: false, error: "अनधिकृत: केवल एडमिन लाइव RSS सिंक चला सकते हैं।" });
     }
     const result = await executeRssSynchronization();
+    return res.json({
+      success: result.success,
+      count: result.newArticlesCount,
+      newArticlesCount: result.newArticlesCount,
+      updatedArticlesCount: result.updatedArticlesCount,
+      skippedDuplicatesCount: result.skippedDuplicatesCount,
+      failedSourcesCount: result.failedSourcesCount,
+      totalSourcesSynced: result.totalSourcesSynced,
+      durationMs: result.durationMs,
+      timestamp: result.timestamp,
+      error: result.error,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// Dedicated Web Links Scraping System (Part 3, Section 7)
+async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
+  const startTime = Date.now();
+  let newArticlesCount = 0;
+  let updatedArticlesCount = 0;
+  let skippedDuplicatesCount = 0;
+  let failedSourcesCount = 0;
+
+  try {
+    const sources = loadRssSourcesDatabase();
+    const activeWebSources = sources.filter((s) => s.isActive && s.type === "web");
+    if (activeWebSources.length === 0) {
+      return {
+        success: true,
+        totalSourcesSynced: 0,
+        newArticlesCount: 0,
+        updatedArticlesCount: 0,
+        skippedDuplicatesCount: 0,
+        failedSourcesCount: 0,
+        durationMs: Date.now() - startTime,
+        timestamp: Date.now(),
+      };
+    }
+
+    const fetchedPosts: StoredNewsPost[] = [];
+    await Promise.allSettled(
+      activeWebSources.map(async (src) => {
+        try {
+          const items = await fetchAndParseWebLink(src);
+          if (items.length > 0) {
+            src.lastFetchedAt = Date.now();
+            src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
+            (src as any).lastSyncStatus = "success";
+            (src as any).lastError = undefined;
+            fetchedPosts.push(...items);
+          } else {
+            failedSourcesCount++;
+            (src as any).lastSyncStatus = "error";
+            (src as any).lastError = "No articles extracted";
+          }
+        } catch (srcErr: any) {
+          failedSourcesCount++;
+          (src as any).lastSyncStatus = "error";
+          (src as any).lastError = srcErr.message || "Fetch error";
+          console.warn(`[Web Scrape] Failed source ${src.name} (${src.url}):`, srcErr.message);
+        }
+      })
+    );
+
+    if (fetchedPosts.length > 0) {
+      let existingPosts = loadNewsDatabase();
+      const existingIds = new Set(existingPosts.map((p) => p.id));
+      const existingUrls = new Set(existingPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
+      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+      const deletedNewsIds = loadDeletedNewsIds();
+
+      const trulyNew: StoredNewsPost[] = [];
+      for (const p of fetchedPosts) {
+        if (deletedNewsIds.has(p.id)) {
+          skippedDuplicatesCount++;
+          continue;
+        }
+
+        p.status = "APPROVED";
+        const titleKey = p.title.trim().toLowerCase().slice(0, 40);
+        const normUrl = (p.sourceUrl || "").trim().toLowerCase();
+        const isDuplicate = existingIds.has(p.id) || (normUrl && existingUrls.has(normUrl)) || existingTitles.has(titleKey);
+
+        if (!isDuplicate) {
+          existingIds.add(p.id);
+          if (normUrl) existingUrls.add(normUrl);
+          existingTitles.add(titleKey);
+          trulyNew.push(p);
+          newArticlesCount++;
+        } else {
+          skippedDuplicatesCount++;
+        }
+      }
+
+      if (trulyNew.length > 0) {
+        existingPosts = [...trulyNew, ...existingPosts].slice(0, 300);
+      }
+      saveNewsDatabase(existingPosts);
+      saveRssSourcesDatabase(sources);
+    }
+
+    const durationMs = Date.now() - startTime;
+    return {
+      success: true,
+      totalSourcesSynced: activeWebSources.length,
+      newArticlesCount,
+      updatedArticlesCount,
+      skippedDuplicatesCount,
+      failedSourcesCount,
+      durationMs,
+      timestamp: Date.now(),
+    };
+  } catch (err: any) {
+    const durationMs = Date.now() - startTime;
+    return {
+      success: false,
+      totalSourcesSynced: 0,
+      newArticlesCount: 0,
+      updatedArticlesCount: 0,
+      skippedDuplicatesCount: 0,
+      failedSourcesCount: 0,
+      durationMs,
+      timestamp: Date.now(),
+      error: cleanErrorMessage(err),
+    };
+  }
+}
+
+app.post("/api/admin/web-scrape", requireAdminMiddleware, async (req, res) => {
+  try {
+    if (!verifyIsAdminUser(req)) {
+      return res.status(403).json({ success: false, error: "अनधिकृत: केवल एडमिन लाइव वेब स्क्रैप चला सकते हैं।" });
+    }
+    const result = await executeWebScrapeSynchronization();
     return res.json({
       success: result.success,
       count: result.newArticlesCount,
@@ -15749,16 +15902,6 @@ export function ensureHashtagHierarchy(
         .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
       bulletLines = sentences.slice(0, 5);
     }
-    const fallbackBullets = [
-      "पूरे घटनाक्रम को लेकर प्रशासनिक स्तर पर समीक्षा की जा रही है",
-      "संबंधित पक्षों से बातचीत कर आगे की रूपरेखा तैयार की जा रही है",
-      "मामले में आगामी ताजा जानकारियों पर लगातार नजर बनी हुई है",
-    ];
-    let fbIdx = 0;
-    while (bulletLines.length < 3) {
-      bulletLines.push(fallbackBullets[fbIdx % fallbackBullets.length]);
-      fbIdx++;
-    }
     finalBodyText = bulletLines
       .slice(0, 5)
       .map((b) => `• ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}।`)
@@ -16781,7 +16924,7 @@ export function generate5BalancedHeadlineOptions(
   const addOptionIfDistinct = (cand: string) => {
     if (!cand) return;
     const formatted = sanitizeHeadlineClean(cand);
-    if (!formatted || formatted.length < 20) return;
+    if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 120) return;
     if (uniqueOptions.includes(formatted)) return;
     const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88);
     if (!isTooSimilar) {
@@ -16789,35 +16932,32 @@ export function generate5BalancedHeadlineOptions(
     }
   };
 
+  // Option 1: सीधी मुख्य खबर (Direct primary event)
   addOptionIfDistinct(cleanBase);
 
   const validFacts = (factSentences || [])
     .map((s) => sanitizeHeadlineClean(s))
-    .filter((s) => s.length >= 20 && !BYLINE_REGEX.test(s));
+    .filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 120 && !BYLINE_REGEX.test(s));
 
+  // Option 2 & 3: तथ्य-केंद्रित व परिणाम-केंद्रित हेडलाइन (Key fact & impact from article)
   for (const fact of validFacts) {
     if (uniqueOptions.length >= 5) break;
     addOptionIfDistinct(fact);
   }
 
-  for (let i = 0; i < validFacts.length && uniqueOptions.length < 5; i++) {
-    const f1 = validFacts[i];
-    if (!cleanBase.includes(f1.slice(0, 15)) && calculateHeadlineSimilarityInternal(cleanBase, f1) < 0.65) {
-      addOptionIfDistinct(`${cleanBase}, ${f1}`);
-    }
-    if (i + 1 < validFacts.length && uniqueOptions.length < 5) {
-      const f2 = validFacts[i + 1];
-      if (calculateHeadlineSimilarityInternal(f1, f2) < 0.65) {
-        addOptionIfDistinct(`${f1}, ${f2}`);
-      }
+  // Option 4: प्रमुख विवरण वाली हेडलाइन (Location or context framed headline)
+  if (loc && uniqueOptions.length < 5) {
+    const primaryLoc = loc.split(/[\/,]/)[0].trim();
+    if (!cleanBase.includes(primaryLoc)) {
+      addOptionIfDistinct(`${primaryLoc}: ${cleanBase}`);
     }
   }
 
-  if (loc && uniqueOptions.length < 5 && !cleanBase.includes(loc.split(",")[0].trim())) {
-    const primaryLoc = loc.split(",")[0].trim();
-    for (const f of validFacts) {
-      if (uniqueOptions.length >= 5) break;
-      addOptionIfDistinct(`${primaryLoc} में ${f}`);
+  // Option 5: प्रभावशाली समाचार हेडलाइन (Reframed complete headline)
+  if (uniqueOptions.length < 5) {
+    const shortBase = cleanBase.replace(/^(?:बड़ा फैसला|बड़ी खबर|ताज़ा खबर|विशेष):\s*/, '');
+    if (shortBase !== cleanBase) {
+      addOptionIfDistinct(shortBase);
     }
   }
 
@@ -17199,7 +17339,7 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     },
     captionShort: {
       type: Type.STRING,
-      description: "Crisp 2-paragraph Hindi news summary with key facts and concluding hashtags ending with #AINewsMaker. Must not repeat the headline",
+      description: "Concise 1-3 sentence news summary with key facts and concluding hashtags ending with #AINewsMaker. Must not repeat the headline",
     },
     category: {
       type: Type.STRING,
@@ -17269,8 +17409,8 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     : `(यदि कोई निजी यूज़रनेम न हो तो सीधे प्रासंगिक समाचार हैशटैग से शुरू करें)`;
 
   const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के वरिष्ठ संपादक (Professional Hindi News Editor) हैं।
-आपका कार्य पूरे उपलब्ध समाचार लेख को गहराई से पढ़कर, उसके वास्तविक तथ्यों और मुख्य घटनाक्रम के आधार पर 5 अलग-अलग, सटीक, संक्षिप्त और प्रभावशाली हिंदी हेडलाइंस (विकल्प 1: 80-95, विकल्प 2: 85-100, विकल्प 3: 90-105, विकल्प 4: 95-110, विकल्प 5: 100-120 अक्षर; अधिकतम सीमा 120 अक्षर) तथा 3 सोशल मीडिया कैप्शन तैयार करना है।
-कड़ा नियम: किसी भी हेडलाइन की लंबाई बढ़ाने के लिए अपनी ओर से कोई कृत्रिम प्रशासनिक वाक्य ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'विशेष डेस्क' आदि) बिल्कुल न जोड़ें। यदि मूल खबर संक्षिप्त है, तो छोटी लेकिन सटीक हेडलाइन रखें। केवल वैध JSON लौटाएं।`;
+आपका कार्य पूरे उपलब्ध समाचार लेख को गहराई से पढ़कर, उसके वास्तविक तथ्यों और मुख्य घटनाक्रम के आधार पर 5 अनुमोदित शैलियों में 5 अलग-अलग, सटीक, संक्षिप्त और प्रभावशाली हिंदी हेडलाइंस (विकल्प 1: सीधी मुख्य खबर [80-95], विकल्प 2: तथ्य-केंद्रित हेडलाइन [85-100], विकल्प 3: परिणाम-केंद्रित हेडलाइन [90-105], विकल्प 4: प्रमुख विवरण वाली हेडलाइन [95-110], विकल्प 5: प्रभावशाली समाचार हेडलाइन [100-120]; अधिकतम सीमा 120 अक्षर) तथा 3 सोशल मीडिया कैप्शन तैयार करना है।
+कड़ा नियम: किसी भी हेडलाइन की लंबाई बढ़ाने के लिए अपनी ओर से कोई कृत्रिम प्रशासनिक वाक्य ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'विशेष डेस्क' आदि) बिल्कुल न जोड़ें। URL को कभी भी हेडलाइन या कैप्शन न बनाएं। केवल वैध JSON लौटाएं।`;
 
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
@@ -17287,12 +17427,13 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
 ★ चरण 1: आंतरिक समाचार विश्लेषण (FACT SHEET EXTRACTION):
 हेडलाइन लिखने से पहले ` + "`factSheet`" + ` ऑब्जेक्ट में मुख्य घटना (mainEvent), मुख्य विषय (mainSubject), मुख्य व्यक्ति या संस्था (mainPersonOrOrg), स्थान (location), दिनांक (date), मुख्य कार्रवाई या निर्णय (mainAction), महत्वपूर्ण संख्या या आँकड़े (importantFigures), आधिकारिक बयान या आदेश (officialStatement), वास्तविक परिणाम (actualOutcome) और महत्वपूर्ण संदर्भ (importantContext) सटीक रूप से दर्ज करें।
 
-★ चरण 2: BREAKING NEWS WALA — 5 हेडलाइन विकल्पों के कड़े नियम:
+★ चरण 2: BREAKING NEWS WALA — 5 अनुमोदित संपादकीय शैलियों के हेडलाइन विकल्प (MAX 120 CHARACTERS):
 1. प्रत्येक हेडलाइन को एक नया, स्वतंत्र, पूर्ण और अर्थपूर्ण हिंदी वाक्य होना चाहिए (DO NOT COPY-PASTE OR SLICE ARTICLE BODY SENTENCES):
    - आलेख के किसी वाक्य को बीच से काटकर या दो असंबद्ध वाक्यों को जोड़कर हेडलाइन कभी न बनाएं।
    - प्रत्येक हेडलाइन का आरंभ, मध्य और अंत व्याकरण की दृष्टि से पूर्ण होना चाहिए। कोई भी हेडलाइन अधूरे वाक्यांश (जैसे 'से 5', 'कोर्ट ने कहा', 'सुप्रीम कोर्ट ने गुरुवार', 'एपीके फाइल लिंक') पर समाप्त नहीं होनी चाहिए।
    - हेडलाइन में कभी भी 'प्रतीकात्मक चित्र', 'फाइल फोटो', 'नई दिल्ली3 घंटे पहले', '2 घंटे पहले', या '; 5 सवाल' जैसे वेब-स्क्रैपिंग अवशेष न आने दें।
-   - निम्नलिखित कृत्रिम या मनगढ़ंत वाक्य स्वतः जोड़ना पूर्णतः प्रतिबंधित है (جب तक कि मूल खबर में वास्तव में वह तथ्य न हो):
+   - URL को कभी भी हेडलाइन के रूप में उपयोग न करें।
+   - निम्नलिखित कृत्रिम या मनगढ़ंत वाक्य स्वतः जोड़ना पूर्णतः प्रतिबंधित है (जब तक कि मूल खबर में वास्तव में वह तथ्य न हो):
      * "शासन स्तर पर आवश्यक निर्देश दिए गए" / "शासन स्तर पर संबंधित तथ्यों को दिए गए आवश्यक निर्देश"
      * "संबंधित पक्षों को निर्देश जारी किए गए"
      * "मामले में नया घटनाक्रम सामने आया है"
@@ -17301,12 +17442,13 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
      * "इस घटना के बाद प्रशासन अलर्ट"
      * "मामले को लेकर विभागीय स्तर पर समीक्षा"
      * "विशेष डेस्क" / "विशेष डैश" (स्थान या हेडलाइन में कभी न लगाएं)
-2. 5 हेडलाइन विकल्प और अधिकतम 120 अक्षर की सीमा (MAX 120 CHARACTERS):
-   - विकल्प 1: 80 से 95 अक्षर (मुख्य घटना का सीधा, स्पष्ट और तेज़ समाचार शीर्षक)
-   - विकल्प 2: 85 से 100 अक्षर (मुख्य घटना के साथ प्रमुख तथ्य, संख्या, राशि या मुख्य निर्णय)
-   - विकल्प 3: 90 से 105 अक्षर (घटना के प्रभाव, परिणाम या कार्रवाई को स्पष्ट करने वाला शीर्षक)
-   - विकल्प 4: 95 से 110 अक्षर (घटना के महत्वपूर्ण संदर्भ, आधिकारिक बयान या आदेश पर आधारित शीर्षक)
-   - विकल्प 5: 100 से 120 अक्षर (खबर का संतुलित और सारगर्भित संपादकीय शीर्षक)
+2. 5 अनुमोदित संपादकीय शैलियाँ और अधिकतम 120 अक्षर की सीमा (5 APPROVED EDITORIAL STYLES):
+   सभी 5 विकल्प केवल और केवल उसी मूल खबर/घटना पर आधारित होने चाहिए, किंतु उनकी संपादकीय प्रस्तुति निम्न 5 शैलियों के अनुसार अलग होगी:
+   - विकल्प 1 [सीधी मुख्य खबर]: 80 से 95 अक्षर (मुख्य घटना का सीधा, स्पष्ट, निष्पक्ष और तेज़ समाचार शीर्षक)
+   - विकल्प 2 [तथ्य-केंद्रित हेडलाइन]: 85 से 100 अक्षर (मुख्य घटना के साथ प्रमुख तथ्य, संख्या, आंकड़ा या मुख्य निर्णय)
+   - विकल्प 3 [परिणाम-केंद्रित हेडलाइन]: 90 से 105 अक्षर (घटना के प्रभाव, परिणाम, असर या कार्रवाई को स्पष्ट करने वाला शीर्षक)
+   - विकल्प 4 [प्रमुख विवरण वाली हेडलाइन]: 95 से 110 अक्षर (घटना के महत्वपूर्ण संदर्भ, विवरण, आधिकारिक बयान या आदेश पर आधारित शीर्षक)
+   - विकल्प 5 [प्रभावशाली समाचार हेडलाइन]: 100 से 120 अक्षर (खबर का संतुलित, सारगर्भित और प्रभावशाली संपादकीय शीर्षक)
    - कोई भी हेडलाइन किसी भी परिस्थिति में 120 अक्षर से अधिक नहीं होनी चाहिए।
    - यदि मूल समाचार में जानकारी सीमित है, तो न्यूनतम अक्षर संख्या पूरी करने के लिए कभी भी कृत्रिम शब्द न जोड़ें—छोटी लेकिन सटीक हेडलाइन रखें।
 3. भाषा, निष्पक्षता और शुद्धता (LANGUAGE & HONORIFIC REMOVAL):
@@ -17316,12 +17458,12 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
    - 'मध्य प्रदेश', 'उत्तर प्रदेश', 'हिमाचल प्रदेश', 'आंध्र प्रदेश' में सही स्पेसिंग रखें।
 4. तीन सोशल मीडिया कैप्शन और हैशटैग नियम (THREE CAPTIONS & HASHTAGS):
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या 'पूरी खबर पढ़ें' न लिखें और न ही हेडलाइन को पहली पंक्ति में दोहराएं।
-   - summary व captionDetailed: खबर के संपूर्ण तथ्यों पर आधारित ठीक 3 विस्तृत पैराग्राफ।
-   - captionBullets: मुख्य तथ्यों पर आधारित 3 से 5 बुलेट पॉइंट्स (प्रत्येक पंक्ति '• ' से शुरू हो और '।' पर समाप्त हो)।
-   - captionShort: मुख्य घटना और परिणाम का ठीक 2 पैराग्राफ में संक्षिप्त विवरण।
+   - विस्तृत कैप्शन (summary व captionDetailed): खबर के संपूर्ण तथ्यों और संदर्भ पर आधारित लगभग 3 विस्तृत पैराग्राफ।
+   - बुलेट कैप्शन (captionBullets): एक संक्षिप्त परिचयात्मक वाक्य, उसके बाद मुख्य तथ्यों पर आधारित 3 से 5 बुलेट पॉइंट्स (प्रत्येक पंक्ति '• ' से शुरू हो और '।' पर समाप्त हो)।
+   - संक्षिप्त कैप्शन (captionShort): मुख्य घटना और परिणाम का 1 से 3 संक्षिप्त वाक्यों में समाचार-केंद्रित विवरण।
    - प्रत्येक कैप्शन के अंत में एक खाली लाइन के बाद 6-8 हैशटैग:
      * ${userTagInstruction}
-     * बीच में खबर से जुड़े 4-6 प्रासंगिक हैशटैग
+     * बीच में खबर से जुड़े 4-6 प्रासंगिक हैशटैग (स्थान, विषय, संस्था)
      * #BNWTV और #breakingnewswala का उपयोग पूर्णतः वर्जित है (इन्हें कभी न लिखें)
      * सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
 

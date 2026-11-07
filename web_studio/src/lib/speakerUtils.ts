@@ -1325,7 +1325,7 @@ export function generate5BalancedHeadlineOptions(
   const addOptionIfDistinct = (cand: string) => {
     if (!cand) return;
     const formatted = sanitizeHeadlineClean(cand);
-    if (!formatted || formatted.length < 20) return;
+    if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 120) return;
     if (uniqueOptions.includes(formatted)) return;
     const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88);
     if (!isTooSimilar) {
@@ -1333,35 +1333,32 @@ export function generate5BalancedHeadlineOptions(
     }
   };
 
+  // Option 1: सीधी मुख्य खबर (Direct primary event)
   addOptionIfDistinct(cleanBase);
 
   const validFacts = (factSentences || [])
     .map((s) => sanitizeHeadlineClean(s))
-    .filter((s) => s.length >= 20 && !BYLINE_REGEX.test(s));
+    .filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 120 && !BYLINE_REGEX.test(s));
 
+  // Option 2 & 3: तथ्य-केंद्रित व परिणाम-केंद्रित हेडलाइन (Key fact & impact from article)
   for (const fact of validFacts) {
     if (uniqueOptions.length >= 5) break;
     addOptionIfDistinct(fact);
   }
 
-  for (let i = 0; i < validFacts.length && uniqueOptions.length < 5; i++) {
-    const f1 = validFacts[i];
-    if (!cleanBase.includes(f1.slice(0, 15)) && calculateHeadlineSimilarityInternal(cleanBase, f1) < 0.65) {
-      addOptionIfDistinct(`${cleanBase}, ${f1}`);
-    }
-    if (i + 1 < validFacts.length && uniqueOptions.length < 5) {
-      const f2 = validFacts[i + 1];
-      if (calculateHeadlineSimilarityInternal(f1, f2) < 0.65) {
-        addOptionIfDistinct(`${f1}, ${f2}`);
-      }
+  // Option 4: प्रमुख विवरण वाली हेडलाइन (Location or context framed headline)
+  if (loc && uniqueOptions.length < 5) {
+    const primaryLoc = loc.split(/[\/,]/)[0].trim();
+    if (!cleanBase.includes(primaryLoc)) {
+      addOptionIfDistinct(`${primaryLoc}: ${cleanBase}`);
     }
   }
 
-  if (loc && uniqueOptions.length < 5 && !cleanBase.includes(loc.split(",")[0].trim())) {
-    const primaryLoc = loc.split(",")[0].trim();
-    for (const f of validFacts) {
-      if (uniqueOptions.length >= 5) break;
-      addOptionIfDistinct(`${primaryLoc} में ${f}`);
+  // Option 5: प्रभावशाली समाचार हेडलाइन (Reframed complete headline)
+  if (uniqueOptions.length < 5) {
+    const shortBase = cleanBase.replace(/^(?:बड़ा फैसला|बड़ी खबर|ताज़ा खबर|विशेष):\s*/, '');
+    if (shortBase !== cleanBase) {
+      addOptionIfDistinct(shortBase);
     }
   }
 
@@ -1472,16 +1469,6 @@ export function ensureHashtagHierarchy(
         .map((s) => s.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
         .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
       bulletLines = sents.slice(0, 5);
-    }
-    const fallbackBullets = [
-      'पूरे घटनाक्रम को लेकर प्रशासनिक स्तर पर समीक्षा की जा रही है',
-      'संबंधित पक्षों से बातचीत कर आगे की रूपरेखा तैयार की जा रही है',
-      'मामले में आगामी ताजा जानकारियों पर लगातार नजर बनी हुई है',
-    ];
-    let fbIdx = 0;
-    while (bulletLines.length < 3) {
-      bulletLines.push(fallbackBullets[fbIdx % fallbackBullets.length]);
-      fbIdx++;
     }
     finalBodyText = bulletLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
   } else if (mode === 'short') {

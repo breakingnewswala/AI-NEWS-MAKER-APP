@@ -105,9 +105,11 @@ import {
   toggleAdminRssSource,
   deleteAdminRssSource,
   syncAllSourcesLive,
+  scrapeAllWebSourcesLive,
   getSavedNewsChannels,
   saveNewsChannel,
   deleteSavedNewsChannel,
+  fetchAdminChannelsFromBackend,
   formatHindiDate,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
@@ -945,6 +947,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     setEditPortalUrl(p.url || '');
   };
 
+  useEffect(() => {
+    fetchAdminChannelsFromBackend().then((channels) => {
+      if (channels && channels.length > 0) {
+        setNewsPortals(channels.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          url: c.url || '',
+          category: c.category || 'breaking',
+          nameHindi: c.nameHindi,
+          nameEnglish: c.nameEnglish,
+        })));
+        setSavedChannels(channels.map((c: any) => c.name));
+      }
+    }).catch(() => {});
+  }, []);
+
   const handleSaveEditPortal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPortal || !editPortalHindi.trim()) return;
@@ -967,8 +985,32 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
     setNewsPortals(updatedList);
     localStorage.setItem('admin_news_portals_list', JSON.stringify(updatedList));
-    saveNewsChannel(combinedName);
-    setSavedChannels(getSavedNewsChannels());
+
+    const updatedChannelNames = updatedList.map((p) => p.name);
+    setSavedChannels(updatedChannelNames);
+    localStorage.setItem('ai_news_admin_channels_list_v1', JSON.stringify(updatedChannelNames));
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_news_channels_updated', { detail: updatedList }));
+      window.dispatchEvent(new CustomEvent('ai_news_saved_channels_updated', { detail: updatedChannelNames }));
+    }
+
+    fetch(getApiUrl(`/api/admin/channels/${encodeURIComponent(editingPortal.id)}`), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAdminAuthHeaders(),
+      },
+      body: JSON.stringify({
+        id: editingPortal.id,
+        channelName: combinedName,
+        nameHindi: hName,
+        nameEnglish: eName,
+        websiteUrl: editPortalUrl.trim() || editingPortal.url,
+        category: editingPortal.category,
+      }),
+    }).catch(() => {});
+
     setEditingPortal(null);
     setRssMsg({ type: 'success', text: `चैनल "${combinedName}" सफलतापूर्वक अपडेट हुआ।` });
   };
@@ -984,22 +1026,49 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     };
     const updated = [item, ...newsPortals];
     setNewsPortals(updated);
-    saveNewsChannel(item.name);
-    setSavedChannels(getSavedNewsChannels());
+    const updatedChannelNames = updated.map((p) => p.name);
+    setSavedChannels(updatedChannelNames);
     localStorage.setItem('admin_news_portals_list', JSON.stringify(updated));
+    localStorage.setItem('ai_news_admin_channels_list_v1', JSON.stringify(updatedChannelNames));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_news_channels_updated', { detail: updated }));
+      window.dispatchEvent(new CustomEvent('ai_news_saved_channels_updated', { detail: updatedChannelNames }));
+    }
+    fetch(getApiUrl('/api/admin/channels'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAdminAuthHeaders(),
+      },
+      body: JSON.stringify({
+        id: item.id,
+        channelName: item.name,
+        websiteUrl: item.url,
+        category: item.category,
+      }),
+    }).catch(() => {});
     setNewPortalName('');
     setNewPortalUrl('');
   };
 
   const handleDeleteNewsPortal = (id: string) => {
-    const target = newsPortals.find(p => p.id === id);
     const updated = newsPortals.filter(p => p.id !== id);
     setNewsPortals(updated);
-    if (target?.name) {
-      deleteSavedNewsChannel(target.name);
-      setSavedChannels(getSavedNewsChannels());
-    }
+    const updatedChannelNames = updated.map((p) => p.name);
+    setSavedChannels(updatedChannelNames);
     localStorage.setItem('admin_news_portals_list', JSON.stringify(updated));
+    localStorage.setItem('ai_news_admin_channels_list_v1', JSON.stringify(updatedChannelNames));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_news_channels_updated', { detail: updated }));
+      window.dispatchEvent(new CustomEvent('ai_news_saved_channels_updated', { detail: updatedChannelNames }));
+    }
+    fetch(getApiUrl(`/api/admin/channels/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAdminAuthHeaders(),
+      },
+    }).catch(() => {});
   };
 
   const handleSuperAdminAddUser = (e: React.FormEvent) => {
@@ -5717,12 +5786,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   onClick={async () => {
                     setIsSyncingRss(true);
                     try {
-                      const res = await syncAllSourcesLive();
+                      const res = await scrapeAllWebSourcesLive();
                       setRssSources(getAdminRssSources());
-                      setRssMsg({
-                        type: res.success ? 'success' : 'error',
-                        text: res.success ? `लाइव वेब स्रोतों से ${res.totalNewItems || 0} नए समाचार स्क्रैप हुए।` : (res.error || 'स्क्रैप त्रुटि'),
-                      });
+                      if (res.success) {
+                        const parts = [];
+                        parts.push(`सफलतापूर्वक ${res.totalSourcesSynced || 0} वेब स्रोत स्क्रैप किए गए।`);
+                        parts.push(`${res.newArticlesCount ?? res.totalNewItems ?? 0} नए समाचार जुड़े`);
+                        if (res.updatedArticlesCount) parts.push(`${res.updatedArticlesCount} अपडेट`);
+                        if (res.skippedDuplicatesCount) parts.push(`${res.skippedDuplicatesCount} पहले से मौजूद`);
+                        if (res.durationMs) parts.push(`(${((res.durationMs)/1000).toFixed(1)}s)`);
+                        setRssMsg({
+                          type: 'success',
+                          text: parts.join(' | '),
+                        });
+                      } else {
+                        setRssMsg({ type: 'error', text: res.error || 'वेब स्क्रैप त्रुटि' });
+                      }
                     } catch (e: any) {
                       setRssMsg({ type: 'error', text: 'वेब स्क्रैप में त्रुटि: ' + e.message });
                     } finally {
@@ -5965,7 +6044,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               }`}
             >
               <Globe className="w-4 h-4 shrink-0" />
-              <span className="truncate">चैनल वा पोर्टल डायरेक्टरी ({newsPortals.length})</span>
+              <span className="truncate">चैनल एंड पोर्टल डायरेक्टरी ({newsPortals.length})</span>
             </button>
             <button
               type="button"
@@ -6105,7 +6184,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-base sm:text-lg font-black text-white">
-                          चैनल वा पोर्टल डायरेक्टरी
+                          चैनल एंड पोर्टल डायरेक्टरी
                         </h3>
                         <span className="px-2 py-0.5 bg-cyan-600 text-white text-[10px] font-black rounded uppercase">
                           मीडिया पोर्टल्स

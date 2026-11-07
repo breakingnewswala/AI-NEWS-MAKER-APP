@@ -2160,7 +2160,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                             className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
-                            {`विकल्प ${idx + 1}`}
+                            {`विकल्प ${idx + 1}${tierRule.angle ? ` · ${tierRule.angle}` : ''}`}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">

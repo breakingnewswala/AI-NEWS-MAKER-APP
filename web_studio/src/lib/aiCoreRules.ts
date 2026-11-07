@@ -27,42 +27,79 @@ export const FIVE_HEADLINE_TIERS: HeadlineTierRule[] = [
     min: 80,
     max: 95,
     name: 'विकल्प 1',
-    angle: '',
-    description: 'मुख्य समाचार हेडलाइन (80-95 अक्षर)',
+    angle: 'सीधी मुख्य खबर',
+    description: 'सीधी मुख्य खबर (80-95 अक्षर)',
   },
   {
     tier: 2,
     min: 85,
     max: 100,
     name: 'विकल्प 2',
-    angle: '',
-    description: 'तथ्य एवं संदर्भ हेडलाइन (85-100 अक्षर)',
+    angle: 'तथ्य-केंद्रित हेडलाइन',
+    description: 'तथ्य-केंद्रित हेडलाइन (85-100 अक्षर)',
   },
   {
     tier: 3,
     min: 90,
     max: 105,
     name: 'विकल्प 3',
-    angle: '',
-    description: 'विस्तृत विवरण हेडलाइन (90-105 अक्षर)',
+    angle: 'परिणाम-केंद्रित हेडलाइन',
+    description: 'परिणाम-केंद्रित हेडलाइन (90-105 अक्षर)',
   },
   {
     tier: 4,
     min: 95,
     max: 110,
     name: 'विकल्प 4',
-    angle: '',
-    description: 'प्रभाव एवं प्रतिक्रिया हेडलाइन (95-110 अक्षर)',
+    angle: 'प्रमुख विवरण वाली हेडलाइन',
+    description: 'प्रमुख विवरण वाली हेडलाइन (95-110 अक्षर)',
   },
   {
     tier: 5,
     min: 100,
     max: 120,
     name: 'विकल्प 5',
-    angle: '',
-    description: 'समग्र संपादकीय हेडलाइन (100-120 अक्षर)',
+    angle: 'प्रभावशाली समाचार हेडलाइन',
+    description: 'प्रभावशाली समाचार हेडलाइन (100-120 अक्षर)',
   },
 ];
+
+export interface CaptionStyleRule {
+  key: 'detailed' | 'bullet' | 'short';
+  name: string;
+  description: string;
+  paragraphCount?: number;
+  bulletCount?: string;
+  sentenceCount?: string;
+}
+
+export const THREE_CAPTION_STYLES: CaptionStyleRule[] = [
+  {
+    key: 'detailed',
+    name: 'विस्तृत कैप्शन',
+    description: 'लगभग 3 अर्थपूर्ण पैराग्राफ, तथ्य व संदर्भ सहित।',
+    paragraphCount: 3,
+  },
+  {
+    key: 'bullet',
+    name: 'बुलेट कैप्शन',
+    description: 'संक्षिप्त परिचयात्मक वाक्य के बाद 3-5 तथ्यात्मक बुलेट पॉइंट्स (• से शुरू, । पर समाप्त)।',
+    bulletCount: '3-5 बुलेट्स',
+  },
+  {
+    key: 'short',
+    name: 'संक्षिप्त कैप्शन',
+    description: 'लगभग 1-3 संक्षिप्त वाक्य, सटीक व समाचार-केंद्रित।',
+    sentenceCount: '1-3 वाक्य',
+  },
+];
+
+export const LOCKED_HASHTAG_RULES = {
+  firstTag: 'यूज़र का सत्यापित सोशल मीडिया यूज़रनेम (उपलब्ध होने पर)',
+  middleTags: '4-6 समाचार, विषय व स्थान से जुड़े प्रासंगिक हैशटैग',
+  finalTag: '#AINewsMaker',
+  forbiddenTags: ['#BNWTV', '#breakingnewswala'],
+};
 
 /**
  * 2. COIN DEDUCTION MATRIX FOR HEADLINE REGENERATION

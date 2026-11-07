@@ -140,6 +140,50 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
     });
 }
 
+export async function addAdminRssSourceAsync(
+  name: string,
+  url: string,
+  type: 'rss' | 'web',
+  category: string
+): Promise<AdminRssSource> {
+  const newSource: AdminRssSource = {
+    id: `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    name: name.trim() || (type === 'rss' ? 'RSS News Feed' : 'Web Article Link'),
+    url: url.trim(),
+    type,
+    category: category || 'देश',
+    isActive: true,
+    createdAt: Date.now(),
+    addedAt: Date.now(),
+    addedDateFormatted: formatHindiDate(Date.now()),
+    itemsFetchedCount: 0,
+  };
+  const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id && s.url !== newSource.url)];
+  memoryRssSources = list;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(list));
+      window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: list }));
+    } catch {}
+  }
+  try {
+    await fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-role': 'admin',
+        ...getAdminAuthHeaders(),
+      },
+      body: JSON.stringify({ sources: list, replace: true, userRole: 'admin' }),
+    });
+  } catch (err) {
+    console.warn('Failed to persist new RSS source to server:', err);
+  }
+  // Trigger background live sync after persisting
+  syncAllSourcesLive().catch(() => {});
+  return newSource;
+}
+
 export function addAdminRssSource(
   name: string,
   url: string,
@@ -339,12 +383,23 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
     } catch {}
     return [];
   }
+  const activeIds = new Set(activeSources.map((s) => s.id));
+  const activeUrls = new Set(activeSources.map((s) => s.url.trim().toLowerCase()));
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SYNCED_RSS_POSTS);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        return parsed.filter((p: any) => {
+          if (!p || !p.id) return false;
+          if (p.sourceId && activeIds.has(p.sourceId)) return true;
+          if (p.sourceFeedUrl && activeUrls.has(p.sourceFeedUrl.trim().toLowerCase())) return true;
+          const parts = String(p.id).split('-');
+          const srcId = parts.length >= 3 ? parts.slice(1, -1).join('-') : parts[1] || '';
+          if (srcId && (activeIds.has(srcId) || activeIds.has(`src_${srcId}`))) return true;
+          if (p.sourceUrl && activeUrls.has(p.sourceUrl.trim().toLowerCase())) return true;
+          return false;
+        });
       }
     }
   } catch {}
@@ -450,30 +505,130 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
 
 
 
+export async function scrapeAllWebSourcesLive(): Promise<RssSyncResult> {
+  try {
+    const scrapeUrl = getApiUrl('/api/admin/web-scrape');
+    const res = await fetch(scrapeUrl, {
+      method: 'POST',
+      headers: getAdminAuthHeaders(),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      try {
+        const postsUrl = getApiUrl('/api/news-posts?includePending=true');
+        const postsRes = await fetch(postsUrl);
+        if (postsRes.ok) {
+          const rawPosts = await postsRes.json();
+          const postsList = Array.isArray(rawPosts) ? rawPosts : (rawPosts?.posts || []);
+          if (Array.isArray(postsList)) {
+            const rssAndWebOnly = postsList.filter(
+              (p: any) => p && p.id && (String(p.id).startsWith('rss-') || String(p.id).startsWith('web-'))
+            );
+            const syncedWithStatus = rssAndWebOnly.map((p: any) => ({
+              ...p,
+              status: p.status || 'PENDING_APPROVAL',
+            }));
+            setSyncedRssNewsPosts(syncedWithStatus);
+          }
+        }
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: getAdminRssSources() }));
+        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      }
+      return {
+        success: true,
+        totalNewItems: data.newArticlesCount ?? data.count ?? data.totalNewItems ?? 0,
+        totalSourcesSynced: data.totalSourcesSynced,
+        newArticlesCount: data.newArticlesCount,
+        updatedArticlesCount: data.updatedArticlesCount,
+        skippedDuplicatesCount: data.skippedDuplicatesCount,
+        failedSourcesCount: data.failedSourcesCount,
+        durationMs: data.durationMs,
+      };
+    }
+  } catch (err: any) {
+    console.warn('Live Web Scrape error:', err);
+    return { success: false, error: err?.message || 'वेब स्क्रैप त्रुटि' };
+  }
+  return { success: false, error: 'वेब स्क्रैप विफल रहा' };
+}
+
 // =========================================================================
-// SHARED NEWS CHANNELS DIRECTORY (RSS & Web Links Sync)
+// SHARED NEWS CHANNELS DIRECTORY (Single Source of Truth)
 // =========================================================================
 
 const STORAGE_KEY_SAVED_CHANNELS = 'ai_news_admin_channels_list_v1';
 
+export interface CanonicalChannelItem {
+  id: string;
+  name: string;
+  channelName?: string;
+  nameHindi?: string;
+  nameEnglish?: string;
+  url?: string;
+  websiteUrl?: string;
+  category?: string;
+}
+
 export const DEFAULT_PRESET_CHANNELS: string[] = [
-  'आज तक (Aaj Tak)',
-  'एबीपी न्यूज़ (ABP News)',
-  'NDTV इंडिया (NDTV India)',
-  'ज़ी न्यूज़ (Zee News)',
-  'दैनिक भास्कर (Dainik Bhaskar)',
-  'नवभारत टाइम्स (NBT)',
-  'प्रेस सूचना ब्यूरो (PIB)',
-  'न्यूज़18 इंडिया (News18)',
-  'जनसत्ता (Jansatta)',
-  'लाइव हिंदुस्तान (Live Hindustan)',
-  'इंडिया टीवी (India TV)',
-  'रिपब्लिक भारत (Republic Bharat)',
+  'आज तक',
+  'एबीपी न्यूज़',
+  'एनडीटीवी इंडिया',
+  'ज़ी न्यूज़',
+  'दैनिक भास्कर',
+  'नवभारत टाइम्स',
+  'प्रेस सूचना ब्यूरो',
+  'न्यूज़18 इंडिया',
+  'जनसत्ता',
+  'लाइव हिंदुस्तान',
+  'इंडिया टीवी',
+  'रिपब्लिक भारत',
 ];
+
+export async function fetchAdminChannelsFromBackend(): Promise<CanonicalChannelItem[]> {
+  try {
+    const res = await fetch(getApiUrl('/api/admin/channels'));
+    if (res.ok) {
+      const data = await res.json();
+      const serverChannels = (data && data.success && Array.isArray(data.channels)) ? data.channels : [];
+      if (serverChannels.length > 0) {
+        const normalized: CanonicalChannelItem[] = serverChannels.map((c: any) => ({
+          id: c.id,
+          name: (c.channelName || c.name || '').trim(),
+          channelName: (c.channelName || c.name || '').trim(),
+          url: c.websiteUrl || c.url || '',
+          category: c.category || 'breaking',
+          nameHindi: c.nameHindi,
+          nameEnglish: c.nameEnglish,
+        }));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('admin_news_portals_list', JSON.stringify(normalized));
+          localStorage.setItem(STORAGE_KEY_SAVED_CHANNELS, JSON.stringify(normalized.map((n) => n.name)));
+          window.dispatchEvent(new CustomEvent('ai_news_channels_updated', { detail: normalized }));
+          window.dispatchEvent(new CustomEvent('ai_news_saved_channels_updated', { detail: normalized.map((n) => n.name) }));
+        }
+        return normalized;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch channels from backend:', err);
+  }
+  return [];
+}
 
 export function getSavedNewsChannels(): string[] {
   if (typeof window === 'undefined') return DEFAULT_PRESET_CHANNELS;
   try {
+    const rawPortals = localStorage.getItem('admin_news_portals_list');
+    if (rawPortals) {
+      const parsed = JSON.parse(rawPortals);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const names = parsed.map((p: any) => p.name || p.channelName).filter(Boolean);
+        if (names.length > 0) return names;
+      }
+    }
     const raw = localStorage.getItem(STORAGE_KEY_SAVED_CHANNELS);
     if (raw) {
       const parsed = JSON.parse(raw);
