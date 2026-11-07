@@ -237,6 +237,7 @@ interface CardEditorProps {
   onOpenCloudSettings?: () => void;
   onLogout?: () => void;
   autoFillNews?: AutoFillNewsData | null;
+  isMobileLayout?: boolean;
 }
 
 const handleThumbnailImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
@@ -273,6 +274,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   onOpenCloudSettings,
   onLogout,
   autoFillNews,
+  isMobileLayout = false,
 }) => {
   const effectiveAdmin = isEffectiveAdmin(currentUser);
   const effectiveTier = getEffectiveUserTier(currentUser);
@@ -644,8 +646,77 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     }
   };
 
+  const MOBILE_STEP_ORDER = [1, 2, 6, 4, 3, 5, 7];
+
   const renderMobileStepNavigation = (stepNumber: number) => {
     if (mobileViewMode !== 'steps') return null;
+
+    if (isMobileLayout) {
+      const currentIndex = MOBILE_STEP_ORDER.indexOf(stepNumber);
+      const hasPrev = currentIndex > 0;
+      const hasNext = currentIndex < MOBILE_STEP_ORDER.length - 1;
+      const prevStep = hasPrev ? MOBILE_STEP_ORDER[currentIndex - 1] : null;
+      const nextStep = hasNext ? MOBILE_STEP_ORDER[currentIndex + 1] : null;
+
+      return (
+        <div className="pt-3 border-t border-neutral-800 flex items-center justify-between gap-2 text-xs">
+          {hasPrev ? (
+            <button
+              type="button"
+              onClick={() => handleGoToStep(prevStep!)}
+              className="flex-1 py-2 px-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold flex items-center justify-center gap-1 border border-neutral-700/80 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-neutral-400" />
+              <span>पिछला चरण</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex-1 py-2 px-2 rounded-xl bg-neutral-900 text-neutral-600 font-medium flex items-center justify-center gap-1 border border-neutral-800 opacity-40 cursor-not-allowed text-[11px] sm:text-xs"
+            >
+              <ChevronLeft className="w-3.5 h-3.5 text-neutral-600" />
+              <span>पिछला चरण</span>
+            </button>
+          )}
+
+          {/* Center: ऊपर लाइव प्रीव्यू देखें */}
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById('mobile-studio-sticky-header');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="flex-1 py-2 px-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+          >
+            <Eye className="w-3.5 h-3.5 text-amber-400" />
+            <span className="truncate">ऊपर प्रीव्यू देखें</span>
+          </button>
+
+          {/* Right: अगला चरण */}
+          {hasNext ? (
+            <button
+              type="button"
+              onClick={() => handleGoToStep(nextStep!)}
+              className="flex-1 py-2 px-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-neutral-950 font-black flex items-center justify-center gap-1 shadow-md transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+            >
+              <span>अगला चरण</span>
+              <ChevronRight className="w-3.5 h-3.5 text-neutral-950" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleGoToStep(1)}
+              className="flex-1 py-2 px-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black flex items-center justify-center gap-1 shadow-md transition-all cursor-pointer active:scale-95 text-[11px] sm:text-xs"
+            >
+              <span>स्टेप 1 पर जाएं</span>
+              <ChevronRight className="w-3.5 h-3.5 text-white" />
+            </button>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="pt-3 border-t border-neutral-800 flex items-center justify-between gap-2 text-xs">
         {/* Left: पिछला चरण */}
@@ -1352,7 +1423,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Layers className="w-4 h-4 text-yellow-400" />
-            स्टेप 1: टेम्पलेट्स
+            {isMobileLayout ? 'स्टेप 1: टेम्पलेट' : 'स्टेप 1: टेम्पलेट्स'}
           </span>
           <p className="text-[11px] text-neutral-400 mt-0.5">अपनी पसंद का ग्राफिक टेम्पलेट चुनें</p>
           <span className="text-xs text-neutral-400 font-medium">
@@ -1774,13 +1845,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-              स्टेप 2: AI टूल्स (AI न्यूज़ व हेडलाइन ऑटोमेशन)
+              {isMobileLayout ? 'स्टेप 2: AI टूल्स (AI न्यूज़ व हेडलाइन)' : 'स्टेप 2: AI टूल्स (AI न्यूज़ व हेडलाइन ऑटोमेशन)'}
             </span>
           </div>
           <InlineAiNewsTools
             card={card}
             onChange={onChange}
-            onNextStep={() => handleGoToStep(3)}
+            onNextStep={() => handleGoToStep(isMobileLayout ? 6 : 3)}
             onPrevStep={() => handleGoToStep(1)}
             mobileViewMode={mobileViewMode}
             onOpenCloudSettings={onOpenCloudSettings}
@@ -1804,7 +1875,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Type className="w-3.5 h-3.5 text-yellow-400" />
-            स्टेप 3: हेडलाइन
+            {isMobileLayout ? 'स्टेप 5: हेडलाइन' : 'स्टेप 3: हेडलाइन'}
           </span>
           <div className="flex items-center gap-2">
             {(card.frameDesign as string) !== 'jacket-morning' && (
@@ -2757,7 +2828,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
                 <LayoutGrid className="w-3.5 h-3.5 text-yellow-400" />
-                स्टेप 4: फोटो व वॉटरमार्क
+                {isMobileLayout ? 'स्टेप 4: फोटो लेआउट' : 'स्टेप 4: फोटो व वॉटरमार्क'}
               </span>
           <span className="text-xs text-yellow-400 font-medium">
             {(card.frameDesign as string) === 'jacket-morning'
@@ -3692,7 +3763,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <MapPin className="w-4 h-4 text-red-500" />
-            स्टेप 5: स्थान व दिनांक
+            {isMobileLayout ? 'स्टेप 6: स्थान एवं दिनांक' : 'स्टेप 5: स्थान व दिनांक'}
           </span>
           <span className="text-[11px] text-neutral-400">
             स्थान व जिला • दिनांक स्टैम्प
@@ -3874,7 +3945,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
             <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-            स्टेप 6: हेडर और फुटर
+            {isMobileLayout ? 'स्टेप 3: हेडर एवं फुटर' : 'स्टेप 6: हेडर और फुटर'}
           </span>
           <span className="text-xs text-neutral-400 font-medium">
             ब्रांडिंग व फुटर सेटिंग्स
@@ -4788,7 +4859,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div>
               <h2 className="text-sm sm:text-base font-black text-amber-400 flex items-center gap-1.5 font-['Mukta']">
                 <Download className="w-4 h-4 text-amber-400" />
-                <span>स्टेप 7: डाउनलोड व कैप्शन</span>
+                <span>{isMobileLayout ? 'स्टेप 7: कैप्शन (सोशल मीडिया कैप्शन व डाउनलोड)' : 'स्टेप 7: डाउनलोड व कैप्शन'}</span>
               </h2>
               <p className="text-[11px] text-neutral-400 mt-0.5">
                 तैयार ग्राफिक डाउनलोड करें और सोशल मीडिया के लिए कैप्शन कॉपी करें

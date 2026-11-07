@@ -5,7 +5,7 @@ import { CardPreview } from './components/CardPreview';
 import { CardEditor } from './components/CardEditor';
 import { AIGenerateImageModal } from './components/AIGenerateImageModal';
 import { NewsCommandModal } from './components/NewsCommandModal';
-import { CaptionModal } from './components/CaptionModal';
+import { CaptionModal, buildHashtags } from './components/CaptionModal';
 import { LoginModal, ReporterUser } from './components/LoginModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppGuideModal } from './components/AppGuideModal';
@@ -35,6 +35,7 @@ import {
   fitHeadlinesTo5TierRanges,
   cleanHeadlineText,
   formatCaptionVariants,
+  stripAllUrlsAndHyperlinks,
 } from './lib/speakerUtils';
 import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
@@ -52,6 +53,7 @@ import {
   Layers,
   Info,
   Lock,
+  Loader2,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -152,6 +154,16 @@ export const STUDIO_STEPS = [
   { step: 6, id: 'step-header-footer', label: 'हेडर व फुटर', name: 'हेडर व फुटर', icon: '📜', title: 'हेडर व फुटर' },
   { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
 ];
+
+export const MOBILE_STUDIO_STEPS = [
+  { mobileStep: 1, internalStep: 1, id: 'step-frame', label: 'टेम्पलेट', key: 'step1' },
+  { mobileStep: 2, internalStep: 2, id: 'step-ai', label: 'AI टूल्स', key: 'step2' },
+  { mobileStep: 3, internalStep: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', key: 'step6' },
+  { mobileStep: 4, internalStep: 4, id: 'step-photo', label: 'फोटो लेआउट', key: 'step4' },
+  { mobileStep: 5, internalStep: 3, id: 'step-headline', label: 'हेडलाइन', key: 'step3' },
+  { mobileStep: 6, internalStep: 5, id: 'step-location', label: 'स्थान एवं दिनांक', key: 'step5' },
+  { mobileStep: 7, internalStep: 7, id: 'step-download', label: 'कैप्शन', key: 'step7' },
+] as const;
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
   fullName: 'मुख्य संपादक (Master Admin)',
@@ -1015,7 +1027,45 @@ export default function App() {
 
   // Mobile editor active step state
   const [activeStep, setActiveStep] = useState<number>(1);
+  const [activeMobileStep, setActiveMobileStep] = useState<number>(1);
+  const [mobileCaptionCopied, setMobileCaptionCopied] = useState<boolean>(false);
   const [mobileViewMode, setMobileViewMode] = useState<'steps' | 'all'>('steps');
+
+  // Synchronize mobile active step with internal activeStep
+  useEffect(() => {
+    const match = MOBILE_STUDIO_STEPS.find((s) => s.internalStep === activeStep);
+    if (match) {
+      setActiveMobileStep(match.mobileStep);
+    }
+  }, [activeStep]);
+
+  // Direct completed caption copy for mobile quick action toolbar
+  const handleCopyCompletedCaption = async () => {
+    try {
+      const cleanHeadline = (card.headline || '').replace(/\[\/?yellow\]/g, '').trim();
+      let newsStory = '';
+      if (card.summary && card.summary.trim()) {
+        let rawSummary = stripAllUrlsAndHyperlinks(card.summary.trim());
+        const tagMatch = rawSummary.match(/(#[a-zA-Z0-9_\u0900-\u097F]+\s*)+$/);
+        if (tagMatch) {
+          rawSummary = rawSummary.substring(0, tagMatch.index).trim();
+        }
+        newsStory = rawSummary;
+      } else {
+        newsStory = cleanHeadline;
+      }
+      const tagsToUse = buildHashtags(card.location, '', card);
+      const fullCaption = `${cleanHeadline}\n\n${newsStory}\n\n${tagsToUse}`.trim();
+
+      await navigator.clipboard.writeText(fullCaption);
+      setMobileCaptionCopied(true);
+      showToast('सोशल मीडिया कैप्शन क्लिपबोर्ड में कॉपी हो गया! ✓');
+      setTimeout(() => setMobileCaptionCopied(false), 2500);
+    } catch (err) {
+      console.error('Caption copy failed:', err);
+      showToast('कैप्शन कॉपी करने में त्रुटि');
+    }
+  };
 
   // Header visibility on scroll for maximum editing space on mobile
   const [isHeaderVisible, setIsHeaderVisible] = useState<boolean>(true);
@@ -3468,68 +3518,113 @@ export default function App() {
           ) : (
             <>
               {/* ============================================================== */}
-              {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (lg:hidden) */}
+              {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (xl:hidden) */}
               {/* ============================================================== */}
-              <div className="lg:hidden w-full flex flex-col min-h-screen">
-                {/* 🔒 STICKY / FROZEN STUDIO HEADER (70/30 Preview & Steps + Live Preview Action Strip) */}
+              <div className="xl:hidden w-full flex flex-col min-h-screen">
+                {/* 🔒 STICKY / FROZEN STUDIO HEADER (Row 1: Split Preview + Steps | Row 2: 4 Quick Actions) */}
                 <div
                   id="mobile-studio-sticky-header"
-                  className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2.5 pt-2 pb-1.5 transition-all"
+                  className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2 sm:px-4 pt-2 pb-1.5 transition-all"
                 >
-                  {/* Row 2: Balanced 70/30 Split (Left ~70%: 4:5 Preview | Right ~30%: 7 Editor Steps) */}
-                  <div className="flex flex-row items-stretch gap-2.5 max-w-md mx-auto w-full">
-                    {/* Left Column: ~70% width for 4:5 Graphic Preview */}
-                    <div className="w-[69%] min-w-0 flex flex-col justify-start">
-                      <div className="text-[9px] sm:text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1 truncate">
-                        4:5 PREVIEW SPACE — 70% WIDTH
+                  {/* Row 1: Split Live Preview & Vertical Step Menu (Mobile: 60:40 | Tablet: 65:35) */}
+                  <div className="flex flex-row items-stretch gap-2 sm:gap-3 md:gap-4 w-full max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
+                    {/* Left Column: 60% (Mobile) / 65% (Tablet) Live Preview */}
+                    <div className="w-[60%] md:w-[65%] min-w-0 flex flex-col justify-start">
+                      <div className="flex items-center justify-between px-1 mb-1">
+                        <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] md:text-xs font-black text-amber-400 uppercase tracking-wider truncate">
+                          <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse motion-reduce:animate-none shrink-0" />
+                          <span>लाइव प्रीव्यू</span>
+                          <span className="hidden sm:inline text-slate-400 font-normal">({card.aspectRatio || '4:5'})</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowSafeZone(!showSafeZone)}
+                          title="सेफ-ज़ोन गाइड"
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold transition-all cursor-pointer ${
+                            showSafeZone
+                              ? 'bg-sky-500/30 border border-sky-400 text-sky-200'
+                              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+                          }`}
+                        >
+                          <Layers className="w-2.5 h-2.5 text-sky-400" />
+                          <span>{showSafeZone ? 'सेफ-ज़ोन' : 'गाइड'}</span>
+                        </button>
                       </div>
-                      <div className="w-full aspect-[4/5] max-h-[300px] rounded-xl sm:rounded-2xl overflow-hidden ring-1 ring-slate-800 shadow-2xl bg-black flex items-center justify-center relative">
-                        <CardPreview
-                          card={card}
-                          className="w-full h-full"
-                          showSafeZone={showSafeZone}
-                          onChange={handleUpdateCard}
-                        />
+
+                      <div className="w-full flex items-center justify-center p-1 sm:p-1.5 bg-slate-950/80 rounded-xl sm:rounded-2xl border border-slate-800 shadow-2xl">
+                        <div className={`w-full max-h-[220px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[420px] lg:max-h-[480px] ${
+                          card.aspectRatio === '9:16' ? 'aspect-[9/16]' : card.aspectRatio === '1:1' ? 'aspect-square' : 'aspect-[4/5]'
+                        } rounded-lg sm:rounded-xl overflow-hidden shadow-2xl ring-1 ring-slate-800 flex items-center justify-center bg-black relative`}>
+                          <CardPreview
+                            card={card}
+                            className="w-full h-full object-contain"
+                            showSafeZone={showSafeZone}
+                            onChange={handleUpdateCard}
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    {/* Right Column: ~30% width for 7 Editor Steps (Text only, exact order) */}
-                    <div className="w-[31%] min-w-0 flex flex-col justify-between py-0.5">
-                      <div className="text-[11px] sm:text-xs font-black text-amber-400 tracking-wide mb-1 text-center truncate flex items-center justify-center gap-1">
-                        <span>एडिटर स्टेप्स</span>
-                        <span className="text-[9.5px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
+                    {/* Right Column: 40% (Mobile) / 35% (Tablet) Vertical Step Menu */}
+                    <div className="w-[40%] md:w-[35%] min-w-0 flex flex-col justify-between py-0.5">
+                      <div className="flex items-center justify-between px-1 mb-1">
+                        <span className="text-[10px] sm:text-xs font-black text-amber-400 tracking-wide truncate">
+                          एडिटर स्टेप्स
+                        </span>
+                        <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold shrink-0 ${
+                          calculateEditorProgress(card, activeStep).is100Percent
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        }`}>
                           {calculateEditorProgress(card, activeStep).percentage}%
                         </span>
                       </div>
-                      <div className="flex-1 flex flex-col justify-between gap-1">
-                        {[
-                          { step: 1, label: 'टेम्पलेट्स' },
-                          { step: 2, label: 'एआई टूल्स' },
-                          { step: 3, label: 'हेडलाइन' },
-                          { step: 4, label: 'फोटो व वॉटरमार्क' },
-                          { step: 5, label: 'स्थान व दिनांक' },
-                          { step: 6, label: 'हेडर व फुटर' },
-                          { step: 7, label: 'डाउनलोड व कैप्शन' },
-                        ].map((s) => {
-                          const isActive = activeStep === s.step;
+
+                      <div className="flex-1 flex flex-col justify-between gap-1 sm:gap-1.5">
+                        {MOBILE_STUDIO_STEPS.map((s) => {
+                          const isCurrentActive = activeMobileStep === s.mobileStep;
+                          const stepProgressKey = s.key as keyof ReturnType<typeof calculateEditorProgress>;
+                          const isDone = Boolean(calculateEditorProgress(card, activeStep)[stepProgressKey]);
+
                           return (
                             <button
-                              key={s.step}
+                              key={s.mobileStep}
                               type="button"
                               onClick={() => {
-                                setActiveStep(s.step);
+                                setActiveMobileStep(s.mobileStep);
+                                setActiveStep(s.internalStep);
                                 const el = document.getElementById('mobile-active-step-commands');
                                 if (el) {
                                   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                 }
                               }}
-                              className={`w-full py-1.5 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all text-center truncate cursor-pointer select-none ${
-                                isActive
-                                  ? 'bg-gradient-to-r from-yellow-400 to-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
-                                  : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 border border-slate-800/80'
+                              className={`w-full py-1 sm:py-1.5 md:py-2 px-1.5 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
+                                isCurrentActive
+                                  ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black shadow-md border-amber-300 ring-1 ring-amber-300'
+                                  : 'bg-slate-900/90 text-slate-200 hover:bg-slate-800 border border-slate-800/90 hover:text-white'
                               }`}
                             >
-                              {s.label}
+                              <span className="truncate pr-1 text-left flex items-center gap-1">
+                                <span className="opacity-70 text-[9px] sm:text-[10px] font-mono">{s.mobileStep}.</span>
+                                <span className="truncate">{s.label}</span>
+                              </span>
+                              <span className="shrink-0 ml-1">
+                                {isDone ? (
+                                  <span className={`inline-flex items-center justify-center w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full ${
+                                    isCurrentActive ? 'bg-slate-950 text-emerald-400' : 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/40'
+                                  }`}>
+                                    <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />
+                                  </span>
+                                ) : isCurrentActive ? (
+                                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 sm:w-4 sm:h-4">
+                                    <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse" />
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 sm:w-4 sm:h-4">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                                  </span>
+                                )}
+                              </span>
                             </button>
                           );
                         })}
@@ -3537,41 +3632,141 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Row 3: Live Preview Action Strip */}
-                  <div className="flex items-center justify-between w-full max-w-md mx-auto pt-2 pb-0.5 border-t border-slate-800/80 mt-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse motion-reduce:animate-none shadow-sm" />
-                      <span className="text-[10px] sm:text-[11px] font-black tracking-wider uppercase text-slate-200">
-                        LIVE PREVIEW CANVAS
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
+                  {/* Row 2: Four-Button Quick Action Toolbar */}
+                  <div className="w-full max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto pt-2 pb-1 border-t border-slate-800/80 mt-1.5">
+                    <div className="grid grid-cols-4 gap-1 sm:gap-2">
+                      {/* 1. डाउनलोड (Download JPG) - Gated until 100% completion */}
+                      {(() => {
+                        const editorProgress = calculateEditorProgress(card, activeStep);
+                        const isEnabled = editorProgress.is100Percent;
+                        return (
+                          <button
+                            type="button"
+                            disabled={!isEnabled || downloading || (isActionLocked && !isCurrentCardBonus)}
+                            onClick={() => {
+                              if (!isEnabled) {
+                                showToast(`⚠️ डाउनलोड के लिए कृपया सभी 7 स्टेप पूरे करें (${editorProgress.percentage}% पूर्ण)`);
+                                return;
+                              }
+                              if (isActionLocked && !isCurrentCardBonus) {
+                                showToast('⚠️ 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कृपया प्लान अपग्रेड करें।');
+                                setCurrentTab('profile');
+                                return;
+                              }
+                              handleDownload('jpeg');
+                            }}
+                            title={
+                              !isEnabled
+                                ? `डाउनलोड लॉक है — कृपया सभी 7 स्टेप्स पूरे करें (${editorProgress.missingSteps.join(', ')})`
+                                : isActionLocked && !isCurrentCardBonus
+                                ? 'ट्रायल समाप्त — डाउनलोड लॉक'
+                                : 'फाइनल JPG ग्राफिक डाउनलोड करें'
+                            }
+                            className={`py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black flex items-center justify-center gap-1 transition-all ${
+                              downloading
+                                ? 'bg-amber-500/30 text-amber-200 border border-amber-400/50 cursor-wait'
+                                : isEnabled && (!isActionLocked || isCurrentCardBonus)
+                                ? 'bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-300 hover:to-green-400 text-slate-950 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-300 active:scale-95 cursor-pointer'
+                                : 'bg-slate-900/60 text-slate-500 border border-slate-800/60 cursor-not-allowed opacity-60'
+                            }`}
+                          >
+                            {downloading ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300" />
+                            ) : !isEnabled ? (
+                              <Lock className="w-3 h-3 text-slate-500" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5 text-slate-950" />
+                            )}
+                            <span className="truncate">
+                              {downloading ? (downloadProgressText || 'डाउनलोड...') : 'डाउनलोड'}
+                            </span>
+                          </button>
+                        );
+                      })()}
+
+                      {/* 2. कैप्शन (Copy completed caption) - Gated until valid caption */}
+                      {(() => {
+                        const hasValidCaption = Boolean(
+                          (card.summary && card.summary.trim().length > 10) ||
+                          (card.headline && card.headline.trim().length >= 20)
+                        );
+                        return (
+                          <button
+                            type="button"
+                            disabled={!hasValidCaption}
+                            onClick={handleCopyCompletedCaption}
+                            title={
+                              hasValidCaption
+                                ? 'सोशल मीडिया कैप्शन कॉपी करें'
+                                : 'कैप्शन लॉक है — कृपया AI टूल्स या हेडलाइन दर्ज करें'
+                            }
+                            className={`py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                              mobileCaptionCopied
+                                ? 'bg-emerald-500 text-slate-950 font-black ring-1 ring-emerald-300'
+                                : hasValidCaption
+                                ? 'bg-slate-900 hover:bg-slate-850 text-sky-300 hover:text-white border border-sky-500/40 hover:border-sky-400 active:scale-95 cursor-pointer'
+                                : 'bg-slate-900/60 text-slate-500 border border-slate-800/60 cursor-not-allowed opacity-60'
+                            }`}
+                          >
+                            {!hasValidCaption ? (
+                              <Lock className="w-3 h-3 text-slate-500" />
+                            ) : mobileCaptionCopied ? (
+                              <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5 text-sky-400" />
+                            )}
+                            <span className="truncate">
+                              {mobileCaptionCopied ? 'कॉपी हुआ!' : 'कैप्शन'}
+                            </span>
+                          </button>
+                        );
+                      })()}
+
+                      {/* 3. रिफ्रेश (Start a fresh graphic workflow) */}
                       <button
                         type="button"
-                        onClick={handleSaveDraft}
-                        className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-bold rounded-lg border border-amber-500/40 flex items-center gap-1 cursor-pointer transition active:scale-95"
-                        title="ड्राफ्ट सेव करें"
-                      >
-                        <Bookmark className="w-3.5 h-3.5 text-amber-400" />
-                        <span>DRAFT</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleResetCard}
-                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg border border-slate-700 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                        onClick={() => {
+                          const confirmReset = window.confirm(
+                            'क्या आप नया सत्र शुरू करना चाहते हैं? सभी असहेजे गए बदलाव रीसेट हो जाएंगे।'
+                          );
+                          if (confirmReset) {
+                            handleResetCard();
+                            setActiveMobileStep(1);
+                            setActiveStep(1);
+                          }
+                        }}
                         title="नया सत्र / रीसेट"
+                        className="py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center gap-1 active:scale-95 cursor-pointer transition-all"
                       >
-                        <RefreshCw className="w-3.5 h-3.5 text-blue-400" />
-                        <span>REFRESH</span>
+                        <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="truncate">रिफ्रेश</span>
+                      </button>
+
+                      {/* 4. AI टूल्स (Open Step 2) */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveMobileStep(2);
+                          setActiveStep(2);
+                          const el = document.getElementById('mobile-active-step-commands');
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }
+                        }}
+                        title="एआई टूल्स खोलें (स्टेप 2)"
+                        className="py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold bg-gradient-to-r from-purple-900/60 to-indigo-900/60 hover:from-purple-800/70 hover:to-indigo-800/70 text-purple-200 border border-purple-500/40 flex items-center justify-center gap-1 active:scale-95 cursor-pointer transition-all"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                        <span className="truncate">AI टूल्स</span>
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* 4. Selected Step Editor Content Panel - Scrolls Underneath the Sticky Upper Area */}
+                {/* Row 3: Full Active Step Editor Panel - Scrolls Underneath the Sticky Upper Area */}
                 <div
                   id="mobile-active-step-commands"
-                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 pb-36 overflow-y-auto max-w-md mx-auto"
+                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 md:p-6 pb-36 overflow-y-auto max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto"
                 >
                   <CardEditor
                     card={card}
@@ -3586,21 +3781,28 @@ export default function App() {
                     onDownload={() => handleDownload('jpeg')}
                     downloading={downloading}
                     activeStep={activeStep}
-                    onStepChange={setActiveStep}
+                    onStepChange={(newStep) => {
+                      const found = MOBILE_STUDIO_STEPS.find((s) => s.internalStep === newStep);
+                      if (found) {
+                        setActiveMobileStep(found.mobileStep);
+                      }
+                      setActiveStep(newStep);
+                    }}
                     currentUser={currentUser}
                     mobileViewMode="steps"
                     onToggleMobileViewMode={setMobileViewMode}
                     onOpenCloudSettings={() => setIsCloudModalOpen(true)}
                     onLogout={handleLogout}
                     autoFillNews={autoFillNews}
+                    isMobileLayout={true}
                   />
                 </div>
               </div>
 
               {/* ==================================================
-                  2. DESKTOP / PC FULL-SCREEN WEB LAYOUT (>= 1024px)
+                  2. DESKTOP / PC FULL-SCREEN WEB LAYOUT (>= 1280px)
                   ================================================== */}
-<div className="hidden lg:flex w-full flex-row items-start gap-4 xl:gap-6">
+              <div className="hidden xl:flex w-full flex-row items-start gap-4 xl:gap-6">
                 {/* ==================================================
                     LEFT COLUMN: LOCKED / FREEZE (Larger Live Preview + 3 Action Buttons below)
                     ================================================== */}
