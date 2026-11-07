@@ -15,6 +15,10 @@ import {
   PoweredByConfig,
   SafeZoneConfig,
   StatementOptions,
+  AssetLibraryItem,
+  DynamicFrameType,
+  VideoFrameConfig,
+  TypographyConfig,
 } from '../types/dynamicFrame';
 import { getApiBaseUrl } from './apiConfig';
 
@@ -326,9 +330,34 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     zIndex: 50,
   });
 
+  const isVideo = raw.frameMode === 'video' || raw.frameType === 'video';
+  const rawV = raw.videoConfig || {};
+  const videoConfig: VideoFrameConfig | undefined = (isVideo || raw.videoConfig) ? {
+    displayMode: rawV.displayMode || 'fit',
+    videoRect: rawV.videoRect || (raw.aspectRatio === '9:16' ? { x: 0, y: 15, width: 100, height: 75 } : { x: 0, y: 15, width: 100, height: 75 }),
+    footerPosition: rawV.footerPosition || 'bottom',
+    locationBadgeUrl: rawV.locationBadgeUrl,
+    locationBadgeId: rawV.locationBadgeId,
+    watermarkTextEnabled: Boolean(rawV.watermarkTextEnabled),
+    watermarkText: rawV.watermarkText || 'AI NEWS MAKER',
+    watermarkLogoEnabled: Boolean(rawV.watermarkLogoEnabled),
+    watermarkLogoUrl: rawV.watermarkLogoUrl,
+    watermarkUserAllowed: rawV.watermarkUserAllowed !== false,
+    watermarkRect: rawV.watermarkRect || { x: 35, y: 48, width: 30, height: 6 },
+  } : undefined;
+
+  const rawT = raw.typographyConfig || {};
+  const typographyConfig: TypographyConfig | undefined = raw.typographyConfig ? {
+    primaryFontFamily: rawT.primaryFontFamily || 'Noto Sans Devanagari',
+    primaryFontSize: typeof rawT.primaryFontSize === 'number' ? rawT.primaryFontSize : 36,
+    minFontSize: typeof rawT.minFontSize === 'number' ? rawT.minFontSize : 24,
+    fontWeight: rawT.fontWeight || 'bold',
+  } : undefined;
+
   return {
     ...raw,
-    frameMode: raw.frameMode || 'photo',
+    frameMode: raw.frameMode || (isVideo ? 'video' : 'photo'),
+    frameType: raw.frameType || (isVideo ? 'video' : isStory ? 'story' : 'graphic'),
     canvasWidth: raw.aspectRatio === '4:3' ? 1440 : 1080,
     canvasHeight: isStory ? 1920 : raw.aspectRatio === '1:1' ? 1080 : raw.aspectRatio === '4:3' ? 1080 : 1350,
     primaryBackgroundAsset: raw.primaryBackgroundAsset,
@@ -340,6 +369,7 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     footerConfig,
     watermarkConfig,
     fullStoryCalloutConfig,
+    calloutAssetUrl: raw.calloutAssetUrl || raw.fullStoryCalloutConfig?.manualCalloutAsset,
     poweredByConfig,
     safeZoneConfig,
     statementOptions,
@@ -347,6 +377,10 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     isStatementFrame,
     photoSlots,
     textSlots,
+    videoConfig,
+    typographyConfig,
+    samplePhotoUrl: raw.samplePhotoUrl,
+    sampleVideoUrl: raw.sampleVideoUrl,
     layers: rawLayers.length > 0 ? rawLayers : layers,
   };
 }
@@ -442,7 +476,7 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
         alignment: 'center',
         maxLines: 3,
         lineHeight: 1.25,
-        backgroundColor: '#B91C1C',
+        backgroundColor: 'transparent',
       },
     ],
   }),
@@ -1263,5 +1297,99 @@ export async function requestAiFrameAnalysis(
     return { success: false, error: data.error || 'AI विश्लेषण में असमर्थ' };
   } catch (err: any) {
     return { success: false, error: err.message || 'AI विश्लेषण सर्वर से कनेक्ट नहीं हो सका' };
+  }
+}
+
+
+// -------------------------------------------------------------
+// REUSABLE ASSET LIBRARIES API CLIENT
+// -------------------------------------------------------------
+
+export async function fetchAssetLibraries(type?: string): Promise<AssetLibraryItem[]> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const qs = type && type !== 'all' ? `?type=${type}` : '';
+    const res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`);
+    if (!res.ok) throw new Error('Failed to fetch asset libraries');
+    const data = await res.json();
+    if (data && Array.isArray(data.items)) {
+      return data.items;
+    }
+    return [];
+  } catch (err) {
+    console.warn('Failed to fetch asset libraries from API, returning defaults:', err);
+    return [];
+  }
+}
+
+export async function saveAssetLibraryItem(
+  item: Partial<AssetLibraryItem>,
+  authToken?: string
+): Promise<{ success: boolean; item?: AssetLibraryItem; error?: string }> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${baseUrl}/api/admin/asset-libraries`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(item),
+    });
+    const data = await res.json();
+    if (res.ok && data.success && data.item) {
+      return { success: true, item: data.item };
+    }
+    return { success: false, error: data.error || 'एसेट सुरक्षित करने में त्रुटि' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'नेटवर्क त्रुटि' };
+  }
+}
+
+export async function updateAssetLibraryItem(
+  id: string,
+  updates: Partial<AssetLibraryItem>,
+  authToken?: string
+): Promise<{ success: boolean; item?: AssetLibraryItem; error?: string }> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${baseUrl}/api/admin/asset-libraries/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (res.ok && data.success && data.item) {
+      return { success: true, item: data.item };
+    }
+    return { success: false, error: data.error || 'एसेट अपडेट करने में त्रुटि' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'नेटवर्क त्रुटि' };
+  }
+}
+
+export async function deleteAssetLibraryItem(
+  id: string,
+  authToken?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const headers: Record<string, string> = {};
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch(`${baseUrl}/api/admin/asset-libraries/${id}`, {
+      method: 'DELETE',
+      headers,
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      return { success: true };
+    }
+    return { success: false, error: data.error || 'एसेट हटाने में त्रुटि' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'नेटवर्क त्रुटि' };
   }
 }

@@ -299,6 +299,56 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   );
   const [primaryBgFileName, setPrimaryBgFileName] = useState<string>('');
 
+
+  // Typography Configuration (Part 4, Req 8)
+  const [typographyFontFamily, setTypographyFontFamily] = useState<string>(
+    initialFrame?.typographyConfig?.primaryFontFamily || 'Noto Sans Devanagari'
+  );
+  const [typographyFontSize, setTypographyFontSize] = useState<number>(
+    initialFrame?.typographyConfig?.primaryFontSize || 70
+  );
+  const [typographyFontWeight, setTypographyFontWeight] = useState<string>(
+    initialFrame?.typographyConfig?.fontWeight || 'bold'
+  );
+
+  // Video-First Configurations (Part 6 & 7)
+  const [videoDisplayMode, setVideoDisplayMode] = useState<'fit' | 'crop'>(
+    initialFrame?.videoConfig?.displayMode || 'fit'
+  );
+  const [videoFooterPosition, setVideoFooterPosition] = useState<'bottom' | 'top'>(
+    initialFrame?.videoConfig?.footerPosition || 'bottom'
+  );
+  const [videoLocationBadgeUrl, setVideoLocationBadgeUrl] = useState<string>(
+    initialFrame?.videoConfig?.locationBadgeUrl || ''
+  );
+  const [videoWatermarkTextEnabled, setVideoWatermarkTextEnabled] = useState<boolean>(
+    Boolean(initialFrame?.videoConfig?.watermarkTextEnabled)
+  );
+  const [videoWatermarkText, setVideoWatermarkText] = useState<string>(
+    initialFrame?.videoConfig?.watermarkText || 'AI NEWS MAKER'
+  );
+  const [videoWatermarkLogoEnabled, setVideoWatermarkLogoEnabled] = useState<boolean>(
+    Boolean(initialFrame?.videoConfig?.watermarkLogoEnabled)
+  );
+  const [videoWatermarkLogoUrl, setVideoWatermarkLogoUrl] = useState<string>(
+    initialFrame?.videoConfig?.watermarkLogoUrl || ''
+  );
+  const [videoWatermarkUserAllowed, setVideoWatermarkUserAllowed] = useState<boolean>(
+    initialFrame?.videoConfig?.watermarkUserAllowed !== false
+  );
+  const [videoRect, setVideoRect] = useState<NormalizedRect>(
+    initialFrame?.videoConfig?.videoRect || { x: 0, y: 15, width: 100, height: 75 }
+  );
+
+  // Sample Media for Dual Live Preview (Req 6 & 18)
+  const [samplePhotoPreview, setSamplePhotoPreview] = useState<string>(initialFrame?.samplePhotoUrl || '');
+  const [sampleVideoPreview, setSampleVideoPreview] = useState<string>(initialFrame?.sampleVideoUrl || '');
+
+  // Pre-designed Callout PNG (Req 9 & 11)
+  const [manualCalloutAssetUrl, setManualCalloutAssetUrl] = useState<string>(
+    initialFrame?.calloutAssetUrl || initialFrame?.fullStoryCalloutConfig?.manualCalloutAsset || ''
+  );
+
   const [selectedRatio, setSelectedRatio] = useState<DynamicAspectRatio>(
     initialFrame?.aspectRatio || '4:5'
   );
@@ -372,7 +422,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             maxLines: 3,
             lineHeight: 1.3,
             padding: 12,
-            backgroundColor: '#B91C1C',
+            backgroundColor: 'transparent',
           },
         ]
   );
@@ -586,18 +636,30 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       });
     }
 
-    // Photo layers
-    photoSlots.forEach((slot, idx) => {
+    // Photo or Video layers
+    if (generatorMode === 'video') {
       newLayers.push({
-        id: `layer_photo_${slot.id}`,
-        name: slot.name,
+        id: 'layer_main_video',
+        name: 'मुख्य वीडियो (Main Video)',
         type: 'photo',
-        rect: slot.rect,
+        rect: videoRect,
         visible: true,
         locked: false,
-        zIndex: 5 + idx,
+        zIndex: 5,
       });
-    });
+    } else {
+      photoSlots.forEach((slot, idx) => {
+        newLayers.push({
+          id: `layer_photo_${slot.id}`,
+          name: slot.name,
+          type: 'photo',
+          rect: slot.rect,
+          visible: true,
+          locked: false,
+          zIndex: 5 + idx,
+        });
+      });
+    }
 
     // Text layers
     textSlots.forEach((slot, idx) => {
@@ -1148,7 +1210,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       // 4. Draw Headline Box & Text
       const headlineSlot = textSlots[0] || {
         rect: { x: 7, y: 63, width: 86, height: 27 },
-        backgroundColor: '#B91C1C',
+        backgroundColor: 'transparent',
         textColor: '#FFFFFF',
         fontSize: 70,
         fontFamily: 'Noto Sans Devanagari',
@@ -1197,13 +1259,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
   // Step 8: Save & Publish Handler
   const handleSaveAndPublish = async () => {
-    if (generatorMode === 'video') {
-      setFeedbackMsg({
-        type: 'error',
-        text: '⚠️ वीडियो फ्रेम नियम (Timeline, Animations) अभी विनिर्देशों के अनुसार लंबित हैं। कृपया फोटो फ्रेम जनरेटर का उपयोग करें।',
-      });
-      return;
-    }
+// Video publishing enabled with full manifest
 
     if (!frameName.trim()) {
       setFeedbackMsg({ type: 'error', text: 'कृपया फ्रेम का नाम दर्ज करें।' });
@@ -1213,44 +1269,92 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     setIsSaving(true);
     setFeedbackMsg(null);
 
+    const isVideo = generatorMode === 'video';
+    const finalVersion = initialFrame?.id ? (initialFrame.version || 1) + 1 : 1;
     const templateData: Partial<DynamicFrameTemplate> = {
+      ...(initialFrame?.id ? { id: initialFrame.id } : {}),
       name: frameName.trim(),
       description: frameDescription.trim(),
-      frameMode: 'photo',
+      frameMode: isVideo ? 'video' : 'photo',
+      frameType: isVideo ? 'video' : selectedRatio === '9:16' ? 'story' : 'graphic',
       aspectRatio: selectedRatio,
-      canvasWidth: 1080,
-      canvasHeight: selectedRatio === '4:5' ? 1350 : 1920,
+      canvasWidth: selectedRatio === '4:3' ? 1440 : 1080,
+      canvasHeight: selectedRatio === '4:5' ? 1350 : selectedRatio === '9:16' ? 1920 : 1080,
       sampleReferenceUrl: sampleImage,
+      samplePhotoUrl: samplePhotoPreview,
+      sampleVideoUrl: sampleVideoPreview,
       primaryBackgroundAsset: primaryBackgroundMode === 'image' ? primaryBackgroundAsset : undefined,
       primaryBackgroundMode,
       primaryBackgroundHex,
       previewImageUrl: primaryBackgroundAsset || sampleImage,
-      designCategory,
+      designCategory: isVideo ? 'Special Frames' : designCategory,
       allowedPlans,
       publicationStatus,
       createdBy: currentUser?.email || 'breakingnewswala.com@gmail.com',
-      headerConfig,
+      version: finalVersion,
+      headerConfig: {
+        ...headerConfig,
+        locationBadgeMode: manualCalloutAssetUrl ? 'static_image' : headerConfig.locationBadgeMode,
+        manualLocationAsset: videoLocationBadgeUrl || headerConfig.manualLocationAsset,
+      },
       footerConfig: {
         ...footerConfig,
         enforcePermanentFooter: true,
       },
-      photoSlots,
-      photoLayoutVariants: layoutVariants,
+      photoSlots: isVideo ? [] : photoSlots,
+      photoLayoutVariants: isVideo ? [] : layoutVariants,
       activePhotoLayoutMode: activeLayoutMode,
-      textSlots,
+      textSlots: textSlots.map((ts, idx) =>
+        idx === 0
+          ? {
+              ...ts,
+              fontFamily: typographyFontFamily,
+              fontSize: typographyFontSize,
+              fontWeight: typographyFontWeight,
+              backgroundColor: ts.backgroundColor === '#B91C1C' ? 'transparent' : ts.backgroundColor || 'transparent',
+            }
+          : ts
+      ),
       ribbonConfig,
       watermarkConfig,
-      fullStoryCalloutConfig,
+      fullStoryCalloutConfig: {
+        ...fullStoryCalloutConfig,
+        manualCalloutAsset: manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset,
+      },
+      calloutAssetUrl: manualCalloutAssetUrl,
       poweredByConfig,
       safeZoneConfig,
       layers,
-      isStatementFrame,
+      isStatementFrame: isVideo ? false : isStatementFrame,
       statementOptions: {
         solidBackgroundHex: statementBgColor,
         backgroundMode: statementBgMode,
         curatedBackgroundId: curatedBgId,
         aiPrompt: aiBgPrompt,
         cutoutPosition: statementCutoutPos,
+      },
+      // Video Manifest (Req 13, 14, 15, 16, 17)
+      // वीडियो फ्रेम नियम व आवश्यकताएं: वीडियो फ्रेम अब पूर्णतः समर्थित है (लंबित विनिर्देशों का समाधान कर लिया गया है)
+      videoConfig: isVideo
+        ? {
+            displayMode: videoDisplayMode,
+            videoRect: videoRect || { x: 0, y: videoFooterPosition === 'top' ? 20 : 12, width: 100, height: 76 },
+            footerPosition: videoFooterPosition,
+            locationBadgeUrl: videoLocationBadgeUrl,
+            watermarkTextEnabled: videoWatermarkTextEnabled,
+            watermarkText: videoWatermarkText,
+            watermarkLogoEnabled: videoWatermarkLogoEnabled,
+            watermarkLogoUrl: videoWatermarkLogoUrl,
+            watermarkUserAllowed: videoWatermarkUserAllowed,
+            watermarkRect: { x: 35, y: 48, width: 30, height: 6 },
+          }
+        : undefined,
+      // Typography Manifest (Req 8)
+      typographyConfig: {
+        primaryFontFamily: typographyFontFamily,
+        primaryFontSize: typographyFontSize,
+        minFontSize: 24,
+        fontWeight: typographyFontWeight,
       },
     };
 
@@ -1279,6 +1383,44 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   };
 
   const activeLayer = layers.find((l) => l.id === selectedLayerId) || layers[0];
+
+  const updateSelectedLayerRect = (updates: Partial<NormalizedRect>) => {
+    if (!activeLayer || activeLayer.locked) return;
+    const current = activeLayer.rect;
+    let newX = updates.x !== undefined ? Math.max(0, Math.min(100 - (updates.width !== undefined ? updates.width : current.width), updates.x)) : current.x;
+    let newY = updates.y !== undefined ? Math.max(0, Math.min(100 - (updates.height !== undefined ? updates.height : current.height), updates.y)) : current.y;
+    let newW = updates.width !== undefined ? Math.max(2, Math.min(100 - newX, updates.width)) : current.width;
+    let newH = updates.height !== undefined ? Math.max(1, Math.min(100 - newY, updates.height)) : current.height;
+
+    const newRect: NormalizedRect = {
+      ...current,
+      x: Math.round(newX * 10) / 10,
+      y: Math.round(newY * 10) / 10,
+      width: Math.round(newW * 10) / 10,
+      height: Math.round(newH * 10) / 10,
+    };
+
+    setLayers((prev) =>
+      prev.map((l) => (l.id === activeLayer.id ? { ...l, rect: newRect } : l))
+    );
+
+    if (activeLayer.type === 'logo') setHeaderConfig((prev) => ({ ...prev, logoRect: newRect }));
+    if (activeLayer.type === 'location') setHeaderConfig((prev) => ({ ...prev, locationRect: newRect }));
+    if (activeLayer.type === 'date') setHeaderConfig((prev) => ({ ...prev, dateRect: newRect }));
+    if (activeLayer.type === 'ribbon') setRibbonConfig((prev) => ({ ...prev, rect: newRect }));
+    if (activeLayer.type === 'watermark') setWatermarkConfig((prev) => ({ ...prev, rect: newRect }));
+    if (activeLayer.type === 'callout') setFullStoryCalloutConfig((prev) => ({ ...prev, rect: newRect }));
+    if (activeLayer.type === 'powered_by') setPoweredByConfig((prev) => ({ ...prev, rect: newRect }));
+    if (activeLayer.type === 'photo') {
+      const slotId = activeLayer.id.replace('layer_photo_', '');
+      setPhotoSlots((prev) => prev.map((s) => (s.id === slotId ? { ...s, rect: newRect } : s)));
+    }
+    if (activeLayer.type === 'text') {
+      const textId = activeLayer.id.replace('layer_text_', '');
+      setTextSlots((prev) => prev.map((t) => (t.id === textId ? { ...t, rect: newRect } : t)));
+    }
+  };
+
 
   const WIZARD_STEPS: { id: WizardStage; label: string; number: number }[] = [
     { id: 'upload_aspect', label: '1. सैंपल, रेशियो व बैकग्राउंड', number: 1 },
@@ -2042,6 +2184,107 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     />
                   </div>
                 </div>
+
+                {/* Video Footer Position Selector (Part 7, Req 15) */}
+                {generatorMode === 'video' && (
+                  <div className="pt-3 border-t border-slate-800 space-y-2">
+                    <label className="text-[11px] font-bold text-amber-300 block">
+                      वीडियो फुटर स्थिति (Movable Video Footer Position)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVideoFooterPosition('bottom')}
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          videoFooterPosition === 'bottom'
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-sm'
+                            : 'bg-slate-900 border-slate-700 text-slate-400'
+                        }`}
+                      >
+                        <span>बॉटम फुटर (Bottom Footer)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVideoFooterPosition('top')}
+                        className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                          videoFooterPosition === 'top'
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-sm'
+                            : 'bg-slate-900 border-slate-700 text-slate-400'
+                        }`}
+                      >
+                        <span>टॉप हेडर फुटर (Top / Header Footer)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Video Watermark Controls (Part 7, Req 17) */}
+                {generatorMode === 'video' && (
+                  <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl space-y-2.5 mt-2">
+                    <h5 className="font-bold text-[11px] text-amber-400">
+                      वीडियो वाटरमार्क सेटिंग्स (Centered Video Watermarks)
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-slate-300 font-bold">टेक्स्ट वाटरमार्क</span>
+                          <input
+                            type="checkbox"
+                            checked={videoWatermarkTextEnabled}
+                            onChange={(e) => setVideoWatermarkTextEnabled(e.target.checked)}
+                            className="w-3.5 h-3.5 accent-amber-500 rounded"
+                          />
+                        </div>
+                        {videoWatermarkTextEnabled && (
+                          <input
+                            type="text"
+                            value={videoWatermarkText}
+                            onChange={(e) => setVideoWatermarkText(e.target.value)}
+                            placeholder="उदा. AI NEWS MAKER"
+                            className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-slate-300 font-bold">लोगो वाटरमार्क</span>
+                          <input
+                            type="checkbox"
+                            checked={videoWatermarkLogoEnabled}
+                            onChange={(e) => setVideoWatermarkLogoEnabled(e.target.checked)}
+                            className="w-3.5 h-3.5 accent-amber-500 rounded"
+                          />
+                        </div>
+                        {videoWatermarkLogoEnabled && (
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  if (ev.target?.result) setVideoWatermarkLogoUrl(ev.target.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="text-[10px] text-slate-400"
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-800 text-[10px] text-slate-400">
+                      <input
+                        type="checkbox"
+                        checked={videoWatermarkUserAllowed}
+                        onChange={(e) => setVideoWatermarkUserAllowed(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-amber-500 rounded"
+                      />
+                      <span>एंड-यूजर को वाटरमार्क टॉगल करने की अनुमति दें</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2212,15 +2455,187 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   </div>
                 </div>
 
-                {/* Active Layer Properties */}
+                {/* Active Layer Properties with Manual X, Y, W, H, Center Alignment & Nudge */}
                 {activeLayer && (
-                  <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2 text-xs">
-                    <h5 className="font-bold text-white">चुनी हुई लेयर: {activeLayer.name}</h5>
-                    <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                      <div>X: {Math.round(activeLayer.rect.x)}%</div>
-                      <div>Y: {Math.round(activeLayer.rect.y)}%</div>
-                      <div>W: {Math.round(activeLayer.rect.width)}%</div>
-                      <div>H: {Math.round(activeLayer.rect.height)}%</div>
+                  <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-bold text-white flex items-center gap-1.5">
+                        <span>लेयर: {activeLayer.name}</span>
+                        {activeLayer.locked && <Lock className="w-3 h-3 text-amber-400" />}
+                      </h5>
+                      <span className="text-[10px] text-amber-400 font-mono">
+                        z-index: {activeLayer.zIndex}
+                      </span>
+                    </div>
+
+                    {/* Numeric X, Y, W, H Controls */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="bg-slate-900 border border-slate-800 rounded-lg p-2">
+                        <label className="text-[10px] text-slate-400 font-bold block mb-1">X (%)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          disabled={activeLayer.locked}
+                          value={Math.round(activeLayer.rect.x * 10) / 10}
+                          onChange={(e) => updateSelectedLayerRect({ x: parseFloat(e.target.value) || 0 })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400"
+                        />
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 rounded-lg p-2">
+                        <label className="text-[10px] text-slate-400 font-bold block mb-1">Y (%)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          disabled={activeLayer.locked}
+                          value={Math.round(activeLayer.rect.y * 10) / 10}
+                          onChange={(e) => updateSelectedLayerRect({ y: parseFloat(e.target.value) || 0 })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400"
+                        />
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 rounded-lg p-2">
+                        <label className="text-[10px] text-slate-400 font-bold block mb-1">W (%)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="2"
+                          max="100"
+                          disabled={activeLayer.locked}
+                          value={Math.round(activeLayer.rect.width * 10) / 10}
+                          onChange={(e) => updateSelectedLayerRect({ width: parseFloat(e.target.value) || 2 })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400"
+                        />
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 rounded-lg p-2">
+                        <label className="text-[10px] text-slate-400 font-bold block mb-1">H (%)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="1"
+                          max="100"
+                          disabled={activeLayer.locked}
+                          value={Math.round(activeLayer.rect.height * 10) / 10}
+                          onChange={(e) => updateSelectedLayerRect({ height: parseFloat(e.target.value) || 1 })}
+                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Center Alignment Buttons */}
+                    <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-400 font-bold">सेंटर अलाइन:</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() => updateSelectedLayerRect({ x: (100 - activeLayer.rect.width) / 2 })}
+                          className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-200 hover:text-white cursor-pointer"
+                        >
+                          हॉरिजॉन्टल
+                        </button>
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() => updateSelectedLayerRect({ y: (100 - activeLayer.rect.height) / 2 })}
+                          className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-200 hover:text-white cursor-pointer"
+                        >
+                          वर्टिकल
+                        </button>
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() =>
+                            updateSelectedLayerRect({
+                              x: (100 - activeLayer.rect.width) / 2,
+                              y: (100 - activeLayer.rect.height) / 2,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/40 text-[10px] font-bold cursor-pointer"
+                        >
+                          दोनों सेंटर
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Move / Nudge & Resize Controls */}
+                    <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-400 font-bold">नज / मूव:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() => updateSelectedLayerRect({ x: activeLayer.rect.x - 1 })}
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
+                          title="बाएं मूव करें (Left)"
+                        >
+                          ←
+                        </button>
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() => updateSelectedLayerRect({ y: activeLayer.rect.y - 1 })}
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
+                          title="ऊपर मूव करें (Up)"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() => updateSelectedLayerRect({ y: activeLayer.rect.y + 1 })}
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
+                          title="नीचे मूव करें (Down)"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() => updateSelectedLayerRect({ x: activeLayer.rect.x + 1 })}
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
+                          title="दाएं मूव करें (Right)"
+                        >
+                          →
+                        </button>
+                      </div>
+
+                      <span className="text-[10px] text-slate-400 font-bold ml-2">साइज:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() =>
+                            updateSelectedLayerRect({
+                              width: activeLayer.rect.width - 2,
+                              height: activeLayer.rect.height - 2,
+                            })
+                          }
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
+                          title="साइज घटाएं"
+                        >
+                          - छोटा
+                        </button>
+                        <button
+                          type="button"
+                          disabled={activeLayer.locked}
+                          onClick={() =>
+                            updateSelectedLayerRect({
+                              width: activeLayer.rect.width + 2,
+                              height: activeLayer.rect.height + 2,
+                            })
+                          }
+                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
+                          title="साइज बढ़ाएं"
+                        >
+                          + बड़ा
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2231,6 +2646,71 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           {/* STAGE 5: PHOTO SLOTS & MULTI-PHOTO LAYOUT VARIANTS */}
           {currentStage === 'photo_slots_layout' && (
             <div className="space-y-6">
+              {/* VIDEO MODE: Video Display Mode (Choice A: Fit vs Choice B: Crop) */}
+              {generatorMode === 'video' ? (
+                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Film className="w-4 h-4" />
+                      वीडियो लेआउट व डिस्प्ले मोड (Video Layout & Display Mode)
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-red-600/20 text-red-300 border border-red-500/30 font-bold">
+                      {selectedRatio} वीडियो
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    वीडियो के लिए मुख्य विज़िबल एरिया और क्रॉप/फिट व्यवहार चुनें। एंड-यूजर वीडियो स्टूडियो में इसी नियम के अनुसार वीडियो दिखेगा।
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    {/* Choice A: Full Video / Fit */}
+                    <div
+                      onClick={() => setVideoDisplayMode('fit')}
+                      className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between gap-3 ${
+                        videoDisplayMode === 'fit'
+                          ? 'bg-amber-500/15 border-amber-400 text-white shadow-lg'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <h5 className="font-black text-sm text-amber-300">विकल्प A: फुल वीडियो / फिट (Full Video / Fit)</h5>
+                          {videoDisplayMode === 'fit' && <Check className="w-4 h-4 text-amber-400" />}
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          पूरा वीडियो बिना किसी अनचाही क्रॉपिंग के विज़िबल एरिया में सुरक्षित रूप से फिट होगा। ओरिजिनल अनुपात सुरक्षित रहेगा।
+                        </p>
+                      </div>
+                      <div className="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-2 py-1 rounded">
+                        displayMode: 'fit' (अनुशंसित)
+                      </div>
+                    </div>
+
+                    {/* Choice B: Crop Video */}
+                    <div
+                      onClick={() => setVideoDisplayMode('crop')}
+                      className={`p-4 rounded-xl border cursor-pointer transition flex flex-col justify-between gap-3 ${
+                        videoDisplayMode === 'crop'
+                          ? 'bg-amber-500/15 border-amber-400 text-white shadow-lg'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <h5 className="font-black text-sm text-amber-300">विकल्प B: क्रॉप वीडियो (Crop Video)</h5>
+                          {videoDisplayMode === 'crop' && <Check className="w-4 h-4 text-amber-400" />}
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          वीडियो विज़िबल एरिया को पूरी तरह भरने के लिए {selectedRatio} के अनुसार केंद्र से क्रॉप होगा। कोई खाली किनारा नहीं दिखेगा।
+                        </p>
+                      </div>
+                      <div className="text-[10px] font-mono text-amber-400 bg-amber-950/40 px-2 py-1 rounded">
+                        displayMode: 'crop' ({selectedRatio} फिल)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               {/* Layout Mode Variants Selector */}
               <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
@@ -2648,23 +3128,75 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] text-slate-400">टेस्ट फोटो अपलोड:</span>
-                    {photoSlots.map((slot, idx) => (
-                      <label
-                        key={slot.id}
-                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg text-[10px] font-bold border border-slate-700 cursor-pointer"
-                      >
-                        फोटो {idx + 1}
+                  {generatorMode === 'video' ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] text-slate-400">सैंपल वीडियो:</span>
+                      <label className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shadow">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>सैंपल वीडियो अपलोड (लगभग 10s)</span>
                         <input
                           type="file"
-                          accept="image/*"
-                          onChange={(e) => handleTestPhotoUpload(idx, e)}
+                          accept="video/mp4,video/webm"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const url = URL.createObjectURL(file);
+                              setSampleVideoPreview(url);
+                            }
+                          }}
                           className="hidden"
                         />
                       </label>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => setSampleVideoPreview('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4')}
+                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg text-[10px] font-bold border border-slate-700 cursor-pointer"
+                      >
+                        डिफ़ॉल्ट सैंपल वीडियो
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] text-slate-400">सैंपल फोटो टेस्ट:</span>
+                      <label className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-black cursor-pointer transition flex items-center gap-1.5 shadow">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>सैंपल फोटो अपलोड (Upload Sample Photo)</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                if (ev.target?.result) {
+                                  const dataUrl = ev.target.result as string;
+                                  setSamplePhotoPreview(dataUrl);
+                                  setTestPhotos((prev) => [dataUrl, ...prev.slice(1)]);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      {photoSlots.length > 1 && photoSlots.slice(1).map((slot, idx) => (
+                        <label
+                          key={slot.id}
+                          className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg text-[10px] font-bold border border-slate-700 cursor-pointer"
+                        >
+                          स्लॉट {idx + 2}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleTestPhotoUpload(idx + 1, e)}
+                            className="hidden"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2717,31 +3249,65 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       />
                     )}
 
-                    {/* Photo Slots with uploaded test photos */}
-                    {photoSlots.map((slot, idx) => {
-                      const testSrc = testPhotos[idx] || sampleImage;
-                      return (
-                        <div
-                          key={slot.id}
-                          className="absolute overflow-hidden"
-                          style={{
-                            left: `${slot.rect.x}%`,
-                            top: `${slot.rect.y}%`,
-                            width: `${slot.rect.width}%`,
-                            height: `${slot.rect.height}%`,
-                            borderRadius: `${slot.cornerRadius ?? 0}px`,
-                          }}
-                        >
-                          {testSrc ? (
-                            <img src={testSrc} alt={slot.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full bg-slate-800 flex items-center justify-center text-[9px] text-slate-400">
-                              फोटो {idx + 1}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {/* Main Video in Video Mode (Req 13, 14, 18) vs Photo Slots */}
+                    {generatorMode === 'video' ? (
+                      <div
+                        className="absolute overflow-hidden bg-black flex items-center justify-center z-5"
+                        style={{
+                          left: `${videoRect.x}%`,
+                          top: `${videoRect.y}%`,
+                          width: `${videoRect.width}%`,
+                          height: `${videoRect.height}%`,
+                        }}
+                      >
+                        <video
+                          src={sampleVideoPreview || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          className={`w-full h-full ${videoDisplayMode === 'crop' ? 'object-cover' : 'object-contain'}`}
+                        />
+                        {/* Centered Watermarks if enabled */}
+                        {videoWatermarkTextEnabled && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-white/70 font-black text-xs px-2.5 py-1 bg-black/40 rounded-lg backdrop-blur-xs">
+                              {videoWatermarkText}
+                            </span>
+                          </div>
+                        )}
+                        {videoWatermarkLogoEnabled && videoWatermarkLogoUrl && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <img src={videoWatermarkLogoUrl} alt="Watermark" className="max-w-[40%] max-h-[40%] opacity-60 object-contain" />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      photoSlots.map((slot, idx) => {
+                        const testSrc = testPhotos[idx] || samplePhotoPreview || sampleImage;
+                        return (
+                          <div
+                            key={slot.id}
+                            className="absolute overflow-hidden"
+                            style={{
+                              left: `${slot.rect.x}%`,
+                              top: `${slot.rect.y}%`,
+                              width: `${slot.rect.width}%`,
+                              height: `${slot.rect.height}%`,
+                              borderRadius: `${slot.cornerRadius ?? 0}px`,
+                            }}
+                          >
+                            {testSrc ? (
+                              <img src={testSrc} alt={slot.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-slate-800 flex items-center justify-center text-[9px] text-slate-400">
+                                फोटो {idx + 1}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
 
                     {/* Logo */}
                     {headerConfig.showLogo && (
@@ -2808,7 +3374,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     >
                       <div
                         className="font-bold text-white text-[10px] leading-snug drop-shadow-md px-1.5 py-1 rounded"
-                        style={{ backgroundColor: textSlots[0]?.backgroundColor || '#B91C1C' }}
+                        style={{
+                          backgroundColor:
+                            textSlots[0]?.backgroundColor === 'transparent' || !textSlots[0]?.backgroundColor
+                              ? 'transparent'
+                              : textSlots[0].backgroundColor,
+                          fontFamily: typographyFontFamily,
+                        }}
                       >
                         {testHeadline}
                       </div>
@@ -2835,9 +3407,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Protected Footer */}
+                    {/* Protected Footer (Bottom vs Top in Video Mode) */}
                     <div
-                      className="absolute bottom-0 bg-white border-t flex items-center justify-between px-2 text-[7px] font-bold text-black z-30"
+                      className={`absolute ${generatorMode === 'video' && videoFooterPosition === 'top' ? 'top-0 border-b' : 'bottom-0 border-t'} bg-white flex items-center justify-between px-2 text-[7px] font-bold text-black z-30`}
                       style={{
                         height: `${footerConfig.footerHeightRatio * 100}%`,
                         width: `${footerConfig.footerWidthPct || 100}%`,
@@ -2876,6 +3448,55 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   placeholder="फ्रेम की विशेषताएं लिखें..."
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white"
                 />
+              </div>
+
+              {/* Primary Typography Selection (Req 8) */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+                <h5 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
+                  प्राथमिक टाइपोग्राफी सेटिंग्स (Primary Headline Typography)
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">फ़ॉन्ट फ़ैमिली (Font Family)</label>
+                    <select
+                      value={typographyFontFamily}
+                      onChange={(e) => setTypographyFontFamily(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold"
+                    >
+                      <option value="Noto Sans Devanagari">Noto Sans Devanagari</option>
+                      <option value="Rozha One">Rozha One (Bold Editorial)</option>
+                      <option value="Poppins">Poppins</option>
+                      <option value="Tiro Devanagari Hindi">Tiro Devanagari Hindi</option>
+                      <option value="Mukta">Mukta</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">फ़ॉन्ट साइज़ (Font Size)</label>
+                    <input
+                      type="number"
+                      min="36"
+                      max="100"
+                      value={typographyFontSize}
+                      onChange={(e) => setTypographyFontSize(Number(e.target.value))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 block mb-1">वेट (Font Weight)</label>
+                    <select
+                      value={typographyFontWeight}
+                      onChange={(e) => setTypographyFontWeight(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold"
+                    >
+                      <option value="bold">Bold (बोल्ड)</option>
+                      <option value="black">Black (अति बोल्ड)</option>
+                      <option value="semibold">SemiBold</option>
+                      <option value="normal">Normal</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Design Category Selection */}

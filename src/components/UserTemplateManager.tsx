@@ -39,6 +39,7 @@ import {
 } from '../lib/userTemplatesManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
+import { AdminAssetLibrariesManager } from './AdminAssetLibrariesManager';
 import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import {
@@ -869,164 +870,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
           </div>
         </div>
 
-        {/* Filter and Search Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-800">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            <button
-              type="button"
-              onClick={() => setDfRatioFilter('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                dfRatioFilter === 'all'
-                  ? 'bg-pink-600 text-white shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
-              }`}
-            >
-              सभी फ्रेम्स ({dynamicFramesList.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setDfRatioFilter('4:5')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                dfRatioFilter === '4:5'
-                  ? 'bg-pink-600 text-white shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
-              }`}
-            >
-              4:5 पोर्ट्रेट ({count4_5})
-            </button>
-            <button
-              type="button"
-              onClick={() => setDfRatioFilter('9:16')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                dfRatioFilter === '9:16'
-                  ? 'bg-pink-600 text-white shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
-              }`}
-            >
-              9:16 सोशल स्टोरी ({count9_16})
-            </button>
-          </div>
-
-          <div className="relative min-w-[220px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={dfSearch}
-              onChange={(e) => setDfSearch(e.target.value)}
-              placeholder="फ्रेम या श्रेणी खोजें..."
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-500"
-            />
-          </div>
-        </div>
-
-        {/* Dynamic Frames Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredFrames.map((frame) => {
-            const isStory = frame.aspectRatio === '9:16';
-            return (
-              <div
-                key={frame.id}
-                className="bg-slate-900/90 border border-slate-800 hover:border-pink-500/50 rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all shadow-md group"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="font-mono text-[10px] text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded-md border border-pink-500/20">
-                      {frame.id}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`px-2 py-0.5 text-[9.5px] font-black rounded ${
-                        isStory ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                      }`}>
-                        {isStory ? '9:16 स्टोरी' : '4:5 पोर्ट्रेट'}
-                      </span>
-                      <span className="px-2 py-0.5 text-[9.5px] font-bold bg-slate-800 text-slate-300 rounded">
-                        v{frame.version || 1}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Frame Visual Preview */}
-                  <div className={`w-full ${isStory ? 'h-36' : 'h-32'} rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex items-center justify-center relative mb-3 group-hover:border-pink-500/30 transition`}>
-                    {frame.previewImageUrl ? (
-                      <img
-                        src={frame.previewImageUrl}
-                        alt={frame.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <Layout className="w-8 h-8 text-slate-700" />
-                    )}
-                    <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-amber-300 border border-amber-500/30">
-                      📂 {frame.designCategory}
-                    </span>
-                    <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
-                      {frame.allowedPlans?.join(', ') || 'ALL'}
-                    </span>
-                  </div>
-
-                  <h5 className="text-sm font-bold text-white line-clamp-1">{frame.name}</h5>
-                  <p className="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed">
-                    {frame.description || 'डायनामिक फ्रेम टेम्पलेट'}
-                  </p>
-
-                  <div className="flex items-center gap-3 text-[10.5px] text-slate-400 mt-2.5 pt-2 border-t border-slate-800/80">
-                    <span>फोटो स्लॉट्स: <strong className="text-white">{frame.photoSlots?.length || 0}</strong></span>
-                    <span>•</span>
-                    <span>टेक्स्ट ज़ोन: <strong className="text-white">{frame.textSlots?.length || 0}</strong></span>
-                    <span>•</span>
-                    <span className="text-emerald-400">फुटर सुरक्षित ✓</span>
-                  </div>
-                </div>
-
-                {/* Actions Row */}
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedEditFrame(frame);
-                      setIsDynamicFrameModalOpen(true);
-                    }}
-                    className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <span>✏️ एडिट</span>
-                  </button>
-
-                  {onOpenStudioWithTemplate && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenStudioWithTemplate(frame.id)}
-                      className="py-1.5 px-2.5 bg-pink-600/30 hover:bg-pink-600 text-pink-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border border-pink-500/40 cursor-pointer"
-                      title="स्टूडियो में टेस्ट करें"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>टेस्ट</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteDynamicFrame(frame)}
-                    className="p-1.5 bg-slate-800 hover:bg-red-950/60 text-slate-400 hover:text-red-300 rounded-lg transition border border-slate-700 hover:border-red-500/40 cursor-pointer"
-                    title="फ्रेम हटाएं"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {filteredFrames.length === 0 && (
-          <div className="p-8 text-center bg-slate-950/50 rounded-2xl border border-slate-800 text-slate-400 text-xs space-y-2">
-            <Sparkles className="w-8 h-8 text-slate-600 mx-auto" />
-            <p className="font-bold text-slate-300">कोई डायनामिक फ्रेम नहीं मिला</p>
-            <p className="text-[11px] text-slate-500">ऊपर दिए गए बटन से नया 4:5 या 9:16 फ्रेम तैयार करें।</p>
-          </div>
-        )}
+        {/* Section D Reusable Central Asset Libraries (Location Badges, Callouts, Suvichar BGs) */}
+        <AdminAssetLibrariesManager />
       </div>
     );
   };
@@ -1555,7 +1400,15 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             {/* Mobile Expanded Sections */}
             {isGraphicsExpanded && (
               <div className="p-3 bg-slate-950/80 border border-purple-500/40 rounded-xl animate-in fade-in">
-                <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudioWithTemplate} />
+                <AdminTemplatePlanManager
+                  isAdmin={true}
+                  onOpenStudioWithTemplate={onOpenStudioWithTemplate}
+                  onEditFrame={(frame) => {
+                    setSelectedEditFrame(frame);
+                    setSelectedGeneratorMode('photo');
+                    setIsDynamicFrameModalOpen(true);
+                  }}
+                />
               </div>
             )}
             {isVideoExpanded && (
@@ -1640,7 +1493,14 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             </button>
             {isVideoExpanded && (
               <div className="p-4 sm:p-6 border-t border-amber-500/20 bg-slate-950/40 animate-in fade-in">
-                <AdminVideoTemplateControl />
+                <AdminVideoTemplateControl
+                  onOpenStudioWithVideoFrame={onOpenStudioWithTemplate}
+                  onEditFrame={(frame) => {
+                    setSelectedEditFrame(frame);
+                    setSelectedGeneratorMode('video');
+                    setIsDynamicFrameModalOpen(true);
+                  }}
+                />
               </div>
             )}
           </div>

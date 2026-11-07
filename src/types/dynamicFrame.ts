@@ -3,6 +3,39 @@
 // Video Frames support 9:16 (1080x1920), 1:1 (1080x1080), 4:5 (1080x1350), 4:3 (1440x1080)
 
 export type FrameMode = 'photo' | 'video';
+export type DynamicFrameType = 'graphic' | 'video' | 'story';
+
+export interface VideoFrameConfig {
+  displayMode: 'fit' | 'crop'; // Choice A: 'fit' (Full Video), Choice B: 'crop' (Crop Video to visible region)
+  videoRect: NormalizedRect;
+  footerPosition: 'bottom' | 'top'; // Movable video footer
+  locationBadgeUrl?: string; // from Location Badge PNG library
+  locationBadgeId?: string;
+  watermarkTextEnabled?: boolean;
+  watermarkText?: string;
+  watermarkLogoEnabled?: boolean;
+  watermarkLogoUrl?: string;
+  watermarkUserAllowed?: boolean; // Admin decides whether text/logo watermark options are available to end-users in Studio
+  watermarkRect?: NormalizedRect; // Center of actual visible video region
+}
+
+export interface TypographyConfig {
+  primaryFontFamily: string; // e.g. "Noto Sans Devanagari", "Rozha One", "Poppins", etc.
+  primaryFontSize: number;
+  minFontSize?: number;
+  fontWeight?: string;
+}
+
+export interface AssetLibraryItem {
+  id: string;
+  name: string;
+  category?: string; // For suvichar backgrounds: 'morning' | 'spiritual' | 'motivation' | 'general'
+  url: string;
+  type: 'location_badge' | 'callout_png' | 'suvichar_background';
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export type DynamicAspectRatio = '4:5' | '9:16' | '1:1' | '4:3';
 
@@ -268,10 +301,13 @@ export interface DynamicFrameTemplate {
   name: string;
   description?: string;
   frameMode?: FrameMode; // 'photo' | 'video' (default: 'photo')
+  frameType?: DynamicFrameType; // 'graphic' | 'video' | 'story'
   aspectRatio: DynamicAspectRatio;
   canvasWidth: number; // 1080 for 4:5, 9:16, 1:1; 1440 for 4:3
   canvasHeight: number; // 1350 for 4:5, 1920 for 9:16, 1080 for 1:1, 1080 for 4:3
   sampleReferenceUrl?: string;
+  samplePhotoUrl?: string; // Preview sample background photo
+  sampleVideoUrl?: string; // Preview sample video
   primaryBackgroundAsset?: string;
   primaryBackgroundMode?: PrimaryBackgroundMode;
   primaryBackgroundHex?: string;
@@ -294,9 +330,16 @@ export interface DynamicFrameTemplate {
   ribbonConfig?: RibbonConfig;
   watermarkConfig?: WatermarkConfig;
   fullStoryCalloutConfig?: FullStoryCalloutConfig;
+  calloutAssetUrl?: string; // Pre-designed callout PNG URL
   poweredByConfig?: PoweredByConfig;
   safeZoneConfig?: SafeZoneConfig;
   layers: FrameLayer[];
+
+  // Video-first frame configurations
+  videoConfig?: VideoFrameConfig;
+
+  // Typography configurations
+  typographyConfig?: TypographyConfig;
 
   // Statement / Bayaanbaazi specific options
   isStatementFrame?: boolean;

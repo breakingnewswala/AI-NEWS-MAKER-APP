@@ -18369,6 +18369,139 @@ app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) =>
 });
 var DYNAMIC_FRAMES_DB_FILE = import_path2.default.join(process.cwd(), "dynamic_frames_db.json");
 var USER_STORY_PREF_DB_FILE = import_path2.default.join(process.cwd(), "user_story_preferences_db.json");
+var ASSET_LIBRARIES_DB_FILE = import_path2.default.join(process.cwd(), "asset_libraries_db.json");
+function getDefaultAssetLibraries() {
+  return [
+    {
+      id: "loc_badge_red_pin",
+      name: "\u0930\u0947\u0921 \u0930\u093F\u092C\u0928 \u0932\u094B\u0915\u0947\u0936\u0928 \u092C\u0948\u091C (Classic Pin)",
+      category: "general",
+      type: "location_badge",
+      url: "/assets/location_badge_red_pin.png",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "loc_badge_blue_modern",
+      name: "\u092E\u0949\u0921\u0930\u094D\u0928 \u092C\u094D\u0932\u0942 \u0932\u094B\u0915\u0947\u0936\u0928 \u092A\u093F\u0932 (Modern Blue Pill)",
+      category: "general",
+      type: "location_badge",
+      url: "/assets/location_badge_blue_modern.png",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "loc_badge_gold_vip",
+      name: "\u0917\u094B\u0932\u094D\u0921\u0928 \u0935\u0940\u0906\u0908\u092A\u0940 \u0932\u094B\u0915\u0947\u0936\u0928 \u0938\u094D\u091F\u094D\u0930\u093F\u092A (Gold Strip)",
+      category: "vip",
+      type: "location_badge",
+      url: "/assets/location_badge_gold_vip.png",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "loc_badge_dark_glass",
+      name: "\u0921\u093E\u0930\u094D\u0915 \u0917\u094D\u0932\u093E\u0938 \u0932\u094B\u0915\u0947\u0936\u0928 \u092C\u0949\u0915\u094D\u0938 (Glassmorphism)",
+      category: "dark",
+      type: "location_badge",
+      url: "/assets/location_badge_dark_glass.png",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "callout_yellow_banner",
+      name: "\u0917\u094B\u0932\u094D\u0921\u0928 '\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902' \u092C\u0948\u091C",
+      category: "yellow",
+      type: "callout_png",
+      url: "/assets/callout_yellow_banner.png",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "callout_crimson_strip",
+      name: "\u0915\u094D\u0930\u093F\u092E\u0938\u0928 \u0930\u0947\u0921 3D \u0915\u0949\u0932\u0906\u0909\u091F \u0938\u094D\u091F\u094D\u0930\u093F\u092A",
+      category: "red",
+      type: "callout_png",
+      url: "/assets/callout_crimson_strip.png",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "callout_neon_blue_tag",
+      name: "\u0939\u093E\u0908-\u0915\u0902\u091F\u094D\u0930\u093E\u0938\u094D\u091F \u0928\u093F\u092F\u0949\u0928 \u092C\u094D\u0932\u0942 \u0915\u0949\u0932\u0906\u0909\u091F \u091F\u0948\u0917",
+      category: "blue",
+      type: "callout_png",
+      url: "/assets/callout_neon_blue_tag.png",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "suvichar_sunrise_morning",
+      name: "\u0938\u094D\u0935\u0930\u094D\u0923\u093F\u092E \u0938\u0942\u0930\u094D\u092F\u094B\u0926\u092F \u0935 \u092A\u094D\u0930\u0915\u0943\u0924\u093F (Morning Suvichar)",
+      category: "morning",
+      type: "suvichar_background",
+      url: "/assets/suvichar_sunrise_morning.jpg",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "suvichar_spiritual_temple",
+      name: "\u0906\u0927\u094D\u092F\u093E\u0924\u094D\u092E\u093F\u0915 \u0926\u093F\u0935\u094D\u092F \u092E\u0902\u0926\u093F\u0930 \u0935 \u0926\u0940\u092A \u0906\u092D\u093E (Spiritual)",
+      category: "spiritual",
+      type: "suvichar_background",
+      url: "/assets/suvichar_spiritual_temple.jpg",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "suvichar_motivation_mountain",
+      name: "\u092A\u0930\u094D\u0935\u0924 \u0936\u093F\u0916\u0930 \u0935 \u0916\u0941\u0932\u093E \u0906\u0938\u092E\u093E\u0928 (Motivation / Quotes)",
+      category: "motivation",
+      type: "suvichar_background",
+      url: "/assets/suvichar_motivation_mountain.jpg",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    },
+    {
+      id: "suvichar_crimson_velvet",
+      name: "\u0915\u094D\u0932\u093E\u0938\u093F\u0915 \u0921\u093E\u0930\u094D\u0915 \u0915\u094D\u0930\u093F\u092E\u0938\u0928 \u0935\u0947\u0932\u0935\u0947\u091F \u0917\u094D\u0930\u0947\u0921\u093F\u090F\u0902\u091F (General)",
+      category: "general",
+      type: "suvichar_background",
+      url: "/assets/suvichar_crimson_velvet.jpg",
+      enabled: true,
+      createdAt: 179388e7,
+      updatedAt: 179388e7
+    }
+  ];
+}
+function loadAssetLibrariesDatabase() {
+  try {
+    if (import_fs2.default.existsSync(ASSET_LIBRARIES_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(ASSET_LIBRARIES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+  }
+  return getDefaultAssetLibraries();
+}
+function saveAssetLibrariesDatabase(items) {
+  try {
+    import_fs2.default.writeFileSync(ASSET_LIBRARIES_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to write asset_libraries_db.json:", err);
+  }
+}
 function loadDynamicFramesDatabase() {
   try {
     if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
@@ -18487,7 +18620,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
               alignment: "center",
               maxLines: 3,
               lineHeight: 1.25,
-              backgroundColor: "#B91C1C"
+              backgroundColor: "transparent"
             }
           ]
         },
@@ -18688,7 +18821,18 @@ app.get("/api/dynamic-frames", async (req, res) => {
       saveDynamicFramesDatabase(frames);
     }
     let filtered = isMaster ? frames : frames.filter((f) => f.publicationStatus === "published");
-    if (aspectRatio) {
+    const { frameType, frameMode } = req.query;
+    if (frameType) {
+      filtered = filtered.filter((f) => {
+        if (frameType === "video") return f.frameType === "video" || f.frameMode === "video";
+        if (frameType === "story") return f.frameType === "story" || f.aspectRatio === "9:16" && f.frameMode !== "video";
+        return f.frameType === "graphic" || !f.frameType && f.frameMode !== "video" && f.aspectRatio !== "9:16";
+      });
+    }
+    if (frameMode) {
+      filtered = filtered.filter((f) => (f.frameMode || "photo") === frameMode);
+    }
+    if (aspectRatio && aspectRatio !== "all") {
       filtered = filtered.filter((f) => f.aspectRatio === aspectRatio);
     }
     if (category && category !== "all") {
@@ -18703,18 +18847,22 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.name || !payload.aspectRatio) {
-      return res.status(400).json({ error: "Frame name and aspectRatio ('4:5' or '9:16') are required." });
+      return res.status(400).json({ error: "Frame name and aspectRatio are required." });
     }
-    if (payload.aspectRatio !== "4:5" && payload.aspectRatio !== "9:16") {
-      return res.status(400).json({ error: "Only '4:5' (1080x1350) and '9:16' (1080x1920) aspect ratios are allowed. 1:1 is strictly disabled." });
+    const isVideo = payload.frameMode === "video" || payload.frameType === "video";
+    const allowedRatios = isVideo ? ["9:16", "1:1", "4:5", "4:3"] : ["4:5", "9:16", "1:1"];
+    if (!allowedRatios.includes(payload.aspectRatio)) {
+      return res.status(400).json({ error: `Invalid aspectRatio '${payload.aspectRatio}'. Allowed for ${isVideo ? "video: 9:16, 1:1, 4:5, 4:3" : "graphic: 4:5, 9:16, 1:1"}.` });
     }
     const newFrame = {
       id: payload.id && !payload.id.startsWith("temp_") ? payload.id : `df_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: payload.name.trim(),
       description: payload.description || "",
       aspectRatio: payload.aspectRatio,
-      canvasWidth: 1080,
-      canvasHeight: payload.aspectRatio === "4:5" ? 1350 : 1920,
+      frameMode: payload.frameMode || (isVideo ? "video" : "photo"),
+      frameType: payload.frameType || (isVideo ? "video" : payload.aspectRatio === "9:16" ? "story" : "graphic"),
+      canvasWidth: payload.aspectRatio === "4:3" ? 1440 : 1080,
+      canvasHeight: payload.aspectRatio === "4:5" ? 1350 : payload.aspectRatio === "9:16" ? 1920 : 1080,
       sampleReferenceUrl: payload.sampleReferenceUrl || "",
       previewImageUrl: payload.previewImageUrl || "",
       designCategory: payload.designCategory || (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"),
@@ -18747,7 +18895,13 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
       ribbonConfig: payload.ribbonConfig || { enabled: false },
       layers: Array.isArray(payload.layers) ? payload.layers : [],
       isStatementFrame: Boolean(payload.isStatementFrame),
-      statementOptions: payload.statementOptions || {}
+      statementOptions: payload.statementOptions || {},
+      videoConfig: payload.videoConfig,
+      typographyConfig: payload.typographyConfig,
+      calloutAssetUrl: payload.calloutAssetUrl,
+      samplePhotoUrl: payload.samplePhotoUrl,
+      sampleVideoUrl: payload.sampleVideoUrl,
+      poweredByConfig: payload.poweredByConfig
     };
     const all = loadDynamicFramesDatabase();
     const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
@@ -18767,9 +18921,11 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
       return res.status(404).json({ error: "Frame not found." });
     }
     const existing = all[existingIdx];
+    const isVideo = payload.frameMode === "video" || payload.frameType === "video" || existing.frameMode === "video" || existing.frameType === "video";
     const targetRatio = payload.aspectRatio || existing.aspectRatio;
-    if (targetRatio !== "4:5" && targetRatio !== "9:16") {
-      return res.status(400).json({ error: "Only 4:5 and 9:16 are supported." });
+    const allowedRatios = isVideo ? ["9:16", "1:1", "4:5", "4:3"] : ["4:5", "9:16", "1:1"];
+    if (!allowedRatios.includes(targetRatio)) {
+      return res.status(400).json({ error: `Invalid aspectRatio '${targetRatio}'.` });
     }
     const updatedFrame = {
       ...existing,
@@ -18801,6 +18957,93 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) =
     all = all.filter((f) => f.id !== id);
     saveDynamicFramesDatabase(all);
     return res.json({ success: true, message: "Frame deleted successfully." });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/asset-libraries", async (req, res) => {
+  try {
+    const { type, category } = req.query;
+    let items = loadAssetLibrariesDatabase();
+    if (type && type !== "all") {
+      items = items.filter((it) => it.type === type);
+    }
+    if (category && category !== "all") {
+      items = items.filter((it) => it.category === category);
+    }
+    return res.json({ success: true, items });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
+  try {
+    const { name, type, category, url, enabled } = req.body || {};
+    if (!name || !type || !url) {
+      return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background'), and URL are required." });
+    }
+    const newItem = {
+      id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name: String(name).trim(),
+      type,
+      category: category || "general",
+      url,
+      enabled: enabled !== false,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    const items = loadAssetLibrariesDatabase();
+    const updated = [newItem, ...items];
+    saveAssetLibrariesDatabase(updated);
+    return res.json({ success: true, item: newItem });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, category, enabled, url } = req.body || {};
+    const items = loadAssetLibrariesDatabase();
+    const idx = items.findIndex((it) => it.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: "Asset item not found." });
+    }
+    const updated = {
+      ...items[idx],
+      ...name !== void 0 ? { name: String(name).trim() } : {},
+      ...category !== void 0 ? { category } : {},
+      ...enabled !== void 0 ? { enabled: Boolean(enabled) } : {},
+      ...url !== void 0 ? { url } : {},
+      updatedAt: Date.now()
+    };
+    items[idx] = updated;
+    saveAssetLibrariesDatabase(items);
+    return res.json({ success: true, item: updated });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    const items = loadAssetLibrariesDatabase();
+    const target = items.find((it) => it.id === id);
+    if (!target) {
+      return res.status(404).json({ error: "Asset item not found." });
+    }
+    const frames = loadDynamicFramesDatabase();
+    const inUse = frames.some(
+      (f) => f.headerConfig?.manualLocationAsset === target.url || f.fullStoryCalloutConfig?.manualCalloutAsset === target.url || f.videoConfig?.locationBadgeUrl === target.url || f.calloutAssetUrl === target.url || f.statementOptions?.curatedBackgroundUrl === target.url
+    );
+    if (inUse) {
+      return res.status(400).json({
+        error: "\u092F\u0939 \u090F\u0938\u0947\u091F \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u090F\u0915 \u092F\u093E \u0905\u0927\u093F\u0915 \u092A\u092C\u094D\u0932\u093F\u0936 \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u0926\u094D\u0935\u093E\u0930\u093E \u0909\u092A\u092F\u094B\u0917 \u092E\u0947\u0902 \u0939\u0948\u0964 \u092A\u0939\u0932\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092B\u094D\u0930\u0947\u092E \u0905\u092A\u0921\u0947\u091F \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    const filtered = items.filter((it) => it.id !== id);
+    saveAssetLibrariesDatabase(filtered);
+    return res.json({ success: true, message: "\u090F\u0938\u0947\u091F \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E\u092F\u093E \u0917\u092F\u093E\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

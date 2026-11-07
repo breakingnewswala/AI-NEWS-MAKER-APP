@@ -83,7 +83,7 @@ import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
 function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[]): FrameOption[] {
   const staticFrames = getEffectiveFrameOptions();
   const publishedDynamic: FrameOption[] = (dynamicFrames || [])
-    .filter((df) => df.publicationStatus === 'published')
+    .filter((df) => df.publicationStatus === 'published' && df.frameMode !== 'video' && df.frameType !== 'video')
     .map((df) => {
       const normCat = normalizeToCanonicalCategory(df.designCategory);
       const tier = df.allowedPlans && df.allowedPlans.length > 0 ? df.allowedPlans[0] : 'BASIC';

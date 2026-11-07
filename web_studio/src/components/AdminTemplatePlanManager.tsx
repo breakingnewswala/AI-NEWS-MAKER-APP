@@ -21,6 +21,11 @@ import {
   Layers,
   Upload,
   Image as ImageIcon,
+  Layout,
+  ExternalLink,
+  MapPin,
+  Calendar,
+  Filter,
 } from 'lucide-react';
 import {
   GraphicPlanCategory,
@@ -70,92 +75,64 @@ export function normalizeToCanonicalCategory(cat?: string): CanonicalFrameCatego
 interface AdminTemplatePlanManagerProps {
   isAdmin: boolean;
   onOpenStudioWithTemplate?: (templateId: string) => void;
+  onEditFrame?: (frame: DynamicFrameTemplate) => void;
 }
 
 export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> = ({
   isAdmin,
   onOpenStudioWithTemplate,
+  onEditFrame,
 }) => {
   const [frameOptions, setFrameOptions] = useState<FrameOption[]>([]);
   const [templateConfigs, setTemplateConfigs] = useState<Record<string, TemplatePlanConfig>>(() => getAllTemplateConfigs());
-  const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
+  const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>([]);
+  
+  // Filters
+  const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '9:16' | '1:1'>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modals & Feedback
+  const [previewFrame, setPreviewFrame] = useState<DynamicFrameTemplate | null>(null);
   const [successToast, setSuccessToast] = useState<{ id: string; msg: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempCustomName, setTempCustomName] = useState<string>('');
 
-  // New Frame Creation Drawer State
-  const [isAddingFrame, setIsAddingFrame] = useState(false);
-  const [newFrameName, setNewFrameName] = useState('');
-  const [newFrameCategory, setNewFrameCategory] = useState<string>('Regular Frames');
-  const [newFrameTier, setNewFrameTier] = useState<string>('BASIC');
-  const [newFrameCoinPrice, setNewFrameCoinPrice] = useState<number>(0);
-  const [newFrameAssetUrl, setNewFrameAssetUrl] = useState('');
-  const [newFrameHeadlineArea, setNewFrameHeadlineArea] = useState('3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)');
-  const [isCreatingFrame, setIsCreatingFrame] = useState(false);
-  const [createError, setCreateError] = useState('');
-
-  // Dynamic Frames List (from D. AI Frame Generator database)
-  const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>([]);
-
   const refreshFrames = () => {
     setFrameOptions(getEffectiveFrameOptions());
     setTemplateConfigs(getAllTemplateConfigs());
-    fetchDynamicFramesFromApi()
-      .then((dfs) => setDynamicFramesList(dfs || []))
-      .catch(() => setDynamicFramesList(getLocalDynamicFrames()));
+    fetchDynamicFramesFromApi({ frameType: 'graphic' })
+      .then((dfs) => {
+        // Exclude video frames strictly
+        const graphicOnly = (dfs || []).filter(
+          (f) => f.frameMode !== 'video' && f.frameType !== 'video'
+        );
+        setDynamicFramesList(graphicOnly);
+      })
+      .catch(() => {
+        const locals = getLocalDynamicFrames().filter(
+          (f) => f.frameMode !== 'video' && f.frameType !== 'video'
+        );
+        setDynamicFramesList(locals);
+      });
   };
 
   useEffect(() => {
     refreshFrames();
-
-    const handleUpdate = () => {
-      refreshFrames();
-    };
-
+    const handleUpdate = () => refreshFrames();
     window.addEventListener('template_plans_updated', handleUpdate);
+    window.addEventListener('dynamic_frames_updated', handleUpdate);
     return () => {
       window.removeEventListener('template_plans_updated', handleUpdate);
+      window.removeEventListener('dynamic_frames_updated', handleUpdate);
     };
   }, []);
 
-  // Unified frames: Effective static frames + Published dynamic frames
-  const allFrames: FrameOption[] = useMemo(() => {
-    const staticList = frameOptions.map((f) => {
-      const cfg = templateConfigs[f.id] || DEFAULT_TEMPLATE_PLAN_CONFIGS[f.id];
-      const normCat = normalizeToCanonicalCategory(cfg?.category || f.category);
-      return {
-        ...f,
-        category: normCat,
-      };
-    });
-
-    const publishedDynamic = (dynamicFramesList || [])
-      .filter((df) => df.publicationStatus === 'published')
-      .map((df) => {
-        const normCat = normalizeToCanonicalCategory(df.designCategory);
-        return {
-          id: df.id,
-          name: df.name,
-          description: df.description || `AI जनरेटेड ${df.aspectRatio} फ्रेम`,
-          category: normCat,
-          isCustom: true,
-          previewUrl: df.previewImageUrl || df.sampleReferenceUrl,
-          assetUrl: df.sampleReferenceUrl,
-        };
-      });
-
-    const seen = new Set<string>();
-    const combined: FrameOption[] = [];
-    for (const item of [...staticList, ...publishedDynamic]) {
-      if (!seen.has(item.id)) {
-        seen.add(item.id);
-        combined.push(item);
-      }
-    }
-    return combined;
-  }, [frameOptions, dynamicFramesList, templateConfigs]);
+  const showToast = (id: string, msg: string) => {
+    setSuccessToast({ id, msg });
+    setTimeout(() => setSuccessToast(null), 3000);
+  };
 
   const getEffectiveConfig = (frameId: string): TemplatePlanConfig => {
     if (templateConfigs[frameId]) return templateConfigs[frameId];
@@ -165,7 +142,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
       return {
         allowedPlans: (df.allowedPlans as GraphicPlanCategory[]) || ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
         isActive: df.publicationStatus === 'published',
-        version: 'v1.0',
+        version: `v${df.version || 1}`,
         category: normCat,
         selectedTier: df.allowedPlans?.includes('BASIC')
           ? 'BASIC'
@@ -187,713 +164,674 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     };
   };
 
-  const handleStartRename = (id: string, currentName: string) => {
-    setEditingId(id);
-    setTempCustomName(currentName);
+  const handleToggleActive = async (frameId: string) => {
+    const current = getEffectiveConfig(frameId);
+    const updated: TemplatePlanConfig = {
+      ...current,
+      isActive: !current.isActive,
+    };
+    setTemplateConfigs((prev) => ({ ...prev, [frameId]: updated }));
+    saveTemplateConfig(frameId, updated);
+    showToast(frameId, updated.isActive ? '✅ फ्रेम सक्रिय किया गया' : '⚠️ फ्रेम निष्क्रिय किया गया');
   };
 
-  const handleSaveRename = (id: string) => {
-    const trimmed = tempCustomName.trim();
-    if (!trimmed) {
-      alert('कृपया टेम्पलेट का नाम खाली न छोड़ें।');
-      return;
-    }
-    saveTemplateConfig(id, { customName: trimmed });
-    setEditingId(null);
-    refreshFrames();
-    setSuccessToast({
-      id,
-      msg: `टेम्पलेट का नाम बदलकर "${trimmed}" कर दिया गया है।`,
+  const handleTierChange = (frameId: string, tier: string) => {
+    const current = getEffectiveConfig(frameId);
+    const newAllowed = getCascadingAllowedPlans(tier);
+    const updated: TemplatePlanConfig = {
+      ...current,
+      selectedTier: tier as any,
+      allowedPlans: newAllowed,
+    };
+    setTemplateConfigs((prev) => ({ ...prev, [frameId]: updated }));
+    saveTemplateConfig(frameId, updated);
+    showToast(frameId, `✅ टियर ${tier} सेट किया गया`);
+  };
+
+  const handleCoinPriceChange = (frameId: string, coinPrice: number) => {
+    const current = getEffectiveConfig(frameId);
+    const updated: TemplatePlanConfig = {
+      ...current,
+      coinPrice: Math.max(0, coinPrice),
+    };
+    setTemplateConfigs((prev) => ({ ...prev, [frameId]: updated }));
+    saveTemplateConfig(frameId, updated);
+    showToast(frameId, `✅ कॉइन मूल्य ${coinPrice} सेट किया गया`);
+  };
+
+  // Convert DynamicFrameTemplate or FrameOption to a canonical display object
+  const displayItems = useMemo(() => {
+    // 1. Published dynamic frames (authoritative source)
+    const dynamicItems = dynamicFramesList.map((df) => {
+      const cfg = getEffectiveConfig(df.id);
+      return {
+        id: df.id,
+        name: df.name,
+        description: df.description || `AI जनरेटेड ${df.aspectRatio} ग्राफिक फ्रेम`,
+        aspectRatio: df.aspectRatio || '4:5',
+        category: normalizeToCanonicalCategory(df.designCategory),
+        previewUrl: df.previewImageUrl || df.sampleReferenceUrl || '',
+        version: df.version || 1,
+        allowedPlans: (cfg.allowedPlans || df.allowedPlans || ['BASIC']) as GraphicPlanCategory[],
+        coinPrice: cfg.coinPrice || 0,
+        isActive: cfg.isActive !== false,
+        rawDynamicFrame: df,
+      };
     });
-    setTimeout(() => setSuccessToast(null), 2500);
-  };
 
-  const handleCancelRename = () => {
-    setEditingId(null);
-    setTempCustomName('');
-  };
-
-  // Cascading tier change handler
-  const handleSelectedTierChange = async (templateId: string, tier: string) => {
-    const cascadingPlans = getCascadingAllowedPlans(tier);
-    saveTemplateConfig(templateId, {
-      selectedTier: tier,
-      allowedPlans: cascadingPlans,
-    });
-
-    const df = dynamicFramesList.find((d) => d.id === templateId);
-    if (df) {
-      try {
-        const token = getAuthToken();
-        await saveDynamicFrameToApi({ id: templateId, allowedPlans: cascadingPlans as any }, token);
-      } catch (e) {
-        console.warn('Error syncing dynamic frame tier:', e);
-      }
-    }
-
-    refreshFrames();
-    setSuccessToast({
-      id: templateId,
-      msg: `टियर बदला: ${tier} -> अनुमत प्लान्स: ${cascadingPlans.join(', ')}`,
-    });
-    setTimeout(() => setSuccessToast(null), 2500);
-  };
-
-  // Category change handler
-  const handleCategoryChange = async (templateId: string, category: string) => {
-    const normCat = normalizeToCanonicalCategory(category);
-    saveTemplateConfig(templateId, { category: normCat });
-
-    const df = dynamicFramesList.find((d) => d.id === templateId);
-    if (df) {
-      try {
-        const token = getAuthToken();
-        await saveDynamicFrameToApi({ id: templateId, designCategory: normCat as any }, token);
-      } catch (e) {
-        console.warn('Error syncing dynamic frame category:', e);
-      }
-    }
-
-    refreshFrames();
-    setSuccessToast({
-      id: templateId,
-      msg: `कैटेगरी बदली: "${normCat}"`,
-    });
-    setTimeout(() => setSuccessToast(null), 2500);
-  };
-
-  // Coin price change handler
-  const handleCoinPriceChange = (templateId: string, coinPrice: number) => {
-    const price = Math.max(0, Number(coinPrice) || 0);
-    saveTemplateConfig(templateId, { coinPrice: price });
-    refreshFrames();
-    setSuccessToast({
-      id: templateId,
-      msg: price > 0 ? `कॉइन अनलॉक मूल्य सेट: ${price} कॉइन्स/दिन` : 'फ्रेम निःशुल्क/पैकेज आधारित सेट',
-    });
-    setTimeout(() => setSuccessToast(null), 2500);
-  };
-
-  const handleTogglePlan = async (templateId: string, plan: GraphicPlanCategory) => {
-    const current = getEffectiveConfig(templateId);
-    const exists = current.allowedPlans.includes(plan);
-    const updatedPlans = exists
-      ? current.allowedPlans.filter((p) => p !== plan)
-      : [...current.allowedPlans, plan];
-
-    if (updatedPlans.length === 0) {
-      alert('कम से कम एक प्लान चुनना अनिवार्य है।');
-      return;
-    }
-
-    saveTemplateConfig(templateId, { allowedPlans: updatedPlans });
-
-    const df = dynamicFramesList.find((d) => d.id === templateId);
-    if (df) {
-      try {
-        const token = getAuthToken();
-        await saveDynamicFrameToApi({ id: templateId, allowedPlans: updatedPlans as any }, token);
-      } catch (e) {
-        console.warn('Error syncing dynamic frame plan toggle:', e);
-      }
-    }
-
-    refreshFrames();
-    setSuccessToast({
-      id: templateId,
-      msg: `प्लान एक्सेस अपडेट: ${updatedPlans.join(', ')}`,
-    });
-    setTimeout(() => setSuccessToast(null), 2500);
-  };
-
-  const handleToggleActive = async (templateId: string) => {
-    const current = getEffectiveConfig(templateId);
-    const nextState = !current.isActive;
-    saveTemplateConfig(templateId, { isActive: nextState });
-
-    const df = dynamicFramesList.find((d) => d.id === templateId);
-    if (df) {
-      try {
-        const token = getAuthToken();
-        await saveDynamicFrameToApi({ id: templateId, publicationStatus: nextState ? 'published' : 'disabled' }, token);
-      } catch (e) {
-        console.warn('Error syncing dynamic frame active status:', e);
-      }
-    }
-
-    refreshFrames();
-    setSuccessToast({
-      id: templateId,
-      msg: nextState ? 'टेम्पलेट सक्रिय (Active) किया गया' : 'टेम्पलेट निष्क्रिय (Inactive) किया गया',
-    });
-    setTimeout(() => setSuccessToast(null), 2500);
-  };
-
-  const handleResetDefaults = () => {
-    if (window.confirm('क्या आप सभी टेम्पलेट्स की सेटिंग्स को डिफ़ॉल्ट पर रीसेट करना चाहते हैं?')) {
-      localStorage.removeItem('admin_template_configs_v3');
-      window.dispatchEvent(new CustomEvent('template_plans_updated'));
-      refreshFrames();
-      setSuccessToast({ id: 'सभी टेम्पलेट्स', msg: 'डिफ़ॉल्ट सेटिंग्स बहाल की गईं' });
-      setTimeout(() => setSuccessToast(null), 2500);
-    }
-  };
-
-  // Create / Upload new frame
-  const handleCreateFrame = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreateError('');
-    if (!newFrameName.trim()) {
-      setCreateError('कृपया फ्रेम का नाम दर्ज करें');
-      return;
-    }
-
-    setIsCreatingFrame(true);
-    try {
-      const res = await fetch('/api/admin/create-frame', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newFrameName.trim(),
-          category: newFrameCategory,
-          selectedTier: newFrameTier,
-          coinPrice: Number(newFrameCoinPrice) || 0,
-          assetUrl: newFrameAssetUrl.trim(),
-          previewUrl: newFrameAssetUrl.trim(),
-          headlineArea: newFrameHeadlineArea,
-        }),
+    // 2. Static frames that aren't superseded by dynamic frames
+    const dynamicIds = new Set(dynamicItems.map((d) => d.id));
+    const staticItems = frameOptions
+      .filter((f) => !dynamicIds.has(f.id))
+      .map((f) => {
+        const cfg = getEffectiveConfig(f.id);
+        const normCat = normalizeToCanonicalCategory(cfg.category || f.category);
+        const isStory = normCat === 'Story Frames';
+        return {
+          id: f.id,
+          name: cfg.customName || f.name,
+          description: f.description || 'क्लासिक न्यूज़ ग्राफिक फ्रेम',
+          aspectRatio: (isStory ? '9:16' : '4:5') as '4:5' | '9:16' | '1:1',
+          category: normCat,
+          previewUrl: f.previewUrl || f.assetUrl || '',
+          version: 1,
+          allowedPlans: cfg.allowedPlans || ['BASIC'],
+          coinPrice: cfg.coinPrice || 0,
+          isActive: cfg.isActive !== false,
+          rawDynamicFrame: undefined,
+        };
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setIsAddingFrame(false);
-        setNewFrameName('');
-        setNewFrameAssetUrl('');
-        setNewFrameCoinPrice(0);
-        refreshFrames();
-        setSuccessToast({
-          id: data.frameId || 'New Frame',
-          msg: `नई फ्रेम "${newFrameName}" सफलतापूर्वक बनाई गई!`,
-        });
-        setTimeout(() => setSuccessToast(null), 3000);
-      } else {
-        setCreateError(data.error || 'फ्रेम बनाने में त्रुटि हुई');
+    return [...dynamicItems, ...staticItems];
+  }, [dynamicFramesList, frameOptions, templateConfigs]);
+
+  // Unified allFrames collection
+  const allFrames = displayItems;
+
+  // Filter items
+  const filteredItems = useMemo(() => {
+    return displayItems.filter((item) => {
+      if (selectedRatio !== 'all' && item.aspectRatio !== selectedRatio) return false;
+      if (filterCategory !== 'all' && item.category !== filterCategory) return false;
+      if (filterPlan !== 'all' && !item.allowedPlans.includes(filterPlan)) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        return (
+          item.name.toLowerCase().includes(q) ||
+          item.id.toLowerCase().includes(q) ||
+          item.category.toLowerCase().includes(q) ||
+          (item.description && item.description.toLowerCase().includes(q))
+        );
       }
-    } catch (err: any) {
-      setCreateError(err.message || 'सर्वर से कनेक्ट करने में त्रुटि');
-    } finally {
-      setIsCreatingFrame(false);
-    }
-  };
+      return true;
+    });
+  }, [displayItems, selectedRatio, filterCategory, filterPlan, searchQuery]);
 
-  const filteredFrames = allFrames.filter((f) => {
-    const cfg = getEffectiveConfig(f.id);
-    const matchesPlan = filterPlan === 'all' || cfg.allowedPlans.includes(filterPlan);
-    const frameCat = normalizeToCanonicalCategory(cfg.category || f.category);
-    const matchesCategory = filterCategory === 'all' || frameCat === filterCategory;
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      frameCat.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesPlan && matchesCategory && matchesSearch;
-  });
-
-  if (!isAdmin) {
-    return (
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center text-slate-400">
-        <Lock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-        <h4 className="text-base font-bold text-white">एडमिन अधिकार आवश्यक है</h4>
-        <p className="text-xs mt-1">Admin Tier Access Control केवल सुपर एडमिन के लिए उपलब्ध है।</p>
-      </div>
-    );
-  }
+  const count4_5 = displayItems.filter((i) => i.aspectRatio === '4:5').length;
+  const count9_16 = displayItems.filter((i) => i.aspectRatio === '9:16').length;
+  const count1_1 = displayItems.filter((i) => i.aspectRatio === '1:1').length;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-red-600 flex items-center justify-center text-slate-950 font-black shadow-lg shrink-0">
-            <ShieldCheck className="w-6 h-6 text-slate-950" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                <span>Admin Tier Access Control</span>
-              </h3>
-              <span className="px-2 py-0.5 bg-red-600/30 border border-red-500/50 text-red-300 text-[10px] font-bold rounded">
-                9 श्रेणियाँ व कैस्केडिंग टियर
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              फ्रेम्स का 9 श्रेणियों में विभाजन, पैकेज टियर एक्सेस कंट्रोल (Basic, Advance, Pro, VIP Desk) और कॉइन-आधारित दैनिक अनलॉक प्रबंधित करें।
-            </p>
-          </div>
+    <div className="space-y-6">
+      {/* Toast Notification */}
+      {successToast && (
+        <div className="p-3 bg-emerald-950/90 border border-emerald-500/60 rounded-xl text-xs font-bold text-emerald-200 flex items-center gap-2 shadow-lg animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{successToast.msg}</span>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+      {/* Ratio Filters & Header Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl shadow-xl">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
           <button
             type="button"
-            onClick={() => setIsAddingFrame(!isAddingFrame)}
-            className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition cursor-pointer"
+            onClick={() => setSelectedRatio('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap ${
+              selectedRatio === 'all'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:text-white'
+            }`}
           >
-            <Plus className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>सभी ग्राफिक फ्रेम्स ({displayItems.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedRatio('4:5')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap ${
+              selectedRatio === '4:5'
+                ? 'bg-purple-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:text-white'
+            }`}
+          >
+            <span>4:5 पोर्ट्रेट ({count4_5})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedRatio('9:16')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap ${
+              selectedRatio === '9:16'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:text-white'
+            }`}
+          >
+            <span>9:16 सोशल स्टोरी ({count9_16})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedRatio('1:1')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap ${
+              selectedRatio === '1:1'
+                ? 'bg-pink-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:text-white'
+            }`}
+          >
+            <span>1:1 स्क्वायर ({count1_1})</span>
+          </button>
+        </div>
+
+        {/* Actions & Search */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('switch_admin_tab', { detail: { tab: 'frames' } }));
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-sm whitespace-nowrap cursor-pointer"
+            title="D. AI Frame Generator में नई फ्रेम बनाएं"
+          >
             <span>+ नई फ्रेम जोड़ें</span>
           </button>
 
           <button
             type="button"
-            onClick={handleResetDefaults}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
-            title="सभी बदलाव रीसेट करें"
+            onClick={() => {
+              if (window.confirm('क्या आप सभी टेम्पलेट्स को डिफ़ॉल्ट सेटिंग्स पर रीसेट करना चाहते हैं?')) {
+                localStorage.removeItem('news_maker_template_plan_configs');
+                window.location.reload();
+              }
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700 whitespace-nowrap cursor-pointer"
+            title="डिफ़ॉल्ट रीसेट करें"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
             <span>डिफ़ॉल्ट रीसेट</span>
           </button>
-        </div>
-      </div>
 
-      {/* Floating Success Notice */}
-      {successToast && (
-        <div className="p-3 bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 rounded-xl flex items-center justify-between gap-2 shadow-lg animate-in fade-in">
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>
-              सफलतापूर्वक अपडेट: <strong>{successToast.id}</strong> — {successToast.msg}
-            </span>
-          </div>
-          <span className="text-[10px] bg-emerald-900/60 px-2 py-0.5 rounded text-emerald-300 font-mono">
-            लाइव सिंक
-          </span>
-        </div>
-      )}
-
-      {/* Add New Frame Drawer */}
-      {isAddingFrame && (
-        <form onSubmit={handleCreateFrame} className="p-5 bg-slate-950/90 border border-amber-500/40 rounded-2xl space-y-4 shadow-2xl animate-in fade-in">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h4 className="text-sm font-black text-amber-300 flex items-center gap-2">
-              <Upload className="w-4 h-4" />
-              <span>नई फ्रेम बनाएं / अपलोड करें (Template Manager)</span>
-            </h4>
-            <button
-              type="button"
-              onClick={() => setIsAddingFrame(false)}
-              className="p-1 text-slate-400 hover:text-white rounded-lg"
-            >
-              ✕
-            </button>
-          </div>
-
-          {createError && (
-            <div className="p-2.5 bg-red-950/80 border border-red-500/60 text-red-200 text-xs rounded-xl font-bold">
-              {createError}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 block mb-1">फ्रेम का नाम *</label>
-              <input
-                type="text"
-                value={newFrameName}
-                onChange={(e) => setNewFrameName(e.target.value)}
-                placeholder="उदा. Super Fast Breaking Ribbon"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-amber-400"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 block mb-1">कैटेगरी असाइन करें * (9 श्रेणियाँ)</label>
-              <select
-                value={newFrameCategory}
-                onChange={(e) => setNewFrameCategory(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-amber-400"
-              >
-                {CANONICAL_FRAME_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                कैस्केडिंग टियर असाइनमेंट *
-              </label>
-              <select
-                value={newFrameTier}
-                onChange={(e) => setNewFrameTier(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-amber-400"
-              >
-                <option value="BASIC">Basic (Basic, Advance, Pro, VIP Desk)</option>
-                <option value="ADVANCED">Advance (Advance, Pro, VIP Desk)</option>
-                <option value="PRO">Pro (Pro, VIP Desk)</option>
-                <option value="VIP DESK">VIP Desk (VIP Desk only)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                दैनिक कॉइन अनलॉक मूल्य (0 = केवल पैकेज)
-              </label>
-              <div className="relative">
-                <Coins className="w-3.5 h-3.5 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="number"
-                  min="0"
-                  step="10"
-                  value={newFrameCoinPrice}
-                  onChange={(e) => setNewFrameCoinPrice(Number(e.target.value))}
-                  placeholder="उदा. 50"
-                  className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-hidden focus:border-amber-400"
-                />
-              </div>
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                फ्रेम एसेट इमेज URL / पाथ
-              </label>
-              <input
-                type="text"
-                value={newFrameAssetUrl}
-                onChange={(e) => setNewFrameAssetUrl(e.target.value)}
-                placeholder="https://... या /assets/frames/frame.png"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-amber-400"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
-            <button
-              type="button"
-              onClick={() => setIsAddingFrame(false)}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition"
-            >
-              रद्द करें
-            </button>
-            <button
-              type="submit"
-              disabled={isCreatingFrame}
-              className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl text-xs shadow-lg transition disabled:opacity-50"
-            >
-              {isCreatingFrame ? 'सेव हो रहा है...' : '✓ फ्रेम सुरक्षित करें'}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Plan & Category Filter Bar */}
-      <div className="space-y-3">
-        {/* Category Pills (All 9 Canonical Categories) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-          <span className="text-[11px] font-bold text-slate-400 shrink-0 mr-1 flex items-center gap-1">
-            <Folder className="w-3.5 h-3.5 text-amber-400" />
-            श्रेणी:
-          </span>
-          <button
-            type="button"
-            onClick={() => setFilterCategory('all')}
-            className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-              filterCategory === 'all'
-                ? 'bg-amber-400 text-slate-950 font-black'
-                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-            }`}
-          >
-            सभी श्रेणियाँ ({allFrames.length})
-          </button>
-          {CANONICAL_FRAME_CATEGORIES.map((cat) => {
-            const count = allFrames.filter((f) => {
-              const cfg = getEffectiveConfig(f.id);
-              return normalizeToCanonicalCategory(cfg?.category || f.category) === cat;
-            }).length;
-            const isSelected = filterCategory === cat;
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setFilterCategory(cat)}
-                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                  isSelected
-                    ? 'bg-amber-400 text-slate-950 font-black'
-                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                }`}
-              >
-                <span>{cat}</span>
-                <span className="text-[10px] opacity-75 font-mono">({count})</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Plan Filter Tabs and Search Toolbar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-800/60">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {[
-              { id: 'all', label: 'सभी प्लान्स' },
-              { id: 'BASIC', label: 'Basic' },
-              { id: 'ADVANCED', label: 'Advance' },
-              { id: 'PRO', label: 'Pro' },
-              { id: 'VIP DESK', label: 'VIP Desk' },
-            ].map((tab) => {
-              const isActive = filterPlan === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setFilterPlan(tab.id as any)}
-                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
-                    isActive
-                      ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 font-black'
-                      : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800'
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Search Input */}
-          <div className="relative min-w-[220px]">
+          {/* Search */}
+          <div className="relative min-w-[200px]">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="फ्रेम या श्रेणी खोजें..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-amber-400"
+              placeholder="ग्राफिक फ्रेम या श्रेणी खोजें..."
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
             />
           </div>
         </div>
       </div>
 
-      {/* Frame List with Admin Tier Access Control */}
-      <div className="space-y-4">
-        {filteredFrames.map((frame, index) => {
-          const cfg = getEffectiveConfig(frame.id);
-          const displayName = cfg.customName || frame.name;
-          const assignedCategory = normalizeToCanonicalCategory(cfg.category || frame.category);
-          const currentTier = cfg.selectedTier || (cfg.allowedPlans.includes('BASIC') ? 'BASIC' : cfg.allowedPlans.includes('ADVANCED') ? 'ADVANCED' : cfg.allowedPlans.includes('PRO') ? 'PRO' : 'VIP DESK');
-          const currentCoinPrice = cfg.coinPrice || 0;
+      {/* Sub Filters: Category & Plans */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <span className="text-slate-400 font-bold flex items-center gap-1">
+            <Filter className="w-3.5 h-3.5 text-purple-400" />
+            <span>श्रेणी:</span>
+          </span>
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white font-bold"
+          >
+            <option value="all">सभी श्रेणियाँ (All)</option>
+            {CANONICAL_FRAME_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
 
+          <span className="text-slate-400 font-bold ml-2">प्लान:</span>
+          <select
+            value={filterPlan}
+            onChange={(e) => setFilterPlan(e.target.value as any)}
+            className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white font-bold"
+          >
+            <option value="all">सभी प्लान्स (All)</option>
+            <option value="BASIC">BASIC</option>
+            <option value="ADVANCED">ADVANCED</option>
+            <option value="PRO">PRO</option>
+            <option value="VIP DESK">VIP DESK</option>
+          </select>
+        </div>
+
+        <span className="text-slate-400 text-xs">
+          दिखाए जा रहे हैं: <strong className="text-white">{filteredItems.length}</strong> ग्राफिक फ्रेम्स
+        </span>
+      </div>
+
+      {/* Structured Card Grid matching Section D catalog design */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredItems.map((item) => {
+          const isStory = item.aspectRatio === '9:16';
           return (
             <div
-              key={frame.id}
-              className={`p-4 sm:p-5 rounded-2xl border transition-all space-y-4 ${
-                cfg.isActive
-                  ? 'bg-slate-950/80 border-slate-800 hover:border-slate-700 shadow-md'
-                  : 'bg-slate-950/40 border-slate-800/50 opacity-60'
+              key={item.id}
+              className={`bg-slate-900/90 border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all shadow-md group ${
+                item.isActive
+                  ? 'border-slate-800 hover:border-purple-500/50'
+                  : 'border-slate-800/40 opacity-70'
               }`}
             >
-              {/* Header row: Name with inline Rename, Category Badge, Active Toggle, Preview (Technical ID hidden) */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  {editingId === frame.id ? (
-                    <div className="flex items-center gap-1.5 bg-slate-900 border border-amber-400/80 rounded-xl p-1 shadow-md">
-                      <input
-                        type="text"
-                        value={tempCustomName}
-                        onChange={(e) => setTempCustomName(e.target.value)}
-                        placeholder="टेम्पलेट का नया नाम..."
-                        className="px-2.5 py-1 bg-slate-950 text-white text-xs font-bold rounded-lg border border-slate-700 focus:outline-hidden focus:border-amber-400 min-w-[180px]"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveRename(frame.id);
-                          if (e.key === 'Escape') handleCancelRename();
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleSaveRename(frame.id)}
-                        className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-lg flex items-center gap-1 cursor-pointer transition active:scale-95"
-                        title="नाम सुरक्षित करें"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>सेव</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelRename}
-                        className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg cursor-pointer transition"
-                        title="रद्द करें"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
-                        <span>फ्रेम #{index + 1}: {displayName}</span>
-                      </h4>
-                      <button
-                        type="button"
-                        onClick={() => handleStartRename(frame.id, displayName)}
-                        className="p-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg cursor-pointer transition"
-                        title="टेम्पलेट का नाम बदलें (Rename Frame)"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                    📂 {assignedCategory}
+              <div>
+                {/* Header Badge Row */}
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="font-mono text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/20 truncate max-w-[150px]">
+                    {item.id}
                   </span>
-
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                    4:5 पोर्ट्रेट
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Active / Inactive Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleActive(frame.id)}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                      cfg.isActive
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                        : 'bg-red-500/20 text-red-300 border border-red-500/40'
-                    }`}
-                  >
-                    {cfg.isActive ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-red-400" />}
-                    <span>{cfg.isActive ? 'सक्रिय (Active)' : 'निष्क्रिय (Inactive)'}</span>
-                  </button>
-
-                  {/* Preview Button */}
-                  {onOpenStudioWithTemplate && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenStudioWithTemplate(frame.id)}
-                      className="px-3 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-black shadow flex items-center gap-1 cursor-pointer transition active:scale-95"
-                      title="स्टूडियो में प्रीव्यू देखें"
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`px-2 py-0.5 text-[9.5px] font-black rounded ${
+                        isStory
+                          ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                          : item.aspectRatio === '1:1'
+                          ? 'bg-pink-500/20 text-pink-300 border border-pink-500/30'
+                          : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                      }`}
                     >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>प्रीव्यू</span>
-                    </button>
+                      {isStory ? '9:16 स्टोरी' : item.aspectRatio === '1:1' ? '1:1 स्क्वायर' : '4:5 पोर्ट्रेट'}
+                    </span>
+                    <span className="px-2 py-0.5 text-[9.5px] font-bold bg-slate-800 text-slate-300 rounded">
+                      v{item.version}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Frame Preview Thumbnail */}
+                <div
+                  onClick={() => {
+                    if (item.rawDynamicFrame) {
+                      setPreviewFrame(item.rawDynamicFrame);
+                    }
+                  }}
+                  className={`w-full ${isStory ? 'h-36' : 'h-32'} rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex items-center justify-center relative mb-3 group-hover:border-purple-500/30 transition cursor-pointer`}
+                  title="क्लिक करके बड़ा प्रीव्यू देखें"
+                >
+                  {item.previewUrl ? (
+                    <img
+                      src={item.previewUrl}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <Layout className="w-8 h-8 text-slate-700" />
                   )}
-                </div>
-              </div>
-
-              {/* Controls Grid: Category, Cascading Tier, Coin Price */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-900/80 p-3.5 rounded-xl border border-slate-800/80">
-                {/* Category Selection */}
-                <div>
-                  <label className="text-[11px] font-black text-amber-300 uppercase tracking-wide block mb-1">
-                    श्रेणी (Category Assignment):
-                  </label>
-                  <select
-                    value={assignedCategory}
-                    onChange={(e) => handleCategoryChange(frame.id, e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-amber-400"
-                  >
-                    {CANONICAL_FRAME_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-amber-300 border border-amber-500/30">
+                    📂 {item.category}
+                  </span>
+                  <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
+                    {item.allowedPlans.join(', ')}
+                  </span>
                 </div>
 
-                {/* Cascading Tier Selection */}
-                <div>
-                  <label className="text-[11px] font-black text-amber-300 uppercase tracking-wide block mb-1">
-                    टियर एक्सेस (Cascading Tier):
-                  </label>
-                  <select
-                    value={currentTier}
-                    onChange={(e) => handleSelectedTierChange(frame.id, e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-amber-400"
-                  >
-                    <option value="BASIC">Basic (Basic, Advance, Pro, VIP Desk)</option>
-                    <option value="ADVANCED">Advance (Advance, Pro, VIP Desk)</option>
-                    <option value="PRO">Pro (Pro, VIP Desk)</option>
-                    <option value="VIP DESK">VIP Desk (VIP Desk only)</option>
-                  </select>
-                </div>
+                {/* Name & Description */}
+                <h5 className="text-sm font-bold text-white line-clamp-1">{item.name}</h5>
+                <p className="text-xs text-slate-400 line-clamp-2 mt-1 leading-relaxed">
+                  {item.description}
+                </p>
 
-                {/* Coin Price Configuration */}
-                <div>
-                  <label className="text-[11px] font-black text-amber-300 uppercase tracking-wide block mb-1">
-                    दैनिक कॉइन अनलॉक (Asia/Kolkata):
-                  </label>
-                  <div className="relative">
-                    <Coins className="w-3.5 h-3.5 text-amber-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                {/* Controls: Tier & Coins */}
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">टियर एक्सेस:</label>
+                    <select
+                      value={item.allowedPlans.includes('BASIC') ? 'BASIC' : item.allowedPlans.includes('ADVANCED') ? 'ADVANCED' : item.allowedPlans.includes('PRO') ? 'PRO' : 'VIP DESK'}
+                      onChange={(e) => handleTierChange(item.id, e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-white font-bold"
+                    >
+                      <option value="BASIC">BASIC (All)</option>
+                      <option value="ADVANCED">ADVANCED+</option>
+                      <option value="PRO">PRO+</option>
+                      <option value="VIP DESK">VIP DESK only</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">कॉइन अनलॉक:</label>
                     <input
                       type="number"
                       min="0"
                       step="10"
-                      value={currentCoinPrice}
-                      onChange={(e) => handleCoinPriceChange(frame.id, Number(e.target.value))}
-                      placeholder="0 (अनलॉक नहीं)"
-                      className="w-full pl-8 pr-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-amber-400"
+                      value={item.coinPrice}
+                      onChange={(e) => handleCoinPriceChange(item.id, Number(e.target.value))}
+                      placeholder="0"
+                      className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-white font-bold"
                     />
                   </div>
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    {currentCoinPrice > 0 ? `${currentCoinPrice} कॉइन्स में आज 11:59 PM तक अनलॉक` : '0 = केवल पैकेज आधारित'}
-                  </span>
                 </div>
               </div>
 
-              {/* Multi-Plan Fine Tuning Checkbox Row */}
-              <div className="pt-2 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <span className="text-[11px] font-bold text-slate-400">
-                  सक्रिय अनुमत प्लान्स (Allowed Plans):
-                </span>
+              {/* Actions Row */}
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => handleToggleActive(item.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                    item.isActive
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}
+                >
+                  {item.isActive ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-slate-500" />}
+                  <span>{item.isActive ? 'सक्रिय (Active)' : 'निष्क्रिय (Inactive)'}</span>
+                </button>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  {(['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'] as GraphicPlanCategory[]).map((plan) => {
-                    const isChecked = cfg.allowedPlans.includes(plan);
-                    const label = plan === 'BASIC' ? 'Basic' : plan === 'ADVANCED' ? 'Advance' : plan === 'PRO' ? 'Pro' : 'VIP Desk';
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (item.rawDynamicFrame) {
+                        setPreviewFrame(item.rawDynamicFrame);
+                      } else {
+                        // Create virtual DynamicFrame for preview
+                        setPreviewFrame({
+                          id: item.id,
+                          name: item.name,
+                          aspectRatio: item.aspectRatio,
+                          canvasWidth: 1080,
+                          canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
+                          designCategory: item.category as any,
+                          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                          publicationStatus: 'published',
+                          createdBy: 'breakingnewswala.com@gmail.com',
+                          createdAt: Date.now(),
+                          updatedAt: Date.now(),
+                          version: item.version,
+                          sampleReferenceUrl: item.previewUrl,
+                          previewImageUrl: item.previewUrl,
+                          headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                          footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                          photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
+                          textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
+                          layers: [],
+                        });
+                      }
+                    }}
+                    className="py-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-purple-400" />
+                    <span>प्रीव्यू</span>
+                  </button>
 
-                    return (
-                      <label
-                        key={plan}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleTogglePlan(frame.id, plan);
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer select-none border ${
-                          isChecked
-                            ? plan === 'BASIC'
-                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
-                              : plan === 'ADVANCED'
-                              ? 'bg-blue-500/20 text-blue-300 border-blue-500/50 shadow-sm'
-                              : plan === 'PRO'
-                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-sm'
-                              : 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
-                            : 'bg-slate-900 text-slate-500 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        <span className={`w-3 h-3 rounded flex items-center justify-center border text-[8px] ${
-                          isChecked
-                            ? 'bg-amber-400 border-amber-400 text-slate-950 font-black'
-                            : 'border-slate-600 bg-transparent'
-                        }`}>
-                          {isChecked && '✓'}
-                        </span>
-                        <span>{label}</span>
-                      </label>
-                    );
-                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onEditFrame && item.rawDynamicFrame) {
+                        onEditFrame(item.rawDynamicFrame);
+                      } else if (onEditFrame) {
+                        onEditFrame({
+                          id: item.id,
+                          name: item.name,
+                          aspectRatio: item.aspectRatio,
+                          canvasWidth: 1080,
+                          canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
+                          designCategory: item.category as any,
+                          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                          publicationStatus: 'published',
+                          createdBy: 'breakingnewswala.com@gmail.com',
+                          createdAt: Date.now(),
+                          updatedAt: Date.now(),
+                          version: item.version,
+                          sampleReferenceUrl: item.previewUrl,
+                          previewImageUrl: item.previewUrl,
+                          headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                          footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                          photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
+                          textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
+                          layers: [],
+                        });
+                      }
+                    }}
+                    className="py-1 px-2.5 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-purple-500/40 cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>एडिट</span>
+                  </button>
+
+                  {onOpenStudioWithTemplate && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenStudioWithTemplate(item.id)}
+                      className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition"
+                      title="स्टूडियो में टेस्ट करें"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           );
         })}
-
-        {filteredFrames.length === 0 && (
-          <div className="p-8 text-center bg-slate-950/50 rounded-xl border border-slate-800/80 text-slate-500 text-xs">
-            कोई टेम्पलेट नहीं मिला।
-          </div>
-        )}
       </div>
+
+      {filteredItems.length === 0 && (
+        <div className="p-8 text-center bg-slate-950/50 rounded-2xl border border-slate-800 text-slate-400 text-xs space-y-2">
+          <Sparkles className="w-8 h-8 text-slate-600 mx-auto" />
+          <p className="font-bold text-slate-300">कोई ग्राफिक फ्रेम नहीं मिला</p>
+          <p className="text-[11px] text-slate-500">कृपया फिल्टर या खोज बदलें।</p>
+        </div>
+      )}
+
+      {/* FULL-SIZE GRAPHIC FRAME PREVIEW MODAL */}
+      {previewFrame && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 border-b border-purple-500/20 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-purple-600 text-white shadow-md">
+                  <Layout className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-white">{previewFrame.name}</h4>
+                  <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                    <span className="font-mono text-purple-300">{previewFrame.id}</span>
+                    <span>•</span>
+                    <span className="font-bold text-amber-300">{previewFrame.aspectRatio}</span>
+                    <span>•</span>
+                    <span className="text-emerald-400">संस्करण v{previewFrame.version || 1}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewFrame(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Two Columns (Visual Canvas Preview & Details) */}
+            <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              {/* Visual Canvas Rendering */}
+              <div className="flex flex-col items-center justify-center">
+                <div
+                  className="relative rounded-2xl overflow-hidden border-4 border-purple-500/50 shadow-2xl bg-slate-950"
+                  style={{
+                    width: previewFrame.aspectRatio === '4:5' ? '280px' : previewFrame.aspectRatio === '9:16' ? '240px' : '260px',
+                    height: previewFrame.aspectRatio === '4:5' ? '350px' : previewFrame.aspectRatio === '9:16' ? '426px' : '260px',
+                    backgroundColor: previewFrame.primaryBackgroundHex || '#0F172A',
+                  }}
+                >
+                  {/* Background Artwork */}
+                  {(previewFrame.previewImageUrl || previewFrame.sampleReferenceUrl || previewFrame.primaryBackgroundAsset) && (
+                    <img
+                      src={previewFrame.primaryBackgroundAsset || previewFrame.previewImageUrl || previewFrame.sampleReferenceUrl}
+                      alt="Frame Background"
+                      className="w-full h-full object-cover pointer-events-none"
+                    />
+                  )}
+
+                  {/* Logo Layer */}
+                  {previewFrame.headerConfig?.showLogo && (
+                    <div
+                      className="absolute bg-slate-900/90 border border-white/20 rounded px-1.5 py-0.5 text-[8px] font-black text-white z-10"
+                      style={{
+                        left: `${previewFrame.headerConfig.logoRect?.x ?? 5}%`,
+                        top: `${previewFrame.headerConfig.logoRect?.y ?? 3.5}%`,
+                      }}
+                    >
+                      चैनल लोगो
+                    </div>
+                  )}
+
+                  {/* Location Badge */}
+                  {previewFrame.headerConfig?.showLocation && (
+                    <div
+                      className="absolute bg-red-600 rounded-full px-2 py-0.5 text-[8px] font-bold text-white z-10 flex items-center gap-0.5"
+                      style={{
+                        left: `${previewFrame.headerConfig.locationRect?.x ?? 5}%`,
+                        top: `${previewFrame.headerConfig.locationRect?.y ?? 13.5}%`,
+                      }}
+                    >
+                      <MapPin className="w-2.5 h-2.5" />
+                      <span>भोपाल</span>
+                    </div>
+                  )}
+
+                  {/* Headline Area - Verified with transparent background over plain canvas */}
+                  <div
+                    className="absolute text-center px-2 z-15"
+                    style={{
+                      bottom: `${(previewFrame.footerConfig?.footerHeightRatio || 0.08) * 100 + 3}%`,
+                      left: '4%',
+                      right: '4%',
+                    }}
+                  >
+                    <div
+                      className="font-bold text-white text-[10px] leading-snug drop-shadow-md px-1.5 py-1 rounded"
+                      style={{
+                        backgroundColor:
+                          previewFrame.textSlots?.[0]?.backgroundColor === 'transparent' || !previewFrame.textSlots?.[0]?.backgroundColor
+                            ? 'transparent'
+                            : previewFrame.textSlots[0].backgroundColor,
+                      }}
+                    >
+                      मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली मंजूरी
+                    </div>
+                  </div>
+
+                  {/* Callout if enabled */}
+                  {previewFrame.fullStoryCalloutConfig?.enabled && (
+                    <div
+                      className="absolute text-[7px] font-bold bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full shadow z-20"
+                      style={{
+                        left: `${previewFrame.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                        top: `${previewFrame.fullStoryCalloutConfig.rect?.y ?? 86}%`,
+                      }}
+                    >
+                      पूरी खबर डिस्क्रिप्शन में
+                    </div>
+                  )}
+
+                  {/* Permanent Footer */}
+                  <div
+                    className="absolute bottom-0 bg-white border-t flex items-center justify-between px-2 text-[7px] font-bold text-black z-30"
+                    style={{
+                      height: `${(previewFrame.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
+                      width: `${previewFrame.footerConfig?.footerWidthPct || 100}%`,
+                      left: `${(100 - (previewFrame.footerConfig?.footerWidthPct || 100)) / 2}%`,
+                    }}
+                  >
+                    <span>@breakingnewswala</span>
+                    <span>सत्यापित समाचार नेटवर्क</span>
+                  </div>
+                </div>
+                <span className="text-[11px] text-slate-400 mt-2 font-bold">वास्तविक पब्लिश्ड फ्रेम प्रीव्यू</span>
+              </div>
+
+              {/* Specifications & Edit Actions */}
+              <div className="space-y-4 text-xs">
+                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-2.5">
+                  <h5 className="font-bold text-sm text-purple-300">डिज़ाइन विनिर्देश (Design Manifest)</h5>
+                  <div className="space-y-1.5 text-slate-300 text-xs">
+                    <div className="flex justify-between py-1 border-b border-slate-800">
+                      <span className="text-slate-400">अनुपात (Aspect Ratio):</span>
+                      <strong className="text-white">{previewFrame.aspectRatio}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-800">
+                      <span className="text-slate-400">कैनवास रेजोल्यूशन:</span>
+                      <strong className="text-white">{previewFrame.canvasWidth} x {previewFrame.canvasHeight}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-800">
+                      <span className="text-slate-400">श्रेणी (Category):</span>
+                      <strong className="text-amber-300">{previewFrame.designCategory}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-800">
+                      <span className="text-slate-400">अनुमत प्लान्स:</span>
+                      <strong className="text-emerald-300">{previewFrame.allowedPlans?.join(', ')}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-800">
+                      <span className="text-slate-400">फोटो स्लॉट्स:</span>
+                      <strong className="text-white">{previewFrame.photoSlots?.length || 1}</strong>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-800">
+                      <span className="text-slate-400">हेडलाइन टाइपोग्राफी:</span>
+                      <strong className="text-white">
+                        {previewFrame.typographyConfig?.primaryFontFamily || 'Noto Sans Devanagari'} ({previewFrame.typographyConfig?.primaryFontSize || 70}px)
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-purple-950/30 border border-purple-500/30 rounded-xl text-xs text-purple-200">
+                  ℹ️ यह फ्रेम पब्लिश हो चुका है। एडिट करने पर सुरक्षित वर्शनिंग के साथ नया वर्शन तैयार होगा।
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = previewFrame;
+                      setPreviewFrame(null);
+                      if (onEditFrame) {
+                        onEditFrame(target);
+                      }
+                    }}
+                    className="flex-1 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    <span>✏️ इस फ्रेम को एडिट करें (Edit & New Version)</span>
+                  </button>
+
+                  {onOpenStudioWithTemplate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenStudioWithTemplate(previewFrame.id);
+                        setPreviewFrame(null);
+                      }}
+                      className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ExternalLink className="w-4 h-4 text-purple-400" />
+                      <span>स्टूडियो में खोलें</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

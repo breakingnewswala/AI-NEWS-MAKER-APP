@@ -47,6 +47,8 @@ import { ReporterUser } from './LoginModal';
 import { VideoFeedItem, INITIAL_VIDEOS } from '../data/newsFeedData';
 import { ChannelProfile } from '../types';
 import { getApiUrl } from '../lib/apiConfig';
+import { DynamicFrameTemplate } from '../types/dynamicFrame';
+import { fetchDynamicFramesFromApi, getLocalDynamicFrames } from '../lib/dynamicFramesManager';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { generate5BalancedHeadlineOptions } from '../lib/speakerUtils';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
@@ -1075,14 +1077,104 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [showWebsite, setShowWebsite] = useState<boolean>(true);
   const [showWhatsapp, setShowWhatsapp] = useState<boolean>(true);
 
+  // Dynamic Published Video Frames (Part 9 & 10)
+  const [dynamicVideoFrames, setDynamicVideoFrames] = useState<DynamicFrameTemplate[]>(() => {
+    if (typeof window !== 'undefined') {
+      return getLocalDynamicFrames().filter(
+        (f) => (f.frameMode === 'video' || f.frameType === 'video') && f.publicationStatus === 'published'
+      );
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    const loadPublishedVideoFrames = () => {
+      fetchDynamicFramesFromApi({ frameType: 'video' })
+        .then((frames) => {
+          const videoOnly = (frames || []).filter(
+            (f) => (f.frameMode === 'video' || f.frameType === 'video') && f.publicationStatus === 'published'
+          );
+          setDynamicVideoFrames(videoOnly);
+        })
+        .catch(() => {});
+    };
+    loadPublishedVideoFrames();
+    window.addEventListener('dynamic_frames_updated', loadPublishedVideoFrames);
+    return () => window.removeEventListener('dynamic_frames_updated', loadPublishedVideoFrames);
+  }, []);
+
+  const dynamicConvertedVideoFrames: VideoFrameDefinition[] = useMemo(() => {
+    return dynamicVideoFrames.map((df) => {
+      const ratio = (df.aspectRatio || '9:16') as '9:16' | '1:1' | '4:5' | '4:3';
+      const vRect = df.videoConfig?.videoRect || { x: 0, y: 15, width: 100, height: 75 };
+      return {
+        id: df.id,
+        name: df.name,
+        nameHi: df.name,
+        description: df.description || `AI जनरेटेड ${ratio} वीडियो फ्रेम`,
+        badge: `★ AI ${ratio}`,
+        canvasRatio: ratio,
+        supportedModes: ratio === '4:5' ? ['core_4_5', 'native_4_5'] : ratio === '9:16' ? ['full_9_16', 'core_4_5'] : ['standard'],
+        headline: {
+          maxLines: df.textSlots?.[0]?.maxLines || 3,
+          area: 'bottom',
+          fontSizeDefault: 28,
+          color: '#ffffff',
+          backgroundStyle: 'lower_third_dark',
+        },
+        logo: {
+          position: 'top-left',
+          boxStyle: 'transparent',
+        },
+        location: {
+          position: 'top-left',
+          badgeStyle: 'white_blue_pin',
+        },
+        videoWindow: {
+          aspectRatio: ratio,
+          mode: df.videoConfig?.displayMode === 'crop' ? 'full' : 'window',
+          top: (vRect.y || 15) / 100,
+          bottom: ((vRect.y || 15) + (vRect.height || 75)) / 100,
+          left: (vRect.x || 0) / 100,
+          right: ((vRect.x || 0) + (vRect.width || 100)) / 100,
+        },
+        footer: {
+          visible: true,
+          style: 'dark_pill_strip',
+        },
+        tierEligibility: (df.allowedPlans?.[0] || 'BASIC') as any,
+        coinPrice: 0,
+        isActive: true,
+        isCustom: true,
+      };
+    });
+  }, [dynamicVideoFrames]);
+
   // Compatible Frames List
   const compatibleFrames = useMemo(() => {
-    return getCompatibleFrames({
+    const builtin = getCompatibleFrames({
       aspectRatio: aspect,
       isOnly4_5,
       hasCoreCrop: Boolean(cropRegion),
     });
-  }, [aspect, isOnly4_5, cropRegion]);
+    const dynamicMatching = dynamicConvertedVideoFrames.filter((df) => {
+      if (aspect === '4:5') return df.canvasRatio === '4:5' || df.canvasRatio === '9:16';
+      if (aspect === '9:16') return df.canvasRatio === '9:16';
+      if (aspect === '1:1') return df.canvasRatio === '1:1';
+      if (aspect === '4:3') return df.canvasRatio === '4:3';
+      return true;
+    });
+
+    const seen = new Set<string>();
+    const combined: VideoFrameDefinition[] = [];
+    for (const f of [...dynamicMatching, ...builtin]) {
+      if (!seen.has(f.id)) {
+        seen.add(f.id);
+        combined.push(f);
+      }
+    }
+    return combined;
+  }, [aspect, isOnly4_5, cropRegion, dynamicConvertedVideoFrames]);
 
   // Listen to profile updates (Prioritizes GIF logo, falls back to PNG)
   useEffect(() => {
@@ -2471,7 +2563,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {/* Two-Column Horizontal Scrollable Frame Listing (Part 10 Req 20) */}
+        <div className="grid grid-rows-2 grid-flow-col auto-cols-[250px] sm:auto-cols-[280px] gap-2.5 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-amber-500/40">
           {compatibleFrames.map((f) => {
             const isSel = selectedFrameId === f.id;
             return (
@@ -2482,19 +2575,21 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   setSelectedFrameId(f.id);
                   showToast(`✅ ${f.nameHi} चुना गया`);
                 }}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 ${
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 w-full shrink-0 ${
                   isSel
                     ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
                     : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                 }`}
               >
-                <div className="text-lg p-1 bg-slate-900 rounded-lg shrink-0">
-                  {f.id === 'frame-custom-3line-4-5' ? '📰' : f.id === 'frame-custom-full-9-16' ? '📱' : '📺'}
+                <div className="text-lg p-1.5 bg-slate-900 rounded-lg shrink-0">
+                  {f.canvasRatio === '9:16' ? '📱' : f.canvasRatio === '4:5' ? '📰' : '📺'}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-black text-amber-300 flex items-center justify-between">
+                  <div className="text-xs font-black text-amber-300 flex items-center justify-between gap-1">
                     <span className="truncate">{f.nameHi}</span>
-                    {isSel && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                    <span className="text-[9px] font-bold bg-slate-800 px-1.5 py-0.2 rounded text-slate-300 shrink-0">
+                      {f.canvasRatio}
+                    </span>
                   </div>
                   <div className="text-[10px] text-slate-400 truncate mt-0.5">
                     {f.description}

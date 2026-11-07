@@ -360,13 +360,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
   // Single Canonical Layout Calculation for live preview (Shared with CanvasExporter)
   const canonicalLayout = React.useMemo(() => {
+    const activeDf = getDynamicFrameById(card.frameDesign || '');
+    const activeFont = card.headlineFontFamily || activeDf?.typographyConfig?.primaryFontFamily || activeDf?.textSlots?.[0]?.fontFamily || 'Baloo 2';
     return computeCanonicalHeadlineLayout({
       headline: card.formattedHeadline || card.headline,
       highlightWords: card.highlightWords,
-      fontFamily: card.headlineFontFamily || 'Baloo 2',
+      fontFamily: activeFont,
       templateId: card.frameDesign || 'graphic_001',
       aspectRatio: card.aspectRatio || '4:5',
-      userFontSize: card.headlineFontSize,
+      userFontSize: card.headlineFontSize || activeDf?.typographyConfig?.primaryFontSize,
     });
   }, [
     card.formattedHeadline,
@@ -3260,22 +3262,42 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
               {/* Dynamic Location Badge */}
               {df.headerConfig?.showLocation && card.location && (
-                <div
-                  className="absolute pointer-events-auto flex items-center justify-center font-bold px-2"
-                  style={{
-                    left: `${df.headerConfig.locationRect?.x ?? 5}%`,
-                    top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                    width: `${df.headerConfig.locationRect?.width ?? 28}%`,
-                    height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                    backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
-                    color: df.headerConfig.locationTextColor || '#FFFFFF',
-                    borderRadius: df.headerConfig.locationStyle === 'pill' ? '9999px' : '6px',
-                    fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
-                  }}
-                >
-                  {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3 h-3 mr-1 inline shrink-0" />}
-                  <span className="truncate">{card.location}</span>
-                </div>
+                df.headerConfig.manualLocationAsset ? (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold"
+                    style={{
+                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
+                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
+                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
+                      backgroundImage: `url(${df.headerConfig.manualLocationAsset})`,
+                      backgroundSize: 'contain',
+                      backgroundPosition: 'center',
+                      backgroundRepeat: 'no-repeat',
+                      color: df.headerConfig.locationTextColor || '#FFFFFF',
+                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
+                    }}
+                  >
+                    <span className="truncate px-2">{card.location}</span>
+                  </div>
+                ) : (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2"
+                    style={{
+                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
+                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
+                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
+                      backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
+                      color: df.headerConfig.locationTextColor || '#FFFFFF',
+                      borderRadius: df.headerConfig.locationStyle === 'pill' ? '9999px' : '6px',
+                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
+                    }}
+                  >
+                    {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3 h-3 mr-1 inline shrink-0" />}
+                    <span className="truncate">{card.location}</span>
+                  </div>
+                )
               )}
 
               {/* Dynamic Date Stamp */}
@@ -3338,26 +3360,45 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
               {/* Full Story Callout */}
               {df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && (
-                <div
-                  className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
-                  style={{
-                    left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                    top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
-                    width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
-                    height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
-                    backgroundColor: df.fullStoryCalloutConfig.bgColor || '#DC2626',
-                    color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
-                    borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',
-                    borderWidth: `${df.fullStoryCalloutConfig.borderWidth ?? 1}px`,
-                    transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg)`,
-                    fontSize: `${Math.max(9, Math.round((df.fullStoryCalloutConfig.fontSize || 18) * previewScale))}px`,
-                  }}
-                >
-                  {df.fullStoryCalloutConfig.showIcon !== false && (
-                    <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse mr-1 inline-block" />
-                  )}
-                  <span className="truncate">{df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में'}</span>
-                </div>
+                (df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset) ? (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center"
+                    style={{
+                      left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                      top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
+                      width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                      height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg)`,
+                    }}
+                  >
+                    <img
+                      src={df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset}
+                      alt="Callout"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
+                    style={{
+                      left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                      top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
+                      width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                      height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                      backgroundColor: df.fullStoryCalloutConfig.bgColor || '#DC2626',
+                      color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
+                      borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',
+                      borderWidth: `${df.fullStoryCalloutConfig.borderWidth ?? 1}px`,
+                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg)`,
+                      fontSize: `${Math.max(9, Math.round((df.fullStoryCalloutConfig.fontSize || 18) * previewScale))}px`,
+                    }}
+                  >
+                    {df.fullStoryCalloutConfig.showIcon !== false && (
+                      <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse mr-1 inline-block" />
+                    )}
+                    <span className="truncate">{df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में'}</span>
+                  </div>
+                )
               )}
 
               {/* Optional POWERED BY Element */}
@@ -3397,7 +3438,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   className="font-black leading-snug drop-shadow-md overflow-hidden"
                   style={{
                     color: df.textSlots[0]?.textColor || '#FFFFFF',
-                    fontFamily: `"${card.headlineFontFamily || df.textSlots[0]?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
+                    fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || df.textSlots[0]?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
                     fontSize: `${effectivePreviewFontSize}px`,
                   }}
                 >
