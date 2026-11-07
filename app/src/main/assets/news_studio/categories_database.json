@@ -1,98 +1,144 @@
 [
   {
-    "id": "breaking",
-    "name": "⚡ ब्रेकिंग न्यूज़",
-    "isActive": true,
-    "order": 1
-  },
-  {
-    "id": "politics",
-    "name": "🏛️ राजनीति व चुनाव",
-    "isActive": true,
-    "order": 2
-  },
-  {
-    "id": "state",
-    "name": "📍 मध्य प्रदेश",
-    "isActive": true,
-    "order": 3
-  },
-  {
-    "id": "national",
-    "name": "🇮🇳 देश / राष्ट्रीय",
-    "isActive": true,
-    "order": 4
-  },
-  {
-    "id": "up",
-    "name": "📍 उत्तर प्रदेश",
-    "isActive": true,
-    "order": 5
-  },
-  {
-    "id": "bihar",
-    "name": "📍 बिहार",
-    "isActive": true,
-    "order": 6
-  },
-  {
     "id": "rajasthan",
-    "name": "📍 राजस्थान",
+    "docId": "rajasthan",
+    "updatedAt": "2026-10-30T13:38:34.959Z",
+    "order": 7,
     "isActive": true,
-    "order": 7
-  },
-  {
-    "id": "tech",
-    "name": "💻 टेक्नोलॉजी",
-    "isActive": true,
-    "order": 8
+    "name": "📍 राजस्थान"
   },
   {
     "id": "business",
-    "name": "📈 कारोबार व व्यापार",
+    "docId": "business",
+    "updatedAt": "2026-10-30T13:38:35.164Z",
     "isActive": true,
+    "name": "📈 कारोबार व व्यापार",
     "order": 9
   },
   {
-    "id": "sports",
-    "name": "🏏 खेल",
+    "id": "-झारखण्ड",
+    "docId": "-झारखण्ड",
+    "name": "🌱 झारखण्ड",
+    "order": 18,
+    "isActive": true
+  },
+  {
+    "id": "-मप्र-छत्तीसगढ़",
+    "docId": "-मप्र-छत्तीसगढ़",
     "isActive": true,
-    "order": 10
+    "name": "❆ मप्र-छत्तीसगढ़",
+    "order": 17
+  },
+  {
+    "id": "up",
+    "docId": "up",
+    "isActive": true,
+    "order": 5,
+    "updatedAt": "2026-10-30T13:38:34.755Z",
+    "name": "📍 उत्तरप्रदेश"
+  },
+  {
+    "id": "special",
+    "docId": "special",
+    "updatedAt": "2026-10-30T13:38:35.901Z",
+    "isActive": true,
+    "name": "📑 विशेष रिपोर्ट",
+    "order": 16
   },
   {
     "id": "entertainment",
-    "name": "🎬 मनोरंजन",
+    "docId": "entertainment",
+    "updatedAt": "2026-10-30T13:38:35.367Z",
+    "order": 11,
     "isActive": true,
-    "order": 11
+    "name": "🎬 मनोरंजन"
   },
   {
     "id": "crime",
+    "docId": "crime",
+    "updatedAt": "2026-10-30T13:38:35.474Z",
     "name": "🚨 क्राइम / अपराध",
+    "order": 12,
+    "isActive": true
+  },
+  {
+    "id": "sports",
+    "docId": "sports",
+    "updatedAt": "2026-10-30T13:38:35.262Z",
+    "order": 10,
     "isActive": true,
-    "order": 12
+    "name": "🏏 खेल"
+  },
+  {
+    "id": "politics",
+    "docId": "politics",
+    "name": "🏛️ राजनीति व चुनाव",
+    "order": 2,
+    "updatedAt": "2026-10-30T13:38:34.393Z",
+    "isActive": true
+  },
+  {
+    "id": "tech",
+    "docId": "tech",
+    "updatedAt": "2026-10-30T13:38:35.065Z",
+    "isActive": true,
+    "order": 8,
+    "name": "💻 टेक्नोलॉजी"
   },
   {
     "id": "accident",
+    "docId": "accident",
+    "order": 13,
+    "updatedAt": "2026-10-30T13:38:35.579Z",
     "name": "🚨 हादसा व दुर्घटना",
-    "isActive": true,
-    "order": 13
+    "isActive": true
   },
   {
-    "id": "agriculture",
-    "name": "🌾 खेती-किसानी",
+    "id": "national",
+    "docId": "national",
+    "name": "🇮🇳 देश / राष्ट्रीय",
     "isActive": true,
-    "order": 14
+    "updatedAt": "2026-10-30T13:38:34.644Z",
+    "order": 4
+  },
+  {
+    "id": "state",
+    "docId": "state",
+    "order": 3,
+    "updatedAt": "2026-10-30T13:38:34.503Z",
+    "name": "📍 मध्यप्रदेश",
+    "isActive": true
   },
   {
     "id": "health",
+    "docId": "health",
+    "updatedAt": "2026-10-30T13:38:35.790Z",
     "name": "🏥 स्वास्थ्य",
     "isActive": true,
     "order": 15
   },
   {
-    "id": "special",
-    "name": "📑 विशेष रिपोर्ट",
+    "id": "bihar",
+    "docId": "bihar",
+    "name": "📍 बिहार",
+    "order": 6,
+    "updatedAt": "2026-10-30T13:38:34.860Z",
+    "isActive": true
+  },
+  {
+    "id": "agriculture",
+    "docId": "agriculture",
     "isActive": true,
-    "order": 16
+    "order": 14,
+    "updatedAt": "2026-10-30T13:38:35.680Z",
+    "name": "🌾 खेती-किसानी"
+  },
+  {
+    "id": "breaking",
+    "docId": "breaking",
+    "order": 1,
+    "isActive": true,
+    "updatedAt": "2026-10-30T13:38:34.242Z",
+    "name": "⚡ ब्रेकिंग न्यूज़"
   }
 ]
