@@ -368,7 +368,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       dwellTimers.forEach((t) => clearTimeout(t));
       dwellTimers.clear();
     };
-  }, [posts, activeCategory, searchQuery]);
+  }, [posts, selectedCategory, categorySearchQuery]);
 
   useEffect(() => {
     const email = (currentUser?.email || '').toLowerCase().trim();
