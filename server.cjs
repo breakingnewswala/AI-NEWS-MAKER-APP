@@ -13797,6 +13797,12 @@ app.get("/api/user/sub-users", requireAuthMiddleware, (req, res) => {
     } else {
       allowedLimit = 0;
     }
+    if (allowedLimit <= 0 && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0938\u092C-\u092F\u0942\u091C\u093C\u0930 \u092A\u094D\u0930\u092C\u0902\u0927\u0928 \u0915\u0947\u0935\u0932 VIP Dashboard \u0914\u0930 Pro VIP Dashboard \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964"
+      });
+    }
     const allSubs = loadSubUsersDatabase();
     const userSubs = allSubs.filter((s) => s.primaryEmail.toLowerCase().trim() === rawEmail);
     const parentLink = allSubs.find((s) => s.subUserEmail.toLowerCase().trim() === rawEmail);
@@ -13843,6 +13849,12 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
       allowedLimit = 1;
     } else {
       allowedLimit = 0;
+    }
+    if (allowedLimit <= 0 && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0938\u092C-\u092F\u0942\u091C\u093C\u0930 \u092A\u094D\u0930\u092C\u0902\u0927\u0928 \u0915\u0947\u0935\u0932 VIP Dashboard \u0914\u0930 Pro VIP Dashboard \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964"
+      });
     }
     if (allowedLimit <= 0) {
       return res.status(403).json({

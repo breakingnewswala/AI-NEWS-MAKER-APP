@@ -46,14 +46,21 @@ const NEWSROOM_STAGES = [
   { id: 4, label: 'न्यूज़ कार्ड', detail: 'प्रकाशन-योग्य अंतिम कार्ड', icon: CheckCircle2 },
 ];
 
-// 6-step video newsroom activity stages (Part 10)
+// 6-step video newsroom activity stages (Part 6 & 7)
 const VIDEO_NEWSROOM_STAGES = [
-  { id: 1, label: 'वीडियो स्रोत जाँच', detail: 'वीडियो लिंक व मीडिया विश्लेषण', icon: Film },
-  { id: 2, label: 'कंटेंट विश्लेषण', detail: 'AI द्वारा मुख्य तथ्यों की पहचान', icon: Search },
-  { id: 3, label: 'न्यूज़ हेडलाइंस', detail: '5 संतुलित विकल्प तैयार हो रहे हैं', icon: ListOrdered },
-  { id: 4, label: 'कट व सेगमेंट मैपिंग', detail: 'टाइमलाइन व कट का निर्धारण', icon: Layers },
-  { id: 5, label: 'कार्ड लेआउट', detail: 'ओवरले, रिबन व ब्रांडिंग सेटिंग', icon: Layout },
-  { id: 6, label: 'वीडियो स्टूडियो', detail: 'अंतिम स्टूडियो लोड हो रहा है', icon: CheckCircle2 },
+  { id: 1, label: 'वीडियो', detail: 'वीडियो लिंक व मीडिया विश्लेषण', icon: Film },
+  { id: 2, label: 'स्रोत जानकारी', detail: 'स्रोत व जैकेट फ्रेम मिलान', icon: Layout },
+  { id: 3, label: 'कंटेंट विश्लेषण', detail: 'AI द्वारा मुख्य तथ्यों की पहचान', icon: Search },
+  { id: 4, label: 'न्यूज़ हेडलाइन', detail: 'संतुलित हेडलाइन विकल्प', icon: ListOrdered },
+  { id: 5, label: 'वीडियो मैपिंग', detail: 'वीडियो फ्रेम प्लेसमेंट व टाइमलाइन', icon: Layers },
+  { id: 6, label: 'वीडियो एक्सपोर्ट', detail: 'अंतिम वीडियो प्रीव्यू तैयार', icon: CheckCircle2 },
+];
+
+export const VIDEO_LOADER_SUBTITLES: string[] = [
+  'आपकी चुनी हुई वीडियो को AI द्वारा तैयार किया जा रहा है।',
+  'वीडियो लेआउट और मुख्य तथ्यों का मिलान किया जा रहा है...',
+  'वीडियो मैपिंग और संतुलित हेडलाइन तैयार की जा रही है...',
+  'वीडियो फ्रेम प्लेसमेंट और प्रीव्यू को अंतिम रूप दिया जा रहा है...',
 ];
 
 export const HOME_CARD_GRAPHIC_SUBTITLES: string[] = [
@@ -78,6 +85,8 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
   const effectiveSubtitles =
     subtitles && subtitles.length > 0
       ? subtitles
+      : mode === 'video_render'
+      ? VIDEO_LOADER_SUBTITLES
       : mode === 'graphic_preparation' || mode === 'approved_presentation'
       ? HOME_CARD_GRAPHIC_SUBTITLES
       : BRANDED_LOADER_SUBTITLES;
@@ -178,7 +187,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
   //   "संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है..."
   const defaultTitle =
     mode === 'video_render'
-      ? 'आपका वीडियो स्टूडियो तैयार किया जा रहा है...'
+      ? 'आपकी चुनी हुई वीडियो को AI द्वारा तैयार किया जा रहा है।'
       : mode === 'ai_generation'
       ? 'खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
       : 'संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...';
@@ -261,7 +270,8 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
           </div>
 
           {/* Newsroom Activity Steps Tracker (Green completed, Blue active processing, Slate pending) */}
-          <div className={`grid gap-1.5 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 ${mode === 'video_render' ? 'grid-cols-3 sm:grid-cols-6' : 'grid-cols-4'}`}>
+          {/* Part 6: Mobile 2 columns x 3 rows, Desktop 3 columns x 2 rows for video workflow */}
+          <div className={`grid gap-2 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 ${mode === 'video_render' ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-4'}`}>
             {activeStages.map((stg, idx) => {
               const isActive = idx === activeStepIndex;
               const isPassed = idx < activeStepIndex;

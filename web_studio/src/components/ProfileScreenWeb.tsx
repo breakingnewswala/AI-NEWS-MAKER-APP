@@ -919,6 +919,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   // Subscription & User Tier State
   const [subscription, setSubscription] = useState<UserSubscriptionInfo>(() => getUserSubscription());
+
+  // Part 10: VIP & Pro VIP Dashboard Permission Check - Restricted from Trial, Basic & Advanced
+  const isVipOrProDashboardUser =
+    isAdmin ||
+    subscription.tier === 'ultra' ||
+    subscription.tier === 'professional' ||
+    subscription.planKey === 'VIP DESK' ||
+    subscription.planKey === 'PRO' ||
+    Boolean(currentUser?.tier && (currentUser.tier === 'ultra' || currentUser.tier === 'professional'));
   const [mobileInput, setMobileInput] = useState<string>('');
   const [mobileError, setMobileError] = useState<string>('');
   const [planSuccessMsg, setPlanSuccessMsg] = useState<string>('');
@@ -3862,7 +3871,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             </div>
             )}
 
-            {/* OPTION: सब-यूज़र प्रबंधन (Sub-Users Management - Section 10) */}
+            {/* OPTION: सब-यूज़र प्रबंधन (Sub-Users Management - VIP & Pro Only per Part 10) */}
+            {isVipOrProDashboardUser && (
             <div className={`rounded-2xl border transition-all overflow-hidden shadow-sm ${normalUserTab === 'sub_users' ? 'border-cyan-400 bg-slate-900/95 ring-2 ring-cyan-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <button
                 type="button"
@@ -4070,6 +4080,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* OPTION FOR PRO / VIP / ADMIN: टेम्प्लेट व कस्टम फ्रेम्स मैनेजर */}
             {canAccessTemplateManager(currentUser) && (

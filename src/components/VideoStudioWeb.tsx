@@ -123,6 +123,10 @@ interface DrawCompositionOptions {
   watermarkOpacity?: number;
   watermarkText?: string;
   watermarkOffsetY?: number;
+  filterCss?: string;
+  watermarkType?: 'text' | 'image';
+  watermarkImageImg?: HTMLImageElement | null;
+  watermarkCustomText?: string;
   socialPosition?: 'footer' | 'header';
   showLocation?: boolean;
   showTicker?: boolean;
@@ -283,6 +287,9 @@ function drawVideoCompositionToCanvas(
         const sh = targetCropH;
 
         ctx.save();
+        if (opts.filterCss && opts.filterCss !== 'none' && (ctx as any).filter !== undefined) {
+          (ctx as any).filter = opts.filterCss;
+        }
         ctx.drawImage(video, sx, sy, sw, sh, 0, videoY, width, videoH);
         ctx.restore();
       } catch {
@@ -466,6 +473,9 @@ function drawVideoCompositionToCanvas(
     if (video && video.readyState >= 2) {
       try {
         ctx.save();
+        if (opts.filterCss && opts.filterCss !== 'none' && (ctx as any).filter !== undefined) {
+          (ctx as any).filter = opts.filterCss;
+        }
         ctx.translate(width / 2, height / 2);
         ctx.scale(zoomScale, zoomScale);
         ctx.translate(0, offsetY);
@@ -671,6 +681,9 @@ function drawVideoCompositionToCanvas(
     if (video && video.readyState >= 2) {
       try {
         ctx.save();
+        if (opts.filterCss && opts.filterCss !== 'none' && (ctx as any).filter !== undefined) {
+          (ctx as any).filter = opts.filterCss;
+        }
         ctx.translate(width / 2, height / 2);
         ctx.scale(zoomScale, zoomScale);
         ctx.translate(0, offsetY);
@@ -801,20 +814,39 @@ function drawVideoCompositionToCanvas(
     }
   }
 
-  // Central Text Watermark (Part 11 & Vertical offset)
-  if (opts.showWatermark && opts.watermarkText) {
-    ctx.save();
-    ctx.globalAlpha = Math.max(0.08, Math.min(0.9, opts.watermarkOpacity || 0.25));
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.9)';
-    ctx.shadowBlur = 8;
-    const wmScale = width / 720;
-    ctx.font = `900 ${Math.round(24 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const wmY = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
-    ctx.fillText(opts.watermarkText, width / 2, wmY);
-    ctx.restore();
+  // Central / Overlay Watermark (Text or Image per Part 8.H)
+  if (opts.showWatermark) {
+    if (opts.watermarkType === 'image' && opts.watermarkImageImg && opts.watermarkImageImg.complete && opts.watermarkImageImg.naturalWidth > 0) {
+      try {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.1, Math.min(0.95, opts.watermarkOpacity || 0.4));
+        const img = opts.watermarkImageImg;
+        const maxW = Math.round(width * 0.28);
+        const imgAspect = img.naturalWidth / img.naturalHeight;
+        const dw = maxW;
+        const dh = dw / imgAspect;
+        const dx = width - dw - 24;
+        const dy = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
+        ctx.drawImage(img, dx, dy, dw, dh);
+        ctx.restore();
+      } catch {}
+    } else {
+      const wmText = opts.watermarkCustomText || opts.watermarkText;
+      if (wmText) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.08, Math.min(0.9, opts.watermarkOpacity || 0.25));
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 8;
+        const wmScale = width / 720;
+        ctx.font = `900 ${Math.round(24 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const wmY = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
+        ctx.fillText(wmText, width / 2, wmY);
+        ctx.restore();
+      }
+    }
   }
 }
 
@@ -841,6 +873,37 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [videoUrl, setVideoUrl] = useState<string>(
     initialVideoUrl || initialVideo?.videoUrl || ''
   );
+
+  // Source-aware flag: when entering from Video & Reels (Part 8)
+  const isFromVideoReels = Boolean(initialVideo || initialVideoUrl);
+
+  // Video Color Filters (Part 8.D)
+  const [videoColorFilter, setVideoColorFilter] = useState<'original' | 'bright' | 'contrast' | 'warm' | 'cool' | 'bw' | 'cinematic'>('original');
+
+  const getVideoFilterCss = (filter: 'original' | 'bright' | 'contrast' | 'warm' | 'cool' | 'bw' | 'cinematic'): string => {
+    switch (filter) {
+      case 'bright':
+        return 'brightness(1.2) saturate(1.1)';
+      case 'contrast':
+        return 'contrast(1.3) saturate(1.15)';
+      case 'warm':
+        return 'sepia(0.3) saturate(1.3) hue-rotate(-10deg)';
+      case 'cool':
+        return 'hue-rotate(15deg) saturate(1.1) brightness(1.05)';
+      case 'bw':
+        return 'grayscale(100%) contrast(1.15)';
+      case 'cinematic':
+        return 'contrast(1.25) brightness(0.95) saturate(1.2) sepia(0.12)';
+      case 'original':
+      default:
+        return 'none';
+    }
+  };
+
+  // Watermark options (Part 8.H)
+  const [watermarkType, setWatermarkType] = useState<'text' | 'image'>('text');
+  const [watermarkImage, setWatermarkImage] = useState<string | null>(null);
+  const [watermarkCustomText, setWatermarkCustomText] = useState<string>('');
 
   const parseVideoDurationSeconds = (rawDur: any, fallback = 60): number => {
     if (typeof rawDur === 'number' && isFinite(rawDur) && rawDur > 1) return rawDur;
@@ -2071,6 +2134,22 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         } catch {}
       }
 
+      // Preload watermark image if image watermark selected (Part 8.H)
+      let watermarkImgPreload: HTMLImageElement | null = null;
+      if (showWatermark && watermarkType === 'image' && watermarkImage) {
+        try {
+          watermarkImgPreload = new Image();
+          watermarkImgPreload.crossOrigin = 'anonymous';
+          watermarkImgPreload.src = watermarkImage;
+          await new Promise<void>((resolve) => {
+            if (watermarkImgPreload!.complete && watermarkImgPreload!.naturalWidth > 0) return resolve();
+            watermarkImgPreload!.onload = () => resolve();
+            watermarkImgPreload!.onerror = () => resolve();
+            setTimeout(resolve, 800);
+          });
+        } catch {}
+      }
+
       setVideoExportProgress(15);
       setVideoExportStatus('ऑडियो व वीडियो स्ट्रीम तैयार हो रहे हैं...');
 
@@ -2253,6 +2332,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         watermarkOpacity,
         watermarkOffsetY,
         watermarkText: watermarkText || profile?.channelNameHi || '',
+        filterCss: getVideoFilterCss(videoColorFilter),
+        watermarkType,
+        watermarkImageImg: watermarkImgPreload,
+        watermarkCustomText: watermarkCustomText || watermarkText || profile?.channelNameHi || '',
         socialPosition,
         showLocation,
         showTicker,
@@ -2336,6 +2419,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             watermarkOpacity,
             watermarkOffsetY,
             watermarkText: watermarkText || profile?.channelNameHi || '',
+            filterCss: getVideoFilterCss(videoColorFilter),
+            watermarkType,
+            watermarkImageImg: watermarkImgPreload,
+            watermarkCustomText: watermarkCustomText || watermarkText || profile?.channelNameHi || '',
             socialPosition,
             showLocation,
             showTicker,
@@ -2815,6 +2902,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       style={{
                         objectPosition: cropRegion ? `center ${cropRegion.y * 100}%` : `center ${Math.min(100, Math.max(0, 50 + offsetY))}%`,
                         transform: `scale(${zoomScale})`,
+                        filter: getVideoFilterCss(videoColorFilter),
                       }}
                     />
 
@@ -2876,6 +2964,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                     style={{
                       transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
+                      filter: getVideoFilterCss(videoColorFilter),
                     }}
                   />
 
@@ -2983,6 +3072,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
                     style={{
                       transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
+                      filter: getVideoFilterCss(videoColorFilter),
                     }}
                   />
 
@@ -3388,7 +3478,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>त्वरित वीडियो निर्माण (चरण {quickStep}/7)</span>
+                      <span>त्वरित वीडियो निर्माण (चरण {quickStep}/{isFromVideoReels ? 5 : 7})</span>
                     </span>
                     <div className="flex items-center gap-2">
                       <span
@@ -3410,15 +3500,24 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                 {/* Horizontal Step Navigation Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
-                  {[
-                    { step: 1, label: 'वीडियो', icon: Film, ok: quickVideoValidation.stepsStatus[1] },
-                    { step: 2, label: 'ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
-                    { step: 3, label: 'हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
-                    { step: 4, label: 'लोकेशन', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
-                    { step: 5, label: 'लोगो-वॉटरमार्क', icon: Sparkles, ok: quickVideoValidation.stepsStatus[5] },
-                    { step: 6, label: 'फ़ूटर-ब्रांडिंग', icon: Tag, ok: quickVideoValidation.stepsStatus[6] },
-                    { step: 7, label: 'डाउनलोड-कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
-                  ].map((s) => {
+                  {(isFromVideoReels
+                    ? [
+                        { step: 1, label: 'वीडियो व फ़िल्टर्स', icon: Film, ok: Boolean(videoUrl) },
+                        { step: 2, label: 'हेडलाइंस', icon: Type, ok: Boolean(headline.trim()) },
+                        { step: 3, label: 'लोकेशन', icon: MapPin, ok: true },
+                        { step: 4, label: 'लोगो-वॉटरमार्क', icon: Sparkles, ok: true },
+                        { step: 5, label: 'डाउनलोड-एक्सपोर्ट', icon: Download, ok: quickVideoValidation.isValid },
+                      ]
+                    : [
+                        { step: 1, label: 'वीडियो', icon: Film, ok: quickVideoValidation.stepsStatus[1] },
+                        { step: 2, label: 'ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
+                        { step: 3, label: 'हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
+                        { step: 4, label: 'लोकेशन', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
+                        { step: 5, label: 'लोगो-वॉटरमार्क', icon: Sparkles, ok: quickVideoValidation.stepsStatus[5] },
+                        { step: 6, label: 'फ़ूटर-ब्रांडिंग', icon: Tag, ok: quickVideoValidation.stepsStatus[6] },
+                        { step: 7, label: 'डाउनलोड-कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
+                      ]
+                  ).map((s) => {
                     const isActive = quickStep === s.step;
                     const Icon = s.icon;
                     return (
@@ -3449,21 +3548,112 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </div>
 
               {/* ============================================================ */}
-              {/* STEP 1: ADD VIDEO (Max 3 clips, trim, zoom, vertical offset) */}
+              {/* STEP 1: VIDEO & COLOR FILTERS (Source-Aware per Part 8)      */}
               {/* ============================================================ */}
               {quickStep === 1 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Film className="w-4 h-4 text-amber-400" />
-                      1. वीडियो जोड़ें और ट्रिम करें
+                      {isFromVideoReels ? '1. वीडियो और कलर फ़िल्टर्स' : '1. वीडियो जोड़ें और ट्रिम करें'}
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-300">
-                      क्लिप्स: {clips.length}/3
+                      {isFromVideoReels ? '🔒 ओरिजिनल वीडियो लॉक' : `क्लिप्स: ${clips.length}/3`}
                     </span>
                   </div>
 
-                  {/* Upload Main Video / Add Clips Buttons */}
+                  {/* If entering from Video & Reels: Locked Video status & Color Filters (Part 8.A, 8.B, 8.C, 8.D, 8.E) */}
+                  {isFromVideoReels && (
+                    <div className="space-y-4">
+                      {/* Video Lock Banner */}
+                      <div className="p-3.5 bg-gradient-to-r from-amber-950/70 via-slate-900 to-slate-950 border border-amber-500/40 rounded-xl flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
+                            🔒
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                              <span>चुनी हुई वीडियो सुरक्षित है</span>
+                              <span className="text-[10px] bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded font-extrabold">9:16 रील्स</span>
+                            </div>
+                            <div className="text-[11px] text-slate-300 truncate font-semibold mt-0.5">
+                              {initialVideo?.title || 'Video & Reels से प्राप्त ओरिजिनल वीडियो'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-xs font-mono font-black text-amber-400">
+                            {formatTime(duration || 30)}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-bold">मूल अवधि</div>
+                        </div>
+                      </div>
+
+                      {/* Video Playback & Audio Preservation Notice (Part 8.E) */}
+                      <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-300">
+                        <span className="flex items-center gap-2 font-bold">
+                          <Volume2 className="w-4 h-4 text-emerald-400" />
+                          <span>ओरिजिनल ऑडियो सुरक्षित है</span>
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                          100% ओरिजिनल साउंड
+                        </span>
+                      </div>
+
+                      {/* Color Filters (Part 8.C) */}
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                            <span>कलर फ़िल्टर्स (Color Filters)</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            प्रीव्यू व एक्सपोर्ट पर तुरंत लागू
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {[
+                            { id: 'original', nameHi: 'ओरिजिनल', nameEn: 'Normal', icon: '✨' },
+                            { id: 'bright', nameHi: 'उज्ज्वल', nameEn: 'Bright', icon: '☀️' },
+                            { id: 'contrast', nameHi: 'कंट्रास्ट', nameEn: 'Contrast', icon: '🌗' },
+                            { id: 'warm', nameHi: 'वार्म टोन', nameEn: 'Warm', icon: '🌅' },
+                            { id: 'cool', nameHi: 'कूल टोन', nameEn: 'Cool', icon: '❄️' },
+                            { id: 'bw', nameHi: 'ब्लैक & व्हाइट', nameEn: 'B&W', icon: '📼' },
+                            { id: 'cinematic', nameHi: 'सिनेमैटिक', nameEn: 'Cinematic', icon: '🎬' },
+                          ].map((f) => {
+                            const isSel = videoColorFilter === f.id;
+                            return (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => {
+                                  setVideoColorFilter(f.id as any);
+                                  showToast(`फ़िल्टर: ${f.nameHi} (${f.nameEn}) लागू किया गया`);
+                                }}
+                                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                                  isSel
+                                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-lg ring-2 ring-amber-300/60'
+                                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+                                }`}
+                              >
+                                <span className="text-base">{f.icon}</span>
+                                <span className="text-xs font-black leading-tight">{f.nameHi}</span>
+                                <span className={`text-[9px] font-bold ${isSel ? 'text-slate-800' : 'text-slate-400'}`}>
+                                  {f.nameEn}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Standard upload and trim controls (Hidden when isFromVideoReels per Part 8.A, 8.D) */}
+                  {!isFromVideoReels && (
+                    <>
+                      {/* Upload Main Video / Add Clips Buttons */}
                   <div className="flex flex-wrap items-center gap-2.5">
                     <button
                       type="button"
@@ -3691,13 +3881,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       <p className="text-xs text-slate-400">कोई वीडियो लोड नहीं है। आगे बढ़ने के लिए कृपया वीडियो अपलोड करें।</p>
                     </div>
                   )}
+                    </>
+                  )}
                 </div>
               )}
 
               {/* ============================================================ */}
-              {/* STEP 2: MUSIC AND AUDIO (Original, Background, No Music)      */}
+              {/* STEP 2: MUSIC AND AUDIO (Only in standard workflow per 8.E)   */}
               {/* ============================================================ */}
-              {quickStep === 2 && (
+              {!isFromVideoReels && quickStep === 2 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -3883,44 +4075,71 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 3: HEADLINE (Strictly blank initial state, AI tools)    */}
+              {/* HEADLINES (Step 2 if from Video & Reels, Step 3 if standard) */}
               {/* ============================================================ */}
-              {quickStep === 3 && (
+              {((isFromVideoReels && quickStep === 2) || (!isFromVideoReels && quickStep === 3)) && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Type className="w-4 h-4 text-amber-400" />
-                      3. मुख्य हेडलाइन (Main News Headline)
+                      {isFromVideoReels ? '2. आपकी हेडलाइंस (News Headlines)' : '3. मुख्य हेडलाइन (Main News Headline)'}
                     </span>
 
-                  {/* Available Headlines Selector from Admin Video Upload */}
-                  {headlineVariants && headlineVariants.filter(Boolean).length > 0 && (
-                    <div className="space-y-2 p-3 bg-slate-950/90 border border-amber-500/30 rounded-xl">
-                      <span className="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
+                  {/* Headline choices in Two-Column Grid (Part 8.F) */}
+                  <div className="space-y-2 p-3 bg-slate-950/90 border border-amber-500/30 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>उपलब्ध हेडलाइन्स चुनें (1-क्लिक में सेट करें):</span>
+                        <span>आपकी हेडलाइंस (उपलब्ध विकल्प)</span>
                       </span>
-                      <div className="grid grid-cols-1 gap-1.5">
-                        {headlineVariants.filter(Boolean).map((hVariant, hIdx) => (
+                      <span className="text-[10px] text-slate-400 font-semibold">
+                        (1-क्लिक में चुनें)
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                      {((headlineVariants && headlineVariants.filter(Boolean).length > 0)
+                        ? headlineVariants.filter(Boolean)
+                        : [
+                            headline || initialVideo?.title || 'देश की बड़ी खबर: घटनाक्रम पर सीधी नजर',
+                            'विशेष रिपोर्ट: मुख्य बिंदुओं का पूरा विश्लेषण',
+                            'बड़ी जानकारी: प्रशासन का अहम फैसला',
+                            'ग्राउंड रिपोर्ट: मौके से ताज़ा अपडेट',
+                          ]
+                      ).map((hVariant, hIdx) => {
+                        const isSelected = headline.trim() === hVariant.trim();
+                        return (
                           <button
                             key={hIdx}
                             type="button"
-                            onClick={() => setHeadline(hVariant.trim())}
-                            className={`text-left p-2 rounded-lg text-xs font-bold transition flex items-start gap-2 cursor-pointer ${
-                              headline.trim() === hVariant.trim()
-                                ? 'bg-amber-400/20 text-amber-200 border border-amber-400/50'
-                                : 'bg-slate-900 text-slate-300 hover:bg-slate-850 hover:text-white border border-slate-800'
+                            onClick={() => {
+                              setHeadline(hVariant.trim());
+                              showToast(`हेडलाइन #${hIdx + 1} चुनी गई`);
+                            }}
+                            className={`text-left p-2.5 rounded-xl border transition flex flex-col justify-between min-h-[72px] sm:min-h-[80px] cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-400/20 text-white border-amber-400 ring-2 ring-amber-400/60 shadow-md font-black'
+                                : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-800'
                             }`}
                           >
-                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-amber-400 font-mono shrink-0">
-                              #{hIdx + 1}
-                            </span>
-                            <span className="leading-snug">{hVariant.trim()}</span>
+                            <div className="flex items-center justify-between w-full mb-1">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-amber-400 font-mono font-bold shrink-0">
+                                #{hIdx + 1}
+                              </span>
+                              {isSelected && (
+                                <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-0.5">
+                                  <Check className="w-3 h-3" /> चयनित
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs font-bold leading-snug line-clamp-3 text-slate-100 break-words">
+                              {hVariant.trim()}
+                            </p>
                           </button>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
                     <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
                       आवश्यक (Required)
                     </span>
@@ -4025,14 +4244,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 4: LOCATION (Strictly blank initial state, no dummy text)*/}
+              {/* LOCATION (Step 3 if from Video & Reels, Step 4 if standard)   */}
               {/* ============================================================ */}
-              {quickStep === 4 && (
+              {((isFromVideoReels && quickStep === 3) || (!isFromVideoReels && quickStep === 4)) && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-amber-400" />
-                      4. खबर की लोकेशन (News Location)
+                      {isFromVideoReels ? '3. खबर की लोकेशन (News Location)' : '4. खबर की लोकेशन (News Location)'}
                     </span>
                     <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
                       आवश्यक (Required)
@@ -4073,14 +4292,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 5: LOGO & WATERMARK (Profile Logo, Scale, Watermark)     */}
+              {/* LOGO & WATERMARK (Step 4 if from Video & Reels, Step 5 if standard) */}
               {/* ============================================================ */}
-              {quickStep === 5 && (
+              {((isFromVideoReels && quickStep === 4) || (!isFromVideoReels && quickStep === 5)) && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      5. लोगो और वॉटरमार्क
+                      {isFromVideoReels ? '4. लोगो और वॉटरमार्क' : '5. लोगो और वॉटरमार्क'}
                     </span>
                   </div>
 
@@ -4165,10 +4384,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Watermark Controls with Vertical Offset Control (Section 13) */}
+                  {/* Watermark Controls with Text vs Image Watermark (Part 8.H) */}
                   <div className="space-y-3 pt-3 border-t border-slate-800">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-300">वॉटरमार्क (Watermark):</span>
+                      <span className="text-xs font-bold text-slate-300">वॉटरमार्क प्रकार (Watermark Type):</span>
                       <button
                         type="button"
                         onClick={() => setShowWatermark(!showWatermark)}
@@ -4184,7 +4403,92 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                     {showWatermark && (
                       <div className="space-y-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Two clear radio choices: Text vs Image Watermark */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setWatermarkType('text')}
+                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                              watermarkType === 'text'
+                                ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
+                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <span>📝 टेक्स्ट वॉटरमार्क</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWatermarkType('image')}
+                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                              watermarkType === 'image'
+                                ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
+                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <span>🖼️ इमेज वॉटरमार्क</span>
+                          </button>
+                        </div>
+
+                        {watermarkType === 'text' ? (
+                          /* Text Watermark Field */
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-300">वॉटरमार्क टेक्स्ट लिखें:</label>
+                            <input
+                              type="text"
+                              value={watermarkCustomText}
+                              onChange={(e) => setWatermarkCustomText(e.target.value)}
+                              placeholder={watermarkText || profile?.channelNameHi || 'यहाँ वॉटरमार्क टेक्स्ट लिखें...'}
+                              className="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-none"
+                            />
+                          </div>
+                        ) : (
+                          /* Image Watermark Upload */
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-300">वॉटरमार्क इमेज चुनें:</label>
+                            <div className="flex items-center gap-3">
+                              {watermarkImage ? (
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={watermarkImage}
+                                    alt="Watermark preview"
+                                    className="h-10 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setWatermarkImage(null)}
+                                    className="px-2 py-1 bg-red-950 text-red-300 border border-red-800 rounded text-[10px] font-bold"
+                                  >
+                                    हटाएं
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic">कोई इमेज अपलोड नहीं है</span>
+                              )}
+                              <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5">
+                                <Upload className="w-3.5 h-3.5 text-amber-400" />
+                                <span>इमेज अपलोड करें</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      const reader = new FileReader();
+                                      reader.onload = () => {
+                                        setWatermarkImage(reader.result as string);
+                                        showToast('🖼️ वॉटरमार्क इमेज सेट हो गई!');
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                           {/* Opacity Slider */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs font-bold text-slate-300">
@@ -4194,7 +4498,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             <input
                               type="range"
                               min="0.1"
-                              max="0.8"
+                              max="0.9"
                               step="0.05"
                               value={watermarkOpacity}
                               onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
@@ -4202,7 +4506,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             />
                           </div>
 
-                          {/* Vertical Movement Slider (Section 13) */}
+                          {/* Vertical Movement Slider */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs font-bold text-slate-300">
                               <span>ऊर्ध्वाधर स्थिति (Vertical Position):</span>
@@ -4219,10 +4523,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             />
                           </div>
                         </div>
-
-                        <span className="text-[10px] text-slate-400 block">
-                          टेक्स्ट: <strong className="text-amber-300">{watermarkText || 'चैनल नाम'}</strong> (क्षैतिज स्थिति फ़्रेम के अनुसार सुरक्षित रहती है)
-                        </span>
                       </div>
                     )}
                   </div>
@@ -4230,9 +4530,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 6: FOOTER BRANDING (Socials, Mobile, Website, Tag)      */}
+              {/* STEP 6: FOOTER BRANDING (Only in standard workflow)          */}
               {/* ============================================================ */}
-              {quickStep === 6 && (
+              {!isFromVideoReels && quickStep === 6 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -4353,14 +4653,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 7 / FINAL STEP: DOWNLOAD VIDEO & CAPTION (100% Validated)*/}
+              {/* DOWNLOAD & EXPORT (Step 5 if from Video & Reels, Step 7 if standard) */}
               {/* ============================================================ */}
-              {quickStep === 7 && (
+              {((isFromVideoReels && quickStep === 5) || (!isFromVideoReels && quickStep === 7)) && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Download className="w-4 h-4 text-amber-400" />
-                      7. वीडियो डाउनलोड व कैप्शन (Download & Caption)
+                      {isFromVideoReels ? '5. वीडियो डाउनलोड व कैप्शन (Download & Caption)' : '7. वीडियो डाउनलोड व कैप्शन (Download & Caption)'}
                     </span>
                     <span
                       className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
@@ -4371,6 +4671,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     >
                       {quickVideoValidation.completionPercentage}% पूर्ण
                     </span>
+                  </div>
+
+                  {/* Part 7: Video-specific generation notice */}
+                  <div className="p-3 bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-950 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-xs text-amber-200">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="font-bold">आपकी चुनी हुई वीडियो को AI द्वारा तैयार किया जा रहा है।</span>
                   </div>
 
                   {/* Completion Status Checklist */}
@@ -4518,10 +4824,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setQuickStep((s) => (s === 7 ? 1 : Math.min(7, s + 1)))}
+                  onClick={() => {
+                    const maxStep = isFromVideoReels ? 5 : 7;
+                    setQuickStep((s) => (s === maxStep ? 1 : Math.min(maxStep, s + 1)));
+                  }}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition flex items-center justify-center gap-1.5 active:scale-95"
                 >
-                  <span>{quickStep === 7 ? 'स्टेप 1 पर जाएं' : 'अगला चरण'}</span>
+                  <span>{quickStep === (isFromVideoReels ? 5 : 7) ? 'स्टेप 1 पर जाएं' : 'अगला चरण'}</span>
                   <ChevronRight className="w-4 h-4 text-white" />
                 </button>
               </div>
@@ -4529,7 +4838,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           ) : (
                 /* WORKFLOW 2: STUDIO MODE (!isReadyToUseMode)                 */
                 /* ============================================================ */
-                <div className="space-y-4">
+                /* Part 6: Responsive Grid (Mobile: 2 cols x 3 rows, Desktop: 3 cols x 2 rows) */
+                <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 items-stretch">
                   {/* Card 1: Multi-Clip Video Timeline Manager */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">

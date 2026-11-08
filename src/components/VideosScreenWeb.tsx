@@ -823,6 +823,39 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [isBonusOnlyFilter, setIsBonusOnlyFilter] = useState<boolean>(false);
   const [isRatioDropdownOpen, setIsRatioDropdownOpen] = useState<boolean>(false);
   const [inlinePlayingId, setInlinePlayingId] = useState<string | null>(null);
+  const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
+
+  // Exact MM:SS video duration formatter (Part 5.C)
+  const formatExactDuration = (dur: string | number | undefined): string => {
+    if (dur === undefined || dur === null || dur === '') return '00:30';
+    if (typeof dur === 'number') {
+      const mins = Math.floor(dur / 60);
+      const secs = Math.floor(dur % 60);
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    const clean = String(dur).trim();
+    if (/^\d{1,2}:\d{2}$/.test(clean)) {
+      const parts = clean.split(':');
+      return `${parts[0].padStart(2, '0')}:${parts[1]}`;
+    }
+    const num = parseInt(clean.replace(/[^\d.]/g, ''), 10);
+    if (!isNaN(num)) {
+      const mins = Math.floor(num / 60);
+      const secs = Math.floor(num % 60);
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return clean;
+  };
+
+  const toggleDescription = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedDescIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const bonusVideos = useMemo(() => {
     return activeVideos.filter((v) => {
@@ -867,8 +900,8 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   };
 
   const handlePlayOrOpenVideo = (vid: VideoFeedItem) => {
-    setActiveVideo(vid);
-    setInlinePlayingId(vid.id);
+    // Part 5.A: Play strictly inline inside the news card - never open additional popup/box
+    setInlinePlayingId((prev) => (prev === vid.id ? null : vid.id));
   };
 
   const renderVideoCard = (vid: VideoFeedItem, isHorizontal = false) => {
@@ -952,9 +985,9 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                   </div>
                 </div>
 
-                <div className="absolute bottom-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded text-[11px] font-bold text-white flex items-center gap-1">
+                <div className="absolute bottom-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded text-[11px] font-bold text-white flex items-center gap-1 font-mono">
                   <Clock className="w-3 h-3 text-amber-400" />
-                  {vid.duration}
+                  {formatExactDuration(vid.duration)}
                 </div>
 
                 <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">
@@ -998,10 +1031,26 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               {vid.title}
             </h3>
 
+            {/* Description with In-Card See More / Collapse (Part 5.B) */}
             {vid.caption && (
-              <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                {vid.caption}
-              </p>
+              <div className="pt-0.5">
+                <p
+                  className={`text-xs text-slate-600 dark:text-slate-400 leading-relaxed ${
+                    expandedDescIds.has(vid.id) ? 'whitespace-pre-wrap' : 'line-clamp-2'
+                  }`}
+                >
+                  {vid.caption}
+                </p>
+                {vid.caption.length > 70 && (
+                  <button
+                    type="button"
+                    onClick={(e) => toggleDescription(vid.id, e)}
+                    className="text-[11px] font-bold text-amber-500 hover:text-amber-400 mt-1 cursor-pointer flex items-center gap-1"
+                  >
+                    <span>{expandedDescIds.has(vid.id) ? 'कम दिखाएँ ▲' : 'और पढ़ें ▼'}</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1112,7 +1161,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#070D1E] text-slate-100 pb-24 transition-colors">
+    <div className="min-h-screen bg-[#070D1E] text-slate-100 pb-28 md:pb-32 transition-colors">
       {/* Top Header */}
       <div className="bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-4 relative z-10 backdrop-blur-md text-slate-900 dark:text-white">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">

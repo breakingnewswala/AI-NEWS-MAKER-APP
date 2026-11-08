@@ -3970,6 +3970,14 @@ app.get("/api/user/sub-users", requireAuthMiddleware, (req, res) => {
       allowedLimit = 0;
     }
 
+    // Part 10: Backend Permission Gate - Trial, Basic and Advanced users are denied sub-users access
+    if (allowedLimit <= 0 && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: "अनधिकृत (403 Forbidden): सब-यूज़र प्रबंधन केवल VIP Dashboard और Pro VIP Dashboard उपयोगकर्ताओं के लिए उपलब्ध है।"
+      });
+    }
+
     const allSubs = loadSubUsersDatabase();
     const userSubs = allSubs.filter((s) => s.primaryEmail.toLowerCase().trim() === rawEmail);
     const parentLink = allSubs.find((s) => s.subUserEmail.toLowerCase().trim() === rawEmail);
@@ -4024,6 +4032,14 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
       allowedLimit = 1;
     } else {
       allowedLimit = 0;
+    }
+
+    // Part 10: Backend Permission Gate - Trial, Basic and Advanced users are denied sub-users access
+    if (allowedLimit <= 0 && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: "अनधिकृत (403 Forbidden): सब-यूज़र प्रबंधन केवल VIP Dashboard और Pro VIP Dashboard उपयोगकर्ताओं के लिए उपलब्ध है।"
+      });
     }
 
     if (allowedLimit <= 0) {

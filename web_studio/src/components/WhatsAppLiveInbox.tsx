@@ -1059,8 +1059,14 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
             </div>
           </div>
 
-          {/* Right Column: Chat Screen (Takes full width on mobile when conversation selected) */}
-          <div className={`flex-1 flex flex-col min-w-0 bg-slate-950 ${!selectedConvId ? 'hidden md:flex' : 'flex w-full'}`}>
+          {/* Right Column: Chat Screen (Dedicated Full-Screen Experience on Mobile per Part 4) */}
+          <div
+            className={`flex-1 flex flex-col min-w-0 bg-slate-950 ${
+              !selectedConvId
+                ? 'hidden md:flex'
+                : 'flex w-full max-md:fixed max-md:inset-0 max-md:z-50 max-md:h-[100dvh] max-md:max-h-none'
+            }`}
+          >
             {!selectedConvId ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
                 <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4">
@@ -1074,15 +1080,16 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
             ) : (
               <>
                 {/* Chat Top Bar */}
-                <div className="p-3.5 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-3 shrink-0">
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="p-3 sm:p-3.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-3 shrink-0 shadow-md">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                     <button
                       type="button"
                       onClick={() => setSelectedConvId(null)}
-                      className="md:hidden p-2 hover:bg-slate-800 text-slate-300 rounded-lg cursor-pointer flex items-center gap-1 active:scale-95"
+                      className="p-1.5 sm:p-2 hover:bg-slate-800 text-slate-300 rounded-lg cursor-pointer flex items-center gap-1 active:scale-95 shrink-0"
                       title="वार्तालाप सूची पर वापस जाएँ"
                     >
                       <ArrowLeft className="w-5 h-5 text-amber-400" />
+                      <span className="text-[11px] font-bold text-slate-300 md:hidden">सूची</span>
                     </button>
 
                     <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-amber-400 shrink-0">
@@ -1090,52 +1097,82 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-xs sm:text-sm font-bold text-white truncate">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <h3 className="text-xs sm:text-sm font-bold text-white truncate max-w-[130px] sm:max-w-none">
                           {selectedConv?.customerName || selectedConv?.customerPhone || 'ग्राहक'}
                         </h3>
                         {selectedConv?.handlingMode === 'waiting_human' ? (
-                          <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[10px] font-bold rounded-full border border-red-500/30 animate-pulse">
+                          <span className="px-2 py-0.5 bg-red-500/20 text-red-300 text-[10px] font-bold rounded-full border border-red-500/30 animate-pulse whitespace-nowrap">
                             सहायता प्रतीक्षारत
                           </span>
                         ) : selectedConv?.handlingMode === 'human' ? (
-                          <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-full border border-emerald-500/30">
-                            ह्यूमन टेकओवर: {selectedConv?.assignedOperatorName || operatorName}
+                          <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-full border border-emerald-500/30 whitespace-nowrap">
+                            ह्यूमन टेकओवर
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 bg-sky-500/20 text-sky-300 text-[10px] font-bold rounded-full border border-sky-500/30">
+                          <span className="px-2 py-0.5 bg-sky-500/20 text-sky-300 text-[10px] font-bold rounded-full border border-sky-500/30 whitespace-nowrap">
                             AI ऑटो
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate">
+                      <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
                         फ़ोन: {selectedConv?.customerPhone || 'N/A'} {selectedConv?.customerEmail ? `• ${selectedConv.customerEmail}` : ''}
                       </p>
                     </div>
                   </div>
 
-                  {/* Mode Switching Buttons */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  {/* Mode Switching Buttons (Part 4: मानव नियंत्रण लें / Take Over Chat & AI नियंत्रण दें) */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                     {selectedConv?.handlingMode === 'human' ? (
                       <button
                         type="button"
                         onClick={() => handleModeChange('ai')}
-                        className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer flex items-center gap-1.5"
+                        className="px-2.5 sm:px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white font-black text-[11px] sm:text-xs rounded-xl shadow transition cursor-pointer flex items-center gap-1.5"
+                        title="AI को नियंत्रण वापस दें"
                       >
                         <Bot className="w-3.5 h-3.5" />
-                        <span>AI को सौंपें</span>
+                        <span>AI नियंत्रण दें</span>
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleModeChange('human')}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer flex items-center gap-1.5"
+                        className="px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 text-white font-black text-[11px] sm:text-xs rounded-xl shadow-lg transition cursor-pointer flex items-center gap-1.5 animate-pulse"
+                        title="मानव नियंत्रण लें"
                       >
                         <UserCheck className="w-3.5 h-3.5" />
-                        <span>टेकओवर करें (ह्यूमन)</span>
+                        <span>मानव नियंत्रण लें (Take Over Chat)</span>
                       </button>
                     )}
                   </div>
+                </div>
+
+                {/* Takeover Status Alert Bar (Part 4) */}
+                <div
+                  className={`px-3 py-1.5 text-[11px] font-bold flex items-center gap-2 border-b shrink-0 ${
+                    selectedConv?.handlingMode === 'human'
+                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                      : selectedConv?.handlingMode === 'waiting_human'
+                      ? 'bg-red-950/60 border-red-500/40 text-red-300 animate-pulse'
+                      : 'bg-sky-950/50 border-sky-500/30 text-sky-300'
+                  }`}
+                >
+                  {selectedConv?.handlingMode === 'human' ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                      <span>मानव नियंत्रण सक्रिय: आपके संदेश सीधे ग्राहक को जाएंगे और AI उत्तर नहीं देगा।</span>
+                    </>
+                  ) : selectedConv?.handlingMode === 'waiting_human' ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-red-400 shrink-0 animate-ping" />
+                      <span>ग्राहक सहायता की प्रतीक्षा कर रहा है! कृपया ऊपर दिए बटन से मानव नियंत्रण लें।</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" />
+                      <span>AI ऑटो-पायलट सक्रिय है। किसी भी समय 'मानव नियंत्रण लें' दबाकर चैट अपने हाथ में लें।</span>
+                    </>
+                  )}
                 </div>
 
                 {/* 24-Hour WhatsApp Session Window Alert */}

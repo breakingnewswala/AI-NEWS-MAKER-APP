@@ -527,31 +527,25 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         </div>
       </div>
 
-      {/* Part 9: Permanent App Download Option in Newsroom */}
-      <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border-2 border-emerald-500/40 hover:border-emerald-500/70 rounded-2xl p-4 sm:p-5 shadow-sm transition-all flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 font-black shadow-md shrink-0">
-            <Smartphone className="w-6 h-6 text-slate-950" />
-          </div>
-          <div>
-            <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white flex items-center gap-2 justify-center sm:justify-start">
-              <span>ऐप डाउनलोड करें</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
-                ऑफ़िशियल मोबाइल ऐप
-              </span>
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
-              स्मार्टफोन में ऐप इंस्टॉल करें — 1-क्लिक एक्सेस, ऑफ़लाइन सपोर्ट और तेज़ स्पीड के साथ न्यूज़ तैयार करें।
-            </p>
-          </div>
+      {/* Mobile App Download Box (Part 3: Horizontal Box, Left text only, Right touch-friendly button) */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 hover:border-amber-400/60 rounded-2xl px-4 py-3 shadow-md transition-all flex flex-row items-center justify-between gap-3 text-left">
+        {/* Left Side: Strictly Text Only (No icon, No logo per Part 3) */}
+        <div className="min-w-0 flex-1">
+          <h4 className="text-xs sm:text-sm font-black text-amber-400 tracking-wide uppercase truncate">
+            AI NEWS MAKER
+          </h4>
+          <p className="text-[11px] sm:text-xs font-medium text-slate-300 mt-0.5 line-clamp-1">
+            अपना न्यूज़ स्टूडियो मोबाइल पर इंस्टॉल करें
+          </p>
         </div>
+
+        {/* Right Side: Clear Touch-Friendly Install Button */}
         <button
           type="button"
           onClick={() => setIsInstallModalOpen(true)}
-          className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-md flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shrink-0"
+          className="shrink-0 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center justify-center whitespace-nowrap min-h-[38px]"
         >
-          <Download className="w-4 h-4 text-slate-950" />
-          <span>इंस्टॉल करें</span>
+          इंस्टॉल करें
         </button>
       </div>
 

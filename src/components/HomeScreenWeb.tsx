@@ -1735,7 +1735,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         </>
       )}
       {/* Centered Container: All boxes share the exact same width and alignment */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-28 md:pb-32 space-y-6">
 
         {/* 3-Card Summary Row (Phase 4: Admin shows Raw News, Pending News & Refresh; Users show Coins, Remaining Graphics & Refresh) */}
         <div className="grid grid-cols-3 gap-2 md:hidden w-full">
@@ -1878,14 +1878,49 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         )}
 
-        {/* Approved Center-Aligned Headline & Tagline */}
-        <div className="text-center py-1 sm:py-2 select-none">
-          <h2 className="text-lg sm:text-2xl font-black bg-gradient-to-r from-red-600 via-amber-500 to-yellow-500 bg-clip-text text-transparent">
+        {/* Approved Center-Aligned Headline & Tagline (Part 2) */}
+        <div className="text-center py-2 sm:py-3 select-none space-y-1">
+          <h2 className="text-lg sm:text-2xl font-black bg-gradient-to-r from-red-600 via-amber-500 to-yellow-500 bg-clip-text text-transparent leading-tight">
             खबर देखने से खबर बनाने तक, सिर्फ दो मिनट।
           </h2>
-          <p className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 mt-0.5">
-            “आपकी खबर, आपकी पहचान — एआई के साथ हर कहानी को दीजिए नया अंदाज़।”
-          </p>
+          <div className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 space-y-0.5 pt-0.5">
+            <p className="leading-snug">आपकी खबर, आपकी पहचान।</p>
+            <p className="text-amber-500 dark:text-amber-400 leading-snug">AI के साथ हर खबर को दीजिए नया अंदाज़।</p>
+          </div>
+        </div>
+
+        {/* Mobile App Download Box (Part 3: Horizontal Box, Left text only, Right touch-friendly button) */}
+        <div className="w-full bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 hover:border-amber-400/60 rounded-2xl px-3.5 py-3 shadow-md flex items-center justify-between gap-3 text-left transition-all my-1.5">
+          {/* Left Side: Strictly Text Only (No icon, No logo per Part 3) */}
+          <div className="min-w-0 flex-1">
+            <h4 className="text-xs sm:text-sm font-black text-amber-400 tracking-wide uppercase truncate">
+              AI NEWS MAKER
+            </h4>
+            <p className="text-[11px] sm:text-xs font-medium text-slate-300 mt-0.5 line-clamp-1">
+              अपना न्यूज़ स्टूडियो मोबाइल पर इंस्टॉल करें
+            </p>
+          </div>
+
+          {/* Right Side: Clear Touch-Friendly Install Button */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                const pwaPrompt = (window as any).deferredPwaPrompt;
+                if (pwaPrompt && typeof pwaPrompt.prompt === 'function') {
+                  pwaPrompt.prompt();
+                  pwaPrompt.userChoice?.then(() => {
+                    (window as any).deferredPwaPrompt = null;
+                  });
+                  return;
+                }
+                window.dispatchEvent(new CustomEvent('open_install_pwa_modal'));
+              }
+            }}
+            className="shrink-0 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center justify-center whitespace-nowrap min-h-[38px]"
+          >
+            इंस्टॉल करें
+          </button>
         </div>
 
         {/* 1. Live Breaking News Ticker (Centered Box, 1 news at a time, auto-changes every 4 seconds) */}

@@ -970,8 +970,13 @@ export default function App() {
 
   useEffect(() => {
     const handleOpenWelcome = () => setShowAuthWelcomeScreen(true);
+    const handleOpenInstall = () => setIsInstallModalOpen(true);
     window.addEventListener('open_auth_welcome_screen', handleOpenWelcome);
-    return () => window.removeEventListener('open_auth_welcome_screen', handleOpenWelcome);
+    window.addEventListener('open_install_pwa_modal', handleOpenInstall);
+    return () => {
+      window.removeEventListener('open_auth_welcome_screen', handleOpenWelcome);
+      window.removeEventListener('open_install_pwa_modal', handleOpenInstall);
+    };
   }, []);
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
@@ -2785,7 +2790,7 @@ export default function App() {
     setBrandedLoader({
       isOpen: true,
       mode: 'video_render',
-      title: 'आपका वीडियो स्टूडियो तैयार किया जा रहा है...',
+      title: 'आपकी चुनी हुई वीडियो को AI द्वारा तैयार किया जा रहा है।',
       durationSeconds: 10,
       error: null,
     });
@@ -2928,8 +2933,11 @@ export default function App() {
     currentTab === 'delete-account' ||
     currentTab === 'support';
 
-  // Primary Screen with Google Login Steps is enforced for unauthenticated visitors
-  if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || (!isOnboardingCompleted && currentTab !== 'studio' && currentTab !== 'generator'))) {
+  // Studio tabs are accessible so users can freely create graphics & videos on Desktop, Mobile, and Tablet
+  const isStudioTab = currentTab === 'studio' || currentTab === 'generator';
+
+  // Primary Screen with Google Login Steps is enforced for unauthenticated visitors unless on legal pages or studio
+  if (!isPublicLegalPage && !isStudioTab && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
       <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (
