@@ -11972,19 +11972,35 @@ function loadNewsDatabase() {
     if (diskPosts.length > 0) {
       const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
       const activeSourceIds = new Set(activeSources.map((s) => s.id));
-      const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
+      const activeSourceUrls = /* @__PURE__ */ new Set([
+        ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
+        ...activeSources.map((s) => (s.originalWebUrl || "").trim().toLowerCase()).filter(Boolean)
+      ]);
       for (const dp of diskPosts) {
+        if (!dp || !dp.id) continue;
         const isFeed = String(dp.id).startsWith("rss-") || String(dp.id).startsWith("web-");
         if (isFeed) {
           if (activeSources.length === 0) continue;
           const parts = String(dp.id).split("-");
-          const srcId = parts.length >= 2 ? parts[1] : "";
-          const matchesUrl = dp.sourceUrl && activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase());
-          if (!srcId || !activeSourceIds.has(srcId) && !matchesUrl) continue;
+          const srcId = dp.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
+          const matchesId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
+          const matchesUrl = Boolean(dp.sourceUrl && (activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+            try {
+              const feedHost = new URL(u).hostname.replace(/^www\./, "");
+              const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, "");
+              return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+            } catch {
+              return false;
+            }
+          })));
+          const isApproved = dp.status === "APPROVED" || dp.status === "published" || Boolean(dp.isApproved) || Boolean(dp.isPrePublished);
+          if (!matchesId && !matchesUrl && !isApproved) continue;
         }
         if (!centralDb.cache.news.has(dp.id)) {
           centralDb.cache.news.set(dp.id, dp);
           cleaned.unshift(dp);
+          centralDb.saveNewsPost(dp.id, dp).catch(() => {
+          });
         }
       }
     }
@@ -12103,7 +12119,10 @@ app.get("/api/news-posts", async (req, res) => {
   const now = Date.now();
   const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
   const activeSourceIds = new Set(activeSources.map((s) => s.id));
-  const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
+  const activeSourceUrls = /* @__PURE__ */ new Set([
+    ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
+    ...activeSources.map((s) => (s.originalWebUrl || "").trim().toLowerCase()).filter(Boolean)
+  ]);
   const activePosts = posts.filter((p) => {
     if (p.status === "REJECTED" && !isAdmin) return false;
     if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) return false;
@@ -12131,13 +12150,14 @@ app.get("/api/news-posts", async (req, res) => {
       if (!hasActiveSource) {
         return false;
       }
-      if (p.status !== "APPROVED") {
+      const isApproved = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+      if (!isApproved && (p.status === "PENDING_APPROVAL" || p.status === "pending")) {
         if (!includePending) {
           return false;
         }
       }
     }
-    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+    const isApprovedStory = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
     if (isApprovedStory) {
       return true;
     }
@@ -12164,24 +12184,28 @@ app.get("/api/news-posts", async (req, res) => {
         const srcId = p.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
         const matchesSourceId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
         const matchesFeedUrl = Boolean(p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()));
-        const matchesUrl = Boolean(p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()));
+        const matchesUrl = Boolean(p.sourceUrl && (activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+          try {
+            const feedHost = new URL(u).hostname.replace(/^www\./, "");
+            const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "");
+            return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+          } catch {
+            return false;
+          }
+        })));
         const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl);
         if (!hasActiveSource) {
           return false;
         }
-        if (p.status !== "APPROVED") {
-          if (!includePending) return false;
-        }
+        const isApproved = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+        if (!isApproved && !includePending) return false;
       }
-      const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+      const isApprovedStory = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
       if (isApprovedStory) return true;
       if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
         return false;
       }
       if ((p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
-        return false;
-      }
-      if (p.status !== "APPROVED" && !includePending) {
         return false;
       }
       return true;
@@ -16692,11 +16716,7 @@ function resolveCategoryKeyFromName(rawCategory, sourceUrl = "") {
   return "national";
 }
 function loadRssSourcesDatabase() {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
-    const list = Array.from(centralDb.cache.rssSources.values());
-    const valid = list.filter((s) => Boolean(s && s.url));
-    if (valid.length > 0) return valid;
-  }
+  let diskSources = [];
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
@@ -16705,13 +16725,34 @@ function loadRssSourcesDatabase() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const valid = parsed.filter((s) => Boolean(s && s.url));
-          if (valid.length > 0) return valid;
+          if (valid.length > 0) {
+            diskSources = valid;
+            break;
+          }
         }
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
+    const list = Array.from(centralDb.cache.rssSources.values());
+    const valid = list.filter((s) => Boolean(s && s.url));
+    if (diskSources.length > 0) {
+      const existingIds = new Set(valid.map((s) => s.id));
+      const existingUrls = new Set(valid.map((s) => (s.url || "").trim().toLowerCase()));
+      for (const ds of diskSources) {
+        if (!existingIds.has(ds.id) && !existingUrls.has((ds.url || "").trim().toLowerCase())) {
+          valid.push(ds);
+          centralDb.cache.rssSources.set(ds.id, ds);
+          centralDb.saveRssSource(ds.id, ds).catch(() => {
+          });
+        }
+      }
+    }
+    if (valid.length > 0) return valid;
+  }
+  if (diskSources.length > 0) return diskSources;
   return [...DEFAULT_PRODUCTION_RSS_SOURCES];
 }
 function saveRssSourcesDatabase(sources) {
@@ -17073,7 +17114,10 @@ ${editorial.summary}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
       location: editorial.location || "",
-      status: "PENDING_APPROVAL"
+      status: "APPROVED",
+      isApproved: true,
+      isPrePublished: true,
+      editorialApproved: true
     });
   }
   return posts;
@@ -17180,7 +17224,10 @@ ${editorial.summary}
 
 \u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
       location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915",
-      status: "PENDING_APPROVAL"
+      status: "APPROVED",
+      isApproved: true,
+      isPrePublished: true,
+      editorialApproved: true
     }];
   } catch (err) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
@@ -17690,9 +17737,11 @@ async function executeRssSynchronization() {
           skippedDuplicatesCount++;
           continue;
         }
-        p.status = "PENDING_APPROVAL";
+        p.status = "APPROVED";
+        p.isApproved = true;
+        p.isPrePublished = true;
+        p.editorialApproved = true;
         p.pendingCreatedAt = Date.now();
-        p.editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || normUrl && existingUrls.has(normUrl) || existingTitles.has(titleKey);
@@ -17838,9 +17887,11 @@ async function executeWebScrapeSynchronization() {
           skippedDuplicatesCount++;
           continue;
         }
-        p.status = "PENDING_APPROVAL";
+        p.status = "APPROVED";
+        p.isApproved = true;
+        p.isPrePublished = true;
+        p.editorialApproved = true;
         p.pendingCreatedAt = Date.now();
-        p.editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || normUrl && existingUrls.has(normUrl) || existingTitles.has(titleKey);

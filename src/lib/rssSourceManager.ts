@@ -258,15 +258,16 @@ export function getApprovedRssIds(): Set<string> {
 export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
   if (!post) return false;
   if (post.status === 'REJECTED' || (post as any).status === 'rejected') return false;
+  if (post.status === 'APPROVED' || (post as any).status === 'approved' || (post as any).status === 'published' || (post as any).isApproved === true || (post as any).isPrePublished === true) return true;
+  if (approvedIds && post.id && approvedIds.has(post.id)) return true;
   if (post.status === 'PENDING_APPROVAL' || (post as any).status === 'pending') {
     if (approvedIds && post.id && approvedIds.has(post.id)) return true;
     return false;
   }
-  if (post.status === 'APPROVED' || (post as any).status === 'approved') return true;
-  if (approvedIds && post.id && approvedIds.has(post.id)) return true;
   const isFeedSource = Boolean(post.id && (post.id.startsWith('rss-') || post.id.startsWith('web-')));
   if (isFeedSource) {
-    return false; // RSS/Web feeds MUST be approved by Admin
+    // Authorized feed source items default to visible in Home Feed unless explicitly rejected
+    return true;
   }
   return true;
 }
@@ -413,15 +414,18 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
     const normalized = posts.map((p) => {
       const isFeed = Boolean(p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')));
       if (isFeed) {
-        const isApproved = p.status === 'APPROVED' || approvedSet.has(p.id);
+        const isRejected = p.status === 'REJECTED' || (p as any).status === 'rejected';
+        const isApproved = !isRejected && (p.status === 'APPROVED' || p.status === 'published' || p.isApproved || approvedSet.has(p.id) || p.status !== 'PENDING_APPROVAL');
         return {
           ...p,
-          status: isApproved ? ('APPROVED' as const) : ('PENDING_APPROVAL' as const),
+          status: isApproved ? ('APPROVED' as const) : isRejected ? ('REJECTED' as const) : ('PENDING_APPROVAL' as const),
+          isApproved,
+          isPrePublished: isApproved,
         };
       }
       return {
         ...p,
-        status: (p.status || 'PENDING_APPROVAL') as any,
+        status: (p.status || 'APPROVED') as any,
       };
     });
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(normalized));
@@ -462,10 +466,12 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
             const rssAndWebOnly = postsList.filter(
               (p: any) => p && p.id && (String(p.id).startsWith('rss-') || String(p.id).startsWith('web-'))
             );
-            // Preserve the actual status returned from the server (do NOT force APPROVED)
+            // Authoritative server status (default to APPROVED if active and not REJECTED)
             const syncedWithStatus = rssAndWebOnly.map((p: any) => ({
               ...p,
-              status: p.status || 'PENDING_APPROVAL',
+              status: p.status === 'REJECTED' ? 'REJECTED' : 'APPROVED',
+              isApproved: p.status !== 'REJECTED',
+              isPrePublished: p.status !== 'REJECTED',
             }));
             setSyncedRssNewsPosts(syncedWithStatus);
 

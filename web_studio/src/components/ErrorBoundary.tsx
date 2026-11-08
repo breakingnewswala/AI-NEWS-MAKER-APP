@@ -36,6 +36,7 @@ export class ErrorBoundary extends Component<Props, State> {
       const msg = (error && error.message) ? error.message : '';
       if (
         msg.indexOf('activeCategory') !== -1 ||
+        msg.indexOf('FolderClock') !== -1 ||
         msg.indexOf('Loading chunk') !== -1 ||
         msg.indexOf('dynamically imported module') !== -1 ||
         msg.indexOf('Failed to fetch') !== -1

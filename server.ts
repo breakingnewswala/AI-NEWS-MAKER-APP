@@ -1652,24 +1652,42 @@ function loadNewsDatabase(): StoredNewsPost[] {
     }
     const list = Array.from(centralDb.cache.news.values()) as StoredNewsPost[];
     const cleaned = list.filter((p: any) => p && p.id && p.id !== '[object Object]' && p.title && !String(p.id).startsWith("live-post-"));
-    // Merge any new/offline posts from disk that are not yet in Firestore cache (excluding orphan feed items)
+    // Merge any new/offline posts from disk that are not yet in Firestore cache
     if (diskPosts.length > 0) {
       const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
       const activeSourceIds = new Set(activeSources.map((s) => s.id));
-      const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
+      const activeSourceUrls = new Set([
+        ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
+        ...activeSources.map((s) => ((s as any).originalWebUrl || "").trim().toLowerCase()).filter(Boolean),
+      ]);
 
       for (const dp of diskPosts) {
+        if (!dp || !dp.id) continue;
         const isFeed = String(dp.id).startsWith("rss-") || String(dp.id).startsWith("web-");
         if (isFeed) {
           if (activeSources.length === 0) continue;
           const parts = String(dp.id).split("-");
-          const srcId = parts.length >= 2 ? parts[1] : "";
-          const matchesUrl = dp.sourceUrl && activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase());
-          if (!srcId || (!activeSourceIds.has(srcId) && !matchesUrl)) continue;
+          const srcId = (dp as any).sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
+          const matchesId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
+          const matchesUrl = Boolean(dp.sourceUrl && (
+            activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase()) ||
+            Array.from(activeSourceUrls).some((u) => {
+              try {
+                const feedHost = new URL(u).hostname.replace(/^www\./, '');
+                const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, '');
+                return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+              } catch {
+                return false;
+              }
+            })
+          ));
+          const isApproved = dp.status === "APPROVED" || dp.status === "published" || Boolean(dp.isApproved) || Boolean(dp.isPrePublished);
+          if (!matchesId && !matchesUrl && !isApproved) continue;
         }
         if (!centralDb.cache.news.has(dp.id)) {
           centralDb.cache.news.set(dp.id, dp);
           cleaned.unshift(dp);
+          centralDb.saveNewsPost(dp.id, dp).catch(() => {});
         }
       }
     }
@@ -1924,7 +1942,10 @@ app.get("/api/news-posts", async (req, res) => {
 
   const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
   const activeSourceIds = new Set(activeSources.map((s) => s.id));
-  const activeSourceUrls = new Set(activeSources.map((s) => (s.url || "").trim().toLowerCase()));
+  const activeSourceUrls = new Set([
+    ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
+    ...activeSources.map((s) => ((s as any).originalWebUrl || "").trim().toLowerCase()).filter(Boolean),
+  ]);
 
   const activePosts = posts.filter((p) => {
     // 0. Explicitly rejected items should never appear in home feed
@@ -1963,7 +1984,8 @@ app.get("/api/news-posts", async (req, res) => {
         return false;
       }
 
-      if (p.status !== "APPROVED") {
+      const isApproved = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+      if (!isApproved && (p.status === "PENDING_APPROVAL" || (p as any).status === "pending")) {
         if (!includePending) {
           return false;
         }
@@ -1971,7 +1993,7 @@ app.get("/api/news-posts", async (req, res) => {
     }
 
     // 3. Check if story is already approved or pre-published by admin
-    const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+    const isApprovedStory = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
     if (isApprovedStory) {
       return true;
     }
@@ -2005,17 +2027,27 @@ app.get("/api/news-posts", async (req, res) => {
         const srcId = (p as any).sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
         const matchesSourceId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
         const matchesFeedUrl = Boolean(p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()));
-        const matchesUrl = Boolean(p.sourceUrl && activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()));
+        const matchesUrl = Boolean(p.sourceUrl && (
+          activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) ||
+          Array.from(activeSourceUrls).some((u) => {
+            try {
+              const feedHost = new URL(u).hostname.replace(/^www\./, '');
+              const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, '');
+              return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+            } catch {
+              return false;
+            }
+          })
+        ));
         const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl);
         if (!hasActiveSource) {
           return false;
         }
-        if (p.status !== "APPROVED") {
-          if (!includePending) return false;
-        }
+        const isApproved = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+        if (!isApproved && !includePending) return false;
       }
 
-      const isApprovedStory = p.status === "APPROVED" || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
+      const isApprovedStory = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
       if (isApprovedStory) return true;
 
       // Ensure pending and rejected posts are NEVER used for backfill for regular users
@@ -2023,9 +2055,6 @@ app.get("/api/news-posts", async (req, res) => {
         return false;
       }
       if ((p.status === "REJECTED" || (p as any).status === "rejected") && !isAdmin) {
-        return false;
-      }
-      if (p.status !== "APPROVED" && !includePending) {
         return false;
       }
 
@@ -7398,11 +7427,7 @@ function resolveCategoryKeyFromName(rawCategory: string, sourceUrl = ""): string
 }
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
-    const list = Array.from(centralDb.cache.rssSources.values()) as AdminRssSourceRecord[];
-    const valid = list.filter((s: any) => Boolean(s && s.url));
-    if (valid.length > 0) return valid;
-  }
+  let diskSources: AdminRssSourceRecord[] = [];
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
     for (const loc of locations) {
@@ -7411,13 +7436,34 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const valid = parsed.filter((s: any) => Boolean(s && s.url));
-          if (valid.length > 0) return valid;
+          if (valid.length > 0) {
+            diskSources = valid;
+            break;
+          }
         }
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
+
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
+    const list = Array.from(centralDb.cache.rssSources.values()) as AdminRssSourceRecord[];
+    const valid = list.filter((s: any) => Boolean(s && s.url));
+    if (diskSources.length > 0) {
+      const existingIds = new Set(valid.map((s) => s.id));
+      const existingUrls = new Set(valid.map((s) => (s.url || "").trim().toLowerCase()));
+      for (const ds of diskSources) {
+        if (!existingIds.has(ds.id) && !existingUrls.has((ds.url || "").trim().toLowerCase())) {
+          valid.push(ds);
+          centralDb.cache.rssSources.set(ds.id, ds);
+          centralDb.saveRssSource(ds.id, ds).catch(() => {});
+        }
+      }
+    }
+    if (valid.length > 0) return valid;
+  }
+  if (diskSources.length > 0) return diskSources;
   return [...DEFAULT_PRODUCTION_RSS_SOURCES];
 }
 
@@ -7835,7 +7881,10 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
       timestamp,
       fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
       location: editorial.location || "",
-      status: "PENDING_APPROVAL",
+      status: "APPROVED",
+      isApproved: true,
+      isPrePublished: true,
+      editorialApproved: true,
     });
   }
 
@@ -7966,7 +8015,10 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       timestamp: Date.now(),
       fullContent: `${editorial.title}\n\n${editorial.summary}\n\nवेब लिंक स्रोतः ${source.url}`,
       location: editorial.location || "वेब डेस्क",
-      status: "PENDING_APPROVAL",
+      status: "APPROVED",
+      isApproved: true,
+      isPrePublished: true,
+      editorialApproved: true,
     }];
   } catch (err: any) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
@@ -8623,10 +8675,12 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
           continue;
         }
 
-        // Editorial Rule: Newly imported RSS feed items require explicit Admin approval.
-        p.status = "PENDING_APPROVAL";
+        // Active Authorized Sources: Newly imported RSS feed items are approved by default so they display in Home Feed
+        p.status = "APPROVED";
+        (p as any).isApproved = true;
+        (p as any).isPrePublished = true;
+        (p as any).editorialApproved = true;
         (p as any).pendingCreatedAt = Date.now();
-        (p as any).editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
 
@@ -8795,10 +8849,12 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
           continue;
         }
 
-        // Editorial Rule: Newly scraped web feed items require explicit Admin approval.
-        p.status = "PENDING_APPROVAL";
+        // Active Authorized Web Sources: Newly scraped web feed items are approved by default so they display in Home Feed
+        p.status = "APPROVED";
+        (p as any).isApproved = true;
+        (p as any).isPrePublished = true;
+        (p as any).editorialApproved = true;
         (p as any).pendingCreatedAt = Date.now();
-        (p as any).editorialApproved = false;
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || (normUrl && existingUrls.has(normUrl)) || existingTitles.has(titleKey);
