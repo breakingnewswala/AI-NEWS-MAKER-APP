@@ -47,6 +47,7 @@ class CentralFirestoreDatabaseService {
       frameUnlocks: new Map(),
       payments: new Map(),
       rssSources: new Map(),
+      channels: new Map(),
       categories: new Map(),
       templateConfigs: new Map(),
       plans: new Map(),
@@ -68,6 +69,7 @@ class CentralFirestoreDatabaseService {
       news: 60 * 1000,
       videos: 60 * 1000,
       rssSources: 120 * 1000,
+      channels: 120 * 1000,
       plans: 300 * 1000,
       coupons: 300 * 1000,
       categories: 300 * 1000,
@@ -483,6 +485,14 @@ class CentralFirestoreDatabaseService {
         this.cache.rssSources.clear();
         rRes.documents.forEach((s) => this.cache.rssSources.set(s.id, s));
         console.log(`  ✓ Loaded ${rRes.documents.length} RSS sources into live cache`);
+      }
+
+      // 4.5 Restricted Channels / Portal Directory
+      const chRes = await this.listDocs('restricted_channels', 200);
+      if (chRes.success) {
+        this.cache.channels.clear();
+        chRes.documents.forEach((ch) => this.cache.channels.set(ch.id, ch));
+        console.log(`  ✓ Loaded ${chRes.documents.length} channels/portals into live cache`);
       }
 
       // 5. Plans & Coupons
@@ -1132,6 +1142,57 @@ class CentralFirestoreDatabaseService {
       const sources = this._loadLocalJson('rss_sources_database.json', []);
       const filtered = sources.filter((s) => s.id !== cleanId);
       this._saveLocalJson('rss_sources_database.json', filtered);
+      return { success: true };
+    }
+  }
+
+  // --- RESTRICTED CHANNELS / PORTAL DIRECTORY OPERATIONS ---
+  async getChannels() {
+    if (this.useFirestore) {
+      if (this.cache.channels && this.cache.channels.size > 0) {
+        return Array.from(this.cache.channels.values());
+      }
+      const res = await this.listDocs('restricted_channels', 200);
+      const docs = res.documents || [];
+      if (!this.cache.channels) this.cache.channels = new Map();
+      docs.forEach((c) => this.cache.channels.set(c.id, c));
+      return docs;
+    } else {
+      return this._loadLocalJson('restricted_channels_db.json', []);
+    }
+  }
+
+  async saveChannel(channelId, payload) {
+    if (!channelId || !payload) return { success: false, error: 'Channel ID and payload required' };
+    const cleanId = String(channelId).trim();
+
+    if (this.useFirestore) {
+      if (!this.cache.channels) this.cache.channels = new Map();
+      this.cache.channels.set(cleanId, payload);
+      const res = await this.writeDoc('restricted_channels', cleanId, payload);
+      return res;
+    } else {
+      const channels = this._loadLocalJson('restricted_channels_db.json', []);
+      const idx = channels.findIndex((c) => c.id === cleanId);
+      if (idx >= 0) channels[idx] = payload;
+      else channels.push(payload);
+      this._saveLocalJson('restricted_channels_db.json', channels);
+      return { success: true };
+    }
+  }
+
+  async deleteChannel(channelId) {
+    if (!channelId) return { success: false, error: 'Channel ID required' };
+    const cleanId = String(channelId).trim();
+
+    if (this.useFirestore) {
+      if (this.cache.channels) this.cache.channels.delete(cleanId);
+      const res = await this.deleteDoc('restricted_channels', cleanId);
+      return res;
+    } else {
+      const channels = this._loadLocalJson('restricted_channels_db.json', []);
+      const filtered = channels.filter((c) => c.id !== cleanId);
+      this._saveLocalJson('restricted_channels_db.json', filtered);
       return { success: true };
     }
   }

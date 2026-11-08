@@ -1638,6 +1638,7 @@ var require_firestore_database_service = __commonJS({
           frameUnlocks: /* @__PURE__ */ new Map(),
           payments: /* @__PURE__ */ new Map(),
           rssSources: /* @__PURE__ */ new Map(),
+          channels: /* @__PURE__ */ new Map(),
           categories: /* @__PURE__ */ new Map(),
           templateConfigs: /* @__PURE__ */ new Map(),
           plans: /* @__PURE__ */ new Map(),
@@ -1656,6 +1657,7 @@ var require_firestore_database_service = __commonJS({
           news: 60 * 1e3,
           videos: 60 * 1e3,
           rssSources: 120 * 1e3,
+          channels: 120 * 1e3,
           plans: 300 * 1e3,
           coupons: 300 * 1e3,
           categories: 300 * 1e3,
@@ -2033,6 +2035,12 @@ var require_firestore_database_service = __commonJS({
             this.cache.rssSources.clear();
             rRes.documents.forEach((s) => this.cache.rssSources.set(s.id, s));
             console.log(`  \u2713 Loaded ${rRes.documents.length} RSS sources into live cache`);
+          }
+          const chRes = await this.listDocs("restricted_channels", 200);
+          if (chRes.success) {
+            this.cache.channels.clear();
+            chRes.documents.forEach((ch) => this.cache.channels.set(ch.id, ch));
+            console.log(`  \u2713 Loaded ${chRes.documents.length} channels/portals into live cache`);
           }
           const pRes = await this.listDocs("plans_catalog", 50);
           if (pRes.success) {
@@ -2604,6 +2612,52 @@ var require_firestore_database_service = __commonJS({
           const sources = this._loadLocalJson("rss_sources_database.json", []);
           const filtered = sources.filter((s) => s.id !== cleanId);
           this._saveLocalJson("rss_sources_database.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- RESTRICTED CHANNELS / PORTAL DIRECTORY OPERATIONS ---
+      async getChannels() {
+        if (this.useFirestore) {
+          if (this.cache.channels && this.cache.channels.size > 0) {
+            return Array.from(this.cache.channels.values());
+          }
+          const res = await this.listDocs("restricted_channels", 200);
+          const docs = res.documents || [];
+          if (!this.cache.channels) this.cache.channels = /* @__PURE__ */ new Map();
+          docs.forEach((c) => this.cache.channels.set(c.id, c));
+          return docs;
+        } else {
+          return this._loadLocalJson("restricted_channels_db.json", []);
+        }
+      }
+      async saveChannel(channelId, payload) {
+        if (!channelId || !payload) return { success: false, error: "Channel ID and payload required" };
+        const cleanId = String(channelId).trim();
+        if (this.useFirestore) {
+          if (!this.cache.channels) this.cache.channels = /* @__PURE__ */ new Map();
+          this.cache.channels.set(cleanId, payload);
+          const res = await this.writeDoc("restricted_channels", cleanId, payload);
+          return res;
+        } else {
+          const channels = this._loadLocalJson("restricted_channels_db.json", []);
+          const idx = channels.findIndex((c) => c.id === cleanId);
+          if (idx >= 0) channels[idx] = payload;
+          else channels.push(payload);
+          this._saveLocalJson("restricted_channels_db.json", channels);
+          return { success: true };
+        }
+      }
+      async deleteChannel(channelId) {
+        if (!channelId) return { success: false, error: "Channel ID required" };
+        const cleanId = String(channelId).trim();
+        if (this.useFirestore) {
+          if (this.cache.channels) this.cache.channels.delete(cleanId);
+          const res = await this.deleteDoc("restricted_channels", cleanId);
+          return res;
+        } else {
+          const channels = this._loadLocalJson("restricted_channels_db.json", []);
+          const filtered = channels.filter((c) => c.id !== cleanId);
+          this._saveLocalJson("restricted_channels_db.json", filtered);
           return { success: true };
         }
       }
@@ -3937,6 +3991,7 @@ var require_firestore_database_service2 = __commonJS({
           frameUnlocks: /* @__PURE__ */ new Map(),
           payments: /* @__PURE__ */ new Map(),
           rssSources: /* @__PURE__ */ new Map(),
+          channels: /* @__PURE__ */ new Map(),
           categories: /* @__PURE__ */ new Map(),
           templateConfigs: /* @__PURE__ */ new Map(),
           plans: /* @__PURE__ */ new Map(),
@@ -3955,6 +4010,7 @@ var require_firestore_database_service2 = __commonJS({
           news: 60 * 1e3,
           videos: 60 * 1e3,
           rssSources: 120 * 1e3,
+          channels: 120 * 1e3,
           plans: 300 * 1e3,
           coupons: 300 * 1e3,
           categories: 300 * 1e3,
@@ -4332,6 +4388,12 @@ var require_firestore_database_service2 = __commonJS({
             this.cache.rssSources.clear();
             rRes.documents.forEach((s) => this.cache.rssSources.set(s.id, s));
             console.log(`  \u2713 Loaded ${rRes.documents.length} RSS sources into live cache`);
+          }
+          const chRes = await this.listDocs("restricted_channels", 200);
+          if (chRes.success) {
+            this.cache.channels.clear();
+            chRes.documents.forEach((ch) => this.cache.channels.set(ch.id, ch));
+            console.log(`  \u2713 Loaded ${chRes.documents.length} channels/portals into live cache`);
           }
           const pRes = await this.listDocs("plans_catalog", 50);
           if (pRes.success) {
@@ -4903,6 +4965,52 @@ var require_firestore_database_service2 = __commonJS({
           const sources = this._loadLocalJson("rss_sources_database.json", []);
           const filtered = sources.filter((s) => s.id !== cleanId);
           this._saveLocalJson("rss_sources_database.json", filtered);
+          return { success: true };
+        }
+      }
+      // --- RESTRICTED CHANNELS / PORTAL DIRECTORY OPERATIONS ---
+      async getChannels() {
+        if (this.useFirestore) {
+          if (this.cache.channels && this.cache.channels.size > 0) {
+            return Array.from(this.cache.channels.values());
+          }
+          const res = await this.listDocs("restricted_channels", 200);
+          const docs = res.documents || [];
+          if (!this.cache.channels) this.cache.channels = /* @__PURE__ */ new Map();
+          docs.forEach((c) => this.cache.channels.set(c.id, c));
+          return docs;
+        } else {
+          return this._loadLocalJson("restricted_channels_db.json", []);
+        }
+      }
+      async saveChannel(channelId, payload) {
+        if (!channelId || !payload) return { success: false, error: "Channel ID and payload required" };
+        const cleanId = String(channelId).trim();
+        if (this.useFirestore) {
+          if (!this.cache.channels) this.cache.channels = /* @__PURE__ */ new Map();
+          this.cache.channels.set(cleanId, payload);
+          const res = await this.writeDoc("restricted_channels", cleanId, payload);
+          return res;
+        } else {
+          const channels = this._loadLocalJson("restricted_channels_db.json", []);
+          const idx = channels.findIndex((c) => c.id === cleanId);
+          if (idx >= 0) channels[idx] = payload;
+          else channels.push(payload);
+          this._saveLocalJson("restricted_channels_db.json", channels);
+          return { success: true };
+        }
+      }
+      async deleteChannel(channelId) {
+        if (!channelId) return { success: false, error: "Channel ID required" };
+        const cleanId = String(channelId).trim();
+        if (this.useFirestore) {
+          if (this.cache.channels) this.cache.channels.delete(cleanId);
+          const res = await this.deleteDoc("restricted_channels", cleanId);
+          return res;
+        } else {
+          const channels = this._loadLocalJson("restricted_channels_db.json", []);
+          const filtered = channels.filter((c) => c.id !== cleanId);
+          this._saveLocalJson("restricted_channels_db.json", filtered);
           return { success: true };
         }
       }
@@ -14231,10 +14339,21 @@ function loadChannelsDatabase() {
     return Array.from(centralDb.cache.channels.values());
   }
   try {
-    if (import_fs2.default.existsSync(CHANNELS_DB_FILE)) {
-      const raw = import_fs2.default.readFileSync(CHANNELS_DB_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    const locations = resolveAllDatabaseLocations("restricted_channels_db.json");
+    for (const loc of locations) {
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          if (centralDb && centralDb.useFirestore) {
+            if (!centralDb.cache.channels) centralDb.cache.channels = /* @__PURE__ */ new Map();
+            for (const ch of parsed) {
+              centralDb.cache.channels.set(ch.id, ch);
+            }
+          }
+          return parsed;
+        }
+      }
     }
   } catch (e) {
     console.error("Error reading restricted_channels_db.json:", e);
@@ -14270,38 +14389,40 @@ function saveChannelsDatabase(channels) {
     return false;
   }
 }
-app.get(["/api/channels", "/api/admin/channels"], (_req, res) => {
+app.get(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (_req, res) => {
   const channels = loadChannelsDatabase();
   return res.json({ success: true, channels });
 });
-app.post(["/api/channels", "/api/admin/channels"], (req, res) => {
+app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (req, res) => {
   try {
     const payload = req.body;
-    if (!payload || !payload.channelName) {
-      return res.status(400).json({ error: "\u091A\u0948\u0928\u0932 \u0915\u093E \u0928\u093E\u092E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
+    const rawName = (payload.channelName || payload.name || "").trim();
+    if (!rawName) {
+      return res.status(400).json({ error: "\u091A\u0948\u0928\u0932 / \u092A\u094B\u0930\u094D\u091F\u0932 \u0915\u093E \u0928\u093E\u092E \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
     }
     const channels = loadChannelsDatabase();
-    const cleanUsername = (payload.username || payload.channelName).toLowerCase().replace(/[^a-z0-9_]/g, "");
-    if (channels.some((c) => c.username.toLowerCase() === cleanUsername)) {
-      return res.status(409).json({ error: "\u092F\u0939 \u091A\u0948\u0928\u0932 \u092A\u0939\u0932\u0947 \u0938\u0947 \u092E\u094C\u091C\u0942\u0926 \u0939\u0948" });
+    const normName = rawName.toLowerCase();
+    if (channels.some((c) => (c.channelName || "").trim().toLowerCase() === normName)) {
+      return res.status(409).json({ error: "\u092F\u0939 \u091A\u0948\u0928\u0932 / \u092A\u094B\u0930\u094D\u091F\u0932 \u092A\u0939\u0932\u0947 \u0938\u0947 \u092E\u094C\u091C\u0942\u0926 \u0939\u0948" });
     }
+    const cleanUser = payload.username ? String(payload.username).toLowerCase().replace(/[^a-z0-9_]/g, "") : `chan_${Date.now().toString(36)}`;
     const newChan = {
-      id: payload.id || `res_${Date.now()}`,
-      channelName: payload.channelName.trim(),
-      websiteUrl: payload.websiteUrl || "",
-      username: cleanUsername,
-      logoUrl: payload.logoUrl || "",
-      reason: payload.reason || "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932",
+      id: payload.id || `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      channelName: rawName,
+      websiteUrl: String(payload.websiteUrl || "").trim(),
+      username: cleanUser || `chan_${Date.now().toString(36)}`,
+      logoUrl: String(payload.logoUrl || ""),
+      reason: String(payload.reason || "\u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 / \u092A\u094B\u0930\u094D\u091F\u0932"),
       createdAt: Date.now()
     };
-    channels.push(newChan);
+    channels.unshift(newChan);
     saveChannelsDatabase(channels);
     return res.json({ success: true, channel: newChan, channels });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.put(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
+app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -14334,11 +14455,16 @@ app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, 
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
+app.delete(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
     channels = channels.filter((c) => c.id !== id);
+    if (centralDb && centralDb.useFirestore) {
+      if (centralDb.cache.channels) centralDb.cache.channels.delete(id);
+      centralDb.deleteDoc("restricted_channels", id).catch(() => {
+      });
+    }
     saveChannelsDatabase(channels);
     return res.json({ success: true, channels });
   } catch (err) {
@@ -16668,15 +16794,6 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
 var RSS_SOURCES_FILE = import_path2.default.join(process.cwd(), "rss_sources_database.json");
 var DEFAULT_PRODUCTION_RSS_SOURCES = [
   {
-    id: "src_1794071136127_oim9",
-    name: "\u0928\u0908 \u0926\u0941\u0928\u093F\u092F\u093E",
-    url: "https://www.naidunia.com/entertainment",
-    type: "rss",
-    category: "\u{1F3AC} \u092E\u0928\u094B\u0930\u0902\u091C\u0928",
-    isActive: true,
-    createdAt: 1794071136127
-  },
-  {
     id: "src_1794071001048_maoy",
     name: "\u0928\u0908 \u0926\u0941\u0928\u093F\u092F\u093E",
     url: "https://www.naidunia.com/madhya-pradesh",
@@ -16686,6 +16803,53 @@ var DEFAULT_PRODUCTION_RSS_SOURCES = [
     createdAt: 1794071001048
   }
 ];
+var DELETED_RSS_SOURCES_FILE = "deleted_rss_sources_ids.json";
+function loadDeletedRssSourceIds() {
+  const deletedSet = /* @__PURE__ */ new Set(["src_1794071136127_oim9"]);
+  if (centralDb && centralDb.useFirestore) {
+    const doc = centralDb.cache?.systemConfig?.get("deleted_rss_sources");
+    if (doc && Array.isArray(doc.deletedIds)) {
+      doc.deletedIds.forEach((id) => deletedSet.add(id));
+    }
+  }
+  try {
+    const locations = resolveAllDatabaseLocations(DELETED_RSS_SOURCES_FILE);
+    for (const loc of locations) {
+      if (import_fs2.default.existsSync(loc)) {
+        const parsed = JSON.parse(import_fs2.default.readFileSync(loc, "utf-8"));
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id) => deletedSet.add(id));
+        }
+      }
+    }
+  } catch {
+  }
+  return deletedSet;
+}
+function recordDeletedRssSourceId(id) {
+  const cleanId = String(id).trim();
+  if (!cleanId) return;
+  const deletedSet = loadDeletedRssSourceIds();
+  deletedSet.add(cleanId);
+  const arr = Array.from(deletedSet);
+  if (centralDb && centralDb.useFirestore) {
+    centralDb.writeDoc("system_config", "deleted_rss_sources", { deletedIds: arr, updatedAt: Date.now() }).catch(() => {
+    });
+  }
+  try {
+    const locations = resolveAllDatabaseLocations(DELETED_RSS_SOURCES_FILE);
+    const jsonStr = JSON.stringify(arr, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
 function resolveCategoryKeyFromName(rawCategory, sourceUrl = "") {
   const c = String(rawCategory || "").toLowerCase();
   const u = String(sourceUrl || "").toLowerCase();
@@ -16716,6 +16880,7 @@ function resolveCategoryKeyFromName(rawCategory, sourceUrl = "") {
   return "national";
 }
 function loadRssSourcesDatabase() {
+  const deletedIds = loadDeletedRssSourceIds();
   let diskSources = [];
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
@@ -16724,7 +16889,7 @@ function loadRssSourcesDatabase() {
         const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          const valid = parsed.filter((s) => Boolean(s && s.url));
+          const valid = parsed.filter((s) => Boolean(s && s.url && !deletedIds.has(s.id) && !s.url.includes("/entertainment") && !s.url.includes("/uttar-pradesh")));
           if (valid.length > 0) {
             diskSources = valid;
             break;
@@ -16736,13 +16901,20 @@ function loadRssSourcesDatabase() {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
+    for (const dId of deletedIds) {
+      if (centralDb.cache.rssSources.has(dId)) {
+        centralDb.cache.rssSources.delete(dId);
+        centralDb.deleteRssSource(dId).catch(() => {
+        });
+      }
+    }
     const list = Array.from(centralDb.cache.rssSources.values());
-    const valid = list.filter((s) => Boolean(s && s.url));
+    const valid = list.filter((s) => Boolean(s && s.url && !deletedIds.has(s.id) && !s.url.includes("/entertainment") && !s.url.includes("/uttar-pradesh")));
     if (diskSources.length > 0) {
       const existingIds = new Set(valid.map((s) => s.id));
       const existingUrls = new Set(valid.map((s) => (s.url || "").trim().toLowerCase()));
       for (const ds of diskSources) {
-        if (!existingIds.has(ds.id) && !existingUrls.has((ds.url || "").trim().toLowerCase())) {
+        if (!deletedIds.has(ds.id) && !existingIds.has(ds.id) && !existingUrls.has((ds.url || "").trim().toLowerCase())) {
           valid.push(ds);
           centralDb.cache.rssSources.set(ds.id, ds);
           centralDb.saveRssSource(ds.id, ds).catch(() => {
@@ -16753,7 +16925,7 @@ function loadRssSourcesDatabase() {
     if (valid.length > 0) return valid;
   }
   if (diskSources.length > 0) return diskSources;
-  return [...DEFAULT_PRODUCTION_RSS_SOURCES];
+  return DEFAULT_PRODUCTION_RSS_SOURCES.filter((s) => !deletedIds.has(s.id));
 }
 function saveRssSourcesDatabase(sources) {
   const cleaned = sources.filter((s) => Boolean(s && s.url));
@@ -17329,6 +17501,7 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     let sources = loadRssSourcesDatabase();
     const targetSource = sources.find((s) => s.id === id);
     sources = sources.filter((s) => s.id !== id);
+    recordDeletedRssSourceId(id);
     saveRssSourcesDatabase(sources);
     if (targetSource) {
       let posts = loadNewsDatabase();
@@ -18904,12 +19077,25 @@ function saveAssetLibrariesDatabase(items) {
     });
   }
 }
+var FORBIDDEN_DYNAMIC_FRAME_IDS = /* @__PURE__ */ new Set([
+  "df_testing_1_double",
+  "df_bayaan_4_5_red",
+  "df_story_9_16_standard",
+  "df_story_9_16_breaking"
+]);
 function loadDynamicFramesDatabase() {
   try {
     if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
       const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id)).map((f) => {
+          if (f.id === "df_reg_4_5_clean") {
+            return { ...f, name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928 \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E (Regular Clean News Frame)" };
+          }
+          return f;
+        });
+      }
     }
   } catch {
   }
@@ -19102,7 +19288,12 @@ app.get("/api/dynamic-frames", async (req, res) => {
       try {
         const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
         if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
-          frames = cloudDoc.frames;
+          frames = cloudDoc.frames.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id)).map((f) => {
+            if (f.id === "df_reg_4_5_clean") {
+              return { ...f, name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928 \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E (Regular Clean News Frame)" };
+            }
+            return f;
+          });
           saveDynamicFramesDatabase(frames);
         }
       } catch {
@@ -19112,7 +19303,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
       frames = [
         {
           id: "df_reg_4_5_clean",
-          name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u093E\u0938\u093F\u0915 4:5 \u092B\u094D\u0930\u0947\u092E (Regular Classic)",
+          name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928 \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E (Regular Clean News Frame)",
           description: "\u0926\u0948\u0928\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u0915 4:5 \u092A\u094B\u0930\u094D\u091F\u094D\u0930\u0947\u091F \u092B\u094B\u091F\u094B \u092B\u094D\u0930\u0947\u092E\u0964",
           aspectRatio: "4:5",
           canvasWidth: 1080,
@@ -19162,274 +19353,6 @@ app.get("/api/dynamic-frames", async (req, res) => {
               maxLines: 3,
               lineHeight: 1.25,
               backgroundColor: "transparent"
-            }
-          ]
-        },
-        {
-          id: "df_testing_1_double",
-          name: "TESTING 1",
-          description: "\u0921\u092C\u0932 \u092B\u094B\u091F\u094B \u0915\u094B\u0932\u093E\u091C \u091F\u0947\u0938\u094D\u091F \u092B\u094D\u0930\u0947\u092E (\u0915\u094D\u0930\u093F\u0915\u0947\u091F \u092B\u094B\u091F\u094B \u0935 \u0938\u0940\u090F\u092E \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935 \u092B\u094B\u091F\u094B)",
-          aspectRatio: "4:5",
-          canvasWidth: 1080,
-          canvasHeight: 1350,
-          previewImageUrl: "/assets/sample_graphic_preview.png",
-          designCategory: "Special Frames",
-          allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-          publicationStatus: "published",
-          createdBy: "breakingnewswala.com@gmail.com",
-          createdAt: 179388e7,
-          updatedAt: 179388e7,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: "top_left",
-            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
-            showLocation: true,
-            locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
-            locationStyle: "pill"
-          },
-          footerConfig: {
-            footerHeightRatio: 0.08,
-            enforcePermanentFooter: true,
-            footerBgColor: "#FFFFFF",
-            footerTextColor: "#000000"
-          },
-          watermarkConfig: {
-            enabled: true,
-            label: "AI GENERATED",
-            rect: { x: 74, y: 3.5, width: 21, height: 3.5 }
-          },
-          fullStoryCalloutConfig: {
-            enabled: true,
-            text: "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902",
-            rect: { x: 8, y: 88, width: 84, height: 3.8 }
-          },
-          photoSlots: [
-            {
-              id: "slot_cricket_photo",
-              name: "\u0915\u094D\u0930\u093F\u0915\u0947\u091F \u092B\u094B\u091F\u094B (Cricket Photo)",
-              slotType: "normal",
-              rect: { x: 0, y: 0, width: 50, height: 61.33 },
-              required: true,
-              cropMode: "cover"
-            },
-            {
-              id: "slot_cm_photo",
-              name: "\u0938\u0940\u090F\u092E \u092E\u094B\u0939\u0928 \u092F\u093E\u0926\u0935 \u092B\u094B\u091F\u094B (CM Mohan Yadav)",
-              slotType: "normal",
-              rect: { x: 50, y: 0, width: 50, height: 61.33 },
-              required: true,
-              cropMode: "cover"
-            }
-          ],
-          textSlots: [
-            {
-              id: "slot_main_headline",
-              name: "\u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (3 \u092A\u0902\u0915\u094D\u0924\u093F\u092F\u093E\u0901)",
-              role: "headline",
-              rect: { x: 7.7, y: 64, width: 84.6, height: 24 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 68,
-              fontWeight: "bold",
-              textColor: "#000000",
-              // STRICTLY BLACK AS CONFIGURED
-              alignment: "center",
-              maxLines: 3,
-              lineHeight: 1.25,
-              backgroundColor: "transparent"
-            }
-          ]
-        },
-        {
-          id: "df_bayaan_4_5_red",
-          name: "\u092C\u092F\u093E\u0928\u092C\u093E\u091C\u093C\u0940 \u0930\u0947\u0921 \u0915\u091F\u0906\u0909\u091F \u092B\u094D\u0930\u0947\u092E (Statement Red Cutout)",
-          description: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092E\u0942\u0935\u094D\u0921 \u0915\u091F\u0906\u0909\u091F \u0935 \u092E\u0941\u0916\u094D\u092F \u092C\u092F\u093E\u0928/\u0915\u094B\u091F\u0947\u0936\u0928 \u092B\u094D\u0930\u0947\u092E\u0964",
-          aspectRatio: "4:5",
-          canvasWidth: 1080,
-          canvasHeight: 1350,
-          designCategory: "\u092C\u092F\u093E\u0928\u092C\u093E\u091C\u0940",
-          allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
-          publicationStatus: "published",
-          createdBy: "breakingnewswala.com@gmail.com",
-          createdAt: 179388e7,
-          updatedAt: 179388e7,
-          version: 1,
-          isStatementFrame: true,
-          statementOptions: { solidBackgroundHex: "#C81E1E" },
-          headerConfig: {
-            showLogo: true,
-            logoPosition: "top_left",
-            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
-            showLocation: true,
-            locationRect: { x: 5, y: 13.5, width: 26, height: 4.5 },
-            locationStyle: "pill"
-          },
-          footerConfig: {
-            footerHeightRatio: 0.08,
-            enforcePermanentFooter: true,
-            footerBgColor: "#FFFFFF",
-            footerTextColor: "#000000"
-          },
-          photoSlots: [
-            {
-              id: "slot_speaker_cutout",
-              name: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u092B\u094B\u091F\u094B (\u0915\u091F\u0906\u0909\u091F)",
-              slotType: "cutout",
-              rect: { x: 50, y: 44, width: 48, height: 48 },
-              required: true,
-              bgRemoval: true,
-              cropMode: "contain"
-            }
-          ],
-          textSlots: [
-            {
-              id: "slot_statement_quote",
-              name: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u092C\u092F\u093E\u0928 (Quote)",
-              role: "quote",
-              rect: { x: 8, y: 22, width: 84, height: 26 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 66,
-              fontWeight: "bold",
-              textColor: "#FFFFFF",
-              alignment: "center",
-              maxLines: 4
-            },
-            {
-              id: "slot_speaker_name",
-              name: "\u0935\u0915\u094D\u0924\u093E \u0915\u093E \u0928\u093E\u092E",
-              role: "speaker_name",
-              rect: { x: 8, y: 72, width: 42, height: 7 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 42,
-              fontWeight: "bold",
-              textColor: "#FFE600",
-              alignment: "left",
-              maxLines: 1
-            },
-            {
-              id: "slot_speaker_desig",
-              name: "\u092A\u0926 / \u0935\u093F\u0935\u0930\u0923",
-              role: "speaker_designation",
-              rect: { x: 8, y: 79.5, width: 42, height: 6 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 28,
-              fontWeight: "normal",
-              textColor: "#F8FAFC",
-              alignment: "left",
-              maxLines: 2
-            }
-          ]
-        },
-        {
-          id: "df_story_9_16_standard",
-          name: "\u0938\u094D\u091F\u0948\u0902\u0921\u0930\u094D\u0921 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Standard Story)",
-          description: "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E \u0935 \u092B\u0947\u0938\u092C\u0941\u0915 \u0938\u094D\u091F\u094B\u0930\u0940 \u0915\u0947 \u0932\u093F\u090F 9:16 \u0935\u0930\u094D\u091F\u093F\u0915\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0932\u0947\u0906\u0909\u091F\u0964",
-          aspectRatio: "9:16",
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: "Story Frames",
-          allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-          publicationStatus: "published",
-          createdBy: "breakingnewswala.com@gmail.com",
-          createdAt: 179388e7,
-          updatedAt: 179388e7,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: "top_left",
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: "pill"
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: "#0F172A",
-            footerTextColor: "#F8FAFC"
-          },
-          photoSlots: [
-            {
-              id: "slot_story_photo",
-              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092E\u0941\u0916\u094D\u092F \u092B\u094B\u091F\u094B",
-              slotType: "normal",
-              rect: { x: 0, y: 0, width: 100, height: 62 },
-              required: true,
-              cropMode: "cover"
-            }
-          ],
-          textSlots: [
-            {
-              id: "slot_story_headline",
-              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
-              role: "headline",
-              rect: { x: 7, y: 66, width: 86, height: 25 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 72,
-              fontWeight: "bold",
-              textColor: "#FFFFFF",
-              alignment: "left",
-              maxLines: 4
-            }
-          ]
-        },
-        {
-          id: "df_story_9_16_breaking",
-          name: "\u0938\u0941\u092A\u0930 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Super Breaking Story)",
-          description: "3D \u0930\u093F\u092C\u0928, \u092C\u0921\u093C\u0940 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u0909\u091A\u094D\u091A \u092A\u094D\u0930\u092D\u093E\u0935 \u0935\u093E\u0932\u0940 9:16 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940\u0964",
-          aspectRatio: "9:16",
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: "Story Frames",
-          allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
-          publicationStatus: "published",
-          createdBy: "breakingnewswala.com@gmail.com",
-          createdAt: 179388e7,
-          updatedAt: 179388e7,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: "top_left",
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: "pill"
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: "#FFE600",
-            footerTextColor: "#000000"
-          },
-          ribbonConfig: {
-            enabled: true,
-            ribbonId: "speed-blue-red",
-            customRibbonUrl: "/assets/breaking_news_ribbon.svg",
-            rect: { x: 12, y: 60, width: 76, height: 6.8 },
-            scalePct: 76
-          },
-          photoSlots: [
-            {
-              id: "slot_story_photo",
-              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092B\u094B\u091F\u094B",
-              slotType: "normal",
-              rect: { x: 0, y: 0, width: 100, height: 64 },
-              required: true,
-              cropMode: "cover"
-            }
-          ],
-          textSlots: [
-            {
-              id: "slot_story_headline",
-              name: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
-              role: "headline",
-              rect: { x: 6, y: 68, width: 88, height: 23 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 74,
-              fontWeight: "bold",
-              textColor: "#0A0A0A",
-              alignment: "center",
-              maxLines: 3
             }
           ]
         }
@@ -21314,87 +21237,6 @@ app.post("/api/twilio/verify-otp", authRateLimiter, (req, res) => {
     return res.json({ success: false, valid: false, message: "\u0905\u092E\u093E\u0928\u094D\u092F OTP \u0926\u0930\u094D\u091C \u0915\u093F\u092F\u093E \u0917\u092F\u093E" });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
-  }
-});
-var RESTRICTED_CHANNELS_FILE = import_path2.default.join(process.cwd(), "restricted_channels_db.json");
-function getInitialRestrictedChannels() {
-  return [
-    { id: "res_aajtak", channelName: "\u0906\u091C \u0924\u0915 (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_abp", channelName: "\u090F\u092C\u0940\u092A\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (ABP News)", websiteUrl: "abplive.com", username: "abpnews", logoUrl: "https://static.abplive.com/frontend/images/ABP_Hindi.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_ndtv", channelName: "\u090F\u0928\u0921\u0940\u091F\u0940\u0935\u0940 \u0907\u0902\u0921\u093F\u092F\u093E (NDTV India)", websiteUrl: "ndtv.in", username: "ndtv", logoUrl: "https://drop.ndtv.com/homepage/images/ndtvlogo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_zeenews", channelName: "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C (Zee News)", websiteUrl: "zeenews.india.com", username: "zeenews", logoUrl: "https://english.cdn.zeenews.com/static/apprun/dna/icons/dna-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_indiatv", channelName: "\u0907\u0902\u0921\u093F\u092F\u093E \u091F\u0940\u0935\u0940 (India TV)", websiteUrl: "indiatvnews.com", username: "indiatv", logoUrl: "https://resize.indiatvnews.com/en/resize/newbucket/1200_-/2020/03/indiatv-logo-1584955685.jpg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u091A\u0948\u0928\u0932 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_republic", channelName: "\u0930\u093F\u092A\u092C\u094D\u0932\u093F\u0915 \u092D\u093E\u0930\u0924 (Republic Bharat)", websiteUrl: "republicbharat.com", username: "republicbharat", logoUrl: "https://www.republicbharat.com/assets/images/bharat-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0928\u0947\u091F\u0935\u0930\u094D\u0915 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_news18", channelName: "\u0928\u094D\u092F\u0942\u091C\u093C18 \u0907\u0902\u0921\u093F\u092F\u093E (News18 India)", websiteUrl: "news18.com", username: "news18", logoUrl: "https://images.news18.com/static_netstorage/images/news18_logo_hindi.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0928\u0947\u091F\u0935\u0930\u094D\u0915 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_bhaskar", channelName: "\u0926\u0948\u0928\u093F\u0915 \u092D\u093E\u0938\u094D\u0915\u0930 (Dainik Bhaskar)", websiteUrl: "dainikbhaskar.com", username: "dainikbhaskar", logoUrl: "https://www.bhaskar.com/assets/images/db-logo-hindi.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 \u0935 \u092E\u0940\u0921\u093F\u092F\u093E \u0938\u092E\u0942\u0939", createdAt: 17e11 },
-    { id: "res_amarujala", channelName: "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E (Amar Ujala)", websiteUrl: "amarujala.com", username: "amarujala", logoUrl: "https://www.amarujala.com/assets/images/amarujala.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 - \u0905\u0928\u0927\u093F\u0915\u0943\u0924 \u0909\u092A\u092F\u094B\u0917 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924", createdAt: 17e11 },
-    { id: "res_jagran", channelName: "\u0926\u0948\u0928\u093F\u0915 \u091C\u093E\u0917\u0930\u0923 (Dainik Jagran)", websiteUrl: "jagran.com", username: "dainikjagran", logoUrl: "https://www.jagran.com/assets/images/jagran-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 \u0938\u092E\u0942\u0939", createdAt: 17e11 },
-    { id: "res_hindustan", channelName: "\u0939\u093F\u0928\u094D\u0926\u0941\u0938\u094D\u0924\u093E\u0928 (Live Hindustan)", websiteUrl: "livehindustan.com", username: "livehindustan", logoUrl: "https://www.livehindustan.com/static/lh-logo.svg", reason: "\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u0924\u094D\u0930 \u0938\u092E\u0942\u0939", createdAt: 17e11 },
-    { id: "res_bbc", channelName: "\u092C\u0940\u092C\u0940\u0938\u0940 \u0939\u093F\u0902\u0926\u0940 (BBC Hindi)", websiteUrl: "bbc.com/hindi", username: "bbchindi", logoUrl: "https://news.files.bbci.co.uk/ws/img/logos/og/hindi.png", reason: "\u0905\u0902\u0924\u0930\u094D\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u0917\u0920\u0928", createdAt: 17e11 }
-  ];
-}
-function loadRestrictedChannels() {
-  try {
-    if (import_fs2.default.existsSync(RESTRICTED_CHANNELS_FILE)) {
-      const raw = import_fs2.default.readFileSync(RESTRICTED_CHANNELS_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (err) {
-    console.error("Error reading restricted_channels_db.json:", err);
-  }
-  const init = getInitialRestrictedChannels();
-  saveRestrictedChannels(init);
-  return init;
-}
-function saveRestrictedChannels(list) {
-  try {
-    import_fs2.default.writeFileSync(RESTRICTED_CHANNELS_FILE, JSON.stringify(list, null, 2), "utf-8");
-    return true;
-  } catch (err) {
-    console.error("Error writing restricted_channels_db.json:", err);
-    return false;
-  }
-}
-app.get("/api/restricted-channels", (_req, res) => {
-  return res.json({ success: true, channels: loadRestrictedChannels() });
-});
-app.post("/api/restricted-channels", (req, res) => {
-  try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u091A\u0948\u0928\u0932 \u0938\u0942\u091A\u0940 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
-    const { channelName, websiteUrl, username, logoUrl, reason } = req.body;
-    if (!channelName) return res.status(400).json({ error: "Channel name is required" });
-    const channels = loadRestrictedChannels();
-    const newChan = {
-      id: `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      channelName: String(channelName).trim(),
-      websiteUrl: String(websiteUrl || "").trim(),
-      username: String(username || "").trim(),
-      logoUrl: String(logoUrl || ""),
-      reason: String(reason || "\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u091A\u0948\u0928\u0932"),
-      createdAt: Date.now()
-    };
-    channels.unshift(newChan);
-    saveRestrictedChannels(channels);
-    return res.json({ success: true, channel: newChan, channels });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-app.delete("/api/restricted-channels/:id", (req, res) => {
-  try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u091A\u0948\u0928\u0932 \u0938\u0942\u091A\u0940 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
-    }
-    const { id } = req.params;
-    let channels = loadRestrictedChannels();
-    channels = channels.filter((c) => c.id !== id);
-    saveRestrictedChannels(channels);
-    return res.json({ success: true, channels });
-  } catch (err) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
 var serveAccountDeletionHtml = (_req, res) => {
@@ -24889,7 +24731,8 @@ ${customPrompt}
    - \u0938\u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 100% \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0939\u094B\u0902\u0964 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0930\u0942\u092A\u094B\u0902 \u0915\u094B \u0939\u093F\u0902\u0926\u0940 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092E\u0947\u0902 \u0932\u093F\u0916\u0947\u0902 (\u091C\u0948\u0938\u0947 \u090F\u092A\u0940\u0915\u0947, \u092F\u0942\u092A\u0940\u0906\u0908, \u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F, \u0939\u093E\u0908 \u0915\u094B\u0930\u094D\u091F, \u090F\u092B\u0906\u0908\u0906\u0930, \u0938\u0940\u092C\u0940\u0906\u0908, \u0908\u0921\u0940, \u091C\u0940\u090F\u0938\u091F\u0940, \u0906\u0930\u092C\u0940\u0906\u0908, \u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908, \u0906\u0908\u092A\u0940\u090F\u0932, \u090F\u0906\u0908)\u0964
    - \u0938\u092E\u094D\u092E\u093E\u0928\u0938\u0942\u091A\u0915 \u092F\u093E \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0935\u093E\u0932\u0947 \u0936\u092C\u094D\u0926 ('\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u0938\u0941\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u091C\u0940', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u092A\u0942\u091C\u094D\u092F') \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0939\u091F\u093E \u0926\u0947\u0902, \u0915\u093F\u0902\u0924\u0941 \u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0928\u093E\u092E \u0914\u0930 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092A\u0926 (\u091C\u0948\u0938\u0947 \u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940, \u092A\u094D\u0930\u0927\u093E\u0928\u092E\u0902\u0924\u094D\u0930\u0940, \u0915\u0932\u0947\u0915\u094D\u091F\u0930, \u092A\u0941\u0932\u093F\u0938 \u0905\u0927\u0940\u0915\u094D\u0937\u0915, \u0928\u094D\u092F\u093E\u092F\u093E\u0927\u0940\u0936) \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0930\u0916\u0947\u0902\u0964
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (\u0964 \u092F\u093E .) \u092F\u093E \u092A\u094D\u0930\u0936\u094D\u0928\u0935\u093E\u091A\u0915 \u091A\u093F\u0939\u094D\u0928 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964 \u0915\u094B\u0908 \u0907\u092E\u094B\u091C\u0940 \u092F\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0928 \u0930\u0916\u0947\u0902\u0964
-   - '\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936', '\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936', '\u0939\u093F\u092E\u093E\u091A\u0932 \u092A\u094D\u0930\u0926\u0947\u0936', '\u0906\u0902\u0927\u094D\u0930 \u092A\u094D\u0930\u0926\u0947\u0936' \u092E\u0947\u0902 \u0938\u0939\u0940 \u0938\u094D\u092A\u0947\u0938\u093F\u0902\u0917 \u0930\u0916\u0947\u0902\u0964
+   - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0905\u0902\u0924 \u0905\u0930\u094D\u0925\u092A\u0942\u0930\u094D\u0923 \u0914\u0930 \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0935\u093E\u0915\u094D\u092F \u092A\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B\u0964 '\u0915\u0940', '\u0915\u0947', '\u092E\u0947\u0902', '\u092A\u0930', '\u0938\u0947', '\u0915\u093F', '\u0914\u0930', '\u092F\u093E', '\u0939\u0941\u090F', '\u0917\u092F\u093E', '\u0915\u0939\u093E \u0915\u093F' \u091C\u0948\u0938\u0947 \u0905\u0927\u0942\u0930\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u092D\u0940 \u0938\u092E\u093E\u092A\u094D\u0924 \u0928 \u0915\u0930\u0947\u0902\u0964
+   - '\u092E\u0927\u094D\u092F\u092A\u094D\u0930\u0926\u0947\u0936' \u0914\u0930 '\u0909\u0924\u094D\u0924\u0930\u092A\u094D\u0930\u0926\u0947\u0936' \u0915\u094B \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u090F\u0915 \u0936\u092C\u094D\u0926 (Single Word) \u092E\u0947\u0902 \u0932\u093F\u0916\u0947\u0902 (\u0909\u0926\u093E. \u092E\u0927\u094D\u092F\u092A\u094D\u0930\u0926\u0947\u0936, \u0909\u0924\u094D\u0924\u0930\u092A\u094D\u0930\u0926\u0947\u0936)\u0964
 4. \u0924\u0940\u0928 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0914\u0930 \u0939\u0948\u0936\u091F\u0948\u0917 \u0928\u093F\u092F\u092E (THREE CAPTIONS & HASHTAGS):
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0932\u093F\u0902\u0915, URL \u092F\u093E '\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u092A\u0922\u093C\u0947\u0902' \u0928 \u0932\u093F\u0916\u0947\u0902 \u0914\u0930 \u0928 \u0939\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094B \u092A\u0939\u0932\u0940 \u092A\u0902\u0915\u094D\u0924\u093F \u092E\u0947\u0902 \u0926\u094B\u0939\u0930\u093E\u090F\u0902\u0964
    - \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0915\u0948\u092A\u094D\u0936\u0928 (summary \u0935 captionDetailed): \u0916\u092C\u0930 \u0915\u0947 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F\u094B\u0902 \u0914\u0930 \u0938\u0902\u0926\u0930\u094D\u092D \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0932\u0917\u092D\u0917 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B\u0964

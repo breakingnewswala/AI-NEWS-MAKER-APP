@@ -171,20 +171,21 @@ export function saveRestrictedChannels(list: RestrictedChannel[]): void {
 
 export function addRestrictedChannel(data: {
   channelName: string;
-  websiteUrl: string;
-  username: string;
+  websiteUrl?: string;
+  username?: string;
   logoUrl?: string;
   reason?: string;
 }): RestrictedChannel {
   const current = getRestrictedChannels();
-  const cleanUser = cleanUsername(data.username);
+  const rawName = data.channelName.trim();
+  const cleanUser = data.username ? cleanUsername(data.username) : `chan_${Date.now().toString(36)}`;
   const newChannel: RestrictedChannel = {
     id: `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    channelName: data.channelName.trim(),
-    websiteUrl: cleanDomain(data.websiteUrl),
-    username: cleanUser,
+    channelName: rawName,
+    websiteUrl: data.websiteUrl ? cleanDomain(data.websiteUrl) : '',
+    username: cleanUser || `chan_${Date.now().toString(36)}`,
     logoUrl: data.logoUrl || '',
-    reason: data.reason || 'प्रतिबंधित आधिकारिक चैनल',
+    reason: data.reason || 'आधिकारिक समाचार चैनल / पोर्टल',
     createdAt: Date.now(),
   };
 

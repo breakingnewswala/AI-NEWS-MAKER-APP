@@ -639,10 +639,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [restrictedList, setRestrictedList] = useState<RestrictedChannel[]>(() => getRestrictedChannels());
   const [restrictedSearch, setRestrictedSearch] = useState<string>('');
   const [newRestrictedName, setNewRestrictedName] = useState<string>('');
-  const [newRestrictedWebsite, setNewRestrictedWebsite] = useState<string>('');
-  const [newRestrictedUsername, setNewRestrictedUsername] = useState<string>('');
-  const [newRestrictedLogo, setNewRestrictedLogo] = useState<string>('');
-  const [newRestrictedReason, setNewRestrictedReason] = useState<string>('');
+  const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
+  const [editingChannelName, setEditingChannelName] = useState<string>('');
   const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Master Admin 4 Navigable Categories & Sub-Users Directory State (Section 11)
@@ -6418,140 +6416,45 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!newRestrictedName.trim()) {
-                  setRestrictedMsg({ type: 'error', text: 'कृपया चैनल का नाम दर्ज करें' });
-                  return;
-                }
-                if (!newRestrictedWebsite.trim() && !newRestrictedUsername.trim()) {
-                  setRestrictedMsg({ type: 'error', text: 'कृपया वेबसाइट या यूज़रनेम दर्ज करें' });
+                  setRestrictedMsg({ type: 'error', text: 'कृपया चैनल / पोर्टल का नाम दर्ज करें' });
                   return;
                 }
                 const added = addRestrictedChannel({
                   channelName: newRestrictedName.trim(),
-                  websiteUrl: newRestrictedWebsite.trim(),
-                  username: newRestrictedUsername.trim() || newRestrictedName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16),
-                  logoUrl: newRestrictedLogo.trim() || undefined,
-                  reason: newRestrictedReason.trim() || 'राष्ट्रीय/आधिकारिक समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित',
+                  websiteUrl: '',
+                  username: '',
+                  reason: 'आधिकारिक समाचार चैनल / पोर्टल',
                 });
                 setRestrictedList(getRestrictedChannels());
                 setNewRestrictedName('');
-                setNewRestrictedWebsite('');
-                setNewRestrictedUsername('');
-                setNewRestrictedLogo('');
-                setNewRestrictedReason('');
                 setRestrictedMsg({
                   type: 'success',
-                  text: `✅ चैनल "${added.channelName}" सफलतापूर्वक प्रतिबंधित सूची में जोड़ दिया गया।`,
+                  text: `✅ चैनल / पोर्टल "${added.channelName}" सफलतापूर्वक सुरक्षित सूची में जोड़ दिया गया।`,
                 });
                 setTimeout(() => setRestrictedMsg(null), 5000);
               }}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5"
+              className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3"
             >
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  1. चैनल का नाम *
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  चैनल / पोर्टल का नाम *
                 </label>
                 <input
                   type="text"
                   required
                   value={newRestrictedName}
                   onChange={(e) => setNewRestrictedName(e.target.value)}
-                  placeholder="उदा. आज तक (Aaj Tak)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
+                  placeholder="चैनल या पोर्टल का नाम हिंदी में दर्ज करें (उदा. दैनिक भास्कर, अमर उजाला, आज तक)..."
+                  className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
                 />
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  2. वेबसाइट का पता (डोमेन) *
-                </label>
-                <input
-                  type="text"
-                  value={newRestrictedWebsite}
-                  onChange={(e) => setNewRestrictedWebsite(e.target.value)}
-                  placeholder="उदा. aajtak.in (बिना https:// के)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  3. यूज़रनेम
-                </label>
-                <input
-                  type="text"
-                  value={newRestrictedUsername}
-                  onChange={(e) => setNewRestrictedUsername(e.target.value)}
-                  placeholder="उदा. aajtak"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  4. चैनल लोगो (फोटो चुनें या URL)
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    id="restricted-logo-file"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          if (typeof reader.result === 'string') {
-                            setNewRestrictedLogo(reader.result);
-                          }
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                  />
-                  <label
-                    htmlFor="restricted-logo-file"
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1.5 transition active:scale-95 shrink-0"
-                  >
-                    <Upload className="w-3.5 h-3.5 text-amber-400" />
-                    <span>📁 फोटो चुनें</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newRestrictedLogo}
-                    onChange={(e) => setNewRestrictedLogo(e.target.value)}
-                    placeholder="या लोगो इमेज लिंक पेस्ट करें..."
-                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
-                  />
-                  {newRestrictedLogo && (
-                    <div className="w-8 h-8 rounded-lg overflow-hidden border border-amber-400/50 bg-black shrink-0 flex items-center justify-center">
-                      <img src={newRestrictedLogo} alt="Logo" className="w-full h-full object-contain" />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="sm:col-span-2 lg:col-span-2">
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  5. प्रतिबंध का कारण
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newRestrictedReason}
-                    onChange={(e) => setNewRestrictedReason(e.target.value)}
-                    placeholder="उदा. राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित"
-                    className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
-                  />
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition cursor-pointer shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>सूची में जोड़ें</span>
-                  </button>
-                </div>
-              </div>
+              <button
+                type="submit"
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>सूची में जोड़ें</span>
+              </button>
             </form>
           </div>
 
@@ -6564,16 +6467,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   type="text"
                   value={restrictedSearch}
                   onChange={(e) => setRestrictedSearch(e.target.value)}
-                  placeholder="चैनल नाम, वेबसाइट या यूज़रनेम खोजें..."
+                  placeholder="चैनल या पोर्टल का नाम खोजें..."
                   className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-hidden"
                 />
               </div>
               <span className="text-xs text-slate-400 font-semibold self-center">
-                कुल प्रतिबंधित ब्रांड्स: {restrictedList.length}
+                कुल सुरक्षित चैनल व पोर्टल: {restrictedList.length}
               </span>
             </div>
 
-            {/* Mobile Restricted Channels Cards (Phase 8) */}
+            {/* Mobile Restricted Channels Cards */}
             <div className="sm:hidden space-y-2.5">
               {restrictedList
                 .filter((c) => {
@@ -6581,47 +6484,84 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   const q = restrictedSearch.toLowerCase();
                   return (
                     c.channelName.toLowerCase().includes(q) ||
-                    c.websiteUrl.toLowerCase().includes(q) ||
-                    c.username.toLowerCase().includes(q) ||
                     (c.reason && c.reason.toLowerCase().includes(q))
                   );
                 })
                 .map((item) => (
                   <div key={item.id} className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {item.logoUrl ? (
-                          <img src={item.logoUrl} alt={item.channelName} className="w-8 h-8 rounded-lg object-contain bg-slate-950 p-0.5 border border-slate-800 shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-xs font-black flex items-center justify-center shrink-0">
-                            🛡️
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <span className="font-bold text-white text-xs block truncate">{item.channelName}</span>
-                          <span className="font-mono text-[10px] text-amber-300 truncate">@{item.username}</span>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-xs font-black flex items-center justify-center shrink-0">
+                          🛡️
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {editingChannelId === item.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editingChannelName}
+                                onChange={(e) => setEditingChannelName(e.target.value)}
+                                className="w-full px-2 py-1 bg-slate-950 border border-amber-400 rounded text-xs text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (editingChannelName.trim()) {
+                                    editRestrictedChannel(item.id, { channelName: editingChannelName.trim() });
+                                    setRestrictedList(getRestrictedChannels());
+                                    setEditingChannelId(null);
+                                    setRestrictedMsg({ type: 'success', text: `चैनल का नाम अपडेट किया गया।` });
+                                  }
+                                }}
+                                className="px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded"
+                              >
+                                सेव
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingChannelId(null)}
+                                className="px-2 py-1 bg-slate-700 text-white text-[10px] rounded"
+                              >
+                                रद्द
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="font-bold text-white text-xs block truncate">{item.channelName}</span>
+                              <span className="text-[10px] text-emerald-400 font-semibold">✓ सुरक्षित नाम</span>
+                            </>
+                          )}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(`क्या आप चैनल "${item.channelName}" को प्रतिबंधित सूची से हटाना चाहते हैं?`)) {
-                            deleteRestrictedChannel(item.id);
-                            setRestrictedList(getRestrictedChannels());
-                            setRestrictedMsg({ type: 'success', text: `चैनल "${item.channelName}" को प्रतिबंधित सूची से हटा दिया गया।` });
-                          }
-                        }}
-                        className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
-                        title="प्रतिबंध हटाएं"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 text-[10px] pt-1 border-t border-slate-800/60">
-                      <span className="text-blue-300 font-mono truncate">{item.websiteUrl}</span>
-                      <span className="px-1.5 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-500/30 font-bold shrink-0">
-                        {item.reason || 'प्रतिबंधित'}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {editingChannelId !== item.id && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingChannelId(item.id);
+                              setEditingChannelName(item.channelName);
+                            }}
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-lg transition cursor-pointer"
+                            title="नाम बदलें (Edit)"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`क्या आप चैनल "${item.channelName}" को सुरक्षित सूची से हटाना चाहते हैं?`)) {
+                              deleteRestrictedChannel(item.id);
+                              setRestrictedList(getRestrictedChannels());
+                              setRestrictedMsg({ type: 'success', text: `चैनल "${item.channelName}" को हटा दिया गया।` });
+                            }
+                          }}
+                          className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer shrink-0"
+                          title="हटाएं (Delete)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -6632,11 +6572,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-950/80 text-slate-400 uppercase text-[10px] font-black border-b border-slate-800">
                   <tr>
-                    <th className="p-3">लोगो</th>
-                    <th className="p-3">चैनल का नाम</th>
-                    <th className="p-3">वेबसाइट</th>
-                    <th className="p-3">यूज़रनेम</th>
-                    <th className="p-3">कारण / सुरक्षा</th>
+                    <th className="p-3 w-12 text-center">#</th>
+                    <th className="p-3">चैनल / पोर्टल का नाम</th>
+                    <th className="p-3">सुरक्षा स्थिति</th>
                     <th className="p-3 text-right">कार्रवाई</th>
                   </tr>
                 </thead>
@@ -6647,61 +6585,87 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       const q = restrictedSearch.toLowerCase();
                       return (
                         c.channelName.toLowerCase().includes(q) ||
-                        c.websiteUrl.toLowerCase().includes(q) ||
-                        c.username.toLowerCase().includes(q) ||
                         (c.reason && c.reason.toLowerCase().includes(q))
                       );
                     })
-                    .map((item) => (
+                    .map((item, idx) => (
                       <tr key={item.id} className="hover:bg-slate-850/50 transition">
-                        <td className="p-3 whitespace-nowrap">
-                          {item.logoUrl ? (
-                            <img
-                              src={item.logoUrl}
-                              alt={item.channelName}
-                              className="w-8 h-8 rounded-lg object-contain bg-slate-950 p-0.5 border border-slate-800"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/40 text-red-300 text-[10px] font-black flex items-center justify-center">
-                              🛡️
+                        <td className="p-3 text-center text-slate-500 font-mono text-[11px]">
+                          {idx + 1}
+                        </td>
+                        <td className="p-3">
+                          {editingChannelId === item.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editingChannelName}
+                                onChange={(e) => setEditingChannelName(e.target.value)}
+                                className="px-3 py-1 bg-slate-950 border border-amber-400 rounded-lg text-xs text-white max-w-sm w-full"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (editingChannelName.trim()) {
+                                    editRestrictedChannel(item.id, { channelName: editingChannelName.trim() });
+                                    setRestrictedList(getRestrictedChannels());
+                                    setEditingChannelId(null);
+                                    setRestrictedMsg({ type: 'success', text: `चैनल का नाम अपडेट किया गया।` });
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg cursor-pointer"
+                              >
+                                सेव
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingChannelId(null)}
+                                className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg cursor-pointer"
+                              >
+                                रद्द
+                              </button>
                             </div>
+                          ) : (
+                            <span className="font-bold text-white text-xs sm:text-sm">{item.channelName}</span>
                           )}
                         </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <span className="font-bold text-white text-xs">{item.channelName}</span>
-                        </td>
-                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-blue-300">
-                          {item.websiteUrl}
-                        </td>
-                        <td className="p-3 whitespace-nowrap font-mono text-[11px] text-amber-300">
-                          @{item.username}
-                        </td>
-                        <td className="p-3 text-[11px] text-slate-300">
-                          <span className="px-2 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-500/30 text-[10px] font-bold">
-                            {item.reason || 'प्रतिबंधित चैनल'}
+                        <td className="p-3 text-slate-300">
+                          <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                            ✓ सुरक्षित आधिकारिक नाम
                           </span>
                         </td>
                         <td className="p-3 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`क्या आप चैनल "${item.channelName}" को प्रतिबंधित सूची से हटाना चाहते हैं?`)) {
-                                deleteRestrictedChannel(item.id);
-                                setRestrictedList(getRestrictedChannels());
-                                setRestrictedMsg({
-                                  type: 'success',
-                                  text: `चैनल "${item.channelName}" को प्रतिबंधित सूची से हटा दिया गया।`,
-                                });
-                              }
-                            }}
-                            className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer"
-                            title="प्रतिबंध हटाएं"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {editingChannelId !== item.id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingChannelId(item.id);
+                                  setEditingChannelName(item.channelName);
+                                }}
+                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-lg transition cursor-pointer"
+                                title="नाम बदलें (Edit)"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`क्या आप चैनल "${item.channelName}" को सुरक्षित सूची से हटाना चाहते हैं?`)) {
+                                  deleteRestrictedChannel(item.id);
+                                  setRestrictedList(getRestrictedChannels());
+                                  setRestrictedMsg({
+                                    type: 'success',
+                                    text: `चैनल "${item.channelName}" को सुरक्षित सूची से हटा दिया गया।`,
+                                  });
+                                }
+                              }}
+                              className="p-1.5 bg-slate-800 hover:bg-rose-950 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-600 rounded-lg transition cursor-pointer"
+                              title="हटाएं (Delete)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

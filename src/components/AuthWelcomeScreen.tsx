@@ -36,11 +36,11 @@ import {
   Bell,
   Coins,
   Link2,
-  FolderClock,
   FileText,
   Loader2,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
+import { FolderClockIcon } from '../icons/FolderClockIcon';
 import { ChannelProfile } from '../types';
 import { LogoCropperModal } from './LogoCropperModal';
 import {
@@ -253,7 +253,7 @@ export const HOME_FEATURE_CARDS: FeatureCardItem[] = [
     step: 3,
     name: 'Newsroom Drafts & Projects',
     desc: 'अपने समाचार, ग्राफिक्स और वीडियो के अधूरे काम सुरक्षित रखें तथा बाद में वहीं से संपादन जारी रखें।',
-    icon: FolderClock,
+    icon: FolderClockIcon,
     color: 'text-orange-400',
     bgColor: 'bg-orange-500/10',
     borderColor: 'border-orange-500/30',

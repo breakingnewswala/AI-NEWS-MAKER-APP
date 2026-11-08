@@ -4492,10 +4492,21 @@ function loadChannelsDatabase(): StoredChannel[] {
     return Array.from((centralDb.cache as any).channels.values());
   }
   try {
-    if (fs.existsSync(CHANNELS_DB_FILE)) {
-      const raw = fs.readFileSync(CHANNELS_DB_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    const locations = resolveAllDatabaseLocations("restricted_channels_db.json");
+    for (const loc of locations) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          if (centralDb && centralDb.useFirestore) {
+            if (!(centralDb.cache as any).channels) (centralDb.cache as any).channels = new Map();
+            for (const ch of parsed) {
+              (centralDb.cache as any).channels.set(ch.id, ch);
+            }
+          }
+          return parsed;
+        }
+      }
     }
   } catch (e) {
     console.error("Error reading restricted_channels_db.json:", e);
@@ -4531,34 +4542,38 @@ function saveChannelsDatabase(channels: StoredChannel[]): boolean {
   }
 }
 
-// GET /api/channels & /api/admin/channels
-app.get(["/api/channels", "/api/admin/channels"], (_req, res) => {
+// GET /api/channels & /api/admin/channels & /api/restricted-channels
+app.get(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (_req, res) => {
   const channels = loadChannelsDatabase();
   return res.json({ success: true, channels });
 });
 
-// POST /api/channels & /api/admin/channels
-app.post(["/api/channels", "/api/admin/channels"], (req, res) => {
+// POST /api/channels & /api/admin/channels & /api/restricted-channels
+app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (req, res) => {
   try {
     const payload = req.body;
-    if (!payload || !payload.channelName) {
-      return res.status(400).json({ error: "चैनल का नाम अनिवार्य है" });
+    const rawName = (payload.channelName || payload.name || "").trim();
+    if (!rawName) {
+      return res.status(400).json({ error: "चैनल / पोर्टल का नाम अनिवार्य है" });
     }
     const channels = loadChannelsDatabase();
-    const cleanUsername = (payload.username || payload.channelName).toLowerCase().replace(/[^a-z0-9_]/g, "");
-    if (channels.some((c) => c.username.toLowerCase() === cleanUsername)) {
-      return res.status(409).json({ error: "यह चैनल पहले से मौजूद है" });
+    const normName = rawName.toLowerCase();
+    if (channels.some((c) => (c.channelName || "").trim().toLowerCase() === normName)) {
+      return res.status(409).json({ error: "यह चैनल / पोर्टल पहले से मौजूद है" });
     }
+    const cleanUser = payload.username
+      ? String(payload.username).toLowerCase().replace(/[^a-z0-9_]/g, "")
+      : `chan_${Date.now().toString(36)}`;
     const newChan: StoredChannel = {
-      id: payload.id || `res_${Date.now()}`,
-      channelName: payload.channelName.trim(),
-      websiteUrl: payload.websiteUrl || "",
-      username: cleanUsername,
-      logoUrl: payload.logoUrl || "",
-      reason: payload.reason || "राष्ट्रीय समाचार चैनल",
+      id: payload.id || `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      channelName: rawName,
+      websiteUrl: String(payload.websiteUrl || "").trim(),
+      username: cleanUser || `chan_${Date.now().toString(36)}`,
+      logoUrl: String(payload.logoUrl || ""),
+      reason: String(payload.reason || "आधिकारिक समाचार चैनल / पोर्टल"),
       createdAt: Date.now(),
     };
-    channels.push(newChan);
+    channels.unshift(newChan);
     saveChannelsDatabase(channels);
     return res.json({ success: true, channel: newChan, channels });
   } catch (err: any) {
@@ -4566,8 +4581,8 @@ app.post(["/api/channels", "/api/admin/channels"], (req, res) => {
   }
 });
 
-// PUT /api/channels/:id & /api/admin/channels/:id (Edit name, change to Hindi, update website)
-app.put(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
+// PUT /api/channels/:id & /api/admin/channels/:id & /api/restricted-channels/:id
+app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -4603,12 +4618,16 @@ app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, 
   }
 });
 
-// DELETE /api/channels/:id & /api/admin/channels/:id
-app.delete(["/api/channels/:id", "/api/admin/channels/:id"], (req, res) => {
+// DELETE /api/channels/:id & /api/admin/channels/:id & /api/restricted-channels/:id
+app.delete(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
     channels = channels.filter((c) => c.id !== id);
+    if (centralDb && centralDb.useFirestore) {
+      if ((centralDb.cache as any).channels) (centralDb.cache as any).channels.delete(id);
+      centralDb.deleteDoc("restricted_channels", id).catch(() => {});
+    }
     saveChannelsDatabase(channels);
     return res.json({ success: true, channels });
   } catch (err: any) {
@@ -7377,15 +7396,6 @@ interface AdminRssSourceRecord {
 
 const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
   {
-    id: "src_1794071136127_oim9",
-    name: "नई दुनिया",
-    url: "https://www.naidunia.com/entertainment",
-    type: "rss",
-    category: "🎬 मनोरंजन",
-    isActive: true,
-    createdAt: 1794071136127,
-  },
-  {
     id: "src_1794071001048_maoy",
     name: "नई दुनिया",
     url: "https://www.naidunia.com/madhya-pradesh",
@@ -7395,6 +7405,52 @@ const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
     createdAt: 1794071001048,
   },
 ];
+
+const DELETED_RSS_SOURCES_FILE = "deleted_rss_sources_ids.json";
+
+function loadDeletedRssSourceIds(): Set<string> {
+  const deletedSet = new Set<string>(["src_1794071136127_oim9"]);
+  if (centralDb && centralDb.useFirestore) {
+    const doc = (centralDb.cache as any)?.systemConfig?.get("deleted_rss_sources");
+    if (doc && Array.isArray(doc.deletedIds)) {
+      doc.deletedIds.forEach((id: string) => deletedSet.add(id));
+    }
+  }
+  try {
+    const locations = resolveAllDatabaseLocations(DELETED_RSS_SOURCES_FILE);
+    for (const loc of locations) {
+      if (fs.existsSync(loc)) {
+        const parsed = JSON.parse(fs.readFileSync(loc, "utf-8"));
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id: string) => deletedSet.add(id));
+        }
+      }
+    }
+  } catch {}
+  return deletedSet;
+}
+
+function recordDeletedRssSourceId(id: string): void {
+  const cleanId = String(id).trim();
+  if (!cleanId) return;
+  const deletedSet = loadDeletedRssSourceIds();
+  deletedSet.add(cleanId);
+  const arr = Array.from(deletedSet);
+  if (centralDb && centralDb.useFirestore) {
+    centralDb.writeDoc("system_config", "deleted_rss_sources", { deletedIds: arr, updatedAt: Date.now() }).catch(() => {});
+  }
+  try {
+    const locations = resolveAllDatabaseLocations(DELETED_RSS_SOURCES_FILE);
+    const jsonStr = JSON.stringify(arr, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
+  } catch {}
+}
 
 function resolveCategoryKeyFromName(rawCategory: string, sourceUrl = ""): string {
   const c = String(rawCategory || "").toLowerCase();
@@ -7427,6 +7483,7 @@ function resolveCategoryKeyFromName(rawCategory: string, sourceUrl = ""): string
 }
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
+  const deletedIds = loadDeletedRssSourceIds();
   let diskSources: AdminRssSourceRecord[] = [];
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
@@ -7435,7 +7492,7 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
         const raw = fs.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          const valid = parsed.filter((s: any) => Boolean(s && s.url));
+          const valid = parsed.filter((s: any) => Boolean(s && s.url && !deletedIds.has(s.id) && !s.url.includes("/entertainment") && !s.url.includes("/uttar-pradesh")));
           if (valid.length > 0) {
             diskSources = valid;
             break;
@@ -7448,13 +7505,20 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
   }
 
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
+    // Purge deleted sources from Firestore cache & db
+    for (const dId of deletedIds) {
+      if (centralDb.cache.rssSources.has(dId)) {
+        centralDb.cache.rssSources.delete(dId);
+        centralDb.deleteRssSource(dId).catch(() => {});
+      }
+    }
     const list = Array.from(centralDb.cache.rssSources.values()) as AdminRssSourceRecord[];
-    const valid = list.filter((s: any) => Boolean(s && s.url));
+    const valid = list.filter((s: any) => Boolean(s && s.url && !deletedIds.has(s.id) && !s.url.includes("/entertainment") && !s.url.includes("/uttar-pradesh")));
     if (diskSources.length > 0) {
       const existingIds = new Set(valid.map((s) => s.id));
       const existingUrls = new Set(valid.map((s) => (s.url || "").trim().toLowerCase()));
       for (const ds of diskSources) {
-        if (!existingIds.has(ds.id) && !existingUrls.has((ds.url || "").trim().toLowerCase())) {
+        if (!deletedIds.has(ds.id) && !existingIds.has(ds.id) && !existingUrls.has((ds.url || "").trim().toLowerCase())) {
           valid.push(ds);
           centralDb.cache.rssSources.set(ds.id, ds);
           centralDb.saveRssSource(ds.id, ds).catch(() => {});
@@ -7464,7 +7528,7 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
     if (valid.length > 0) return valid;
   }
   if (diskSources.length > 0) return diskSources;
-  return [...DEFAULT_PRODUCTION_RSS_SOURCES];
+  return DEFAULT_PRODUCTION_RSS_SOURCES.filter((s) => !deletedIds.has(s.id));
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
@@ -8133,6 +8197,7 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     let sources = loadRssSourcesDatabase();
     const targetSource = sources.find((s) => s.id === id);
     sources = sources.filter((s) => s.id !== id);
+    recordDeletedRssSourceId(id);
     saveRssSourcesDatabase(sources);
 
     // Clean generated news posts associated with deleted source
@@ -10097,12 +10162,28 @@ function saveAssetLibrariesDatabase(items: any[]) {
   }
 }
 
+const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
+  'df_testing_1_double',
+  'df_bayaan_4_5_red',
+  'df_story_9_16_standard',
+  'df_story_9_16_breaking'
+]);
+
 function loadDynamicFramesDatabase(): any[] {
   try {
     if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
       const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed
+          .filter(f => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id))
+          .map(f => {
+            if (f.id === 'df_reg_4_5_clean') {
+              return { ...f, name: 'रेगुलर क्लीन न्यूज़ फ्रेम (Regular Clean News Frame)' };
+            }
+            return f;
+          });
+      }
     }
   } catch {}
   return [];
@@ -10304,7 +10385,14 @@ app.get("/api/dynamic-frames", async (req, res) => {
       try {
         const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
         if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
-          frames = cloudDoc.frames;
+          frames = cloudDoc.frames
+            .filter((f: any) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id))
+            .map((f: any) => {
+              if (f.id === 'df_reg_4_5_clean') {
+                return { ...f, name: 'रेगुलर क्लीन न्यूज़ फ्रेम (Regular Clean News Frame)' };
+              }
+              return f;
+            });
           saveDynamicFramesDatabase(frames);
         }
       } catch {}
@@ -10315,7 +10403,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
       frames = [
         {
           id: 'df_reg_4_5_clean',
-          name: 'रेगुलर क्लासिक 4:5 फ्रेम (Regular Classic)',
+          name: 'रेगुलर क्लीन न्यूज़ फ्रेम (Regular Clean News Frame)',
           description: 'दैनिक समाचारों के लिए मानक 4:5 पोर्ट्रेट फोटो फ्रेम।',
           aspectRatio: '4:5',
           canvasWidth: 1080,
@@ -10365,273 +10453,6 @@ app.get("/api/dynamic-frames", async (req, res) => {
               maxLines: 3,
               lineHeight: 1.25,
               backgroundColor: 'transparent',
-            },
-          ],
-        },
-        {
-          id: 'df_testing_1_double',
-          name: 'TESTING 1',
-          description: 'डबल फोटो कोलाज टेस्ट फ्रेम (क्रिकेट फोटो व सीएम मोहन यादव फोटो)',
-          aspectRatio: '4:5',
-          canvasWidth: 1080,
-          canvasHeight: 1350,
-          previewImageUrl: '/assets/sample_graphic_preview.png',
-          designCategory: 'Special Frames',
-          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-          publicationStatus: 'published',
-          createdBy: 'breakingnewswala.com@gmail.com',
-          createdAt: 1793880000000,
-          updatedAt: 1793880000000,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: 'top_left',
-            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
-            showLocation: true,
-            locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
-            locationStyle: 'pill',
-          },
-          footerConfig: {
-            footerHeightRatio: 0.08,
-            enforcePermanentFooter: true,
-            footerBgColor: '#FFFFFF',
-            footerTextColor: '#000000',
-          },
-          watermarkConfig: {
-            enabled: true,
-            label: 'AI GENERATED',
-            rect: { x: 74, y: 3.5, width: 21, height: 3.5 },
-          },
-          fullStoryCalloutConfig: {
-            enabled: true,
-            text: 'पूरी खबर डिस्क्रिप्शन में',
-            rect: { x: 8, y: 88, width: 84, height: 3.8 },
-          },
-          photoSlots: [
-            {
-              id: 'slot_cricket_photo',
-              name: 'क्रिकेट फोटो (Cricket Photo)',
-              slotType: 'normal',
-              rect: { x: 0, y: 0, width: 50, height: 61.33 },
-              required: true,
-              cropMode: 'cover',
-            },
-            {
-              id: 'slot_cm_photo',
-              name: 'सीएम मोहन यादव फोटो (CM Mohan Yadav)',
-              slotType: 'normal',
-              rect: { x: 50, y: 0, width: 50, height: 61.33 },
-              required: true,
-              cropMode: 'cover',
-            },
-          ],
-          textSlots: [
-            {
-              id: 'slot_main_headline',
-              name: 'मुख्य हेडलाइन (3 पंक्तियाँ)',
-              role: 'headline',
-              rect: { x: 7.7, y: 64, width: 84.6, height: 24 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 68,
-              fontWeight: 'bold',
-              textColor: '#000000', // STRICTLY BLACK AS CONFIGURED
-              alignment: 'center',
-              maxLines: 3,
-              lineHeight: 1.25,
-              backgroundColor: 'transparent',
-            },
-          ],
-        },
-        {
-          id: 'df_bayaan_4_5_red',
-          name: 'बयानबाज़ी रेड कटआउट फ्रेम (Statement Red Cutout)',
-          description: 'वक्ता का बैकग्राउंड रिमूव्ड कटआउट व मुख्य बयान/कोटेशन फ्रेम।',
-          aspectRatio: '4:5',
-          canvasWidth: 1080,
-          canvasHeight: 1350,
-          designCategory: 'बयानबाजी',
-          allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
-          publicationStatus: 'published',
-          createdBy: 'breakingnewswala.com@gmail.com',
-          createdAt: 1793880000000,
-          updatedAt: 1793880000000,
-          version: 1,
-          isStatementFrame: true,
-          statementOptions: { solidBackgroundHex: '#C81E1E' },
-          headerConfig: {
-            showLogo: true,
-            logoPosition: 'top_left',
-            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
-            showLocation: true,
-            locationRect: { x: 5, y: 13.5, width: 26, height: 4.5 },
-            locationStyle: 'pill',
-          },
-          footerConfig: {
-            footerHeightRatio: 0.08,
-            enforcePermanentFooter: true,
-            footerBgColor: '#FFFFFF',
-            footerTextColor: '#000000',
-          },
-          photoSlots: [
-            {
-              id: 'slot_speaker_cutout',
-              name: 'वक्ता का फोटो (कटआउट)',
-              slotType: 'cutout',
-              rect: { x: 50, y: 44, width: 48, height: 48 },
-              required: true,
-              bgRemoval: true,
-              cropMode: 'contain',
-            },
-          ],
-          textSlots: [
-            {
-              id: 'slot_statement_quote',
-              name: 'वक्ता का बयान (Quote)',
-              role: 'quote',
-              rect: { x: 8, y: 22, width: 84, height: 26 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 66,
-              fontWeight: 'bold',
-              textColor: '#FFFFFF',
-              alignment: 'center',
-              maxLines: 4,
-            },
-            {
-              id: 'slot_speaker_name',
-              name: 'वक्ता का नाम',
-              role: 'speaker_name',
-              rect: { x: 8, y: 72, width: 42, height: 7 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 42,
-              fontWeight: 'bold',
-              textColor: '#FFE600',
-              alignment: 'left',
-              maxLines: 1,
-            },
-            {
-              id: 'slot_speaker_desig',
-              name: 'पद / विवरण',
-              role: 'speaker_designation',
-              rect: { x: 8, y: 79.5, width: 42, height: 6 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 28,
-              fontWeight: 'normal',
-              textColor: '#F8FAFC',
-              alignment: 'left',
-              maxLines: 2,
-            },
-          ],
-        },
-        {
-          id: 'df_story_9_16_standard',
-          name: 'स्टैंडर्ड सोशल स्टोरी 9:16 (Standard Story)',
-          description: 'सोशल मीडिया इंस्टाग्राम व फेसबुक स्टोरी के लिए 9:16 वर्टिकल न्यूज़ लेआउट।',
-          aspectRatio: '9:16',
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: 'Story Frames',
-          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-          publicationStatus: 'published',
-          createdBy: 'breakingnewswala.com@gmail.com',
-          createdAt: 1793880000000,
-          updatedAt: 1793880000000,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: 'top_left',
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: 'pill',
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: '#0F172A',
-            footerTextColor: '#F8FAFC',
-          },
-          photoSlots: [
-            {
-              id: 'slot_story_photo',
-              name: 'स्टोरी मुख्य फोटो',
-              slotType: 'normal',
-              rect: { x: 0, y: 0, width: 100, height: 62 },
-              required: true,
-              cropMode: 'cover',
-            },
-          ],
-          textSlots: [
-            {
-              id: 'slot_story_headline',
-              name: 'स्टोरी हेडलाइन',
-              role: 'headline',
-              rect: { x: 7, y: 66, width: 86, height: 25 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 72,
-              fontWeight: 'bold',
-              textColor: '#FFFFFF',
-              alignment: 'left',
-              maxLines: 4,
-            },
-          ],
-        },
-        {
-          id: 'df_story_9_16_breaking',
-          name: 'सुपर ब्रेकिंग स्टोरी 9:16 (Super Breaking Story)',
-          description: '3D रिबन, बड़ी ब्रेकिंग हेडलाइन और उच्च प्रभाव वाली 9:16 सोशल स्टोरी।',
-          aspectRatio: '9:16',
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: 'Story Frames',
-          allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
-          publicationStatus: 'published',
-          createdBy: 'breakingnewswala.com@gmail.com',
-          createdAt: 1793880000000,
-          updatedAt: 1793880000000,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: 'top_left',
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: 'pill',
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: '#FFE600',
-            footerTextColor: '#000000',
-          },
-          ribbonConfig: {
-            enabled: true,
-            ribbonId: 'speed-blue-red',
-            customRibbonUrl: '/assets/breaking_news_ribbon.svg',
-            rect: { x: 12, y: 60, width: 76, height: 6.8 },
-            scalePct: 76,
-          },
-          photoSlots: [
-            {
-              id: 'slot_story_photo',
-              name: 'स्टोरी फोटो',
-              slotType: 'normal',
-              rect: { x: 0, y: 0, width: 100, height: 64 },
-              required: true,
-              cropMode: 'cover',
-            },
-          ],
-          textSlots: [
-            {
-              id: 'slot_story_headline',
-              name: 'ब्रेकिंग स्टोरी हेडलाइन',
-              role: 'headline',
-              rect: { x: 6, y: 68, width: 88, height: 23 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 74,
-              fontWeight: 'bold',
-              textColor: '#0A0A0A',
-              alignment: 'center',
-              maxLines: 3,
             },
           ],
         },
@@ -12859,105 +12680,8 @@ app.post("/api/twilio/verify-otp", authRateLimiter, (req, res) => {
 });
 
 // ==========================================
-// RESTRICTED CHANNELS DATABASE & API
+// RESTRICTED CHANNELS DATABASE & API (Mapped to Canonical Handler above)
 // ==========================================
-interface StoredRestrictedChannel {
-  id: string;
-  channelName: string;
-  websiteUrl: string;
-  username: string;
-  logoUrl?: string;
-  reason?: string;
-  createdAt: number;
-}
-
-const RESTRICTED_CHANNELS_FILE = path.join(process.cwd(), "restricted_channels_db.json");
-
-function getInitialRestrictedChannels(): StoredRestrictedChannel[] {
-  return [
-    { id: "res_aajtak", channelName: "आज तक (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_abp", channelName: "एबीपी न्यूज़ (ABP News)", websiteUrl: "abplive.com", username: "abpnews", logoUrl: "https://static.abplive.com/frontend/images/ABP_Hindi.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_ndtv", channelName: "एनडीटीवी इंडिया (NDTV India)", websiteUrl: "ndtv.in", username: "ndtv", logoUrl: "https://drop.ndtv.com/homepage/images/ndtvlogo.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_zeenews", channelName: "ज़ी न्यूज़ (Zee News)", websiteUrl: "zeenews.india.com", username: "zeenews", logoUrl: "https://english.cdn.zeenews.com/static/apprun/dna/icons/dna-logo.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_indiatv", channelName: "इंडिया टीवी (India TV)", websiteUrl: "indiatvnews.com", username: "indiatv", logoUrl: "https://resize.indiatvnews.com/en/resize/newbucket/1200_-/2020/03/indiatv-logo-1584955685.jpg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_republic", channelName: "रिपब्लिक भारत (Republic Bharat)", websiteUrl: "republicbharat.com", username: "republicbharat", logoUrl: "https://www.republicbharat.com/assets/images/bharat-logo.svg", reason: "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_news18", channelName: "न्यूज़18 इंडिया (News18 India)", websiteUrl: "news18.com", username: "news18", logoUrl: "https://images.news18.com/static_netstorage/images/news18_logo_hindi.svg", reason: "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_bhaskar", channelName: "दैनिक भास्कर (Dainik Bhaskar)", websiteUrl: "dainikbhaskar.com", username: "dainikbhaskar", logoUrl: "https://www.bhaskar.com/assets/images/db-logo-hindi.svg", reason: "राष्ट्रीय समाचार पत्र व मीडिया समूह", createdAt: 1700000000000 },
-    { id: "res_amarujala", channelName: "अमर उजाला (Amar Ujala)", websiteUrl: "amarujala.com", username: "amarujala", logoUrl: "https://www.amarujala.com/assets/images/amarujala.svg", reason: "राष्ट्रीय समाचार पत्र - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-    { id: "res_jagran", channelName: "दैनिक जागरण (Dainik Jagran)", websiteUrl: "jagran.com", username: "dainikjagran", logoUrl: "https://www.jagran.com/assets/images/jagran-logo.svg", reason: "राष्ट्रीय समाचार पत्र समूह", createdAt: 1700000000000 },
-    { id: "res_hindustan", channelName: "हिन्दुस्तान (Live Hindustan)", websiteUrl: "livehindustan.com", username: "livehindustan", logoUrl: "https://www.livehindustan.com/static/lh-logo.svg", reason: "राष्ट्रीय समाचार पत्र समूह", createdAt: 1700000000000 },
-    { id: "res_bbc", channelName: "बीबीसी हिंदी (BBC Hindi)", websiteUrl: "bbc.com/hindi", username: "bbchindi", logoUrl: "https://news.files.bbci.co.uk/ws/img/logos/og/hindi.png", reason: "अंतर्राष्ट्रीय समाचार संगठन", createdAt: 1700000000000 },
-  ];
-}
-
-function loadRestrictedChannels(): StoredRestrictedChannel[] {
-  try {
-    if (fs.existsSync(RESTRICTED_CHANNELS_FILE)) {
-      const raw = fs.readFileSync(RESTRICTED_CHANNELS_FILE, "utf-8");
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (err) {
-    console.error("Error reading restricted_channels_db.json:", err);
-  }
-  const init = getInitialRestrictedChannels();
-  saveRestrictedChannels(init);
-  return init;
-}
-
-function saveRestrictedChannels(list: StoredRestrictedChannel[]): boolean {
-  try {
-    fs.writeFileSync(RESTRICTED_CHANNELS_FILE, JSON.stringify(list, null, 2), "utf-8");
-    return true;
-  } catch (err) {
-    console.error("Error writing restricted_channels_db.json:", err);
-    return false;
-  }
-}
-
-app.get("/api/restricted-channels", (_req, res) => {
-  return res.json({ success: true, channels: loadRestrictedChannels() });
-});
-
-app.post("/api/restricted-channels", (req, res) => {
-  try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही प्रतिबंधित चैनल सूची प्रबंधित कर सकते हैं।" });
-    }
-    const { channelName, websiteUrl, username, logoUrl, reason } = req.body;
-    if (!channelName) return res.status(400).json({ error: "Channel name is required" });
-    const channels = loadRestrictedChannels();
-    const newChan: StoredRestrictedChannel = {
-      id: `res_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      channelName: String(channelName).trim(),
-      websiteUrl: String(websiteUrl || "").trim(),
-      username: String(username || "").trim(),
-      logoUrl: String(logoUrl || ""),
-      reason: String(reason || "प्रतिबंधित आधिकारिक चैनल"),
-      createdAt: Date.now(),
-    };
-    channels.unshift(newChan);
-    saveRestrictedChannels(channels);
-    return res.json({ success: true, channel: newChan, channels });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
-
-app.delete("/api/restricted-channels/:id", (req, res) => {
-  try {
-    if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही प्रतिबंधित चैनल सूची प्रबंधित कर सकते हैं।" });
-    }
-    const { id } = req.params;
-    let channels = loadRestrictedChannels();
-    channels = channels.filter((c) => c.id !== id);
-    saveRestrictedChannels(channels);
-    return res.json({ success: true, channels });
-  } catch (err: any) {
-    return res.status(500).json({ error: cleanErrorMessage(err) });
-  }
-});
 
 // Serve Dedicated Account Deletion HTML Page for Google Play Console URL
 const serveAccountDeletionHtml = (_req: express.Request, res: express.Response) => {
@@ -17866,7 +17590,8 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
    - सभी हेडलाइंस 100% शुद्ध देवनागरी हिंदी में हों। अंग्रेजी संक्षिप्त रूपों को हिंदी देवनागरी में लिखें (जैसे एपीके, यूपीआई, सुप्रीम कोर्ट, हाई कोर्ट, एफआईआर, सीबीआई, ईडी, जीएसटी, आरबीआई, बीसीसीआई, आईपीएल, एआई)।
    - सम्मानसूचक या चाटुकारिता वाले शब्द ('श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'आदरणीय', 'महोदय', 'जी', 'सम्माननीय', 'सम्मानीय', 'पूज्य') पूरी तरह हटा दें, किंतु व्यक्ति का वास्तविक नाम और आधिकारिक पद (जैसे मुख्यमंत्री, प्रधानमंत्री, कलेक्टर, पुलिस अधीक्षक, न्यायाधीश) सुरक्षित रखें।
    - किसी भी हेडलाइन के अंत में पूर्णविराम (। या .) या प्रश्नवाचक चिह्न न लगाएं। कोई इमोजी या हैशटैग हेडलाइन में न रखें।
-   - 'मध्य प्रदेश', 'उत्तर प्रदेश', 'हिमाचल प्रदेश', 'आंध्र प्रदेश' में सही स्पेसिंग रखें।
+   - हेडलाइन का अंत अर्थपूर्ण और स्वाभाविक वाक्य पर समाप्त हो। 'की', 'के', 'में', 'पर', 'से', 'कि', 'और', 'या', 'हुए', 'गया', 'कहा कि' जैसे अधूरे शब्दों पर हेडलाइन कभी समाप्त न करें।
+   - 'मध्यप्रदेश' और 'उत्तरप्रदेश' को अनिवार्य रूप से एक शब्द (Single Word) में लिखें (उदा. मध्यप्रदेश, उत्तरप्रदेश)।
 4. तीन सोशल मीडिया कैप्शन और हैशटैग नियम (THREE CAPTIONS & HASHTAGS):
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या 'पूरी खबर पढ़ें' न लिखें और न ही हेडलाइन को पहली पंक्ति में दोहराएं।
    - विस्तृत कैप्शन (summary व captionDetailed): खबर के संपूर्ण तथ्यों और संदर्भ पर आधारित लगभग 3 विस्तृत पैराग्राफ।

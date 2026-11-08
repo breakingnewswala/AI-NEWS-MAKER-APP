@@ -11,9 +11,9 @@ import {
   Bell,
   Coins,
   Share2,
-  FolderClock,
   LucideIcon,
 } from 'lucide-react';
+import { FolderClockIcon } from '../icons/FolderClockIcon';
 
 export interface CanonicalFeature {
   id: number;
@@ -216,7 +216,7 @@ export const CANONICAL_12_FEATURES: CanonicalFeature[] = [
     shortTitle: 'Drafts Management',
     desc: 'अपने समाचार, ग्राफिक और वीडियो को सुरक्षित रख कर बाद में संपादित करें',
     status: 'available',
-    icon: FolderClock,
+    icon: FolderClockIcon as unknown as LucideIcon,
     targetTab: 'newsroom',
     textColor: 'text-orange-400',
     iconBgColor: 'bg-orange-500/15 border-orange-500/40 text-orange-400',

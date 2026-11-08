@@ -41,9 +41,9 @@ import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
+import { FolderClockIcon } from './icons/FolderClockIcon';
 import {
   FolderOpen,
-  FolderClock,
   Download,
   Copy,
   Check,
@@ -147,24 +147,98 @@ type AppTab =
 
 const STORAGE_KEY = 'breaking_news_card_state_v3';
 
+export const STUDIO_STEP_THEMES: Record<number, {
+  name: string;
+  activeBtn: string;
+  badge: string;
+  borderActive: string;
+  ringActive: string;
+  accentText: string;
+  indicator: string;
+}> = {
+  1: { // Purple
+    name: 'purple',
+    activeBtn: 'bg-purple-600 text-white font-black shadow-lg shadow-purple-900/40 border-purple-400 ring-2 ring-purple-400',
+    badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+    borderActive: 'border-purple-500',
+    ringActive: 'ring-purple-400',
+    accentText: 'text-purple-400',
+    indicator: 'bg-purple-500',
+  },
+  2: { // Cyan/Blue
+    name: 'cyan',
+    activeBtn: 'bg-cyan-600 text-white font-black shadow-lg shadow-cyan-900/40 border-cyan-400 ring-2 ring-cyan-400',
+    badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+    borderActive: 'border-cyan-500',
+    ringActive: 'ring-cyan-400',
+    accentText: 'text-cyan-400',
+    indicator: 'bg-cyan-500',
+  },
+  3: { // Orange/Amber
+    name: 'amber',
+    activeBtn: 'bg-amber-500 text-slate-950 font-black shadow-lg shadow-amber-900/40 border-amber-300 ring-2 ring-amber-300',
+    badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    borderActive: 'border-amber-500',
+    ringActive: 'ring-amber-300',
+    accentText: 'text-amber-400',
+    indicator: 'bg-amber-500',
+  },
+  4: { // Pink/Rose
+    name: 'rose',
+    activeBtn: 'bg-rose-600 text-white font-black shadow-lg shadow-rose-900/40 border-rose-400 ring-2 ring-rose-400',
+    badge: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+    borderActive: 'border-rose-500',
+    ringActive: 'ring-rose-400',
+    accentText: 'text-rose-400',
+    indicator: 'bg-rose-500',
+  },
+  5: { // Green/Emerald
+    name: 'emerald',
+    activeBtn: 'bg-emerald-600 text-white font-black shadow-lg shadow-emerald-900/40 border-emerald-400 ring-2 ring-emerald-400',
+    badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    borderActive: 'border-emerald-500',
+    ringActive: 'ring-emerald-400',
+    accentText: 'text-emerald-400',
+    indicator: 'bg-emerald-500',
+  },
+  6: { // Indigo/Violet
+    name: 'indigo',
+    activeBtn: 'bg-indigo-600 text-white font-black shadow-lg shadow-indigo-900/40 border-indigo-400 ring-2 ring-indigo-400',
+    badge: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
+    borderActive: 'border-indigo-500',
+    ringActive: 'ring-indigo-400',
+    accentText: 'text-indigo-400',
+    indicator: 'bg-indigo-500',
+  },
+  7: { // Teal
+    name: 'teal',
+    activeBtn: 'bg-teal-600 text-white font-black shadow-lg shadow-teal-900/40 border-teal-400 ring-2 ring-teal-400',
+    badge: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+    borderActive: 'border-teal-500',
+    ringActive: 'ring-teal-400',
+    accentText: 'text-teal-400',
+    indicator: 'bg-teal-500',
+  },
+};
+
 export const STUDIO_STEPS = [
   { step: 1, id: 'step-frame', label: 'टेम्पलेट्स', name: 'टेम्पलेट्स', icon: '🖼️', title: 'टेम्पलेट्स' },
-  { step: 2, id: 'step-ai', label: 'एआई टूल्स', name: 'एआई टूल्स', icon: '🤖', title: 'एआई ऑटोमेशन टूल्स' },
-  { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'मुख्य हेडलाइन व टेक्स्ट' },
-  { step: 4, id: 'step-photo', label: 'फोटो व वॉटरमार्क', name: 'फोटो व वॉटरमार्क', icon: '📷', title: 'फोटो व वॉटरमार्क' },
-  { step: 5, id: 'step-location', label: 'स्थान व दिनांक', name: 'स्थान व दिनांक', icon: '📍', title: 'स्थान व दिनांक' },
-  { step: 6, id: 'step-header-footer', label: 'हेडर व फुटर', name: 'हेडर व फुटर', icon: '📜', title: 'हेडर व फुटर' },
-  { step: 7, id: 'step-download', label: 'डाउनलोड व कैप्शन', name: 'डाउनलोड व कैप्शन', icon: '⬇️', title: 'डाउनलोड व कैप्शन' },
+  { step: 2, id: 'step-ai', label: 'AI टूल्स', name: 'AI टूल्स', icon: '🤖', title: 'AI टूल्स' },
+  { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'हेडलाइन' },
+  { step: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', name: 'फोटो एवं वॉटरमार्क', icon: '📷', title: 'फोटो एवं वॉटरमार्क' },
+  { step: 5, id: 'step-location', label: 'स्थान', name: 'स्थान', icon: '📍', title: 'स्थान' },
+  { step: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', name: 'हेडर एवं फुटर', icon: '📜', title: 'हेडर एवं फुटर' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड एवं कैप्शन', name: 'डाउनलोड एवं कैप्शन', icon: '⬇️', title: 'डाउनलोड एवं कैप्शन' },
 ];
 
 export const MOBILE_STUDIO_STEPS = [
-  { mobileStep: 1, internalStep: 1, id: 'step-frame', label: 'टेम्पलेट', key: 'step1' },
+  { mobileStep: 1, internalStep: 1, id: 'step-frame', label: 'टेम्पलेट्स', key: 'step1' },
   { mobileStep: 2, internalStep: 2, id: 'step-ai', label: 'AI टूल्स', key: 'step2' },
-  { mobileStep: 3, internalStep: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', key: 'step6' },
-  { mobileStep: 4, internalStep: 4, id: 'step-photo', label: 'फोटो लेआउट', key: 'step4' },
-  { mobileStep: 5, internalStep: 3, id: 'step-headline', label: 'हेडलाइन', key: 'step3' },
-  { mobileStep: 6, internalStep: 5, id: 'step-location', label: 'स्थान एवं दिनांक', key: 'step5' },
-  { mobileStep: 7, internalStep: 7, id: 'step-download', label: 'कैप्शन', key: 'step7' },
+  { mobileStep: 3, internalStep: 3, id: 'step-headline', label: 'हेडलाइन', key: 'step3' },
+  { mobileStep: 4, internalStep: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', key: 'step4' },
+  { mobileStep: 5, internalStep: 5, id: 'step-location', label: 'स्थान', key: 'step5' },
+  { mobileStep: 6, internalStep: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', key: 'step6' },
+  { mobileStep: 7, internalStep: 7, id: 'step-download', label: 'डाउनलोड एवं कैप्शन', key: 'step7' },
 ] as const;
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
@@ -1049,6 +1123,24 @@ export default function App() {
   const [activeMobileStep, setActiveMobileStep] = useState<number>(1);
   const [mobileCaptionCopied, setMobileCaptionCopied] = useState<boolean>(false);
   const [mobileViewMode, setMobileViewMode] = useState<'steps' | 'all'>('steps');
+
+  // Mobile Editor Scroll Reset: on step switch, reset editor workspace scroll offset to 0 so new step opens fresh directly below sticky header
+  const resetMobileEditorScroll = useCallback(() => {
+    try {
+      const stickyHeader = document.getElementById('mobile-studio-sticky-header');
+      const editorTarget = document.getElementById('mobile-active-step-commands');
+      if (editorTarget) {
+        if (stickyHeader) {
+          const headerRect = stickyHeader.getBoundingClientRect();
+          const editorRect = editorTarget.getBoundingClientRect();
+          const scrollNeeded = editorRect.top - headerRect.bottom;
+          window.scrollBy({ top: scrollNeeded, behavior: 'instant' });
+        } else {
+          editorTarget.scrollIntoView({ behavior: 'instant', block: 'start' });
+        }
+      }
+    } catch {}
+  }, []);
 
   // Synchronize mobile active step with internal activeStep
   useEffect(() => {
@@ -3582,7 +3674,7 @@ export default function App() {
                 }`}
               >
                 <Palette className="w-3.5 h-3.5 text-slate-950" />
-                <span>ग्राफिक फोटो न्यूज़</span>
+                <span>ग्राफिक फोटो स्टूडियो</span>
               </button>
               <button
                 type="button"
@@ -3597,7 +3689,7 @@ export default function App() {
                 }`}
               >
                 <Film className="w-3.5 h-3.5 text-white" />
-                <span>वीडियो न्यूज़</span>
+                <span>वीडियो न्यूज़ स्टूडियो</span>
               </button>
             </div>
           </div>
@@ -3703,6 +3795,7 @@ export default function App() {
                           const isCurrentActive = activeMobileStep === s.mobileStep;
                           const stepProgressKey = s.key as keyof ReturnType<typeof calculateEditorProgress>;
                           const isDone = Boolean(calculateEditorProgress(card, activeStep)[stepProgressKey]);
+                          const theme = STUDIO_STEP_THEMES[s.mobileStep] || STUDIO_STEP_THEMES[1];
 
                           return (
                             <button
@@ -3712,15 +3805,20 @@ export default function App() {
                                 setIsMobileFocusedEditing(true);
                                 setActiveMobileStep(s.mobileStep);
                                 setActiveStep(s.internalStep);
+                                resetMobileEditorScroll();
                               }}
-                              className={`w-full py-1 sm:py-1.5 md:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[9.5px] sm:text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
+                              className={`w-full py-1 sm:py-1.5 md:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[9.5px] sm:text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none border ${
                                 isCurrentActive
-                                  ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black shadow-md border-amber-300 ring-1 ring-amber-300'
-                                  : 'bg-slate-900/90 text-slate-200 hover:bg-slate-800 border border-slate-800/90 hover:text-white'
+                                  ? theme.activeBtn
+                                  : 'bg-slate-900/90 text-slate-200 hover:bg-slate-800 border-slate-800/90 hover:text-white'
                               }`}
                             >
-                              <span className="truncate pr-0.5 text-left flex items-center gap-0.5">
-                                <span className="opacity-75 text-[8.5px] sm:text-[10px] font-mono">{s.mobileStep}.</span>
+                              <span className="truncate pr-0.5 text-left flex items-center gap-1">
+                                <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[8px] sm:text-[9.5px] font-mono font-black border ${
+                                  isCurrentActive ? 'bg-black/30 text-white border-white/30' : theme.badge
+                                }`}>
+                                  {s.mobileStep}
+                                </span>
                                 <span className="truncate">{s.label}</span>
                               </span>
                               <span className="shrink-0 ml-0.5">
@@ -3732,7 +3830,7 @@ export default function App() {
                                   </span>
                                 ) : isCurrentActive ? (
                                   <span className="inline-flex items-center justify-center w-3.5 h-3.5 sm:w-4 sm:h-4">
-                                    <span className="w-2 h-2 rounded-full bg-slate-950 animate-pulse" />
+                                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center justify-center w-3.5 h-3.5 sm:w-4 sm:h-4">
@@ -3848,7 +3946,7 @@ export default function App() {
                         title="ड्राफ्ट सेव / रिस्टोर करें"
                         className="py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold bg-slate-900 hover:bg-slate-850 text-amber-300 hover:text-white border border-slate-700/80 flex items-center justify-center gap-1 active:scale-95 cursor-pointer transition-all"
                       >
-                        <FolderClock className="w-3.5 h-3.5 text-amber-400" />
+                        <FolderClockIcon className="w-3.5 h-3.5 text-amber-400" />
                         <span className="truncate">ड्राफ्ट</span>
                       </button>
 
@@ -3896,6 +3994,7 @@ export default function App() {
                         setActiveMobileStep(found.mobileStep);
                       }
                       setActiveStep(newStep);
+                      resetMobileEditorScroll();
                     }}
                     currentUser={currentUser}
                     mobileViewMode="steps"
@@ -3921,6 +4020,7 @@ export default function App() {
                           setActiveMobileStep(prev);
                           const stepObj = MOBILE_STUDIO_STEPS.find((s) => s.mobileStep === prev);
                           if (stepObj) setActiveStep(stepObj.internalStep);
+                          resetMobileEditorScroll();
                         }
                       }}
                       className="flex-1 py-2.5 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 active:scale-95 shadow-sm"
@@ -3952,6 +4052,7 @@ export default function App() {
                           setActiveMobileStep(next);
                           const stepObj = MOBILE_STUDIO_STEPS.find((s) => s.mobileStep === next);
                           if (stepObj) setActiveStep(stepObj.internalStep);
+                          resetMobileEditorScroll();
                         }
                       }}
                       className="flex-1 py-2.5 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 active:scale-95 shadow-md"
@@ -4187,26 +4288,41 @@ export default function App() {
                       );
                     })()}
 
-                    {/* Horizontal Scrollable Tabs: Step 1 to 8 */}
+                    {/* Horizontal Scrollable Tabs: Step 1 to 7 with Multicolor Themes */}
                     <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">
                       {STUDIO_STEPS.map((s) => {
                         const isActive = activeStep === s.step;
+                        const theme = STUDIO_STEP_THEMES[s.step] || STUDIO_STEP_THEMES[1];
+                        const stepProgressKey = `step${s.step}` as keyof ReturnType<typeof calculateEditorProgress>;
+                        const isDone = Boolean(calculateEditorProgress(card, activeStep)[stepProgressKey]);
+
                         return (
                           <button
                             key={s.step}
                             type="button"
                             onClick={() => {
                               setActiveStep(s.step);
+                              setActiveMobileStep(s.step);
                               setMobileViewMode('steps');
                               scrollToStepById(s.id);
                             }}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                            className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 border ${
                               isActive
-                                ? 'bg-amber-400 text-slate-950 shadow-md ring-2 ring-amber-300 scale-102 font-black'
-                                : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:text-white'
+                                ? theme.activeBtn
+                                : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800 hover:text-white'
                             }`}
                           >
+                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded text-[9.5px] font-mono font-black border ${
+                              isActive ? 'bg-black/30 text-white border-white/30' : theme.badge
+                            }`}>
+                              {s.step}
+                            </span>
                             <span>{s.label}</span>
+                            {isDone && (
+                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              </span>
+                            )}
                           </button>
                         );
                       })}

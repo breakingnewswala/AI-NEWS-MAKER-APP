@@ -805,13 +805,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   }, [card.frameDesign, card.layout, onChange]);
 
   const STEPS = [
-    { step: 1, id: 'step-frame', label: '1. फ्रेम्स', shortLabel: 'फ्रेम्स', icon: '🖼️' },
-    { step: 2, id: 'step-ai', label: '2. एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '🤖' },
+    { step: 1, id: 'step-frame', label: '1. टेम्पलेट्स', shortLabel: 'टेम्पलेट्स', icon: '🖼️' },
+    { step: 2, id: 'step-ai', label: '2. AI टूल्स', shortLabel: 'AI टूल्स', icon: '🤖' },
     { step: 3, id: 'step-headline', label: '3. हेडलाइन', shortLabel: 'हेडलाइन', icon: '✍️' },
-    { step: 4, id: 'step-photo', label: '4. फोटो व वॉटरमार्क', shortLabel: 'फोटो-वॉटरमार्क', icon: '📷' },
-    { step: 5, id: 'step-location', label: '5. स्थान व दिनांक', shortLabel: 'स्थान-दिनांक', icon: '📍' },
-    { step: 6, id: 'step-header-footer', label: '6. हैडर और फुटर', shortLabel: 'हैडर-फुटर', icon: '📜' },
-    { step: 7, id: 'step-download', label: '7. डाउनलोड व कैप्शन', shortLabel: 'डाउनलोड-कैप्शन', icon: '⬇️' },
+    { step: 4, id: 'step-photo', label: '4. फोटो एवं वॉटरमार्क', shortLabel: 'फोटो-वॉटरमार्क', icon: '📷' },
+    { step: 5, id: 'step-location', label: '5. स्थान', shortLabel: 'स्थान', icon: '📍' },
+    { step: 6, id: 'step-header-footer', label: '6. हेडर एवं फुटर', shortLabel: 'हेडर-फुटर', icon: '📜' },
+    { step: 7, id: 'step-download', label: '7. डाउनलोड एवं कैप्शन', shortLabel: 'डाउनलोड-कैप्शन', icon: '⬇️' },
   ];
 
   const activeHeaderPng = getActiveHeaderPng(card);
@@ -1445,9 +1445,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-yellow-400" />
-              Step 1 — टेम्पलेट
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-mono font-black">1</span>
+              <Layers className="w-4 h-4 text-purple-400" />
+              स्टेप 1: टेम्पलेट्स
             </span>
             <p className="text-[11px] text-neutral-400 mt-0.5">अपनी पसंद का ग्राफिक टेम्पलेट चुनें</p>
           </div>
@@ -1847,8 +1848,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-black">2</span>
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
               स्टेप 2: AI टूल्स (सुविचार व बैकग्राउंड)
             </span>
           </div>
@@ -1860,20 +1862,21 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         <div
           id="step-ai"
           style={{ scrollMarginTop: '380px' }}
-          className={`bg-gradient-to-r from-neutral-900 to-neutral-950 border border-yellow-500/20 rounded-xl p-4 space-y-3.5 scroll-mt-[380px] ${
+          className={`bg-gradient-to-r from-neutral-900 to-neutral-950 border border-cyan-500/20 rounded-xl p-4 space-y-3.5 scroll-mt-[380px] ${
             mobileViewMode === 'steps' && activeStep !== 2 ? 'hidden' : 'block'
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-              {isMobileLayout ? 'स्टेप 2: AI टूल्स (AI न्यूज़ व हेडलाइन)' : 'स्टेप 2: AI टूल्स (AI न्यूज़ व हेडलाइन ऑटोमेशन)'}
+            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-black">2</span>
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              स्टेप 2: AI टूल्स
             </span>
           </div>
           <InlineAiNewsTools
             card={card}
             onChange={onChange}
-            onNextStep={() => handleGoToStep(isMobileLayout ? 6 : 3)}
+            onNextStep={() => handleGoToStep(3)}
             onPrevStep={() => handleGoToStep(1)}
             mobileViewMode={mobileViewMode}
             onOpenCloudSettings={onOpenCloudSettings}
@@ -1895,9 +1898,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         }`}
       >
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-            <Type className="w-3.5 h-3.5 text-yellow-400" />
-            {isMobileLayout ? 'स्टेप 5: हेडलाइन' : 'स्टेप 3: हेडलाइन'}
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-black">3</span>
+            <Type className="w-3.5 h-3.5 text-amber-400" />
+            स्टेप 3: हेडलाइन
           </span>
           <div className="flex items-center gap-2">
             {(card.frameDesign as string) !== 'jacket-morning' && (
@@ -2848,9 +2852,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             }`}
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-                <LayoutGrid className="w-3.5 h-3.5 text-yellow-400" />
-                {isMobileLayout ? 'स्टेप 4: फोटो लेआउट' : 'स्टेप 4: फोटो व वॉटरमार्क'}
+              <span className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-mono font-black">4</span>
+                <LayoutGrid className="w-3.5 h-3.5 text-rose-400" />
+                स्टेप 4: फोटो एवं वॉटरमार्क
               </span>
           <span className="text-xs text-yellow-400 font-medium">
             {(card.frameDesign as string) === 'jacket-morning'
@@ -3783,9 +3788,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         }`}
       >
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-            <MapPin className="w-4 h-4 text-red-500" />
-            {isMobileLayout ? 'स्टेप 6: स्थान एवं दिनांक' : 'स्टेप 5: स्थान व दिनांक'}
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-mono font-black">5</span>
+            <MapPin className="w-4 h-4 text-emerald-400" />
+            स्टेप 5: स्थान
           </span>
           <span className="text-[11px] text-neutral-400">
             स्थान व जिला • दिनांक स्टैम्प
@@ -3949,9 +3955,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         }`}
       >
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-            <Sliders className="w-3.5 h-3.5 text-yellow-400" />
-            {isMobileLayout ? 'स्टेप 3: हेडर एवं फुटर' : 'स्टेप 6: हेडर और फुटर'}
+          <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono font-black">6</span>
+            <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+            स्टेप 6: हेडर एवं फुटर
           </span>
           <span className="text-xs text-neutral-400 font-medium">
             ब्रांडिंग व फुटर सेटिंग्स
@@ -4863,9 +4870,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between pb-2.5 border-b border-neutral-800">
             <div>
-              <h2 className="text-sm sm:text-base font-black text-amber-400 flex items-center gap-1.5 font-['Mukta']">
-                <Download className="w-4 h-4 text-amber-400" />
-                <span>{isMobileLayout ? 'स्टेप 7: कैप्शन (सोशल मीडिया कैप्शन व डाउनलोड)' : 'स्टेप 7: डाउनलोड व कैप्शन'}</span>
+              <h2 className="text-sm sm:text-base font-black text-teal-400 flex items-center gap-1.5 font-['Mukta']">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-mono font-black">7</span>
+                <Download className="w-4 h-4 text-teal-400" />
+                <span>स्टेप 7: डाउनलोड एवं कैप्शन</span>
               </h2>
               <p className="text-[11px] text-neutral-400 mt-0.5">
                 तैयार ग्राफिक डाउनलोड करें और सोशल मीडिया के लिए कैप्शन कॉपी करें

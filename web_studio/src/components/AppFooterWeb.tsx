@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Sparkles,
   ChevronRight,
   Headphones,
   Mail,
@@ -54,23 +53,24 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
           aria-label="AI News Maker 12 Features Showcase"
           className="rounded-2xl sm:rounded-3xl bg-gradient-to-b from-slate-900/90 via-slate-950/95 to-slate-900/90 border border-slate-700/80 p-4 sm:p-6 lg:p-8 shadow-2xl shadow-black/80 relative"
         >
-          {/* Tagline Header */}
+          {/* Tagline Header (Exact 4-Line Hierarchy per Part 10) */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 sm:pb-8 border-b border-slate-800/90 text-center sm:text-left">
-            <div className="space-y-2 flex flex-col items-center sm:items-start text-center sm:text-left">
-              <div className="flex items-center justify-center sm:justify-start gap-2">
-                <span className="p-1.5 rounded-lg bg-amber-400/20 text-amber-400 border border-amber-400/30">
-                  <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400 animate-pulse" />
-                </span>
-                <h2 className="text-lg sm:text-2xl md:text-3xl font-black text-white tracking-tight leading-tight text-center sm:text-left">
-                  खबर देखने से खबर बनाने तक,{' '}
-                  <span className="text-amber-400 drop-shadow-sm font-black">
-                    सिर्फ 2 मिनट में
-                  </span>
-                </h2>
-              </div>
-              <p className="text-xs sm:text-sm md:text-base font-bold text-slate-300 text-center sm:text-left">
-                डिजिटल न्यूज़ चैनलों का AI स्टूडियो —{' '}
-                <span className="text-amber-300/90">12 शक्तिशाली सुविधाओं के साथ</span>
+            <div className="space-y-1.5 flex flex-col items-center sm:items-start text-center sm:text-left">
+              {/* Line 1: खबर देखने से खबर बनाने तक */}
+              <span className="text-sm sm:text-base md:text-lg font-bold text-slate-300">
+                खबर देखने से खबर बनाने तक
+              </span>
+              {/* Line 2: सिर्फ दो मिनट में */}
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight leading-tight">
+                सिर्फ दो मिनट में
+              </h2>
+              {/* Line 3: डिजिटल न्यूज़ चैनलों का AI स्टूडियो */}
+              <p className="text-xs sm:text-sm md:text-base font-semibold text-slate-400">
+                डिजिटल न्यूज़ चैनलों का AI स्टूडियो
+              </p>
+              {/* Line 4: बारह शक्तिशाली सुविधाओं के साथ (larger text, golden gradient highlight) */}
+              <p className="text-base sm:text-lg md:text-xl font-black bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-200 bg-clip-text text-transparent drop-shadow-sm">
+                बारह शक्तिशाली सुविधाओं के साथ
               </p>
             </div>
 
@@ -78,10 +78,9 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
               <button
                 type="button"
                 onClick={handleScrollToFeatures}
-                className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-gradient-to-r from-amber-500/10 via-amber-400/20 to-yellow-500/10 hover:from-amber-400 hover:to-yellow-400 text-amber-300 hover:text-slate-950 border border-amber-400/50 hover:border-amber-300 font-extrabold text-xs sm:text-sm flex items-center gap-2 transition-all duration-200 shadow-lg shadow-amber-500/10 cursor-pointer active:scale-95"
+                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm flex items-center gap-1.5 transition-all duration-200 shadow-lg shadow-amber-500/20 ring-1 ring-amber-300 cursor-pointer active:scale-95"
               >
-                <span>सभी फ़ीचर्स देखें</span>
-                <span className="font-bold">→</span>
+                <span>सभी फीचर्स</span>
               </button>
             </div>
           </div>

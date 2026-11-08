@@ -198,12 +198,10 @@ export function cleanHeadlineText(text: any): string {
     .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+स्तर\s+पर\s+आवश्यक\s+संज्ञान\s+लिया\s+गया(?:\s+है)?.*$/u, '')
     .replace(/\s*[,।;:\-–—\/]?\s*(?:विशेष\s*डेस्क|विशेष\s*डैश|विशेष\s*संवाददाता|सेंट्रल\s*डेस्क|न्यूज़\s*डेस्क|ब्यूरो\s*डेस्क)\s*/gu, ' ');
 
-  // 15. Standard Hindi spelling for compound state/location names (Part 1, Item 5)
+  // 15. Single-word canonical normalization for state/location names (Part 5)
   cleaned = cleaned
-    .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
-    .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश')
-    .replace(/हिमाचलप्रदेश/g, 'हिमाचल प्रदेश')
-    .replace(/आंध्रप्रदेश/g, 'आंध्र प्रदेश');
+    .replace(/मध्य\s+प्रदेश/g, 'मध्यप्रदेश')
+    .replace(/उत्तर\s+प्रदेश/g, 'उत्तरप्रदेश');
 
   // 16. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation or quotes
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, '').trim();
@@ -1077,6 +1075,12 @@ export function validateHeadlines5Tier(headlines: string[]): {
     } else if (/[।\.]$/.test(trimmed)) {
       valid = false;
       reason = 'हेडलाइन के अंत में पूर्णविराम (. या ।) नहीं होना चाहिए।';
+    } else {
+      const danglingCheck = /(?:\s+(?:ने|के|की|का|को|में|पर|से|कि|और|या|एवं|व|तक|भी|तो|ही|हुए|गया|गई|हुई|जारी|कहा\s+कि|बताया\s+कि|लेकर|चलते))$/u;
+      if (danglingCheck.test(trimmed)) {
+        valid = false;
+        reason = 'हेडलाइन का अंत अधूरा है (अधूरे विभक्ति, संयोजक या क्रिया पर समाप्त)।';
+      }
     }
 
     if (!valid) invalidTiers.push(i + 1);
@@ -1139,6 +1143,76 @@ export function sanitizeHeadlineClean(text: string): string {
     res = res.replace(danglingPostpositions, "").trim();
   }
   return res.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+}
+
+export function fixHeadlineEnding(text: string): string {
+  if (!text) return "";
+  let res = text.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  res = res.replace(/(?:की\s+)?(?:दे\s+रहा|दे\s+रहे|दे\s+रही)$/u, "की धमकी");
+  res = res.replace(/\s+(?:कर\s+रहा|कर\s+रहे|कर\s+रही)$/u, " की कार्रवाई");
+  res = res.replace(/\s+(?:हो\s+रहा|हो\s+रहे|हो\s+रही)$/u, " की स्थिति");
+  res = res.replace(/\s+कहा\s+कि$/u, " का बड़ा बयान");
+  res = res.replace(/\s+बताया\s+कि$/u, " का दावा");
+  res = res.replace(/\s+(?:करते\s+हुए|करते\s+हुए\s+कहा|बोलते\s+हुए)$/u, " का बयान");
+  res = res.replace(/\s+(?:लेकर|चलते|होते\s+ही|होते)$/u, " पर अलर्ट");
+
+  const danglingEndings = /(?:\s+(?:ने|के|की|का|को|में|पर|से|कि|हेतु|तहत|दौरान|और|या|एवं|व|तक|भी|तो|ही|हुए|गया|गई|हुई|जारी|के\s+बाद|के\s+लिए|के\s+बीच|की\s+ओर|के\s+साथ))$/u;
+  let prevLen = 0;
+  while (res.length !== prevLen) {
+    prevLen = res.length;
+    res = res.replace(danglingEndings, "").trim();
+  }
+
+  return res.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
+}
+
+export interface HeadlineQualityReport {
+  isValid: boolean;
+  score: number;
+  charCount: number;
+  issues: string[];
+  cleanedHeadline: string;
+}
+
+export function validateHeadlineQuality(headline: string, tierIndex?: number): HeadlineQualityReport {
+  const issues: string[] = [];
+  if (!headline || typeof headline !== 'string' || !headline.trim()) {
+    return { isValid: false, score: 0, charCount: 0, issues: ['हेडलाइन रिक्त है'], cleanedHeadline: '' };
+  }
+
+  const cleaned = sanitizeHeadlineClean(headline);
+  const charCount = countHeadlineVisibleCharacters(cleaned);
+
+  if (/[।\.]$/.test(headline.trim())) {
+    issues.push('हेडलाइन के अंत में पूर्णविराम (। या .) नहीं होना चाहिए');
+  }
+
+  const danglingMatch = /(?:\s+(?:ने|के|की|का|को|में|पर|से|कि|और|या|एवं|व|तक|भी|तो|ही|हुए|गया|गई|हुई|जारी|कहा\s+कि|बताया\s+कि|लेकर|चलते))$/u;
+  if (danglingMatch.test(cleaned)) {
+    issues.push('हेडलाइन का अंत अधूरे व्याकरण या शब्द पर हो रहा है');
+  }
+
+  if (charCount > 200) {
+    issues.push(`हेडलाइन की लंबाई 200 अक्षरों से अधिक है (${charCount})`);
+  }
+
+  if (typeof tierIndex === 'number' && tierIndex >= 0 && tierIndex < HEADLINE_5_TIER_RANGES.length) {
+    const tier = HEADLINE_5_TIER_RANGES[tierIndex];
+    if (charCount < tier.min - 15) {
+      issues.push(`हेडलाइन विकल्प ${tierIndex + 1} के न्यूनतम सीमा (${tier.min}) से छोटी है (${charCount})`);
+    } else if (charCount > tier.max + 15) {
+      issues.push(`हेडलाइन विकल्प ${tierIndex + 1} के अधिकतम सीमा (${tier.max}) से लंबी है (${charCount})`);
+    }
+  }
+
+  const score = Math.max(0, 100 - issues.length * 25);
+  return {
+    isValid: issues.length === 0,
+    score,
+    charCount,
+    issues,
+    cleanedHeadline: cleaned,
+  };
 }
 
 export function fitSingleHeadlineToTier(
