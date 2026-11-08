@@ -1190,24 +1190,52 @@ interface ServerRewardsDatabase {
 
 function loadRewardsDatabase(): ServerRewardsDatabase {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.wallets.size > 0) {
-    const wallets: Record<string, { coinBalance: number; pendingCoins: number; totalEarnedCoins: number }> = {};
+    const wallets: Record<string, { coinBalance: number; pendingCoins: number; totalEarnedCoins: number; graphicClaimed?: boolean; videoClaimed?: boolean }> = {};
+    const welcomeRewards: Record<string, { graphicClaimed?: boolean; videoClaimed?: boolean }> = {};
+    const txs = Array.from(centralDb.cache.walletTransactions.values());
+
     for (const [k, w] of centralDb.cache.wallets.entries()) {
-      wallets[k] = {
+      const cleanK = k.toLowerCase().trim();
+      const gClaimed = Boolean((w as any).graphicClaimed || (w as any).firstGraphicDownloadRewardClaimed);
+      const vClaimed = Boolean((w as any).videoClaimed || (w as any).firstVideoExportRewardClaimed);
+      wallets[cleanK] = {
         coinBalance: Number(w.coinBalance || 0),
         pendingCoins: Number(w.pendingCoins || 0),
         totalEarnedCoins: Number(w.totalEarnedCoins || 0),
+        graphicClaimed: gClaimed,
+        videoClaimed: vClaimed,
       };
+      if (gClaimed || vClaimed) {
+        welcomeRewards[cleanK] = { graphicClaimed: gClaimed, videoClaimed: vClaimed };
+      }
     }
+
+    // Reconcile welcomeRewards from transaction history so Firestore cache restarts never lose claim state
+    for (const tx of txs) {
+      const txId = String((tx as any)?.id || (tx as any)?.transactionId || '');
+      const desc = String((tx as any)?.description || '');
+      const uKey = String((tx as any)?.userEmail || (tx as any)?.userId || '').toLowerCase().trim();
+      if (!uKey) continue;
+      if (txId.startsWith('tx-welcome-graphic-') || desc.includes('प्रथम सफल ग्राफिक डाउनलोड')) {
+        welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), graphicClaimed: true };
+        if (wallets[uKey]) wallets[uKey].graphicClaimed = true;
+      }
+      if (txId.startsWith('tx-welcome-video-') || desc.includes('प्रथम सफल वीडियो डाउनलोड')) {
+        welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), videoClaimed: true };
+        if (wallets[uKey]) wallets[uKey].videoClaimed = true;
+      }
+    }
+
     const frameUnlocks: Record<string, any> = {};
     for (const [k, f] of centralDb.cache.frameUnlocks.entries()) {
       frameUnlocks[k] = f;
     }
     return {
       claims: [],
-      transactions: Array.from(centralDb.cache.walletTransactions.values()),
+      transactions: txs,
       downloadEvents: [],
       wallets,
-      welcomeRewards: {},
+      welcomeRewards,
       unlockedItems: {},
       frameUnlocks,
     };
@@ -1216,12 +1244,27 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
     if (fs.existsSync(REWARDS_DB_FILE)) {
       const raw = fs.readFileSync(REWARDS_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
+      const wallets = parsed.wallets && typeof parsed.wallets === 'object' ? parsed.wallets : {};
+      const welcomeRewards = parsed.welcomeRewards && typeof parsed.welcomeRewards === 'object' ? parsed.welcomeRewards : {};
+      const transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+      for (const tx of transactions) {
+        const txId = String((tx as any)?.id || (tx as any)?.transactionId || '');
+        const desc = String((tx as any)?.description || '');
+        const uKey = String((tx as any)?.userEmail || (tx as any)?.userId || '').toLowerCase().trim();
+        if (!uKey) continue;
+        if (txId.startsWith('tx-welcome-graphic-') || desc.includes('प्रथम सफल ग्राफिक डाउनलोड')) {
+          welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), graphicClaimed: true };
+        }
+        if (txId.startsWith('tx-welcome-video-') || desc.includes('प्रथम सफल वीडियो डाउनलोड')) {
+          welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), videoClaimed: true };
+        }
+      }
       return {
         claims: Array.isArray(parsed.claims) ? parsed.claims : [],
-        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+        transactions,
         downloadEvents: Array.isArray(parsed.downloadEvents) ? parsed.downloadEvents : [],
-        wallets: parsed.wallets && typeof parsed.wallets === 'object' ? parsed.wallets : {},
-        welcomeRewards: parsed.welcomeRewards && typeof parsed.welcomeRewards === 'object' ? parsed.welcomeRewards : {},
+        wallets,
+        welcomeRewards,
         unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === 'object' ? parsed.unlockedItems : {},
         frameUnlocks: parsed.frameUnlocks && typeof parsed.frameUnlocks === 'object' ? parsed.frameUnlocks : {},
       };
@@ -1233,6 +1276,17 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
 }
 
 function saveRewardsDatabase(db: ServerRewardsDatabase): boolean {
+  if (db.welcomeRewards && db.wallets) {
+    for (const [k, wr] of Object.entries(db.welcomeRewards)) {
+      const cleanK = k.toLowerCase().trim();
+      if (db.wallets[cleanK]) {
+        (db.wallets[cleanK] as any).graphicClaimed = Boolean(wr?.graphicClaimed || (db.wallets[cleanK] as any).graphicClaimed);
+        (db.wallets[cleanK] as any).videoClaimed = Boolean(wr?.videoClaimed || (db.wallets[cleanK] as any).videoClaimed);
+        (db.wallets[cleanK] as any).firstGraphicDownloadRewardClaimed = Boolean((db.wallets[cleanK] as any).graphicClaimed);
+        (db.wallets[cleanK] as any).firstVideoExportRewardClaimed = Boolean((db.wallets[cleanK] as any).videoClaimed);
+      }
+    }
+  }
   if (centralDb && centralDb.useFirestore) {
     if (db.wallets) {
       for (const [key, wallet] of Object.entries(db.wallets)) {
@@ -1255,7 +1309,6 @@ function saveRewardsDatabase(db: ServerRewardsDatabase): boolean {
         }
       }
     }
-    return true;
   }
   try {
     const locations = resolveAllDatabaseLocations("rewards_database.json");
@@ -2196,8 +2249,10 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
           isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : Boolean((p as any).isPrePublished),
           breaking: postData.breaking !== undefined ? postData.breaking : p.breaking,
           isExclusive: postData.isExclusive !== undefined ? postData.isExclusive : p.isExclusive,
-          isBonus: postData.isBonus !== undefined ? postData.isBonus : p.isBonus,
-          rewardCoins: postData.rewardCoins || p.rewardCoins || 100,
+          isBonus: postData.isBonus !== undefined ? Boolean(postData.isBonus) : Boolean(p.isBonus === true),
+          rewardCoins: (postData.isBonus !== undefined ? Boolean(postData.isBonus) : Boolean(p.isBonus === true))
+            ? Number(postData.rewardCoins || p.rewardCoins || 100)
+            : 0,
           timestamp: Date.now()
         };
       }
@@ -2215,8 +2270,8 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         ...(edDb[id] || {}),
         newsId: id,
         title: approvedTitle,
-        headlines: hList.slice(0, 5),
-        headlineOptions: hList.slice(0, 5),
+        headlines: hList.slice(0, 10),
+        headlineOptions: hList.slice(0, 10),
         approvedHeadline: postData.approvedHeadline || hList[0] || approvedTitle,
         captionDetailed: postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || "",
         captionBullets: postData.captionBullets || postData.approvedCaptionBullets || "",
@@ -2236,6 +2291,7 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     if (!found) {
       const postData = req.body || {};
       approvedTitle = postData.title || postData.headline || "समाचार";
+      const explicitBonus = postData.isBonus === true;
       const newApprovedPost: StoredNewsPost = {
         id,
         title: approvedTitle,
@@ -2254,8 +2310,8 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         district: postData.district || postData.location || "",
         timestamp: Date.now(),
         status: "APPROVED",
-        isBonus: postData.isBonus || false,
-        rewardCoins: postData.rewardCoins || 100,
+        isBonus: explicitBonus,
+        rewardCoins: explicitBonus ? Number(postData.rewardCoins || 100) : 0,
       } as any;
       existing.unshift(newApprovedPost);
     }
@@ -2350,7 +2406,7 @@ app.post("/api/admin/migrate-approvals", requireAdminMiddleware, (req, res) => {
   }
 });
 
-// 10. GET Persistent Approved Editorial Content (Preserves 5 admin pre-published headlines & captions)
+// 10. GET Persistent Approved Editorial Content (Preserves 5 to 10 admin pre-published headlines & captions)
 app.get("/api/editorial/approved/:id", (req, res) => {
   try {
     const { id } = req.params;
@@ -2363,7 +2419,7 @@ app.get("/api/editorial/approved/:id", (req, res) => {
       (record.isPrePublished === true || record.aiGenerated === true) &&
       Array.isArray(record.headlines) &&
       record.headlines.length >= 5 &&
-      record.headlines.every((h: string) => typeof h === "string" && h.trim().length >= 20 && countHeadlineVisibleCharacters(h) <= 120 && !hasFillerPhrase(h))
+      record.headlines.every((h: string) => typeof h === "string" && h.trim().length >= 20 && countHeadlineVisibleCharacters(h) <= 200 && !hasFillerPhrase(h))
     ) {
       return res.json({ success: true, isApproved: true, data: record });
     }
@@ -2390,8 +2446,8 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       ...existing,
       newsId: id,
       title: body.title || existing.title || "समाचार",
-      headlines: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : (existing.headlines || []),
-      headlineOptions: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : (existing.headlineOptions || []),
+      headlines: Array.isArray(body.headlines) ? body.headlines.slice(0, 10) : (existing.headlines || []),
+      headlineOptions: Array.isArray(body.headlines) ? body.headlines.slice(0, 10) : (existing.headlineOptions || []),
       captionDetailed: body.captionDetailed || existing.captionDetailed || "",
       captionBullets: body.captionBullets || existing.captionBullets || "",
       captionShort: body.captionShort || existing.captionShort || "",
@@ -2411,7 +2467,9 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       fullContent: body.fullContent || existing.fullContent || body.fullNews || existing.fullNews || "",
       articleText: body.articleText || existing.articleText || body.fullNews || existing.fullNews || body.captionDetailed || "",
       isBonus: body.isBonus !== undefined ? Boolean(body.isBonus) : (existing.isBonus !== undefined ? Boolean(existing.isBonus) : false),
-      rewardCoins: Number(body.rewardCoins ?? existing.rewardCoins ?? 0),
+      rewardCoins: (body.isBonus !== undefined ? Boolean(body.isBonus) : Boolean(existing.isBonus === true))
+        ? Number(body.rewardCoins ?? existing.rewardCoins ?? 100)
+        : 0,
       coinCost: Number(body.coinCost ?? existing.coinCost ?? body.coinPrice ?? 0),
       coinPrice: Number(body.coinCost ?? existing.coinCost ?? body.coinPrice ?? 0),
       restrictedPlans: Array.isArray(body.restrictedPlans) ? body.restrictedPlans : (existing.restrictedPlans || []),
@@ -2466,6 +2524,7 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       if (modified) {
         saveNewsDatabase(newsDb);
       } else {
+        const explicitBonus = body.isBonus === true;
         const newApprovedPost: StoredNewsPost = {
           id,
           title: updated.title || body.title || "समाचार",
@@ -2491,8 +2550,8 @@ app.post("/api/editorial/approved/:id", (req, res) => {
           isPrePublished,
           headlineOptions: updated.headlines,
           approvedHeadlines: updated.headlines,
-          isBonus: body.isBonus || false,
-          rewardCoins: body.rewardCoins || 100,
+          isBonus: explicitBonus,
+          rewardCoins: explicitBonus ? Number(body.rewardCoins || 100) : 0,
         } as any;
         newsDb.unshift(newApprovedPost);
         saveNewsDatabase(newsDb);
@@ -7271,13 +7330,62 @@ interface AdminRssSourceRecord {
   itemsFetchedCount?: number;
 }
 
-const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [];
+const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
+  {
+    id: "src_1794071136127_oim9",
+    name: "नई दुनिया",
+    url: "https://www.naidunia.com/entertainment",
+    type: "rss",
+    category: "🎬 मनोरंजन",
+    isActive: true,
+    createdAt: 1794071136127,
+  },
+  {
+    id: "src_1794071001048_maoy",
+    name: "नई दुनिया",
+    url: "https://www.naidunia.com/madhya-pradesh",
+    type: "rss",
+    category: "📍 मध्यप्रदेश",
+    isActive: true,
+    createdAt: 1794071001048,
+  },
+];
+
+function resolveCategoryKeyFromName(rawCategory: string, sourceUrl = ""): string {
+  const c = String(rawCategory || "").toLowerCase();
+  const u = String(sourceUrl || "").toLowerCase();
+  if (c.includes("मनोरंजन") || c.includes("entertainment") || c.includes("bollywood") || c.includes("बॉलीवुड") || u.includes("/entertainment") || u.includes("/bollywood")) {
+    return "entertainment";
+  }
+  if (c.includes("मध्यप्रदेश") || c.includes("मध्य प्रदेश") || c.includes("राज्य") || c.includes("state") || c.includes("छत्तीसगढ़") || u.includes("/madhya-pradesh") || u.includes("/chhattisgarh")) {
+    return "state";
+  }
+  if (c.includes("राजनीति") || c.includes("politics") || c.includes("चुनाव")) {
+    return "politics";
+  }
+  if (c.includes("व्यापार") || c.includes("बिजनेस") || c.includes("business") || c.includes("कारोबार")) {
+    return "business";
+  }
+  if (c.includes("खेल") || c.includes("क्रिकेट") || c.includes("sports") || c.includes("cricket") || u.includes("/sports")) {
+    return "sports";
+  }
+  if (c.includes("अपराध") || c.includes("क्राइम") || c.includes("crime") || u.includes("/crime")) {
+    return "crime";
+  }
+  if (c.includes("टेक") || c.includes("तकनीक") || c.includes("tech") || c.includes("technology")) {
+    return "tech";
+  }
+  if (c.includes("देश") || c.includes("राष्ट्रीय") || c.includes("national") || c.includes("india") || u.includes("/national") || u.includes("/india")) {
+    return "national";
+  }
+  return "national";
+}
 
 function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
     const list = Array.from(centralDb.cache.rssSources.values()) as AdminRssSourceRecord[];
     const valid = list.filter((s: any) => Boolean(s && s.url));
-    return valid;
+    if (valid.length > 0) return valid;
   }
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
@@ -7287,14 +7395,14 @@ function loadRssSourcesDatabase(): AdminRssSourceRecord[] {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const valid = parsed.filter((s: any) => Boolean(s && s.url));
-          return valid;
+          if (valid.length > 0) return valid;
         }
       }
     }
   } catch (err: any) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return [];
+  return [...DEFAULT_PRODUCTION_RSS_SOURCES];
 }
 
 function saveRssSourcesDatabase(sources: AdminRssSourceRecord[]): boolean {
@@ -7626,7 +7734,31 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
 
   const posts: StoredNewsPost[] = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
-  const items = xmlText.match(itemRegex) || [];
+  let items = xmlText.match(itemRegex) || [];
+
+  // Fallback for HTML category listing pages (e.g. https://www.naidunia.com/entertainment) when no <item> XML tags exist
+  if (items.length === 0 && /<html|<body|<a\s/i.test(xmlText)) {
+    const syntheticItems: string[] = [];
+    const seenUrls = new Set<string>();
+    const anchorMatches = xmlText.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
+    for (const m of anchorMatches) {
+      if (syntheticItems.length >= 12) break;
+      const href = resolveUrl(m[1] || "", source.url);
+      if (!href || !href.startsWith("http") || seenUrls.has(href)) continue;
+      if (href === source.url || href.endsWith("/entertainment") || href.endsWith("/madhya-pradesh")) continue;
+      // Only match article links (typically ending in digits/slug or having a long path)
+      const pathPart = (() => { try { return new URL(href).pathname; } catch { return ""; } })();
+      if (pathPart.length < 18 || !/[-/]\d{4,}|[-][a-z0-9]{4,}/i.test(pathPart)) continue;
+      const innerHtml = m[2] || "";
+      const imgMatch = innerHtml.match(/<img[^>]+(?:data-src|src)=["']([^"']+)["']/i);
+      const imgTag = imgMatch && imgMatch[1] ? `<media:content url="${resolveUrl(imgMatch[1], source.url)}" />` : "";
+      const textContent = decodeHtmlEntities(innerHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+      if (!textContent || textContent.length < 18 || !/[\u0900-\u097F]/.test(textContent)) continue;
+      seenUrls.add(href);
+      syntheticItems.push(`<item><title><![CDATA[${textContent}]]></title><link>${href}</link><description><![CDATA[${textContent}]]></description>${imgTag}</item>`);
+    }
+    items = syntheticItems;
+  }
 
   for (const itemXml of items.slice(0, 15)) {
     const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
@@ -7659,15 +7791,7 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
     const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
 
     const catName = editorial.categoryName || source.category || "देश";
-
-    const catKey =
-      catName === "देश" ? "national" :
-        catName === "राज्य" ? "state" :
-          catName === "राजनीति" ? "politics" :
-            catName === "व्यापार" ? "business" :
-              catName === "खेल" ? "sports" :
-                catName === "मनोरंजन" ? "entertainment" :
-                  catName === "अपराध" ? "crime" : "tech";
+    const catKey = resolveCategoryKeyFromName(catName, link || source.url);
 
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
 
@@ -7690,6 +7814,8 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
       imageUrl,
       breaking: editorial.title.includes("बड़ा") || editorial.title.includes("फैसला") || editorial.title.includes("कार्रवाई"),
       isExclusive: false,
+      isBonus: false,
+      rewardCoins: 0,
       timestamp,
       fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
       location: editorial.location || "",
@@ -7799,14 +7925,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     const editorial = await processRssItemWithAiEditorial(rawTitle, fullArticleText, source.category, source.url);
 
     const catName = editorial.categoryName || source.category || "देश";
-    const catKey =
-      catName === "देश" ? "national" :
-        catName === "राज्य" ? "state" :
-          catName === "राजनीति" ? "politics" :
-            catName === "व्यापार" ? "business" :
-              catName === "खेल" ? "sports" :
-                catName === "मनोरंजन" ? "entertainment" :
-                  catName === "अपराध" ? "crime" : "tech";
+    const catKey = resolveCategoryKeyFromName(catName, source.url);
 
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
     const postId = `web-${source.id}-${hashStr}`;
@@ -10799,13 +10918,22 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
         const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
 
+        const existingLogo = String(existing?.channelLogoUrl || existing?.channelLogoPngUrl || "").trim();
+        const hasRealLogo = Boolean(existingLogo && !existingLogo.includes("ai_news_maker_logo.png"));
+        const existingPhoneDigits = String(existing?.phoneNumber || existing?.mobile || existing?.whatsappNumber || "").replace(/\D/g, "").slice(-10);
+        const isWhatsappVerified = Boolean((existing as any)?.whatsappVerified === true || (existing as any)?.isMobileVerified === true || (existing as any)?.phoneVerified === true);
+
         const isProfileComplete = Boolean(
           !isDeletedTombstoned &&
-          existing &&
-          existing.isProfileComplete &&
-          existing.channelNameHi &&
-          existing.channelNameHi !== "सेटअप अधूरा (Incomplete)" &&
-          (existing.channelLogoUrl || existing.channelLogoPngUrl)
+          (isSuper || isAdmin || (
+            existing &&
+            existing.isProfileComplete &&
+            existing.channelNameHi &&
+            existing.channelNameHi !== "सेटअप अधूरा (Incomplete)" &&
+            hasRealLogo &&
+            existingPhoneDigits.length === 10 &&
+            isWhatsappVerified
+          ))
         );
 
         let safeUsername: string;
@@ -18598,17 +18726,19 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     }
     const currentBalance = (walletKey && rDb.wallets[walletKey]) ? rDb.wallets[walletKey].coinBalance : 0;
 
-    // Check Single-Use lock across drafts database and memory state
+    const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines.filter(Boolean) : [previousHeadlines].filter(Boolean);
+    const MAX_HEADLINES_PER_ARTICLE = 10;
+
+    // Check Single-Use / Max-10 lock across drafts database and memory state
     const drafts = loadDraftsDatabase();
     const existingDraft = draftId ? drafts.find((d: any) => d.id === draftId) : null;
     const memoryRegenState = draftId ? draftRegenerationStateMap.get(draftId) : null;
 
-    if ((existingDraft && existingDraft.regenerationUsed) || (memoryRegenState && memoryRegenState.used)) {
+    if (rawPrev.length >= MAX_HEADLINES_PER_ARTICLE || ((existingDraft && existingDraft.regenerationUsed) || (memoryRegenState && memoryRegenState.used))) {
       const savedHeadlines = (existingDraft && existingDraft.regeneratedHeadlines) || (memoryRegenState && memoryRegenState.headlines) || [];
       if (savedHeadlines.length > 0 && generationRequestId && (existingDraft?.generationRequestId === generationRequestId || memoryRegenState?.generationRequestId === generationRequestId)) {
         // Idempotent retry: return saved headlines without deducting coins again!
-        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
-        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        const combinedSaved = [...rawPrev, ...savedHeadlines].slice(0, MAX_HEADLINES_PER_ARTICLE);
         return res.json({
           success: true,
           actualProvider: "idempotent-cache",
@@ -18620,15 +18750,17 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           remainingCoins: currentBalance,
           draftId: draftId || undefined,
           alreadyRegenerated: true,
-          regenerationUsed: true,
+          regenerationUsed: combinedSaved.length >= MAX_HEADLINES_PER_ARTICLE,
           message: "इस ड्राफ्ट के लिए पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाए गए हैं।"
         });
       }
-      return res.status(409).json({
-        success: false,
-        alreadyUsed: true,
-        error: "इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।"
-      });
+      if (rawPrev.length >= MAX_HEADLINES_PER_ARTICLE) {
+        return res.status(409).json({
+          success: false,
+          alreadyUsed: true,
+          error: "अधिकतम 10 हेडलाइन्स उपलब्ध हैं। इस खबर के लिए 10 हेडलाइन की सीमा पूरी हो चुकी है।"
+        });
+      }
     }
 
     // Concurrency shield: if regeneration is already in-flight for this draft, await its completion
@@ -18655,7 +18787,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
 
     // Distributed Firestore-backed atomic lock (Phase 3.0B-S distributed safety)
     lockId = "";
-    if (draftId && centralDb) {
+    if (draftId && centralDb && rawPrev.length >= 5) {
       const lockAcquisition = await centralDb.acquireDraftRegenerationLock(
         draftId,
         walletKey,
@@ -18663,11 +18795,11 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       );
 
       if (!lockAcquisition.success) {
-        if (lockAcquisition.alreadyUsed) {
+        if (lockAcquisition.alreadyUsed && rawPrev.length >= MAX_HEADLINES_PER_ARTICLE) {
           return res.status(409).json({
             success: false,
             alreadyUsed: true,
-            error: lockAcquisition.error || "इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।"
+            error: lockAcquisition.error || "अधिकतम 10 हेडलाइन्स उपलब्ध हैं।"
           });
         }
         if (lockAcquisition.inFlight) {
@@ -18677,17 +18809,9 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
             error: lockAcquisition.error || "इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।"
           });
         }
-        return res.status(409).json({
-          success: false,
-          conflict: true,
-          error: lockAcquisition.error || "ड्राफ्ट लॉक प्राप्त करने में त्रुटि।"
-        });
-      }
-
-      if (lockAcquisition.idempotentReplay && Array.isArray(lockAcquisition.headlines)) {
+      } else if (lockAcquisition.idempotentReplay && Array.isArray(lockAcquisition.headlines)) {
         const savedHeadlines = lockAcquisition.headlines;
-        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
-        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        const combinedSaved = [...rawPrev, ...savedHeadlines].slice(0, MAX_HEADLINES_PER_ARTICLE);
         return res.json({
           success: true,
           actualProvider: "idempotent-cache",
@@ -18699,12 +18823,12 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           remainingCoins: currentBalance,
           draftId: draftId || undefined,
           alreadyRegenerated: true,
-          regenerationUsed: true,
+          regenerationUsed: combinedSaved.length >= MAX_HEADLINES_PER_ARTICLE,
           message: "इस ड्राफ्ट के लिए पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाए गए हैं।"
         });
+      } else {
+        lockId = lockAcquisition.lockId || "";
       }
-
-      lockId = lockAcquisition.lockId || "";
     }
 
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
@@ -18729,12 +18853,12 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       draftRegenerationInFlight.set(draftId, p);
     }
 
-    const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
     const excludeTitles = rawPrev.map((h: string) => cleanHeadlineText(String(h || "")).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter(Boolean);
 
     let sourceTitle = canonicalContext.title || req.body.title || req.body.sourceHeadline || "";
     let sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
     let sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
+    let candidateSourceUrl = String(canonicalContext.sourceUrl || req.body.sourceUrl || "").trim();
 
     // Enhanced context retrieval fallback for pre-published and normal news
     if (!sourceText || sourceText.trim().length < 50) {
@@ -18746,6 +18870,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           sourceTitle = sourceTitle || edRecord.title || "";
           sourceText = edRecord.fullNews || edRecord.fullContent || edRecord.articleText || edRecord.captionDetailed || edRecord.summary || sourceText;
           sourceLoc = sourceLoc || edRecord.location || "";
+          candidateSourceUrl = candidateSourceUrl || String((edRecord as any).sourceUrl || "").trim();
         }
       } catch {}
 
@@ -18757,6 +18882,28 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
             sourceTitle = sourceTitle || nPost.title || "";
             sourceText = (nPost as any).fullNews || (nPost as any).fullContent || (nPost as any).articleText || nPost.captionDetailed || nPost.summary || sourceText;
             sourceLoc = sourceLoc || nPost.location || (nPost as any).district || "";
+            candidateSourceUrl = candidateSourceUrl || String(nPost.sourceUrl || "").trim();
+          }
+        } catch {}
+      }
+
+      // If still short and we have a sourceUrl, fetch the article HTML
+      if ((!sourceText || sourceText.trim().length < 80) && candidateSourceUrl.startsWith("http")) {
+        try {
+          const resp = await fetch(candidateSourceUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36" },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (resp.ok) {
+            const html = await resp.text();
+            const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi))
+              .map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()))
+              .filter((p) => p.length > 35 && /[\u0900-\u097F]/.test(p))
+              .slice(0, 8)
+              .join("\n\n");
+            if (paragraphs.length > (sourceText || "").length) {
+              sourceText = paragraphs;
+            }
           }
         } catch {}
       }
@@ -19001,25 +19148,26 @@ JSON Output Schema:
       remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
     }
 
-    // Persist Single-Use State per News Draft (Part 8 Permanent Core Rule)
+    const totalHeadlineOptions = [...rawPrev, ...finalOptions].slice(0, MAX_HEADLINES_PER_ARTICLE);
+    const isNowMaxed = totalHeadlineOptions.length >= MAX_HEADLINES_PER_ARTICLE;
+
+    // Persist State per News Draft (Max 10 Headlines Rule)
     if (draftId) {
       draftRegenerationStateMap.set(draftId, {
-        used: true,
+        used: isNowMaxed,
         headlines: finalOptions,
         userId: walletKey,
         timestamp: Date.now(),
         generationRequestId,
       });
       if (existingDraft) {
-        existingDraft.regenerationUsed = true;
+        existingDraft.regenerationUsed = isNowMaxed;
         existingDraft.regeneratedHeadlines = finalOptions;
         existingDraft.generationRequestId = generationRequestId;
         existingDraft.updatedAt = Date.now();
         saveDraftsDatabase(drafts);
       }
     }
-
-    const totalHeadlineOptions = [...rawPrev.slice(0, 5), ...finalOptions].slice(0, 10);
 
     const responsePayload = {
       success: true,
@@ -19032,7 +19180,7 @@ JSON Output Schema:
       coinsDeducted,
       remainingCoins,
       draftId: draftId || undefined,
-      regenerationUsed: true,
+      regenerationUsed: isNowMaxed,
       wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : undefined,
       canonicalContext: {
         ...canonicalContext,

@@ -2074,7 +2074,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               {visibleHighlightPosts.map((post) => {
                 const effectiveCoinCost = Number(post.coinCost ?? post.coinValue ?? (post as any).coinPrice ?? 0);
                 const isPaid = effectiveCoinCost > 0;
-                const isBonus = Boolean(post.isBonus || (post as any).bonusNews || (post.rewardCoins && post.rewardCoins > 0));
+                const isBonus = Boolean(post.isBonus === true || (post as any).bonusNews === true);
                 const isUnlocked = unlockedNewsIds.has(post.id);
                 const isRestricted = isPostRestricted(post);
                 const isBonusClaimed = claimedBonusNewsIds.has(post.id);
@@ -2503,7 +2503,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               const displayThumbnail = getPostThumbnail(post);
               const effectiveCoinCost = Number(post.coinCost ?? post.coinValue ?? (post as any).coinPrice ?? 0);
               const isPaid = effectiveCoinCost > 0;
-              const isBonus = Boolean(post.isBonus || (post as any).bonusNews || (post.rewardCoins && post.rewardCoins > 0));
+              const isBonus = Boolean(post.isBonus === true || (post as any).bonusNews === true);
               const isUnlocked = unlockedNewsIds.has(post.id);
               const isRestricted = isPostRestricted(post);
               const isBonusClaimed = claimedBonusNewsIds.has(post.id);

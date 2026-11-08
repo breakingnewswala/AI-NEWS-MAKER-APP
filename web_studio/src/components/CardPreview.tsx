@@ -356,7 +356,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
   // Exact proportional scale matching CanvasExporter 1080px canvas
   const previewScale = containerWidth > 0 ? containerWidth / 1080 : 0.4;
-  const effectivePaddingX = Math.max(12, Math.round(52 * previewScale));
+  const effectivePaddingX = Math.max(6, Math.round(52 * previewScale));
 
   // Single Canonical Layout Calculation for live preview (Shared with CanvasExporter)
   const canonicalLayout = React.useMemo(() => {
@@ -367,7 +367,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       highlightWords: card.highlightWords,
       fontFamily: activeFont,
       templateId: card.frameDesign || 'graphic_001',
-      aspectRatio: card.aspectRatio || '4:5',
+      aspectRatio: (activeDf?.aspectRatio as any) || card.aspectRatio || '4:5',
       userFontSize: card.headlineFontSize || activeDf?.typographyConfig?.primaryFontSize,
     });
   }, [
@@ -380,8 +380,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     card.headlineFontSize,
   ]);
 
-  // Canonical preview font size scaled to preview container
-  const effectivePreviewFontSize = Math.max(14, Math.round(canonicalLayout.fontSize * previewScale));
+  // Canonical preview font size scaled proportionally to preview container (true miniature on mobile/tablet)
+  const effectivePreviewFontSize = Math.max(7, Math.round(canonicalLayout.fontSize * previewScale));
 
   // Render Canonical Headline Lines matching exported canvas layout pixel-for-pixel
   const renderFormattedHeadline = (customColor?: string, customHighlight?: string) => {
@@ -419,8 +419,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
     const isBlackText = baseTextColor.toLowerCase() === '#000000' || baseTextColor.toLowerCase() === 'black' || baseTextColor.toLowerCase() === '#0f172a';
 
-    const effectiveFontSize = Math.max(13, Math.round(canonicalLayout.fontSize * previewScale));
-    const effectiveLineHeight = Math.max(16, Math.round(canonicalLayout.lineHeight * previewScale));
+    const effectiveFontSize = Math.max(7, Math.round(canonicalLayout.fontSize * previewScale));
+    const effectiveLineHeight = Math.max(9, Math.round(canonicalLayout.lineHeight * previewScale));
 
     return (
       <div className="w-full flex flex-col items-center justify-center select-none pointer-events-none">
@@ -446,7 +446,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     fontWeight: 900,
                     textShadow: isIvory || isBlackText ? 'none' : (isLightTemplate ? 'none' : '0 2px 6px rgba(0,0,0,0.85)'),
                     marginRight: (tIdx < line.length - 1 && !isNextPunctuation)
-                      ? `${Math.max(2, Math.round(effectiveFontSize * 0.28))}px`
+                      ? `${Math.max(1.5, Math.round(effectiveFontSize * 0.26))}px`
                       : undefined,
                   }}
                   className="inline-block"
@@ -461,8 +461,16 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     );
   };
 
-  // Aspect ratio class: Graphic Photo News canvas is strictly True 4:5 (1080x1350)
-  const aspectClass = 'aspect-[4/5]';
+  // Aspect ratio class: True 4:5 (1080x1350) default, or 9:16 / 1:1 when selected template specifies it
+  const resolvedRatio = (() => {
+    const df = getDynamicFrameById(card.frameDesign || '');
+    const r = df?.aspectRatio || card.aspectRatio || '4:5';
+    if (r === '9:16') return '9:16';
+    if (r === '1:1') return '1:1';
+    return '4:5';
+  })();
+  const aspectClass = resolvedRatio === '9:16' ? 'aspect-[9/16]' : resolvedRatio === '1:1' ? 'aspect-square' : 'aspect-[4/5]';
+  const aspectCssRatio = resolvedRatio === '9:16' ? '9 / 16' : resolvedRatio === '1:1' ? '1 / 1' : '4 / 5';
 
   const getFilterCss = (filters?: typeof card.imageFilters): string => {
     if (!filters) return 'none';
@@ -523,7 +531,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       className={`relative w-full mx-auto overflow-hidden rounded-2xl shadow-2xl bg-neutral-900 select-none ${aspectClass} ${card.frameDesign === 'graphic_002' ? 'border-[5px] sm:border-[8px] border-[#EA580C]' : card.frameDesign === 'graphic_004' ? 'border-[4px] sm:border-[6px] border-black bg-white' : ''} ${className || ''}`}
       style={{
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
-        aspectRatio: '4 / 5',
+        aspectRatio: aspectCssRatio,
       }}
     >
       {/* 0. BASE BACKGROUND FOR DYNAMIC FRAMES */}

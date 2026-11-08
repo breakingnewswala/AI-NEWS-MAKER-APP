@@ -17,6 +17,42 @@ const PERMISSION_ASKED_KEY = 'ai_news_notif_permission_prompted';
 
 const DEFAULT_NOTIFICATIONS: AppNotification[] = [];
 
+const SEEN_SOUND_NOTIF_IDS_KEY = 'ai_news_seen_sound_notif_ids_v1';
+
+function isDummyOrTestNotification(n: any): boolean {
+  if (!n || typeof n !== 'object') return true;
+  const title = String(n.title || '').trim();
+  const msg = String(n.message || '').trim();
+  const id = String(n.id || '').trim();
+  if (!title) return true;
+  if (/^(dummy|test|sample|mock)/i.test(id)) return true;
+  if (/dummy|test notification|sample notification/i.test(`${title} ${msg}`)) return true;
+  return false;
+}
+
+function getSeenSoundNotifIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(SEEN_SOUND_NOTIF_IDS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function markSoundNotifIdsSeen(ids: string[]): void {
+  if (typeof window === 'undefined' || !ids.length) return;
+  try {
+    const seen = getSeenSoundNotifIds();
+    ids.forEach((id) => {
+      if (id) seen.add(id);
+    });
+    localStorage.setItem(SEEN_SOUND_NOTIF_IDS_KEY, JSON.stringify(Array.from(seen).slice(-150)));
+  } catch {}
+}
+
 export function getNotifications(): AppNotification[] {
   if (typeof window === 'undefined') return DEFAULT_NOTIFICATIONS;
   try {
@@ -25,7 +61,7 @@ export function getNotifications(): AppNotification[] {
       return DEFAULT_NOTIFICATIONS;
     }
     const list: AppNotification[] = JSON.parse(raw);
-    return Array.isArray(list) ? list : DEFAULT_NOTIFICATIONS;
+    return Array.isArray(list) ? list.filter((n) => !isDummyOrTestNotification(n)) : DEFAULT_NOTIFICATIONS;
   } catch {
     return DEFAULT_NOTIFICATIONS;
   }
@@ -34,14 +70,16 @@ export function getNotifications(): AppNotification[] {
 export function saveNotifications(list: AppNotification[]) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    window.dispatchEvent(new CustomEvent('ai_news_notifications_updated', { detail: list }));
+    const cleanList = Array.isArray(list) ? list.filter((n) => !isDummyOrTestNotification(n)) : [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanList));
+    window.dispatchEvent(new CustomEvent('ai_news_notifications_updated', { detail: cleanList }));
   } catch {}
 }
 
 export function markAllNotificationsAsRead(userEmail?: string): AppNotification[] {
   const current = getNotifications().map((n) => ({ ...n, unread: false }));
   saveNotifications(current);
+  markSoundNotifIdsSeen(current.map((n) => n.id));
   if (typeof window !== 'undefined') {
     fetch('/api/notifications/mark-read', {
       method: 'POST',
@@ -55,6 +93,7 @@ export function markAllNotificationsAsRead(userEmail?: string): AppNotification[
 export function markNotificationAsRead(id: string): AppNotification[] {
   const current = getNotifications().map((n) => (n.id === id ? { ...n, unread: false } : n));
   saveNotifications(current);
+  markSoundNotifIdsSeen([id]);
   if (typeof window !== 'undefined') {
     fetch('/api/notifications/mark-read', {
       method: 'POST',
@@ -68,12 +107,26 @@ export function markNotificationAsRead(id: string): AppNotification[] {
 export async function fetchNotificationsFromServer(userEmail?: string): Promise<AppNotification[]> {
   if (typeof window === 'undefined') return getNotifications();
   try {
+    const previousUnreadIds = new Set(getNotifications().filter((n) => n.unread).map((n) => n.id));
+    const seenSoundIds = getSeenSoundNotifIds();
     const emailParam = userEmail ? `?email=${encodeURIComponent(userEmail.trim())}` : '';
     const res = await fetch(`/api/notifications${emailParam}`);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.notifications)) {
-        const serverNotifs: AppNotification[] = data.notifications;
+        const serverNotifs: AppNotification[] = data.notifications.filter((n: any) => !isDummyOrTestNotification(n));
+        const newlyArrivedUnread = serverNotifs.filter(
+          (n) => n.unread && n.id && !previousUnreadIds.has(n.id) && !seenSoundIds.has(n.id)
+        );
+        if (newlyArrivedUnread.length > 0) {
+          markSoundNotifIdsSeen(newlyArrivedUnread.map((n) => n.id));
+          const hasBreaking = newlyArrivedUnread.some((n) => /ब्रेकिंग|breaking/i.test(n.title || ''));
+          if (hasBreaking) {
+            playBreakingNewsAlertSound();
+          } else {
+            playNormalNotificationSound();
+          }
+        }
         saveNotifications(serverNotifs);
         return serverNotifs;
       }
@@ -95,6 +148,12 @@ export function addNotification(notif: Omit<AppNotification, 'id' | 'timestamp' 
     type: notif.type || 'news',
     linkTab: notif.linkTab,
   };
+
+  const seenSoundIds = getSeenSoundNotifIds();
+  if (full.unread && !seenSoundIds.has(full.id) && !String(full.id).startsWith('breaking_')) {
+    markSoundNotifIdsSeen([full.id]);
+    playNormalNotificationSound();
+  }
 
   const list = [full, ...getNotifications().filter((n) => n.id !== full.id)].slice(0, 30);
   saveNotifications(list);

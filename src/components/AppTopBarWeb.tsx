@@ -94,12 +94,19 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       setNotificationsList(list);
     });
 
+    const pollInterval = setInterval(() => {
+      fetchNotificationsFromServer(currentUser?.email).then((list) => {
+        setNotificationsList(list);
+      });
+    }, 15000);
+
     const handleUpdate = () => {
       setCurrentTier(getUserSubscription().tier);
       setAdminSystemModeState(getAdminSystemMode());
       setTestPlan(getAdminTestPlanTier());
       setNotificationsList(getNotifications());
       setNotifPermission(getNotificationPermissionStatus());
+      setSoundSettings(getSoundSettings());
     };
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('ai_news_admin_view_mode_changed', handleUpdate);
@@ -107,17 +114,20 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     window.addEventListener('ai_news_user_plan_updated', handleUpdate);
     window.addEventListener('ai_news_notifications_updated', handleUpdate);
     window.addEventListener('ai_news_notification_permission_changed', handleUpdate);
+    window.addEventListener('ai_news_sound_settings_updated', handleUpdate);
     (window as any).onNotificationPermissionResult = (status: string) => {
       setNotifPermission(status as NotificationPermission | 'unsupported');
       window.dispatchEvent(new Event('ai_news_notification_permission_changed'));
     };
     return () => {
+      clearInterval(pollInterval);
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('ai_news_admin_view_mode_changed', handleUpdate);
       window.removeEventListener('ai_news_admin_test_plan_changed', handleUpdate);
       window.removeEventListener('ai_news_user_plan_updated', handleUpdate);
       window.removeEventListener('ai_news_notifications_updated', handleUpdate);
       window.removeEventListener('ai_news_notification_permission_changed', handleUpdate);
+      window.removeEventListener('ai_news_sound_settings_updated', handleUpdate);
     };
   }, [currentUser?.email]);
 

@@ -326,7 +326,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     setPrePublishMsg(null);
     try {
       const targetNewsId = autoFillNews?.newsId || card.sourceNewsId || `editorial-${Date.now()}`;
-      const headlinesToSave = headlineOptions.length > 0 ? headlineOptions.slice(0, 5) : [result.headline || card.headline];
+      const headlinesToSave = headlineOptions.length > 0 ? headlineOptions.slice(0, 10) : [result.headline || card.headline];
       const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(targetNewsId)}`), {
         method: 'POST',
         headers: {
@@ -334,6 +334,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
         },
         body: JSON.stringify({
+          newsId: targetNewsId,
+          sourceUrl: canonicalContext?.sourceUrl || linkUrl || autoFillNews?.url || card.sourceUrl || '',
+          fullContent: canonicalContext?.articleText || autoFillNews?.fullNews || inputText || result.captionDetailed || card.summary || result.summary || '',
           title: card.originalHeadline || result.headline || headlineOptions[0],
           headlines: headlinesToSave,
           captionDetailed: result.captionDetailed || card.summary || result.summary,
@@ -348,7 +351,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }),
       });
       if (res.ok) {
-        setPrePublishMsg('✅ यह खबर 5 स्वीकृत हेडलाइन व फोटो सहित सफलतापूर्वक प्री-पब्लिश हो गई है! अब सामान्य यूज़र्स इसे तुरंत लोड कर सकेंगे।');
+        setPrePublishMsg(`✅ यह खबर ${headlinesToSave.length} स्वीकृत हेडलाइन व फोटो सहित सफलतापूर्वक प्री-पब्लिश हो गई है! अब सामान्य यूज़र्स इसे तुरंत लोड कर सकेंगे।`);
         window.dispatchEvent(new CustomEvent('ai_news_approved'));
         window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
       } else {
@@ -675,12 +678,22 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
         .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const approvedOpts = fitHeadlinesTo5TierRanges(
-        autoFillNews.approvedHeadlines,
+      const rawApproved = autoFillNews.approvedHeadlines.map((h: string) => cleanHeadlineText(h)).filter(Boolean);
+      const firstBatch = fitHeadlinesTo5TierRanges(
+        rawApproved.slice(0, 5),
         factSentences,
         baseTitle,
         autoFillNews.location || card.location || ''
       ).slice(0, 5);
+      const secondBatch = rawApproved.length > 5
+        ? fitHeadlinesTo5TierRanges(
+            rawApproved.slice(5, 10),
+            factSentences,
+            baseTitle,
+            autoFillNews.location || card.location || ''
+          ).slice(0, 5)
+        : [];
+      const approvedOpts = [...firstBatch, ...secondBatch].slice(0, 10);
       const topHeadline = approvedOpts[0] || baseTitle;
 
       let detailedCaption = autoFillNews.captionDetailed || autoFillNews.summary || rawContent || topHeadline;
@@ -706,6 +719,18 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
       }
 
+      const prePubCanonicalCtx = {
+        sourceUrl: autoFillNews.url || card.sourceUrl || '',
+        title: autoFillNews.title || topHeadline,
+        articleText: autoFillNews.fullNews || autoFillNews.summary || detailedCaption || topHeadline,
+        mainEvent: topHeadline,
+        location: cleanLocationField(autoFillNews.location || card.location || ''),
+        category: cleanCategoryField(autoFillNews.category || card.category || ''),
+        extractedAt: new Date().toISOString(),
+      };
+      setCanonicalContext(prePubCanonicalCtx);
+
+      const isAlreadyAtMax10 = approvedOpts.length >= 10;
       setHeadlineOptions(approvedOpts);
       setSelectedHeadlineIndex(0);
       setLoading(false);
@@ -723,6 +748,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         captionBullets: bulletsCaption,
         captionShort: shortCaption,
         tags: autoFillNews.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'],
+        canonicalContext: prePubCanonicalCtx,
+        regenerationUsed: isAlreadyAtMax10,
       };
       setResult(editorialResult);
 
@@ -730,6 +757,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         headline: topHeadline,
         formattedHeadline: topHeadline,
         headlineOptions: approvedOpts,
+        regenerationUsed: isAlreadyAtMax10,
         location: editorialResult.location,
         category: editorialResult.category,
         summary: formattedCaption,
@@ -1365,7 +1393,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     }
   };
 
-  // Regenerate 5 brand new headline options from the same canonical news context (Part 8 Single-Use Coin Engine)
+  // Regenerate up to 5 brand new headline options from the same canonical news context (Max 10 Headlines Rule)
+  const MAX_HEADLINES_PER_ARTICLE = 10;
   const handleRegenerateHeadlines = async () => {
     if (isRegenerating || loading) return;
 
@@ -1373,8 +1402,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     const rawTier = isAdminOrSuperAdmin ? 'admin' : (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
     const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
 
-    if (card.regenerationUsed || (result && (result as any).regenerationUsed)) {
-      setError('इस ड्राफ्ट के लिए अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।');
+    const existingHeadlines = headlineOptions.filter((h) => h && h.trim().length > 0);
+    if (existingHeadlines.length >= MAX_HEADLINES_PER_ARTICLE) {
+      setError('इस खबर के लिए अधिकतम 10 हेडलाइन विकल्प पहले ही उपलब्ध हैं।');
       return;
     }
 
@@ -1402,6 +1432,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         autoFillNews?.fullNews ||
         autoFillNews?.summary ||
         inputText ||
+        result?.captionDetailed ||
         result?.summary ||
         card.summary ||
         '',
@@ -1410,6 +1441,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
     };
 
     const activeDraftId = card.draftId || card.id || card.sourceNewsId || autoFillNews?.newsId || (result as any)?.draftId || `draft-${Date.now()}`;
+    const missingCount = Math.min(5, MAX_HEADLINES_PER_ARTICLE - existingHeadlines.length);
 
     try {
       const payload = {
@@ -1417,10 +1449,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         newsId: card.sourceNewsId || autoFillNews?.newsId || undefined,
         generationRequestId: `req-regen-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         canonicalContext: activeCtx,
+        sourceUrl: activeCtx.sourceUrl || undefined,
         sourceHeadline: activeCtx.title || result?.headline || card.headline || '',
         summary: activeCtx.articleText || inputText || result?.summary || card.summary || '',
         location: activeCtx.location || result?.location || card.location || '',
-        previousHeadlines: headlineOptions.slice(0, 5),
+        previousHeadlines: existingHeadlines.slice(0, MAX_HEADLINES_PER_ARTICLE),
+        requestedCount: missingCount,
         template_id: card.templateId || 'graphic_001',
         channelUsername: card.socialHandle || currentUser?.username || '',
         userTier: rawTier,
@@ -1452,7 +1486,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         }
 
         if (res.status === 409 || data?.alreadyUsed) {
-          setError('इस न्यूज़ ड्राफ्ट पर अतिरिक्त 5 हेडलाइन रीजेनरेशन (Single-Use) का उपयोग पहले ही किया जा चुका है।');
+          setError(data?.error || 'इस खबर के लिए अधिकतम 10 हेडलाइन विकल्प पहले ही बन चुके हैं।');
           setIsRegenerating(false);
           return;
         }
@@ -1492,22 +1526,42 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
         .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const new5Options = fitHeadlinesTo5TierRanges(rawNew, articleSentences, sourceTitle, sourceLoc).slice(0, 5);
+      // Deduplicate against existing headlines
+      const uniqueRawNew = rawNew.filter(
+        (candidate) =>
+          !existingHeadlines.some(
+            (existing) => existing === candidate || calculateHeadlineSimilarity(existing, candidate) >= 0.72
+          )
+      );
 
-      if (new5Options.length > 0) {
-        const initial5 = headlineOptions.slice(0, 5);
-        const combined10 = [...initial5, ...new5Options].slice(0, 10);
+      const fittedNew = fitHeadlinesTo5TierRanges(
+        uniqueRawNew.length > 0 ? uniqueRawNew : rawNew,
+        articleSentences,
+        sourceTitle,
+        sourceLoc
+      ).slice(0, missingCount);
+
+      if (fittedNew.length > 0) {
+        const combined10 = [...existingHeadlines];
+        for (const h of fittedNew) {
+          if (combined10.length >= MAX_HEADLINES_PER_ARTICLE) break;
+          if (!combined10.includes(h)) {
+            combined10.push(h);
+          }
+        }
+        const reachedMax = combined10.length >= MAX_HEADLINES_PER_ARTICLE;
+        const firstNewIdx = Math.min(existingHeadlines.length, combined10.length - 1);
         setHeadlineOptions(combined10);
-        setSelectedHeadlineIndex(initial5.length); // Auto-select the first new option (index 5)
-        const topH = new5Options[0];
+        setSelectedHeadlineIndex(firstNewIdx);
+        const topH = combined10[firstNewIdx] || fittedNew[0];
         const updatedResult: AIAnalysisResult | null = result
           ? {
               ...result,
               headline: topH,
               formattedHeadline: topH,
               headlineOptions: combined10,
-              regenerationUsed: true,
-              regeneratedHeadlines: new5Options,
+              regenerationUsed: reachedMax,
+              regeneratedHeadlines: fittedNew,
               canonicalContext: (data && data.canonicalContext) || activeCtx,
             }
           : null;
@@ -1519,8 +1573,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           headline: topH,
           formattedHeadline: topH,
           headlineOptions: combined10,
-          regenerationUsed: true,
-          regeneratedHeadlines: new5Options,
+          regenerationUsed: reachedMax,
+          regeneratedHeadlines: fittedNew,
         });
 
         window.dispatchEvent(
@@ -1528,7 +1582,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             detail: {
               result: updatedResult,
               headlineOptions: combined10,
-              selectedHeadlineIndex: initial5.length,
+              selectedHeadlineIndex: firstNewIdx,
               canonicalContext: (data && data.canonicalContext) || activeCtx,
               activeGeneratedProvider: (data && data.actualProvider) || activeGeneratedProvider || aiProvider,
               error: null,
@@ -1542,7 +1596,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { coinBalance: data.remainingCoins } }));
         }
 
-        setRegenSuccessMsg(`✓ 5 नए संतुलित हेडलाइन विकल्प सफलतापूर्वक जोड़े गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
+        setRegenSuccessMsg(`✓ ${fittedNew.length} नए संतुलित हेडलाइन विकल्प सफलतापूर्वक जोड़े गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
         setTimeout(() => setRegenSuccessMsg(null), 4000);
       } else {
         setError('हेडलाइन्स के नए विकल्प तैयार नहीं हो सके। कृपया पुनः प्रयास करें।');
@@ -2060,34 +2114,34 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             const userRole = isAdminOrSuperAdmin ? 'admin' : (currentUser?.role || '').toLowerCase();
             const rawTier = isAdminOrSuperAdmin ? 'admin' : (userPlan || currentUser?.tier || 'basic').toLowerCase().trim();
             const regenCost = getRegenCoinCostForPlan(rawTier, userRole);
-            const isRegenUsed = Boolean(card.regenerationUsed || (result && (result as any).regenerationUsed));
+            const isMaxHeadlinesReached = headlineOptions.filter((h) => h && h.trim().length > 0).length >= MAX_HEADLINES_PER_ARTICLE;
 
             return (
               <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
                 <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
                   <Check className="w-4 h-4 text-green-400" />
                   <span>
-                    तैयार AI हेडलाइन्स ({headlineOptions.length} विकल्प उपलब्ध)
+                    तैयार AI हेडलाइन्स ({headlineOptions.length} / {MAX_HEADLINES_PER_ARTICLE} विकल्प उपलब्ध)
                   </span>
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={handleRegenerateHeadlines}
-                    disabled={isRegenerating || loading || isRegenUsed}
+                    disabled={isRegenerating || loading || isMaxHeadlinesReached}
                     className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
-                      isRegenUsed
+                      isMaxHeadlinesReached
                         ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-80'
                         : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black'
                     }`}
-                    title={isRegenUsed ? 'इस ड्राफ्ट पर अतिरिक्त हेडलाइन रीजेनरेशन का उपयोग हो चुका है' : `उसी खबर के लिए 5 नई हेडलाइन बनाएं (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
+                    title={isMaxHeadlinesReached ? 'अधिकतम 10 हेडलाइन्स उपलब्ध हैं' : `उसी खबर के लिए 5 नई हेडलाइन बनाएं (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
                     <span>
                       {isRegenerating
                         ? 'नई हेडलाइन्स बन रही हैं...'
-                        : isRegenUsed
-                        ? '✓ 5 अतिरिक्त हेडलाइन्स जोड़ी गईं'
+                        : isMaxHeadlinesReached
+                        ? '✓ अधिकतम 10 हेडलाइन्स तैयार'
                         : `🔄 पाँच नई हेडलाइन बनाएँ (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
                     </span>
                   </button>
@@ -2115,7 +2169,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Part 2 & Part 3: Clean Headline Options UI (Only विकल्प 1..5 / 6..10, max 120 chars, no category angle boxes) */}
+          {/* Part 2 & Part 3: Clean Headline Options UI (Only विकल्प 1..5 / 6..10, 5-tier 80-200 chars) */}
           {headlineOptions.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -2167,7 +2221,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                           <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                             <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
                             <span className="text-neutral-600">•</span>
-                            <span className={charCount > 120 ? 'text-amber-400' : 'text-emerald-400 font-bold'}>
+                            <span className={charCount > tierRule.max ? 'text-amber-400' : 'text-emerald-400 font-bold'}>
                               {charCount} अक्षर (लक्ष्य: {tierRule.min}-{tierRule.max})
                             </span>
                           </span>
@@ -2189,7 +2243,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
           )}
 
-          {/* Selected Headline Direct Edit Box with Live Dynamic Word and Character Counter (Max 120 chars) */}
+          {/* Selected Headline Direct Edit Box with Live Dynamic Word and Character Counter (Max 200 chars) */}
           <div className="space-y-1 bg-neutral-900/90 p-2.5 rounded-lg border border-neutral-800">
             <div className="flex items-center justify-between text-[11px] text-neutral-400 font-bold">
               <div className="flex items-center gap-1.5">
@@ -2203,13 +2257,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       .filter(Boolean).length} शब्द
                   </span>
                   <span className="text-neutral-600">|</span>
-                  <span>{countHeadlineVisibleCharacters(result.headline || '')} / 120 अक्षर</span>
+                  <span>{countHeadlineVisibleCharacters(result.headline || '')} / 200 अक्षर</span>
                 </span>
               </div>
               <VoiceInputButton
                 onTranscript={(transcript) => {
                   setResult((prev) => {
-                    const newText = (prev?.headline ? `${prev.headline} ${transcript}` : transcript).slice(0, 120);
+                    const newText = (prev?.headline ? `${prev.headline} ${transcript}` : transcript).slice(0, 200);
                     onChange({ headline: newText, formattedHeadline: newText });
                     return prev
                       ? {
@@ -2225,10 +2279,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
             </div>
             <textarea
               rows={2}
-              maxLength={120}
+              maxLength={200}
               value={result.headline}
               onChange={(e) => {
-                const val = e.target.value.slice(0, 120);
+                const val = e.target.value.slice(0, 200);
                 setResult((prev) => (prev ? { ...prev, headline: val, formattedHeadline: val } : null));
                 onChange({ headline: val, formattedHeadline: val });
               }}

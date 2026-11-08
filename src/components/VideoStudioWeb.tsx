@@ -842,18 +842,40 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     initialVideoUrl || initialVideo?.videoUrl || ''
   );
 
+  const parseVideoDurationSeconds = (rawDur: any, fallback = 60): number => {
+    if (typeof rawDur === 'number' && isFinite(rawDur) && rawDur > 1) return rawDur;
+    const str = String(rawDur || '').trim();
+    if (!str) return fallback;
+    if (str.includes(':')) {
+      const parts = str.split(':').map((p) => parseFloat(p.replace(/[^\d.]/g, '')) || 0);
+      if (parts.length === 2) {
+        const secs = parts[0] * 60 + parts[1];
+        return secs > 1 ? secs : fallback;
+      }
+      if (parts.length === 3) {
+        const secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return secs > 1 ? secs : fallback;
+      }
+    }
+    const num = parseFloat(str.replace(/[^\d.]/g, ''));
+    return isFinite(num) && num > 1 ? num : fallback;
+  };
+
   // Sync video source whenever an initial video or URL is passed
   useEffect(() => {
     const url = initialVideoUrl || initialVideo?.videoUrl || '';
     if (url) {
+      const parsedDur = parseVideoDurationSeconds(initialVideo?.duration, 60);
       setVideoUrl(url);
+      setTrimStart(0);
+      setTrimEnd(parsedDur);
       setClips([{
         id: `clip-${Date.now()}`,
         name: initialVideo?.title || 'वीडियो क्लिप',
         url,
-        duration: parseFloat(String(initialVideo?.duration || '60')) || 60,
+        duration: parsedDur,
         trimStart: 0,
-        trimEnd: parseFloat(String(initialVideo?.duration || '60')) || 60,
+        trimEnd: parsedDur,
       }]);
       if (initialHeadline || initialVideo?.title) {
         const h = initialHeadline || initialVideo?.title || '';
@@ -882,13 +904,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [clips, setClips] = useState<VideoClipItem[]>(() => {
     const defaultUrl = initialVideoUrl || initialVideo?.videoUrl || '';
     if (defaultUrl) {
+      const parsedDur = parseVideoDurationSeconds(initialVideo?.duration, 60);
       return [{
         id: 'clip-1',
         name: initialVideo?.title || 'वीडियो क्लिप 1',
         url: defaultUrl,
-        duration: parseFloat(String(initialVideo?.duration || '60')) || 60,
+        duration: parsedDur,
         trimStart: 0,
-        trimEnd: parseFloat(String(initialVideo?.duration || '60')) || 60,
+        trimEnd: parsedDur,
       }];
     }
     return [];
@@ -1525,10 +1548,24 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     };
 
     const handleLoadedMetadata = () => {
-      setDuration(v.duration || 60);
-      if (trimEnd === 60 || trimEnd > (v.duration || 60)) {
-        setTrimEnd(Math.floor(v.duration || 60));
+      const actualDur = (v.duration && isFinite(v.duration) && v.duration > 1)
+        ? v.duration
+        : parseVideoDurationSeconds(initialVideo?.duration, 60);
+      setDuration(actualDur);
+      if (trimEnd === 60 || trimEnd <= 1.5 || trimEnd > actualDur) {
+        setTrimEnd(Math.ceil(actualDur));
       }
+      setClips((prev) =>
+        prev.map((c, idx) =>
+          idx === activeClipIndex
+            ? {
+                ...c,
+                duration: actualDur,
+                trimEnd: (c.trimEnd === 60 || c.trimEnd <= 1.5 || c.trimEnd > actualDur) ? Math.ceil(actualDur) : c.trimEnd,
+              }
+            : c
+        )
+      );
     };
 
     v.addEventListener('timeupdate', handleTimeUpdate);
@@ -1895,13 +1932,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     }
   };
 
-  // Trigger welcome reward for 1st video export from Video Studio (500 coins)
+  // Trigger welcome reward for 1st video export from Video Studio (500 coins - strict one-time)
   const triggerVideoWelcomeReward = () => {
     try {
       const email = (currentUser?.email || profile?.email || '').toLowerCase().trim();
       if (!email) return;
 
-      // Call atomic first-time export reward endpoint
       fetch(getApiUrl('/api/rewards/first-time-export'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1913,18 +1949,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
             window.dispatchEvent(new CustomEvent('ai_news_wallet_updated'));
             setTimeout(() => {
-              alert('🎉 बधाई! वीडियो स्टूडियो से प्रथम वीडियो एक्सपोर्ट पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
+              showToast('🎉 बधाई! वीडियो स्टूडियो से प्रथम वीडियो एक्सपोर्ट पर आपको 500 वेलकम बोनस कॉइन्स मिले!');
             }, 600);
           }
         })
         .catch(() => {});
-
-      // Also call legacy wallet endpoint
-      fetch(getApiUrl('/api/wallet/claim-welcome-reward'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, rewardType: 'video' }),
-      }).catch(() => {});
     } catch {}
   };
 
@@ -2161,25 +2190,38 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         recorder.onerror = (e) => reject(e);
       });
 
-      const rawVideoDuration = (video.duration && !isNaN(video.duration) && video.duration > 0) ? video.duration : 60;
+      const fallbackDur = (duration && isFinite(duration) && duration > 1.5)
+        ? duration
+        : parseVideoDurationSeconds(initialVideo?.duration, 30);
+      const rawVideoDuration = (video.duration && isFinite(video.duration) && video.duration > 1.5)
+        ? video.duration
+        : fallbackDur;
       const startTime = isReadyToUseMode ? 0 : Math.max(0, trimStart || 0);
-      const rawEnd = isReadyToUseMode
-        ? rawVideoDuration
-        : (trimEnd > startTime ? trimEnd : rawVideoDuration);
-      const endTime = Math.max(startTime + 0.5, rawEnd);
-      const totalDuration = Math.max(0.5, endTime - startTime);
+      const validTrimEnd = (trimEnd && isFinite(trimEnd) && trimEnd > startTime + 1.5 && trimEnd <= rawVideoDuration)
+        ? trimEnd
+        : rawVideoDuration;
+      const rawEnd = isReadyToUseMode ? rawVideoDuration : validTrimEnd;
+      const endTime = Math.max(startTime + 2, rawEnd);
+      const totalDuration = Math.max(2, endTime - startTime);
 
-      // Seek to start position and wait for seeked event
+      // Seek to start position and wait until seek genuinely finishes before starting MediaRecorder
       video.pause();
-      await new Promise<void>((resolve) => {
-        const onSeek = () => {
-          video.removeEventListener('seeked', onSeek);
-          resolve();
-        };
-        video.addEventListener('seeked', onSeek);
-        video.currentTime = startTime;
-        setTimeout(resolve, 500); // 500ms safety timeout
-      });
+      if (Math.abs(video.currentTime - startTime) > 0.05 || video.ended) {
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const finishSeek = () => {
+            if (settled) return;
+            settled = true;
+            video.removeEventListener('seeked', finishSeek);
+            resolve();
+          };
+          video.addEventListener('seeked', finishSeek);
+          try {
+            video.currentTime = startTime;
+          } catch {}
+          setTimeout(finishSeek, 2000);
+        });
+      }
 
       const initialExpHeadline = (headlineScheduleMode === 'scheduled' && scheduledHeadlines.filter((h) => h.trim().length > 0).length > 1)
         ? (scheduledHeadlines.filter((h) => h.trim().length > 0)[0] || headline)
@@ -2222,6 +2264,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       // Attempt to play with audio; fallback to muted if browser autoplay blocks
       video.muted = false;
+      video.playbackRate = 1.0;
       try {
         await video.play();
       } catch {
@@ -2235,7 +2278,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       let maxReportedPct = 20;
       let hasEnded = false;
 
-      // Deterministic Loop with Active Nudging Watchdog
+      // Deterministic Loop with Safe Watchdog (exports full video duration)
       await new Promise<void>((resolve) => {
         let animId: number;
 
@@ -2280,9 +2323,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             socialHandle,
             mobileNumber,
             showMobileNumber,
-        showWebsite,
-        showWhatsapp,
-        cropRegion,
+            showWebsite,
+            showWhatsapp,
+            cropRegion,
             aspect,
             zoomScale,
             offsetY,
@@ -2298,30 +2341,38 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             showTicker,
           });
 
-          // Watchdog: detect stall and nudge video forward
           const now = Date.now();
-          if (video.currentTime !== lastVideoCurrentTime) {
+          const wallElapsed = Math.max(0, (now - exportStartWallTime) / 1000);
+
+          // Watchdog: detect genuine stall (>1200ms) and resume playback without premature end-jumping
+          if (Math.abs(video.currentTime - lastVideoCurrentTime) > 0.01) {
             lastVideoCurrentTime = video.currentTime;
             lastProgressWallTime = now;
-          } else if (now - lastProgressWallTime > 350) {
-            // Nudge forward so playback NEVER freezes
+          } else if (!video.seeking && now - lastProgressWallTime > 1200) {
             if (video.paused && !video.ended) {
               video.play().catch(() => {});
+            } else if (!video.ended) {
+              try {
+                video.currentTime = Math.min(endTime - 0.1, startTime + wallElapsed);
+              } catch {}
             }
-            video.currentTime = Math.min(endTime, video.currentTime + 0.1);
             lastProgressWallTime = now;
           }
 
           // Progress calculation: 20% to 95% (strictly monotonic)
-          const elapsed = Math.max(0, video.currentTime - startTime);
+          const elapsed = Math.max(0, Math.min(totalDuration, video.currentTime - startTime));
           const timePct = Math.min(95, Math.max(20, Math.round(20 + (elapsed / totalDuration) * 75)));
-          const wallElapsed = Math.max(0, (now - exportStartWallTime) / 1000);
           const wallPct = Math.min(95, Math.max(20, Math.round(20 + (wallElapsed / totalDuration) * 75)));
-          maxReportedPct = Math.max(maxReportedPct, Math.max(timePct, wallPct));
+          maxReportedPct = Math.max(maxReportedPct, Math.min(timePct, wallPct + 15), wallPct);
           setVideoExportProgress(maxReportedPct);
 
-          const isTimeComplete = video.currentTime >= (endTime - 0.08) || video.ended;
-          const isHardTimeout = (now - exportStartWallTime) >= ((totalDuration + 1.2) * 1000);
+          const minElapsedBeforeStop = Math.min(1.8, totalDuration * 0.6);
+          const isTimeComplete =
+            wallElapsed >= minElapsedBeforeStop &&
+            !video.seeking &&
+            ((video.currentTime >= endTime - 0.08 && video.currentTime <= endTime + 5) ||
+              (video.ended && wallElapsed >= totalDuration * 0.75));
+          const isHardTimeout = wallElapsed >= totalDuration + 2.0;
 
           if (isTimeComplete || isHardTimeout) {
             stopAndFinish();

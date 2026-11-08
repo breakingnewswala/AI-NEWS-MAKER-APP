@@ -9,12 +9,14 @@ interface AppBottomBarWebProps {
   currentTab: string;
   currentUser?: ReporterUser | null;
   onSelectTab: (tab: StandardAppTab) => void;
+  isGraphicStudioActive?: boolean;
 }
 
 export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
   currentTab,
   currentUser,
   onSelectTab,
+  isGraphicStudioActive = false,
 }) => {
   const isHome = currentTab === 'home';
   const isVideos = currentTab === 'videos';
@@ -22,6 +24,7 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
   const isNewsroom = currentTab === 'newsroom' || currentTab === 'drafts';
   const isControlPanel = currentTab === 'profile' || currentTab === 'export';
   const isAdmin = isUserAdmin(currentUser);
+  const isCompactStudioBtn = isStudio && isGraphicStudioActive;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/90 shadow-2xl xl:hidden">
@@ -48,18 +51,18 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
           <span className="text-[8.5px] sm:text-[9.5px] font-bold mt-1 tracking-tight truncate max-w-[64px]">वीडियो एंड रील्स</span>
         </button>
 
-        {/* Tab 3: Studio (स्टूडियो - Center Elevated Action Button) */}
-        <div className="flex-1 flex justify-center -mt-6">
+        {/* Tab 3: Studio (स्टूडियो - Center Elevated Action Button; slightly smaller and lower when Graphic Photo Studio editor is active) */}
+        <div className={`flex-1 flex justify-center ${isCompactStudioBtn ? '-mt-2' : '-mt-6'} transition-all`}>
           <button
             onClick={() => onSelectTab('studio')}
-            className={`w-14 h-14 rounded-full flex flex-col items-center justify-center shadow-xl transition-transform active:scale-95 cursor-pointer ${
+            className={`${isCompactStudioBtn ? 'w-11 h-11' : 'w-14 h-14'} rounded-full flex flex-col items-center justify-center shadow-xl transition-all active:scale-95 cursor-pointer ${
               isStudio
-                ? 'bg-gradient-to-tr from-red-600 via-amber-500 to-red-600 text-white ring-4 ring-amber-400/40 shadow-red-600/50 scale-110'
+                ? `bg-gradient-to-tr from-red-600 via-amber-500 to-red-600 text-white ${isCompactStudioBtn ? 'ring-2 ring-amber-400/50 scale-100' : 'ring-4 ring-amber-400/40 scale-110'} shadow-red-600/50`
                 : 'bg-gradient-to-tr from-red-700 to-amber-600 text-white hover:scale-105 shadow-red-700/40'
             }`}
           >
-            <Sparkles className="w-6 h-6 text-white animate-pulse" />
-            <span className="text-[8.5px] font-black uppercase tracking-tight text-amber-100">
+            <Sparkles className={`${isCompactStudioBtn ? 'w-4 h-4' : 'w-6 h-6'} text-white animate-pulse`} />
+            <span className={`${isCompactStudioBtn ? 'text-[7.5px]' : 'text-[8.5px]'} font-black uppercase tracking-tight text-amber-100`}>
               स्टूडियो
             </span>
           </button>

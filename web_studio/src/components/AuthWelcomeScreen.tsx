@@ -797,28 +797,48 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // An existing user is any user already registered on the server/DB with account details
+    const isInvalidChannelPlaceholder = (val?: string) => {
+      const clean = (val || '').trim();
+      if (!clean) return true;
+      const lower = clean.toLowerCase();
+      return (
+        lower === 'incomplete' ||
+        lower === 'pending' ||
+        lower === 'null' ||
+        lower === 'undefined' ||
+        clean === 'एआई न्यूज़ मेकर' ||
+        lower === 'ai news maker'
+      );
+    };
+
+    const isInvalidLogoPlaceholder = (url?: string) => {
+      const clean = (url || '').trim();
+      if (!clean) return true;
+      return clean === '/assets/ai_news_maker_logo.png' || clean.endsWith('/ai_news_maker_logo.png');
+    };
+
+    const checkStrictCompletedProfile = (prof: any) => {
+      if (!prof) return false;
+      const chName = (prof.channelNameHi || prof.channelName || '').trim();
+      const chLogo = (prof.channelLogoUrl || prof.channelLogoPngUrl || '').trim();
+      const mob = String(prof.whatsappNumber || prof.mobileNumber || prof.mobile || '').replace(/\D/g, '').slice(-10);
+      const isWaVerified =
+        prof.whatsappVerified === true ||
+        Boolean(prof.whatsappVerifiedAt) ||
+        prof.isProfileComplete === true;
+      return (
+        !isInvalidChannelPlaceholder(chName) &&
+        !isInvalidLogoPlaceholder(chLogo) &&
+        mob.length === 10 &&
+        isWaVerified
+      );
+    };
+
+    // An existing completed user is either an Admin/SuperAdmin, a known static verified profile, or a user who completed Channel Name + Logo + WhatsApp OTP verification
     const isExistingUser = Boolean(
       (isAdmin && !cleanEmail.includes('reporter')) ||
-      (serverProfile && (
-        serverProfile.isProfileComplete === true ||
-        serverProfile.channelNameHi ||
-        serverProfile.channelName ||
-        serverProfile.fullName ||
-        serverProfile.name ||
-        serverProfile.mobileNumber ||
-        serverProfile.mobile ||
-        serverProfile.channelLogoUrl ||
-        serverProfile.channelLogoPngUrl ||
-        serverProfile.username ||
-        serverProfile.userId ||
-        serverProfile.uid
-      )) ||
-      (parsedProfile && (
-        parsedProfile.channelNameHi ||
-        parsedProfile.channelLogoUrl ||
-        parsedProfile.fullName
-      )) ||
+      checkStrictCompletedProfile(serverProfile) ||
+      checkStrictCompletedProfile(parsedProfile) ||
       Boolean(knownProfile)
     );
 
