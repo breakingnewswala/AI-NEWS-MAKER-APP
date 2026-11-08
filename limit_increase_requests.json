@@ -1,5 +1,16 @@
 [
   {
+    "id": "req-limit-1794100402653-y1zg",
+    "email": "reporter_1794100402616@example.com",
+    "userId": "reporter_1794100402616@example.com",
+    "tier": "basic",
+    "currentLimit": 10,
+    "reason": "विशेष कवरेज हेतु अतिरिक्त लिमिट की आवश्यकता है",
+    "dateStr": "2026-11-08",
+    "requestedAt": 1794100402653,
+    "status": "pending"
+  },
+  {
     "id": "req-limit-1794080887993-8tci",
     "email": "reporter_1794080887954@example.com",
     "userId": "reporter_1794080887954@example.com",

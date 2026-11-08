@@ -2,79 +2,79 @@
   "graphic_004": {
     "id": "graphic_004",
     "docId": "graphic_004",
-    "customName": "Special Edition Frame",
+    "templateId": "graphic_004",
     "allowedPlans": [
       "VIP DESK"
     ],
-    "updatedAt": "2026-10-30T13:38:36.315Z",
-    "isActive": true,
-    "headlineArea": "2-Line Premium Gold Headline Area",
-    "templateId": "graphic_004",
-    "coinPrice": 150,
-    "locationArea": "top_left_box",
-    "logoArea": "top_right_box",
     "selectedTier": "VIP DESK",
+    "isActive": true,
+    "updatedAt": "2026-10-30T13:38:36.315Z",
+    "headlineArea": "2-Line Premium Gold Headline Area",
+    "coinPrice": 150,
     "version": "v1.0",
-    "category": "Special Frame"
+    "category": "Special Frame",
+    "customName": "Special Edition Frame",
+    "locationArea": "top_left_box",
+    "logoArea": "top_right_box"
   },
   "graphic_001": {
     "id": "graphic_001",
     "docId": "graphic_001",
-    "headlineArea": "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
-    "isActive": true,
+    "coinPrice": 0,
     "version": "v1.0",
+    "selectedTier": "BASIC",
+    "templateId": "graphic_001",
     "allowedPlans": [
       "BASIC",
       "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
-    "locationArea": "top_left_box",
+    "isActive": true,
     "logoArea": "top_right_box",
-    "coinPrice": 0,
     "customName": "Regular Clean News Frame",
-    "updatedAt": "2026-10-30T13:38:36.005Z",
-    "templateId": "graphic_001",
-    "selectedTier": "BASIC",
-    "category": "Regular Frame"
+    "category": "Regular Frame",
+    "locationArea": "top_left_box",
+    "headlineArea": "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
+    "updatedAt": "2026-10-30T13:38:36.005Z"
   },
   "graphic_003": {
     "id": "graphic_003",
     "docId": "graphic_003",
-    "version": "v1.0",
+    "category": "Super Breaking Frame",
+    "customName": "Super Breaking News Frame",
+    "logoArea": "top_right_box",
     "locationArea": "top_strip",
-    "coinPrice": 100,
     "headlineArea": "3-Line Red Ribbon Headline Area",
+    "coinPrice": 100,
     "updatedAt": "2026-10-30T13:38:36.209Z",
+    "isActive": true,
+    "selectedTier": "PRO",
     "templateId": "graphic_003",
     "allowedPlans": [
       "PRO",
       "VIP DESK"
     ],
-    "logoArea": "top_right_box",
-    "isActive": true,
-    "customName": "Super Breaking News Frame",
-    "selectedTier": "PRO",
-    "category": "Super Breaking Frame"
+    "version": "v1.0"
   },
   "graphic_002": {
     "id": "graphic_002",
     "docId": "graphic_002",
     "isActive": true,
-    "version": "v1.0",
     "locationArea": "top_left_box",
-    "logoArea": "top_right_box",
-    "selectedTier": "ADVANCED",
-    "updatedAt": 1794080887567,
     "templateId": "graphic_002",
-    "category": "Package Frame",
-    "coinPrice": 15,
+    "logoArea": "top_right_box",
     "customName": "Package Standard Frame",
+    "headlineArea": "2-Line Headline Area (डार्�� ब्लू स्ट्रिप)",
+    "updatedAt": 1794100402212,
+    "coinPrice": 15,
     "allowedPlans": [
       "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
-    "headlineArea": "2-Line Headline Area (डार्�� ब्लू स्ट्रिप)"
+    "version": "v1.0",
+    "selectedTier": "ADVANCED",
+    "category": "Package Frame"
   }
 }

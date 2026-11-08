@@ -9,6 +9,7 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  isResetting?: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -21,60 +22,85 @@ export class ErrorBoundary extends Component<Props, State> {
     this.state = {
       hasError: false,
       error: null,
+      isResetting: false,
     };
   }
 
   public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error, isResetting: false };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error in UI component:', error, errorInfo);
+    try {
+      const msg = (error && error.message) ? error.message : '';
+      if (
+        msg.indexOf('activeCategory') !== -1 ||
+        msg.indexOf('Loading chunk') !== -1 ||
+        msg.indexOf('dynamically imported module') !== -1 ||
+        msg.indexOf('Failed to fetch') !== -1
+      ) {
+        const lastAutoRecover = sessionStorage.getItem('__auto_boundary_recovered');
+        if (!lastAutoRecover) {
+          sessionStorage.setItem('__auto_boundary_recovered', 'true');
+          this.handleReset();
+        }
+      }
+    } catch {}
   }
 
-  private handleReset = () => {
+  private handleReset = async () => {
+    this.setState({ isResetting: true });
     try {
       if ('caches' in window) {
-        caches.keys().then((names) => {
-          names.forEach((name) => caches.delete(name));
-        });
+        try {
+          const names = await caches.keys();
+          await Promise.all(names.map((name) => caches.delete(name)));
+        } catch {}
       }
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((regs) => {
-          regs.forEach((reg) => reg.unregister());
-        });
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((reg) => reg.unregister()));
+        } catch {}
       }
       try {
         sessionStorage.clear();
+        localStorage.removeItem('__recovery_reload_attempted');
       } catch {}
     } catch {}
-    this.setState({ hasError: false, error: null });
-    window.location.href = window.location.origin + window.location.pathname + '?reload=' + Date.now();
+    this.setState({ hasError: false, error: null, isResetting: false });
+    const cleanUrl = window.location.origin + window.location.pathname + '?fresh=' + Date.now();
+    window.location.replace(cleanUrl);
   };
 
-  private handleStudioReset = () => {
+  private handleStudioReset = async () => {
+    this.setState({ isResetting: true });
     try {
       if ('caches' in window) {
-        caches.keys().then((names) => {
-          names.forEach((name) => caches.delete(name));
-        });
+        try {
+          const names = await caches.keys();
+          await Promise.all(names.map((name) => caches.delete(name)));
+        } catch {}
       }
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then((regs) => {
-          regs.forEach((reg) => reg.unregister());
-        });
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((reg) => reg.unregister()));
+        } catch {}
       }
       try {
         sessionStorage.clear();
         localStorage.removeItem('active_app_tab');
         localStorage.removeItem('news_studio_draft');
+        localStorage.removeItem('__recovery_reload_attempted');
       } catch {}
       if (typeof (window as any).setAppTab === 'function') {
         (window as any).setAppTab('home');
       }
     } catch {}
-    this.setState({ hasError: false, error: null });
-    window.location.href = window.location.origin + '/?fresh=' + Date.now();
+    this.setState({ hasError: false, error: null, isResetting: false });
+    window.location.replace(window.location.origin + '/?fresh=' + Date.now());
   };
 
   public render() {
@@ -93,16 +119,18 @@ export class ErrorBoundary extends Component<Props, State> {
           <div className="flex gap-2 pt-2">
             <button
               onClick={this.handleReset}
-              className="px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-neutral-950 text-xs font-black rounded-xl flex items-center gap-1.5 cursor-pointer shadow transition-all"
+              disabled={this.state.isResetting}
+              className="px-4 py-2 bg-yellow-400 hover:bg-yellow-300 disabled:opacity-60 text-neutral-950 text-xs font-black rounded-xl flex items-center gap-1.5 cursor-pointer shadow transition-all"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>पुनः प्रयास करें (Retry)</span>
+              <RotateCcw className={`w-3.5 h-3.5 ${this.state.isResetting ? 'animate-spin' : ''}`} />
+              <span>{this.state.isResetting ? 'रीसेट हो रहा है...' : 'पुनः प्रयास करें (Retry)'}</span>
             </button>
             <button
               onClick={this.handleStudioReset}
-              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold rounded-xl cursor-pointer transition-all"
+              disabled={this.state.isResetting}
+              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-60 text-neutral-200 text-xs font-bold rounded-xl cursor-pointer transition-all"
             >
-              स्टूडियो रीसेट करें
+              {this.state.isResetting ? 'सफाई जारी है...' : 'स्टूडियो रीसेट करें'}
             </button>
           </div>
         </div>

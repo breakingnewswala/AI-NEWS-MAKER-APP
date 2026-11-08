@@ -46,6 +46,14 @@
     </style>
     <script>
       (function() {
+        // Safe global fallbacks to ensure legacy/cached client bundles never throw ReferenceError
+        try {
+          window.activeCategory = window.activeCategory || 'all';
+          window.searchQuery = window.searchQuery || '';
+          window.categorySearchQuery = window.categorySearchQuery || '';
+          window.selectedCategory = window.selectedCategory || 'all';
+        } catch (e) {}
+
         try {
           document.documentElement.classList.add('dark');
           localStorage.setItem('theme', 'dark');
@@ -55,21 +63,23 @@
         window.addEventListener('error', function(e) {
           try {
             var msg = (e && e.message) ? e.message : '';
-            if (msg.indexOf('activeCategory') !== -1 || msg.indexOf('Loading chunk') !== -1 || msg.indexOf('dynamically imported module') !== -1) {
+            if (msg.indexOf('activeCategory') !== -1 || msg.indexOf('Loading chunk') !== -1 || msg.indexOf('dynamically imported module') !== -1 || msg.indexOf('Failed to fetch') !== -1) {
               if (!sessionStorage.getItem('__recovery_reload_attempted')) {
                 sessionStorage.setItem('__recovery_reload_attempted', '1');
-                if ('caches' in window) {
-                  caches.keys().then(function(keys) {
-                    keys.forEach(function(k) { caches.delete(k); });
+                var purge = function() {
+                  var p1 = ('caches' in window) ? caches.keys().then(function(keys) {
+                    return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+                  }) : Promise.resolve();
+                  var p2 = ('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    return Promise.all(regs.map(function(r) { return r.unregister(); }));
+                  }) : Promise.resolve();
+                  Promise.all([p1, p2]).then(function() {
+                    window.location.replace(window.location.origin + window.location.pathname + '?fresh=' + Date.now());
+                  }).catch(function() {
+                    window.location.replace(window.location.origin + window.location.pathname + '?fresh=' + Date.now());
                   });
-                }
-                if ('serviceWorker' in navigator) {
-                  navigator.serviceWorker.getRegistrations().then(function(regs) {
-                    regs.forEach(function(r) { r.unregister(); });
-                  });
-                }
-                var cleanUrl = window.location.origin + window.location.pathname + '?reload=' + Date.now();
-                window.location.replace(cleanUrl);
+                };
+                purge();
               }
             }
           } catch(err) {}
