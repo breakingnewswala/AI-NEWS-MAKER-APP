@@ -1736,6 +1736,56 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
+  // 5.5 WATERMARK (Part 4: Rotation, Position & Type Controls)
+  if (df.watermarkConfig?.enabled) {
+    ctx.save();
+    const wm = df.watermarkConfig;
+    const rotDeg = wm.rotation ?? 270;
+    const op = wm.opacity ?? 0.85;
+    ctx.globalAlpha = op;
+
+    let wx = width - 40;
+    let wy = height * 0.35;
+    if (wm.position === 'left_edge') {
+      wx = 40;
+      wy = height * 0.35;
+    } else if (wm.position === 'top') {
+      wx = width / 2;
+      wy = 60;
+    } else if (wm.position === 'bottom') {
+      wx = width / 2;
+      wy = height * 0.88;
+    } else if (wm.position === 'center') {
+      wx = width / 2;
+      wy = height / 2;
+    }
+
+    ctx.translate(wx, wy);
+    ctx.rotate((rotDeg * Math.PI) / 180);
+
+    if (wm.type === 'image' && wm.imageUrl) {
+      try {
+        const wmImg = await loadImage(wm.imageUrl);
+        const imgW = (wm.imageSize || 120) * (width / 1080);
+        const imgH = (imgW / wmImg.width) * wmImg.height;
+        ctx.drawImage(wmImg, -imgW / 2, -imgH / 2, imgW, imgH);
+      } catch (err) {
+        console.warn('Watermark image load error:', err);
+      }
+    } else {
+      const wmText = wm.customText || wm.label || 'AI GENERATED';
+      const wmFontSize = Math.round((wm.fontSize || 14) * (width / 1080) * 1.5);
+      ctx.font = `bold ${wmFontSize}px "Baloo 2", sans-serif`;
+      ctx.fillStyle = wm.textColor || '#FFFFFF';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 6;
+      ctx.fillText(wmText, 0, 0);
+    }
+    ctx.restore();
+  }
+
   // 6. PRIMARY HEADLINE TEXT (Respecting #000000 Black Text without white/dark shadow collision)
   const textSlot = df.textSlots[0] || { rect: { x: 7, y: 63, width: 86, height: 27 }, textColor: '#FFFFFF' };
   const hx = (textSlot.rect.x / 100) * width;

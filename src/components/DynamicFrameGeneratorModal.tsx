@@ -35,6 +35,8 @@ import {
   ShieldAlert,
   Film,
   Download,
+  MapPin,
+  FileText,
 } from 'lucide-react';
 import {
   DynamicFrameTemplate,
@@ -500,17 +502,20 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     }
   );
 
-  // Watermark (AI GENERATED / प्रतीकात्मक फोटो)
+  // Watermark (AI GENERATED / प्रतीकात्मक फोटो - Part 4 default: 270° Vertical Right Edge)
   const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(
     initialFrame?.watermarkConfig || {
       enabled: false,
+      type: 'text',
       label: 'AI GENERATED',
-      rect: { x: 72, y: 56, width: 25, height: 4 },
-      fontSize: 16,
+      customText: 'AI GENERATED',
+      position: 'right_edge',
+      rect: { x: 92, y: 35, width: 6, height: 25 },
+      fontSize: 14,
       textColor: '#FFFFFF',
       bgColor: 'rgba(0,0,0,0.6)',
       opacity: 0.85,
-      rotation: 0,
+      rotation: 270,
       align: 'center',
       watermarkStyle: 'badge',
     }
@@ -1314,7 +1319,6 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       version: finalVersion,
       headerConfig: {
         ...headerConfig,
-        locationBadgeMode: manualCalloutAssetUrl ? 'static_image' : headerConfig.locationBadgeMode,
         manualLocationAsset: videoLocationBadgeUrl || headerConfig.manualLocationAsset,
       },
       footerConfig: {
@@ -1328,9 +1332,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         idx === 0
           ? {
               ...ts,
-              fontFamily: typographyFontFamily,
-              fontSize: typographyFontSize,
-              fontWeight: typographyFontWeight,
+              fontFamily: typographyFontFamily || ts.fontFamily,
+              fontSize: typographyFontSize || ts.fontSize,
+              fontWeight: typographyFontWeight || ts.fontWeight,
+              textColor: ts.textColor || '#FFFFFF',
               backgroundColor: ts.backgroundColor === '#B91C1C' ? 'transparent' : ts.backgroundColor || 'transparent',
             }
           : ts
@@ -1342,6 +1347,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         manualCalloutAsset: manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset,
       },
       calloutAssetUrl: manualCalloutAssetUrl,
+      locationBadgeAssetId: headerConfig.locationBadgeAssetId,
+      calloutAssetId: fullStoryCalloutConfig.calloutAssetId,
       poweredByConfig,
       safeZoneConfig,
       layers,
@@ -1824,21 +1831,20 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           {/* STAGE 3: RIBBON, HEADER & FOOTER ELEMENTS */}
           {currentStage === 'ribbon_header_footer' && (
             <div className="space-y-6">
-              {/* Channel Logo & Location Badge */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Channel Logo */}
-                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white">चैनल लोगो (Channel Logo)</span>
-                    <input
-                      type="checkbox"
-                      checked={headerConfig.showLogo}
-                      onChange={(e) => setHeaderConfig({ ...headerConfig, showLogo: e.target.checked })}
-                      className="w-4 h-4 accent-amber-500 rounded"
-                    />
-                  </div>
-                  {headerConfig.showLogo && (
-                    <div className="space-y-2 pt-1">
+              {/* Channel Logo */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white">चैनल लोगो (Channel Logo)</span>
+                  <input
+                    type="checkbox"
+                    checked={headerConfig.showLogo}
+                    onChange={(e) => setHeaderConfig({ ...headerConfig, showLogo: e.target.checked })}
+                    className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                  />
+                </div>
+                {headerConfig.showLogo && (
+                  <div className="space-y-2 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <div className="flex justify-between text-[10px] text-slate-400 mb-1">
                           <span>लोगो स्केल: {headerConfig.logoScalePct ?? 100}%</span>
@@ -1865,12 +1871,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           className="w-full accent-amber-500"
                         />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400">अलाइनमेंट:</span>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block mb-1">अलाइनमेंट:</span>
                         <select
                           value={headerConfig.logoAlign || 'left'}
                           onChange={(e) => setHeaderConfig({ ...headerConfig, logoAlign: e.target.value as any })}
-                          className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
                         >
                           <option value="left">Left</option>
                           <option value="center">Center</option>
@@ -1878,111 +1884,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         </select>
                       </div>
                     </div>
-                  )}
-                </div>
-
-                {/* Location Badge */}
-                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white">लोकेशन बैज (Location Badge)</span>
-                    <input
-                      type="checkbox"
-                      checked={headerConfig.showLocation}
-                      onChange={(e) => setHeaderConfig({ ...headerConfig, showLocation: e.target.checked })}
-                      className="w-4 h-4 accent-amber-500 rounded"
-                    />
                   </div>
-                  {headerConfig.showLocation && (
-                    <div className="space-y-2 pt-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400">मोड:</span>
-                        <select
-                          value={headerConfig.locationBadgeMode || 'dynamic_overlay'}
-                          onChange={(e) => setHeaderConfig({ ...headerConfig, locationBadgeMode: e.target.value as any })}
-                          className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
-                        >
-                          <option value="dynamic_overlay">Mode A: बैज स्किन + डायनामिक टेक्स्ट</option>
-                          <option value="static_image">Mode B: पूर्ण स्टैटिक बैज इमेज</option>
-                        </select>
-                      </div>
-
-                      {headerConfig.locationBadgeMode === 'static_image' ? (
-                        <div className="pt-1 space-y-2">
-                          <label className="text-[10px] text-slate-400 block mb-1">
-                            लोकेशन बैज लाइब्रेरी से चुनें (Location Badge Library)
-                          </label>
-                          {locationBadgeLibrary.length > 0 ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto p-1 bg-slate-900/60 rounded border border-slate-800">
-                              {locationBadgeLibrary.map((item) => {
-                                const isSelected = headerConfig.locationBadgeAssetId === item.id || headerConfig.manualLocationAsset === item.assetUrl;
-                                return (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setHeaderConfig({
-                                        ...headerConfig,
-                                        locationBadgeAssetId: item.id,
-                                        manualLocationAsset: item.assetUrl,
-                                        textRegion: item.textRegion,
-                                        typographyConfig: item.typographyConfig,
-                                        locationBadgeMode: 'static_image',
-                                      });
-                                    }}
-                                    className={`p-1.5 rounded border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
-                                      isSelected
-                                        ? 'border-amber-400 bg-amber-500/20'
-                                        : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-                                    }`}
-                                  >
-                                    <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
-                                      <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
-                                    </div>
-                                    <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
-                                      {item.name}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
-                              अभी कोई Location Badge उपलब्ध नहीं है। नया PNG अपलोड करें।
-                            </div>
-                          )}
-                          <div className="pt-1">
-                            <label className="text-[10px] text-slate-400 block mb-1">अथवा नया लोकेशन बैज PNG अपलोड करें</label>
-                            <input type="file" accept="image/*" onChange={handleManualLocationUpload} className="text-[11px] text-slate-400" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-slate-400 block mb-0.5">स्टाइल</label>
-                            <select
-                              value={headerConfig.locationStyle || 'pill'}
-                              onChange={(e) => setHeaderConfig({ ...headerConfig, locationStyle: e.target.value as any })}
-                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
-                            >
-                              <option value="pill">Pill (कैप्सूल)</option>
-                              <option value="box">Box (आयताकार)</option>
-                              <option value="strip">Strip (पट्टी)</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-slate-400 block mb-0.5">बैकग्राउंड रंग</label>
-                            <input
-                              type="color"
-                              value={headerConfig.locationBgColor || '#DC2626'}
-                              onChange={(e) => setHeaderConfig({ ...headerConfig, locationBgColor: e.target.value })}
-                              className="w-full h-7 bg-slate-900 rounded cursor-pointer"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
 
               {/* Date Stamp & AI Watermark */}
@@ -1998,7 +1901,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       type="checkbox"
                       checked={headerConfig.showDate}
                       onChange={(e) => setHeaderConfig({ ...headerConfig, showDate: e.target.checked })}
-                      className="w-4 h-4 accent-amber-500 rounded"
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
                     />
                   </div>
                   {headerConfig.showDate && (
@@ -2025,8 +1928,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             onChange={(e) => setHeaderConfig({ ...headerConfig, dateRotation: parseInt(e.target.value) })}
                             className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
                           >
+                            <option value={270}>270° (वर्टिकल लेफ्ट एज - डिफ़ॉल्ट)</option>
                             <option value={0}>0° (हॉरिज़ॉन्टल)</option>
-                            <option value={270}>270° (वर्टिकल लेफ्ट एज)</option>
                             <option value={90}>90° (वर्टिकल राइट एज)</option>
                           </select>
                         </div>
@@ -2035,72 +1938,186 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   )}
                 </div>
 
-                {/* AI Watermark */}
+                {/* AI Watermark (Part 4: Rotation, Position & Type Controls) */}
                 <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-white">वाटरमार्क (AI Watermark)</span>
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-sky-400" />
+                      वाटरमार्क (AI Watermark)
+                    </span>
                     <input
                       type="checkbox"
                       checked={watermarkConfig.enabled}
                       onChange={(e) => setWatermarkConfig({ ...watermarkConfig, enabled: e.target.checked })}
-                      className="w-4 h-4 accent-amber-500 rounded"
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
                     />
                   </div>
                   {watermarkConfig.enabled && (
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">लेबल</label>
-                        <select
-                          value={watermarkConfig.label}
-                          onChange={(e) => setWatermarkConfig({ ...watermarkConfig, label: e.target.value as any })}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
-                        >
-                          <option value="AI GENERATED">AI GENERATED</option>
-                          <option value="प्रतीकात्मक फोटो">प्रतीकात्मक फोटो</option>
-                        </select>
+                    <div className="space-y-2 pt-1">
+                      {/* Watermark Type & Position */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">प्रकार (Type)</label>
+                          <select
+                            value={watermarkConfig.type || 'text'}
+                            onChange={(e) => setWatermarkConfig({ ...watermarkConfig, type: e.target.value as any })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                          >
+                            <option value="text">टेक्स्ट वाटरमार्क (Text)</option>
+                            <option value="image">इमेज वाटरमार्क (Image)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">स्थिति (Position)</label>
+                          <select
+                            value={watermarkConfig.position || 'right_edge'}
+                            onChange={(e) => setWatermarkConfig({ ...watermarkConfig, position: e.target.value as any })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                          >
+                            <option value="right_edge">Right Edge (डिफ़ॉल्ट)</option>
+                            <option value="left_edge">Left Edge</option>
+                            <option value="top">Top</option>
+                            <option value="bottom">Bottom</option>
+                            <option value="center">Centre</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">रोटेशन</label>
-                        <select
-                          value={watermarkConfig.rotation ?? 0}
-                          onChange={(e) => setWatermarkConfig({ ...watermarkConfig, rotation: parseInt(e.target.value) })}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
-                        >
-                          <option value={0}>0°</option>
-                          <option value={90}>90°</option>
-                          <option value={270}>270°</option>
-                        </select>
+
+                      {/* Rotation (0, 90, 180, 270) & Opacity */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">रोटेशन (Rotation)</label>
+                          <select
+                            value={watermarkConfig.rotation ?? 270}
+                            onChange={(e) => setWatermarkConfig({ ...watermarkConfig, rotation: parseInt(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                          >
+                            <option value={270}>270° (ऊर्ध्वाधर - डिफ़ॉल्ट)</option>
+                            <option value={0}>0° (सामान्य / हॉरिज़ॉन्टल)</option>
+                            <option value={90}>90° (दायाँ झुकाव)</option>
+                            <option value={180}>180° (उल्टा)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">पारदर्शिता: {Math.round((watermarkConfig.opacity ?? 0.85) * 100)}%</label>
+                          <input
+                            type="range"
+                            min={20}
+                            max={100}
+                            value={Math.round((watermarkConfig.opacity ?? 0.85) * 100)}
+                            onChange={(e) => setWatermarkConfig({ ...watermarkConfig, opacity: parseInt(e.target.value) / 100 })}
+                            className="w-full accent-amber-500"
+                          />
+                        </div>
                       </div>
+
+                      {/* Text vs Image Controls */}
+                      {watermarkConfig.type === 'image' ? (
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-slate-400 block">इमेज URL / पाथ</label>
+                          <input
+                            type="text"
+                            value={watermarkConfig.imageUrl || ''}
+                            onChange={(e) => setWatermarkConfig({ ...watermarkConfig, imageUrl: e.target.value })}
+                            placeholder="/assets/ai_watermark.png या https://..."
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                          />
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-0.5">लेबल / टेक्स्ट</label>
+                            <input
+                              type="text"
+                              value={watermarkConfig.customText || watermarkConfig.label || 'AI GENERATED'}
+                              onChange={(e) => setWatermarkConfig({ ...watermarkConfig, customText: e.target.value, label: e.target.value as any })}
+                              placeholder="AI GENERATED"
+                              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-400 block mb-0.5">रंग (Color)</label>
+                            <input
+                              type="color"
+                              value={watermarkConfig.textColor || '#FFFFFF'}
+                              onChange={(e) => setWatermarkConfig({ ...watermarkConfig, textColor: e.target.value })}
+                              className="w-full h-7 bg-slate-900 rounded cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Full Story Callout & Ribbon */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Full Story Callout */}
-                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white">पूरी खबर डिस्क्रिप्शन कॉलआउट</span>
-                    <input
-                      type="checkbox"
-                      checked={fullStoryCalloutConfig.enabled}
-                      onChange={(e) => setFullStoryCalloutConfig({ ...fullStoryCalloutConfig, enabled: e.target.checked })}
-                      className="w-4 h-4 accent-amber-500 rounded"
-                    />
+              {/* Breaking News Ribbon (Placed ABOVE Callout sections per Part 3) */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    ब्रेकिंग न्यूज़ रिबन (Breaking News Ribbon)
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={ribbonConfig.enabled}
+                    onChange={(e) => setRibbonConfig({ ...ribbonConfig, enabled: e.target.checked })}
+                    className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                  />
+                </div>
+                {ribbonConfig.enabled && (
+                  <div className="space-y-2 pt-1">
+                    <select
+                      value={ribbonConfig.ribbonId}
+                      onChange={(e) => {
+                        const r = BUILTIN_RIBBONS.find((b) => b.id === e.target.value);
+                        setRibbonConfig({
+                          ...ribbonConfig,
+                          ribbonId: e.target.value,
+                          customRibbonUrl: r?.svgPath || ribbonConfig.customRibbonUrl,
+                        });
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-white text-[11px]"
+                    >
+                      {BUILTIN_RIBBONS.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  {fullStoryCalloutConfig.enabled && (
-                    <div className="space-y-2 pt-1">
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">कॉलआउट टेक्स्ट</label>
-                        <input
-                          type="text"
-                          value={fullStoryCalloutConfig.text}
-                          onChange={(e) => setFullStoryCalloutConfig({ ...fullStoryCalloutConfig, text: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
+                )}
+              </div>
+
+              {/* Side-by-Side Equal Width Callouts: LEFT = Story Callout, RIGHT = Location Badge (Part 3) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                {/* LEFT: Full Story Callout */}
+                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-amber-400" />
+                        पूरी खबर विवरण कॉलआउट (Story Callout)
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={fullStoryCalloutConfig.enabled}
+                        onChange={(e) => setFullStoryCalloutConfig({ ...fullStoryCalloutConfig, enabled: e.target.checked })}
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                      />
+                    </div>
+                    {fullStoryCalloutConfig.enabled && (
+                      <div className="space-y-2.5 pt-1">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">कॉलआउट टेक्स्ट</label>
+                          <input
+                            type="text"
+                            value={fullStoryCalloutConfig.text}
+                            onChange={(e) => setFullStoryCalloutConfig({ ...fullStoryCalloutConfig, text: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-[11px]"
+                          />
+                        </div>
                         <div>
                           <label className="text-[10px] text-slate-400 block mb-0.5">विजिबिलिटी पॉलिसी</label>
                           <select
@@ -2113,102 +2130,168 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             <option value="disabled">Disabled (कभी न दिखे)</option>
                           </select>
                         </div>
-                        <div>
-                          <label className="text-[10px] text-slate-400 block mb-0.5">अथवा नया कॉलआउट अपलोड</label>
-                          <input type="file" accept="image/*" onChange={handleManualCalloutUpload} className="text-[10px] text-slate-400" />
+
+                        {/* Approved Callout PNG Library Picker (No Manual File Upload per Part 3) */}
+                        <div className="space-y-1 pt-1">
+                          <label className="text-[10px] font-bold text-slate-300 block">
+                            केंद्रीय स्वीकृत कॉलआउट लाइब्रेरी से चुनें:
+                          </label>
+                          {calloutLibrary.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1.5 bg-slate-900/60 rounded border border-slate-800">
+                              {calloutLibrary.map((item) => {
+                                const isSelected = manualCalloutAssetUrl === item.assetUrl || fullStoryCalloutConfig.manualCalloutAsset === item.assetUrl || fullStoryCalloutConfig.calloutAssetId === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setManualCalloutAssetUrl(item.assetUrl);
+                                      setFullStoryCalloutConfig({
+                                        ...fullStoryCalloutConfig,
+                                        calloutAssetId: item.id,
+                                        manualCalloutAsset: item.assetUrl,
+                                        calloutAssetMode: 'static_image',
+                                      });
+                                    }}
+                                    className={`p-1.5 rounded-lg border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
+                                      isSelected
+                                        ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
+                                        : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                                    }`}
+                                  >
+                                    <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
+                                      <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
+                                      {item.name}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-3 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
+                              इस श्रेणी में अभी कोई स्वीकृत डिज़ाइन उपलब्ध नहीं है।
+                            </div>
+                          )}
                         </div>
                       </div>
-
-                      {/* Story Callout PNG Library Picker (Part 7) */}
-                      <div className="space-y-1 pt-1">
-                        <label className="text-[10px] text-slate-400 block">
-                          कॉलआउट लाइब्रेरी से चुनें (Callout PNG Library)
-                        </label>
-                        {calloutLibrary.length > 0 ? (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-36 overflow-y-auto p-1 bg-slate-900/60 rounded border border-slate-800">
-                            {calloutLibrary.map((item) => {
-                              const isSelected = manualCalloutAssetUrl === item.assetUrl || fullStoryCalloutConfig.manualCalloutAsset === item.assetUrl;
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setManualCalloutAssetUrl(item.assetUrl);
-                                    setFullStoryCalloutConfig({
-                                      ...fullStoryCalloutConfig,
-                                      calloutAssetId: item.id,
-                                      manualCalloutAsset: item.assetUrl,
-                                      calloutAssetMode: 'static_image',
-                                    });
-                                  }}
-                                  className={`p-1.5 rounded border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
-                                    isSelected
-                                      ? 'border-amber-400 bg-amber-500/20'
-                                      : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-                                  }`}
-                                >
-                                  <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
-                                    <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
-                                  </div>
-                                  <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
-                                    {item.name}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
-                            अभी कोई Story Callout उपलब्ध नहीं है। नया PNG अपलोड करें।
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Plan-Based Story Callout Controls (Part 8) */}
-                      <div className="pt-2 border-t border-slate-800 space-y-2">
-                        <span className="text-[11px] font-black text-amber-400 block">
-                          प्लान आधारित कॉलआउट अनुमतियाँ (Subscription Plan Rules)
-                        </span>
-                        <div className="p-2.5 bg-slate-900/80 rounded border border-slate-800 text-[10px] text-slate-300 space-y-1.5">
-                          <p><strong className="text-white">Basic & Advanced:</strong> केवल एडमिन द्वारा चुना गया डिफ़ॉल्ट कॉलआउट दिखेगा (फिक्स, लॉक)।</p>
-                          <p><strong className="text-white">Pro & VIP Desk:</strong> डिफ़ॉल्ट के अलावा 2–3 वैकल्पिक कॉलआउट डिज़ाइनों का चयन उपलब्ध रहेगा।</p>
-                        </div>
-                      </div>
+                    )}
+                  </div>
+                  {fullStoryCalloutConfig.enabled && (
+                    <div className="pt-2 border-t border-slate-800/80 text-[10px] text-slate-400">
+                      <span className="text-amber-400 font-bold block mb-0.5">प्लान नियम:</span>
+                      Basic/Adv: फिक्स डिफ़ॉल्ट | Pro/VIP: वैकल्पिक चयन उपलब्ध
                     </div>
                   )}
                 </div>
 
-                {/* Ribbon */}
-                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white">ब्रेकिंग न्यूज़ रिबन (Ribbon)</span>
-                    <input
-                      type="checkbox"
-                      checked={ribbonConfig.enabled}
-                      onChange={(e) => setRibbonConfig({ ...ribbonConfig, enabled: e.target.checked })}
-                      className="w-4 h-4 accent-amber-500 rounded"
-                    />
+                {/* RIGHT: Location Badge */}
+                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-rose-400" />
+                        लोकेशन बैज कॉलआउट (Location Badge Callout)
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={headerConfig.showLocation}
+                        onChange={(e) => setHeaderConfig({ ...headerConfig, showLocation: e.target.checked })}
+                        className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                      />
+                    </div>
+                    {headerConfig.showLocation && (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-400">मोड:</span>
+                          <select
+                            value={headerConfig.locationBadgeMode || 'dynamic_overlay'}
+                            onChange={(e) => setHeaderConfig({ ...headerConfig, locationBadgeMode: e.target.value as any })}
+                            className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px] w-full"
+                          >
+                            <option value="dynamic_overlay">Mode A: बैज स्किन + डायनामिक टेक्स्ट</option>
+                            <option value="static_image">Mode B: पूर्ण स्टैटिक बैज इमेज</option>
+                          </select>
+                        </div>
+
+                        {headerConfig.locationBadgeMode === 'static_image' ? (
+                          <div className="space-y-1 pt-1">
+                            <label className="text-[10px] font-bold text-slate-300 block">
+                              केंद्रीय स्वीकृत लोकेशन बैज लाइब्रेरी से चुनें:
+                            </label>
+                            {locationBadgeLibrary.length > 0 ? (
+                              <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1.5 bg-slate-900/60 rounded border border-slate-800">
+                                {locationBadgeLibrary.map((item) => {
+                                  const isSelected = headerConfig.locationBadgeAssetId === item.id || headerConfig.manualLocationAsset === item.assetUrl;
+                                  return (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setHeaderConfig({
+                                          ...headerConfig,
+                                          locationBadgeAssetId: item.id,
+                                          manualLocationAsset: item.assetUrl,
+                                          textRegion: item.textRegion,
+                                          typographyConfig: item.typographyConfig,
+                                          locationBadgeMode: 'static_image',
+                                        });
+                                      }}
+                                      className={`p-1.5 rounded-lg border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
+                                        isSelected
+                                          ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
+                                          : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                                      }`}
+                                    >
+                                      <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
+                                        <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                                      </div>
+                                      <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
+                                        {item.name}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="p-3 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
+                                इस श्रेणी में अभी कोई स्वीकृत डिज़ाइन उपलब्ध नहीं है।
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">स्टाइल</label>
+                              <select
+                                value={headerConfig.locationStyle || 'pill'}
+                                onChange={(e) => setHeaderConfig({ ...headerConfig, locationStyle: e.target.value as any })}
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
+                              >
+                                <option value="pill">Pill (कैप्सूल)</option>
+                                <option value="box">Box (आयताकार)</option>
+                                <option value="strip">Strip (पट्टी)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-slate-400 block mb-0.5">बैकग्राउंड रंग</label>
+                              <input
+                                type="color"
+                                value={headerConfig.locationBgColor || '#DC2626'}
+                                onChange={(e) => setHeaderConfig({ ...headerConfig, locationBgColor: e.target.value })}
+                                className="w-full h-7 bg-slate-900 rounded cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {ribbonConfig.enabled && (
-                    <div className="space-y-2 pt-1">
-                      <select
-                        value={ribbonConfig.ribbonId}
-                        onChange={(e) => {
-                          const r = BUILTIN_RIBBONS.find((b) => b.id === e.target.value);
-                          setRibbonConfig({
-                            ...ribbonConfig,
-                            ribbonId: e.target.value,
-                            customRibbonUrl: r?.svgPath || ribbonConfig.customRibbonUrl,
-                          });
-                        }}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-white text-[11px]"
-                      >
-                        {BUILTIN_RIBBONS.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
+                  {headerConfig.showLocation && (
+                    <div className="pt-2 border-t border-slate-800/80 text-[10px] text-slate-400">
+                      <span className="text-rose-400 font-bold block mb-0.5">स्थान:</span>
+                      सैंपल टेस्ट में भोपाल (📍 भोपाल) दिखेगा, लाइव में यूज़र का शहर
                     </div>
                   )}
                 </div>
@@ -3429,50 +3512,117 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       })
                     )}
 
-                    {/* Logo */}
+                    {/* Original PNG Frame Overlay (Part 6: Alpha transparency & curves preserved) */}
+                    {(sampleImage || initialFrame?.sampleReferenceUrl) && (
+                      <img
+                        src={sampleImage || initialFrame?.sampleReferenceUrl}
+                        alt="Frame Overlay"
+                        className="absolute inset-0 w-full h-full object-contain pointer-events-none z-12"
+                      />
+                    )}
+
+                    {/* Logo (Part 7: Master Admin Sample Identity) */}
                     {headerConfig.showLogo && (
                       <div
-                        className="absolute bg-slate-900/90 border border-white/20 rounded px-1.5 py-0.5 text-[8px] font-bold text-white z-10"
+                        className="absolute z-16 flex items-center justify-center p-0.5 rounded bg-slate-900/80 border border-white/20 shadow"
                         style={{
                           left: `${headerConfig.logoRect?.x ?? 5}%`,
                           top: `${headerConfig.logoRect?.y ?? 3.5}%`,
+                          maxWidth: '22%',
+                          maxHeight: '9%',
                         }}
                       >
-                        {currentUser?.channelName || 'न्यूज़ लोगो'}
+                        <img
+                          src="/assets/ai_news_maker_logo.png"
+                          alt="Admin Logo"
+                          className="max-h-5 max-w-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/logo.png';
+                          }}
+                        />
                       </div>
                     )}
 
-                    {/* Location Badge */}
+                    {/* Location Badge (Part 7: Bhopal Location) */}
                     {headerConfig.showLocation && (
                       <div
-                        className="absolute bg-red-600 rounded-full px-2 py-0.5 text-[8px] font-bold text-white z-10"
+                        className="absolute z-16 flex items-center justify-center"
                         style={{
                           left: `${headerConfig.locationRect?.x ?? 5}%`,
                           top: `${headerConfig.locationRect?.y ?? 13.5}%`,
                         }}
                       >
-                        📍 भोपाल
+                        {headerConfig.locationBadgeMode === 'static_image' && (headerConfig.manualLocationAsset || locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url) ? (
+                          <img
+                            src={headerConfig.manualLocationAsset || locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url}
+                            alt="Location Badge"
+                            className="max-h-6 object-contain"
+                          />
+                        ) : (
+                          <div
+                            className="rounded-full px-2 py-0.5 text-[8px] font-bold text-white shadow flex items-center gap-1"
+                            style={{
+                              backgroundColor: headerConfig.locationBgColor || '#DC2626',
+                            }}
+                          >
+                            <span>📍 भोपाल</span>
+                          </div>
+                        )}
                       </div>
                     )}
 
                     {/* Date Stamp */}
                     {headerConfig.showDate && (
                       <div
-                        className="absolute text-[8px] font-bold text-slate-300 z-10"
+                        className="absolute text-[8px] font-bold text-slate-300 z-16"
                         style={{
                           left: `${headerConfig.dateRect?.x ?? 2}%`,
                           top: `${headerConfig.dateRect?.y ?? 35}%`,
-                          transform: `rotate(${headerConfig.dateRotation || 0}deg)`,
+                          transform: `rotate(${headerConfig.dateRotation ?? 270}deg)`,
                         }}
                       >
                         5 नवंबर 2026
                       </div>
                     )}
 
-                    {/* Ribbon */}
+                    {/* AI Watermark (Part 4: Rotation, Position & Type) */}
+                    {watermarkConfig.enabled && (
+                      <div
+                        className="absolute z-20 pointer-events-none flex items-center justify-center"
+                        style={{
+                          ...(watermarkConfig.position === 'left_edge'
+                            ? { left: '2%', top: '35%' }
+                            : watermarkConfig.position === 'top'
+                            ? { top: '3%', left: '50%', transform: 'translateX(-50%)' }
+                            : watermarkConfig.position === 'bottom'
+                            ? { bottom: '10%', left: '50%', transform: 'translateX(-50%)' }
+                            : watermarkConfig.position === 'center'
+                            ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+                            : { right: '2%', top: '35%' }), // Default right_edge
+                          transform: `rotate(${watermarkConfig.rotation ?? 270}deg)`,
+                          opacity: watermarkConfig.opacity ?? 0.85,
+                        }}
+                      >
+                        {watermarkConfig.type === 'image' && watermarkConfig.imageUrl ? (
+                          <img src={watermarkConfig.imageUrl} alt="Watermark" className="max-h-8 max-w-20 object-contain" />
+                        ) : (
+                          <span
+                            className="text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap"
+                            style={{
+                              color: watermarkConfig.textColor || '#FFFFFF',
+                              backgroundColor: watermarkConfig.bgColor || 'rgba(0,0,0,0.6)',
+                            }}
+                          >
+                            {watermarkConfig.customText || watermarkConfig.label || 'AI GENERATED'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Breaking News Ribbon */}
                     {ribbonConfig.enabled && ribbonConfig.customRibbonUrl && (
                       <div
-                        className="absolute z-20"
+                        className="absolute z-14"
                         style={{
                           left: `${ribbonConfig.rect?.x ?? 15}%`,
                           top: `${ribbonConfig.rect?.y ?? 60}%`,
@@ -3483,23 +3633,60 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Headline */}
+                    {/* Full Story Callout */}
+                    {fullStoryCalloutConfig.enabled && (
+                      <div
+                        className="absolute z-16 flex items-center justify-center pointer-events-none"
+                        style={{
+                          left: `${fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                          top: `${fullStoryCalloutConfig.rect?.y ?? 88}%`,
+                          width: `${fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                          height: `${fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                        }}
+                      >
+                        {fullStoryCalloutConfig.calloutAssetMode === 'static_image' && (fullStoryCalloutConfig.manualCalloutAsset || manualCalloutAssetUrl) ? (
+                          <img
+                            src={fullStoryCalloutConfig.manualCalloutAsset || manualCalloutAssetUrl}
+                            alt="Story Callout"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <div
+                            className="text-[8px] font-black px-2 py-0.5 rounded shadow flex items-center gap-1"
+                            style={{
+                              color: fullStoryCalloutConfig.textColor || '#FFFFFF',
+                              backgroundColor: fullStoryCalloutConfig.bgColor || '#DC2626',
+                              border: `${fullStoryCalloutConfig.borderWidth ?? 1}px solid ${fullStoryCalloutConfig.borderColor || '#FACC15'}`,
+                            }}
+                          >
+                            <span>📢</span>
+                            <span>{fullStoryCalloutConfig.text || 'पूरी खबर विवरण'}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Primary Headline (Part 5: Exact Font Color, Size, Family & Alignment without overrides) */}
                     <div
-                      className="absolute text-center px-2 z-15"
+                      className="absolute px-2 z-15"
                       style={{
-                        bottom: `${footerConfig.footerHeightRatio * 100 + 2}%`,
-                        left: '4%',
-                        right: '4%',
+                        left: `${textSlots[0]?.rect?.x ?? 4}%`,
+                        top: textSlots[0]?.rect?.y ? `${textSlots[0].rect.y}%` : undefined,
+                        bottom: !textSlots[0]?.rect?.y ? `${footerConfig.footerHeightRatio * 100 + 2}%` : undefined,
+                        width: `${textSlots[0]?.rect?.width ?? 92}%`,
                       }}
                     >
                       <div
-                        className="font-bold text-white text-[10px] leading-snug drop-shadow-md px-1.5 py-1 rounded"
+                        className="font-bold leading-snug drop-shadow-md px-1.5 py-1 rounded"
                         style={{
+                          color: textSlots[0]?.textColor || typographyConfig?.primaryHeadline?.fontColor || '#FFFFFF',
+                          fontSize: `${Math.max(10, Math.min(22, Math.round(((textSlots[0]?.fontSize || typographyConfig?.primaryHeadline?.fontSize || 70) / 1080) * (selectedRatio === '4:5' ? 280 : 230))))}px`,
+                          fontFamily: typographyFontFamily || textSlots[0]?.fontFamily || 'Noto Sans Devanagari',
+                          textAlign: (textSlots[0]?.alignment as any) || 'center',
                           backgroundColor:
                             textSlots[0]?.backgroundColor === 'transparent' || !textSlots[0]?.backgroundColor
                               ? 'transparent'
                               : textSlots[0].backgroundColor,
-                          fontFamily: typographyFontFamily,
                         }}
                       >
                         {testHeadline}
@@ -3527,17 +3714,19 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Protected Footer (Bottom vs Top in Video Mode) */}
+                    {/* Protected Footer (Part 7: Master Admin Footer) */}
                     <div
-                      className={`absolute ${generatorMode === 'video' && videoFooterPosition === 'top' ? 'top-0 border-b' : 'bottom-0 border-t'} bg-white flex items-center justify-between px-2 text-[7px] font-bold text-black z-30`}
+                      className={`absolute ${generatorMode === 'video' && videoFooterPosition === 'top' ? 'top-0 border-b' : 'bottom-0 border-t'} flex items-center justify-between px-2 text-[7px] font-bold z-30`}
                       style={{
                         height: `${footerConfig.footerHeightRatio * 100}%`,
                         width: `${footerConfig.footerWidthPct || 100}%`,
                         left: `${(100 - (footerConfig.footerWidthPct || 100)) / 2}%`,
+                        backgroundColor: footerConfig.footerBgColor || '#FFFFFF',
+                        color: footerConfig.footerTextColor || '#000000',
                       }}
                     >
-                      <span>@{currentUser?.username || 'breakingnewswala'}</span>
-                      <span>{currentUser?.phone ? `📱 ${currentUser.phone}` : 'सत्यापित डिजिटल समाचार नेटवर्क'}</span>
+                      <span>@breakingnewswala</span>
+                      <span>📱 9406540644 | सत्यापित डिजिटल समाचार नेटवर्क</span>
                     </div>
                   </div>
                 </div>

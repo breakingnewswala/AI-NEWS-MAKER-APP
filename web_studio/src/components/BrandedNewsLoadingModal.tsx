@@ -46,21 +46,23 @@ const NEWSROOM_STAGES = [
   { id: 4, label: 'न्यूज़ कार्ड', detail: 'प्रकाशन-योग्य अंतिम कार्ड', icon: CheckCircle2 },
 ];
 
-// 6-step video newsroom activity stages (Part 6 & 7)
+// 6-step video newsroom activity stages (Part 1.B)
 const VIDEO_NEWSROOM_STAGES = [
-  { id: 1, label: 'वीडियो', detail: 'वीडियो लिंक व मीडिया विश्लेषण', icon: Film },
-  { id: 2, label: 'स्रोत जानकारी', detail: 'स्रोत व जैकेट फ्रेम मिलान', icon: Layout },
-  { id: 3, label: 'कंटेंट विश्लेषण', detail: 'AI द्वारा मुख्य तथ्यों की पहचान', icon: Search },
-  { id: 4, label: 'न्यूज़ हेडलाइन', detail: 'संतुलित हेडलाइन विकल्प', icon: ListOrdered },
-  { id: 5, label: 'वीडियो मैपिंग', detail: 'वीडियो फ्रेम प्लेसमेंट व टाइमलाइन', icon: Layers },
-  { id: 6, label: 'वीडियो एक्सपोर्ट', detail: 'अंतिम वीडियो प्रीव्यू तैयार', icon: CheckCircle2 },
+  { id: 1, label: 'वीडियो विश्लेषण', detail: 'वीडियो का विश्लेषण किया जा रहा है', icon: Film },
+  { id: 2, label: 'दृश्य पहचान', detail: 'मुख्य दृश्यों की पहचान की जा रही है', icon: Search },
+  { id: 3, label: 'हेडलाइंस निर्माण', detail: 'वीडियो के लिए हेडलाइंस तैयार की जा रही हैं', icon: ListOrdered },
+  { id: 4, label: 'कैप्शन निर्माण', detail: 'वीडियो का कैप्शन तैयार किया जा रहा है', icon: FileText },
+  { id: 5, label: 'लेआउट व मैपिंग', detail: 'वीडियो लेआउट और टेक्स्ट मैपिंग की जा रही है', icon: Layers },
+  { id: 6, label: 'अंतिम वीडियो', detail: 'अंतिम वीडियो तैयार की जा रही है', icon: CheckCircle2 },
 ];
 
 export const VIDEO_LOADER_SUBTITLES: string[] = [
-  'आपकी चुनी हुई वीडियो को AI द्वारा तैयार किया जा रहा है।',
-  'वीडियो लेआउट और मुख्य तथ्यों का मिलान किया जा रहा है...',
-  'वीडियो मैपिंग और संतुलित हेडलाइन तैयार की जा रही है...',
-  'वीडियो फ्रेम प्लेसमेंट और प्रीव्यू को अंतिम रूप दिया जा रहा है...',
+  'वीडियो का विश्लेषण किया जा रहा है...',
+  'मुख्य दृश्यों की पहचान की जा रही है...',
+  'वीडियो के लिए हेडलाइंस तैयार की जा रही हैं...',
+  'वीडियो का कैप्शन तैयार किया जा रहा है...',
+  'वीडियो लेआउट और टेक्स्ट मैपिंग की जा रही है...',
+  'अंतिम वीडियो तैयार की जा रही है...',
 ];
 
 export const HOME_CARD_GRAPHIC_SUBTITLES: string[] = [
@@ -187,13 +189,16 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
   //   "संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है..."
   const defaultTitle =
     mode === 'video_render'
-      ? 'आपकी चुनी हुई वीडियो को AI द्वारा तैयार किया जा रहा है।'
+      ? 'आपकी चुनी हुई वीडियो AI द्वारा तैयार की जा रही है...'
       : mode === 'ai_generation'
       ? 'खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
       : 'संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...';
 
   const displayTitle = title || defaultTitle;
-  const currentSubtitle = effectiveSubtitles[subtitleIndex] || effectiveSubtitles[0];
+  const currentSubtitle =
+    mode === 'video_render' && activeStages[activeStepIndex]?.detail
+      ? `${activeStages[activeStepIndex].detail}...`
+      : effectiveSubtitles[subtitleIndex] || effectiveSubtitles[0];
 
   // Calculated progress for presentation timer or indeterminate animation
   const progressPercent = durationSeconds && durationSeconds > 0
@@ -214,7 +219,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
       aria-labelledby="branded-loading-title"
       className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 via-slate-950 to-neutral-950 border border-indigo-500/40 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-indigo-950/50 space-y-5 animate-in zoom-in-95 duration-200 overflow-hidden">
+      <div className={`relative w-full ${mode === 'video_render' ? 'max-w-md sm:max-w-lg md:max-w-xl' : 'max-w-md'} bg-gradient-to-b from-slate-900 via-slate-950 to-neutral-950 border border-indigo-500/40 rounded-3xl p-6 sm:p-8 text-center shadow-2xl shadow-indigo-950/50 space-y-5 animate-in zoom-in-95 duration-200 overflow-hidden`}>
         {/* Subtle decorative multicolor top glow */}
         <div className="absolute -top-12 left-1/4 w-36 h-20 bg-blue-500/20 blur-2xl rounded-full pointer-events-none" />
         <div className="absolute -top-12 right-1/4 w-36 h-20 bg-violet-500/20 blur-2xl rounded-full pointer-events-none" />
@@ -270,8 +275,8 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
           </div>
 
           {/* Newsroom Activity Steps Tracker (Green completed, Blue active processing, Slate pending) */}
-          {/* Part 6: Mobile 2 columns x 3 rows, Desktop 3 columns x 2 rows for video workflow */}
-          <div className={`grid gap-2 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 ${mode === 'video_render' ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-4'}`}>
+          {/* Part 1: Mobile 2 columns x 3 rows, Desktop/Tablet 3 columns x 2 rows for video workflow */}
+          <div className={`grid gap-2.5 bg-slate-900/90 p-3 rounded-2xl border border-slate-800 ${mode === 'video_render' ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-4'}`}>
             {activeStages.map((stg, idx) => {
               const isActive = idx === activeStepIndex;
               const isPassed = idx < activeStepIndex;
@@ -279,7 +284,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
               return (
                 <div
                   key={stg.id}
-                  className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl text-center transition-all duration-300 ${
+                  className={`flex flex-col items-center justify-center min-h-[58px] py-2 px-1.5 rounded-xl text-center transition-all duration-300 ${
                     isActive
                       ? 'bg-gradient-to-b from-blue-500/25 to-violet-500/20 border border-sky-400/60 shadow-sm text-sky-200'
                       : isPassed
@@ -287,8 +292,8 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
                       : 'bg-slate-900/40 border border-slate-800/60 text-slate-400'
                   }`}
                 >
-                  <IconComp className={`w-3.5 h-3.5 mb-1 ${isActive ? 'text-sky-300 scale-110' : isPassed ? 'text-emerald-400' : 'text-slate-500'}`} />
-                  <span className={`text-[10px] font-black leading-tight truncate w-full ${isActive ? 'text-white' : isPassed ? 'text-emerald-300' : 'text-slate-400'}`}>
+                  <IconComp className={`w-4 h-4 mb-1 shrink-0 ${isActive ? 'text-sky-300 scale-110' : isPassed ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <span className={`text-[11px] font-bold leading-tight break-words text-center w-full ${isActive ? 'text-white' : isPassed ? 'text-emerald-300' : 'text-slate-400'}`}>
                     {stg.label}
                   </span>
                 </div>

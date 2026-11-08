@@ -3419,23 +3419,49 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 </div>
               )}
 
-              {/* Watermark */}
+              {/* Watermark (Part 4: Position, Rotation, Type parity) */}
               {df.watermarkConfig?.enabled && (
                 <div
-                  className="absolute pointer-events-auto px-2 py-0.5 rounded text-center font-bold"
+                  className="absolute pointer-events-auto flex items-center justify-center font-bold"
                   style={{
-                    left: `${df.watermarkConfig.rect?.x ?? 72}%`,
-                    top: `${df.watermarkConfig.rect?.y ?? 56}%`,
-                    width: `${df.watermarkConfig.rect?.width ?? 25}%`,
-                    height: `${df.watermarkConfig.rect?.height ?? 4}%`,
-                    backgroundColor: df.watermarkConfig.bgColor || 'rgba(0,0,0,0.6)',
-                    color: df.watermarkConfig.textColor || '#FFFFFF',
+                    ...(df.watermarkConfig.position === 'left_edge'
+                      ? { left: '2%', top: '35%' }
+                      : df.watermarkConfig.position === 'top'
+                      ? { top: '3%', left: '50%', transform: 'translateX(-50%)' }
+                      : df.watermarkConfig.position === 'bottom'
+                      ? { bottom: '10%', left: '50%', transform: 'translateX(-50%)' }
+                      : df.watermarkConfig.position === 'center'
+                      ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+                      : df.watermarkConfig.position === 'right_edge' || !df.watermarkConfig.rect?.x
+                      ? { right: '2%', top: '35%' }
+                      : {
+                          left: `${df.watermarkConfig.rect?.x ?? 72}%`,
+                          top: `${df.watermarkConfig.rect?.y ?? 56}%`,
+                          width: `${df.watermarkConfig.rect?.width ?? 25}%`,
+                          height: `${df.watermarkConfig.rect?.height ?? 4}%`,
+                        }),
                     opacity: df.watermarkConfig.opacity ?? 0.85,
-                    transform: `rotate(${df.watermarkConfig.rotation || 0}deg)`,
-                    fontSize: `${Math.max(8, Math.round((df.watermarkConfig.fontSize || 16) * previewScale))}px`,
+                    transform: `rotate(${df.watermarkConfig.rotation ?? (df.watermarkConfig.position === 'right_edge' ? 270 : 0)}deg)`,
                   }}
                 >
-                  {df.watermarkConfig.label}
+                  {df.watermarkConfig.type === 'image' && df.watermarkConfig.imageUrl ? (
+                    <img
+                      src={df.watermarkConfig.imageUrl}
+                      alt="Watermark"
+                      className="max-h-8 max-w-20 object-contain"
+                    />
+                  ) : (
+                    <span
+                      className="px-2 py-0.5 rounded text-center whitespace-nowrap shadow-sm"
+                      style={{
+                        backgroundColor: df.watermarkConfig.bgColor || 'rgba(0,0,0,0.6)',
+                        color: df.watermarkConfig.textColor || '#FFFFFF',
+                        fontSize: `${Math.max(8, Math.round((df.watermarkConfig.fontSize || 14) * previewScale))}px`,
+                      }}
+                    >
+                      {df.watermarkConfig.customText || df.watermarkConfig.label || 'AI GENERATED'}
+                    </span>
+                  )}
                 </div>
               )}
 

@@ -718,8 +718,10 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                     }}
                   >
                     <div
-                      className="font-bold text-white text-[10px] leading-snug drop-shadow-md px-1.5 py-1 rounded"
+                      className="font-bold text-[10px] leading-snug drop-shadow-md px-1.5 py-1 rounded"
                       style={{
+                        color: previewFrame.textSlots?.[0]?.textColor || previewFrame.typographyConfig?.primaryHeadline?.fontColor || '#FFFFFF',
+                        fontFamily: previewFrame.typographyConfig?.primaryFontFamily || previewFrame.textSlots?.[0]?.fontFamily || 'Noto Sans Devanagari',
                         backgroundColor:
                           previewFrame.textSlots?.[0]?.backgroundColor === 'transparent' || !previewFrame.textSlots?.[0]?.backgroundColor
                             ? 'transparent'
@@ -739,7 +741,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                         top: `${previewFrame.fullStoryCalloutConfig.rect?.y ?? 86}%`,
                       }}
                     >
-                      पूरी खबर डिस्क्रिप्शन में
+                      {previewFrame.fullStoryCalloutConfig.text || 'पूरी खबर विवरण'}
                     </div>
                   )}
 
@@ -750,6 +752,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                       height: `${(previewFrame.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
                       width: `${previewFrame.footerConfig?.footerWidthPct || 100}%`,
                       left: `${(100 - (previewFrame.footerConfig?.footerWidthPct || 100)) / 2}%`,
+                      backgroundColor: previewFrame.footerConfig?.footerBgColor || '#FFFFFF',
+                      color: previewFrame.footerConfig?.footerTextColor || '#000000',
                     }}
                   >
                     <span>@breakingnewswala</span>
@@ -759,35 +763,35 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 <span className="text-[11px] text-slate-400 mt-2 font-bold">वास्तविक पब्लिश्ड फ्रेम प्रीव्यू</span>
               </div>
 
-              {/* Specifications & Edit Actions */}
+              {/* Specifications & Edit Actions (Part 8: 100% Hindi) */}
               <div className="space-y-4 text-xs">
                 <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-2.5">
-                  <h5 className="font-bold text-sm text-purple-300">डिज़ाइन विनिर्देश (Design Manifest)</h5>
+                  <h5 className="font-bold text-sm text-purple-300">फ्रेम का विवरण</h5>
                   <div className="space-y-1.5 text-slate-300 text-xs">
                     <div className="flex justify-between py-1 border-b border-slate-800">
-                      <span className="text-slate-400">अनुपात (Aspect Ratio):</span>
+                      <span className="text-slate-400">आकार अनुपात:</span>
                       <strong className="text-white">{previewFrame.aspectRatio}</strong>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-800">
-                      <span className="text-slate-400">कैनवास रेजोल्यूशन:</span>
+                      <span className="text-slate-400">फ्रेम का आकार:</span>
                       <strong className="text-white">{previewFrame.canvasWidth} x {previewFrame.canvasHeight}</strong>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-800">
-                      <span className="text-slate-400">श्रेणी (Category):</span>
+                      <span className="text-slate-400">श्रेणी:</span>
                       <strong className="text-amber-300">{previewFrame.designCategory}</strong>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-800">
-                      <span className="text-slate-400">अनुमत प्लान्स:</span>
+                      <span className="text-slate-400">अनुमत सदस्यता:</span>
                       <strong className="text-emerald-300">{previewFrame.allowedPlans?.join(', ')}</strong>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-800">
-                      <span className="text-slate-400">फोटो स्लॉट्स:</span>
+                      <span className="text-slate-400">फोटो के स्थान:</span>
                       <strong className="text-white">{previewFrame.photoSlots?.length || 1}</strong>
                     </div>
                     <div className="flex justify-between py-1 border-b border-slate-800">
-                      <span className="text-slate-400">हेडलाइन टाइपोग्राफी:</span>
+                      <span className="text-slate-400">शीर्षक की अक्षर शैली:</span>
                       <strong className="text-white">
-                        {previewFrame.typographyConfig?.primaryFontFamily || 'Noto Sans Devanagari'} ({previewFrame.typographyConfig?.primaryFontSize || 70}px)
+                        {previewFrame.typographyConfig?.primaryFontFamily || previewFrame.textSlots?.[0]?.fontFamily || 'Noto Sans Devanagari'} ({previewFrame.typographyConfig?.primaryFontSize || previewFrame.textSlots?.[0]?.fontSize || 70}px)
                       </strong>
                     </div>
                   </div>
@@ -810,7 +814,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                     className="flex-1 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
                   >
                     <Edit2 className="w-4 h-4" />
-                    <span>✏️ इस फ्रेम को एडिट करें (Edit & New Version)</span>
+                    <span>✏️ इस फ्रेम को एडिट करें</span>
                   </button>
 
                   {onOpenStudioWithTemplate && (

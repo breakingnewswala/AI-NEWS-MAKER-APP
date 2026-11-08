@@ -141,6 +141,9 @@ targets.forEach((target) => {
       'users_accounts_db.json',
       'user_profiles_db.json',
       'sub_users_db.json',
+      'dynamic_frames_db.json',
+      'asset_libraries_db.json',
+      'user_story_preferences_db.json',
       'registered_users.json',
       'server.cjs.map',
     ]);
@@ -295,6 +298,9 @@ if (fs.existsSync(dbPath)) {
   syncServerOnlyDatabaseFile('auth_credentials_db.json');
   syncServerOnlyDatabaseFile('analytics_database.json');
   syncServerOnlyDatabaseFile('package_coupons_db.json');
+  syncServerOnlyDatabaseFile('dynamic_frames_db.json');
+  syncServerOnlyDatabaseFile('asset_libraries_db.json');
+  syncServerOnlyDatabaseFile('user_story_preferences_db.json');
   // NOTE: gemini_api_keys_vault.json and api_keys_database.json are EXCLUDED entirely from public sync!
 
   // 6. Ensure persistent uploads directory is synced
@@ -379,6 +385,9 @@ ${itemsXml}
     'users_accounts_db.json',
     'user_profiles_db.json',
     'sub_users_db.json',
+    'dynamic_frames_db.json',
+    'asset_libraries_db.json',
+    'user_story_preferences_db.json',
     'registered_users.json',
     'server.cjs.map',
   ];

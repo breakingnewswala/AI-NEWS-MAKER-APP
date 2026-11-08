@@ -192,16 +192,23 @@ export interface HeaderConfig {
 }
 
 export type WatermarkStyle = 'badge' | 'subtle_text' | 'boxed' | 'chip';
+export type WatermarkPosition = 'right_edge' | 'left_edge' | 'top' | 'bottom' | 'center' | 'custom';
+export type WatermarkType = 'text' | 'image';
 
 export interface WatermarkConfig {
   enabled: boolean;
-  label: 'AI GENERATED' | 'प्रतीकात्मक फोटो';
+  type?: WatermarkType;
+  label?: 'AI GENERATED' | 'प्रतीकात्मक फोटो' | string;
+  customText?: string;
+  imageUrl?: string;
+  imageSize?: number;
   rect: NormalizedRect;
+  position?: WatermarkPosition;
   fontSize?: number;
   textColor?: string;
   bgColor?: string;
   opacity?: number;
-  rotation?: number; // 0, 90, 270
+  rotation?: number; // 0, 90, 180, 270
   align?: 'left' | 'center' | 'right';
   watermarkStyle?: WatermarkStyle;
 }

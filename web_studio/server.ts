@@ -10036,8 +10036,10 @@ function saveAssetLibrariesDatabase(items: any[]) {
   } catch (err) {
     console.warn("Failed to write asset_libraries_db.json:", err);
   }
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    centralDb.writeDoc("system_config", "asset_libraries", { items, updatedAt: Date.now() }).catch(() => {});
+  }
 }
-
 
 function loadDynamicFramesDatabase(): any[] {
   try {
@@ -10056,6 +10058,137 @@ function saveDynamicFramesDatabase(frames: any[]) {
   } catch (err) {
     console.warn("Failed to write dynamic_frames_db.json:", err);
   }
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    centralDb.writeDoc("system_config", "dynamic_frames", { frames, updatedAt: Date.now() }).catch(() => {});
+  }
+}
+
+function deepMergeFrameConfig(existing: any, payload: any): any {
+  if (!existing) return payload || {};
+  if (!payload) return existing;
+
+  const targetRatio = payload.aspectRatio || existing.aspectRatio || '4:5';
+  const isVideo = payload.frameMode === 'video' || payload.frameType === 'video' || existing.frameMode === 'video' || existing.frameType === 'video';
+
+  return {
+    ...existing,
+    ...payload,
+    id: existing.id,
+    name: payload.name !== undefined ? String(payload.name).trim() : existing.name,
+    description: payload.description !== undefined ? payload.description : existing.description,
+    aspectRatio: targetRatio,
+    frameMode: payload.frameMode || existing.frameMode || (isVideo ? 'video' : 'photo'),
+    frameType: payload.frameType || existing.frameType || (isVideo ? 'video' : targetRatio === '9:16' ? 'story' : 'graphic'),
+    canvasWidth: payload.canvasWidth || existing.canvasWidth || (targetRatio === '4:3' ? 1440 : 1080),
+    canvasHeight: payload.canvasHeight || existing.canvasHeight || (targetRatio === '4:5' ? 1350 : targetRatio === '9:16' ? 1920 : 1080),
+    sampleReferenceUrl: payload.sampleReferenceUrl !== undefined ? payload.sampleReferenceUrl : existing.sampleReferenceUrl,
+    previewImageUrl: payload.previewImageUrl !== undefined ? payload.previewImageUrl : existing.previewImageUrl,
+    samplePhotoUrl: payload.samplePhotoUrl !== undefined ? payload.samplePhotoUrl : existing.samplePhotoUrl,
+    sampleVideoUrl: payload.sampleVideoUrl !== undefined ? payload.sampleVideoUrl : existing.sampleVideoUrl,
+    calloutAssetUrl: payload.calloutAssetUrl !== undefined ? payload.calloutAssetUrl : existing.calloutAssetUrl,
+    designCategory: payload.designCategory || existing.designCategory || 'Regular Frames',
+    allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : (existing.allowedPlans || ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK']),
+    publicationStatus: payload.publicationStatus || existing.publicationStatus || 'draft',
+    headerConfig: {
+      ...(existing.headerConfig || {}),
+      ...(payload.headerConfig || {}),
+      logoRect: {
+        ...((existing.headerConfig && existing.headerConfig.logoRect) || {}),
+        ...((payload.headerConfig && payload.headerConfig.logoRect) || {}),
+      },
+      locationRect: {
+        ...((existing.headerConfig && existing.headerConfig.locationRect) || {}),
+        ...((payload.headerConfig && payload.headerConfig.locationRect) || {}),
+      },
+      dateRect: {
+        ...((existing.headerConfig && existing.headerConfig.dateRect) || {}),
+        ...((payload.headerConfig && payload.headerConfig.dateRect) || {}),
+      },
+      textRegion: {
+        ...((existing.headerConfig && existing.headerConfig.textRegion) || {}),
+        ...((payload.headerConfig && payload.headerConfig.textRegion) || {}),
+      },
+      typographyConfig: {
+        ...((existing.headerConfig && existing.headerConfig.typographyConfig) || {}),
+        ...((payload.headerConfig && payload.headerConfig.typographyConfig) || {}),
+      },
+    },
+    footerConfig: {
+      ...(existing.footerConfig || {}),
+      ...(payload.footerConfig || {}),
+      enforcePermanentFooter: true,
+      footerHeightRatio: payload.footerConfig?.footerHeightRatio ?? existing.footerConfig?.footerHeightRatio ?? (targetRatio === '4:5' ? 0.08 : 0.065),
+      footerBgColor: payload.footerConfig?.footerBgColor || existing.footerConfig?.footerBgColor || '#FFFFFF',
+      footerTextColor: payload.footerConfig?.footerTextColor || existing.footerConfig?.footerTextColor || '#000000',
+      footerWidthPct: typeof payload.footerConfig?.footerWidthPct === 'number' ? Math.max(70, Math.min(100, payload.footerConfig.footerWidthPct)) : (existing.footerConfig?.footerWidthPct ?? 100),
+      footerAlignment: payload.footerConfig?.footerAlignment || existing.footerConfig?.footerAlignment || 'center',
+    },
+    watermarkConfig: {
+      ...(existing.watermarkConfig || {}),
+      ...(payload.watermarkConfig || {}),
+      rect: {
+        ...((existing.watermarkConfig && existing.watermarkConfig.rect) || {}),
+        ...((payload.watermarkConfig && payload.watermarkConfig.rect) || {}),
+      },
+    },
+    fullStoryCalloutConfig: {
+      ...(existing.fullStoryCalloutConfig || {}),
+      ...(payload.fullStoryCalloutConfig || {}),
+      rect: {
+        ...((existing.fullStoryCalloutConfig && existing.fullStoryCalloutConfig.rect) || {}),
+        ...((payload.fullStoryCalloutConfig && payload.fullStoryCalloutConfig.rect) || {}),
+      },
+      planCalloutSettings: {
+        ...((existing.fullStoryCalloutConfig && existing.fullStoryCalloutConfig.planCalloutSettings) || {}),
+        ...((payload.fullStoryCalloutConfig && payload.fullStoryCalloutConfig.planCalloutSettings) || {}),
+      },
+    },
+    safeZoneConfig: {
+      ...(existing.safeZoneConfig || {}),
+      ...(payload.safeZoneConfig || {}),
+    },
+    ribbonConfig: {
+      ...(existing.ribbonConfig || {}),
+      ...(payload.ribbonConfig || {}),
+      rect: {
+        ...((existing.ribbonConfig && existing.ribbonConfig.rect) || {}),
+        ...((payload.ribbonConfig && payload.ribbonConfig.rect) || {}),
+      },
+    },
+    typographyConfig: {
+      ...(existing.typographyConfig || {}),
+      ...(payload.typographyConfig || {}),
+      primaryHeadline: {
+        ...((existing.typographyConfig && existing.typographyConfig.primaryHeadline) || {}),
+        ...((payload.typographyConfig && payload.typographyConfig.primaryHeadline) || {}),
+      },
+      secondaryHeadline: {
+        ...((existing.typographyConfig && existing.typographyConfig.secondaryHeadline) || {}),
+        ...((payload.typographyConfig && payload.typographyConfig.secondaryHeadline) || {}),
+      },
+    },
+    photoSlots: Array.isArray(payload.photoSlots) ? payload.photoSlots : (existing.photoSlots || []),
+    textSlots: Array.isArray(payload.textSlots) ? payload.textSlots : (existing.textSlots || []),
+    layers: Array.isArray(payload.layers) ? payload.layers : (existing.layers || []),
+    statementOptions: {
+      ...(existing.statementOptions || {}),
+      ...(payload.statementOptions || {}),
+    },
+    videoConfig: payload.videoConfig !== undefined ? payload.videoConfig : existing.videoConfig,
+    poweredByConfig: {
+      ...(existing.poweredByConfig || {}),
+      ...(payload.poweredByConfig || {}),
+      rect: {
+        ...((existing.poweredByConfig && existing.poweredByConfig.rect) || {}),
+        ...((payload.poweredByConfig && payload.poweredByConfig.rect) || {}),
+      },
+    },
+    isStatementFrame: payload.isStatementFrame !== undefined ? Boolean(payload.isStatementFrame) : Boolean(existing.isStatementFrame),
+    locationBadgeAssetId: payload.locationBadgeAssetId !== undefined ? payload.locationBadgeAssetId : existing.locationBadgeAssetId,
+    calloutAssetId: payload.calloutAssetId !== undefined ? payload.calloutAssetId : existing.calloutAssetId,
+    updatedAt: Date.now(),
+    version: (existing.version || 1) + 1,
+  };
 }
 
 function loadUserStoryPreferencesDatabase(): Record<string, { primaryStoryFrameId: string | null; updatedAt: number }> {
@@ -10110,6 +10243,16 @@ app.get("/api/dynamic-frames", async (req, res) => {
     const { aspectRatio, category } = req.query;
     const isMaster = isAuthorizedMasterAdmin(req);
     let frames = loadDynamicFramesDatabase();
+
+    if (frames.length === 0 && centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
+        if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
+          frames = cloudDoc.frames;
+          saveDynamicFramesDatabase(frames);
+        }
+      } catch {}
+    }
 
     // If database is empty, seed defaults
     if (frames.length === 0) {
@@ -10529,6 +10672,8 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
       calloutAssetUrl: payload.calloutAssetUrl,
       samplePhotoUrl: payload.samplePhotoUrl,
       sampleVideoUrl: payload.sampleVideoUrl,
+      locationBadgeAssetId: payload.locationBadgeAssetId,
+      calloutAssetId: payload.calloutAssetId,
       poweredByConfig: payload.poweredByConfig,
     };
 
@@ -10562,21 +10707,7 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
       return res.status(400).json({ error: `Invalid aspectRatio '${targetRatio}'.` });
     }
 
-    const updatedFrame = {
-      ...existing,
-      ...payload,
-      id: existing.id,
-      aspectRatio: targetRatio,
-      canvasWidth: 1080,
-      canvasHeight: targetRatio === "4:5" ? 1350 : 1920,
-      footerConfig: {
-        ...(existing.footerConfig || {}),
-        ...(payload.footerConfig || {}),
-        enforcePermanentFooter: true, // Always enforced
-      },
-      updatedAt: Date.now(),
-      version: (existing.version || 1) + 1,
-    };
+    const updatedFrame = deepMergeFrameConfig(existing, payload);
 
     all[existingIdx] = updatedFrame;
     saveDynamicFramesDatabase(all);
@@ -10608,6 +10739,15 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
   try {
     const { type, category } = req.query as any;
     let items = loadAssetLibrariesDatabase();
+    if (items.length <= 4 && centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudDoc = await centralDb.readDoc("system_config", "asset_libraries");
+        if (cloudDoc && Array.isArray(cloudDoc.items) && cloudDoc.items.length > 0) {
+          items = cloudDoc.items;
+          saveAssetLibrariesDatabase(items);
+        }
+      } catch {}
+    }
     if (type && type !== "all") {
       items = items.filter((it) => it.type === type);
     }
