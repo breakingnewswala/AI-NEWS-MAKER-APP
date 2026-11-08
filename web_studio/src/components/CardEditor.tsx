@@ -1420,15 +1420,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           mobileViewMode === 'steps' && activeStep !== 1 ? 'hidden' : 'block'
         }`}
       >
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
-            <Layers className="w-4 h-4 text-yellow-400" />
-            {isMobileLayout ? 'स्टेप 1: टेम्पलेट' : 'स्टेप 1: टेम्पलेट्स'}
-          </span>
-          <p className="text-[11px] text-neutral-400 mt-0.5">अपनी पसंद का ग्राफिक टेम्पलेट चुनें</p>
-          <span className="text-xs text-neutral-400 font-medium">
-            {currentFrameOptions.find((f) => (card.frameDesign || 'graphic_001') === f.id)?.name || 'फ्रेम स्टाइल'}
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-yellow-400 flex items-center gap-1.5">
+              <Layers className="w-4 h-4 text-yellow-400" />
+              Step 1 — टेम्पलेट
+            </span>
+            <p className="text-[11px] text-neutral-400 mt-0.5">अपनी पसंद का ग्राफिक टेम्पलेट चुनें</p>
+          </div>
         </div>
 
         {/* ==================================================
@@ -3808,28 +3807,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             />
           </div>
 
-          {/* Quick District Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            {['भोपाल', 'इंदौर', 'जबलपुर', 'ग्वालियर', 'उज्जैन', 'दिल्ली', 'रायपुर', 'लखनऊ', 'पटना'].map((dist) => {
-              const isSel = (card.location || '').trim() === dist;
-              return (
-                <button
-                  key={dist}
-                  type="button"
-                  onClick={() => onChange({ location: dist, showLocation: true })}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
-                    isSel
-                      ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
-                      : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-700'
-                  }`}
-                >
-                  {dist}
-                </button>
-              );
-            })}
-          </div>
-
-
           {/* Location Box Soft Color Selector */}
           <div className="pt-2 border-t border-neutral-800 space-y-2">
             <div className="flex items-center justify-between text-xs">
@@ -4868,51 +4845,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold border border-red-500/30 shrink-0">
               1080×1350 HD
             </span>
-          </div>
-
-          {/* Design Elements & Accents (Part 9 Step 7 Elements Requirement) */}
-          <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5 font-['Mukta']">
-                <span>🎨</span>
-                <span>अतिरिक्त डिज़ाइन एलिमेंट्स व बैज (Graphic Elements):</span>
-              </span>
-              <span className="text-[10px] text-neutral-400">वैकल्पिक स्टिकर्स व रिबन</span>
-            </div>
-            
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {[
-                { label: '⚡ सुपर ब्रेकिंग', value: '⚡ सुपर ब्रेकिंग' },
-                { label: '🚨 एक्सक्लूसिव', value: '🚨 एक्सक्लूसिव' },
-                { label: '🔴 लाइव अपडेट', value: '🔴 लाइव अपडेट' },
-                { label: '🔍 स्पेशल पड़ताल', value: '🔍 स्पेशल पड़ताल' },
-                { label: 'बड़ी खबर', value: 'बड़ी खबर' },
-                { label: 'अलर्ट', value: 'अलर्ट' },
-              ].map((badge) => {
-                const isActive = card.breakingUrgencyBadge === badge.value || card.graphic004StampText === badge.value;
-                return (
-                  <button
-                    key={badge.value}
-                    type="button"
-                    onClick={() => {
-                      onChange({
-                        breakingUrgencyBadge: isActive ? '' : badge.value,
-                        graphic004StampText: isActive ? '' : badge.value,
-                        showGraphic004Stamp: !isActive,
-                      });
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                      isActive
-                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow font-black'
-                        : 'bg-neutral-900 border-neutral-750 text-neutral-300 hover:border-neutral-600'
-                    }`}
-                  >
-                    <span>{badge.label}</span>
-                    {isActive && <Check className="w-3 h-3 text-slate-950" />}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* 1. Primary Action Button: सोशल मीडिया रेडी कार्ड डाउनलोड करें */}

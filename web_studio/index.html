@@ -45,6 +45,15 @@
       }
     </style>
     <script>
+      var activeCategory = 'all';
+      var searchQuery = '';
+      var categorySearchQuery = '';
+      var selectedCategory = 'all';
+      window.activeCategory = 'all';
+      window.searchQuery = '';
+      window.categorySearchQuery = '';
+      window.selectedCategory = 'all';
+
       (function() {
         // Safe global fallbacks to ensure legacy/cached client bundles never throw ReferenceError
         try {

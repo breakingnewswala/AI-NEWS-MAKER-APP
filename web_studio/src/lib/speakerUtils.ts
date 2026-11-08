@@ -971,15 +971,15 @@ export interface HeadlineTierRange {
 }
 
 export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
-  { min: 80, max: 95, label: 'विकल्प 1' },
-  { min: 85, max: 100, label: 'विकल्प 2' },
-  { min: 90, max: 105, label: 'विकल्प 3' },
-  { min: 95, max: 110, label: 'विकल्प 4' },
-  { min: 100, max: 120, label: 'विकल्प 5' },
+  { min: 80, max: 110, label: 'विकल्प 1' },
+  { min: 100, max: 130, label: 'विकल्प 2' },
+  { min: 125, max: 150, label: 'विकल्प 3' },
+  { min: 130, max: 160, label: 'विकल्प 4' },
+  { min: 150, max: 200, label: 'विकल्प 5' },
 ];
 
-export const HEADLINE_MAX_CHARACTER_LIMIT = 120;
-export const HEADLINE_5_TIER_MAX_LIMITS = [95, 100, 105, 110, 120];
+export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
+export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
 
 /**
  * Canonical segmenter for user-perceived Unicode grapheme clusters (Devanagari aksharas).
@@ -1259,20 +1259,20 @@ export function fitHeadlinesTo5TierRanges(
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 120, label: `विकल्प ${i + 1}` };
-    const effectiveMax = Math.min(tier.max, 120);
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `विकल्प ${i + 1}` };
+    const effectiveMax = Math.min(tier.max, 200);
     const cand = workingHeadlines[i] || workingHeadlines[0] || baseText || '';
     if (!cand) continue;
     const cleaned = sanitizeHeadlineClean(cand);
     const currentLen = countHeadlineVisibleCharacters(cleaned);
 
-    // Case 1: Within tier max (or complete sentence <= 120 chars) -> Keep accurate headline without cutting off the final verb
+    // Case 1: Within tier max (or complete sentence <= 200 chars) -> Keep accurate headline without cutting off the final verb
     if (currentLen <= effectiveMax) {
       result.push(cleaned);
       continue;
     }
 
-    // Case 2: Exceeds tier.max -> Check if there is a clean clause boundary; if not and currentLen <= 120, keep complete sentence
+    // Case 2: Exceeds tier.max -> Check if there is a clean clause boundary; if not and currentLen <= 200, keep complete sentence
     let truncated = cleaned;
     const delimiters = [", ", " - ", ": ", " — ", "; "];
     for (const d of delimiters) {
@@ -1286,8 +1286,8 @@ export function fitHeadlinesTo5TierRanges(
         }
       }
     }
-    if (countHeadlineVisibleCharacters(truncated) > 120) {
-      const sliced = cleaned.substring(0, 120);
+    if (countHeadlineVisibleCharacters(truncated) > 200) {
+      const sliced = cleaned.substring(0, 200);
       const lastSpace = sliced.lastIndexOf(" ");
       truncated = sanitizeHeadlineClean(lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced);
     }

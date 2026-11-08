@@ -25,42 +25,42 @@ export const FIVE_HEADLINE_TIERS: HeadlineTierRule[] = [
   {
     tier: 1,
     min: 80,
-    max: 95,
+    max: 110,
     name: 'विकल्प 1',
     angle: 'सीधी मुख्य खबर',
-    description: 'सीधी मुख्य खबर (80-95 अक्षर)',
+    description: 'सीधी मुख्य खबर (80-110 अक्षर)',
   },
   {
     tier: 2,
-    min: 85,
-    max: 100,
+    min: 100,
+    max: 130,
     name: 'विकल्प 2',
     angle: 'तथ्य-केंद्रित हेडलाइन',
-    description: 'तथ्य-केंद्रित हेडलाइन (85-100 अक्षर)',
+    description: 'तथ्य-केंद्रित हेडलाइन (100-130 अक्षर)',
   },
   {
     tier: 3,
-    min: 90,
-    max: 105,
+    min: 125,
+    max: 150,
     name: 'विकल्प 3',
     angle: 'परिणाम-केंद्रित हेडलाइन',
-    description: 'परिणाम-केंद्रित हेडलाइन (90-105 अक्षर)',
+    description: 'परिणाम-केंद्रित हेडलाइन (125-150 अक्षर)',
   },
   {
     tier: 4,
-    min: 95,
-    max: 110,
+    min: 130,
+    max: 160,
     name: 'विकल्प 4',
     angle: 'प्रमुख विवरण वाली हेडलाइन',
-    description: 'प्रमुख विवरण वाली हेडलाइन (95-110 अक्षर)',
+    description: 'प्रमुख विवरण वाली हेडलाइन (130-160 अक्षर)',
   },
   {
     tier: 5,
-    min: 100,
-    max: 120,
+    min: 150,
+    max: 200,
     name: 'विकल्प 5',
     angle: 'प्रभावशाली समाचार हेडलाइन',
-    description: 'प्रभावशाली समाचार हेडलाइन (100-120 अक्षर)',
+    description: 'प्रभावशाली समाचार हेडलाइन (150-200 अक्षर)',
   },
 ];
 
@@ -241,7 +241,7 @@ export function sanitizePressNoteFlattery(text: any, isHeadline: boolean = false
  * 4. SYSTEM EDITORIAL PROMPT INSTRUCTION
  */
 export const CHIEF_EDITOR_SYSTEM_INSTRUCTION = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के मुख्य संपादक (Chief Editor) हैं।
-दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मूल समाचार में उपलब्ध वास्तविक तथ्यों और मुख्य घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी मुख्य घटना के 5 अलग-अलग हेडलाइन विकल्प (विकल्प 1: 80-95, विकल्प 2: 85-100, विकल्प 3: 90-105, विकल्प 4: 95-110, विकल्प 5: 100-120 अक्षर; अधिकतम सीमा 120 अक्षर) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें।
+दी गई समाचार सामग्री का गहन विश्लेषण करके केवल मूल समाचार में उपलब्ध वास्तविक तथ्यों और मुख्य घटना पर आधारित सटीक, तथ्यपरक, प्रभावशाली हिंदी हेडलाइन, उसी मुख्य घटना के 5 अलग-अलग हेडलाइन विकल्प (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 अक्षर; अधिकतम सीमा 200 अक्षर) और 3 अलग-अलग शैलियों के सोशल मीडिया कैप्शन तैयार करें।
 किसी भी हेडलाइन की लंबाई बढ़ाने के लिए अपनी ओर से कोई कृत्रिम प्रशासनिक वाक्य ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'मामले में नया घटनाक्रम सामने आया है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'विशेष डेस्क' आदि) बिल्कुल न जोड़ें। यदि मूल खबर संक्षिप्त है, तो छोटी लेकिन सटीक हेडलाइन रखें। केवल वैध JSON लौटाएं।`;
 
 /**
@@ -258,15 +258,15 @@ export function buildHeadlineRegenerationPrompt(params: {
 
   const systemInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
 Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME primary news event in pure Hindi Devanagari script.
-MANDATORY 5-TIER CHARACTER LIMITS (Absolute Maximum: 120 characters):
-- Option 1 (विकल्प 1): 80–95 characters
-- Option 2 (विकल्प 2): 85–100 characters
-- Option 3 (विकल्प 3): 90–105 characters
-- Option 4 (विकल्प 4): 95–110 characters
-- Option 5 (विकल्प 5): 100–120 characters
+MANDATORY 5-TIER CHARACTER LIMITS (Absolute Maximum: 200 characters):
+- Option 1 (विकल्प 1): 80–110 characters
+- Option 2 (विकल्प 2): 100–130 characters
+- Option 3 (विकल्प 3): 125–150 characters
+- Option 4 (विकल्प 4): 130–160 characters
+- Option 5 (विकल्प 5): 150–200 characters
 
 STRICT EDITORIAL RULES:
-1. No headline may exceed 120 characters under any circumstance.
+1. No headline may exceed 200 characters under any circumstance.
 2. Never add artificial administrative filler or unsupported statements merely to increase length (strictly prohibited: 'शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'पूरे मामले को लेकर कार्रवाई की जा रही है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'इस घटना के बाद प्रशासन अलर्ट', 'मामले को लेकर विभागीय स्तर पर समीक्षा', 'विशेष डेस्क', 'विशेष डैश').
 3. If the original news contains limited information, keep a shorter accurate headline rather than adding filler.
 4. No ending punctuation (. or । or ?).
@@ -276,7 +276,7 @@ STRICT EDITORIAL RULES:
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
   const prompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें।
-प्रत्येक विकल्प अधिकतम 120 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
+प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
 
 शीर्षक संदर्भ: ${sourceTitle}
 समाचार सामग्री/तथ्य: ${sourceText.slice(0, 3000)}
@@ -289,11 +289,11 @@ ${
 JSON Output Schema:
 {
   "headlineOptions": [
-    "विकल्प 1 (80-95 अक्षर)",
-    "विकल्प 2 (85-100 अक्षर)",
-    "विकल्प 3 (90-105 अक्षर)",
-    "विकल्प 4 (95-110 अक्षर)",
-    "विकल्प 5 (100-120 अक्षर)"
+    "विकल्प 1 (80-110 अक्षर)",
+    "विकल्प 2 (100-130 अक्षर)",
+    "विकल्प 3 (125-150 अक्षर)",
+    "विकल्प 4 (130-160 अक्षर)",
+    "विकल्प 5 (150-200 अक्षर)"
   ]
 }`;
 

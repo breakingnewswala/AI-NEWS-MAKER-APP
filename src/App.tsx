@@ -98,6 +98,7 @@ import { AccountDeletionPage } from './components/AccountDeletionPage';
 import { SupportContactPage } from './components/SupportContactPage';
 import { RefundCancellationPolicyPage } from './components/RefundCancellationPolicyPage';
 import { AppFooterWeb } from './components/AppFooterWeb';
+import { GraphicStudioGuideModal } from './components/GraphicStudioGuideModal';
 import {
   triggerBreakingNewsAlert,
   addNotification,
@@ -1399,6 +1400,7 @@ export default function App() {
   const [commandModalInitialTab, setCommandModalInitialTab] = useState<'link' | 'command' | 'manual'>('link');
   const [isCaptionModalOpen, setIsCaptionModalOpen] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  const [isGraphicStudioGuideOpen, setIsGraphicStudioGuideOpen] = useState(false);
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | undefined>(() => getActiveDraftId() || undefined);
   const [downloading, setDownloading] = useState(false);
@@ -3526,33 +3528,43 @@ export default function App() {
                   id="mobile-studio-sticky-header"
                   className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2 sm:px-4 pt-2 pb-1.5 transition-all"
                 >
-                  {/* Row 1: Split Live Preview & Vertical Step Menu (Mobile: 60:40 | Tablet: 65:35) */}
+                  {/* Row 1: Split Live Preview & Vertical Step Menu (Mobile: 70:30 | Tablet: 68:32) */}
                   <div className="flex flex-row items-stretch gap-2 sm:gap-3 md:gap-4 w-full max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
-                    {/* Left Column: 60% (Mobile) / 65% (Tablet) Live Preview */}
-                    <div className="w-[60%] md:w-[65%] min-w-0 flex flex-col justify-start">
+                    {/* Left Column: 70% (Mobile) / 68% (Tablet) Live Preview */}
+                    <div className="w-[70%] md:w-[68%] min-w-0 flex flex-col justify-start">
                       <div className="flex items-center justify-between px-1 mb-1">
                         <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] md:text-xs font-black text-amber-400 uppercase tracking-wider truncate">
                           <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse motion-reduce:animate-none shrink-0" />
                           <span>लाइव प्रीव्यू</span>
                           <span className="hidden sm:inline text-slate-400 font-normal">({card.aspectRatio || '4:5'})</span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowSafeZone(!showSafeZone)}
-                          title="सेफ-ज़ोन गाइड"
-                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold transition-all cursor-pointer ${
-                            showSafeZone
-                              ? 'bg-sky-500/30 border border-sky-400 text-sky-200'
-                              : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
-                          }`}
-                        >
-                          <Layers className="w-2.5 h-2.5 text-sky-400" />
-                          <span>{showSafeZone ? 'सेफ-ज़ोन' : 'गाइड'}</span>
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setShowSafeZone(!showSafeZone)}
+                            title="सेफ-ज़ोन ऑन/ऑफ"
+                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold transition-all cursor-pointer ${
+                              showSafeZone
+                                ? 'bg-sky-500/30 border border-sky-400 text-sky-200'
+                                : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-slate-200'
+                            }`}
+                          >
+                            <Layers className="w-2.5 h-2.5 text-sky-400" />
+                            <span>{showSafeZone ? 'Safe Zone: On' : 'Safe Zone'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsGraphicStudioGuideOpen(true)}
+                            title="ग्राफ़िक स्टूडियो यूज़र गाइड"
+                            className="w-5 h-5 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-black text-[10px] flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-xs"
+                          >
+                            ?
+                          </button>
+                        </div>
                       </div>
 
                       <div className="w-full flex items-center justify-center p-1 sm:p-1.5 bg-slate-950/80 rounded-xl sm:rounded-2xl border border-slate-800 shadow-2xl">
-                        <div className={`w-full max-h-[220px] xs:max-h-[250px] sm:max-h-[300px] md:max-h-[420px] lg:max-h-[480px] ${
+                        <div className={`w-full max-h-[240px] xs:max-h-[270px] sm:max-h-[320px] md:max-h-[440px] lg:max-h-[500px] ${
                           card.aspectRatio === '9:16' ? 'aspect-[9/16]' : card.aspectRatio === '1:1' ? 'aspect-square' : 'aspect-[4/5]'
                         } rounded-lg sm:rounded-xl overflow-hidden shadow-2xl ring-1 ring-slate-800 flex items-center justify-center bg-black relative`}>
                           <CardPreview
@@ -3565,8 +3577,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Right Column: 40% (Mobile) / 35% (Tablet) Vertical Step Menu */}
-                    <div className="w-[40%] md:w-[35%] min-w-0 flex flex-col justify-between py-0.5">
+                    {/* Right Column: 30% (Mobile) / 32% (Tablet) Vertical Step Menu */}
+                    <div className="w-[30%] md:w-[32%] min-w-0 flex flex-col justify-between py-0.5">
                       <div className="flex items-center justify-between px-1 mb-1">
                         <span className="text-[10px] sm:text-xs font-black text-amber-400 tracking-wide truncate">
                           एडिटर स्टेप्स
@@ -3593,10 +3605,6 @@ export default function App() {
                               onClick={() => {
                                 setActiveMobileStep(s.mobileStep);
                                 setActiveStep(s.internalStep);
-                                const el = document.getElementById('mobile-active-step-commands');
-                                if (el) {
-                                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }
                               }}
                               className={`w-full py-1 sm:py-1.5 md:py-2 px-1.5 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold transition-all flex items-center justify-between cursor-pointer select-none ${
                                 isCurrentActive
@@ -3748,10 +3756,6 @@ export default function App() {
                         onClick={() => {
                           setActiveMobileStep(2);
                           setActiveStep(2);
-                          const el = document.getElementById('mobile-active-step-commands');
-                          if (el) {
-                            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }
                         }}
                         title="एआई टूल्स खोलें (स्टेप 2)"
                         className="py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold bg-gradient-to-r from-purple-900/60 to-indigo-900/60 hover:from-purple-800/70 hover:to-indigo-800/70 text-purple-200 border border-purple-500/40 flex items-center justify-center gap-1 active:scale-95 cursor-pointer transition-all"
@@ -3763,10 +3767,10 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Row 3: Full Active Step Editor Panel - Scrolls Underneath the Sticky Upper Area */}
+                {/* Row 3: Full Active Step Editor Panel */}
                 <div
                   id="mobile-active-step-commands"
-                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 md:p-6 pb-36 overflow-y-auto max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto"
+                  className="w-full flex-1 bg-slate-900/95 p-3 sm:p-4 md:p-6 pb-44 max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto"
                 >
                   <CardEditor
                     card={card}
@@ -3796,6 +3800,59 @@ export default function App() {
                     autoFillNews={autoFillNews}
                     isMobileLayout={true}
                   />
+                </div>
+
+                {/* Permanent Fixed Bottom Step Navigation Strip (Above AppBottomBarWeb) */}
+                <div className="fixed bottom-16 left-0 right-0 z-40 bg-slate-950/98 backdrop-blur-md border-t border-slate-800 shadow-2xl px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 max-w-md sm:max-w-xl md:max-w-3xl mx-auto">
+                    {/* Previous Step Button */}
+                    <button
+                      type="button"
+                      disabled={activeMobileStep <= 1}
+                      onClick={() => {
+                        if (activeMobileStep > 1) {
+                          const prev = activeMobileStep - 1;
+                          setActiveMobileStep(prev);
+                          const stepObj = MOBILE_STUDIO_STEPS.find((s) => s.mobileStep === prev);
+                          if (stepObj) setActiveStep(stepObj.internalStep);
+                        }
+                      }}
+                      className="flex-1 py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 active:scale-95 shadow-sm"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>पिछला चरण</span>
+                    </button>
+
+                    {/* View Preview on Top Button (Smooth scroll to top) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="flex-[1.2] py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 text-amber-300 border border-amber-500/40 active:scale-95 shadow-sm"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5 text-amber-400" />
+                      <span>ऊपर प्रीव्यू देखें</span>
+                    </button>
+
+                    {/* Next Step Button */}
+                    <button
+                      type="button"
+                      disabled={activeMobileStep >= MOBILE_STUDIO_STEPS.length}
+                      onClick={() => {
+                        if (activeMobileStep < MOBILE_STUDIO_STEPS.length) {
+                          const next = activeMobileStep + 1;
+                          setActiveMobileStep(next);
+                          const stepObj = MOBILE_STUDIO_STEPS.find((s) => s.mobileStep === next);
+                          if (stepObj) setActiveStep(stepObj.internalStep);
+                        }
+                      }}
+                      className="flex-1 py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 active:scale-95 shadow-md"
+                    >
+                      <span>अगला चरण</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -4335,6 +4392,12 @@ export default function App() {
             scrollToStepById(stepObj.id);
           }
         }}
+      />
+
+      {/* Dedicated Graphic Photo Studio Workflow Guide Modal */}
+      <GraphicStudioGuideModal
+        isOpen={isGraphicStudioGuideOpen}
+        onClose={() => setIsGraphicStudioGuideOpen(false)}
       />
 
       {/* 9. DRAFT RESTORE & MANAGER MODAL */}

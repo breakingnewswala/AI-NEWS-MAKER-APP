@@ -17053,15 +17053,15 @@ export interface HeadlineTierRange {
 }
 
 export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
-  { min: 80, max: 95, label: 'विकल्प 1' },
-  { min: 85, max: 100, label: 'विकल्प 2' },
-  { min: 90, max: 105, label: 'विकल्प 3' },
-  { min: 95, max: 110, label: 'विकल्प 4' },
-  { min: 100, max: 120, label: 'विकल्प 5' },
+  { min: 80, max: 110, label: 'विकल्प 1' },
+  { min: 100, max: 130, label: 'विकल्प 2' },
+  { min: 125, max: 150, label: 'विकल्प 3' },
+  { min: 130, max: 160, label: 'विकल्प 4' },
+  { min: 150, max: 200, label: 'विकल्प 5' },
 ];
 
-export const HEADLINE_MAX_CHARACTER_LIMIT = 120;
-export const HEADLINE_5_TIER_MAX_LIMITS = [95, 100, 105, 110, 120];
+export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
+export const HEADLINE_5_TIER_MAX_LIMITS = [110, 130, 150, 160, 200];
 
 /**
  * Canonical segmenter for user-perceived Unicode grapheme clusters (Devanagari aksharas).
@@ -17148,9 +17148,9 @@ export function validateHeadlines5Tier(headlines: string[]): {
     if (!text || charCount < 20) {
       valid = false;
       reason = 'हेडलाइन खाली या अधूरी है।';
-    } else if (charCount > 120) {
+    } else if (charCount > 200) {
       valid = false;
-      reason = `वर्ण संख्या (${charCount}) अधिकतम सीमा (120) से अधिक है।`;
+      reason = `वर्ण संख्या (${charCount}) अधिकतम सीमा (200) से अधिक है।`;
     } else if (/[।\.]$/.test(trimmed)) {
       valid = false;
       reason = 'हेडलाइन के अंत में पूर्णविराम (. या ।) नहीं होना चाहिए।';
@@ -17305,8 +17305,8 @@ export function fitHeadlinesTo5TierRanges(
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 120, label: `विकल्प ${i + 1}` };
-    const effectiveMax = Math.min(tier.max, 120);
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `विकल्प ${i + 1}` };
+    const effectiveMax = Math.min(tier.max, 200);
     const cand = workingHeadlines[i] || workingHeadlines[0] || baseText || '';
     if (!cand) continue;
     const cleaned = sanitizeHeadlineClean(cand);
@@ -17318,7 +17318,7 @@ export function fitHeadlinesTo5TierRanges(
       continue;
     }
 
-    // Case 2: Exceeds tier.max -> Check if there is a clean clause boundary; if not and currentLen <= 120, keep complete sentence
+    // Case 2: Exceeds tier.max -> Check if there is a clean clause boundary; if not and currentLen <= 200, keep complete sentence
     let truncated = cleaned;
     const delimiters = [", ", " - ", ": ", " — ", "; "];
     for (const d of delimiters) {
@@ -17332,8 +17332,8 @@ export function fitHeadlinesTo5TierRanges(
         }
       }
     }
-    if (countHeadlineVisibleCharacters(truncated) > 120) {
-      const sliced = cleaned.substring(0, 120);
+    if (countHeadlineVisibleCharacters(truncated) > 200) {
+      const sliced = cleaned.substring(0, 200);
       const lastSpace = sliced.lastIndexOf(" ");
       truncated = sanitizeHeadlineClean(lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced);
     }
@@ -17376,12 +17376,12 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     },
     headline: {
       type: Type.STRING,
-      description: "Primary journalistic headline in Devanagari Hindi (target 80-95 visible characters, max 120 characters, complete sentence, no trailing period or punctuation)",
+      description: "Primary journalistic headline in Devanagari Hindi (target 80-110 visible characters, max 200 characters, complete sentence, no trailing period or punctuation)",
     },
     headlineOptions: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
-      description: "Exactly 5 distinct, complete, self-contained factual headline options for the SAME central news event (Option 1: 80-95 chars, Option 2: 85-100 chars, Option 3: 90-105 chars, Option 4: 95-110 chars, Option 5: 100-120 chars; absolute maximum 120 characters; pure Hindi, complete sentences, no artificial filler, no trailing periods or punctuation)",
+      description: "Exactly 5 distinct, complete, self-contained factual headline options for the SAME central news event (Option 1: 80-110 chars, Option 2: 100-130 chars, Option 3: 125-150 chars, Option 4: 130-160 chars, Option 5: 150-200 chars; absolute maximum 200 characters; pure Hindi, complete sentences, no artificial filler, no trailing periods or punctuation)",
     },
     highlightWords: {
       type: Type.ARRAY,
@@ -17480,7 +17480,7 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     : `(यदि कोई निजी यूज़रनेम न हो तो सीधे प्रासंगिक समाचार हैशटैग से शुरू करें)`;
 
   const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के वरिष्ठ संपादक (Professional Hindi News Editor) हैं।
-आपका कार्य पूरे उपलब्ध समाचार लेख को गहराई से पढ़कर, उसके वास्तविक तथ्यों और मुख्य घटनाक्रम के आधार पर 5 अनुमोदित शैलियों में 5 अलग-अलग, सटीक, संक्षिप्त और प्रभावशाली हिंदी हेडलाइंस (विकल्प 1: सीधी मुख्य खबर [80-95], विकल्प 2: तथ्य-केंद्रित हेडलाइन [85-100], विकल्प 3: परिणाम-केंद्रित हेडलाइन [90-105], विकल्प 4: प्रमुख विवरण वाली हेडलाइन [95-110], विकल्प 5: प्रभावशाली समाचार हेडलाइन [100-120]; अधिकतम सीमा 120 अक्षर) तथा 3 सोशल मीडिया कैप्शन तैयार करना है।
+आपका कार्य पूरे उपलब्ध समाचार लेख को गहराई से पढ़कर, उसके वास्तविक तथ्यों और मुख्य घटनाक्रम के आधार पर 5 अनुमोदित शैलियों में 5 अलग-अलग, सटीक, संक्षिप्त और प्रभावशाली हिंदी हेडलाइंस (विकल्प 1: सीधी मुख्य खबर [80-110], विकल्प 2: तथ्य-केंद्रित हेडलाइन [100-130], विकल्प 3: परिणाम-केंद्रित हेडलाइन [125-150], विकल्प 4: प्रमुख विवरण वाली हेडलाइन [130-160], विकल्प 5: प्रभावशाली समाचार हेडलाइन [150-200]; अधिकतम सीमा 200 अक्षर) तथा 3 सोशल मीडिया कैप्शन तैयार करना है।
 कड़ा नियम: किसी भी हेडलाइन की लंबाई बढ़ाने के लिए अपनी ओर से कोई कृत्रिम प्रशासनिक वाक्य ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'विशेष डेस्क' आदि) बिल्कुल न जोड़ें। URL को कभी भी हेडलाइन या कैप्शन न बनाएं। केवल वैध JSON लौटाएं।`;
 
   const effectiveSourceTitle = primaryHeadline || "";
@@ -17498,7 +17498,7 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
 ★ चरण 1: आंतरिक समाचार विश्लेषण (FACT SHEET EXTRACTION):
 हेडलाइन लिखने से पहले ` + "`factSheet`" + ` ऑब्जेक्ट में मुख्य घटना (mainEvent), मुख्य विषय (mainSubject), मुख्य व्यक्ति या संस्था (mainPersonOrOrg), स्थान (location), दिनांक (date), मुख्य कार्रवाई या निर्णय (mainAction), महत्वपूर्ण संख्या या आँकड़े (importantFigures), आधिकारिक बयान या आदेश (officialStatement), वास्तविक परिणाम (actualOutcome) और महत्वपूर्ण संदर्भ (importantContext) सटीक रूप से दर्ज करें।
 
-★ चरण 2: BREAKING NEWS WALA — 5 अनुमोदित संपादकीय शैलियों के हेडलाइन विकल्प (MAX 120 CHARACTERS):
+★ चरण 2: BREAKING NEWS WALA — 5 अनुमोदित संपादकीय शैलियों के हेडलाइन विकल्प (MAX 200 CHARACTERS):
 1. प्रत्येक हेडलाइन को एक नया, स्वतंत्र, पूर्ण और अर्थपूर्ण हिंदी वाक्य होना चाहिए (DO NOT COPY-PASTE OR SLICE ARTICLE BODY SENTENCES):
    - आलेख के किसी वाक्य को बीच से काटकर या दो असंबद्ध वाक्यों को जोड़कर हेडलाइन कभी न बनाएं।
    - प्रत्येक हेडलाइन का आरंभ, मध्य और अंत व्याकरण की दृष्टि से पूर्ण होना चाहिए। कोई भी हेडलाइन अधूरे वाक्यांश (जैसे 'से 5', 'कोर्ट ने कहा', 'सुप्रीम कोर्ट ने गुरुवार', 'एपीके फाइल लिंक') पर समाप्त नहीं होनी चाहिए।
@@ -17513,14 +17513,14 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
      * "इस घटना के बाद प्रशासन अलर्ट"
      * "मामले को लेकर विभागीय स्तर पर समीक्षा"
      * "विशेष डेस्क" / "विशेष डैश" (स्थान या हेडलाइन में कभी न लगाएं)
-2. 5 अनुमोदित संपादकीय शैलियाँ और अधिकतम 120 अक्षर की सीमा (5 APPROVED EDITORIAL STYLES):
+2. 5 अनुमोदित संपादकीय शैलियाँ और अधिकतम 200 अक्षर की सीमा (5 APPROVED EDITORIAL STYLES):
    सभी 5 विकल्प केवल और केवल उसी मूल खबर/घटना पर आधारित होने चाहिए, किंतु उनकी संपादकीय प्रस्तुति निम्न 5 शैलियों के अनुसार अलग होगी:
-   - विकल्प 1 [सीधी मुख्य खबर]: 80 से 95 अक्षर (मुख्य घटना का सीधा, स्पष्ट, निष्पक्ष और तेज़ समाचार शीर्षक)
-   - विकल्प 2 [तथ्य-केंद्रित हेडलाइन]: 85 से 100 अक्षर (मुख्य घटना के साथ प्रमुख तथ्य, संख्या, आंकड़ा या मुख्य निर्णय)
-   - विकल्प 3 [परिणाम-केंद्रित हेडलाइन]: 90 से 105 अक्षर (घटना के प्रभाव, परिणाम, असर या कार्रवाई को स्पष्ट करने वाला शीर्षक)
-   - विकल्प 4 [प्रमुख विवरण वाली हेडलाइन]: 95 से 110 अक्षर (घटना के महत्वपूर्ण संदर्भ, विवरण, आधिकारिक बयान या आदेश पर आधारित शीर्षक)
-   - विकल्प 5 [प्रभावशाली समाचार हेडलाइन]: 100 से 120 अक्षर (खबर का संतुलित, सारगर्भित और प्रभावशाली संपादकीय शीर्षक)
-   - कोई भी हेडलाइन किसी भी परिस्थिति में 120 अक्षर से अधिक नहीं होनी चाहिए।
+   - विकल्प 1 [सीधी मुख्य खबर]: 80 से 110 अक्षर (मुख्य घटना का सीधा, स्पष्ट, निष्पक्ष और तेज़ समाचार शीर्षक)
+   - विकल्प 2 [तथ्य-केंद्रित हेडलाइन]: 100 से 130 अक्षर (मुख्य घटना के साथ प्रमुख तथ्य, संख्या, आंकड़ा या मुख्य निर्णय)
+   - विकल्प 3 [परिणाम-केंद्रित हेडलाइन]: 125 से 150 अक्षर (घटना के प्रभाव, परिणाम, असर या कार्रवाई को स्पष्ट करने वाला शीर्षक)
+   - विकल्प 4 [प्रमुख विवरण वाली हेडलाइन]: 130 से 160 अक्षर (घटना के महत्वपूर्ण संदर्भ, विवरण, आधिकारिक बयान या आदेश पर आधारित शीर्षक)
+   - विकल्प 5 [प्रभावशाली समाचार हेडलाइन]: 150 से 200 अक्षर (खबर का संतुलित, सारगर्भित और प्रभावशाली संपादकीय शीर्षक)
+   - कोई भी हेडलाइन किसी भी परिस्थिति में 200 अक्षर से अधिक नहीं होनी चाहिए।
    - यदि मूल समाचार में जानकारी सीमित है, तो न्यूनतम अक्षर संख्या पूरी करने के लिए कभी भी कृत्रिम शब्द न जोड़ें—छोटी लेकिन सटीक हेडलाइन रखें।
 3. भाषा, निष्पक्षता और शुद्धता (LANGUAGE & HONORIFIC REMOVAL):
    - सभी हेडलाइंस 100% शुद्ध देवनागरी हिंदी में हों। अंग्रेजी संक्षिप्त रूपों को हिंदी देवनागरी में लिखें (जैसे एपीके, यूपीआई, सुप्रीम कोर्ट, हाई कोर्ट, एफआईआर, सीबीआई, ईडी, जीएसटी, आरबीआई, बीसीसीआई, आईपीएल, एआई)।
@@ -18179,10 +18179,10 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       // Validate all 5 headline options against 5-tier mandatory character bounds
       let validationReport = validateHeadlines5Tier(parsedData.headlineOptions);
 
-      // Bounded retry if any tier exceeds 120 chars and we used Gemini/OpenAI
+      // Bounded retry if any tier exceeds 200 chars and we used Gemini/OpenAI
       if (!validationReport.valid && actualProvider !== "local" && parsedData.headlineOptions.length > 0) {
         try {
-          const retryPrompt = `निम्नलिखित समाचार हेडलाइंस में से कुछ विकल्प अपनी अधिकतम वर्ण-सीमा (120 अक्षर) का पालन नहीं कर रहे हैं:
+          const retryPrompt = `निम्नलिखित समाचार हेडलाइंस में से कुछ विकल्प अपनी अधिकतम वर्ण-सीमा (200 अक्षर) का पालन नहीं कर रहे हैं:
 ${validationReport.results.map((r: any) => `विकल्प ${r.tier} (${r.min}-${r.max} अक्षर, वर्तमान: ${r.charCount} अक्षर): "${r.text}" ${r.valid ? '[मान्य]' : `[त्रुटि: ${r.reason}]`}`).join('\n')}
 
 मूल समाचार तथ्य:
@@ -18191,8 +18191,8 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
 """
 
 कृपया उपरोक्त 5 हेडलाइन विकल्पों को संशोधित कर ठीक 5 विकल्पों का वैध JSON Object लौटाएं।
-प्रत्येक विकल्प अधिकतम 120 अक्षर की सीमा (विकल्प 1: 80-95, विकल्प 2: 85-100, विकल्प 3: 90-105, विकल्प 4: 95-110, विकल्प 5: 100-120 अक्षर) के भीतर होना चाहिए, बिना किसी कृत्रिम वाक्य के और बिना पूर्णविराम के:
-{"headlineOptions": ["विकल्प 1 (80-95)", "विकल्प 2 (85-100)", "विकल्प 3 (90-105)", "विकल्प 4 (95-110)", "विकल्प 5 (100-120)"]}`;
+प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 अक्षर) के भीतर होना चाहिए, बिना किसी कृत्रिम वाक्य के और बिना पूर्णविराम के:
+{"headlineOptions": ["विकल्प 1 (80-110)", "विकल्प 2 (100-130)", "विकल्प 3 (125-150)", "विकल्प 4 (130-160)", "विकल्प 5 (150-200)"]}`;
 
           const retryAiResult = await executeGeminiWithKeyPool(async (ai) => {
             const resp = await generateWithFallbackAndRetry(
@@ -18795,19 +18795,19 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
 Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME primary news event in pure Hindi Devanagari script:
 - All 5 options must be based strictly on the same central event and verified facts from the source news.
 - STRICT RULE: Never add generic administrative or filler statements ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'पूरे मामले को लेकर कार्रवाई की जा रही है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'इस घटना के बाद प्रशासन अलर्ट', 'मामले को लेकर विभागीय स्तर पर समीक्षा', 'विशेष डेस्क', 'विशेष डैश') merely to increase headline length.
-- MANDATORY 5-TIER CHARACTER LIMITS (Absolute Maximum: 120 characters):
-  * Option 1 (विकल्प 1): 80–95 characters
-  * Option 2 (विकल्प 2): 85–100 characters
-  * Option 3 (विकल्प 3): 90–105 characters
-  * Option 4 (विकल्प 4): 95–110 characters
-  * Option 5 (विकल्प 5): 100–120 characters
-- No headline may exceed 120 characters under any circumstance. If the original news is short, keep a shorter accurate headline rather than adding filler.
+- MANDATORY 5-TIER CHARACTER LIMITS (Absolute Maximum: 200 characters):
+  * Option 1 (विकल्प 1): 80–110 characters
+  * Option 2 (विकल्प 2): 100–130 characters
+  * Option 3 (विकल्प 3): 125–150 characters
+  * Option 4 (विकल्प 4): 130–160 characters
+  * Option 5 (विकल्प 5): 150–200 characters
+- No headline may exceed 200 characters under any circumstance. If the original news is short, keep a shorter accurate headline rather than adding filler.
 - No ending punctuation (. or । or ?). No tier labels or bracketed counts like '[85/100]'.
 - Pure Devanagari Hindi only (no Roman English characters).
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
     const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें।
-प्रत्येक विकल्प अधिकतम 120 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
+प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
 शीर्षक संदर्भ: ${sourceTitle}
 समाचार सामग्री/तथ्य: ${sourceText.slice(0, 3000)}
 ${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
@@ -18815,11 +18815,11 @@ ${excludeTitles.length > 0 ? `पिछले 5 विकल्प (इन्ह
 JSON Output Schema:
 {
   "headlineOptions": [
-    "विकल्प 1 (80-95 अक्षर)",
-    "विकल्प 2 (85-100 अक्षर)",
-    "विकल्प 3 (90-105 अक्षर)",
-    "विकल्प 4 (95-110 अक्षर)",
-    "विकल्प 5 (100-120 अक्षर)"
+    "विकल्प 1 (80-110 अक्षर)",
+    "विकल्प 2 (100-130 अक्षर)",
+    "विकल्प 3 (125-150 अक्षर)",
+    "विकल्प 4 (130-160 अक्षर)",
+    "विकल्प 5 (150-200 अक्षर)"
   ]
 }`;
 
@@ -23901,7 +23901,7 @@ async function startServer() {
         app.use(
           express.static(staticDir, {
             setHeaders: (res, filePath) => {
-              if (filePath.endsWith(".html")) {
+              if (filePath.endsWith(".html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.json")) {
                 res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
                 res.setHeader("Pragma", "no-cache");
                 res.setHeader("Expires", "0");

@@ -2,79 +2,79 @@
   "graphic_004": {
     "id": "graphic_004",
     "docId": "graphic_004",
-    "templateId": "graphic_004",
-    "allowedPlans": [
-      "VIP DESK"
-    ],
-    "selectedTier": "VIP DESK",
     "isActive": true,
-    "updatedAt": "2026-10-30T13:38:36.315Z",
-    "headlineArea": "2-Line Premium Gold Headline Area",
     "coinPrice": 150,
-    "version": "v1.0",
+    "selectedTier": "VIP DESK",
     "category": "Special Frame",
+    "headlineArea": "2-Line Premium Gold Headline Area",
+    "version": "v1.0",
+    "templateId": "graphic_004",
+    "updatedAt": "2026-10-30T13:38:36.315Z",
+    "logoArea": "top_right_box",
     "customName": "Special Edition Frame",
     "locationArea": "top_left_box",
-    "logoArea": "top_right_box"
+    "allowedPlans": [
+      "VIP DESK"
+    ]
   },
   "graphic_001": {
     "id": "graphic_001",
     "docId": "graphic_001",
-    "coinPrice": 0,
-    "version": "v1.0",
-    "selectedTier": "BASIC",
-    "templateId": "graphic_001",
+    "locationArea": "top_left_box",
     "allowedPlans": [
       "BASIC",
       "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
+    "updatedAt": "2026-10-30T13:38:36.005Z",
     "isActive": true,
-    "logoArea": "top_right_box",
-    "customName": "Regular Clean News Frame",
     "category": "Regular Frame",
-    "locationArea": "top_left_box",
+    "logoArea": "top_right_box",
+    "version": "v1.0",
+    "selectedTier": "BASIC",
+    "coinPrice": 0,
     "headlineArea": "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
-    "updatedAt": "2026-10-30T13:38:36.005Z"
+    "customName": "Regular Clean News Frame",
+    "templateId": "graphic_001"
   },
   "graphic_003": {
     "id": "graphic_003",
     "docId": "graphic_003",
-    "category": "Super Breaking Frame",
-    "customName": "Super Breaking News Frame",
-    "logoArea": "top_right_box",
-    "locationArea": "top_strip",
-    "headlineArea": "3-Line Red Ribbon Headline Area",
+    "version": "v1.0",
     "coinPrice": 100,
-    "updatedAt": "2026-10-30T13:38:36.209Z",
-    "isActive": true,
-    "selectedTier": "PRO",
     "templateId": "graphic_003",
+    "customName": "Super Breaking News Frame",
+    "locationArea": "top_strip",
     "allowedPlans": [
       "PRO",
       "VIP DESK"
     ],
-    "version": "v1.0"
+    "isActive": true,
+    "category": "Super Breaking Frame",
+    "headlineArea": "3-Line Red Ribbon Headline Area",
+    "logoArea": "top_right_box",
+    "selectedTier": "PRO",
+    "updatedAt": "2026-10-30T13:38:36.209Z"
   },
   "graphic_002": {
     "id": "graphic_002",
     "docId": "graphic_002",
-    "isActive": true,
-    "locationArea": "top_left_box",
-    "templateId": "graphic_002",
-    "logoArea": "top_right_box",
     "customName": "Package Standard Frame",
-    "headlineArea": "2-Line Headline Area (डार्�� ब्लू स्ट्रिप)",
-    "updatedAt": 1794100402212,
-    "coinPrice": 15,
+    "isActive": true,
+    "category": "Package Frame",
     "allowedPlans": [
       "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
-    "version": "v1.0",
+    "locationArea": "top_left_box",
+    "logoArea": "top_right_box",
+    "updatedAt": 1794102372492,
+    "templateId": "graphic_002",
     "selectedTier": "ADVANCED",
-    "category": "Package Frame"
+    "headlineArea": "2-Line Headline Area (डार्�� ब्लू स्ट्रिप)",
+    "version": "v1.0",
+    "coinPrice": 15
   }
 }
