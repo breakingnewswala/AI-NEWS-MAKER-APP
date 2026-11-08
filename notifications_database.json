@@ -11,28 +11,6 @@
     "linkTab": "home"
   },
   {
-    "id": "notif_video_vid-test-45-1794102376208",
-    "title": "🎬 नया वीडियो व रील्स जारी",
-    "message": "विशेष 4:5 ग्राउंड रिपोर्ट",
-    "time": "अभी",
-    "timestamp": 1794102376215,
-    "unread": true,
-    "type": "video",
-    "targetUserEmail": "all",
-    "linkTab": "videos"
-  },
-  {
-    "id": "notif_video_vid-test-1794102376190",
-    "title": "🎬 नया वीडियो व रील्स जारी",
-    "message": "संसद में ऐतिहासिक डिजिटल मीडिया बिल पास",
-    "time": "अभी",
-    "timestamp": 1794102376199,
-    "unread": true,
-    "type": "video",
-    "targetUserEmail": "all",
-    "linkTab": "videos"
-  },
-  {
     "unread": false,
     "targetUserEmail": "admin",
     "linkTab": "profile",

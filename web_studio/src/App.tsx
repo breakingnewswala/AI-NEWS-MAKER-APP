@@ -926,7 +926,8 @@ export default function App() {
 
       // Check user-specific onboarding completion flag
       const userOnboarding = localStorage.getItem(`onboarding_completed_${cleanEmail}`);
-      if (userOnboarding !== 'true') return false;
+      const generalOnboarding = localStorage.getItem('is_onboarding_completed');
+      if (userOnboarding === 'true' || generalOnboarding === 'true') return true;
 
       // Check actual profile data completeness & WhatsApp verification
       const userProfileStr = localStorage.getItem(`user_profile_${cleanEmail}`) || localStorage.getItem('user_channel_profile');
@@ -935,22 +936,14 @@ export default function App() {
       const hasValidChannelName = Boolean(
         profile.channelNameHi &&
         profile.channelNameHi.trim() &&
-        profile.channelNameHi.trim() !== 'सेटअप अधूरा (Incomplete)' &&
-        profile.channelNameHi.trim() !== 'एआई न्यूज़ मेकर' &&
-        profile.channelNameHi.trim().toLowerCase() !== 'ai news maker'
-      );
-      const logoCandidate = (profile.channelLogoUrl || profile.channelLogoPngUrl || profile.channelLogoGifUrl || '').trim();
-      const hasValidLogo = Boolean(
-        logoCandidate &&
-        logoCandidate !== '/assets/ai_news_maker_logo.png' &&
-        !logoCandidate.includes('googleusercontent.com')
+        profile.channelNameHi.trim() !== 'सेटअप अधूरा (Incomplete)'
       );
       const rawPhone = (profile.whatsappNumber || profile.mobileNumber || profile.mobile || getUserSubscription().primaryMobile || '').replace(/\D/g, '').slice(-10);
       const isPhoneVerified = Boolean(
         rawPhone.length === 10 &&
         (profile.whatsappVerified === true || getUserSubscription().isMobileLocked === true)
       );
-      if (!hasValidChannelName || !hasValidLogo || !profile.username || !isPhoneVerified) {
+      if (!hasValidChannelName || !profile.username) {
         return false;
       }
       return true;
@@ -2935,8 +2928,8 @@ export default function App() {
     currentTab === 'delete-account' ||
     currentTab === 'support';
 
-  // Primary Screen with Google Login Steps is enforced for all unauthenticated visitors
-  if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
+  // Primary Screen with Google Login Steps is enforced for unauthenticated visitors
+  if (!isPublicLegalPage && (showAuthWelcomeScreen || !currentUser || (!isOnboardingCompleted && currentTab !== 'studio' && currentTab !== 'generator'))) {
     return (
       <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (

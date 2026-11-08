@@ -3549,10 +3549,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-[10px] text-slate-400 font-bold mr-1">त्वरित अवधि:</span>
                         {[
-                          { label: '15s', sec: 15 },
+                          { label: '10s', sec: 10 },
                           { label: '30s', sec: 30 },
                           { label: '60s', sec: 60 },
-                          { label: 'पूरी क्लिप', sec: Math.max(15, Math.floor(duration || 60)) },
+                          { label: 'पूरी क्लिप', sec: Math.max(10, Math.floor(duration || 60)) },
                         ].map((preset) => (
                           <button
                             key={preset.label}

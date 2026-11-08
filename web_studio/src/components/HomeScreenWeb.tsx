@@ -1878,13 +1878,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         )}
 
-        {/* Approved Center-Aligned Tagline & Subtitle */}
+        {/* Approved Center-Aligned Headline & Tagline */}
         <div className="text-center py-1 sm:py-2 select-none">
           <h2 className="text-lg sm:text-2xl font-black bg-gradient-to-r from-red-600 via-amber-500 to-yellow-500 bg-clip-text text-transparent">
-            खबर देखने से खबर बनाने तक सिर्फ दो मिनट
+            खबर देखने से खबर बनाने तक, सिर्फ दो मिनट।
           </h2>
           <p className="text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 mt-0.5">
-            डिजिटल news चैनलों का AI स्टूडियो
+            “आपकी खबर, आपकी पहचान — एआई के साथ हर कहानी को दीजिए नया अंदाज़।”
           </p>
         </div>
 

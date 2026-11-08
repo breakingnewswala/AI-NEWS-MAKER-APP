@@ -574,7 +574,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                     <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
                       WhatsApp AI Command Center — Live Inbox
                     </h3>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold hidden sm:inline-block">
                       Master Admin
                     </span>
                   </div>

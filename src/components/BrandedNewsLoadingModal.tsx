@@ -123,9 +123,9 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
     };
   }, [isOpen, error, effectiveSubtitles, subtitleIntervalMs, prefersReducedMotion]);
 
-  // Duration countdown for fixed presentation intervals
+  // Duration countdown for fixed presentation intervals or dynamic elapsed time tracking
   useEffect(() => {
-    if (!isOpen || error || !durationSeconds || durationSeconds <= 0) {
+    if (!isOpen || error) {
       if (countdownRef.current) clearInterval(countdownRef.current);
       setElapsedSeconds(0);
       completeFiredRef.current = false;
@@ -135,26 +135,33 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
     setElapsedSeconds(0);
     completeFiredRef.current = false;
 
-    countdownRef.current = setInterval(() => {
-      setElapsedSeconds((prev) => {
-        const next = +(prev + 0.2).toFixed(2);
-        if (next >= durationSeconds && !completeFiredRef.current) {
-          completeFiredRef.current = true;
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          if (onComplete) {
-            setTimeout(() => {
-              onComplete();
-            }, 60);
-          } else if (onCancel) {
-            setTimeout(() => {
-              onCancel();
-            }, 60);
+    if (durationSeconds && durationSeconds > 0) {
+      countdownRef.current = setInterval(() => {
+        setElapsedSeconds((prev) => {
+          const next = +(prev + 0.2).toFixed(2);
+          if (next >= durationSeconds && !completeFiredRef.current) {
+            completeFiredRef.current = true;
+            if (countdownRef.current) clearInterval(countdownRef.current);
+            if (onComplete) {
+              setTimeout(() => {
+                onComplete();
+              }, 60);
+            } else if (onCancel) {
+              setTimeout(() => {
+                onCancel();
+              }, 60);
+            }
+            return durationSeconds;
           }
-          return durationSeconds;
-        }
-        return Math.min(durationSeconds, next);
-      });
-    }, 200);
+          return Math.min(durationSeconds, next);
+        });
+      }, 200);
+    } else {
+      // Dynamic AI generation - track elapsed seconds continuously
+      countdownRef.current = setInterval(() => {
+        setElapsedSeconds((prev) => +(prev + 0.5).toFixed(1));
+      }, 500);
+    }
 
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
@@ -347,9 +354,13 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
                 <span className="text-sky-300">
                   {mode === 'ai_generation' ? 'AI विश्लेषण जारी है...' : 'ग्राफिक सामग्री तैयार हो रही है...'}
                 </span>
-                {progressPercent !== null && (
+                {progressPercent !== null ? (
                   <span className="text-violet-300 font-mono">
-                    {Math.floor(elapsedSeconds)}s / {durationSeconds}s
+                    {Math.floor(elapsedSeconds)}s / {durationSeconds}s ({progressPercent}%)
+                  </span>
+                ) : (
+                  <span className="text-violet-300 font-mono">
+                    समय: {Math.floor(elapsedSeconds)}s (अनुमानित 10-20s)
                   </span>
                 )}
               </div>

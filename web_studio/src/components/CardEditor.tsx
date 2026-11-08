@@ -591,6 +591,78 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     setStep7CaptionText(computeCaptionForStyle(step7CaptionStyle));
   }, [computeCaptionForStyle, step7CaptionStyle]);
 
+  // 7-Step Graphic Studio Completion Progress Tracker (Part 1 & Part 8: 100% Gate)
+  const editorProgress = React.useMemo(() => {
+    // Step 1: Layout / Template selection
+    const step1Done = Boolean(card.layout || card.aspectRatio || card.frameDesign || card.title);
+    // Step 2: Headline / Content (headline entered)
+    const step2Done = Boolean(card.headline && card.headline.trim().length > 0);
+    // Step 3: Images uploaded/selected
+    const step3Done = Boolean(
+      card.images &&
+      (card.images.main || card.images.secondary || card.images.top || card.images.bottom || card.images.left || card.images.right)
+    );
+    // Step 4: Framing / Format selection
+    const step4Done = Boolean(card.aspectRatio || card.frameDesign);
+    // Step 5: Badges / Callouts / Location (Location default ON)
+    const step5Done = Boolean(
+      (card.showLocation !== false && (card.location || '').trim().length > 0) ||
+      card.newsUpdateBadge ||
+      card.calloutTag ||
+      card.category
+    );
+    // Step 6: Branding (Brand name & logo)
+    const step6Done = Boolean(
+      (card.brandName || '').trim() ||
+      (card.channelNameHi || '').trim() ||
+      (card.channelNameEn || '').trim() ||
+      card.brandLogoType
+    );
+    // Step 7: Final Review / Caption
+    const step7Done = Boolean(
+      (card.summary || '').trim().length > 0 ||
+      (step7CaptionText || '').trim().length > 0
+    );
+
+    const stepsStatus = [step1Done, step2Done, step3Done, step4Done, step5Done, step6Done, step7Done];
+    const completedSteps = stepsStatus.filter(Boolean).length;
+    const totalSteps = 7;
+    const percentage = Math.round((completedSteps / totalSteps) * 100);
+    const is100Percent = completedSteps === totalSteps;
+
+    return {
+      step1Done,
+      step2Done,
+      step3Done,
+      step4Done,
+      step5Done,
+      step6Done,
+      step7Done,
+      completedSteps,
+      totalSteps,
+      percentage,
+      is100Percent,
+    };
+  }, [
+    card.layout,
+    card.aspectRatio,
+    card.frameDesign,
+    card.title,
+    card.headline,
+    card.images,
+    card.showLocation,
+    card.location,
+    card.newsUpdateBadge,
+    card.calloutTag,
+    card.category,
+    card.brandName,
+    card.channelNameHi,
+    card.channelNameEn,
+    card.brandLogoType,
+    card.summary,
+    step7CaptionText,
+  ]);
+
   const handleCopyStep7Caption = () => {
     if (!editorProgress.is100Percent) {
       if ((window as any).showAppToast) {

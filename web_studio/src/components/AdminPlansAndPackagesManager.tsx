@@ -2302,7 +2302,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm sm:text-base font-black text-white block truncate">
-                    एडमिन नोटिफिकेशन पैनल (Admin Notifications)
+                    एडमिन नोटिफिकेशन पैनल
                   </span>
                   {adminNotifCounts.all > 0 && (
                     <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-full uppercase animate-pulse">
@@ -2488,7 +2488,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                     <div><strong className="text-amber-400 font-bold">यूज़र:</strong> {n.meta.userName || 'संपादक'}</div>
                                     <div><strong className="text-amber-400 font-bold">ईमेल:</strong> {n.meta.userEmail || n.meta.email || 'N/A'}</div>
                                     {n.meta.userMobile && <div><strong className="text-amber-400 font-bold">मोबाइल:</strong> {n.meta.userMobile}</div>}
-                                    <div><strong className="text-amber-400 font-bold">स्थिति:</strong> <span className={n.status === 'resolved' || n.status === 'approved' ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>{n.status === 'resolved' || n.status === 'approved' ? '✓ Resolved' : '⏳ Pending'}</span></div>
+                                    <div><strong className="text-amber-400 font-bold">स्थिति:</strong> <span className={n.status === 'resolved' || n.status === 'approved' ? 'text-emerald-400 font-bold' : 'text-amber-300 font-bold'}>{n.status === 'resolved' || n.status === 'approved' ? '✓ निस्तारित' : '⏳ प्रतीक्षारत'}</span></div>
                                     {n.meta.channelName && <div><strong className="text-amber-400 font-bold">चैनल:</strong> {n.meta.channelName}</div>}
                                     {n.meta.newLogoUrl && (
                                       <div className="sm:col-span-2 flex items-center gap-2 pt-1">
@@ -2523,9 +2523,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               type="button"
                               onClick={() => handleResolveSupportRequest(n.rawId, n.id, n.category)}
                               className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-[11px] font-bold rounded-lg shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1 border border-blue-400/40"
-                              title="इस सपोर्ट अनुरोध को Resolved मार्क करें"
+                              title="इस सपोर्ट अनुरोध को निस्तारित मार्क करें"
                             >
-                              <span>✓ Resolve करें</span>
+                              <span>✓ हल करें</span>
                             </button>
                           )}
 
@@ -6735,7 +6735,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm sm:text-base font-black text-white block truncate">
-                    एपीआई की मैनेजर (API Key Manager)
+                    API Manager
                   </span>
                   <span className="px-2 py-0.5 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 text-[10px] font-black rounded uppercase">
                     Free & Paid Pools

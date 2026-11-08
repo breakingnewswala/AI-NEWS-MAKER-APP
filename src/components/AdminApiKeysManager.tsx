@@ -438,7 +438,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     return (
       <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-        <p className="text-sm">API की मैनेजर लोड हो रहा है...</p>
+        <p className="text-sm">API Manager लोड हो रहा है...</p>
       </div>
     );
   }

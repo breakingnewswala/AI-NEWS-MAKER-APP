@@ -1059,8 +1059,8 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
             </div>
           </div>
 
-          {/* Right Column: Chat Screen */}
-          <div className={`flex-1 flex flex-col min-w-0 bg-slate-950 ${!selectedConvId ? 'hidden md:flex' : 'flex'}`}>
+          {/* Right Column: Chat Screen (Takes full width on mobile when conversation selected) */}
+          <div className={`flex-1 flex flex-col min-w-0 bg-slate-950 ${!selectedConvId ? 'hidden md:flex' : 'flex w-full'}`}>
             {!selectedConvId ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500">
                 <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4">
@@ -1079,9 +1079,10 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
                     <button
                       type="button"
                       onClick={() => setSelectedConvId(null)}
-                      className="md:hidden p-1.5 hover:bg-slate-800 text-slate-400 rounded-lg"
+                      className="md:hidden p-2 hover:bg-slate-800 text-slate-300 rounded-lg cursor-pointer flex items-center gap-1 active:scale-95"
+                      title="वार्तालाप सूची पर वापस जाएँ"
                     >
-                      <ArrowLeft className="w-4 h-4" />
+                      <ArrowLeft className="w-5 h-5 text-amber-400" />
                     </button>
 
                     <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-amber-400 shrink-0">
@@ -1277,10 +1278,10 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
                   </div>
                 )}
 
-                {/* Reply Form */}
+                {/* Reply Form (Sticky bottom with safe inset for mobile virtual keyboard) */}
                 <form
                   onSubmit={handleSendMessage}
-                  className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0"
+                  className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0 sticky bottom-0 z-10"
                 >
                   <button
                     type="button"
