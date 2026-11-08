@@ -11527,12 +11527,36 @@ try {
 function loadRewardsDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.wallets.size > 0) {
     const wallets = {};
+    const welcomeRewards = {};
+    const txs = Array.from(centralDb.cache.walletTransactions.values());
     for (const [k, w] of centralDb.cache.wallets.entries()) {
-      wallets[k] = {
+      const cleanK = k.toLowerCase().trim();
+      const gClaimed = Boolean(w.graphicClaimed || w.firstGraphicDownloadRewardClaimed);
+      const vClaimed = Boolean(w.videoClaimed || w.firstVideoExportRewardClaimed);
+      wallets[cleanK] = {
         coinBalance: Number(w.coinBalance || 0),
         pendingCoins: Number(w.pendingCoins || 0),
-        totalEarnedCoins: Number(w.totalEarnedCoins || 0)
+        totalEarnedCoins: Number(w.totalEarnedCoins || 0),
+        graphicClaimed: gClaimed,
+        videoClaimed: vClaimed
       };
+      if (gClaimed || vClaimed) {
+        welcomeRewards[cleanK] = { graphicClaimed: gClaimed, videoClaimed: vClaimed };
+      }
+    }
+    for (const tx of txs) {
+      const txId = String(tx?.id || tx?.transactionId || "");
+      const desc = String(tx?.description || "");
+      const uKey = String(tx?.userEmail || tx?.userId || "").toLowerCase().trim();
+      if (!uKey) continue;
+      if (txId.startsWith("tx-welcome-graphic-") || desc.includes("\u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921")) {
+        welcomeRewards[uKey] = { ...welcomeRewards[uKey] || {}, graphicClaimed: true };
+        if (wallets[uKey]) wallets[uKey].graphicClaimed = true;
+      }
+      if (txId.startsWith("tx-welcome-video-") || desc.includes("\u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921")) {
+        welcomeRewards[uKey] = { ...welcomeRewards[uKey] || {}, videoClaimed: true };
+        if (wallets[uKey]) wallets[uKey].videoClaimed = true;
+      }
     }
     const frameUnlocks = {};
     for (const [k, f] of centralDb.cache.frameUnlocks.entries()) {
@@ -11540,10 +11564,10 @@ function loadRewardsDatabase() {
     }
     return {
       claims: [],
-      transactions: Array.from(centralDb.cache.walletTransactions.values()),
+      transactions: txs,
       downloadEvents: [],
       wallets,
-      welcomeRewards: {},
+      welcomeRewards,
       unlockedItems: {},
       frameUnlocks
     };
@@ -11552,12 +11576,27 @@ function loadRewardsDatabase() {
     if (import_fs2.default.existsSync(REWARDS_DB_FILE)) {
       const raw = import_fs2.default.readFileSync(REWARDS_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
+      const wallets = parsed.wallets && typeof parsed.wallets === "object" ? parsed.wallets : {};
+      const welcomeRewards = parsed.welcomeRewards && typeof parsed.welcomeRewards === "object" ? parsed.welcomeRewards : {};
+      const transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+      for (const tx of transactions) {
+        const txId = String(tx?.id || tx?.transactionId || "");
+        const desc = String(tx?.description || "");
+        const uKey = String(tx?.userEmail || tx?.userId || "").toLowerCase().trim();
+        if (!uKey) continue;
+        if (txId.startsWith("tx-welcome-graphic-") || desc.includes("\u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921")) {
+          welcomeRewards[uKey] = { ...welcomeRewards[uKey] || {}, graphicClaimed: true };
+        }
+        if (txId.startsWith("tx-welcome-video-") || desc.includes("\u092A\u094D\u0930\u0925\u092E \u0938\u092B\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0921\u093E\u0909\u0928\u0932\u094B\u0921")) {
+          welcomeRewards[uKey] = { ...welcomeRewards[uKey] || {}, videoClaimed: true };
+        }
+      }
       return {
         claims: Array.isArray(parsed.claims) ? parsed.claims : [],
-        transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
+        transactions,
         downloadEvents: Array.isArray(parsed.downloadEvents) ? parsed.downloadEvents : [],
-        wallets: parsed.wallets && typeof parsed.wallets === "object" ? parsed.wallets : {},
-        welcomeRewards: parsed.welcomeRewards && typeof parsed.welcomeRewards === "object" ? parsed.welcomeRewards : {},
+        wallets,
+        welcomeRewards,
         unlockedItems: parsed.unlockedItems && typeof parsed.unlockedItems === "object" ? parsed.unlockedItems : {},
         frameUnlocks: parsed.frameUnlocks && typeof parsed.frameUnlocks === "object" ? parsed.frameUnlocks : {}
       };
@@ -11568,6 +11607,17 @@ function loadRewardsDatabase() {
   return { claims: [], transactions: [], downloadEvents: [], wallets: {}, welcomeRewards: {}, unlockedItems: {}, frameUnlocks: {} };
 }
 function saveRewardsDatabase(db) {
+  if (db.welcomeRewards && db.wallets) {
+    for (const [k, wr] of Object.entries(db.welcomeRewards)) {
+      const cleanK = k.toLowerCase().trim();
+      if (db.wallets[cleanK]) {
+        db.wallets[cleanK].graphicClaimed = Boolean(wr?.graphicClaimed || db.wallets[cleanK].graphicClaimed);
+        db.wallets[cleanK].videoClaimed = Boolean(wr?.videoClaimed || db.wallets[cleanK].videoClaimed);
+        db.wallets[cleanK].firstGraphicDownloadRewardClaimed = Boolean(db.wallets[cleanK].graphicClaimed);
+        db.wallets[cleanK].firstVideoExportRewardClaimed = Boolean(db.wallets[cleanK].videoClaimed);
+      }
+    }
+  }
   if (centralDb && centralDb.useFirestore) {
     if (db.wallets) {
       for (const [key, wallet] of Object.entries(db.wallets)) {
@@ -11593,7 +11643,6 @@ function saveRewardsDatabase(db) {
         }
       }
     }
-    return true;
   }
   try {
     const locations = resolveAllDatabaseLocations("rewards_database.json");
@@ -12322,8 +12371,8 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
           isPrePublished: postData.isPrePublished !== void 0 ? Boolean(postData.isPrePublished) : Boolean(p.isPrePublished),
           breaking: postData.breaking !== void 0 ? postData.breaking : p.breaking,
           isExclusive: postData.isExclusive !== void 0 ? postData.isExclusive : p.isExclusive,
-          isBonus: postData.isBonus !== void 0 ? postData.isBonus : p.isBonus,
-          rewardCoins: postData.rewardCoins || p.rewardCoins || 100,
+          isBonus: postData.isBonus !== void 0 ? Boolean(postData.isBonus) : Boolean(p.isBonus === true),
+          rewardCoins: (postData.isBonus !== void 0 ? Boolean(postData.isBonus) : Boolean(p.isBonus === true)) ? Number(postData.rewardCoins || p.rewardCoins || 100) : 0,
           timestamp: Date.now()
         };
       }
@@ -12337,8 +12386,8 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         ...edDb[id] || {},
         newsId: id,
         title: approvedTitle,
-        headlines: hList.slice(0, 5),
-        headlineOptions: hList.slice(0, 5),
+        headlines: hList.slice(0, 10),
+        headlineOptions: hList.slice(0, 10),
         approvedHeadline: postData.approvedHeadline || hList[0] || approvedTitle,
         captionDetailed: postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || "",
         captionBullets: postData.captionBullets || postData.approvedCaptionBullets || "",
@@ -12357,6 +12406,7 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     if (!found) {
       const postData = req.body || {};
       approvedTitle = postData.title || postData.headline || "\u0938\u092E\u093E\u091A\u093E\u0930";
+      const explicitBonus = postData.isBonus === true;
       const newApprovedPost = {
         id,
         title: approvedTitle,
@@ -12375,8 +12425,8 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         district: postData.district || postData.location || "",
         timestamp: Date.now(),
         status: "APPROVED",
-        isBonus: postData.isBonus || false,
-        rewardCoins: postData.rewardCoins || 100
+        isBonus: explicitBonus,
+        rewardCoins: explicitBonus ? Number(postData.rewardCoins || 100) : 0
       };
       existing.unshift(newApprovedPost);
     }
@@ -12468,7 +12518,7 @@ app.get("/api/editorial/approved/:id", (req, res) => {
     const db = loadApprovedEditorialDatabase();
     const record = db[id];
     const hasFillerPhrase = (txt) => /(?:शासन स्तर पर|प्रशासनिक व विभागीय स्तर पर जरूरी कदम|मामले में नया घटनाक्रम सामने आया|विशेष डेस्क|विशेष डैश|प्रशासनिक स्तर पर आवश्यक संज्ञान)/u.test(txt || "");
-    if (record && (record.isPrePublished === true || record.aiGenerated === true) && Array.isArray(record.headlines) && record.headlines.length >= 5 && record.headlines.every((h) => typeof h === "string" && h.trim().length >= 20 && countHeadlineVisibleCharacters(h) <= 120 && !hasFillerPhrase(h))) {
+    if (record && (record.isPrePublished === true || record.aiGenerated === true) && Array.isArray(record.headlines) && record.headlines.length >= 5 && record.headlines.every((h) => typeof h === "string" && h.trim().length >= 20 && countHeadlineVisibleCharacters(h) <= 200 && !hasFillerPhrase(h))) {
       return res.json({ success: true, isApproved: true, data: record });
     }
     return res.json({ success: true, isApproved: false, message: "Requires live AI editorial generation" });
@@ -12488,8 +12538,8 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       ...existing,
       newsId: id,
       title: body.title || existing.title || "\u0938\u092E\u093E\u091A\u093E\u0930",
-      headlines: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : existing.headlines || [],
-      headlineOptions: Array.isArray(body.headlines) ? body.headlines.slice(0, 5) : existing.headlineOptions || [],
+      headlines: Array.isArray(body.headlines) ? body.headlines.slice(0, 10) : existing.headlines || [],
+      headlineOptions: Array.isArray(body.headlines) ? body.headlines.slice(0, 10) : existing.headlineOptions || [],
       captionDetailed: body.captionDetailed || existing.captionDetailed || "",
       captionBullets: body.captionBullets || existing.captionBullets || "",
       captionShort: body.captionShort || existing.captionShort || "",
@@ -12509,7 +12559,7 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       fullContent: body.fullContent || existing.fullContent || body.fullNews || existing.fullNews || "",
       articleText: body.articleText || existing.articleText || body.fullNews || existing.fullNews || body.captionDetailed || "",
       isBonus: body.isBonus !== void 0 ? Boolean(body.isBonus) : existing.isBonus !== void 0 ? Boolean(existing.isBonus) : false,
-      rewardCoins: Number(body.rewardCoins ?? existing.rewardCoins ?? 0),
+      rewardCoins: (body.isBonus !== void 0 ? Boolean(body.isBonus) : Boolean(existing.isBonus === true)) ? Number(body.rewardCoins ?? existing.rewardCoins ?? 100) : 0,
       coinCost: Number(body.coinCost ?? existing.coinCost ?? body.coinPrice ?? 0),
       coinPrice: Number(body.coinCost ?? existing.coinCost ?? body.coinPrice ?? 0),
       restrictedPlans: Array.isArray(body.restrictedPlans) ? body.restrictedPlans : existing.restrictedPlans || [],
@@ -12562,6 +12612,7 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       if (modified) {
         saveNewsDatabase(newsDb);
       } else {
+        const explicitBonus = body.isBonus === true;
         const newApprovedPost = {
           id,
           title: updated.title || body.title || "\u0938\u092E\u093E\u091A\u093E\u0930",
@@ -12587,8 +12638,8 @@ app.post("/api/editorial/approved/:id", (req, res) => {
           isPrePublished,
           headlineOptions: updated.headlines,
           approvedHeadlines: updated.headlines,
-          isBonus: body.isBonus || false,
-          rewardCoins: body.rewardCoins || 100
+          isBonus: explicitBonus,
+          rewardCoins: explicitBonus ? Number(body.rewardCoins || 100) : 0
         };
         newsDb.unshift(newApprovedPost);
         saveNewsDatabase(newsDb);
@@ -16579,11 +16630,60 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   }
 });
 var RSS_SOURCES_FILE = import_path2.default.join(process.cwd(), "rss_sources_database.json");
+var DEFAULT_PRODUCTION_RSS_SOURCES = [
+  {
+    id: "src_1794071136127_oim9",
+    name: "\u0928\u0908 \u0926\u0941\u0928\u093F\u092F\u093E",
+    url: "https://www.naidunia.com/entertainment",
+    type: "rss",
+    category: "\u{1F3AC} \u092E\u0928\u094B\u0930\u0902\u091C\u0928",
+    isActive: true,
+    createdAt: 1794071136127
+  },
+  {
+    id: "src_1794071001048_maoy",
+    name: "\u0928\u0908 \u0926\u0941\u0928\u093F\u092F\u093E",
+    url: "https://www.naidunia.com/madhya-pradesh",
+    type: "rss",
+    category: "\u{1F4CD} \u092E\u0927\u094D\u092F\u092A\u094D\u0930\u0926\u0947\u0936",
+    isActive: true,
+    createdAt: 1794071001048
+  }
+];
+function resolveCategoryKeyFromName(rawCategory, sourceUrl = "") {
+  const c = String(rawCategory || "").toLowerCase();
+  const u = String(sourceUrl || "").toLowerCase();
+  if (c.includes("\u092E\u0928\u094B\u0930\u0902\u091C\u0928") || c.includes("entertainment") || c.includes("bollywood") || c.includes("\u092C\u0949\u0932\u0940\u0935\u0941\u0921") || u.includes("/entertainment") || u.includes("/bollywood")) {
+    return "entertainment";
+  }
+  if (c.includes("\u092E\u0927\u094D\u092F\u092A\u094D\u0930\u0926\u0947\u0936") || c.includes("\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936") || c.includes("\u0930\u093E\u091C\u094D\u092F") || c.includes("state") || c.includes("\u091B\u0924\u094D\u0924\u0940\u0938\u0917\u0922\u093C") || u.includes("/madhya-pradesh") || u.includes("/chhattisgarh")) {
+    return "state";
+  }
+  if (c.includes("\u0930\u093E\u091C\u0928\u0940\u0924\u093F") || c.includes("politics") || c.includes("\u091A\u0941\u0928\u093E\u0935")) {
+    return "politics";
+  }
+  if (c.includes("\u0935\u094D\u092F\u093E\u092A\u093E\u0930") || c.includes("\u092C\u093F\u091C\u0928\u0947\u0938") || c.includes("business") || c.includes("\u0915\u093E\u0930\u094B\u092C\u093E\u0930")) {
+    return "business";
+  }
+  if (c.includes("\u0916\u0947\u0932") || c.includes("\u0915\u094D\u0930\u093F\u0915\u0947\u091F") || c.includes("sports") || c.includes("cricket") || u.includes("/sports")) {
+    return "sports";
+  }
+  if (c.includes("\u0905\u092A\u0930\u093E\u0927") || c.includes("\u0915\u094D\u0930\u093E\u0907\u092E") || c.includes("crime") || u.includes("/crime")) {
+    return "crime";
+  }
+  if (c.includes("\u091F\u0947\u0915") || c.includes("\u0924\u0915\u0928\u0940\u0915") || c.includes("tech") || c.includes("technology")) {
+    return "tech";
+  }
+  if (c.includes("\u0926\u0947\u0936") || c.includes("\u0930\u093E\u0937\u094D\u091F\u094D\u0930\u0940\u092F") || c.includes("national") || c.includes("india") || u.includes("/national") || u.includes("/india")) {
+    return "national";
+  }
+  return "national";
+}
 function loadRssSourcesDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
     const list = Array.from(centralDb.cache.rssSources.values());
     const valid = list.filter((s) => Boolean(s && s.url));
-    return valid;
+    if (valid.length > 0) return valid;
   }
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
@@ -16593,14 +16693,14 @@ function loadRssSourcesDatabase() {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const valid = parsed.filter((s) => Boolean(s && s.url));
-          return valid;
+          if (valid.length > 0) return valid;
         }
       }
     }
   } catch (err) {
     console.error("Error reading rss_sources_database.json:", err.message);
   }
-  return [];
+  return [...DEFAULT_PRODUCTION_RSS_SOURCES];
 }
 function saveRssSourcesDatabase(sources) {
   const cleaned = sources.filter((s) => Boolean(s && s.url));
@@ -16886,7 +16986,34 @@ function decodeHtmlEntities(str) {
 async function parseRssItemsFromXml(xmlText, source) {
   const posts = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
-  const items = xmlText.match(itemRegex) || [];
+  let items = xmlText.match(itemRegex) || [];
+  if (items.length === 0 && /<html|<body|<a\s/i.test(xmlText)) {
+    const syntheticItems = [];
+    const seenUrls = /* @__PURE__ */ new Set();
+    const anchorMatches = xmlText.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
+    for (const m of anchorMatches) {
+      if (syntheticItems.length >= 12) break;
+      const href = resolveUrl(m[1] || "", source.url);
+      if (!href || !href.startsWith("http") || seenUrls.has(href)) continue;
+      if (href === source.url || href.endsWith("/entertainment") || href.endsWith("/madhya-pradesh")) continue;
+      const pathPart = (() => {
+        try {
+          return new URL(href).pathname;
+        } catch {
+          return "";
+        }
+      })();
+      if (pathPart.length < 18 || !/[-/]\d{4,}|[-][a-z0-9]{4,}/i.test(pathPart)) continue;
+      const innerHtml = m[2] || "";
+      const imgMatch = innerHtml.match(/<img[^>]+(?:data-src|src)=["']([^"']+)["']/i);
+      const imgTag = imgMatch && imgMatch[1] ? `<media:content url="${resolveUrl(imgMatch[1], source.url)}" />` : "";
+      const textContent = decodeHtmlEntities(innerHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+      if (!textContent || textContent.length < 18 || !/[\u0900-\u097F]/.test(textContent)) continue;
+      seenUrls.add(href);
+      syntheticItems.push(`<item><title><![CDATA[${textContent}]]></title><link>${href}</link><description><![CDATA[${textContent}]]></description>${imgTag}</item>`);
+    }
+    items = syntheticItems;
+  }
   for (const itemXml of items.slice(0, 15)) {
     const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
     const rawTitle = titleMatch ? decodeHtmlEntities(titleMatch[1] || titleMatch[2] || "") : "";
@@ -16905,7 +17032,7 @@ async function parseRssItemsFromXml(xmlText, source) {
     const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
     const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
     const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
-    const catKey = catName === "\u0926\u0947\u0936" ? "national" : catName === "\u0930\u093E\u091C\u094D\u092F" ? "state" : catName === "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" ? "politics" : catName === "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" ? "business" : catName === "\u0916\u0947\u0932" ? "sports" : catName === "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" ? "entertainment" : catName === "\u0905\u092A\u0930\u093E\u0927" ? "crime" : "tech";
+    const catKey = resolveCategoryKeyFromName(catName, link || source.url);
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
     const postId = `rss-${source.id}-${hashStr}`;
     posts.push({
@@ -16925,6 +17052,8 @@ async function parseRssItemsFromXml(xmlText, source) {
       imageUrl,
       breaking: editorial.title.includes("\u092C\u0921\u093C\u093E") || editorial.title.includes("\u092B\u0948\u0938\u0932\u093E") || editorial.title.includes("\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908"),
       isExclusive: false,
+      isBonus: false,
+      rewardCoins: 0,
       timestamp,
       fullContent: editorial.summary ? `${editorial.title}
 
@@ -17012,7 +17141,7 @@ async function fetchAndParseWebLink(source) {
     }
     const editorial = await processRssItemWithAiEditorial(rawTitle, fullArticleText, source.category, source.url);
     const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
-    const catKey = catName === "\u0926\u0947\u0936" ? "national" : catName === "\u0930\u093E\u091C\u094D\u092F" ? "state" : catName === "\u0930\u093E\u091C\u0928\u0940\u0924\u093F" ? "politics" : catName === "\u0935\u094D\u092F\u093E\u092A\u093E\u0930" ? "business" : catName === "\u0916\u0947\u0932" ? "sports" : catName === "\u092E\u0928\u094B\u0930\u0902\u091C\u0928" ? "entertainment" : catName === "\u0905\u092A\u0930\u093E\u0927" ? "crime" : "tech";
+    const catKey = resolveCategoryKeyFromName(catName, source.url);
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
     const postId = `web-${source.id}-${hashStr}`;
     return [{
@@ -19527,8 +19656,12 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           });
         }
         const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
+        const existingLogo = String(existing?.channelLogoUrl || existing?.channelLogoPngUrl || "").trim();
+        const hasRealLogo = Boolean(existingLogo && !existingLogo.includes("ai_news_maker_logo.png"));
+        const existingPhoneDigits = String(existing?.phoneNumber || existing?.mobile || existing?.whatsappNumber || "").replace(/\D/g, "").slice(-10);
+        const isWhatsappVerified = Boolean(existing?.whatsappVerified === true || existing?.isMobileVerified === true || existing?.phoneVerified === true);
         const isProfileComplete = Boolean(
-          !isDeletedTombstoned && existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && (existing.channelLogoUrl || existing.channelLogoPngUrl)
+          !isDeletedTombstoned && (isSuper || isAdmin || existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && hasRealLogo && existingPhoneDigits.length === 10 && isWhatsappVerified)
         );
         let safeUsername;
         if (isSuper) {
@@ -25429,14 +25562,15 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
     }
     const currentBalance = walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey].coinBalance : 0;
+    const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines.filter(Boolean) : [previousHeadlines].filter(Boolean);
+    const MAX_HEADLINES_PER_ARTICLE = 10;
     const drafts = loadDraftsDatabase();
     const existingDraft = draftId ? drafts.find((d) => d.id === draftId) : null;
     const memoryRegenState = draftId ? draftRegenerationStateMap.get(draftId) : null;
-    if (existingDraft && existingDraft.regenerationUsed || memoryRegenState && memoryRegenState.used) {
+    if (rawPrev.length >= MAX_HEADLINES_PER_ARTICLE || (existingDraft && existingDraft.regenerationUsed || memoryRegenState && memoryRegenState.used)) {
       const savedHeadlines = existingDraft && existingDraft.regeneratedHeadlines || memoryRegenState && memoryRegenState.headlines || [];
       if (savedHeadlines.length > 0 && generationRequestId && (existingDraft?.generationRequestId === generationRequestId || memoryRegenState?.generationRequestId === generationRequestId)) {
-        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
-        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        const combinedSaved = [...rawPrev, ...savedHeadlines].slice(0, MAX_HEADLINES_PER_ARTICLE);
         return res.json({
           success: true,
           actualProvider: "idempotent-cache",
@@ -25448,15 +25582,17 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           remainingCoins: currentBalance,
           draftId: draftId || void 0,
           alreadyRegenerated: true,
-          regenerationUsed: true,
+          regenerationUsed: combinedSaved.length >= MAX_HEADLINES_PER_ARTICLE,
           message: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u0947 \u0932\u093F\u090F \u092A\u0942\u0930\u094D\u0935-\u091C\u0928\u0930\u0947\u091F\u0947\u0921 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0932\u094C\u091F\u093E\u090F \u0917\u090F \u0939\u0948\u0902\u0964"
         });
       }
-      return res.status(409).json({
-        success: false,
-        alreadyUsed: true,
-        error: "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
-      });
+      if (rawPrev.length >= MAX_HEADLINES_PER_ARTICLE) {
+        return res.status(409).json({
+          success: false,
+          alreadyUsed: true,
+          error: "\u0905\u0927\u093F\u0915\u0924\u092E 10 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964 \u0907\u0938 \u0916\u092C\u0930 \u0915\u0947 \u0932\u093F\u090F 10 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0940 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964"
+        });
+      }
     }
     if (draftId && draftRegenerationInFlight.has(draftId)) {
       try {
@@ -25479,18 +25615,18 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       }
     }
     lockId = "";
-    if (draftId && centralDb) {
+    if (draftId && centralDb && rawPrev.length >= 5) {
       const lockAcquisition = await centralDb.acquireDraftRegenerationLock(
         draftId,
         walletKey,
         generationRequestId
       );
       if (!lockAcquisition.success) {
-        if (lockAcquisition.alreadyUsed) {
+        if (lockAcquisition.alreadyUsed && rawPrev.length >= MAX_HEADLINES_PER_ARTICLE) {
           return res.status(409).json({
             success: false,
             alreadyUsed: true,
-            error: lockAcquisition.error || "\u0907\u0938 \u0928\u094D\u092F\u0942\u091C\u093C \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0940\u091C\u0947\u0928\u0930\u0947\u0936\u0928 (Single-Use) \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u092A\u0939\u0932\u0947 \u0939\u0940 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964"
+            error: lockAcquisition.error || "\u0905\u0927\u093F\u0915\u0924\u092E 10 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964"
           });
         }
         if (lockAcquisition.inFlight) {
@@ -25500,16 +25636,9 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
             error: lockAcquisition.error || "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u092A\u0939\u0932\u0947 \u0938\u0947 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964"
           });
         }
-        return res.status(409).json({
-          success: false,
-          conflict: true,
-          error: lockAcquisition.error || "\u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0932\u0949\u0915 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0928\u0947 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F\u0964"
-        });
-      }
-      if (lockAcquisition.idempotentReplay && Array.isArray(lockAcquisition.headlines)) {
+      } else if (lockAcquisition.idempotentReplay && Array.isArray(lockAcquisition.headlines)) {
         const savedHeadlines = lockAcquisition.headlines;
-        const rawPrevOptions = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
-        const combinedSaved = [...rawPrevOptions.slice(0, 5), ...savedHeadlines].slice(0, 10);
+        const combinedSaved = [...rawPrev, ...savedHeadlines].slice(0, MAX_HEADLINES_PER_ARTICLE);
         return res.json({
           success: true,
           actualProvider: "idempotent-cache",
@@ -25521,11 +25650,12 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           remainingCoins: currentBalance,
           draftId: draftId || void 0,
           alreadyRegenerated: true,
-          regenerationUsed: true,
+          regenerationUsed: combinedSaved.length >= MAX_HEADLINES_PER_ARTICLE,
           message: "\u0907\u0938 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u0947 \u0932\u093F\u090F \u092A\u0942\u0930\u094D\u0935-\u091C\u0928\u0930\u0947\u091F\u0947\u0921 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928\u094D\u0938 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0932\u094C\u091F\u093E\u090F \u0917\u090F \u0939\u0948\u0902\u0964"
         });
+      } else {
+        lockId = lockAcquisition.lockId || "";
       }
-      lockId = lockAcquisition.lockId || "";
     }
     if (requiredCoins > 0 && currentBalance < requiredCoins) {
       if (draftId && lockId && centralDb) {
@@ -25546,11 +25676,11 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       });
       draftRegenerationInFlight.set(draftId, p);
     }
-    const rawPrev = Array.isArray(previousHeadlines) ? previousHeadlines : [previousHeadlines].filter(Boolean);
     const excludeTitles = rawPrev.map((h) => cleanHeadlineText(String(h || "")).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter(Boolean);
     let sourceTitle = canonicalContext.title || req.body.title || req.body.sourceHeadline || "";
     let sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
     let sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
+    let candidateSourceUrl = String(canonicalContext.sourceUrl || req.body.sourceUrl || "").trim();
     if (!sourceText || sourceText.trim().length < 50) {
       const targetNewsId = draftId || req.body.newsId || canonicalContext.newsId || canonicalContext.sourceNewsId || "";
       try {
@@ -25560,6 +25690,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           sourceTitle = sourceTitle || edRecord.title || "";
           sourceText = edRecord.fullNews || edRecord.fullContent || edRecord.articleText || edRecord.captionDetailed || edRecord.summary || sourceText;
           sourceLoc = sourceLoc || edRecord.location || "";
+          candidateSourceUrl = candidateSourceUrl || String(edRecord.sourceUrl || "").trim();
         }
       } catch {
       }
@@ -25571,6 +25702,23 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
             sourceTitle = sourceTitle || nPost.title || "";
             sourceText = nPost.fullNews || nPost.fullContent || nPost.articleText || nPost.captionDetailed || nPost.summary || sourceText;
             sourceLoc = sourceLoc || nPost.location || nPost.district || "";
+            candidateSourceUrl = candidateSourceUrl || String(nPost.sourceUrl || "").trim();
+          }
+        } catch {
+        }
+      }
+      if ((!sourceText || sourceText.trim().length < 80) && candidateSourceUrl.startsWith("http")) {
+        try {
+          const resp = await fetch(candidateSourceUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36" },
+            signal: AbortSignal.timeout(5e3)
+          });
+          if (resp.ok) {
+            const html = await resp.text();
+            const paragraphs = Array.from(html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)).map((m) => decodeHtmlEntities(m[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim())).filter((p) => p.length > 35 && /[\u0900-\u097F]/.test(p)).slice(0, 8).join("\n\n");
+            if (paragraphs.length > (sourceText || "").length) {
+              sourceText = paragraphs;
+            }
           }
         } catch {
         }
@@ -25796,23 +25944,24 @@ JSON Output Schema:
     } else if (walletKey && rDb.wallets[walletKey]) {
       remainingCoins = rDb.wallets[walletKey].coinBalance || 0;
     }
+    const totalHeadlineOptions = [...rawPrev, ...finalOptions].slice(0, MAX_HEADLINES_PER_ARTICLE);
+    const isNowMaxed = totalHeadlineOptions.length >= MAX_HEADLINES_PER_ARTICLE;
     if (draftId) {
       draftRegenerationStateMap.set(draftId, {
-        used: true,
+        used: isNowMaxed,
         headlines: finalOptions,
         userId: walletKey,
         timestamp: Date.now(),
         generationRequestId
       });
       if (existingDraft) {
-        existingDraft.regenerationUsed = true;
+        existingDraft.regenerationUsed = isNowMaxed;
         existingDraft.regeneratedHeadlines = finalOptions;
         existingDraft.generationRequestId = generationRequestId;
         existingDraft.updatedAt = Date.now();
         saveDraftsDatabase(drafts);
       }
     }
-    const totalHeadlineOptions = [...rawPrev.slice(0, 5), ...finalOptions].slice(0, 10);
     const responsePayload = {
       success: true,
       actualProvider,
@@ -25824,7 +25973,7 @@ JSON Output Schema:
       coinsDeducted,
       remainingCoins,
       draftId: draftId || void 0,
-      regenerationUsed: true,
+      regenerationUsed: isNowMaxed,
       wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : void 0,
       canonicalContext: {
         ...canonicalContext,

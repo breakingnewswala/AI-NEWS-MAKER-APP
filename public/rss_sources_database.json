@@ -1,1 +1,30 @@
-[]
+[
+  {
+    "id": "src_1794071136127_oim9",
+    "name": "नई दुनिया",
+    "url": "https://www.naidunia.com/entertainment",
+    "originalWebUrl": "https://www.naidunia.com/entertainment",
+    "type": "rss",
+    "category": "🎬 मनोरंजन",
+    "isActive": true,
+    "createdAt": 1794071136127,
+    "addedAt": 1794071136127,
+    "lastFetchedAt": 1794071174598,
+    "itemsFetchedCount": 3,
+    "lastSyncStatus": "success"
+  },
+  {
+    "id": "src_1794071001048_maoy",
+    "name": "नई दुनिया",
+    "url": "https://www.naidunia.com/madhya-pradesh",
+    "originalWebUrl": "https://www.naidunia.com/madhya-pradesh",
+    "type": "rss",
+    "category": "📍 मध्यप्रदेश",
+    "isActive": true,
+    "createdAt": 1794071001048,
+    "addedAt": 1794071001048,
+    "lastFetchedAt": 1794071030215,
+    "itemsFetchedCount": 1,
+    "lastSyncStatus": "success"
+  }
+]
