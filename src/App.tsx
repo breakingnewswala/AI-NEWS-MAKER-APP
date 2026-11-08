@@ -43,6 +43,7 @@ import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfi
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
 import {
   FolderOpen,
+  FolderClock,
   Download,
   Copy,
   Check,
