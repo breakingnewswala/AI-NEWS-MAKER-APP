@@ -3640,7 +3640,7 @@ export default function App() {
                 }`}
               >
                 <Palette className="w-4 h-4 text-neutral-950" />
-                <span>ग्राफिक फोटो स्टूडियो</span>
+                <span>फोटो न्यूज़ स्टूडियो</span>
               </button>
               {/* Video News Studio is fully accessible on both mobile and desktop per Master Prompt Part D & E */}
               <button
@@ -3673,7 +3673,7 @@ export default function App() {
                 }`}
               >
                 <Palette className="w-3.5 h-3.5 text-slate-950" />
-                <span>ग्राफिक फोटो स्टूडियो</span>
+                <span>फोटो न्यूज़ स्टूडियो</span>
               </button>
               <button
                 type="button"
@@ -3720,8 +3720,8 @@ export default function App() {
                 >
                   {/* Row 1: Split Live Preview & Vertical Step Menu (Mobile: 72-75% / 25-28% | Tablet: 70:30) */}
                   <div className="flex flex-row items-stretch gap-1.5 sm:gap-2.5 md:gap-4 w-full max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
-                    {/* Left Column: 72%–74% (Mobile) / 70% (Tablet) Actual Proportional Miniature Live Preview */}
-                    <div className="w-[72%] sm:w-[74%] md:w-[70%] min-w-0 flex flex-col justify-start">
+                    {/* Left Column: 67%–69% (Mobile) / 70% (Tablet) Actual Proportional Miniature Live Preview */}
+                    <div className="w-[67%] sm:w-[69%] md:w-[70%] min-w-0 flex flex-col justify-start">
                       <div className="flex items-center justify-between px-1 mb-1">
                         <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] md:text-xs font-black text-amber-400 uppercase tracking-wider truncate">
                           <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse motion-reduce:animate-none shrink-0" />
@@ -3777,8 +3777,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Right Column: 28%–26% (Mobile) / 30% (Tablet) Vertical Step Menu */}
-                    <div className="w-[28%] sm:w-[26%] md:w-[30%] min-w-0 flex flex-col justify-between py-0.5">
+                    {/* Right Column: 33%–31% (Mobile) / 30% (Tablet) Vertical Step Menu */}
+                    <div className="w-[33%] sm:w-[31%] md:w-[30%] min-w-0 flex flex-col justify-between py-0.5">
                       <div className="flex items-center justify-between px-0.5 mb-1">
                         <span className="text-[9.5px] sm:text-xs font-black text-amber-400 tracking-tight truncate">
                           एडिटर स्टेप्स

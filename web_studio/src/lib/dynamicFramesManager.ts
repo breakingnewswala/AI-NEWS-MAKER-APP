@@ -389,123 +389,8 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
 // DEFAULT SEED DYNAMIC FRAMES (Production-grade 4:5 and 9:16)
 // -------------------------------------------------------------
 
-export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
-  // 1. Standard 9:16 Story Frame
-  normalizeDynamicFrame({
-    id: 'df_story_9_16_standard',
-    name: 'स्टैंडर्ड सोशल स्टोरी 9:16 (Standard Story)',
-    description: 'सोशल मीडिया इंस्टाग्राम व फेसबुक स्टोरी के लिए 9:16 वर्टिकल न्यूज़ लेआउट।',
-    aspectRatio: '9:16',
-    canvasWidth: 1080,
-    canvasHeight: 1920,
-    designCategory: 'Story Frames',
-    allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-    publicationStatus: 'published',
-    createdBy: 'breakingnewswala.com@gmail.com',
-    createdAt: 1793880000000,
-    updatedAt: 1793880000000,
-    version: 1,
-    headerConfig: {
-      showLogo: true,
-      logoPosition: 'top_left',
-      logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-      showLocation: true,
-      locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-      locationStyle: 'pill',
-    },
-    footerConfig: {
-      footerHeightRatio: 0.065,
-      enforcePermanentFooter: true,
-      footerBgColor: '#0F172A',
-      footerTextColor: '#F8FAFC',
-    },
-    photoSlots: [
-      {
-        id: 'slot_story_photo',
-        name: 'स्टोरी मुख्य फोटो',
-        slotType: 'normal',
-        rect: { x: 0, y: 0, width: 100, height: 62 },
-        required: true,
-        cropMode: 'cover',
-      },
-    ],
-    textSlots: [
-      {
-        id: 'slot_story_headline',
-        name: 'स्टोरी हेडलाइन',
-        role: 'headline',
-        rect: { x: 7, y: 66, width: 86, height: 25 },
-        fontFamily: 'Noto Sans Devanagari',
-        fontSize: 72,
-        fontWeight: 'bold',
-        textColor: '#FFFFFF',
-        alignment: 'left',
-        maxLines: 4,
-      },
-    ],
-  }),
-  // 2. Super Breaking 9:16 Story Frame
-  normalizeDynamicFrame({
-    id: 'df_story_9_16_breaking',
-    name: 'सुपर ब्रेकिंग स्टोरी 9:16 (Super Breaking Story)',
-    description: '3D रिबन, बड़ी ब्रेकिंग हेडलाइन और उच्च प्रभाव वाली 9:16 सोशल स्टोरी।',
-    aspectRatio: '9:16',
-    canvasWidth: 1080,
-    canvasHeight: 1920,
-    designCategory: 'Story Frames',
-    allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
-    publicationStatus: 'published',
-    createdBy: 'breakingnewswala.com@gmail.com',
-    createdAt: 1793880000000,
-    updatedAt: 1793880000000,
-    version: 1,
-    headerConfig: {
-      showLogo: true,
-      logoPosition: 'top_left',
-      logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-      showLocation: true,
-      locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-      locationStyle: 'pill',
-    },
-    footerConfig: {
-      footerHeightRatio: 0.065,
-      enforcePermanentFooter: true,
-      footerBgColor: '#FFE600',
-      footerTextColor: '#000000',
-    },
-    ribbonConfig: {
-      enabled: true,
-      ribbonId: 'speed-blue-red',
-      customRibbonUrl: '/assets/breaking_news_ribbon.svg',
-      rect: { x: 12, y: 60, width: 76, height: 6.8 },
-      scalePct: 76,
-    },
-    photoSlots: [
-      {
-        id: 'slot_story_photo',
-        name: 'स्टोरी फोटो',
-        slotType: 'normal',
-        rect: { x: 0, y: 0, width: 100, height: 64 },
-        required: true,
-        cropMode: 'cover',
-      },
-    ],
-    textSlots: [
-      {
-        id: 'slot_story_headline',
-        name: 'ब्रेकिंग स्टोरी हेडलाइन',
-        role: 'headline',
-        rect: { x: 6, y: 68, width: 88, height: 23 },
-        fontFamily: 'Noto Sans Devanagari',
-        fontSize: 74,
-        fontWeight: 'bold',
-        textColor: '#0A0A0A',
-        alignment: 'center',
-        maxLines: 3,
-      },
-    ],
-  }),
-];
+export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [];
+
 // -------------------------------------------------------------
 // LOCALSTORAGE & SERVER SYNC IMPLEMENTATION
 // -------------------------------------------------------------
@@ -519,7 +404,13 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
     if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_DYNAMIC_FRAMES;
 
     // Merge default seeds if missing (df_reg_4_5_clean is forbidden, canonical is strictly graphic_001)
-    const FORBIDDEN_IDS = new Set(['df_reg_4_5_clean', 'df_testing_1_double', 'df_bayaan_4_5_red']);
+    const FORBIDDEN_IDS = new Set([
+      'df_reg_4_5_clean',
+      'df_testing_1_double',
+      'df_bayaan_4_5_red',
+      'df_story_9_16_standard',
+      'df_story_9_16_breaking',
+    ]);
     const existingIds = new Set(
       parsed
         .filter((f: any) => !FORBIDDEN_IDS.has(f.id) && f.id !== 'df_reg_4_5_clean')

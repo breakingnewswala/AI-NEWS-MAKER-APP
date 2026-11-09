@@ -25,9 +25,12 @@ export function getLocalCustomFrames(userId?: string): CustomFrame[] {
     if (!raw) return [];
     const list = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    if (!userId) return list;
+    const filtered = list.filter(
+      (f: any) => f && f.name !== 'My 4x5 Custom Frame' && !f.name?.toLowerCase()?.includes('my 4x5 custom')
+    );
+    if (!userId) return filtered;
     const cleanId = userId.toLowerCase().trim();
-    return list.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId || f.userId === 'general');
+    return filtered.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId || f.userId === 'general');
   } catch {
     return [];
   }

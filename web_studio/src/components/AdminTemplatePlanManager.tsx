@@ -46,7 +46,6 @@ import { getAuthToken } from '../lib/apiConfig';
 
 export const CANONICAL_FRAME_CATEGORIES = [
   'Regular Frames',
-  'Story Frames',
   'Package Frames',
   'Super Breaking',
   'Text Breaking',
@@ -62,7 +61,7 @@ export function normalizeToCanonicalCategory(cat?: string): CanonicalFrameCatego
   if (!cat) return 'Regular Frames';
   const c = cat.trim();
   if (c === 'Regular Frame' || c === 'Regular Frames') return 'Regular Frames';
-  if (c === 'Story Frame' || c === 'Story Frames') return 'Story Frames';
+  if (c === 'Story Frame' || c === 'Story Frames') return 'Regular Frames';
   if (c === 'Package Frame' || c === 'Package Frames') return 'Package Frames';
   if (c === 'Super Breaking Frame' || c === 'Super Breaking') return 'Super Breaking';
   if (c === 'Text Breaking Frame' || c === 'Text Breaking') return 'Text Breaking';

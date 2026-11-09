@@ -204,7 +204,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const tabLabels: Record<string, string> = {
     home: isHindi ? 'होम (ताज़ा समाचार)' : 'Home (Live News)',
     videos: isHindi ? 'वीडियो एंड रील्स' : 'Videos & Reels',
-    studio: isHindi ? 'ग्राफिक फोटो स्टूडियो' : 'Graphic Photo Studio',
+    studio: isHindi ? 'फोटो न्यूज़ स्टूडियो' : 'PHOTO NEWS STUDIO',
     epaper: isHindi ? 'दैनिक ई-पेपर' : 'E-Paper',
     profile: isAdminUser
       ? (isHindi ? 'कंट्रोल रूम' : 'Control Room')

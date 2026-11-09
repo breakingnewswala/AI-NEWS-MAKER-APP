@@ -206,7 +206,7 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>(A) ग्राफिक फोटो स्टूडियो गाइड</span>
+            <span>(A) फोटो न्यूज़ स्टूडियो गाइड</span>
           </button>
 
           <button
@@ -228,7 +228,7 @@ export const AppGuideModal: React.FC<AppGuideModalProps> = ({
           {/* Quick intro note */}
           <div className="bg-gradient-to-r from-amber-500/10 via-neutral-900 to-red-500/10 border border-amber-500/20 rounded-2xl p-3 text-xs text-amber-200 flex items-center justify-between">
             <span>
-              👋 <strong>{activeGuideTab === 'graphic' ? 'ग्राफिक फोटो स्टूडियो' : 'वीडियो न्यूज़ स्टूडियो'}:</strong> नीचे दिए गए 5 आसान चरणों का पालन करें:
+              👋 <strong>{activeGuideTab === 'graphic' ? 'फोटो न्यूज़ स्टूडियो' : 'वीडियो न्यूज़ स्टूडियो'}:</strong> नीचे दिए गए 5 आसान चरणों का पालन करें:
             </span>
             <span className="text-[11px] font-bold text-yellow-400 bg-yellow-500/20 px-2 py-0.5 rounded-full border border-yellow-500/30">
               5 सरल स्टेप्स

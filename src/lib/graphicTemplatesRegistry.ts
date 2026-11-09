@@ -69,7 +69,6 @@ export function normalizeUserPlanTier(tier?: string | null): GraphicPlanCategory
 
 export const FRAME_CATEGORIES = [
   'Regular Frame',
-  'Story Frame',
   'Package Frame',
   'Super Breaking Frame',
   'Text Breaking Frame',

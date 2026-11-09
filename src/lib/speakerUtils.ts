@@ -1,6 +1,81 @@
 // Helper utilities to detect and extract leader names and designations from Hindi news headlines
 
 /**
+ * Canonical Headline Text Normalizer:
+ * Unwraps complex objects, arrays, tokens, JSON strings, and completely purges:
+ * - "[object Object]", "[object Array]"
+ * - "undefined", "null", "NaN"
+ * - Extra whitespace and bracket artifacts
+ */
+export function normalizeHeadlineText(input: any): string {
+  if (input === null || input === undefined) return '';
+
+  // If input is an array, map each element and join
+  if (Array.isArray(input)) {
+    return input
+      .map((item) => normalizeHeadlineText(item))
+      .filter((s) => Boolean(s && s.trim()))
+      .join(' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
+  // If input is an object (e.g. WordToken, HeadlineOption, or custom state)
+  if (typeof input === 'object') {
+    // Check known text container properties in priority order
+    const candidate =
+      input.text ??
+      input.headline ??
+      input.title ??
+      input.value ??
+      input.content ??
+      input.label ??
+      input.name ??
+      input.hi ??
+      input.hindi ??
+      input.raw;
+
+    if (candidate !== undefined && candidate !== null) {
+      return normalizeHeadlineText(candidate);
+    }
+
+    if (Array.isArray(input.tokens)) {
+      return normalizeHeadlineText(input.tokens);
+    }
+    if (Array.isArray(input.lines)) {
+      return normalizeHeadlineText(input.lines);
+    }
+
+    // If no recognizable property, return empty string — NEVER leak [object Object]
+    return '';
+  }
+
+  // If input is already string or primitive
+  let str = String(input || '');
+
+  // If it's a JSON string representing an object or array, safely parse it
+  const trimmed = str.trim();
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        return normalizeHeadlineText(parsed);
+      }
+    } catch {}
+  }
+
+  // Strip all object coercion leaks & NaN / undefined / null literals
+  str = str
+    .replace(/\[object\s+Object\]/gi, '')
+    .replace(/\[object\s+Array\]/gi, '')
+    .replace(/\b(?:undefined|null|NaN)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  return str;
+}
+
+/**
  * Professional News Headline Formatter:
  * - Strips UI loading/processing text like "लोड हो रहा है", "Loading...", "Please wait"
  * - Removes starting fluff like "यह खबर है", "जानिए", "देखिए", "Breaking News:", "ब्रेकिंग न्यूज़:"
@@ -10,9 +85,7 @@
  */
 export function cleanHeadlineText(text: any): string {
   if (!text) return '';
-  let cleaned = typeof text === 'string'
-    ? text
-    : (Array.isArray(text) ? text.filter(Boolean).map((x) => typeof x === 'string' ? x : JSON.stringify(x)).join(' । ') : String(text || ''));
+  let cleaned = normalizeHeadlineText(text);
   if (!cleaned || typeof cleaned.replace !== 'function') return '';
 
   // 0. Remove Unicode replacement characters (\uFFFD / diamond question marks) and non-printable control characters

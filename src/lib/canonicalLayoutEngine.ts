@@ -13,7 +13,8 @@
  */
 
 import { NewsCardData } from '../types';
-import { cleanHeadlineText } from './speakerUtils';
+import { cleanHeadlineText, normalizeHeadlineText } from './speakerUtils';
+export { normalizeHeadlineText };
 
 export interface WordToken {
   text: string;

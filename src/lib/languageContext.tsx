@@ -16,7 +16,7 @@ export const TRANSLATIONS: Record<string, { hi: string; en: string }> = {
   // Navigation Tabs
   nav_home: { hi: 'होम (ताज़ा समाचार)', en: 'Home (Live News)' },
   nav_videos: { hi: 'वीडियो फ़ीड', en: 'Video Feed' },
-  nav_studio: { hi: 'ग्राफिक फोटो स्टूडियो', en: 'Graphic Photo Studio' },
+  nav_studio: { hi: 'फोटो न्यूज़ स्टूडियो', en: 'PHOTO NEWS STUDIO' },
   nav_epaper: { hi: 'ई-पेपर अखबार', en: 'E-Paper Newspaper' },
   nav_profile: { hi: 'प्रोफाइल व सेटिंग्स', en: 'Profile & Settings' },
 

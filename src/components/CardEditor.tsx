@@ -83,14 +83,22 @@ import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
 
 function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[]): FrameOption[] {
   const staticFrames = getEffectiveFrameOptions();
+  const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
+    'df_reg_4_5_clean',
+    'df_testing_1_double',
+    'df_bayaan_4_5_red',
+    'df_story_9_16_standard',
+    'df_story_9_16_breaking',
+  ]);
+
   // Canonical Regular Clean News Frame is strictly graphic_001; df_reg_4_5_clean and regular clean duplicates are excluded
   const publishedDynamic: FrameOption[] = (dynamicFrames || [])
     .filter(
       (df) =>
         df.publicationStatus === 'published' &&
         df.frameMode !== 'video' && df.frameType !== 'video' &&
-        df.id !== 'df_reg_4_5_clean' &&
-        !(df.id !== 'graphic_001' && (df.name?.includes('रेगुलर क्लीन') || df.name?.toLowerCase()?.includes('regular clean')))
+        !FORBIDDEN_DYNAMIC_FRAME_IDS.has(df.id) &&
+        df.designCategory !== 'Story Frames'
     )
     .map((df) => {
       const normCat = normalizeToCanonicalCategory(df.designCategory);
@@ -107,12 +115,16 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[]): FrameO
       };
     });
 
-  const seen = new Set<string>(['df_reg_4_5_clean']);
+  const seen = new Set<string>(FORBIDDEN_DYNAMIC_FRAME_IDS);
   const combined: FrameOption[] = [];
+  let hasRegularClean = false;
+
   for (const item of [...staticFrames, ...publishedDynamic]) {
     if (seen.has(item.id)) continue;
-    if (item.id !== 'graphic_001' && (item.name?.includes('रेगुलर क्लीन') || item.name?.toLowerCase()?.includes('regular clean'))) {
-      continue;
+    const isRegularClean = item.id === 'graphic_001' || item.name?.includes('रेगुलर क्लीन') || item.name?.toLowerCase()?.includes('regular clean');
+    if (isRegularClean) {
+      if (hasRegularClean) continue;
+      hasRegularClean = true;
     }
     seen.add(item.id);
     combined.push(item);
@@ -463,7 +475,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const getCategoryLabelHi = (catName: string) => {
     const map: Record<string, string> = {
       'Regular Frame': 'रेगुलर फ्रेम',
-      'Story Frame': 'स्टोरी फ्रेम (9:16)',
       'Package Frame': 'पैकेज फ्रेम',
       'Super Breaking': 'सुपर ब्रेकिंग',
       'Super Breaking Frame': 'सुपर ब्रेकिंग',

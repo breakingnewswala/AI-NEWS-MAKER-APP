@@ -82,7 +82,82 @@ import {
   AiFrameAnalysisResult,
   getLocalDynamicFrames,
 } from '../lib/dynamicFramesManager';
-import { computeCanonicalHeadlineLayout } from '../lib/canonicalLayoutEngine';
+import { computeCanonicalHeadlineLayout, normalizeHeadlineText } from '../lib/canonicalLayoutEngine';
+
+/**
+ * Robust image loader that avoids setting crossOrigin on data: and blob: URLs
+ * to eliminate CORS/security failures in modern web engines.
+ */
+function loadImageSafe(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    if (!src) return reject(new Error('Empty src'));
+    const img = new Image();
+    if (!src.startsWith('data:') && !src.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      if (img.crossOrigin) {
+        const retry = new Image();
+        retry.onload = () => resolve(retry);
+        retry.onerror = (e) => reject(e);
+        retry.src = src;
+      } else {
+        reject(new Error(`Failed to load image: ${src.substring(0, 50)}`));
+      }
+    };
+    img.src = src;
+  });
+}
+
+/**
+ * Removes baked-in fake checkerboard pattern from photo area if present in uploaded frame PNG
+ */
+function removeFakeCheckerboardFromCanvas(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  photoRect: { x: number; y: number; width: number; height: number }
+) {
+  try {
+    const rx = Math.max(0, Math.floor((photoRect.x / 100) * width));
+    const ry = Math.max(0, Math.floor((photoRect.y / 100) * height));
+    const rw = Math.min(width - rx, Math.ceil((photoRect.width / 100) * width));
+    const rh = Math.min(height - ry, Math.ceil((photoRect.height / 100) * height));
+
+    if (rw <= 0 || rh <= 0) return;
+
+    const imgData = ctx.getImageData(rx, ry, rw, rh);
+    const data = imgData.data;
+    let checkerboardCount = 0;
+    const totalPixels = rw * rh;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+      if (a > 200) {
+        const isWhite = r >= 240 && g >= 240 && b >= 240;
+        const isGrey = r >= 180 && r <= 230 && Math.abs(r - g) <= 5 && Math.abs(g - b) <= 5;
+        if (isWhite || isGrey) {
+          checkerboardCount++;
+        }
+      }
+    }
+
+    if (checkerboardCount / totalPixels > 0.6) {
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const isWhite = r >= 240 && g >= 240 && b >= 240;
+        const isGrey = r >= 180 && r <= 230 && Math.abs(r - g) <= 5 && Math.abs(g - b) <= 5;
+        if (isWhite || isGrey) {
+          data[i + 3] = 0;
+        }
+      }
+      ctx.putImageData(imgData, rx, ry);
+    }
+  } catch (err) {
+    console.warn('Checkerboard scan error:', err);
+  }
+}
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
 import { getAuthToken } from '../lib/apiConfig';
@@ -356,9 +431,36 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     initialFrame?.calloutAssetUrl || initialFrame?.fullStoryCalloutConfig?.manualCalloutAsset || ''
   );
 
+  // Central Approved Built-in Fallbacks for Location Badge & Story Callout
+  const FALLBACK_LOCATION_BADGES = [
+    {
+      id: 'asset_1794132101671_u0g9s',
+      name: 'Red Map Pin Badge with Divider',
+      category: 'general',
+      type: 'location_badge',
+      url: '/assets/location_white_icon.png',
+      assetUrl: '/assets/location_white_icon.png',
+      enabled: true,
+      textRegion: { x: 32, y: 24, width: 58, height: 55 },
+      typographyConfig: { fontFamily: 'Mukta', fontSize: 50, fontWeight: 'bold', textColor: '#000000', textAlign: 'center' },
+    },
+  ];
+
+  const FALLBACK_CALLOUTS = [
+    {
+      id: 'callout_bully_forward_story',
+      name: 'पूरी खबर विवरण कॉलआउट (Full Story Callout)',
+      category: 'general',
+      type: 'callout_png',
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
+      assetUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
+      enabled: true,
+    },
+  ];
+
   // Central Asset Libraries for Location Badge & Story Callout (Part 1 & 2: Expandable List UI)
-  const [locationBadgeLibrary, setLocationBadgeLibrary] = useState<any[]>([]);
-  const [calloutLibrary, setCalloutLibrary] = useState<any[]>([]);
+  const [locationBadgeLibrary, setLocationBadgeLibrary] = useState<any[]>(FALLBACK_LOCATION_BADGES);
+  const [calloutLibrary, setCalloutLibrary] = useState<any[]>(FALLBACK_CALLOUTS);
   const [isCalloutListExpanded, setIsCalloutListExpanded] = useState<boolean>(true);
   const [isLocationBadgeListExpanded, setIsLocationBadgeListExpanded] = useState<boolean>(true);
 
@@ -394,8 +496,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             assetUrl: it.assetUrl || it.url || '',
           }));
 
-          setLocationBadgeLibrary(badges);
-          setCalloutLibrary(callouts);
+          if (badges.length > 0) setLocationBadgeLibrary(badges);
+          if (callouts.length > 0) setCalloutLibrary(callouts);
         }
       })
       .catch((err) => {
@@ -673,6 +775,26 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const [testHeadline, setTestHeadline] = useState<string>(
     'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी'
   );
+
+  // Part 2: Sample Test Mode (Dummy Text Input) State
+  const [dummyLine1, setDummyLine1] = useState<string>('मध्य प्रदेश में ऐतिहासिक फैसला:');
+  const [dummyLine2, setDummyLine2] = useState<string>('कैबिनेट बैठक में बड़े प्रस्तावों को');
+  const [dummyLine3, setDummyLine3] = useState<string>('मिली अंतिम मंजूरी');
+  const [dummyLocation, setDummyLocation] = useState<string>('भोपाल');
+  const [dummyCalloutText, setDummyCalloutText] = useState<string>('पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें');
+  const [isSampleTestModeExpanded, setIsSampleTestModeExpanded] = useState<boolean>(true);
+
+  // Part 8: Layout Lock State (Protects canvas coordinates from accidental moves)
+  const [isLayoutLocked, setIsLayoutLocked] = useState<boolean>(Boolean(initialFrame?.isLayoutLocked));
+
+  const handleResetSampleText = () => {
+    setDummyLine1('मध्य प्रदेश में ऐतिहासिक फैसला:');
+    setDummyLine2('कैबिनेट बैठक में बड़े प्रस्तावों को');
+    setDummyLine3('मिली अंतिम मंजूरी');
+    setDummyLocation('भोपाल');
+    setDummyCalloutText('पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें');
+    setTestHeadline('मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी');
+  };
 
   // Keep footer height aligned with ratio
   useEffect(() => {
@@ -1076,6 +1198,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setSelectedLayerId(layerId);
+    if (isLayoutLocked) return;
     const targetLayer = layers.find((l) => l.id === layerId);
     if (!targetLayer) return;
     if (targetLayer.locked && targetLayer.type === 'footer') {
@@ -1087,6 +1210,43 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     setDragHandle(handle);
     setDragStartPos({ x: e.clientX, y: e.clientY });
     setInitialLayerRect({ ...targetLayer.rect });
+  };
+
+  const handleRotateActiveLayer = (deg: number) => {
+    if (isLayoutLocked) return;
+    if (!selectedLayerId) return;
+    const cleanDeg = (deg + 360) % 360;
+    setLayers((prev) =>
+      prev.map((l) => (l.id === selectedLayerId ? { ...l, rotation: cleanDeg } : l))
+    );
+
+    if (selectedLayerId.startsWith('layer_photo_')) {
+      const slotId = selectedLayerId.replace('layer_photo_', '');
+      setPhotoSlots((prev) =>
+        prev.map((s) => (s.id === slotId ? { ...s, rotation: cleanDeg } : s))
+      );
+    } else if (selectedLayerId.startsWith('layer_text_')) {
+      const slotId = selectedLayerId.replace('layer_text_', '');
+      setTextSlots((prev) =>
+        prev.map((s) => (s.id === slotId ? { ...s, rotation: cleanDeg } : s))
+      );
+    } else if (selectedLayerId === 'layer_logo') {
+      setHeaderConfig((prev) => ({ ...prev, logoRotation: cleanDeg }));
+    } else if (selectedLayerId === 'layer_location') {
+      setHeaderConfig((prev) => ({ ...prev, locationRotation: cleanDeg }));
+    } else if (selectedLayerId === 'layer_date') {
+      setHeaderConfig((prev) => ({ ...prev, dateRotation: cleanDeg }));
+    } else if (selectedLayerId === 'layer_watermark') {
+      setWatermarkConfig((prev) => ({ ...prev, rotation: cleanDeg }));
+    } else if (selectedLayerId === 'layer_callout') {
+      setFullStoryCalloutConfig((prev) => ({ ...prev, rotation: cleanDeg }));
+    }
+  };
+
+  const handleToggleLayerLock = (layerId: string) => {
+    setLayers((prev) =>
+      prev.map((l) => (l.id === layerId ? { ...l, locked: !l.locked } : l))
+    );
   };
 
   const handleCanvasPointerMove = (e: React.PointerEvent) => {
@@ -1260,7 +1420,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // 0. Base dark canvas
+      // 0. Base dark canvas (solid background, never fake checkerboard)
       ctx.fillStyle = '#0B1329';
       ctx.fillRect(0, 0, w, h);
 
@@ -1273,16 +1433,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const sy = (slot.rect.y / 100) * h;
         const sw = (slot.rect.width / 100) * w;
         const sh = (slot.rect.height / 100) * h;
+        const pRot = slot.rotation ?? 0;
 
         if (testImgSrc) {
           try {
-            const pImg = new Image();
-            pImg.crossOrigin = 'anonymous';
-            pImg.src = testImgSrc;
-            await new Promise((resolve) => {
-              pImg.onload = resolve;
-              pImg.onerror = resolve;
-            });
+            const pImg = await loadImageSafe(testImgSrc);
             ctx.save();
             ctx.beginPath();
             if (slot.cornerRadius) {
@@ -1292,6 +1447,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               ctx.rect(sx, sy, sw, sh);
             }
             ctx.clip();
+
+            if (pRot !== 0) {
+              ctx.translate(sx + sw / 2, sy + sh / 2);
+              ctx.rotate((pRot * Math.PI) / 180);
+              ctx.translate(-(sx + sw / 2), -(sy + sh / 2));
+            }
+
             const imgAspect = pImg.width / pImg.height;
             const slotAspect = sw / sh;
             let drawW = sw, drawH = sh, dx = sx, dy = sy;
@@ -1304,7 +1466,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             }
             ctx.drawImage(pImg, dx, dy, drawW, drawH);
             ctx.restore();
-          } catch {}
+          } catch (err) {
+            console.warn('Photo slot load error:', err);
+          }
         } else {
           ctx.fillStyle = '#1E293B';
           ctx.fillRect(sx, sy, sw, sh);
@@ -1319,14 +1483,21 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       // LAYER 2: Panel B Original PNG Artwork (Drawn on top of photo)
       if (primaryBackgroundAsset) {
         try {
-          const bgImg = new Image();
-          bgImg.crossOrigin = 'anonymous';
-          bgImg.src = primaryBackgroundAsset;
-          await new Promise((resolve) => {
-            bgImg.onload = resolve;
-            bgImg.onerror = resolve;
-          });
-          ctx.drawImage(bgImg, 0, 0, w, h);
+          const bgImg = await loadImageSafe(primaryBackgroundAsset);
+          if (bgImg && bgImg.width > 0) {
+            const primarySlot = activeSlots[0]?.rect || { x: 0, y: 0, width: 100, height: 60 };
+            const tempC = document.createElement('canvas');
+            tempC.width = w;
+            tempC.height = h;
+            const tCtx = tempC.getContext('2d');
+            if (tCtx) {
+              tCtx.drawImage(bgImg, 0, 0, w, h);
+              removeFakeCheckerboardFromCanvas(tCtx, w, h, primarySlot);
+              ctx.drawImage(tempC, 0, 0, w, h);
+            } else {
+              ctx.drawImage(bgImg, 0, 0, w, h);
+            }
+          }
         } catch (e) {
           console.warn('Panel B PNG Artwork load error in test download:', e);
         }
@@ -1344,13 +1515,19 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const hy = (headlineSlot.rect.y / 100) * h;
       const hw = (headlineSlot.rect.width / 100) * w;
       const hh = (headlineSlot.rect.height / 100) * h;
+      const hRot = headlineSlot.rotation ?? 0;
 
       if (headlineSlot.backgroundColor && headlineSlot.backgroundColor !== 'transparent') {
         ctx.fillStyle = headlineSlot.backgroundColor;
         ctx.fillRect(hx, hy, hw, hh);
       }
 
-      const textToDraw = testHeadline || 'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी';
+      const rawInput =
+        testHeadline ||
+        [dummyLine1, dummyLine2, dummyLine3].filter(Boolean).join(' ') ||
+        'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी';
+      const textToDraw = normalizeHeadlineText(rawInput);
+
       const canonicalLayout = computeCanonicalHeadlineLayout({
         headline: textToDraw,
         fontFamily: headlineSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
@@ -1361,6 +1538,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       });
 
       ctx.save();
+      if (hRot !== 0) {
+        ctx.translate(hx + hw / 2, hy + hh / 2);
+        ctx.rotate((hRot * Math.PI) / 180);
+        ctx.translate(-(hx + hw / 2), -(hy + hh / 2));
+      }
+
       const textColor = headlineSlot.textColor || '#FFFFFF';
       const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black';
       ctx.fillStyle = textColor;
@@ -1377,14 +1560,27 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         ctx.shadowBlur = 0;
       }
 
-      canonicalLayout.lines.forEach((line, lineIdx) => {
+      canonicalLayout.lines.forEach((line: any, lineIdx: number) => {
         const lineY = canonicalLayout.startY + lineIdx * canonicalLayout.lineHeight + canonicalLayout.lineHeight / 2;
         const lineX = canonicalLayout.alignment === 'center'
           ? canonicalLayout.boxCenterX
           : canonicalLayout.alignment === 'left'
           ? hx + 15
           : hx + hw - 15;
-        ctx.fillText(line, lineX, lineY);
+
+        let lineString = '';
+        if (Array.isArray(line)) {
+          lineString = line
+            .map((t: any) => (typeof t === 'string' ? t : (t?.text || '')))
+            .join(' ');
+        } else if (typeof line === 'string') {
+          lineString = line;
+        } else if (line && typeof line === 'object') {
+          lineString = line.text || line.headline || '';
+        }
+        lineString = normalizeHeadlineText(lineString);
+
+        ctx.fillText(lineString, lineX, lineY);
       });
       ctx.restore();
 
@@ -1395,29 +1591,41 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const ly = (lRect.y / 100) * h;
         const lw = (lRect.width / 100) * w;
         const lh = (lRect.height / 100) * h;
+        const lRot = headerConfig.logoRotation ?? 0;
         try {
-          const logoImg = new Image();
-          logoImg.crossOrigin = 'anonymous';
-          logoImg.src = '/assets/ai_news_maker_logo.png';
-          await new Promise((resolve) => {
-            logoImg.onload = resolve;
-            logoImg.onerror = () => {
-              logoImg.src = '/logo.png';
-              logoImg.onload = resolve;
-              logoImg.onerror = resolve;
-            };
-          });
-          if (logoImg.width > 0) {
-            const lAspect = logoImg.width / logoImg.height;
-            let drawW = lw, drawH = lh;
-            if (lAspect > lw / lh) {
-              drawH = lw / lAspect;
-            } else {
-              drawW = lh * lAspect;
-            }
-            ctx.drawImage(logoImg, lx + (lw - drawW) / 2, ly + (lh - drawH) / 2, drawW, drawH);
+          const logoSrc = currentUser?.channelLogo || currentUser?.profileLogo || '/assets/ai_news_maker_logo.png';
+          let logoImg: HTMLImageElement;
+          try {
+            logoImg = await loadImageSafe(logoSrc);
+          } catch {
+            logoImg = await loadImageSafe('/logo.png');
           }
-        } catch {}
+          if (logoImg && logoImg.width > 0) {
+            ctx.save();
+            if (lRot !== 0) {
+              ctx.translate(lx + lw / 2, ly + lh / 2);
+              ctx.rotate((lRot * Math.PI) / 180);
+              ctx.translate(-(lx + lw / 2), -(ly + lh / 2));
+            }
+            const scale = (headerConfig.logoScalePct || 100) / 100;
+            const targetW = lw * scale;
+            const targetH = lh * scale;
+            const lAspect = logoImg.width / logoImg.height;
+            let drawW = targetW, drawH = targetH;
+            if (lAspect > targetW / targetH) {
+              drawH = targetW / lAspect;
+            } else {
+              drawW = targetH * lAspect;
+            }
+            const align = headerConfig.logoAlign || 'left';
+            const dx = align === 'center' ? lx + (lw - drawW) / 2 : align === 'right' ? lx + lw - drawW : lx;
+            const dy = ly + (lh - drawH) / 2;
+            ctx.drawImage(logoImg, dx, dy, drawW, drawH);
+            ctx.restore();
+          }
+        } catch (e) {
+          console.warn('Channel Logo draw error in preview download:', e);
+        }
       }
 
       // LAYER 5: Location Badge
@@ -1427,32 +1635,69 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const by = (locRect.y / 100) * h;
         const bw = (locRect.width / 100) * w;
         const bh = (locRect.height / 100) * h;
+        const locRot = headerConfig.locationRotation ?? 0;
 
-        const badgeAsset = headerConfig.manualLocationAsset || locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url;
-        if (headerConfig.locationBadgeMode === 'static_image' && badgeAsset) {
+        const badgeAsset =
+          headerConfig.manualLocationAsset ||
+          locationBadgeLibrary.find((b) => b.id === headerConfig.locationBadgeAssetId)?.url ||
+          locationBadgeLibrary.find((b) => b.id === headerConfig.locationBadgeAssetId)?.assetUrl;
+
+        ctx.save();
+        if (locRot !== 0) {
+          ctx.translate(bx + bw / 2, by + bh / 2);
+          ctx.rotate((locRot * Math.PI) / 180);
+          ctx.translate(-(bx + bw / 2), -(by + bh / 2));
+        }
+
+        let badgeDrawn = false;
+        if (badgeAsset) {
           try {
-            const bImg = new Image();
-            bImg.crossOrigin = 'anonymous';
-            bImg.src = badgeAsset;
-            await new Promise((resolve) => {
-              bImg.onload = resolve;
-              bImg.onerror = resolve;
-            });
-            ctx.drawImage(bImg, bx, by, bw, bh);
-          } catch {}
-        } else {
-          ctx.save();
+            const bImg = await loadImageSafe(badgeAsset);
+            if (bImg && bImg.width > 0) {
+              const bAspect = bImg.width / bImg.height;
+              const boxAspect = bw / bh;
+              let dw = bw, dh = bh;
+              if (bAspect > boxAspect) {
+                dh = bw / bAspect;
+              } else {
+                dw = bh * bAspect;
+              }
+              const dx = bx + (bw - dw) / 2;
+              const dy = by + (bh - dh) / 2;
+              ctx.drawImage(bImg, dx, dy, dw, dh);
+              badgeDrawn = true;
+
+              const locText = dummyLocation || 'भोपाल';
+              if (headerConfig.textRegion) {
+                const tr = headerConfig.textRegion;
+                const tx = dx + (tr.x / 100) * dw;
+                const ty = dy + (tr.y / 100) * dh;
+                const tw = (tr.width / 100) * dw;
+                const th = (tr.height / 100) * dh;
+                ctx.fillStyle = headerConfig.locationTextColor || '#FFFFFF';
+                ctx.font = `bold ${Math.round(th * 0.75)}px "Noto Sans Devanagari", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(locText, tx + tw / 2, ty + th / 2);
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to draw badge asset, falling back:', e);
+          }
+        }
+
+        if (!badgeDrawn) {
           ctx.fillStyle = headerConfig.locationBgColor || '#DC2626';
           ctx.beginPath();
           ctx.roundRect(bx, by, bw, bh, bh / 2);
           ctx.fill();
           ctx.fillStyle = headerConfig.locationTextColor || '#FFFFFF';
-          ctx.font = 'bold 22px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+          ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText('📍 भोपाल', bx + bw / 2, by + bh / 2);
-          ctx.restore();
+          ctx.fillText(`📍 ${dummyLocation || 'भोपाल'}`, bx + bw / 2, by + bh / 2);
         }
+        ctx.restore();
       }
 
       // LAYER 6: Date Stamp
@@ -1467,6 +1712,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           ctx.rotate((-90 * Math.PI) / 180);
         } else if (rot === 90) {
           ctx.rotate((90 * Math.PI) / 180);
+        } else if (rot !== 0) {
+          ctx.rotate((rot * Math.PI) / 180);
         }
         ctx.fillStyle = '#CBD5E1';
         ctx.font = 'bold 20px "Noto Sans Devanagari", sans-serif';
@@ -1482,8 +1729,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const wm = watermarkConfig;
         const rotDeg = wm.rotation ?? 270;
         const op = wm.opacity ?? 0.85;
-        let wx = (wm.rect?.x ?? 74) / 100 * w;
-        let wy = (wm.rect?.y ?? 3.5) / 100 * h;
+        let wx = ((wm.rect?.x ?? 74) / 100) * w;
+        let wy = ((wm.rect?.y ?? 3.5) / 100) * h;
         ctx.save();
         ctx.globalAlpha = op;
         ctx.translate(wx, wy);
@@ -1503,52 +1750,111 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const cy = (cRect.y / 100) * h;
         const cw = (cRect.width / 100) * w;
         const ch = (cRect.height / 100) * h;
-        const calloutAsset = fullStoryCalloutConfig.manualCalloutAsset || manualCalloutAssetUrl;
+        const cRot = fullStoryCalloutConfig.rotation ?? 0;
+
+        const calloutAsset =
+          fullStoryCalloutConfig.manualCalloutAsset ||
+          manualCalloutAssetUrl ||
+          calloutLibrary.find((c) => c.id === fullStoryCalloutConfig.calloutAssetId)?.url ||
+          calloutLibrary.find((c) => c.id === fullStoryCalloutConfig.calloutAssetId)?.assetUrl;
+
+        ctx.save();
+        if (cRot !== 0) {
+          ctx.translate(cx + cw / 2, cy + ch / 2);
+          ctx.rotate((cRot * Math.PI) / 180);
+          ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
+        }
+
+        let calloutDrawn = false;
         if (calloutAsset) {
           try {
-            const cImg = new Image();
-            cImg.crossOrigin = 'anonymous';
-            cImg.src = calloutAsset;
-            await new Promise((resolve) => {
-              cImg.onload = resolve;
-              cImg.onerror = resolve;
-            });
-            ctx.drawImage(cImg, cx, cy, cw, ch);
-          } catch {}
-        } else {
-          ctx.save();
-          ctx.fillStyle = '#F59E0B';
+            const cImg = await loadImageSafe(calloutAsset);
+            if (cImg && cImg.width > 0) {
+              const cAspect = cImg.width / cImg.height;
+              const boxAspect = cw / ch;
+              let dw = cw, dh = ch;
+              if (cAspect > boxAspect) {
+                dh = cw / cAspect;
+              } else {
+                dw = ch * cAspect;
+              }
+              const dx = cx + (cw - dw) / 2;
+              const dy = cy + (ch - dh) / 2;
+              ctx.drawImage(cImg, dx, dy, dw, dh);
+              calloutDrawn = true;
+            }
+          } catch (e) {
+            console.warn('Failed to draw callout asset, falling back:', e);
+          }
+        }
+
+        if (!calloutDrawn) {
+          ctx.fillStyle = fullStoryCalloutConfig.bgColor || '#F59E0B';
           ctx.beginPath();
           ctx.roundRect(cx, cy, cw, ch, 6);
           ctx.fill();
-          ctx.fillStyle = '#0F172A';
+          ctx.fillStyle = fullStoryCalloutConfig.textColor || '#0F172A';
           ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(fullStoryCalloutConfig.text || 'पूरी खबर विवरण में', cx + cw / 2, cy + ch / 2);
-          ctx.restore();
+          ctx.fillText(
+            dummyCalloutText || fullStoryCalloutConfig.text || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें',
+            cx + cw / 2,
+            cy + ch / 2
+          );
         }
+        ctx.restore();
       }
 
-      // LAYER 9: Permanent Protected Footer
+      // LAYER 9: Permanent Protected Master Admin Brand Footer
       const fRatio = footerConfig.footerHeightRatio || (selectedRatio === '4:5' ? 0.08 : 0.065);
-      const fh = fRatio * h;
-      const fw = ((footerConfig.footerWidthPct || 100) / 100) * w;
-      const fx = (w - fw) / 2;
+      const fh = Math.round(fRatio * h);
+      const fw = Math.round(((footerConfig.footerWidthPct || 100) / 100) * w);
+      const fx = Math.round((w - fw) / 2);
       const fy = h - fh;
+
       let footerBg = primaryFooterColor || footerConfig.primaryFooterColor || footerConfig.footerBgColor || '#FFFFFF';
       if (bannedFooterColor && footerBg.trim().toLowerCase() === bannedFooterColor.trim().toLowerCase()) {
-        footerBg = '#000000';
+        footerBg = '#0B1329';
       }
+
+      ctx.save();
       ctx.fillStyle = footerBg;
       ctx.fillRect(fx, fy, fw, fh);
-      ctx.fillStyle = footerConfig.footerTextColor || '#000000';
-      ctx.font = 'bold 24px sans-serif';
+
+      const hexClean = footerBg.replace('#', '').trim();
+      let isLightBg = true;
+      if (hexClean.length === 6) {
+        const r = parseInt(hexClean.substring(0, 2), 16);
+        const g = parseInt(hexClean.substring(2, 4), 16);
+        const b = parseInt(hexClean.substring(4, 6), 16);
+        const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        isLightBg = lum >= 0.5;
+      }
+      const footerTextColor = footerConfig.footerTextColor || (isLightBg ? '#0A0A0A' : '#FFFFFF');
+
+      ctx.strokeStyle = isLightBg ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx + fw, fy);
+      ctx.stroke();
+
+      const centerY = fy + fh / 2;
+
+      // Brand handles and name
+      ctx.fillStyle = footerTextColor;
+      ctx.font = 'bold 24px "Noto Sans Devanagari", sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`@${currentUser?.username || 'breakingnewswala'}`, fx + 30, fy + fh / 2);
+      const brandHandle = currentUser?.username ? `@${currentUser.username}` : '@breakingnewswala';
+      ctx.fillText(`BREAKING NEWS WALA | ${brandHandle}`, fx + 25, centerY);
+
+      // Website and WhatsApp helpline
       ctx.textAlign = 'right';
-      ctx.fillText(currentUser?.phone ? `📱 ${currentUser.phone}` : 'सत्यापित डिजिटल समाचार नेटवर्क', fx + fw - 30, fy + fh / 2);
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText('🌐 breakingnewswala.com  |  📱 9669802408', fx + fw - 25, centerY);
+      ctx.restore();
 
       // Trigger direct download
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
@@ -1639,6 +1945,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       poweredByConfig,
       safeZoneConfig,
       layers,
+      isLayoutLocked,
       isStatementFrame: isVideo ? false : isStatementFrame,
       statementOptions: {
         solidBackgroundHex: statementBgColor,
@@ -2946,21 +3253,35 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Canvas Column */}
               <div className="lg:col-span-2 flex flex-col items-center">
-                {/* Safe Zone Toggle Header */}
+                {/* Safe Zone & Layout Lock Toggle Header */}
                 <div className="flex items-center justify-between w-full max-w-[360px] mb-2">
                   <span className="text-xs font-bold text-slate-300">कैनवास मार्किंग</span>
-                  <button
-                    type="button"
-                    onClick={() => setSafeZoneConfig((prev) => ({ ...prev, enabled: !prev.enabled }))}
-                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${
-                      safeZoneConfig.enabled
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
-                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>सेफ ज़ोन {safeZoneConfig.enabled ? 'ON' : 'OFF'}</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsLayoutLocked(!isLayoutLocked)}
+                      className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1 text-xs font-black transition-all cursor-pointer ${
+                        isLayoutLocked
+                          ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-300'
+                          : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+                      }`}
+                    >
+                      {isLayoutLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                      <span>{isLayoutLocked ? 'लेआउट लॉक ON' : 'लेआउट लॉक करें'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSafeZoneConfig((prev) => ({ ...prev, enabled: !prev.enabled }))}
+                      className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer ${
+                        safeZoneConfig.enabled
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>सेफ ज़ोन {safeZoneConfig.enabled ? 'ON' : 'OFF'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Safe Zone Warnings Banner */}
@@ -3310,6 +3631,63 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           + बड़ा
                         </button>
                       </div>
+                    </div>
+
+                    {/* Part 7: Element Rotation Controls */}
+                    <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-400 font-bold">रोटेशन (Rotation):</span>
+                      <div className="flex items-center gap-1">
+                        {[0, 90, 180, 270].map((deg) => (
+                          <button
+                            key={deg}
+                            type="button"
+                            disabled={isLayoutLocked || activeLayer.locked}
+                            onClick={() => handleRotateActiveLayer(deg)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                              (activeLayer.rotation || 0) === deg
+                                ? 'bg-amber-400 text-slate-950 font-black shadow'
+                                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                            }`}
+                          >
+                            {deg}°
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={isLayoutLocked || activeLayer.locked}
+                          onClick={() => handleRotateActiveLayer(((activeLayer.rotation || 0) - 90 + 360) % 360)}
+                          className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold cursor-pointer"
+                          title="90° वामावर्त घुमाएँ (-90°)"
+                        >
+                          ↶
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isLayoutLocked || activeLayer.locked}
+                          onClick={() => handleRotateActiveLayer(((activeLayer.rotation || 0) + 90) % 360)}
+                          className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold cursor-pointer"
+                          title="90° दक्षिणावर्त घुमाएँ (+90°)"
+                        >
+                          ↷
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Part 8: Individual Layer Lock / Unlock */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-bold">लेयर लॉक स्थिति:</span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleLayerLock(activeLayer.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 cursor-pointer transition ${
+                          activeLayer.locked
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                        }`}
+                      >
+                        {activeLayer.locked ? <Lock className="w-3 h-3 text-amber-400" /> : <Unlock className="w-3 h-3 text-slate-400" />}
+                        <span>{activeLayer.locked ? 'लेयर लॉक है' : 'लेयर अनलॉक है'}</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -3769,17 +4147,100 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   </button>
                 </div>
 
-                {/* Test Headline Live Input */}
-                <div className="pt-2 border-t border-slate-800">
-                  <label className="text-[11px] font-bold text-amber-300 block mb-1">
-                    टेस्ट हेडलाइन (Live Editable Headline):
-                  </label>
-                  <input
-                    type="text"
-                    value={testHeadline}
-                    onChange={(e) => setTestHeadline(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-bold"
-                  />
+                {/* Part 2: Dedicated Sample Test Mode (Dummy Text Input) Panel */}
+                <div className="pt-2 border-t border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setIsSampleTestModeExpanded(!isSampleTestModeExpanded)}
+                      className="flex items-center gap-2 text-xs font-black text-amber-300 hover:text-amber-200 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>नमूना टेक्स्ट दर्ज करें (Sample Test Inputs)</span>
+                      {isSampleTestModeExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetSampleText}
+                      className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-[10px] font-bold cursor-pointer transition flex items-center gap-1"
+                    >
+                      <span>🔄 रीसेट नमूना टेक्स्ट</span>
+                    </button>
+                  </div>
+
+                  {isSampleTestModeExpanded && (
+                    <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
+                      {/* 3 Distinct Headline Lines */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">हेडलाइन: लाइन 1</label>
+                          <input
+                            type="text"
+                            value={dummyLine1}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setDummyLine1(v);
+                              setTestHeadline([v, dummyLine2, dummyLine3].filter(Boolean).join(' '));
+                            }}
+                            placeholder="लाइन 1"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">हेडलाइन: लाइन 2</label>
+                          <input
+                            type="text"
+                            value={dummyLine2}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setDummyLine2(v);
+                              setTestHeadline([dummyLine1, v, dummyLine3].filter(Boolean).join(' '));
+                            }}
+                            placeholder="लाइन 2"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">हेडलाइन: लाइन 3</label>
+                          <input
+                            type="text"
+                            value={dummyLine3}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setDummyLine3(v);
+                              setTestHeadline([dummyLine1, dummyLine2, v].filter(Boolean).join(' '));
+                            }}
+                            placeholder="लाइन 3"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Location & Callout Full Description */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-800/80">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">सैंपल लोकेशन (City/State)</label>
+                          <input
+                            type="text"
+                            value={dummyLocation}
+                            onChange={(e) => setDummyLocation(e.target.value)}
+                            placeholder="भोपाल"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">कॉलआउट विवरण (Callout Text)</label>
+                          <input
+                            type="text"
+                            value={dummyCalloutText}
+                            onChange={(e) => setDummyCalloutText(e.target.value)}
+                            placeholder="पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Test Layout Switcher & Test Photos Upload */}
@@ -3976,7 +4437,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     {/* LAYER 3: Primary Headline (z-15 - Exact 3 Lines Typography Layout) */}
                     {textSlots.length > 0 && (() => {
                       const hSlot = textSlots[0];
-                      const rawText = testHeadline || 'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी';
+                      const rawText = normalizeHeadlineText(
+                        testHeadline ||
+                        [dummyLine1, dummyLine2, dummyLine3].filter(Boolean).join(' ') ||
+                        'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी'
+                      );
+                      const hRot = hSlot.rotation ?? 0;
                       return (
                         <div
                           className="absolute z-15 flex flex-col justify-center px-1 text-center pointer-events-none select-none"
@@ -3985,6 +4451,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             top: `${hSlot.rect.y}%`,
                             width: `${hSlot.rect.width}%`,
                             height: `${hSlot.rect.height}%`,
+                            transform: hRot !== 0 ? `rotate(${hRot}deg)` : undefined,
+                            transformOrigin: 'center center',
                             backgroundColor: hSlot.backgroundColor && hSlot.backgroundColor !== 'transparent' ? hSlot.backgroundColor : undefined,
                           }}
                         >
@@ -4013,10 +4481,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           top: `${headerConfig.logoRect?.y ?? 3.5}%`,
                           maxWidth: `${headerConfig.logoRect?.width ?? 22}%`,
                           maxHeight: `${headerConfig.logoRect?.height ?? 9}%`,
+                          transform: (headerConfig.logoRotation ?? 0) !== 0 ? `rotate(${headerConfig.logoRotation}deg)` : undefined,
+                          transformOrigin: 'center center',
                         }}
                       >
                         <img
-                          src="/assets/ai_news_maker_logo.png"
+                          src={currentUser?.channelLogo || currentUser?.profileLogo || "/assets/ai_news_maker_logo.png"}
                           alt="Admin Logo"
                           className="max-h-5 max-w-full object-contain"
                           onError={(e) => {
@@ -4027,32 +4497,46 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     )}
 
                     {/* LAYER 5: Location Badge (z-16) */}
-                    {headerConfig.showLocation && (
-                      <div
-                        className="absolute z-16 flex items-center justify-center pointer-events-none"
-                        style={{
-                          left: `${headerConfig.locationRect?.x ?? 5}%`,
-                          top: `${headerConfig.locationRect?.y ?? 13.5}%`,
-                        }}
-                      >
-                        {headerConfig.locationBadgeMode === 'static_image' && (headerConfig.manualLocationAsset || locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url) ? (
-                          <img
-                            src={headerConfig.manualLocationAsset || locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url}
-                            alt="Location Badge"
-                            className="max-h-6 object-contain"
-                          />
-                        ) : (
-                          <div
-                            className="rounded-full px-2 py-0.5 text-[8px] font-bold text-white shadow flex items-center gap-1"
-                            style={{
-                              backgroundColor: headerConfig.locationBgColor || '#DC2626',
-                            }}
-                          >
-                            <span>📍 भोपाल</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {headerConfig.showLocation && (() => {
+                      const badgeAsset =
+                        headerConfig.manualLocationAsset ||
+                        locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url ||
+                        locationBadgeLibrary[0]?.url;
+                      const locRot = headerConfig.locationRotation ?? 0;
+                      return (
+                        <div
+                          className="absolute z-16 flex items-center justify-center pointer-events-none"
+                          style={{
+                            left: `${headerConfig.locationRect?.x ?? 5}%`,
+                            top: `${headerConfig.locationRect?.y ?? 13.5}%`,
+                            transform: locRot !== 0 ? `rotate(${locRot}deg)` : undefined,
+                            transformOrigin: 'center center',
+                          }}
+                        >
+                          {headerConfig.locationBadgeMode === 'static_image' && badgeAsset ? (
+                            <div className="relative flex items-center justify-center">
+                              <img
+                                src={badgeAsset}
+                                alt="Location Badge"
+                                className="max-h-6 object-contain"
+                              />
+                              <span className="absolute right-2 text-[8px] font-bold text-white shadow-sm">
+                                {dummyLocation || 'भोपाल'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div
+                              className="rounded-full px-2 py-0.5 text-[8px] font-bold text-white shadow flex items-center gap-1"
+                              style={{
+                                backgroundColor: headerConfig.locationBgColor || '#DC2626',
+                              }}
+                            >
+                              <span>📍 {dummyLocation || 'भोपाल'}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* LAYER 6: Date Stamp (z-16) */}
                     {headerConfig.showDate && (
@@ -4140,37 +4624,47 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     )}
 
                     {/* LAYER 8: Full Story Callout (z-18) */}
-                    {fullStoryCalloutConfig.enabled && (
-                      <div
-                        className="absolute z-18 flex items-center justify-center pointer-events-none"
-                        style={{
-                          left: `${fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                          top: `${fullStoryCalloutConfig.rect?.y ?? 85}%`,
-                          width: `${fullStoryCalloutConfig.rect?.width ?? 80}%`,
-                          height: `${fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
-                        }}
-                      >
-                        {fullStoryCalloutConfig.calloutAssetMode === 'static_image' && (fullStoryCalloutConfig.manualCalloutAsset || manualCalloutAssetUrl) ? (
-                          <img
-                            src={fullStoryCalloutConfig.manualCalloutAsset || manualCalloutAssetUrl}
-                            alt="Story Callout"
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        ) : (
-                          <div
-                            className="text-[8px] font-black px-2 py-0.5 rounded shadow flex items-center gap-1"
-                            style={{
-                              color: fullStoryCalloutConfig.textColor || '#FFFFFF',
-                              backgroundColor: fullStoryCalloutConfig.bgColor || '#DC2626',
-                              border: `${fullStoryCalloutConfig.borderWidth ?? 1}px solid ${fullStoryCalloutConfig.borderColor || '#FACC15'}`,
-                            }}
-                          >
-                            <span>📢</span>
-                            <span>{fullStoryCalloutConfig.text || 'पूरी खबर विवरण'}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {fullStoryCalloutConfig.enabled && (() => {
+                      const calloutAsset =
+                        fullStoryCalloutConfig.manualCalloutAsset ||
+                        manualCalloutAssetUrl ||
+                        calloutLibrary.find(c => c.id === fullStoryCalloutConfig.calloutAssetId)?.url ||
+                        calloutLibrary[0]?.url;
+                      const cRot = fullStoryCalloutConfig.rotation ?? 0;
+                      return (
+                        <div
+                          className="absolute z-18 flex items-center justify-center pointer-events-none"
+                          style={{
+                            left: `${fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                            top: `${fullStoryCalloutConfig.rect?.y ?? 85}%`,
+                            width: `${fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                            height: `${fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                            transform: cRot !== 0 ? `rotate(${cRot}deg)` : undefined,
+                            transformOrigin: 'center center',
+                          }}
+                        >
+                          {fullStoryCalloutConfig.calloutAssetMode === 'static_image' && calloutAsset ? (
+                            <img
+                              src={calloutAsset}
+                              alt="Story Callout"
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <div
+                              className="text-[8px] font-black px-2 py-0.5 rounded shadow flex items-center gap-1"
+                              style={{
+                                color: fullStoryCalloutConfig.textColor || '#FFFFFF',
+                                backgroundColor: fullStoryCalloutConfig.bgColor || '#F59E0B',
+                                border: `${fullStoryCalloutConfig.borderWidth ?? 1}px solid ${fullStoryCalloutConfig.borderColor || '#FACC15'}`,
+                              }}
+                            >
+                              <span>📢</span>
+                              <span>{dummyCalloutText || fullStoryCalloutConfig.text || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Optional POWERED BY Element */}
                     {poweredByConfig.enabled && (
@@ -4200,9 +4694,17 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       const fWidthPct = footerConfig.footerWidthPct || 100;
                       let fBg = primaryFooterColor || footerConfig.primaryFooterColor || footerConfig.footerBgColor || '#FFFFFF';
                       if (bannedFooterColor && fBg.trim().toLowerCase() === bannedFooterColor.trim().toLowerCase()) {
-                        fBg = '#000000';
+                        fBg = '#0B1329';
                       }
-                      const fColor = footerConfig.footerTextColor || '#000000';
+                      const hexClean = fBg.replace('#', '').trim();
+                      let isLight = true;
+                      if (hexClean.length === 6) {
+                        const r = parseInt(hexClean.substring(0, 2), 16);
+                        const g = parseInt(hexClean.substring(2, 4), 16);
+                        const b = parseInt(hexClean.substring(4, 6), 16);
+                        isLight = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 >= 0.5;
+                      }
+                      const fColor = footerConfig.footerTextColor || (isLight ? '#0A0A0A' : '#FFFFFF');
                       return (
                         <div
                           className={`absolute ${generatorMode === 'video' && videoFooterPosition === 'top' ? 'top-0 border-b' : 'bottom-0 border-t'} flex items-center justify-between px-2 text-[7px] font-bold z-20 pointer-events-none select-none`}
@@ -4214,8 +4716,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             color: fColor,
                           }}
                         >
-                          <span className="truncate max-w-[45%]">{currentUser?.username ? `@${currentUser.username}` : '@breakingnewswala'}</span>
-                          <span className="truncate max-w-[45%]">📱 9406540644 | सत्यापित नेटवर्क</span>
+                          <span className="truncate max-w-[48%]">
+                            BREAKING NEWS WALA | {currentUser?.username ? `@${currentUser.username}` : '@breakingnewswala'}
+                          </span>
+                          <span className="truncate max-w-[48%]">🌐 breakingnewswala.com | 📱 9669802408</span>
                         </div>
                       );
                     })()}

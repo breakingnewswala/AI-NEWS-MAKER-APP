@@ -56,7 +56,6 @@ export const VIDEO_ALLOWED_ASPECT_RATIOS: DynamicAspectRatio[] = ['9:16', '1:1',
 
 export type DynamicDesignCategory =
   | 'Regular Frames'
-  | 'Story Frames'
   | 'Package Frames'
   | 'Super Breaking'
   | 'Text Breaking'
@@ -67,7 +66,6 @@ export type DynamicDesignCategory =
 
 export const DYNAMIC_FRAME_CATEGORIES: DynamicDesignCategory[] = [
   'Regular Frames',
-  'Story Frames',
   'Package Frames',
   'Super Breaking',
   'Text Breaking',
@@ -109,6 +107,7 @@ export interface PhotoSlotConfig {
   shadow?: boolean;
   bgRemoval?: boolean; // True for foreground cutout ONLY
   aspectRatioLabel?: string; // e.g. "16:9", "1:1", "4:5", "Free"
+  rotation?: number; // 0, 90, 180, 270
 }
 
 // Multi-Photo Layout Variants (Step 5)
@@ -137,6 +136,7 @@ export interface TextSlotConfig {
   lineHeight?: number;
   padding?: number;
   backgroundColor?: string;
+  rotation?: number; // 0, 90, 180, 270
 }
 
 export type LocationBadgeMode = 'dynamic_overlay' | 'static_image';
@@ -152,6 +152,7 @@ export interface HeaderConfig {
   logoInsetPx?: number;
   logoOpacity?: number;
   logoAlign?: 'left' | 'center' | 'right';
+  logoRotation?: number; // 0, 90, 180, 270
 
   // Independent Location Badge Configuration
   showLocation: boolean;
@@ -164,6 +165,7 @@ export interface HeaderConfig {
   locationBorderRadius?: number;
   locationShowIcon?: boolean;
   locationAlign?: 'left' | 'center' | 'right';
+  locationRotation?: number; // 0, 90, 180, 270
   locationBadgeMode?: LocationBadgeMode;
   manualLocationAsset?: string; // Uploaded manual badge skin or static badge
   locationBadgeAssetId?: string;
@@ -398,6 +400,9 @@ export interface DynamicFrameTemplate {
   // Footer primary & banned color policy (Part 7)
   primaryFooterColor?: string;
   bannedFooterColor?: string;
+
+  // Layout lock state (Part 8)
+  isLayoutLocked?: boolean;
 }
 
 export interface UserStoryPreference {

@@ -10368,7 +10368,9 @@ function saveCustomFramesDatabase(frames: StoredCustomFrame[]): boolean {
 
 app.get("/api/custom-frames", (req, res) => {
   const { userId } = req.query;
-  const all = loadCustomFramesDatabase();
+  const all = loadCustomFramesDatabase().filter(
+    (f) => f && f.name !== 'My 4x5 Custom Frame' && !f.name?.toLowerCase()?.includes('my 4x5 custom')
+  );
   if (!userId) return res.json({ success: true, frames: all });
   const cleanId = String(userId).toLowerCase().trim();
   const userFrames = all.filter((f) => !f.userId || f.userId.toLowerCase().trim() === cleanId || f.userId === 'general');
@@ -10530,7 +10532,9 @@ function saveAssetLibrariesDatabase(items: any[]) {
 const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
   'df_reg_4_5_clean', // Canonical Regular Clean News Frame is strictly graphic_001 (Part 4)
   'df_testing_1_double',
-  'df_bayaan_4_5_red'
+  'df_bayaan_4_5_red',
+  'df_story_9_16_standard',
+  'df_story_9_16_breaking'
 ]);
 
 function loadDynamicFramesDatabase(): any[] {
