@@ -1,5 +1,5 @@
 // Service Worker for Progressive Web App (PWA) & Web Push Notifications
-const CACHE_NAME = 'news-graphic-studio-v2026-11-08-v4';
+const CACHE_NAME = 'news-graphic-studio-v2026-11-09-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

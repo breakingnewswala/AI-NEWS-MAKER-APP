@@ -24,13 +24,13 @@
     "captionShort": "राजपाल यादव के खिलाफ गिरफ्तारी वारंट जारी, चेक बाउंस मामले में पेश नहीं हुए, मजिस्ट्रेट #BreakingNews #AINewsMaker",
     "fullContent": "राजपाल यादव के खिलाफ गिरफ्तारी वारंट जारी, चेक बाउंस मामले में पेश नहीं हुए, मजिस्ट्रेट\n\nराजपाल यादव के खिलाफ गिरफ्तारी वारंट जारी, चेक बाउंस मामले में पेश नहीं हुए, मजिस्ट्रेट ने दिया आदेश\n\nस्रोतः नई दुनिया (https://www.naidunia.com/entertainment/news-rajpal-yadav-arrest-warrant-mhow-court-cheque-bounce-case-25-lakh-8474951)",
     "approvedPhotos": [],
-    "editorialApproved": true,
+    "editorialApproved": false,
     "updatedAt": 1794078264631,
     "sourceChannel": "नई दुनिया",
     "headlineOptions": [
       "राजपाल यादव के खिलाफ गिरफ्तारी वारंट जारी, चेक बाउंस मामले में पेश नहीं हुए, मजिस्ट्रेट"
     ],
-    "status": "APPROVED",
+    "status": "PENDING_APPROVAL",
     "location": "",
     "breaking": false,
     "isExclusive": false,
@@ -41,7 +41,13 @@
     "imageSource": "source",
     "approvedCaptionShort": "राजपाल यादव के खिलाफ गिरफ्तारी वारंट जारी, चेक बाउंस मामले में पेश नहीं हुए, मजिस्ट्रेट #BreakingNews #AINewsMaker",
     "publishedTime": "1 घंटे पहले",
-    "category": "entertainment"
+    "category": "entertainment",
+    "ingestionStatus": "IMPORTED",
+    "approvalStatus": "PENDING_APPROVAL",
+    "publicationStatus": "UNPUBLISHED",
+    "isApproved": false,
+    "isPublished": false,
+    "visibility": "public"
   },
   {
     "id": "rss-src_1794071136127_oim9-4KSw4KS-4KSH4K",
@@ -71,7 +77,7 @@
       "राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों"
     ],
     "approvedHeadline": "राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों",
-    "status": "APPROVED",
+    "status": "PENDING_APPROVAL",
     "approvedCaptionDetailed": "राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों को डोनेट करूंगा…",
     "isPrePublished": false,
     "approvedCaptionBullets": "• राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों। • राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों को डोनेट करूंगा…। #BreakingNews #HindiNews #AINewsMaker",
@@ -80,12 +86,18 @@
     "rewardCoins": 0,
     "sourceCategoryId": "🎬 मनोरंजन",
     "sourceFeedUrl": "https://www.naidunia.com/entertainment",
-    "editorialApproved": true,
+    "editorialApproved": false,
     "updatedAt": 1794078264632,
     "sourceId": "src_1794071136127_oim9",
     "imageUrl": "https://img.naidunia.com/naidunia/ndnimg/06112026/06_11_2026-shehjaaz_poonewala_winner.jpg",
     "fullContent": "राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों\n\nराइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों को डोनेट करूंगा…\n\nस्रोतः नई दुनिया (https://www.naidunia.com/entertainment/news-rise-and-fall-2-shehzad-poonawalla-winner-35-lakh-prize-money-flood-relief-8475161)",
-    "summary": "राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों को डोनेट करूंगा…"
+    "summary": "राइज एंड फॉल 2 के विनर बने शहजाद पूनावाला, 35 लाख जीते, कहा- बाढ़ पीड़ितों को डोनेट करूंगा…",
+    "ingestionStatus": "IMPORTED",
+    "approvalStatus": "PENDING_APPROVAL",
+    "publicationStatus": "UNPUBLISHED",
+    "isApproved": false,
+    "isPublished": false,
+    "visibility": "public"
   },
   {
     "id": "rss-src_1794071136127_oim9-4oCY4KST4KSuIO",
@@ -100,7 +112,7 @@
     "breaking": false,
     "updatedAt": 1794078264632,
     "approvedCaptionDetailed": "‘ओम शांति ओम’ में दीपिका पादुकोण का रेट्रो लुक कैसे हुआ तैयार? हेमा मालिनी से ले ली गई थी प्रेरणा",
-    "status": "APPROVED",
+    "status": "PENDING_APPROVAL",
     "approvedCaptionBullets": "• ‘ओम शांति ओम’ में दीपिका पादुकोण का रेट्रो लुक कैसे हुआ तैयार? हेमा मालिनी से। • ‘ओम शांति ओम’ में दीपिका पादुकोण का रेट्रो लुक कैसे हुआ तैयार? हेमा मालिनी से ले ली गई थी प्रेरणा। #BreakingNews #HindiNews #AINewsMaker",
     "sourceCategoryId": "🎬 मनोरंजन",
     "approvedHeadline": "‘ओम शांति ओम’ में दीपिका पादुकोण का रेट्रो लुक कैसे हुआ तैयार? हेमा मालिनी से",
@@ -118,7 +130,7 @@
     "pendingCreatedAt": 1794071148640,
     "isBonus": false,
     "rewardCoins": 0,
-    "editorialApproved": true,
+    "editorialApproved": false,
     "summary": "‘ओम शांति ओम’ में दीपिका पादुकोण का रेट्रो लुक कैसे हुआ तैयार? हेमा मालिनी से ले ली गई थी प्रेरणा",
     "timestamp": 1794071168958,
     "sourceChannel": "नई दुनिया",
@@ -129,12 +141,18 @@
     "imageUrl": "https://img.naidunia.com/naidunia/ndnimg/06112026/06_11_2026-deepika_padukone_om_shanti_om.jpg",
     "approvedCaptionShort": "‘ओम शांति ओम’ में दीपिका पादुकोण का रेट्रो लुक कैसे हुआ तैयार? हेमा मालिनी से #BreakingNews #AINewsMaker",
     "sourceId": "src_1794071136127_oim9",
-    "isPrePublished": false
+    "isPrePublished": false,
+    "ingestionStatus": "IMPORTED",
+    "approvalStatus": "PENDING_APPROVAL",
+    "publicationStatus": "UNPUBLISHED",
+    "isApproved": false,
+    "isPublished": false,
+    "visibility": "public"
   },
   {
     "id": "rss-src_1794071001048_maoy-TVAg4KSu4KWH4K",
     "docId": "rss-src_1794071001048_maoy-TVAg4KSu4KWH4K",
-    "status": "APPROVED",
+    "status": "PENDING_APPROVAL",
     "headlineOptions": [
       "MP में 'राधा' का जलवा, 19.76 लीटर दूध देकर बनी नंबर-1 गाय, मालिक को मिलेगा"
     ],
@@ -158,7 +176,7 @@
     "approvedPhotos": [],
     "title": "MP में 'राधा' का जलवा, 19.76 लीटर दूध देकर बनी नंबर-1 गाय, मालिक को मिलेगा",
     "captionShort": "MP में 'राधा' का जलवा, 19.76 लीटर दूध देकर बनी नंबर-1 गाय, मालिक को मिलेगा #BreakingNews #AINewsMaker",
-    "editorialApproved": true,
+    "editorialApproved": false,
     "sourceFeedUrl": "https://www.naidunia.com/madhya-pradesh",
     "sourceUrl": "https://www.naidunia.com/madhya-pradesh/ujjain-gir-cow-radha-becomes-number-1-cow-giving-19-liters-of-milk-daily-owner-will-get-reward-8475405",
     "pendingCreatedAt": 1794071008331,
@@ -173,7 +191,13 @@
     "isPrePublished": false,
     "category": "state",
     "isBonus": false,
-    "rewardCoins": 0
+    "rewardCoins": 0,
+    "ingestionStatus": "IMPORTED",
+    "approvalStatus": "PENDING_APPROVAL",
+    "publicationStatus": "UNPUBLISHED",
+    "isApproved": false,
+    "isPublished": false,
+    "visibility": "public"
   },
   {
     "id": "news_1793391037097",

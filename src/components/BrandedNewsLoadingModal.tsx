@@ -66,7 +66,7 @@ export const VIDEO_LOADER_SUBTITLES: string[] = [
 ];
 
 export const HOME_CARD_GRAPHIC_SUBTITLES: string[] = [
-  'चुनी गई खबर के तथ्यों के आधार पर हेडलाइन, कैप्शन और ग्राफिक सामग्री तैयार की जा रही है।',
+  'खबर के तथ्यों, संदर्भ और प्रमुख बिंदुओं का विश्लेषण करके ग्राफिक के लिए सामग्री व्यवस्थित की जा रही है।',
   'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों की पुष्टि...',
   'संतुलित हेडलाइन और उपयोगी कैप्शन तैयार किए जा रहे हैं...',
   'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
@@ -183,16 +183,16 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
 
   const activeStages = mode === 'video_render' ? VIDEO_NEWSROOM_STAGES : NEWSROOM_STAGES;
 
-  // Part 5.1 & 5.2 Operation-Specific Main Loading Messages:
+  // Part 2.A & 2.B Operation-Specific Main Loading Messages:
   // - URL-based news generation (ai_generation): "खबर जनरेट हो रही है, कृपया प्रतीक्षा करें..."
-  // - Home Screen News Card -> Graphic workflow (graphic_preparation / approved_presentation):
-  //   "संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है..."
+  // - Home Screen News Card -> Graphic workflow:
+  //   "संपादकीय डेस्क आपकी चुनी हुई खबर के लिए पाँच प्रभावी हेडलाइन विकल्प तैयार कर रहा है।"
   const defaultTitle =
     mode === 'video_render'
       ? 'आपकी चुनी हुई वीडियो AI द्वारा तैयार की जा रही है...'
       : mode === 'ai_generation'
       ? 'खबर जनरेट हो रही है, कृपया प्रतीक्षा करें...'
-      : 'संपादकीय डेस्क आपकी चुनी गई खबर की हेडलाइन्स और कैप्शन को ग्राफिक के लिए तैयार कर रहा है...';
+      : 'संपादकीय डेस्क आपकी चुनी हुई खबर के लिए पाँच प्रभावी हेडलाइन विकल्प तैयार कर रहा है।';
 
   const displayTitle = title || defaultTitle;
   const currentSubtitle =
@@ -354,7 +354,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
             </div>
 
             {/* Smooth animated multicolor progress bar */}
-            <div className="space-y-1.5 px-3">
+            <div className="space-y-2.5 px-3">
               <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/80">
                 {progressPercent !== null ? (
                   <div
@@ -365,29 +365,30 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
                   <div className="h-full w-3/5 bg-gradient-to-r from-blue-500 via-violet-500 to-amber-400 rounded-full animate-pulse transition-all duration-300" />
                 )}
               </div>
-              <div className="flex justify-between text-[11px] font-bold text-slate-400">
-                <span className="text-sky-300">
-                  {mode === 'ai_generation' ? 'AI विश्लेषण जारी है...' : 'ग्राफिक सामग्री तैयार हो रही है...'}
-                </span>
+
+              {/* Part 2.D: Center-aligned Elapsed and Estimated Timing Layout */}
+              <div className="flex items-center justify-center text-center py-0.5">
                 {progressPercent !== null ? (
-                  <span className="text-violet-300 font-mono">
-                    {Math.floor(elapsedSeconds)}s / {durationSeconds}s ({progressPercent}%)
+                  <span className="text-violet-300 font-mono text-xs sm:text-sm font-bold tracking-wide">
+                    समय: {Math.floor(elapsedSeconds)}s / {durationSeconds}s ({progressPercent}%)
                   </span>
                 ) : (
-                  <span className="text-violet-300 font-mono">
+                  <span className="text-violet-300 font-mono text-xs sm:text-sm font-bold tracking-wide">
                     समय: {Math.floor(elapsedSeconds)}s (अनुमानित 10-20s)
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Brand supporting line at bottom */}
-            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-[11px] text-slate-300 font-medium">
+            {/* Part 2.C: Bottom Progress Message at lowest line of progress section without duplicate graphic messages */}
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-center gap-1.5 text-xs sm:text-sm text-sky-300 font-bold">
               <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span>
                 {mode === 'ai_generation'
-                  ? '⚡ AI कुछ ही क्षणों में 5 संतुलित हेडलाइन विकल्प व सोशल मीडिया कैप्शन प्रस्तुत करेगा'
-                  : '⚡ चुनी गई खबर के तथ्यों के आधार पर हेडलाइन, कैप्शन और ग्राफिक सामग्री तैयार की जा रही है'}
+                  ? 'AI विश्लेषण जारी है...'
+                  : mode === 'video_render'
+                  ? 'वीडियो रेंडरिंग प्रक्रिया जारी है...'
+                  : 'कैप्शन और ग्राफिक सामग्री तैयार की जा रही है...'}
               </span>
             </div>
           </>

@@ -19,4 +19,5 @@ export const FolderClockIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) 
   </svg>
 );
 
+export const FolderClock = FolderClockIcon;
 export default FolderClockIcon;

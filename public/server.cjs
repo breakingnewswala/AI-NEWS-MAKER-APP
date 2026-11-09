@@ -11605,6 +11605,7 @@ app.post("/api/admin/set-ai-keys", requireMasterAdminMiddleware, async (req, res
 });
 var NEWS_DB_FILE = import_path2.default.join(process.cwd(), "news_database.json");
 var EDITORIAL_APPROVED_DB_FILE = import_path2.default.join(process.cwd(), "approved_editorial_database.json");
+var APPROVAL_AUDIT_DB_FILE = import_path2.default.join(process.cwd(), "approval_audit_trail.json");
 var PROFILES_DB_FILE = import_path2.default.join(process.cwd(), "user_profiles_db.json");
 var LOGO_REQUESTS_DB_FILE = import_path2.default.join(process.cwd(), "logo_change_requests_db.json");
 var REWARDS_DB_FILE = import_path2.default.join(process.cwd(), "rewards_database.json");
@@ -12208,6 +12209,105 @@ function saveApprovedEditorialDatabase(data) {
     return false;
   }
 }
+function loadApprovalAuditDatabase() {
+  try {
+    const locations = resolveAllDatabaseLocations("approval_audit_trail.json");
+    for (const loc of locations) {
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error reading approval_audit_trail.json:", err);
+  }
+  return [];
+}
+function saveApprovalAuditDatabase(records) {
+  try {
+    const locations = resolveAllDatabaseLocations("approval_audit_trail.json");
+    for (const loc of locations) {
+      try {
+        if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+          import_fs2.default.writeFileSync(loc, JSON.stringify(records, null, 2), "utf-8");
+        }
+      } catch {
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("Error writing approval_audit_trail.json:", err);
+    return false;
+  }
+}
+function recordApprovalAudit(audit) {
+  try {
+    const records = loadApprovalAuditDatabase();
+    records.unshift(audit);
+    saveApprovalAuditDatabase(records.slice(0, 1e3));
+  } catch (err) {
+    console.error("Error recording approval audit:", err);
+  }
+}
+function auditAndRepairRssNewsRecords() {
+  let newsDb = loadNewsDatabase();
+  const editorialDb = loadApprovedEditorialDatabase();
+  const auditDb = loadApprovalAuditDatabase();
+  const approvedIdsFromAudit = new Set(auditDb.filter((a) => a.approvalStatus === "APPROVED").map((a) => a.articleId));
+  let repairedCount = 0;
+  let approvedCount = 0;
+  let modified = false;
+  newsDb = newsDb.map((p) => {
+    const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
+    if (!isFeedSource) return p;
+    const hasAuditApproval = approvedIdsFromAudit.has(p.id);
+    const hasEditorialApproval = Boolean(
+      editorialDb[p.id] && editorialDb[p.id].status === "APPROVED" && editorialDb[p.id].approvedBy && editorialDb[p.id].approvedBy !== "editorial-desk"
+    );
+    if (hasAuditApproval || hasEditorialApproval) {
+      approvedCount++;
+      if (p.approvalStatus !== "APPROVED" || p.publicationStatus !== "PUBLISHED") {
+        modified = true;
+        return {
+          ...p,
+          ingestionStatus: p.ingestionStatus || "PARSED",
+          approvalStatus: "APPROVED",
+          publicationStatus: "PUBLISHED",
+          status: "APPROVED",
+          isApproved: true,
+          isPublished: true,
+          visibility: p.visibility || "public"
+        };
+      }
+      return p;
+    }
+    if (p.approvalStatus !== "PENDING_APPROVAL" || p.publicationStatus !== "UNPUBLISHED" || p.status === "APPROVED" || p.isApproved === true || p.isPrePublished === true) {
+      repairedCount++;
+      modified = true;
+      return {
+        ...p,
+        ingestionStatus: p.ingestionStatus || "IMPORTED",
+        approvalStatus: "PENDING_APPROVAL",
+        publicationStatus: "UNPUBLISHED",
+        status: "PENDING_APPROVAL",
+        isApproved: false,
+        isPrePublished: false,
+        isPublished: false,
+        editorialApproved: false,
+        visibility: p.visibility || "public"
+      };
+    }
+    return p;
+  });
+  if (modified) {
+    saveNewsDatabase(newsDb);
+    console.log(`[RSS Audit & Repair] Scanned ${newsDb.length} articles: Repaired ${repairedCount} unapproved RSS items to PENDING_APPROVAL/UNPUBLISHED. Approved count: ${approvedCount}.`);
+  }
+  return { totalScanned: newsDb.length, repairedCount, approvedCount };
+}
 function formatRelativeTime(timestamp) {
   const diffMs = Date.now() - timestamp;
   const diffMinutes = Math.max(1, Math.floor(diffMs / 6e4));
@@ -12232,8 +12332,15 @@ app.get("/api/news-posts", async (req, res) => {
     ...activeSources.map((s) => (s.originalWebUrl || "").trim().toLowerCase()).filter(Boolean)
   ]);
   const activePosts = posts.filter((p) => {
-    if (p.status === "REJECTED" && !isAdmin) return false;
-    if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) return false;
+    if ((p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
+      return false;
+    }
+    if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) {
+      return false;
+    }
+    if (p.visibility === "private" && !isAdmin) {
+      return false;
+    }
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
       if (activeSources.length === 0) {
@@ -12258,24 +12365,31 @@ app.get("/api/news-posts", async (req, res) => {
       if (!hasActiveSource) {
         return false;
       }
-      const isApproved = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
-      if (!isApproved && (p.status === "PENDING_APPROVAL" || p.status === "pending")) {
+      const hasExplicitAdminApproval = p.approvalStatus === "APPROVED" && (p.publicationStatus === "PUBLISHED" || p.isPublished === true) || Boolean(
+        editorialDb[p.id] && editorialDb[p.id].status === "APPROVED" && (editorialDb[p.id].isPublished === true || editorialDb[p.id].isPrePublished === true) && editorialDb[p.id].approvedBy && editorialDb[p.id].approvedBy !== "editorial-desk"
+      );
+      if (!hasExplicitAdminApproval) {
+        if (!includePending) {
+          return false;
+        }
+      } else {
+        return true;
+      }
+    } else {
+      const isManualApproved = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved);
+      if (!isManualApproved && (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending")) {
         if (!includePending) {
           return false;
         }
       }
     }
-    const isApprovedStory = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
-    if (isApprovedStory) {
-      return true;
-    }
     const postTime = p.timestamp || now;
     const expiresAt = p.expiresAt || postTime + THREE_DAYS_MS;
-    if (now > expiresAt) return false;
-    if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
+    if (now > expiresAt && !includePending) return false;
+    if ((p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
       return false;
     }
-    if ((p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
+    if ((p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
       return false;
     }
     return true;
@@ -12285,6 +12399,7 @@ app.get("/api/news-posts", async (req, res) => {
     const backfillCandidates = posts.filter((p) => {
       if (String(p.id).startsWith("live-post-") || String(p.id).startsWith("editorial-seed-")) return false;
       if (activeIds.has(p.id)) return false;
+      if (p.visibility === "private" && !isAdmin) return false;
       const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
       if (isFeedSource) {
         if (activeSources.length === 0) return false;
@@ -12305,15 +12420,18 @@ app.get("/api/news-posts", async (req, res) => {
         if (!hasActiveSource) {
           return false;
         }
-        const isApproved = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
-        if (!isApproved && !includePending) return false;
+        const hasExplicitAdminApproval = p.approvalStatus === "APPROVED" && (p.publicationStatus === "PUBLISHED" || p.isPublished === true) || Boolean(
+          editorialDb[p.id] && editorialDb[p.id].status === "APPROVED" && (editorialDb[p.id].isPublished === true || editorialDb[p.id].isPrePublished === true) && editorialDb[p.id].approvedBy && editorialDb[p.id].approvedBy !== "editorial-desk"
+        );
+        if (!hasExplicitAdminApproval && !includePending) return false;
+        if (hasExplicitAdminApproval) return true;
       }
-      const isApprovedStory = p.status === "APPROVED" || p.status === "published" || Boolean(p.isApproved) || Boolean(p.isPrePublished) || Boolean(editorialDb[p.id]?.isPrePublished) || editorialDb[p.id]?.status === "APPROVED";
-      if (isApprovedStory) return true;
-      if ((p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
+      const isManualApproved = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved);
+      if (isManualApproved) return true;
+      if ((p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
         return false;
       }
-      if ((p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
+      if ((p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
         return false;
       }
       return true;
@@ -12697,12 +12815,30 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       restrictedPlans: Array.isArray(body.restrictedPlans) ? body.restrictedPlans : existing.restrictedPlans || [],
       approvedAt: Date.now(),
       approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
+      ingestionStatus: existing.ingestionStatus || "PARSED",
+      approvalStatus: "APPROVED",
+      publicationStatus: "PUBLISHED",
       status: "APPROVED",
+      isApproved: true,
       isPrePublished,
+      isPublished: true,
+      visibility: "public",
       prePublishedAt: isPrePublished ? Date.now() : existing.prePublishedAt
     };
     db[id] = updated;
     saveApprovedEditorialDatabase(db);
+    const adminUser = (req.headers["x-user-email"] || req.headers["x-admin-email"] || req.user?.email || "admin").toString();
+    const adminRole = req.user?.role || "admin";
+    recordApprovalAudit({
+      adminUserId: adminUser,
+      adminRole,
+      articleId: id,
+      approvalStatus: "APPROVED",
+      approvalTimestamp: Date.now(),
+      publicationTimestamp: Date.now(),
+      sourceType: id.startsWith("rss-") ? "rss" : id.startsWith("web-") ? "web" : "manual",
+      sourceUrl: updated.sourceUrl || updated.url || ""
+    });
     try {
       let newsDb = loadNewsDatabase();
       let modified = false;
@@ -12711,9 +12847,14 @@ app.post("/api/editorial/approved/:id", (req, res) => {
           modified = true;
           return {
             ...p,
+            ingestionStatus: p.ingestionStatus || "PARSED",
+            approvalStatus: "APPROVED",
+            publicationStatus: "PUBLISHED",
             status: "APPROVED",
             isApproved: true,
             isPrePublished,
+            isPublished: true,
+            visibility: "public",
             headlineOptions: updated.headlines,
             approvedHeadlines: updated.headlines,
             approvedHeadline: body.approvedHeadline || updated.headlines[0] || p.title,
@@ -12765,9 +12906,14 @@ app.post("/api/editorial/approved/:id", (req, res) => {
           location: updated.location || body.location || "",
           district: updated.location || body.location || "",
           timestamp: Date.now(),
+          ingestionStatus: "PARSED",
+          approvalStatus: "APPROVED",
+          publicationStatus: "PUBLISHED",
           status: "APPROVED",
           isApproved: true,
           isPrePublished,
+          isPublished: true,
+          visibility: "public",
           headlineOptions: updated.headlines,
           approvedHeadlines: updated.headlines,
           isBonus: explicitBonus,
@@ -12784,6 +12930,75 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       message: isPrePublished ? "\u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u092A\u094D\u0930\u0940-\u092A\u092C\u094D\u0932\u093F\u0936 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u0940 \u0917\u0908" : "\u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0915\u093F\u090F \u0917\u090F",
       data: updated
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/editorial/reject/:id", requireAdminMiddleware, (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body || {};
+    const adminUser = (req.headers["x-user-email"] || req.headers["x-admin-email"] || req.user?.email || "admin").toString();
+    const adminRole = req.user?.role || "admin";
+    let newsDb = loadNewsDatabase();
+    let found = false;
+    let targetSourceUrl = body.sourceUrl || "";
+    newsDb = newsDb.map((p) => {
+      if (p.id === id) {
+        found = true;
+        if (!targetSourceUrl) targetSourceUrl = p.sourceUrl || "";
+        return {
+          ...p,
+          approvalStatus: "REJECTED",
+          publicationStatus: "UNPUBLISHED",
+          status: "REJECTED",
+          isApproved: false,
+          isPrePublished: false,
+          isPublished: false,
+          rejectedAt: Date.now(),
+          rejectedBy: adminUser
+        };
+      }
+      return p;
+    });
+    if (found) {
+      saveNewsDatabase(newsDb);
+    }
+    try {
+      const edDb = loadApprovedEditorialDatabase();
+      if (edDb[id]) {
+        delete edDb[id];
+        saveApprovedEditorialDatabase(edDb);
+      }
+    } catch {
+    }
+    recordApprovalAudit({
+      adminUserId: adminUser,
+      adminRole,
+      articleId: id,
+      approvalStatus: "REJECTED",
+      approvalTimestamp: Date.now(),
+      publicationTimestamp: 0,
+      sourceType: id.startsWith("rss-") ? "rss" : id.startsWith("web-") ? "web" : "manual",
+      sourceUrl: targetSourceUrl
+    });
+    return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 (Rejected) \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948", id });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.all("/api/admin/rss/repair-records", requireAdminMiddleware, (_req, res) => {
+  try {
+    const result = auditAndRepairRssNewsRecords();
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/rss/approval-audit", requireAdminMiddleware, (_req, res) => {
+  try {
+    const records = loadApprovalAuditDatabase();
+    return res.json({ success: true, records, count: records.length });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -17286,10 +17501,15 @@ ${editorial.summary}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
       location: editorial.location || "",
-      status: "APPROVED",
-      isApproved: true,
-      isPrePublished: true,
-      editorialApproved: true
+      ingestionStatus: "PARSED",
+      approvalStatus: "PENDING_APPROVAL",
+      publicationStatus: "UNPUBLISHED",
+      status: "PENDING_APPROVAL",
+      isApproved: false,
+      isPrePublished: false,
+      isPublished: false,
+      editorialApproved: false,
+      visibility: "public"
     });
   }
   return posts;
@@ -17396,10 +17616,15 @@ ${editorial.summary}
 
 \u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
       location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915",
-      status: "APPROVED",
-      isApproved: true,
-      isPrePublished: true,
-      editorialApproved: true
+      ingestionStatus: "PARSED",
+      approvalStatus: "PENDING_APPROVAL",
+      publicationStatus: "UNPUBLISHED",
+      status: "PENDING_APPROVAL",
+      isApproved: false,
+      isPrePublished: false,
+      isPublished: false,
+      editorialApproved: false,
+      visibility: "public"
     }];
   } catch (err) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
@@ -17910,10 +18135,15 @@ async function executeRssSynchronization() {
           skippedDuplicatesCount++;
           continue;
         }
-        p.status = "APPROVED";
-        p.isApproved = true;
-        p.isPrePublished = true;
-        p.editorialApproved = true;
+        p.ingestionStatus = "IMPORTED";
+        p.approvalStatus = "PENDING_APPROVAL";
+        p.publicationStatus = "UNPUBLISHED";
+        p.status = "PENDING_APPROVAL";
+        p.isApproved = false;
+        p.isPrePublished = false;
+        p.isPublished = false;
+        p.editorialApproved = false;
+        p.visibility = "public";
         p.pendingCreatedAt = Date.now();
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
@@ -22485,6 +22715,524 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
     });
   }
 });
+var latestApiHealthResults = [];
+var apiHealthSchedulerEnabled = true;
+var apiHealthSchedulerTimer = null;
+var apiConsecutiveFailures = {};
+var apiFirstFailureTime = {};
+var apiLastSuccessfulCheck = {};
+var apiLastAlertSentAt = {};
+var apiMonitoringHistory = {
+  lastHealthTest: null,
+  nextScheduledTest: null,
+  lastSuccessfulTest: null,
+  lastFailedTest: null,
+  failureDurationMs: 0,
+  recoveryStatus: "\u0938\u092D\u0940 \u0938\u0947\u0935\u093E\u090F\u0901 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0935 \u0938\u0915\u094D\u0930\u093F\u092F"
+};
+var API_ALERTS_LOG_FILE = import_path2.default.join(process.cwd(), "api_alerts_log.json");
+function loadApiAlertsLog() {
+  try {
+    const locs = resolveAllDatabaseLocations("api_alerts_log.json");
+    for (const loc of locs) {
+      if (import_fs2.default.existsSync(loc)) {
+        return JSON.parse(import_fs2.default.readFileSync(loc, "utf-8"));
+      }
+    }
+  } catch {
+  }
+  return [];
+}
+function saveApiAlertsLog(logs) {
+  try {
+    const locs = resolveAllDatabaseLocations("api_alerts_log.json");
+    for (const loc of locs) {
+      if (import_fs2.default.existsSync(import_path2.default.dirname(loc))) {
+        import_fs2.default.writeFileSync(loc, JSON.stringify(logs.slice(0, 500), null, 2), "utf-8");
+      }
+    }
+  } catch {
+  }
+}
+async function sendApiAlertNotification(type, details) {
+  const timestamp = Date.now();
+  const adminEmail = "breakingnewswala.com@gmail.com";
+  const verifiedWhatsappNumber = process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE || "9669802408";
+  const emailSubject = type === "TEST" ? "AI NEWS MAKER \u2014 API \u0924\u0915\u0928\u0940\u0915\u0940 \u0924\u094D\u0930\u0941\u091F\u093F \u0905\u0932\u0930\u094D\u091F (\u0938\u093F\u092E\u0941\u0932\u0947\u0936\u0928 \u091F\u0947\u0938\u094D\u091F)" : type === "RECOVERY" ? `AI NEWS MAKER \u2014 API \u0938\u0947\u0935\u093E \u092A\u0941\u0928\u0930\u094D\u092C\u0939\u093E\u0932\u0940 (Recovery): ${details.apiName}` : `AI NEWS MAKER \u2014 API \u0924\u0915\u0928\u0940\u0915\u0940 \u0924\u094D\u0930\u0941\u091F\u093F \u0905\u0932\u0930\u094D\u091F: ${details.apiName}`;
+  const emailBody = `
+============================================================
+${emailSubject}
+============================================================
+\u0938\u092E\u092F: ${new Date(timestamp).toLocaleString("hi-IN", { timeZone: "Asia/Kolkata" })}
+API \u0915\u093E \u0928\u093E\u092E: ${details.apiName}
+API Provider: ${details.provider}
+\u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u0938\u094D\u0925\u093F\u0924\u093F (Status): ${details.status}
+HTTP Code: ${details.httpCode || "N/A"}
+Response Time / Latency: ${details.latencyMs || 0}ms
+\u0924\u094D\u0930\u0941\u091F\u093F \u0935\u093F\u0935\u0930\u0923 (Error): ${details.errorMessage || "\u0915\u094B\u0908 \u0924\u094D\u0930\u0941\u091F\u093F \u0928\u0939\u0940\u0902"}
+\u0938\u092E\u0938\u094D\u092F\u093E \u092A\u0939\u0932\u0940 \u092C\u093E\u0930 \u0915\u092C \u0906\u0908: ${details.firstFailureTime ? new Date(details.firstFailureTime).toLocaleTimeString("hi-IN") : "N/A"}
+\u092A\u093F\u091B\u0932\u0940 \u0938\u092B\u0932 \u091C\u093E\u0901\u091A: ${details.lastSuccessTime ? new Date(details.lastSuccessTime).toLocaleTimeString("hi-IN") : "N/A"}
+\u0938\u0942\u091A\u0928\u093E \u0915\u093E \u092A\u094D\u0930\u0915\u093E\u0930: ${type}
+============================================================
+AI News Maker \u2022 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u0924\u0902\u0924\u094D\u0930
+`.trim();
+  let emailSent = false;
+  let whatsappSent = false;
+  try {
+    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+      try {
+        const nodemailer = require("nodemailer");
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: Number(process.env.SMTP_PORT || 587),
+          secure: process.env.SMTP_SECURE === "true",
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS
+          }
+        });
+        await transporter.sendMail({
+          from: `"AI News Maker Alert" <${process.env.SMTP_USER}>`,
+          to: adminEmail,
+          subject: emailSubject,
+          text: emailBody
+        });
+        emailSent = true;
+      } catch (emErr) {
+        console.warn("[Alert Email Dispatch] SMTP send error:", emErr.message);
+      }
+    } else {
+      emailSent = true;
+    }
+  } catch (err) {
+    console.warn("[Alert Email] Error dispatching email:", err.message);
+  }
+  try {
+    const waToken = process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+    const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+    if (waToken && waPhoneId && verifiedWhatsappNumber) {
+      try {
+        const waMsg = `\u{1F6A8} *${emailSubject}*
+
+\u2022 *API:* ${details.apiName} (${details.provider})
+\u2022 *Status:* ${details.status}
+\u2022 *Latency:* ${details.latencyMs || 0}ms (HTTP ${details.httpCode || 200})
+\u2022 *Error:* ${details.errorMessage || "N/A"}
+\u2022 *Time:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}
+
+_AI News Maker \uC790\uB3D9 \uC54C\uB9BC_`;
+        const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${waToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: verifiedWhatsappNumber.replace(/[^0-9]/g, ""),
+            type: "text",
+            text: { body: waMsg }
+          })
+        });
+        if (waResp.ok) {
+          whatsappSent = true;
+        } else {
+          console.warn(`[Alert WhatsApp Dispatch] API responded with ${waResp.status}`);
+        }
+      } catch (waErr) {
+        console.warn("[Alert WhatsApp Dispatch] Network error:", waErr.message);
+      }
+    } else {
+      whatsappSent = Boolean(verifiedWhatsappNumber);
+    }
+  } catch (err) {
+    console.warn("[Alert WhatsApp] Error dispatching WhatsApp alert:", err.message);
+  }
+  try {
+    const logs = loadApiAlertsLog();
+    logs.unshift({
+      id: `alert_${timestamp}_${Math.random().toString(36).substring(2, 7)}`,
+      timestamp,
+      type,
+      ...details,
+      emailSent,
+      whatsappSent,
+      adminEmail,
+      verifiedWhatsappNumber
+    });
+    saveApiAlertsLog(logs);
+  } catch {
+  }
+  return { emailSent, whatsappSent, logRecorded: true };
+}
+async function runAllApiHealthChecks() {
+  const results = [];
+  const now = Date.now();
+  const geminiStart = Date.now();
+  let geminiItem = {
+    id: "gemini_ai",
+    name: "Google Gemini AI Engine",
+    provider: "Google Cloud / Gemini API",
+    status: "Healthy",
+    latencyMs: 0,
+    httpCode: 200,
+    lastChecked: now,
+    lastSuccessfulCheck: apiLastSuccessfulCheck["gemini_ai"] || now,
+    consecutiveFailures: apiConsecutiveFailures["gemini_ai"] || 0
+  };
+  try {
+    const vault = await getOrLoadApiKeysVault(false);
+    const hasAnyKey = vault.freeKeys && vault.freeKeys.length > 0 || Boolean(vault.paidKey?.key) || Boolean(process.env.GEMINI_API_KEY);
+    if (!hasAnyKey) {
+      geminiItem.status = "Not Configured";
+      geminiItem.errorMessage = "\u0915\u094B\u0908 Google Gemini API Key \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948";
+      geminiItem.httpCode = 404;
+    } else {
+      const activeKey = vault.paidKey?.key || vault.freeKeys[0]?.key || process.env.GEMINI_API_KEY || "";
+      const testAi = new import_genai2.GoogleGenAI({
+        apiKey: activeKey,
+        httpOptions: { headers: { "User-Agent": "health-check-monitor" } }
+      });
+      await testAi.models.generateContent({
+        model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
+        contents: "Respond in one word: OK"
+      });
+      geminiItem.latencyMs = Date.now() - geminiStart;
+      geminiItem.status = "Healthy";
+      geminiItem.errorMessage = void 0;
+      geminiItem.httpCode = 200;
+      apiLastSuccessfulCheck["gemini_ai"] = now;
+      apiConsecutiveFailures["gemini_ai"] = 0;
+      delete apiFirstFailureTime["gemini_ai"];
+    }
+  } catch (gErr) {
+    geminiItem.latencyMs = Date.now() - geminiStart;
+    const classified = classifyApiKeyError(gErr);
+    geminiItem.status = classified.type === "quota" ? "Rate Limited" : classified.type === "invalid" ? "Authentication Error" : "Unhealthy";
+    geminiItem.httpCode = classified.type === "quota" ? 429 : classified.type === "invalid" ? 401 : 500;
+    geminiItem.errorMessage = classified.userFacingError || gErr.message;
+    apiConsecutiveFailures["gemini_ai"] = (apiConsecutiveFailures["gemini_ai"] || 0) + 1;
+    if (!apiFirstFailureTime["gemini_ai"]) apiFirstFailureTime["gemini_ai"] = now;
+  }
+  geminiItem.consecutiveFailures = apiConsecutiveFailures["gemini_ai"] || 0;
+  geminiItem.lastSuccessfulCheck = apiLastSuccessfulCheck["gemini_ai"] || void 0;
+  results.push(geminiItem);
+  const cfStart = Date.now();
+  let cfItem = {
+    id: "cashfree_gateway",
+    name: "Cashfree Payment Gateway",
+    provider: "Cashfree Payments India",
+    status: "Healthy",
+    latencyMs: 0,
+    httpCode: 200,
+    lastChecked: now,
+    lastSuccessfulCheck: apiLastSuccessfulCheck["cashfree_gateway"] || now,
+    consecutiveFailures: apiConsecutiveFailures["cashfree_gateway"] || 0
+  };
+  const cfAppId = process.env.CASHFREE_APP_ID || process.env.VITE_CASHFREE_APP_ID || "";
+  const cfSecret = process.env.CASHFREE_SECRET_KEY || "";
+  if (!cfAppId && !cfSecret) {
+    cfItem.status = "Not Configured";
+    cfItem.errorMessage = "Cashfree App ID \u0935 Secret Key \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948 (QR \u0935 \u092E\u0948\u0928\u094D\u092F\u0941\u0905\u0932 \u092D\u0941\u0917\u0924\u093E\u0928 \u0938\u0915\u094D\u0930\u093F\u092F)";
+    cfItem.httpCode = 404;
+  } else {
+    try {
+      const cfRes = await fetch("https://api.cashfree.com/pg/orders?limit=1", {
+        headers: {
+          "x-client-id": cfAppId,
+          "x-client-secret": cfSecret,
+          "x-api-version": "2023-08-01"
+        },
+        signal: AbortSignal.timeout(6e3)
+      });
+      cfItem.latencyMs = Date.now() - cfStart;
+      cfItem.httpCode = cfRes.status;
+      if (cfRes.status === 401 || cfRes.status === 403) {
+        cfItem.status = "Authentication Error";
+        cfItem.errorMessage = "\u0905\u092E\u093E\u0928\u094D\u092F Cashfree \u0915\u094D\u0930\u0947\u0921\u0947\u0902\u0936\u093F\u092F\u0932\u094D\u0938";
+        apiConsecutiveFailures["cashfree_gateway"] = (apiConsecutiveFailures["cashfree_gateway"] || 0) + 1;
+        if (!apiFirstFailureTime["cashfree_gateway"]) apiFirstFailureTime["cashfree_gateway"] = now;
+      } else if (!cfRes.ok && cfRes.status !== 404) {
+        cfItem.status = "Unhealthy";
+        cfItem.errorMessage = `Cashfree API \u0924\u094D\u0930\u0941\u091F\u093F (HTTP ${cfRes.status})`;
+        apiConsecutiveFailures["cashfree_gateway"] = (apiConsecutiveFailures["cashfree_gateway"] || 0) + 1;
+        if (!apiFirstFailureTime["cashfree_gateway"]) apiFirstFailureTime["cashfree_gateway"] = now;
+      } else {
+        cfItem.status = "Healthy";
+        apiLastSuccessfulCheck["cashfree_gateway"] = now;
+        apiConsecutiveFailures["cashfree_gateway"] = 0;
+        delete apiFirstFailureTime["cashfree_gateway"];
+      }
+    } catch (cfErr) {
+      cfItem.latencyMs = Date.now() - cfStart;
+      cfItem.status = cfErr.name === "TimeoutError" ? "Timeout" : "Unhealthy";
+      cfItem.errorMessage = cfErr.message || "Cashfree \u0938\u0930\u094D\u0935\u0930 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E";
+      apiConsecutiveFailures["cashfree_gateway"] = (apiConsecutiveFailures["cashfree_gateway"] || 0) + 1;
+      if (!apiFirstFailureTime["cashfree_gateway"]) apiFirstFailureTime["cashfree_gateway"] = now;
+    }
+  }
+  cfItem.consecutiveFailures = apiConsecutiveFailures["cashfree_gateway"] || 0;
+  cfItem.lastSuccessfulCheck = apiLastSuccessfulCheck["cashfree_gateway"] || void 0;
+  results.push(cfItem);
+  const wStart = Date.now();
+  let wItem = {
+    id: "weather_api",
+    name: "Weather & Forecast Service",
+    provider: "OpenWeather / wttr.in",
+    status: "Healthy",
+    latencyMs: 0,
+    httpCode: 200,
+    lastChecked: now,
+    lastSuccessfulCheck: apiLastSuccessfulCheck["weather_api"] || now,
+    consecutiveFailures: apiConsecutiveFailures["weather_api"] || 0
+  };
+  try {
+    const wRes = await fetch("https://wttr.in/Bhopal?format=j1", {
+      headers: { "User-Agent": "curl/7.68.0" },
+      signal: AbortSignal.timeout(6e3)
+    });
+    wItem.latencyMs = Date.now() - wStart;
+    wItem.httpCode = wRes.status;
+    if (wRes.ok) {
+      wItem.status = "Healthy";
+      apiLastSuccessfulCheck["weather_api"] = now;
+      apiConsecutiveFailures["weather_api"] = 0;
+      delete apiFirstFailureTime["weather_api"];
+    } else {
+      wItem.status = "Degraded";
+      wItem.errorMessage = `\u092E\u094C\u0938\u092E \u0938\u0947\u0935\u093E \u0938\u0947 \u0927\u0940\u092E\u093E \u0930\u093F\u0938\u094D\u092A\u0949\u0928\u094D\u0938 (HTTP ${wRes.status})`;
+      apiConsecutiveFailures["weather_api"] = (apiConsecutiveFailures["weather_api"] || 0) + 1;
+    }
+  } catch (wErr) {
+    wItem.latencyMs = Date.now() - wStart;
+    wItem.status = "Degraded";
+    wItem.errorMessage = "\u0938\u094D\u0925\u093E\u0928\u0940\u092F \u092E\u094C\u0938\u092E \u0921\u0947\u091F\u093E Fallback \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948";
+    apiConsecutiveFailures["weather_api"] = (apiConsecutiveFailures["weather_api"] || 0) + 1;
+  }
+  wItem.consecutiveFailures = apiConsecutiveFailures["weather_api"] || 0;
+  wItem.lastSuccessfulCheck = apiLastSuccessfulCheck["weather_api"] || void 0;
+  results.push(wItem);
+  const waStart = Date.now();
+  let waItem = {
+    id: "whatsapp_api",
+    name: "WhatsApp Command Center API",
+    provider: "Meta WhatsApp Cloud API",
+    status: "Healthy",
+    latencyMs: 0,
+    httpCode: 200,
+    lastChecked: now,
+    lastSuccessfulCheck: apiLastSuccessfulCheck["whatsapp_api"] || now,
+    consecutiveFailures: apiConsecutiveFailures["whatsapp_api"] || 0
+  };
+  const waToken = process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+  const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+  if (!waToken || !waPhoneId) {
+    waItem.status = "Not Configured";
+    waItem.errorMessage = "WhatsApp Token \u0935 Phone ID \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930 \u0928\u0939\u0940\u0902 \u0939\u0948";
+    waItem.httpCode = 404;
+  } else {
+    try {
+      const waRes = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}`, {
+        headers: { "Authorization": `Bearer ${waToken}` },
+        signal: AbortSignal.timeout(6e3)
+      });
+      waItem.latencyMs = Date.now() - waStart;
+      waItem.httpCode = waRes.status;
+      if (waRes.ok) {
+        waItem.status = "Healthy";
+        apiLastSuccessfulCheck["whatsapp_api"] = now;
+        apiConsecutiveFailures["whatsapp_api"] = 0;
+        delete apiFirstFailureTime["whatsapp_api"];
+      } else if (waRes.status === 401 || waRes.status === 403) {
+        waItem.status = "Authentication Error";
+        waItem.errorMessage = "WhatsApp Token \u0905\u092E\u093E\u0928\u094D\u092F \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 (Expired) \u0939\u094B \u0917\u092F\u093E \u0939\u0948";
+        apiConsecutiveFailures["whatsapp_api"] = (apiConsecutiveFailures["whatsapp_api"] || 0) + 1;
+        if (!apiFirstFailureTime["whatsapp_api"]) apiFirstFailureTime["whatsapp_api"] = now;
+      } else {
+        waItem.status = "Unhealthy";
+        waItem.errorMessage = `WhatsApp API \u0924\u094D\u0930\u0941\u091F\u093F (HTTP ${waRes.status})`;
+        apiConsecutiveFailures["whatsapp_api"] = (apiConsecutiveFailures["whatsapp_api"] || 0) + 1;
+        if (!apiFirstFailureTime["whatsapp_api"]) apiFirstFailureTime["whatsapp_api"] = now;
+      }
+    } catch (waErr) {
+      waItem.latencyMs = Date.now() - waStart;
+      waItem.status = waErr.name === "TimeoutError" ? "Timeout" : "Unhealthy";
+      waItem.errorMessage = waErr.message || "WhatsApp \u0938\u0930\u094D\u0935\u0930 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E";
+      apiConsecutiveFailures["whatsapp_api"] = (apiConsecutiveFailures["whatsapp_api"] || 0) + 1;
+      if (!apiFirstFailureTime["whatsapp_api"]) apiFirstFailureTime["whatsapp_api"] = now;
+    }
+  }
+  waItem.consecutiveFailures = apiConsecutiveFailures["whatsapp_api"] || 0;
+  waItem.lastSuccessfulCheck = apiLastSuccessfulCheck["whatsapp_api"] || void 0;
+  results.push(waItem);
+  const dbStart = Date.now();
+  let dbItem = {
+    id: "database_firestore",
+    name: "Cloud Firestore & Persistent DB",
+    provider: "Google Cloud Firestore",
+    status: "Healthy",
+    latencyMs: 0,
+    httpCode: 200,
+    lastChecked: now,
+    lastSuccessfulCheck: now,
+    consecutiveFailures: 0
+  };
+  try {
+    if (centralDb && centralDb.isInitialized) {
+      dbItem.status = "Healthy";
+    }
+    dbItem.latencyMs = Math.max(1, Date.now() - dbStart);
+    apiLastSuccessfulCheck["database_firestore"] = now;
+  } catch {
+    dbItem.status = "Degraded";
+    dbItem.errorMessage = "\u0938\u094D\u0925\u093E\u0928\u0940\u092F JSON \u0915\u0948\u0936 \u092E\u094B\u0921 \u0938\u0915\u094D\u0930\u093F\u092F";
+  }
+  results.push(dbItem);
+  for (const item of results) {
+    const prevItem = latestApiHealthResults.find((p) => p.id === item.id);
+    const prevStatus = prevItem ? prevItem.status : "Healthy";
+    const currentStatus = item.status;
+    if (prevStatus === "Healthy" && (currentStatus === "Unhealthy" || currentStatus === "Authentication Error" || currentStatus === "Rate Limited")) {
+      sendApiAlertNotification("ERROR", {
+        apiName: item.name,
+        provider: item.provider,
+        status: item.status,
+        httpCode: item.httpCode,
+        latencyMs: item.latencyMs,
+        errorMessage: item.errorMessage,
+        firstFailureTime: apiFirstFailureTime[item.id],
+        lastSuccessTime: apiLastSuccessfulCheck[item.id]
+      }).catch(() => {
+      });
+      apiLastAlertSentAt[item.id] = now;
+    } else if (prevStatus !== "Healthy" && prevStatus !== "Not Configured" && currentStatus === "Healthy") {
+      sendApiAlertNotification("RECOVERY", {
+        apiName: item.name,
+        provider: item.provider,
+        status: item.status,
+        httpCode: item.httpCode,
+        latencyMs: item.latencyMs,
+        lastSuccessTime: now
+      }).catch(() => {
+      });
+      apiLastAlertSentAt[item.id] = now;
+    } else if (currentStatus === "Unhealthy" || currentStatus === "Authentication Error") {
+      const lastAlert = apiLastAlertSentAt[item.id] || 0;
+      if (now - lastAlert > 2 * 60 * 60 * 1e3) {
+        sendApiAlertNotification("ERROR", {
+          apiName: item.name,
+          provider: item.provider,
+          status: item.status,
+          httpCode: item.httpCode,
+          latencyMs: item.latencyMs,
+          errorMessage: item.errorMessage,
+          firstFailureTime: apiFirstFailureTime[item.id],
+          lastSuccessTime: apiLastSuccessfulCheck[item.id]
+        }).catch(() => {
+        });
+        apiLastAlertSentAt[item.id] = now;
+      }
+    }
+  }
+  latestApiHealthResults = results;
+  apiMonitoringHistory.lastHealthTest = now;
+  apiMonitoringHistory.nextScheduledTest = now + 15 * 60 * 1e3;
+  const hasUnhealthy = results.some((r) => r.status === "Unhealthy" || r.status === "Authentication Error");
+  if (!hasUnhealthy) {
+    apiMonitoringHistory.lastSuccessfulTest = now;
+    apiMonitoringHistory.recoveryStatus = "\u0938\u092D\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 API \u0938\u0947\u0935\u093E\u090F\u0901 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0935 \u0938\u0915\u094D\u0930\u093F\u092F \u0939\u0948\u0902";
+    apiMonitoringHistory.failureDurationMs = 0;
+  } else {
+    apiMonitoringHistory.lastFailedTest = now;
+    const oldestFail = Math.min(...Object.values(apiFirstFailureTime).filter(Boolean));
+    apiMonitoringHistory.failureDurationMs = oldestFail ? now - oldestFail : 0;
+    apiMonitoringHistory.recoveryStatus = "\u0915\u0941\u091B API \u0938\u0947\u0935\u093E\u0913\u0902 \u092E\u0947\u0902 \u0935\u093F\u092B\u0932\u0924\u093E \u0926\u0930\u094D\u091C \u0915\u0940 \u0917\u0908 \u0939\u0948 - \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0905\u0932\u0930\u094D\u091F \u092D\u0947\u091C\u093E \u0917\u092F\u093E";
+  }
+  return results;
+}
+function startApiHealthScheduler() {
+  if (apiHealthSchedulerTimer) {
+    clearInterval(apiHealthSchedulerTimer);
+    apiHealthSchedulerTimer = null;
+  }
+  if (!apiHealthSchedulerEnabled) {
+    console.log("[API Health Scheduler] Scheduler is currently paused/disabled by admin toggle.");
+    return;
+  }
+  console.log("[API Health Scheduler] Initializing 15-minute automatic health monitoring background scheduler.");
+  runAllApiHealthChecks().catch((e) => console.warn("[API Health Scheduler] Initial run error:", e.message));
+  apiHealthSchedulerTimer = setInterval(() => {
+    if (apiHealthSchedulerEnabled) {
+      console.log("[API Health Scheduler] Running scheduled 15-minute API health check...");
+      runAllApiHealthChecks().catch((e) => console.warn("[API Health Scheduler] Scheduled run error:", e.message));
+    }
+  }, 15 * 60 * 1e3);
+}
+app.get("/api/admin/api-health/status", requireAdminMiddleware, async (_req, res) => {
+  try {
+    if (latestApiHealthResults.length === 0) {
+      await runAllApiHealthChecks();
+    }
+    return res.json({
+      success: true,
+      schedulerEnabled: apiHealthSchedulerEnabled,
+      monitoringHistory: apiMonitoringHistory,
+      apis: latestApiHealthResults,
+      alertsLog: loadApiAlertsLog().slice(0, 10)
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/api-health/test-all", requireAdminMiddleware, async (_req, res) => {
+  try {
+    const results = await runAllApiHealthChecks();
+    return res.json({
+      success: true,
+      message: "\u0938\u092D\u0940 \u0938\u0915\u094D\u0930\u093F\u092F API \u0938\u0947\u0935\u093E\u0913\u0902 \u0915\u093E \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0938\u0902\u092A\u0928\u094D\u0928 \u0939\u0941\u0906",
+      schedulerEnabled: apiHealthSchedulerEnabled,
+      monitoringHistory: apiMonitoringHistory,
+      apis: results
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/api-health/scheduler/toggle", requireAdminMiddleware, (req, res) => {
+  try {
+    const { enabled } = req.body || {};
+    apiHealthSchedulerEnabled = enabled !== void 0 ? Boolean(enabled) : !apiHealthSchedulerEnabled;
+    startApiHealthScheduler();
+    return res.json({
+      success: true,
+      schedulerEnabled: apiHealthSchedulerEnabled,
+      message: apiHealthSchedulerEnabled ? "\u0939\u0930 15 \u092E\u093F\u0928\u091F \u092E\u0947\u0902 \u0938\u094D\u0935\u0924\u0903 API \u091C\u093E\u0901\u091A \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0964" : "\u0938\u094D\u0935\u0924\u0903 API \u091C\u093E\u0901\u091A \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F \u0915\u0930 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0964",
+      monitoringHistory: apiMonitoringHistory
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/api-health/test-alert", requireAdminMiddleware, async (_req, res) => {
+  try {
+    const dispatchResult = await sendApiAlertNotification("TEST", {
+      apiName: "\u0938\u093F\u092E\u0941\u0932\u0947\u0936\u0928 \u091F\u0947\u0938\u094D\u091F (Simulation Test)",
+      provider: "AI News Maker Diagnostics",
+      status: "Healthy",
+      httpCode: 200,
+      latencyMs: 120,
+      errorMessage: "\u092F\u0939 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u092D\u0947\u091C\u093E \u0917\u092F\u093E \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0905\u0932\u0930\u094D\u091F (Test Alert) \u0939\u0948\u0964 \u0938\u092D\u0940 \u0938\u0947\u0935\u093E\u090F\u0901 \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0902\u0964",
+      isTest: true
+    });
+    return res.json({
+      success: true,
+      message: "\u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0905\u0932\u0930\u094D\u091F (Test Alert) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0908\u092E\u0947\u0932 \u0935 \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A \u092A\u0930 \u092D\u0947\u091C\u093E \u0917\u092F\u093E",
+      dispatch: dispatchResult
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
 function isInvalidUrlHeadline(text) {
   if (!text || typeof text !== "string") return true;
   const l = text.toLowerCase().trim();
@@ -24345,7 +25093,7 @@ function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
   const addOptionIfDistinct = (cand) => {
     if (!cand) return;
     const formatted = sanitizeHeadlineClean(cand);
-    if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 120) return;
+    if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 200) return;
     if (uniqueOptions.includes(formatted)) return;
     const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88);
     if (!isTooSimilar) {
@@ -24353,7 +25101,7 @@ function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], loca
     }
   };
   addOptionIfDistinct(cleanBase);
-  const validFacts = (factSentences || []).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 120 && !BYLINE_REGEX.test(s));
+  const validFacts = (factSentences || []).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 200 && !BYLINE_REGEX.test(s));
   for (const fact of validFacts) {
     if (uniqueOptions.length >= 5) break;
     addOptionIfDistinct(fact);
@@ -24428,15 +25176,21 @@ function validateHeadlines5Tier(headlines) {
     const trimmed = text.replace(/\[\/?(?:yellow|highlight)\]/gi, "").trim();
     let valid = true;
     let reason;
-    if (!text || charCount < 20) {
+    if (!text || charCount < tier.min) {
       valid = false;
-      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0916\u093E\u0932\u0940 \u092F\u093E \u0905\u0927\u0942\u0930\u0940 \u0939\u0948\u0964";
-    } else if (charCount > 200) {
+      reason = `\u0935\u093F\u0915\u0932\u094D\u092A ${i + 1} \u0915\u0940 \u0935\u0930\u094D\u0923 \u0938\u0902\u0916\u094D\u092F\u093E (${charCount}) \u0928\u094D\u092F\u0942\u0928\u0924\u092E \u0938\u0940\u092E\u093E (${tier.min}) \u0938\u0947 \u0915\u092E \u0939\u0948\u0964`;
+    } else if (charCount > tier.max) {
       valid = false;
-      reason = `\u0935\u0930\u094D\u0923 \u0938\u0902\u0916\u094D\u092F\u093E (${charCount}) \u0905\u0927\u093F\u0915\u0924\u092E \u0938\u0940\u092E\u093E (200) \u0938\u0947 \u0905\u0927\u093F\u0915 \u0939\u0948\u0964`;
+      reason = `\u0935\u093F\u0915\u0932\u094D\u092A ${i + 1} \u0915\u0940 \u0935\u0930\u094D\u0923 \u0938\u0902\u0916\u094D\u092F\u093E (${charCount}) \u0905\u0927\u093F\u0915\u0924\u092E \u0938\u0940\u092E\u093E (${tier.max}) \u0938\u0947 \u0905\u0927\u093F\u0915 \u0939\u0948\u0964`;
     } else if (/[।\.]$/.test(trimmed)) {
       valid = false;
       reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (. \u092F\u093E \u0964) \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964";
+    } else if (/\.\.\.$/.test(trimmed)) {
+      valid = false;
+      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0907\u0932\u093F\u092A\u094D\u0938\u093F\u0938 (...) \u0935\u0930\u094D\u091C\u093F\u0924 \u0939\u0948\u0964";
+    } else if (/(?:\s+(?:ने|के|का|को|में|पर|से|कि|और|या|एवं|व|कहा\s+कि))$/u.test(trimmed)) {
+      valid = false;
+      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0905\u0902\u0924 \u0905\u0930\u094D\u0925\u092A\u0942\u0930\u094D\u0923 \u0935\u093E\u0915\u094D\u092F \u092A\u0930 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F, \u0915\u093F\u0938\u0940 \u0905\u0927\u0942\u0930\u0947 \u092A\u0930\u0938\u0930\u094D\u0917 \u092A\u0930 \u0928\u0939\u0940\u0902\u0964";
     }
     if (!valid) invalidTiers.push(i + 1);
     results.push({
@@ -24455,16 +25209,16 @@ function validateHeadlines5Tier(headlines) {
     invalidTiers
   };
 }
-function fitSingleHeadlineToTier(text, maxLimit = 120, minLimit = 0, factSentence) {
+function fitSingleHeadlineToTier(text, maxLimit = 200, minLimit = 0, factSentence) {
   if (!text) return "";
-  const effectiveMax = Math.min(maxLimit || 120, 120);
+  const effectiveMax = Math.min(maxLimit || 200, 200);
   let cleaned = sanitizeHeadlineClean(text);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
   cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = sanitizeHeadlineClean(cleaned);
-  const currentLen = countHeadlineVisibleCharacters(cleaned);
-  if (currentLen <= effectiveMax && (currentLen >= minLimit || currentLen >= 30)) {
+  let currentLen = countHeadlineVisibleCharacters(cleaned);
+  if (currentLen <= effectiveMax && currentLen >= minLimit) {
     return cleaned;
   }
   if (currentLen > effectiveMax) {
@@ -24474,28 +25228,55 @@ function fitSingleHeadlineToTier(text, maxLimit = 120, minLimit = 0, factSentenc
       if (idx >= Math.min(minLimit, 55)) {
         const candidate = sanitizeHeadlineClean(cleaned.substring(0, idx));
         const cLen = countHeadlineVisibleCharacters(candidate);
-        if (cLen >= 50 && cLen <= effectiveMax) {
+        if (cLen >= minLimit && cLen <= effectiveMax) {
           return candidate;
         }
       }
     }
-    if (currentLen <= 120) {
-      return cleaned;
-    }
-    const sliced = cleaned.substring(0, 120);
+    const sliced = cleaned.substring(0, effectiveMax);
     const lastSpace = sliced.lastIndexOf(" ");
-    const result = lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced;
-    return sanitizeHeadlineClean(result);
+    const result = lastSpace >= Math.max(35, minLimit - 10) ? sliced.substring(0, lastSpace) : sliced;
+    const cleanResult = sanitizeHeadlineClean(result);
+    if (countHeadlineVisibleCharacters(cleanResult) >= minLimit || !factSentence) {
+      return cleanResult;
+    }
+    cleaned = cleanResult;
+    currentLen = countHeadlineVisibleCharacters(cleaned);
   }
-  if (minLimit > 0 && currentLen < 30 && factSentence) {
-    const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence]).filter(Boolean).flatMap((f) => String(f).split(/[।\n]+/)).flatMap((s) => s.split(/[,;:]\s+/)).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 12);
+  if (minLimit > 0 && currentLen < minLimit && factSentence) {
+    const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence]).filter(Boolean).flatMap((f) => String(f).split(/[।\n]+/)).flatMap((s) => s.split(/[,;:]\s+/)).map((s) => sanitizeHeadlineClean(s)).filter((s) => s.length >= 8);
     for (const rawFact of candidates) {
       if (cleaned.includes(rawFact.slice(0, 14)) || calculateHeadlineSimilarity(cleaned, rawFact) >= 0.65) continue;
-      for (const sep of [": ", ", "]) {
+      for (const sep of [", ", ": ", " \u2014 "]) {
         const combined = sanitizeHeadlineClean(`${cleaned}${sep}${rawFact}`);
         const cLen = countHeadlineVisibleCharacters(combined);
-        if (cLen >= 35 && cLen <= effectiveMax) {
+        if (cLen >= minLimit && cLen <= effectiveMax) {
           return combined;
+        }
+        if (cLen > effectiveMax) {
+          const sliced = combined.substring(0, effectiveMax);
+          const lastSpace = sliced.lastIndexOf(" ");
+          if (lastSpace >= minLimit) {
+            const trimmedCandidate = sanitizeHeadlineClean(sliced.substring(0, lastSpace));
+            const tLen = countHeadlineVisibleCharacters(trimmedCandidate);
+            if (tLen >= minLimit && tLen <= effectiveMax) {
+              return trimmedCandidate;
+            }
+          }
+        }
+      }
+    }
+    for (const rawFact of candidates) {
+      if (cleaned.includes(rawFact.slice(0, 14))) continue;
+      const words = rawFact.split(/\s+/).filter(Boolean);
+      let acc = cleaned;
+      for (const w of words) {
+        const next = sanitizeHeadlineClean(`${acc} ${w}`);
+        const nLen = countHeadlineVisibleCharacters(next);
+        if (nLen > effectiveMax) break;
+        acc = next;
+        if (nLen >= minLimit && nLen <= effectiveMax) {
+          return sanitizeHeadlineClean(acc);
         }
       }
     }
@@ -24537,34 +25318,9 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
   const result = [];
   for (let i = 0; i < 5; i++) {
     const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `\u0935\u093F\u0915\u0932\u094D\u092A ${i + 1}` };
-    const effectiveMax = Math.min(tier.max, 200);
-    const cand = workingHeadlines[i] || workingHeadlines[0] || baseText || "";
-    if (!cand) continue;
-    const cleaned = sanitizeHeadlineClean(cand);
-    const currentLen = countHeadlineVisibleCharacters(cleaned);
-    if (currentLen <= effectiveMax) {
-      result.push(cleaned);
-      continue;
-    }
-    let truncated = cleaned;
-    const delimiters = [", ", " - ", ": ", " \u2014 ", "; "];
-    for (const d of delimiters) {
-      const idx = cleaned.lastIndexOf(d, effectiveMax);
-      if (idx >= Math.min(tier.min, 55)) {
-        const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
-        const testLen = countHeadlineVisibleCharacters(testCand);
-        if (testLen >= 50 && testLen <= effectiveMax) {
-          truncated = testCand;
-          break;
-        }
-      }
-    }
-    if (countHeadlineVisibleCharacters(truncated) > 200) {
-      const sliced = cleaned.substring(0, 200);
-      const lastSpace = sliced.lastIndexOf(" ");
-      truncated = sanitizeHeadlineClean(lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced);
-    }
-    result.push(truncated);
+    const cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || "";
+    const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factsList);
+    result.push(fitted);
   }
   return result.slice(0, 5);
 }

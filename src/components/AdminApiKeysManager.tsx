@@ -68,11 +68,41 @@ interface ApiKeysManagerData {
   };
 }
 
+export interface ApiHealthCheckItem {
+  id: string;
+  name: string;
+  provider: string;
+  status: 'Healthy' | 'Degraded' | 'Unhealthy' | 'Not Configured' | 'Authentication Error' | 'Timeout' | 'Rate Limited';
+  latencyMs: number;
+  httpCode?: number;
+  errorMessage?: string;
+  lastChecked: number;
+  lastSuccessfulCheck?: number;
+  consecutiveFailures: number;
+}
+
+export interface ApiMonitoringHistoryState {
+  lastHealthTest: number | null;
+  nextScheduledTest: number | null;
+  lastSuccessfulTest: number | null;
+  lastFailedTest: number | null;
+  failureDurationMs: number;
+  recoveryStatus: string;
+}
+
 export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUser }) => {
   const [data, setData] = useState<ApiKeysManagerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // API Health Monitoring & Scheduler State (Part 3, 4, 5)
+  const [healthItems, setHealthItems] = useState<ApiHealthCheckItem[]>([]);
+  const [schedulerEnabled, setSchedulerEnabled] = useState<boolean>(true);
+  const [monitoringHistory, setMonitoringHistory] = useState<ApiMonitoringHistoryState | null>(null);
+  const [runningHealthTest, setRunningHealthTest] = useState<boolean>(false);
+  const [togglingScheduler, setTogglingScheduler] = useState<boolean>(false);
+  const [sendingTestAlert, setSendingTestAlert] = useState<boolean>(false);
 
   // New Free Key form
   const [newFreeKey, setNewFreeKey] = useState('');
@@ -148,11 +178,149 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     }
   };
 
+  const fetchHealthStatus = async () => {
+    try {
+      let headers = await getAuthHeaders();
+      let res = await fetch(getApiUrl('/api/admin/api-health/status'), { headers });
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
+          res = await fetch(getApiUrl('/api/admin/api-health/status'), { headers });
+        }
+      }
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          setHealthItems(json.apis || []);
+          setSchedulerEnabled(Boolean(json.schedulerEnabled));
+          setMonitoringHistory(json.monitoringHistory || null);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load API health status:', err);
+    }
+  };
+
+  const handleRunAllHealthTests = async () => {
+    setRunningHealthTest(true);
+    try {
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch(getApiUrl('/api/admin/api-health/test-all'), {
+        method: 'POST',
+        headers,
+      });
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${freshToken}`,
+            'x-admin-email': adminEmail,
+          };
+          res = await fetch(getApiUrl('/api/admin/api-health/test-all'), {
+            method: 'POST',
+            headers,
+          });
+        }
+      }
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setHealthItems(json.apis || []);
+        setMonitoringHistory(json.monitoringHistory || null);
+        showToast('✅ सभी सक्रिय API की जाँच पूरी हो गई!');
+      } else {
+        showToast(`❌ ${json.error || 'स्वास्थ्य परीक्षण विफल रहा'}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ नेटवर्क त्रुटि: ${err.message}`);
+    } finally {
+      setRunningHealthTest(false);
+    }
+  };
+
+  const handleToggleScheduler = async () => {
+    setTogglingScheduler(true);
+    try {
+      const nextState = !schedulerEnabled;
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch(getApiUrl('/api/admin/api-health/scheduler/toggle'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ enabled: nextState }),
+      });
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${freshToken}`,
+            'x-admin-email': adminEmail,
+          };
+          res = await fetch(getApiUrl('/api/admin/api-health/scheduler/toggle'), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ enabled: nextState }),
+          });
+        }
+      }
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSchedulerEnabled(json.schedulerEnabled);
+        if (json.monitoringHistory) setMonitoringHistory(json.monitoringHistory);
+        showToast(json.message || '✅ 15 मिनट शेड्यूलर टॉगल हो गया');
+      } else {
+        showToast(`❌ ${json.error || 'टॉगल करने में विफलता'}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ त्रुटि: ${err.message}`);
+    } finally {
+      setTogglingScheduler(false);
+    }
+  };
+
+  const handleSendTestAlert = async () => {
+    setSendingTestAlert(true);
+    try {
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch(getApiUrl('/api/admin/api-health/test-alert'), {
+        method: 'POST',
+        headers,
+      });
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true);
+        if (freshToken) {
+          headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${freshToken}`,
+            'x-admin-email': adminEmail,
+          };
+          res = await fetch(getApiUrl('/api/admin/api-health/test-alert'), {
+            method: 'POST',
+            headers,
+          });
+        }
+      }
+      const json = await res.json();
+      if (res.ok && json.success) {
+        showToast('🔔 ' + (json.message || 'परीक्षण अलर्ट भेजा गया!'));
+      } else {
+        showToast(`❌ ${json.error || 'अलर्ट टेस्ट विफल'}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ त्रुटि: ${err.message}`);
+    } finally {
+      setSendingTestAlert(false);
+    }
+  };
+
   useEffect(() => {
     fetchKeysData();
-    // Auto refresh every 30s to update cooldown timers
+    fetchHealthStatus();
+    // Auto refresh every 30s to update cooldown timers & health snapshot
     const timer = setInterval(() => {
       fetchKeysData(true);
+      fetchHealthStatus();
     }, 30000);
     return () => clearInterval(timer);
   }, []);
@@ -504,6 +672,174 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         <p className="leading-relaxed">
           • <strong className="text-purple-300">VIP पेड की:</strong> VIP DESK या Pro प्लान वाले उपयोगकर्ताओं की रिक्वेस्ट सीधे आपकी सुरक्षित Google Cloud Pay-As-You-Go Key से बिना किसी कतार के अल्ट्रा-फास्ट प्रोसेस होगी।
         </p>
+      </div>
+
+      {/* ======================================================== */}
+      {/* SECTION 0: API स्वास्थ्य निगरानी व स्वचालित अलर्ट तंत्र (Part 3, 4, 5) */}
+      {/* ======================================================== */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-xl">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <span className="p-1.5 bg-sky-500/20 text-sky-400 rounded-lg">
+                <Activity className="w-4 h-4" />
+              </span>
+              <span>API स्वास्थ्य निगरानी एवं स्वचालित अलर्ट तंत्र</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              सभी सक्रिय व कॉन्फ़िगर की गई API सेवाओं की वास्तविक कनेक्टिविटी, लेटेंसी, HTTP कोड व तकनीकी त्रुटि की रीयल-टाइम जाँच।
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Button 1: सभी API की जाँच करें (Refresh API Health) */}
+            <button
+              type="button"
+              onClick={handleRunAllHealthTests}
+              disabled={runningHealthTest}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
+              title="सभी Active API Integrations का वास्तविक Health Test चलाएँ"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${runningHealthTest ? 'animate-spin' : ''}`} />
+              <span>{runningHealthTest ? 'जाँच जारी है...' : 'सभी API की जाँच करें'}</span>
+            </button>
+
+            {/* Button 2: 15-Minute Automatic Scheduler Toggle */}
+            <button
+              type="button"
+              onClick={handleToggleScheduler}
+              disabled={togglingScheduler}
+              className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all cursor-pointer disabled:opacity-50 ${
+                schedulerEnabled
+                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+              }`}
+              title="हर 15 मिनट में स्वचालित पृष्ठभूमि स्वास्थ्य निगरानी"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>
+                हर 15 मिनट में स्वतः API जाँच:{' '}
+                <strong className={schedulerEnabled ? 'text-emerald-400' : 'text-slate-400'}>
+                  {schedulerEnabled ? 'सक्रिय (ON)' : 'निष्क्रिय (OFF)'}
+                </strong>
+              </span>
+            </button>
+
+            {/* Button 3: Alert Test Button */}
+            <button
+              type="button"
+              onClick={handleSendTestAlert}
+              disabled={sendingTestAlert}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              title="व्यवस्थापक ईमेल व व्हाट्सएप पर टेस्ट अलर्ट भेजकर डिलीवरी सत्यापित करें"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>{sendingTestAlert ? 'भेजा जा रहा है...' : 'अलर्ट टेस्ट करें'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Monitoring History Overview Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 text-xs">
+          <div>
+            <span className="text-slate-400 block text-[11px]">अंतिम जाँच समय (Last Checked):</span>
+            <span className="text-white font-mono font-bold">
+              {monitoringHistory?.lastHealthTest
+                ? new Date(monitoringHistory.lastHealthTest).toLocaleTimeString('hi-IN')
+                : 'अभी तक कोई जाँच नहीं'}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-[11px]">अगली स्वचालित जाँच (Next Test):</span>
+            <span className="text-sky-300 font-mono font-bold">
+              {schedulerEnabled && monitoringHistory?.nextScheduledTest
+                ? new Date(monitoringHistory.nextScheduledTest).toLocaleTimeString('hi-IN')
+                : schedulerEnabled
+                ? '15 मिनट के भीतर'
+                : 'शेड्यूलर निष्क्रिय'}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-[11px]">सिस्टम स्थिति (Recovery Status):</span>
+            <span className="text-emerald-400 font-bold">
+              {monitoringHistory?.recoveryStatus || 'सभी सेवाएँ सामान्य'}
+            </span>
+          </div>
+        </div>
+
+        {/* Detailed API Health Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400">
+                <th className="py-2.5 px-3">API सेवा एवं Provider</th>
+                <th className="py-2.5 px-3">स्थिति (Health Status)</th>
+                <th className="py-2.5 px-3">रिस्पॉन्स लेटेंसी</th>
+                <th className="py-2.5 px-3">HTTP कोड</th>
+                <th className="py-2.5 px-3">अंतिम सफलता</th>
+                <th className="py-2.5 px-3">लगातार विफलता</th>
+                <th className="py-2.5 px-3">त्रुटि संदेश / टिप्पणी</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {healthItems.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-slate-500">
+                    स्वास्थ्य डेटा लोड करने के लिए ऊपर <strong>"सभी API की जाँच करें"</strong> बटन पर क्लिक करें।
+                  </td>
+                </tr>
+              ) : (
+                healthItems.map((item) => {
+                  const statusColors: Record<string, string> = {
+                    'Healthy': 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+                    'Degraded': 'bg-yellow-500/15 text-yellow-300 border-yellow-500/40',
+                    'Unhealthy': 'bg-rose-500/15 text-rose-300 border-rose-500/40',
+                    'Not Configured': 'bg-slate-800 text-slate-400 border-slate-700',
+                    'Authentication Error': 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+                    'Timeout': 'bg-orange-500/15 text-orange-300 border-orange-500/40',
+                    'Rate Limited': 'bg-purple-500/15 text-purple-300 border-purple-500/40',
+                  };
+                  const badgeClass = statusColors[item.status] || 'bg-slate-800 text-slate-300 border-slate-700';
+
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-white text-xs">{item.name}</div>
+                        <div className="text-[10px] text-slate-400">{item.provider}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${badgeClass}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-300">
+                        {item.latencyMs > 0 ? `${item.latencyMs}ms` : '—'}
+                      </td>
+                      <td className="py-3 px-3 font-mono">
+                        <span className={item.httpCode === 200 ? 'text-emerald-400' : item.httpCode ? 'text-amber-400' : 'text-slate-500'}>
+                          {item.httpCode || '—'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-[11px] text-slate-400">
+                        {item.lastSuccessfulCheck
+                          ? new Date(item.lastSuccessfulCheck).toLocaleTimeString('hi-IN')
+                          : '—'}
+                      </td>
+                      <td className="py-3 px-3 font-mono">
+                        <span className={item.consecutiveFailures > 0 ? 'text-rose-400 font-bold' : 'text-slate-400'}>
+                          {item.consecutiveFailures}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-[11px] text-slate-400 max-w-[220px] truncate" title={item.errorMessage || ''}>
+                        {item.errorMessage || '—'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ======================================================== */}

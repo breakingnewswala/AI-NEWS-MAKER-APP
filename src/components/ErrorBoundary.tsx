@@ -41,11 +41,8 @@ export class ErrorBoundary extends Component<Props, State> {
         msg.indexOf('dynamically imported module') !== -1 ||
         msg.indexOf('Failed to fetch') !== -1
       ) {
-        const lastAutoRecover = sessionStorage.getItem('__auto_boundary_recovered');
-        if (!lastAutoRecover) {
-          sessionStorage.setItem('__auto_boundary_recovered', 'true');
-          this.handleReset();
-        }
+        // Auto-recover immediately from legacy/cached chunk mismatches
+        this.handleReset();
       }
     } catch {}
   }
@@ -68,6 +65,7 @@ export class ErrorBoundary extends Component<Props, State> {
       try {
         sessionStorage.clear();
         localStorage.removeItem('__recovery_reload_attempted');
+        localStorage.removeItem('__auto_boundary_recovered');
       } catch {}
     } catch {}
     this.setState({ hasError: false, error: null, isResetting: false });
@@ -95,6 +93,7 @@ export class ErrorBoundary extends Component<Props, State> {
         localStorage.removeItem('active_app_tab');
         localStorage.removeItem('news_studio_draft');
         localStorage.removeItem('__recovery_reload_attempted');
+        localStorage.removeItem('__auto_boundary_recovered');
       } catch {}
       if (typeof (window as any).setAppTab === 'function') {
         (window as any).setAppTab('home');
