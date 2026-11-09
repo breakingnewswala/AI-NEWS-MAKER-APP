@@ -390,16 +390,15 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
 // -------------------------------------------------------------
 
 export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
-  // 1. Regular 4:5 Frame (Basic)
+  // 1. Standard 9:16 Story Frame
   normalizeDynamicFrame({
-    id: 'df_reg_4_5_clean',
-    name: 'रेगुलर क्लीन न्यूज़ फ्रेम (Regular Clean News Frame)',
-    description: 'दैनिक समाचारों के लिए मानक 4:5 क्लीन न्यूज़ फोटो फ्रेम।',
-    aspectRatio: '4:5',
+    id: 'df_story_9_16_standard',
+    name: 'स्टैंडर्ड सोशल स्टोरी 9:16 (Standard Story)',
+    description: 'सोशल मीडिया इंस्टाग्राम व फेसबुक स्टोरी के लिए 9:16 वर्टिकल न्यूज़ लेआउट।',
+    aspectRatio: '9:16',
     canvasWidth: 1080,
-    canvasHeight: 1350,
-    previewImageUrl: '/assets/sample_graphic_preview.png',
-    designCategory: 'Regular Frames',
+    canvasHeight: 1920,
+    designCategory: 'Story Frames',
     allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
     publicationStatus: 'published',
     createdBy: 'breakingnewswala.com@gmail.com',
@@ -409,74 +408,100 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
     headerConfig: {
       showLogo: true,
       logoPosition: 'top_left',
-      logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
-      logoScalePct: 100,
-      logoPaddingPx: 4,
+      logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
       showLocation: true,
-      locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
+      locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
       locationStyle: 'pill',
-      showDate: true,
-      dateRect: { x: 5, y: 18.5, width: 34, height: 3.2 },
-      dateFormat: 'D MMMM YYYY',
-      dateRotation: 0,
-      dateFontSize: 20,
-      dateTextColor: '#CBD5E1',
     },
     footerConfig: {
-      footerHeightRatio: 0.08,
+      footerHeightRatio: 0.065,
       enforcePermanentFooter: true,
-      footerBgColor: '#FFFFFF',
-      footerTextColor: '#000000',
-      footerWidthPct: 100,
-      footerAlignment: 'center',
-    },
-    watermarkConfig: {
-      enabled: true,
-      label: 'AI GENERATED',
-      rect: { x: 74, y: 3.5, width: 21, height: 3.5 },
-      fontSize: 18,
-      opacity: 0.8,
-      rotation: 0,
-    },
-    fullStoryCalloutConfig: {
-      enabled: false,
-      text: 'पूरी खबर डिस्क्रिप्शन में...',
-      rect: { x: 8, y: 86, width: 84, height: 4.5 },
-      fontSize: 22,
-    },
-    safeZoneConfig: {
-      enabled: true,
-      topMarginPct: 5,
-      bottomMarginPct: 5,
-      leftMarginPct: 5,
-      rightMarginPct: 5,
-      headerSafeAreaPct: 15,
-      footerSafeAreaPct: 10,
+      footerBgColor: '#0F172A',
+      footerTextColor: '#F8FAFC',
     },
     photoSlots: [
       {
-        id: 'slot_main_photo',
-        name: 'मुख्य समाचार फोटो (Main Photo)',
+        id: 'slot_story_photo',
+        name: 'स्टोरी मुख्य फोटो',
         slotType: 'normal',
-        rect: { x: 0, y: 0, width: 100, height: 61.33 },
+        rect: { x: 0, y: 0, width: 100, height: 62 },
         required: true,
         cropMode: 'cover',
       },
     ],
     textSlots: [
       {
-        id: 'slot_main_headline',
-        name: 'मुख्य हेडलाइन (3 पंक्तियाँ)',
+        id: 'slot_story_headline',
+        name: 'स्टोरी हेडलाइन',
         role: 'headline',
-        rect: { x: 7.7, y: 64, width: 84.6, height: 26 },
+        rect: { x: 7, y: 66, width: 86, height: 25 },
         fontFamily: 'Noto Sans Devanagari',
-        fontSize: 70,
+        fontSize: 72,
         fontWeight: 'bold',
         textColor: '#FFFFFF',
+        alignment: 'left',
+        maxLines: 4,
+      },
+    ],
+  }),
+  // 2. Super Breaking 9:16 Story Frame
+  normalizeDynamicFrame({
+    id: 'df_story_9_16_breaking',
+    name: 'सुपर ब्रेकिंग स्टोरी 9:16 (Super Breaking Story)',
+    description: '3D रिबन, बड़ी ब्रेकिंग हेडलाइन और उच्च प्रभाव वाली 9:16 सोशल स्टोरी।',
+    aspectRatio: '9:16',
+    canvasWidth: 1080,
+    canvasHeight: 1920,
+    designCategory: 'Story Frames',
+    allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
+    publicationStatus: 'published',
+    createdBy: 'breakingnewswala.com@gmail.com',
+    createdAt: 1793880000000,
+    updatedAt: 1793880000000,
+    version: 1,
+    headerConfig: {
+      showLogo: true,
+      logoPosition: 'top_left',
+      logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+      showLocation: true,
+      locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
+      locationStyle: 'pill',
+    },
+    footerConfig: {
+      footerHeightRatio: 0.065,
+      enforcePermanentFooter: true,
+      footerBgColor: '#FFE600',
+      footerTextColor: '#000000',
+    },
+    ribbonConfig: {
+      enabled: true,
+      ribbonId: 'speed-blue-red',
+      customRibbonUrl: '/assets/breaking_news_ribbon.svg',
+      rect: { x: 12, y: 60, width: 76, height: 6.8 },
+      scalePct: 76,
+    },
+    photoSlots: [
+      {
+        id: 'slot_story_photo',
+        name: 'स्टोरी फोटो',
+        slotType: 'normal',
+        rect: { x: 0, y: 0, width: 100, height: 64 },
+        required: true,
+        cropMode: 'cover',
+      },
+    ],
+    textSlots: [
+      {
+        id: 'slot_story_headline',
+        name: 'ब्रेकिंग स्टोरी हेडलाइन',
+        role: 'headline',
+        rect: { x: 6, y: 68, width: 88, height: 23 },
+        fontFamily: 'Noto Sans Devanagari',
+        fontSize: 74,
+        fontWeight: 'bold',
+        textColor: '#0A0A0A',
         alignment: 'center',
         maxLines: 3,
-        lineHeight: 1.25,
-        backgroundColor: 'transparent',
       },
     ],
   }),
@@ -493,8 +518,8 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_DYNAMIC_FRAMES;
 
-    // Merge default seeds if missing
-    const FORBIDDEN_IDS = new Set(['df_testing_1_double', 'df_bayaan_4_5_red', 'df_story_9_16_standard', 'df_story_9_16_breaking']);
+    // Merge default seeds if missing (df_reg_4_5_clean is forbidden, canonical is strictly graphic_001)
+    const FORBIDDEN_IDS = new Set(['df_reg_4_5_clean', 'df_testing_1_double', 'df_bayaan_4_5_red']);
     const existingIds = new Set(parsed.filter((f: any) => !FORBIDDEN_IDS.has(f.id)).map((f: DynamicFrameTemplate) => f.id));
     const merged = parsed.filter((f: any) => !FORBIDDEN_IDS.has(f.id));
     for (const def of DEFAULT_DYNAMIC_FRAMES) {

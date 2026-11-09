@@ -3,7 +3,18 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import {ErrorBoundary} from './components/ErrorBoundary.tsx';
 import {LanguageProvider} from './lib/languageContext.tsx';
+import {FolderClockIcon} from './icons/FolderClockIcon.tsx';
 import './index.css';
+
+// Absolute safeguard against runtime ReferenceError: FolderClock is not defined
+try {
+  (globalThis as any).FolderClock = FolderClockIcon;
+  (globalThis as any).FolderClockIcon = FolderClockIcon;
+  if (typeof window !== 'undefined') {
+    (window as any).FolderClock = FolderClockIcon;
+    (window as any).FolderClockIcon = FolderClockIcon;
+  }
+} catch {}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

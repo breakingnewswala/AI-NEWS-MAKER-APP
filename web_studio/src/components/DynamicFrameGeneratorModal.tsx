@@ -12,6 +12,8 @@ import {
   Unlock,
   ChevronRight,
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Plus,
   ShieldCheck,
   Crown,
@@ -351,24 +353,51 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     initialFrame?.calloutAssetUrl || initialFrame?.fullStoryCalloutConfig?.manualCalloutAsset || ''
   );
 
-  // Central Asset Libraries for Location Badge & Story Callout (Part 6 & Part 7)
+  // Central Asset Libraries for Location Badge & Story Callout (Part 1 & 2: Expandable List UI)
   const [locationBadgeLibrary, setLocationBadgeLibrary] = useState<any[]>([]);
   const [calloutLibrary, setCalloutLibrary] = useState<any[]>([]);
+  const [isCalloutListExpanded, setIsCalloutListExpanded] = useState<boolean>(true);
+  const [isLocationBadgeListExpanded, setIsLocationBadgeListExpanded] = useState<boolean>(true);
 
   useEffect(() => {
-    fetch('/api/admin/asset-libraries?category=location_badge')
+    // Fetch central approved asset libraries with robust alias matching
+    fetch('/api/admin/asset-libraries')
       .then((r) => r.json())
       .then((d) => {
-        if (d.success && Array.isArray(d.items)) setLocationBadgeLibrary(d.items);
-      })
-      .catch(() => {});
+        if (d.success && Array.isArray(d.items)) {
+          const badges = d.items.filter((it: any) =>
+            it.type === 'location_badge' ||
+            it.category === 'location_badge' ||
+            it.type === 'location' ||
+            it.type === 'badge' ||
+            (it.name && /badge|बैज|location|लोकेशन|pin|पिंन/i.test(it.name))
+          ).map((it: any) => ({
+            ...it,
+            url: it.url || it.assetUrl || '',
+            assetUrl: it.assetUrl || it.url || '',
+          }));
 
-    fetch('/api/admin/asset-libraries?category=callout_png')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success && Array.isArray(d.items)) setCalloutLibrary(d.items);
+          const callouts = d.items.filter((it: any) =>
+            it.type === 'callout_png' ||
+            it.category === 'callout_png' ||
+            it.type === 'callout' ||
+            it.type === 'story_callout' ||
+            it.type === 'full_story' ||
+            it.type === 'description_callout' ||
+            (it.name && /callout|कॉलआउट|विवरण|डिस्क्रिप्शन|story|bully|forward/i.test(it.name))
+          ).map((it: any) => ({
+            ...it,
+            url: it.url || it.assetUrl || '',
+            assetUrl: it.assetUrl || it.url || '',
+          }));
+
+          setLocationBadgeLibrary(badges);
+          setCalloutLibrary(callouts);
+        }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn('Could not load asset libraries in modal:', err);
+      });
   }, []);
 
   const [selectedRatio, setSelectedRatio] = useState<DynamicAspectRatio>(
@@ -2131,48 +2160,70 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           </select>
                         </div>
 
-                        {/* Approved Callout PNG Library Picker (No Manual File Upload per Part 3) */}
-                        <div className="space-y-1 pt-1">
-                          <label className="text-[10px] font-bold text-slate-300 block">
-                            केंद्रीय स्वीकृत कॉलआउट लाइब्रेरी से चुनें:
-                          </label>
-                          {calloutLibrary.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1.5 bg-slate-900/60 rounded border border-slate-800">
-                              {calloutLibrary.map((item) => {
-                                const isSelected = manualCalloutAssetUrl === item.assetUrl || fullStoryCalloutConfig.manualCalloutAsset === item.assetUrl || fullStoryCalloutConfig.calloutAssetId === item.id;
-                                return (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => {
-                                      setManualCalloutAssetUrl(item.assetUrl);
-                                      setFullStoryCalloutConfig({
-                                        ...fullStoryCalloutConfig,
-                                        calloutAssetId: item.id,
-                                        manualCalloutAsset: item.assetUrl,
-                                        calloutAssetMode: 'static_image',
-                                      });
-                                    }}
-                                    className={`p-1.5 rounded-lg border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
-                                      isSelected
-                                        ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
-                                        : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-                                    }`}
-                                  >
-                                    <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
-                                      <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
-                                    </div>
-                                    <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
-                                      {item.name}
-                                    </span>
-                                  </button>
-                                );
-                              })}
+                        {/* Approved Callout PNG Library Picker (Part 1 & 2: Expandable List UI) */}
+                        <div className="space-y-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsCalloutListExpanded(!isCalloutListExpanded)}
+                            className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-900 hover:bg-slate-800/80 border border-slate-800 transition cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-bold text-slate-200">
+                                केंद्रीय स्वीकृत कॉलआउट लाइब्रेरी ({calloutLibrary.length})
+                              </span>
+                              {(manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset) && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-semibold truncate max-w-[140px]">
+                                  ✓ {calloutLibrary.find(c => (c.url || c.assetUrl) === (manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset))?.name || 'चयनित'}
+                                </span>
+                              )}
                             </div>
-                          ) : (
-                            <div className="p-3 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
-                              इस श्रेणी में अभी कोई स्वीकृत डिज़ाइन उपलब्ध नहीं है।
+                            <div className="text-slate-400">
+                              {isCalloutListExpanded ? <ChevronUp className="w-4 h-4 text-amber-400" /> : <ChevronDown className="w-4 h-4" />}
                             </div>
+                          </button>
+
+                          {isCalloutListExpanded && (
+                            <>
+                              {calloutLibrary.length > 0 ? (
+                                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+                                  {calloutLibrary.map((item) => {
+                                    const assetUrl = item.url || item.assetUrl;
+                                    const isSelected = manualCalloutAssetUrl === assetUrl || fullStoryCalloutConfig.manualCalloutAsset === assetUrl || fullStoryCalloutConfig.calloutAssetId === item.id;
+                                    return (
+                                      <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setManualCalloutAssetUrl(assetUrl);
+                                          setFullStoryCalloutConfig({
+                                            ...fullStoryCalloutConfig,
+                                            calloutAssetId: item.id,
+                                            manualCalloutAsset: assetUrl,
+                                            calloutAssetMode: 'static_image',
+                                          });
+                                        }}
+                                        className={`p-2 rounded-lg border flex flex-col items-center gap-1.5 transition cursor-pointer text-left ${
+                                          isSelected
+                                            ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
+                                            : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                                        }`}
+                                      >
+                                        <div className="w-full h-10 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden p-1">
+                                          <img src={assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                                        </div>
+                                        <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
+                                          {item.name}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="p-3 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded-xl border border-dashed border-slate-800">
+                                  इस श्रेणी में अभी कोई स्वीकृत डिज़ाइन उपलब्ध नहीं है।
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
@@ -2216,48 +2267,70 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         </div>
 
                         {headerConfig.locationBadgeMode === 'static_image' ? (
-                          <div className="space-y-1 pt-1">
-                            <label className="text-[10px] font-bold text-slate-300 block">
-                              केंद्रीय स्वीकृत लोकेशन बैज लाइब्रेरी से चुनें:
-                            </label>
-                            {locationBadgeLibrary.length > 0 ? (
-                              <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1.5 bg-slate-900/60 rounded border border-slate-800">
-                                {locationBadgeLibrary.map((item) => {
-                                  const isSelected = headerConfig.locationBadgeAssetId === item.id || headerConfig.manualLocationAsset === item.assetUrl;
-                                  return (
-                                    <button
-                                      key={item.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setHeaderConfig({
-                                          ...headerConfig,
-                                          locationBadgeAssetId: item.id,
-                                          manualLocationAsset: item.assetUrl,
-                                          textRegion: item.textRegion,
-                                          typographyConfig: item.typographyConfig,
-                                          locationBadgeMode: 'static_image',
-                                        });
-                                      }}
-                                      className={`p-1.5 rounded-lg border flex flex-col items-center gap-1 transition cursor-pointer text-left ${
-                                        isSelected
-                                          ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
-                                          : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-                                      }`}
-                                    >
-                                      <div className="w-full h-8 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden">
-                                        <img src={item.assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
-                                      </div>
-                                      <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
-                                        {item.name}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
+                          <div className="space-y-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsLocationBadgeListExpanded(!isLocationBadgeListExpanded)}
+                              className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-900 hover:bg-slate-800/80 border border-slate-800 transition cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-bold text-slate-200">
+                                  केंद्रीय स्वीकृत लोकेशन बैज लाइब्रेरी ({locationBadgeLibrary.length})
+                                </span>
+                                {(headerConfig.manualLocationAsset || headerConfig.locationBadgeAssetId) && (
+                                  <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-semibold truncate max-w-[140px]">
+                                    ✓ {locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId || (b.url || b.assetUrl) === headerConfig.manualLocationAsset)?.name || 'चयनित'}
+                                  </span>
+                                )}
                               </div>
-                            ) : (
-                              <div className="p-3 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded border border-dashed border-slate-800">
-                                इस श्रेणी में अभी कोई स्वीकृत डिज़ाइन उपलब्ध नहीं है।
+                              <div className="text-slate-400">
+                                {isLocationBadgeListExpanded ? <ChevronUp className="w-4 h-4 text-amber-400" /> : <ChevronDown className="w-4 h-4" />}
                               </div>
+                            </button>
+
+                            {isLocationBadgeListExpanded && (
+                              <>
+                                {locationBadgeLibrary.length > 0 ? (
+                                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+                                    {locationBadgeLibrary.map((item) => {
+                                      const assetUrl = item.url || item.assetUrl;
+                                      const isSelected = headerConfig.locationBadgeAssetId === item.id || headerConfig.manualLocationAsset === assetUrl;
+                                      return (
+                                        <button
+                                          key={item.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setHeaderConfig({
+                                              ...headerConfig,
+                                              locationBadgeAssetId: item.id,
+                                              manualLocationAsset: assetUrl,
+                                              textRegion: item.textRegion,
+                                              typographyConfig: item.typographyConfig,
+                                              locationBadgeMode: 'static_image',
+                                            });
+                                          }}
+                                          className={`p-2 rounded-lg border flex flex-col items-center gap-1.5 transition cursor-pointer text-left ${
+                                            isSelected
+                                              ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
+                                              : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                                          }`}
+                                        >
+                                          <div className="w-full h-10 flex items-center justify-center bg-slate-950/80 rounded overflow-hidden p-1">
+                                            <img src={assetUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                                          </div>
+                                          <span className="text-[10px] font-bold text-slate-200 truncate w-full text-center">
+                                            {item.name}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="p-3 text-center text-[10px] text-slate-400 bg-slate-900/40 rounded-xl border border-dashed border-slate-800">
+                                    इस श्रेणी में अभी कोई स्वीकृत डिज़ाइन उपलब्ध नहीं है।
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                         ) : (
@@ -3585,39 +3658,62 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* AI Watermark (Part 4: Rotation, Position & Type) */}
-                    {watermarkConfig.enabled && (
-                      <div
-                        className="absolute z-20 pointer-events-none flex items-center justify-center"
-                        style={{
-                          ...(watermarkConfig.position === 'left_edge'
-                            ? { left: '2%', top: '35%' }
-                            : watermarkConfig.position === 'top'
-                            ? { top: '3%', left: '50%', transform: 'translateX(-50%)' }
-                            : watermarkConfig.position === 'bottom'
-                            ? { bottom: '10%', left: '50%', transform: 'translateX(-50%)' }
-                            : watermarkConfig.position === 'center'
-                            ? { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
-                            : { right: '2%', top: '35%' }), // Default right_edge
-                          transform: `rotate(${watermarkConfig.rotation ?? 270}deg)`,
-                          opacity: watermarkConfig.opacity ?? 0.85,
-                        }}
-                      >
-                        {watermarkConfig.type === 'image' && watermarkConfig.imageUrl ? (
-                          <img src={watermarkConfig.imageUrl} alt="Watermark" className="max-h-8 max-w-20 object-contain" />
-                        ) : (
-                          <span
-                            className="text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap"
-                            style={{
-                              color: watermarkConfig.textColor || '#FFFFFF',
-                              backgroundColor: watermarkConfig.bgColor || 'rgba(0,0,0,0.6)',
-                            }}
-                          >
-                            {watermarkConfig.customText || watermarkConfig.label || 'AI GENERATED'}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    {/* AI Watermark (Part 3: Rotation, Position & Geometry Parity) */}
+                    {watermarkConfig.enabled && (() => {
+                      const rot = watermarkConfig.rotation ?? (watermarkConfig.position === 'right_edge' ? 270 : 0);
+                      const pos = watermarkConfig.position || 'right_edge';
+                      let posStyle: React.CSSProperties = { right: '10px', top: '35%' };
+                      let baseTranslate = 'translateY(-50%)';
+
+                      if (pos === 'left_edge') {
+                        posStyle = { left: '10px', top: '35%' };
+                        baseTranslate = 'translateY(-50%)';
+                      } else if (pos === 'top') {
+                        posStyle = { top: '12px', left: '50%' };
+                        baseTranslate = 'translateX(-50%)';
+                      } else if (pos === 'bottom') {
+                        posStyle = { bottom: '12px', left: '50%' };
+                        baseTranslate = 'translateX(-50%)';
+                      } else if (pos === 'center') {
+                        posStyle = { top: '50%', left: '50%' };
+                        baseTranslate = 'translate(-50%, -50%)';
+                      } else if (watermarkConfig.rect?.x !== undefined) {
+                        posStyle = {
+                          left: `${watermarkConfig.rect.x}%`,
+                          top: `${watermarkConfig.rect.y}%`,
+                        };
+                        baseTranslate = '';
+                      }
+
+                      const transform = baseTranslate ? `${baseTranslate} rotate(${rot}deg)` : `rotate(${rot}deg)`;
+
+                      return (
+                        <div
+                          className="absolute z-20 pointer-events-none flex items-center justify-center font-bold select-none"
+                          style={{
+                            ...posStyle,
+                            transform,
+                            transformOrigin: 'center center',
+                            opacity: watermarkConfig.opacity ?? 0.85,
+                          }}
+                        >
+                          {watermarkConfig.type === 'image' && watermarkConfig.imageUrl ? (
+                            <img src={watermarkConfig.imageUrl} alt="Watermark" className="max-h-8 max-w-20 object-contain" />
+                          ) : (
+                            <span
+                              className="text-[8px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
+                              style={{
+                                color: watermarkConfig.textColor || '#FFFFFF',
+                                backgroundColor: watermarkConfig.watermarkStyle === 'box' ? (watermarkConfig.bgColor || 'rgba(0,0,0,0.6)') : 'transparent',
+                                textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7)',
+                              }}
+                            >
+                              {watermarkConfig.customText || watermarkConfig.label || 'AI GENERATED'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Breaking News Ribbon */}
                     {ribbonConfig.enabled && ribbonConfig.customRibbonUrl && (

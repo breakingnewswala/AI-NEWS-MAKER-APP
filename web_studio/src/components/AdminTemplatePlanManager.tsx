@@ -3,6 +3,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   RotateCcw,
+  RefreshCw,
   Sparkles,
   Lock,
   Crown,
@@ -87,11 +88,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   const [templateConfigs, setTemplateConfigs] = useState<Record<string, TemplatePlanConfig>>(() => getAllTemplateConfigs());
   const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>([]);
   
-  // Filters
-  const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '9:16' | '1:1'>('all');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
+  // Filters (Part 5: 1:1, Category dropdown & Search removed; Clean Manager UI)
+  const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '9:16'>('all');
   const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
-  const [searchQuery, setSearchQuery] = useState('');
   
   // Modals & Feedback
   const [previewFrame, setPreviewFrame] = useState<DynamicFrameTemplate | null>(null);
@@ -248,28 +247,17 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   // Unified allFrames collection
   const allFrames = displayItems;
 
-  // Filter items
+  // Filter items (Part 5: Clean filtering by Ratio and Plan Eligibility)
   const filteredItems = useMemo(() => {
     return displayItems.filter((item) => {
       if (selectedRatio !== 'all' && item.aspectRatio !== selectedRatio) return false;
-      if (filterCategory !== 'all' && item.category !== filterCategory) return false;
       if (filterPlan !== 'all' && !item.allowedPlans.includes(filterPlan)) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        return (
-          item.name.toLowerCase().includes(q) ||
-          item.id.toLowerCase().includes(q) ||
-          item.category.toLowerCase().includes(q) ||
-          (item.description && item.description.toLowerCase().includes(q))
-        );
-      }
       return true;
     });
-  }, [displayItems, selectedRatio, filterCategory, filterPlan, searchQuery]);
+  }, [displayItems, selectedRatio, filterPlan]);
 
   const count4_5 = displayItems.filter((i) => i.aspectRatio === '4:5').length;
   const count9_16 = displayItems.filter((i) => i.aspectRatio === '9:16').length;
-  const count1_1 = displayItems.filter((i) => i.aspectRatio === '1:1').length;
 
   return (
     <div className="space-y-6">
@@ -320,21 +308,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
           >
             <span>9:16 सोशल स्टोरी ({count9_16})</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedRatio('1:1')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap ${
-              selectedRatio === '1:1'
-                ? 'bg-pink-600 text-white shadow-md'
-                : 'bg-slate-800/80 text-slate-300 hover:text-white'
-            }`}
-          >
-            <span>1:1 स्क्वायर ({count1_1})</span>
-          </button>
         </div>
 
-        {/* Actions & Search */}
+        {/* Actions: Refresh & Add New Frame */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -349,53 +325,20 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('क्या आप सभी टेम्पलेट्स को डिफ़ॉल्ट सेटिंग्स पर रीसेट करना चाहते हैं?')) {
-                localStorage.removeItem('news_maker_template_plan_configs');
-                window.location.reload();
-              }
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700 whitespace-nowrap cursor-pointer"
-            title="डिफ़ॉल्ट रीसेट करें"
+            onClick={refreshFrames}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700 whitespace-nowrap cursor-pointer shadow-sm"
+            title="टेम्पलेट्स दोबारा लोड करें"
           >
-            <span>डिफ़ॉल्ट रीसेट</span>
+            <RefreshCw className="w-3.5 h-3.5 text-purple-400" />
+            <span>रिफ्रेश करें</span>
           </button>
-
-          {/* Search */}
-          <div className="relative min-w-[200px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ग्राफिक फ्रेम या श्रेणी खोजें..."
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
-            />
-          </div>
         </div>
       </div>
 
-      {/* Sub Filters: Category & Plans */}
+      {/* Sub Filters: Plan Filter */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          <span className="text-slate-400 font-bold flex items-center gap-1">
-            <Filter className="w-3.5 h-3.5 text-purple-400" />
-            <span>श्रेणी:</span>
-          </span>
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white font-bold"
-          >
-            <option value="all">सभी श्रेणियाँ (All)</option>
-            {CANONICAL_FRAME_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-
-          <span className="text-slate-400 font-bold ml-2">प्लान:</span>
+          <span className="text-slate-400 font-bold ml-1">प्लान:</span>
           <select
             value={filterPlan}
             onChange={(e) => setFilterPlan(e.target.value as any)}

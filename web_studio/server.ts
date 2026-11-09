@@ -10436,8 +10436,30 @@ const DUMMY_ASSET_IDS = new Set([
 ]);
 
 function getDefaultAssetLibraries(): any[] {
-  // Pure genuine assets only: Dummy / sample Location Badges and Callouts removed per Part 9 policy.
+  // Pure genuine assets only: Location Badges, Story Callouts & Suvichar BGs
   return [
+    {
+      id: "asset_1794132101671_u0g9s",
+      name: "Red Map Pin Badge with Divider",
+      category: "general",
+      type: "location_badge",
+      url: "/assets/location_white_icon.png",
+      enabled: true,
+      createdAt: 1794132101671,
+      updatedAt: 1794132144005,
+      textRegion: { x: 32, y: 24, width: 58, height: 55 },
+      typographyConfig: { fontFamily: "Mukta", fontSize: 50, fontWeight: "bold", textColor: "#000000", textAlign: "center" },
+    },
+    {
+      id: "callout_bully_forward_story",
+      name: "पूरी खबर विवरण कॉलआउट (Full Story Callout)",
+      category: "general",
+      type: "callout_png",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
+      enabled: true,
+      createdAt: 1793880000000,
+      updatedAt: 1793880000000,
+    },
     {
       id: "suvichar_sunrise_morning",
       name: "स्वर्णिम सूर्योदय व प्रकृति (Morning Suvichar)",
@@ -10506,10 +10528,9 @@ function saveAssetLibrariesDatabase(items: any[]) {
 }
 
 const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
+  'df_reg_4_5_clean', // Canonical Regular Clean News Frame is strictly graphic_001 (Part 4)
   'df_testing_1_double',
-  'df_bayaan_4_5_red',
-  'df_story_9_16_standard',
-  'df_story_9_16_breaking'
+  'df_bayaan_4_5_red'
 ]);
 
 function loadDynamicFramesDatabase(): any[] {
@@ -10519,13 +10540,7 @@ function loadDynamicFramesDatabase(): any[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed
-          .filter(f => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id))
-          .map(f => {
-            if (f.id === 'df_reg_4_5_clean') {
-              return { ...f, name: 'रेगुलर क्लीन न्यूज़ फ्रेम (Regular Clean News Frame)' };
-            }
-            return f;
-          });
+          .filter(f => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id));
       }
     }
   } catch {}
@@ -10959,22 +10974,65 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
   try {
     const { type, category } = req.query as any;
     let items = loadAssetLibrariesDatabase();
-    if (items.length <= 4 && centralDb && typeof centralDb.readDoc === "function") {
+    if (centralDb && typeof centralDb.readDoc === "function") {
       try {
         const cloudDoc = await centralDb.readDoc("system_config", "asset_libraries");
-        if (cloudDoc && Array.isArray(cloudDoc.items) && cloudDoc.items.length > 0) {
-          items = cloudDoc.items;
+        const docData = cloudDoc?.data || cloudDoc;
+        if (docData && Array.isArray(docData.items) && docData.items.length > 0) {
+          const itemMap = new Map<string, any>();
+          for (const it of items) itemMap.set(it.id, it);
+          for (const cit of docData.items) itemMap.set(cit.id, { ...itemMap.get(cit.id), ...cit });
+          items = Array.from(itemMap.values()).filter((it: any) => !DUMMY_ASSET_IDS.has(it.id));
           saveAssetLibrariesDatabase(items);
         }
-      } catch {}
+      } catch (err: any) {
+        console.warn("Asset libraries Firestore sync note:", err?.message);
+      }
     }
-    if (type && type !== "all") {
-      items = items.filter((it) => it.type === type);
+
+    // Normalization & alias matching
+    const normParam = (type && type !== "all" ? type : category && category !== "all" ? category : null);
+
+    if (normParam) {
+      const q = String(normParam).toLowerCase().trim();
+      if (q === 'location_badge' || q === 'location' || q === 'badge') {
+        items = items.filter((it: any) =>
+          it.type === 'location_badge' ||
+          it.category === 'location_badge' ||
+          it.type === 'location' ||
+          it.type === 'badge' ||
+          (it.name && /badge|बैज|location|लोकेशन|pin|पिंन/i.test(it.name))
+        );
+      } else if (q === 'callout_png' || q === 'callout' || q === 'story_callout' || q === 'full_story' || q === 'description_callout') {
+        items = items.filter((it: any) =>
+          it.type === 'callout_png' ||
+          it.category === 'callout_png' ||
+          it.type === 'callout' ||
+          it.type === 'story_callout' ||
+          it.type === 'full_story' ||
+          it.type === 'description_callout' ||
+          (it.name && /callout|कॉलआउट|विवरण|डिस्क्रिप्शन|story|bully|forward/i.test(it.name))
+        );
+      } else if (q === 'suvichar_background' || q === 'suvichar') {
+        items = items.filter((it: any) =>
+          it.type === 'suvichar_background' ||
+          it.category === 'suvichar_background' ||
+          it.type === 'suvichar'
+        );
+      } else {
+        items = items.filter((it: any) => it.type === q || it.category === q);
+      }
     }
-    if (category && category !== "all") {
-      items = items.filter((it) => it.category === category);
-    }
-    return res.json({ success: true, items });
+
+    // Map both url and assetUrl
+    const normalized = items.map((it: any) => ({
+      ...it,
+      url: it.url || it.assetUrl || '',
+      assetUrl: it.assetUrl || it.url || '',
+      enabled: it.enabled !== false,
+    }));
+
+    return res.json({ success: true, items: normalized });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

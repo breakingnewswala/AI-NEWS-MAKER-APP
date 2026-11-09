@@ -6075,6 +6075,8 @@ function drawPhotoDisclaimerWatermark(
     card.showWatermark ||
     (card.showAiGenerated && card.photoDisclaimerType !== 'none');
 
+  // Single Watermark Instance: If dynamic frame has its own watermark enabled, suppress legacy photo disclaimer
+  if ((card as any).customDynamicFrame?.watermarkConfig?.enabled) return;
   if (!isDisclaimerActive) return;
 
   const disclaimerText =
