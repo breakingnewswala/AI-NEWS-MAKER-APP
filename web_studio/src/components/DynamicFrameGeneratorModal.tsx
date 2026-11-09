@@ -1528,6 +1528,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी';
       const textToDraw = normalizeHeadlineText(rawInput);
 
+      const headlineAlign = (headlineSlot.alignment || 'center') as CanvasTextAlign;
       const canonicalLayout = computeCanonicalHeadlineLayout({
         headline: textToDraw,
         fontFamily: headlineSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
@@ -1535,9 +1536,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         isBreakingStyle: false,
         customBounds: { x: hx, y: hy, width: hw, height: hh },
         customMaxLines: 3,
+        alignment: headlineAlign as any,
       });
 
       ctx.save();
+      // Clip to headline bounding area with a small safety margin
+      ctx.beginPath();
+      ctx.rect(hx - 5, hy - 5, hw + 10, hh + 10);
+      ctx.clip();
+
       if (hRot !== 0) {
         ctx.translate(hx + hw / 2, hy + hh / 2);
         ctx.rotate((hRot * Math.PI) / 180);
@@ -1548,7 +1555,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black';
       ctx.fillStyle = textColor;
       ctx.font = `bold ${canonicalLayout.fontSize}px "${canonicalLayout.fontFamily}", "Noto Sans Devanagari", sans-serif`;
-      ctx.textAlign = canonicalLayout.alignment || 'center';
+      ctx.textAlign = headlineAlign;
       ctx.textBaseline = 'middle';
 
       if (!isBlack) {
@@ -1562,11 +1569,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
       canonicalLayout.lines.forEach((line: any, lineIdx: number) => {
         const lineY = canonicalLayout.startY + lineIdx * canonicalLayout.lineHeight + canonicalLayout.lineHeight / 2;
-        const lineX = canonicalLayout.alignment === 'center'
-          ? canonicalLayout.boxCenterX
-          : canonicalLayout.alignment === 'left'
-          ? hx + 15
-          : hx + hw - 15;
+        const lineX = headlineAlign === 'center'
+          ? (hx + hw / 2)
+          : headlineAlign === 'left'
+          ? hx + 20
+          : hx + hw - 20;
 
         let lineString = '';
         if (Array.isArray(line)) {
@@ -1668,18 +1675,39 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               badgeDrawn = true;
 
               const locText = dummyLocation || 'भोपाल';
-              if (headerConfig.textRegion) {
-                const tr = headerConfig.textRegion;
-                const tx = dx + (tr.x / 100) * dw;
-                const ty = dy + (tr.y / 100) * dh;
-                const tw = (tr.width / 100) * dw;
-                const th = (tr.height / 100) * dh;
-                ctx.fillStyle = headerConfig.locationTextColor || '#FFFFFF';
-                ctx.font = `bold ${Math.round(th * 0.75)}px "Noto Sans Devanagari", sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(locText, tx + tw / 2, ty + th / 2);
+              let locColor = headerConfig.locationTextColor;
+              const libBadge = locationBadgeLibrary.find(
+                (b) => b.id === headerConfig.locationBadgeAssetId || (b.url || b.assetUrl) === badgeAsset
+              );
+              if (!locColor || (locColor.toUpperCase() === '#FFFFFF' && libBadge?.typographyConfig?.textColor)) {
+                locColor = libBadge?.typographyConfig?.textColor || '#000000';
+              } else if (!locColor && badgeAsset) {
+                locColor = '#000000';
               }
+
+              const tr = headerConfig.textRegion || libBadge?.textRegion || { x: 32, y: 22, width: 62, height: 56 };
+              const tx = dx + (tr.x / 100) * dw;
+              const ty = dy + (tr.y / 100) * dh;
+              const tw = (tr.width / 100) * dw;
+              const th = (tr.height / 100) * dh;
+
+              ctx.save();
+              let fontSize = Math.max(14, Math.min(36, Math.round(th * 0.75)));
+              ctx.font = `800 ${fontSize}px "Mukta", "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+              ctx.fillStyle = locColor || '#000000';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+
+              // Dynamic text shrink if city name is long so it NEVER overflows
+              let measuredW = ctx.measureText(locText).width;
+              while (measuredW > tw - 4 && fontSize > 10) {
+                fontSize -= 1;
+                ctx.font = `800 ${fontSize}px "Mukta", "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+                measuredW = ctx.measureText(locText).width;
+              }
+
+              ctx.fillText(locText, tx + tw / 2, ty + th / 2);
+              ctx.restore();
             }
           } catch (e) {
             console.warn('Failed to draw badge asset, falling back:', e);
@@ -2864,6 +2892,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                           key={item.id}
                                           type="button"
                                           onClick={() => {
+                                            const chosenColor = item.typographyConfig?.textColor || item.typographyConfig?.color || '#000000';
                                             setHeaderConfig({
                                               ...headerConfig,
                                               locationBadgeAssetId: item.id,
@@ -2871,6 +2900,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                               textRegion: item.textRegion,
                                               typographyConfig: item.typographyConfig,
                                               locationBadgeMode: 'static_image',
+                                              locationTextColor: chosenColor,
                                             });
                                           }}
                                           className={`p-2 rounded-lg border flex flex-col items-center gap-1.5 transition cursor-pointer text-left ${
@@ -2922,6 +2952,41 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             </div>
                           </div>
                         )}
+
+                        {/* Location Text Color Control */}
+                        <div className="mt-2.5 flex items-center justify-between bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                          <span className="text-[10px] text-slate-300 font-semibold">लोकेशन टेक्स्ट रंग:</span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setHeaderConfig({ ...headerConfig, locationTextColor: '#000000' })}
+                              className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer border ${
+                                (headerConfig.locationTextColor || '#000000').toLowerCase() === '#000000'
+                                  ? 'bg-black text-white border-amber-400'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                              }`}
+                            >
+                              काला (Black)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHeaderConfig({ ...headerConfig, locationTextColor: '#FFFFFF' })}
+                              className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer border ${
+                                (headerConfig.locationTextColor || '').toLowerCase() === '#ffffff'
+                                  ? 'bg-white text-black border-amber-400'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                              }`}
+                            >
+                              सफेद (White)
+                            </button>
+                            <input
+                              type="color"
+                              value={headerConfig.locationTextColor || '#000000'}
+                              onChange={(e) => setHeaderConfig({ ...headerConfig, locationTextColor: e.target.value })}
+                              className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -4520,7 +4585,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 alt="Location Badge"
                                 className="max-h-6 object-contain"
                               />
-                              <span className="absolute right-2 text-[8px] font-bold text-white shadow-sm">
+                              <span
+                                className="absolute right-2 text-[8px] font-black shadow-sm"
+                                style={{
+                                  color: headerConfig.locationTextColor || '#000000',
+                                }}
+                              >
                                 {dummyLocation || 'भोपाल'}
                               </span>
                             </div>

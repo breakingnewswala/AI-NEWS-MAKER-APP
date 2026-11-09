@@ -63,9 +63,22 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     };
   }, [rawCard]);
 
+  const [dynamicFramesRevision, setDynamicFramesRevision] = React.useState<number>(0);
+  React.useEffect(() => {
+    const handleUpdate = () => setDynamicFramesRevision((v) => v + 1);
+    window.addEventListener('ai_news_dynamic_frames_updated', handleUpdate);
+    window.addEventListener('dynamic_frames_updated', handleUpdate);
+    window.addEventListener('template_plans_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('ai_news_dynamic_frames_updated', handleUpdate);
+      window.removeEventListener('dynamic_frames_updated', handleUpdate);
+      window.removeEventListener('template_plans_updated', handleUpdate);
+    };
+  }, []);
+
   const currentDynamicFrame = React.useMemo(() => {
     return card.customDynamicFrame || (card.frameDesign ? getDynamicFrameById(card.frameDesign) : null);
-  }, [card.customDynamicFrame, card.frameDesign]);
+  }, [card.customDynamicFrame, card.frameDesign, dynamicFramesRevision]);
   const df = currentDynamicFrame;
 
   const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
@@ -366,8 +379,17 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
   // Single Canonical Layout Calculation for live preview (Shared with CanvasExporter)
   const canonicalLayout = React.useMemo(() => {
-    const activeDf = getDynamicFrameById(card.frameDesign || '');
+    const activeDf = df;
     const activeFont = card.headlineFontFamily || activeDf?.typographyConfig?.primaryFontFamily || activeDf?.textSlots?.[0]?.fontFamily || 'Baloo 2';
+    const textSlotRect = activeDf?.textSlots?.[0]?.rect;
+    const canvasH = (activeDf?.aspectRatio === '9:16' || card.aspectRatio === '9:16') ? 1920 : 1350;
+    const customBounds = textSlotRect ? {
+      x: (textSlotRect.x / 100) * 1080,
+      y: (textSlotRect.y / 100) * canvasH,
+      width: (textSlotRect.width / 100) * 1080,
+      height: (textSlotRect.height / 100) * canvasH,
+    } : undefined;
+
     return computeCanonicalHeadlineLayout({
       headline: card.formattedHeadline || card.headline,
       highlightWords: card.highlightWords,
@@ -375,6 +397,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       templateId: card.frameDesign || 'graphic_001',
       aspectRatio: (activeDf?.aspectRatio as any) || card.aspectRatio || '4:5',
       userFontSize: card.headlineFontSize || activeDf?.typographyConfig?.primaryFontSize,
+      customBounds,
+      alignment: (activeDf?.textSlots?.[0]?.alignment as any) || 'center',
     });
   }, [
     card.formattedHeadline,
@@ -384,6 +408,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     card.frameDesign,
     card.aspectRatio,
     card.headlineFontSize,
+    df,
   ]);
 
   // Canonical preview font size scaled proportionally to preview container (true miniature on mobile/tablet)
@@ -469,7 +494,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
   // Aspect ratio class: True 4:5 (1080x1350) default, or 9:16 / 1:1 when selected template specifies it
   const resolvedRatio = (() => {
-    const df = getDynamicFrameById(card.frameDesign || '');
     const r = df?.aspectRatio || card.aspectRatio || '4:5';
     if (r === '9:16') return '9:16';
     if (r === '1:1') return '1:1';
@@ -542,7 +566,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     >
       {/* 0. BASE BACKGROUND FOR DYNAMIC FRAMES */}
       {(() => {
-        const df = getDynamicFrameById(card.frameDesign || '');
         if (!df) return null;
         return (
           <div
@@ -554,7 +577,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
       {/* 0B. DYNAMIC FRAME PHOTO SLOTS (Layer 1: Bottom under PNG Artwork) */}
       {(() => {
-        const df = getDynamicFrameById(card.frameDesign || '');
         if (!df || !df.photoSlots || df.photoSlots.length === 0) return null;
         return (
           <div className="absolute inset-0 z-5 pointer-events-none overflow-hidden select-none">
@@ -601,7 +623,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
       {/* 0C. DYNAMIC FRAME PANEL B PNG ARTWORK OVERLAY (Layer 2: On top of photo, preserving transparent cutouts & curves) */}
       {(() => {
-        const df = getDynamicFrameById(card.frameDesign || '');
         if (!df) return null;
         const bgUrl = df.primaryBackgroundAsset;
         if (!bgUrl) return null;
@@ -697,7 +718,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </>
           )}
         </div>
-      ) : (!getDynamicFrameById(card.frameDesign || '')) ? (
+      ) : (!df) ? (
       <div
         className={`absolute inset-x-0 z-10 overflow-hidden transition-all duration-150 ${card.frameDesign === 'graphic_001' ? 'bg-transparent' : 'bg-neutral-950'}`}
         style={{
@@ -3300,9 +3321,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           );
         })()
-      ) : getDynamicFrameById(card.frameDesign || '') ? (
+      ) : df ? (
         (() => {
-          const df = getDynamicFrameById(card.frameDesign || '')!;
           return (
             <div className="absolute inset-0 z-20 pointer-events-none select-none">
               {/* Dynamic Logo */}
@@ -3340,7 +3360,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       backgroundSize: 'contain',
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
-                      color: df.headerConfig.locationTextColor || '#FFFFFF',
+                      color: df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000'),
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                     }}
                   >
@@ -3380,7 +3400,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       width: `${df.headerConfig.locationRect?.width ?? 28}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
-                      color: df.headerConfig.locationTextColor || '#FFFFFF',
+                      color: df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000'),
                       borderRadius: df.headerConfig.locationStyle === 'pill' ? '9999px' : '6px',
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                     }}

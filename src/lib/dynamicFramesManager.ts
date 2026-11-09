@@ -436,9 +436,9 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
 export function getDynamicFrameById(id: string): DynamicFrameTemplate | null {
   if (!id) return null;
   const local = getLocalDynamicFrames();
-  const found = local.find((f) => f.id === id);
+  const found = local.find((f) => f.id === id || f.name === id);
   if (found) return found;
-  const def = DEFAULT_DYNAMIC_FRAMES.find((f) => f.id === id);
+  const def = DEFAULT_DYNAMIC_FRAMES.find((f) => f.id === id || f.name === id);
   return def || null;
 }
 
@@ -482,8 +482,13 @@ export async function fetchDynamicFramesFromApi(
       const data = await res.json();
       if (data.success && Array.isArray(data.frames)) {
         const normalized = data.frames.map(normalizeDynamicFrame);
-        saveLocalDynamicFrames(normalized);
-        return normalized;
+        const local = getLocalDynamicFrames();
+        const map = new Map<string, DynamicFrameTemplate>();
+        local.forEach((f) => map.set(f.id, f));
+        normalized.forEach((f) => map.set(f.id, f));
+        const merged = Array.from(map.values());
+        saveLocalDynamicFrames(merged);
+        return filterRatio ? merged.filter((f) => f.aspectRatio === filterRatio) : merged;
       }
     }
   } catch (err) {

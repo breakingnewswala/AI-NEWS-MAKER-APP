@@ -340,6 +340,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     }
   }, [isBasicUser, card.headlineFontFamily]);
 
+  const [dynamicFramesRaw, setDynamicFramesRaw] = React.useState<DynamicFrameTemplate[]>(() => getLocalDynamicFrames());
   const [currentFrameOptions, setCurrentFrameOptions] = React.useState<FrameOption[]>(() => {
     return buildUnifiedFrameOptions(getLocalDynamicFrames());
   });
@@ -355,7 +356,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         }
       } catch {}
       if (isMounted) {
+        setDynamicFramesRaw(dfs);
         setCurrentFrameOptions(buildUnifiedFrameOptions(dfs));
+        if (card.frameDesign && !card.customDynamicFrame) {
+          const match = dfs.find((d) => d.id === card.frameDesign || d.name === card.frameDesign);
+          if (match) {
+            onChange({ customDynamicFrame: match });
+          }
+        }
       }
     };
 
@@ -1592,7 +1600,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <div
                       key={f.id}
                       onClick={() => {
-                        onChange({ frameDesign: f.id });
+                        const match = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
+                        onChange({
+                          frameDesign: f.id,
+                          customDynamicFrame: match || undefined,
+                          aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
+                        });
                       }}
                       className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all relative overflow-hidden select-none cursor-pointer ${
                         isSelected

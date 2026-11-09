@@ -85,7 +85,11 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 }) => {
   const [frameOptions, setFrameOptions] = useState<FrameOption[]>([]);
   const [templateConfigs, setTemplateConfigs] = useState<Record<string, TemplatePlanConfig>>(() => getAllTemplateConfigs());
-  const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>([]);
+  const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>(() => {
+    return getLocalDynamicFrames().filter(
+      (f) => f.frameMode !== 'video' && f.frameType !== 'video'
+    );
+  });
   
   // Filters (Part 5: 1:1, Category dropdown & Search removed; Clean Manager UI)
   // Legacy filter test assertions: selectedRatio === 'all' && selectedRatio === '4:5' && selectedRatio === '9:16' && selectedRatio === '1:1'
@@ -102,18 +106,21 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   const refreshFrames = () => {
     setFrameOptions(getEffectiveFrameOptions());
     setTemplateConfigs(getAllTemplateConfigs());
+    const locals = getLocalDynamicFrames().filter(
+      (f) => f.frameMode !== 'video' && f.frameType !== 'video'
+    );
     fetchDynamicFramesFromApi({ frameType: 'graphic' })
       .then((dfs) => {
         // Exclude video frames strictly
         const graphicOnly = (dfs || []).filter(
           (f) => f.frameMode !== 'video' && f.frameType !== 'video'
         );
-        setDynamicFramesList(graphicOnly);
+        const map = new Map<string, DynamicFrameTemplate>();
+        locals.forEach((f) => map.set(f.id, f));
+        graphicOnly.forEach((f) => map.set(f.id, f));
+        setDynamicFramesList(Array.from(map.values()));
       })
       .catch(() => {
-        const locals = getLocalDynamicFrames().filter(
-          (f) => f.frameMode !== 'video' && f.frameType !== 'video'
-        );
         setDynamicFramesList(locals);
       });
   };

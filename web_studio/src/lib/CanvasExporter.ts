@@ -363,7 +363,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   }
 
   // 1. Draw Authoritative Dynamic Frame if matched
-  const dynamicFrame = getDynamicFrameById(card.frameDesign || '');
+  const dynamicFrame = card.customDynamicFrame || getDynamicFrameById(card.frameDesign || '');
   if (dynamicFrame) {
     await drawAuthoritativeDynamicFrameCanvas(ctx, width, height, card, dynamicFrame, customLogoImg);
     return canvas;
@@ -1671,12 +1671,25 @@ async function drawAuthoritativeDynamicFrameCanvas(
 
         ctx.save();
         const typo = df.headerConfig.typographyConfig;
-        const fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
+        let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
+        let locColor = typo?.color || df.headerConfig.locationTextColor;
+        if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
+          locColor = '#000000';
+        }
         ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
-        ctx.fillStyle = typo?.color || df.headerConfig.locationTextColor || '#FFFFFF';
+        ctx.fillStyle = locColor;
         ctx.textBaseline = 'middle';
         const align = typo?.align || 'center';
         ctx.textAlign = align === 'left' ? 'left' : align === 'right' ? 'right' : 'center';
+
+        // Auto text shrink for long locations
+        let measuredW = ctx.measureText(card.location).width;
+        while (measuredW > tw - 4 && fontSize > 10) {
+          fontSize -= 1;
+          ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
+          measuredW = ctx.measureText(card.location).width;
+        }
+
         const drawTx = align === 'left' ? tx + 4 : align === 'right' ? tx + tw - 4 : tx + tw / 2;
         ctx.fillText(card.location, drawTx, ty + th / 2);
         ctx.restore();
@@ -1808,20 +1821,29 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black' || textColor.toLowerCase() === '#0f172a';
     const highlightColor = card.highlightColor || (isBlack ? '#DC2626' : '#FFE600');
 
+    const align = (textSlot.alignment || 'center') as CanvasTextAlign;
     const layout = computeCanonicalHeadlineLayout({
       headline: rawHeadline,
       highlightWords: card.highlightWords,
       fontFamily: fontFam,
-      templateId: 'graphic_001',
-      aspectRatio: card.aspectRatio || '4:5',
+      aspectRatio: card.aspectRatio || df.aspectRatio || '4:5',
+      customBounds: { x: hx, y: hy, width: hw, height: hh },
+      customMaxLines: 3,
       userFontSize: card.headlineFontSize,
+      alignment: align as any,
       ctx,
     });
 
     const lines = layout.lines || [];
     const totalLines = lines.length;
     const lineHeight = layout.lineHeight || 60;
-    const startY = hy + (hh - totalLines * lineHeight) / 2 + lineHeight / 2;
+    const startY = layout.startY + lineHeight / 2;
+
+    ctx.save();
+    // Clip to headline bounding box with subtle safety margin
+    ctx.beginPath();
+    ctx.rect(hx - 5, hy - 5, hw + 10, hh + 10);
+    ctx.clip();
 
     ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
@@ -1835,7 +1857,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
 
     lines.forEach((line, lIdx) => {
-      const lineY = startY + lIdx * lineHeight;
+      const lineY = layout.startY + lIdx * lineHeight + lineHeight / 2;
       let totalLineWidth = 0;
       const spaceWidth = ctx.measureText(' ').width;
       const tokenWidths: number[] = [];
@@ -1847,7 +1869,12 @@ async function drawAuthoritativeDynamicFrameCanvas(
         if (tIdx < line.length - 1) totalLineWidth += spaceWidth;
       });
 
-      let curX = hx + (hw - totalLineWidth) / 2;
+      let curX = align === 'center'
+        ? hx + (hw - totalLineWidth) / 2
+        : align === 'left'
+        ? hx + 20
+        : hx + hw - totalLineWidth - 20;
+
       line.forEach((token, tIdx) => {
         ctx.fillStyle = token.isHighlight ? highlightColor : textColor;
         ctx.textAlign = 'left';
@@ -1855,6 +1882,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
         curX += tokenWidths[tIdx] + spaceWidth;
       });
     });
+    ctx.restore();
     ctx.restore();
   }
 

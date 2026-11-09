@@ -98,6 +98,9 @@ export interface CanonicalHeadlineLayout {
   isValid: boolean;
   validationError?: string;
   spec: TemplateLayoutSpec;
+  boxCenterX: number;
+  alignment: 'center' | 'left' | 'right';
+  fontFamily: string;
 }
 
 /**
@@ -481,6 +484,8 @@ export interface HeadlineLayoutOptions {
   userFontSize?: number;
   ctx?: CanvasRenderingContext2D | null;
   customBounds?: { x: number; y: number; width: number; height: number };
+  alignment?: 'center' | 'left' | 'right';
+  isBreakingStyle?: boolean;
 }
 
 /**
@@ -502,6 +507,11 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   const maxW = options.customBounds?.width || spec.headlineArea.maxWidth;
   const maxH = options.customBounds?.height || spec.headlineArea.maxHeight;
 
+  const defaultBoxCenterX = options.customBounds
+    ? options.customBounds.x + options.customBounds.width / 2
+    : spec.width / 2;
+  const defaultAlignment = options.alignment || 'center';
+
   if (!rawHeadline.trim()) {
     return {
       lines: [],
@@ -515,6 +525,9 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
       maxHeight: maxH,
       isValid: true,
       spec,
+      boxCenterX: defaultBoxCenterX,
+      alignment: defaultAlignment,
+      fontFamily: fontFam,
     };
   }
 
@@ -664,6 +677,11 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     };
   });
 
+  const resolvedBoxCenterX = options.customBounds
+    ? options.customBounds.x + options.customBounds.width / 2
+    : spec.width / 2;
+  const resolvedAlignment = options.alignment || 'center';
+
   return {
     lines: bestLines,
     lineMetrics,
@@ -679,6 +697,9 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
       ? undefined
       : `हेडलाइन सेफ-ज़ोन सीमा (${maxLines} लाइन) से बड़ी है। कृपया कुछ शब्द संक्षिप्त करें।`,
     spec,
+    boxCenterX: resolvedBoxCenterX,
+    alignment: resolvedAlignment,
+    fontFamily: fontFam,
   };
 }
 
