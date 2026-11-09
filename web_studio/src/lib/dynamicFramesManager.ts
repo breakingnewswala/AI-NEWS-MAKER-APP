@@ -520,8 +520,17 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
 
     // Merge default seeds if missing (df_reg_4_5_clean is forbidden, canonical is strictly graphic_001)
     const FORBIDDEN_IDS = new Set(['df_reg_4_5_clean', 'df_testing_1_double', 'df_bayaan_4_5_red']);
-    const existingIds = new Set(parsed.filter((f: any) => !FORBIDDEN_IDS.has(f.id)).map((f: DynamicFrameTemplate) => f.id));
-    const merged = parsed.filter((f: any) => !FORBIDDEN_IDS.has(f.id));
+    const existingIds = new Set(
+      parsed
+        .filter((f: any) => !FORBIDDEN_IDS.has(f.id) && f.id !== 'df_reg_4_5_clean')
+        .map((f: DynamicFrameTemplate) => f.id)
+    );
+    const merged = parsed.filter(
+      (f: any) =>
+        !FORBIDDEN_IDS.has(f.id) &&
+        f.id !== 'df_reg_4_5_clean' &&
+        !(f.id !== 'graphic_001' && (f.name?.includes('रेगुलर क्लीन') || f.name?.toLowerCase()?.includes('regular clean')))
+    );
     for (const def of DEFAULT_DYNAMIC_FRAMES) {
       if (!existingIds.has(def.id)) {
         merged.push(def);
@@ -553,10 +562,30 @@ export function saveLocalDynamicFrames(frames: DynamicFrameTemplate[]) {
   }
 }
 
-export async function fetchDynamicFramesFromApi(filterAspectRatio?: DynamicAspectRatio): Promise<DynamicFrameTemplate[]> {
+export async function fetchDynamicFramesFromApi(
+  filter?: DynamicAspectRatio | { aspectRatio?: DynamicAspectRatio; frameType?: string }
+): Promise<DynamicFrameTemplate[]> {
+  let filterRatio: DynamicAspectRatio | undefined = undefined;
+  let q = '';
+
+  if (typeof filter === 'string') {
+    filterRatio = filter;
+    q = `?aspectRatio=${encodeURIComponent(filter)}`;
+  } else if (filter && typeof filter === 'object') {
+    const params = new URLSearchParams();
+    if (filter.aspectRatio) {
+      filterRatio = filter.aspectRatio;
+      params.append('aspectRatio', filter.aspectRatio);
+    }
+    if (filter.frameType) {
+      params.append('frameType', filter.frameType);
+    }
+    const qs = params.toString();
+    if (qs) q = `?${qs}`;
+  }
+
   try {
     const baseUrl = getApiBaseUrl();
-    const q = filterAspectRatio ? `?aspectRatio=${encodeURIComponent(filterAspectRatio)}` : '';
     const res = await fetch(`${baseUrl}/api/dynamic-frames${q}`);
     if (res.ok) {
       const data = await res.json();
@@ -570,7 +599,7 @@ export async function fetchDynamicFramesFromApi(filterAspectRatio?: DynamicAspec
     console.warn('Network error fetching dynamic frames from API, falling back to local storage:', err);
   }
   const local = getLocalDynamicFrames();
-  return filterAspectRatio ? local.filter((f) => f.aspectRatio === filterAspectRatio) : local;
+  return filterRatio ? local.filter((f) => f.aspectRatio === filterRatio) : local;
 }
 
 export async function saveDynamicFrameToApi(

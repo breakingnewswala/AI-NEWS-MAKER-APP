@@ -1555,22 +1555,11 @@ async function drawAuthoritativeDynamicFrameCanvas(
 ) {
   ctx.save();
 
-  // 1. PRIMARY BACKGROUND
-  if (df.primaryBackgroundHex) {
-    ctx.fillStyle = df.primaryBackgroundHex;
-    ctx.fillRect(0, 0, width, height);
-  }
-  const bgUrl = df.primaryBackgroundAsset || df.sampleReferenceUrl;
-  if (bgUrl) {
-    try {
-      const bgImg = await loadImage(bgUrl);
-      ctx.drawImage(bgImg, 0, 0, width, height);
-    } catch (e) {
-      console.warn('Dynamic frame bg load error:', e);
-    }
-  }
+  // 0. BASE CANVAS FILL
+  ctx.fillStyle = df.primaryBackgroundHex || '#0B1329';
+  ctx.fillRect(0, 0, width, height);
 
-  // 2. PHOTO SLOTS (Supporting multi-photo double layout e.g. TESTING 1)
+  // LAYER 1: PHOTO SLOTS (Drawn at the bottom under PNG artwork)
   if (df.photoSlots && df.photoSlots.length > 0) {
     for (let sIdx = 0; sIdx < df.photoSlots.length; sIdx++) {
       const slot = df.photoSlots[sIdx];
@@ -1621,6 +1610,17 @@ async function drawAuthoritativeDynamicFrameCanvas(
       } catch (e) {
         console.warn('Photo slot load error:', e);
       }
+    }
+  }
+
+  // LAYER 2: PANEL B ORIGINAL PNG ARTWORK OVERLAY (Preserving transparency & natural curves)
+  const bgArtworkUrl = df.primaryBackgroundAsset;
+  if (bgArtworkUrl) {
+    try {
+      const bgImg = await loadImage(bgArtworkUrl);
+      ctx.drawImage(bgImg, 0, 0, width, height);
+    } catch (e) {
+      console.warn('Dynamic frame PNG artwork load error:', e);
     }
   }
 

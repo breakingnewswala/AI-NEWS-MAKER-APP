@@ -544,34 +544,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       {(() => {
         const df = getDynamicFrameById(card.frameDesign || '');
         if (!df) return null;
-        if (df.primaryBackgroundMode === 'solid' && df.primaryBackgroundHex) {
-          return (
-            <div
-              className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none"
-              style={{ backgroundColor: df.primaryBackgroundHex }}
-            />
-          );
-        }
-        const bgUrl = df.primaryBackgroundAsset || df.sampleReferenceUrl;
-        if (!bgUrl) return null;
         return (
-          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
-            <img
-              src={bgUrl}
-              alt="Dynamic Frame Primary Background"
-              className="w-full h-full object-cover"
-              crossOrigin="anonymous"
-            />
-          </div>
+          <div
+            className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none"
+            style={{ backgroundColor: df.primaryBackgroundHex || '#0B1329' }}
+          />
         );
       })()}
 
-      {/* 0B. DYNAMIC FRAME PHOTO SLOTS (Multi-Photo Double Layout Support e.g. TESTING 1) */}
+      {/* 0B. DYNAMIC FRAME PHOTO SLOTS (Layer 1: Bottom under PNG Artwork) */}
       {(() => {
         const df = getDynamicFrameById(card.frameDesign || '');
         if (!df || !df.photoSlots || df.photoSlots.length === 0) return null;
         return (
-          <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
+          <div className="absolute inset-0 z-5 pointer-events-none overflow-hidden select-none">
             {df.photoSlots.map((slot, sIdx) => {
               const defaultAsset = slot.defaultAssetUrl || (sIdx === 0
                 ? (df.id === 'df_testing_1_double'
@@ -609,6 +595,24 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 </div>
               );
             })}
+          </div>
+        );
+      })()}
+
+      {/* 0C. DYNAMIC FRAME PANEL B PNG ARTWORK OVERLAY (Layer 2: On top of photo, preserving transparent cutouts & curves) */}
+      {(() => {
+        const df = getDynamicFrameById(card.frameDesign || '');
+        if (!df) return null;
+        const bgUrl = df.primaryBackgroundAsset;
+        if (!bgUrl) return null;
+        return (
+          <div className="absolute inset-0 z-12 overflow-hidden pointer-events-none select-none">
+            <img
+              src={bgUrl}
+              alt="Dynamic Frame Artwork Overlay"
+              className="w-full h-full object-contain pointer-events-none select-none"
+              crossOrigin="anonymous"
+            />
           </div>
         );
       })()}

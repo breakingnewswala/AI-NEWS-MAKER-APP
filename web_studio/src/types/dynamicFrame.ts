@@ -289,6 +289,8 @@ export interface FooterConfig {
   footerWidthPct?: number; // 70% to 100% (default 100%)
   footerAlignment?: 'center' | 'left' | 'right';
   footerInset?: number; // Inset %
+  primaryFooterColor?: string; // Default footer background color for users
+  bannedFooterColor?: string; // Banned footer color that users can never select
 }
 
 export interface RibbonConfig {
@@ -392,6 +394,10 @@ export interface DynamicFrameTemplate {
   // Statement / Bayaanbaazi specific options
   isStatementFrame?: boolean;
   statementOptions?: StatementOptions;
+
+  // Footer primary & banned color policy (Part 7)
+  primaryFooterColor?: string;
+  bannedFooterColor?: string;
 }
 
 export interface UserStoryPreference {

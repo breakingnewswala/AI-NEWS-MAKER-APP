@@ -479,6 +479,7 @@ export interface HeadlineLayoutOptions {
   customMaxLines?: number;
   userFontSize?: number;
   ctx?: CanvasRenderingContext2D | null;
+  customBounds?: { x: number; y: number; width: number; height: number };
 }
 
 /**
@@ -497,8 +498,8 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   const rawHeadline = cleanHeadlineText(options.headline || '');
   const fontFam = options.fontFamily || 'Baloo 2';
   const maxLines = options.customMaxLines || spec.headlineArea.maxLines;
-  const maxW = spec.headlineArea.maxWidth;
-  const maxH = spec.headlineArea.maxHeight;
+  const maxW = options.customBounds?.width || spec.headlineArea.maxWidth;
+  const maxH = options.customBounds?.height || spec.headlineArea.maxHeight;
 
   if (!rawHeadline.trim()) {
     return {
@@ -635,7 +636,9 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
 
   // Calculate precise geometric coordinates for every line
   // Shift center slightly down (+8px) for graphic_001 to balance top matras in Devanagari and eliminate excessive bottom gap above footer
-  const centerY = spec.templateId === 'graphic_001'
+  const centerY = options.customBounds
+    ? Math.round(options.customBounds.y + options.customBounds.height / 2)
+    : spec.templateId === 'graphic_001'
     ? Math.round(spec.headlineArea.y + spec.headlineArea.height / 2 + 8)
     : Math.round(spec.headlineArea.y + spec.headlineArea.height / 2);
   const startY = centerY - ((bestLines.length - 1) * bestLineH) / 2;
@@ -647,7 +650,10 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
       lw += measureTextWidth(tok.text, fontFam, bestFontSize, '900', options.ctx);
       if (tIdx < line.length - 1) lw += spaceW;
     });
-    const startX = Math.round(spec.width / 2 - lw / 2);
+    const boxCenterX = options.customBounds
+      ? options.customBounds.x + options.customBounds.width / 2
+      : spec.width / 2;
+    const startX = Math.round(boxCenterX - lw / 2);
     const lineY = Math.round(startY + idx * bestLineH);
     return {
       text: line.map((t) => t.text).join(' '),

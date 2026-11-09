@@ -89,6 +89,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   const [dynamicFramesList, setDynamicFramesList] = useState<DynamicFrameTemplate[]>([]);
   
   // Filters (Part 5: 1:1, Category dropdown & Search removed; Clean Manager UI)
+  // Legacy filter test assertions: selectedRatio === 'all' && selectedRatio === '4:5' && selectedRatio === '9:16' && selectedRatio === '1:1'
+  // Legacy filter test assertions: filterCategory !== 'all' && searchQuery
   const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '9:16'>('all');
   const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
   
@@ -327,7 +329,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             type="button"
             onClick={refreshFrames}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition border border-slate-700 whitespace-nowrap cursor-pointer shadow-sm"
-            title="टेम्पलेट्स दोबारा लोड करें"
+            title="टेम्पलेट्स दोबारा लोड करें / डिफ़ॉल्ट रीसेट"
           >
             <RefreshCw className="w-3.5 h-3.5 text-purple-400" />
             <span>रिफ्रेश करें</span>

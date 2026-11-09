@@ -83,9 +83,15 @@ import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
 
 function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[]): FrameOption[] {
   const staticFrames = getEffectiveFrameOptions();
-  // Canonical Regular Clean News Frame is strictly graphic_001; df_reg_4_5_clean duplicate is excluded per Part 4
+  // Canonical Regular Clean News Frame is strictly graphic_001; df_reg_4_5_clean and regular clean duplicates are excluded
   const publishedDynamic: FrameOption[] = (dynamicFrames || [])
-    .filter((df) => df.publicationStatus === 'published' && df.frameMode !== 'video' && df.frameType !== 'video' && df.id !== 'df_reg_4_5_clean')
+    .filter(
+      (df) =>
+        df.publicationStatus === 'published' &&
+        df.frameMode !== 'video' && df.frameType !== 'video' &&
+        df.id !== 'df_reg_4_5_clean' &&
+        !(df.id !== 'graphic_001' && (df.name?.includes('रेगुलर क्लीन') || df.name?.toLowerCase()?.includes('regular clean')))
+    )
     .map((df) => {
       const normCat = normalizeToCanonicalCategory(df.designCategory);
       const tier = df.allowedPlans && df.allowedPlans.length > 0 ? df.allowedPlans[0] : 'BASIC';
@@ -104,10 +110,12 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[]): FrameO
   const seen = new Set<string>(['df_reg_4_5_clean']);
   const combined: FrameOption[] = [];
   for (const item of [...staticFrames, ...publishedDynamic]) {
-    if (!seen.has(item.id)) {
-      seen.add(item.id);
-      combined.push(item);
+    if (seen.has(item.id)) continue;
+    if (item.id !== 'graphic_001' && (item.name?.includes('रेगुलर क्लीन') || item.name?.toLowerCase()?.includes('regular clean'))) {
+      continue;
     }
+    seen.add(item.id);
+    combined.push(item);
   }
   return combined;
 }

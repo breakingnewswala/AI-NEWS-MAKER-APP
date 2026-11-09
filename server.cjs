@@ -19535,12 +19535,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
       try {
         const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
         if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
-          frames = cloudDoc.frames.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id)).map((f) => {
-            if (f.id === "df_reg_4_5_clean") {
-              return { ...f, name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928 \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E (Regular Clean News Frame)" };
-            }
-            return f;
-          });
+          frames = cloudDoc.frames.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && f.id !== "df_reg_4_5_clean" && !(f.id !== "graphic_001" && (f.name?.includes("\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928") || f.name?.toLowerCase()?.includes("regular clean"))));
           saveDynamicFramesDatabase(frames);
         }
       } catch {
@@ -19549,13 +19544,13 @@ app.get("/api/dynamic-frames", async (req, res) => {
     if (frames.length === 0) {
       frames = [
         {
-          id: "df_reg_4_5_clean",
-          name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928 \u0928\u094D\u092F\u0942\u091C\u093C \u092B\u094D\u0930\u0947\u092E (Regular Clean News Frame)",
-          description: "\u0926\u0948\u0928\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930\u094B\u0902 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u0915 4:5 \u092A\u094B\u0930\u094D\u091F\u094D\u0930\u0947\u091F \u092B\u094B\u091F\u094B \u092B\u094D\u0930\u0947\u092E\u0964",
-          aspectRatio: "4:5",
+          id: "df_story_9_16_standard",
+          name: "\u0938\u094D\u091F\u0948\u0902\u0921\u0930\u094D\u0921 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Standard Story)",
+          description: "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E \u0935 \u092B\u0947\u0938\u092C\u0941\u0915 \u0938\u094D\u091F\u094B\u0930\u0940 \u0915\u0947 \u0932\u093F\u090F 9:16 \u0935\u0930\u094D\u091F\u093F\u0915\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0932\u0947\u0906\u0909\u091F\u0964",
+          aspectRatio: "9:16",
           canvasWidth: 1080,
-          canvasHeight: 1350,
-          designCategory: "Regular Frames",
+          canvasHeight: 1920,
+          designCategory: "Story Frames",
           allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
           publicationStatus: "published",
           createdBy: "breakingnewswala.com@gmail.com",
@@ -19565,41 +19560,99 @@ app.get("/api/dynamic-frames", async (req, res) => {
           headerConfig: {
             showLogo: true,
             logoPosition: "top_left",
-            logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
+            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
             showLocation: true,
-            locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
+            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
             locationStyle: "pill"
           },
           footerConfig: {
-            footerHeightRatio: 0.08,
+            footerHeightRatio: 0.065,
             enforcePermanentFooter: true,
-            footerBgColor: "#FFFFFF",
-            footerTextColor: "#000000"
+            footerBgColor: "#0F172A",
+            footerTextColor: "#F8FAFC"
           },
           photoSlots: [
             {
-              id: "slot_main_photo",
-              name: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092B\u094B\u091F\u094B (Main Photo)",
+              id: "slot_story_photo",
+              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092E\u0941\u0916\u094D\u092F \u092B\u094B\u091F\u094B",
               slotType: "normal",
-              rect: { x: 0, y: 0, width: 100, height: 61.33 },
+              rect: { x: 0, y: 0, width: 100, height: 62 },
               required: true,
               cropMode: "cover"
             }
           ],
           textSlots: [
             {
-              id: "slot_main_headline",
-              name: "\u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (3 \u092A\u0902\u0915\u094D\u0924\u093F\u092F\u093E\u0901)",
+              id: "slot_story_headline",
+              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
               role: "headline",
-              rect: { x: 7.7, y: 64, width: 84.6, height: 26 },
+              rect: { x: 7, y: 66, width: 86, height: 25 },
               fontFamily: "Noto Sans Devanagari",
-              fontSize: 70,
+              fontSize: 72,
               fontWeight: "bold",
               textColor: "#FFFFFF",
+              alignment: "left",
+              maxLines: 4
+            }
+          ]
+        },
+        {
+          id: "df_story_9_16_breaking",
+          name: "\u0938\u0941\u092A\u0930 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Super Breaking Story)",
+          description: "3D \u0930\u093F\u092C\u0928, \u092C\u0921\u093C\u0940 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u0909\u091A\u094D\u091A \u092A\u094D\u0930\u092D\u093E\u0935 \u0935\u093E\u0932\u0940 9:16 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940\u0964",
+          aspectRatio: "9:16",
+          canvasWidth: 1080,
+          canvasHeight: 1920,
+          designCategory: "Story Frames",
+          allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
+          publicationStatus: "published",
+          createdBy: "breakingnewswala.com@gmail.com",
+          createdAt: 179388e7,
+          updatedAt: 179388e7,
+          version: 1,
+          headerConfig: {
+            showLogo: true,
+            logoPosition: "top_left",
+            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
+            showLocation: true,
+            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
+            locationStyle: "pill"
+          },
+          footerConfig: {
+            footerHeightRatio: 0.065,
+            enforcePermanentFooter: true,
+            footerBgColor: "#FFE600",
+            footerTextColor: "#000000"
+          },
+          ribbonConfig: {
+            enabled: true,
+            ribbonId: "speed-blue-red",
+            customRibbonUrl: "/assets/breaking_news_ribbon.svg",
+            rect: { x: 12, y: 60, width: 76, height: 6.8 },
+            scalePct: 76
+          },
+          photoSlots: [
+            {
+              id: "slot_story_photo",
+              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092B\u094B\u091F\u094B",
+              slotType: "normal",
+              rect: { x: 0, y: 0, width: 100, height: 64 },
+              required: true,
+              cropMode: "cover"
+            }
+          ],
+          textSlots: [
+            {
+              id: "slot_story_headline",
+              name: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
+              role: "headline",
+              rect: { x: 6, y: 68, width: 88, height: 23 },
+              fontFamily: "Noto Sans Devanagari",
+              fontSize: 74,
+              fontWeight: "bold",
+              textColor: "#0A0A0A",
               alignment: "center",
-              maxLines: 3,
-              lineHeight: 1.25,
-              backgroundColor: "transparent"
+              maxLines: 3
             }
           ]
         }
@@ -19612,7 +19665,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
       filtered = filtered.filter((f) => {
         if (frameType === "video") return f.frameType === "video" || f.frameMode === "video";
         if (frameType === "story") return f.frameType === "story" || f.aspectRatio === "9:16" && f.frameMode !== "video";
-        return f.frameType === "graphic" || !f.frameType && f.frameMode !== "video" && f.aspectRatio !== "9:16";
+        return f.frameMode !== "video" && f.frameType !== "video";
       });
     }
     if (frameMode) {

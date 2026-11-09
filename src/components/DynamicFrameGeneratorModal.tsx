@@ -39,6 +39,8 @@ import {
   Download,
   MapPin,
   FileText,
+  Camera,
+  AlertCircle,
 } from 'lucide-react';
 import {
   DynamicFrameTemplate,
@@ -80,6 +82,7 @@ import {
   AiFrameAnalysisResult,
   getLocalDynamicFrames,
 } from '../lib/dynamicFramesManager';
+import { computeCanonicalHeadlineLayout } from '../lib/canonicalLayoutEngine';
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
 import { getAuthToken } from '../lib/apiConfig';
@@ -295,13 +298,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const [primaryBackgroundAsset, setPrimaryBackgroundAsset] = useState<string>(
     initialFrame?.primaryBackgroundAsset || ''
   );
-  const [primaryBackgroundMode, setPrimaryBackgroundMode] = useState<PrimaryBackgroundMode>(
-    initialFrame?.primaryBackgroundMode || 'image'
-  );
+  const [primaryBackgroundMode, setPrimaryBackgroundMode] = useState<PrimaryBackgroundMode>('image');
   const [primaryBackgroundHex, setPrimaryBackgroundHex] = useState<string>(
     initialFrame?.primaryBackgroundHex || '#0B1329'
   );
   const [primaryBgFileName, setPrimaryBgFileName] = useState<string>('');
+  const [primaryBgDimensions, setPrimaryBgDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [isPngTransparent, setIsPngTransparent] = useState<boolean | null>(null);
 
 
   // Typography Configuration (Part 4, Req 8)
@@ -610,8 +613,22 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       footerWidthPct: 100,
       footerAlignment: 'center',
       footerInset: 0,
+      primaryFooterColor: '#FFFFFF',
+      bannedFooterColor: '',
     }
   );
+
+  const [primaryFooterColor, setPrimaryFooterColor] = useState<string>(
+    initialFrame?.footerConfig?.primaryFooterColor || initialFrame?.primaryFooterColor || initialFrame?.footerConfig?.footerBgColor || '#FFFFFF'
+  );
+  const [bannedFooterColor, setBannedFooterColor] = useState<string>(
+    initialFrame?.footerConfig?.bannedFooterColor || initialFrame?.bannedFooterColor || ''
+  );
+
+  const isFooterColorConflict = useMemo(() => {
+    if (!primaryFooterColor || !bannedFooterColor) return false;
+    return primaryFooterColor.trim().toLowerCase() === bannedFooterColor.trim().toLowerCase();
+  }, [primaryFooterColor, bannedFooterColor]);
 
   // Ribbon
   const [ribbonConfig, setRibbonConfig] = useState<RibbonConfig>(
@@ -875,11 +892,45 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     const reader = new FileReader();
     reader.onload = (ev) => {
       if (ev.target?.result) {
-        setPrimaryBackgroundAsset(ev.target.result as string);
+        const dataUrl = ev.target.result as string;
+        setPrimaryBackgroundAsset(dataUrl);
         setPrimaryBackgroundMode('image');
+
+        const img = new Image();
+        img.onload = () => {
+          setPrimaryBgDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.min(img.naturalWidth, 150);
+            canvas.height = Math.min(img.naturalHeight, 150);
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+              let hasAlpha = false;
+              for (let i = 3; i < imgData.length; i += 4) {
+                if (imgData[i] < 250) {
+                  hasAlpha = true;
+                  break;
+                }
+              }
+              setIsPngTransparent(hasAlpha);
+            }
+          } catch {
+            setIsPngTransparent(null);
+          }
+        };
+        img.src = dataUrl;
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleClearPrimaryBg = () => {
+    setPrimaryBackgroundAsset('');
+    setPrimaryBgFileName('');
+    setPrimaryBgDimensions(null);
+    setIsPngTransparent(null);
   };
 
   const handleManualLocationUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -932,15 +983,19 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   // Stage 2: AI Gemini Multimodal Analysis
   const handleRunAiAnalysis = async () => {
     if (!sampleImage) {
-      setFeedbackMsg({ type: 'error', text: 'कृपया पहले सैंपल ग्राफिक अपलोड करें।' });
+      setFeedbackMsg({ type: 'error', text: 'कृपया पहले पैनल A में सैंपल ग्राफिक अपलोड करें।' });
       return;
     }
     setIsAnalyzing(true);
     setAnalysisStatusText('Gemini 1.5 Pro विज़न से सैंपल लेआउट का विश्लेषण हो रहा है...');
     try {
       const res = await requestAiFrameAnalysis(sampleImage, selectedRatio);
-      setAnalysisResult(res);
-      setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
+      if (res.success && res.result) {
+        setAnalysisResult(res.result);
+        setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
+      } else {
+        setAnalysisStatusText(res.error || 'AI विश्लेषण में असमर्थ');
+      }
     } catch (err: any) {
       setAnalysisStatusText('AI विश्लेषण में त्रुटि आई। डिफ़ॉल्ट लेआउट सक्रिय किया जा रहा है।');
     } finally {
@@ -950,38 +1005,65 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
   const handleApplyAiAnalysis = () => {
     if (!analysisResult) return;
-    if (analysisResult.headlineArea) {
+    const hRect = analysisResult.headlineRect || (analysisResult as any).headlineArea;
+    if (hRect) {
       setTextSlots((prev) => [
         {
           ...prev[0],
-          rect: analysisResult.headlineArea!,
-          fontSize: analysisResult.headlineMaxLines === 2 ? 74 : 64,
-          maxLines: analysisResult.headlineMaxLines || 3,
+          rect: hRect,
+          fontSize: (analysisResult as any).headlineMaxLines === 2 ? 74 : 64,
+          maxLines: (analysisResult as any).headlineMaxLines || 3,
         },
       ]);
     }
-    if (analysisResult.photoSlotArea) {
+    const pRect = analysisResult.recommendedPhotoSlots?.[0]?.rect || (analysisResult as any).photoSlotArea;
+    if (pRect) {
       setPhotoSlots((prev) => [
         {
           ...prev[0],
-          rect: analysisResult.photoSlotArea!,
+          rect: pRect,
         },
       ]);
     }
-    if (analysisResult.logoArea) {
+    const lRect = analysisResult.logoRect || (analysisResult as any).logoArea;
+    if (lRect) {
       setHeaderConfig((prev) => ({
         ...prev,
         showLogo: true,
-        logoRect: analysisResult.logoArea!,
+        logoRect: lRect,
       }));
     }
-    if (analysisResult.locationArea) {
+    const locRect = analysisResult.locationRect || (analysisResult as any).locationArea;
+    if (locRect) {
       setHeaderConfig((prev) => ({
         ...prev,
         showLocation: true,
-        locationRect: analysisResult.locationArea!,
+        locationRect: locRect,
       }));
     }
+    if (analysisResult.dateRect) {
+      setHeaderConfig((prev) => ({
+        ...prev,
+        showDate: true,
+        dateRect: analysisResult.dateRect,
+      }));
+    }
+    if (analysisResult.watermarkRect) {
+      setWatermarkConfig((prev) => ({
+        ...prev,
+        enabled: true,
+        rect: analysisResult.watermarkRect,
+      }));
+    }
+    if (analysisResult.footerRect) {
+      const fH = Math.min(15, Math.max(5, analysisResult.footerRect.height || 8));
+      setFooterConfig((prev) => ({
+        ...prev,
+        footerHeightRatio: fH / 100,
+        footerWidthPct: analysisResult.footerRect.width || 100,
+      }));
+    }
+    setFeedbackMsg({ type: 'success', text: 'AI लेआउट निर्देशांक सफलतापूर्वक लागू किए गए!' });
     setCurrentStage('ribbon_header_footer');
   };
 
@@ -1167,7 +1249,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     }
   };
 
-  // Step 7: Full Resolution Direct Test Preview Download
+  // Step 7: Full Resolution Authoritative Canonical Test Preview Download
   const handleDownloadTestPreview = async () => {
     try {
       const canvas = document.createElement('canvas');
@@ -1178,34 +1260,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // 1. Draw Background
-      if (primaryBackgroundMode === 'solid') {
-        ctx.fillStyle = primaryBackgroundHex || '#0B1329';
-        ctx.fillRect(0, 0, w, h);
-      } else if (primaryBackgroundAsset || sampleImage) {
-        try {
-          const bgImg = new Image();
-          bgImg.crossOrigin = 'anonymous';
-          bgImg.src = primaryBackgroundAsset || sampleImage;
-          await new Promise((resolve) => {
-            bgImg.onload = resolve;
-            bgImg.onerror = resolve;
-          });
-          ctx.drawImage(bgImg, 0, 0, w, h);
-        } catch {
-          ctx.fillStyle = '#0B1329';
-          ctx.fillRect(0, 0, w, h);
-        }
-      } else {
-        ctx.fillStyle = '#0B1329';
-        ctx.fillRect(0, 0, w, h);
-      }
+      // 0. Base dark canvas
+      ctx.fillStyle = '#0B1329';
+      ctx.fillRect(0, 0, w, h);
 
-      // 2. Draw Test Photos for current layout slots
+      // LAYER 1: Photo Slots (Drawn at the bottom)
       const activeSlots = photoSlots;
       for (let i = 0; i < activeSlots.length; i++) {
         const slot = activeSlots[i];
-        const testImgSrc = testPhotos[i] || sampleImage;
+        const testImgSrc = testPhotos[i] || samplePhotoPreview;
         const sx = (slot.rect.x / 100) * w;
         const sy = (slot.rect.y / 100) * h;
         const sw = (slot.rect.width / 100) * w;
@@ -1222,7 +1285,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             });
             ctx.save();
             ctx.beginPath();
-            ctx.rect(sx, sy, sw, sh);
+            if (slot.cornerRadius) {
+              const r = (slot.cornerRadius / 100) * sw;
+              ctx.roundRect(sx, sy, sw, sh, r);
+            } else {
+              ctx.rect(sx, sy, sw, sh);
+            }
             ctx.clip();
             const imgAspect = pImg.width / pImg.height;
             const slotAspect = sw / sh;
@@ -1240,28 +1308,31 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         } else {
           ctx.fillStyle = '#1E293B';
           ctx.fillRect(sx, sy, sw, sh);
+          ctx.fillStyle = '#64748B';
+          ctx.font = 'bold 28px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`फोटो स्लॉट ${i + 1}`, sx + sw / 2, sy + sh / 2);
         }
       }
 
-      // 3. Draw Ribbon if enabled
-      if (ribbonConfig.enabled && ribbonConfig.customRibbonUrl) {
+      // LAYER 2: Panel B Original PNG Artwork (Drawn on top of photo)
+      if (primaryBackgroundAsset) {
         try {
-          const rImg = new Image();
-          rImg.crossOrigin = 'anonymous';
-          rImg.src = ribbonConfig.customRibbonUrl;
+          const bgImg = new Image();
+          bgImg.crossOrigin = 'anonymous';
+          bgImg.src = primaryBackgroundAsset;
           await new Promise((resolve) => {
-            rImg.onload = resolve;
-            rImg.onerror = resolve;
+            bgImg.onload = resolve;
+            bgImg.onerror = resolve;
           });
-          const rx = ((ribbonConfig.rect?.x ?? 15) / 100) * w;
-          const ry = ((ribbonConfig.rect?.y ?? 60) / 100) * h;
-          const rw = ((ribbonConfig.rect?.width ?? 70) / 100) * w;
-          const rh = ((ribbonConfig.rect?.height ?? 8) / 100) * h;
-          ctx.drawImage(rImg, rx, ry, rw, rh);
-        } catch {}
+          ctx.drawImage(bgImg, 0, 0, w, h);
+        } catch (e) {
+          console.warn('Panel B PNG Artwork load error in test download:', e);
+        }
       }
 
-      // 4. Draw Headline Box & Text
+      // LAYER 3: Main Headline (3 Lines Canonical Word-Wrapped Layout)
       const headlineSlot = textSlots[0] || {
         rect: { x: 7, y: 63, width: 86, height: 27 },
         backgroundColor: 'transparent',
@@ -1273,32 +1344,211 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const hy = (headlineSlot.rect.y / 100) * h;
       const hw = (headlineSlot.rect.width / 100) * w;
       const hh = (headlineSlot.rect.height / 100) * h;
+
       if (headlineSlot.backgroundColor && headlineSlot.backgroundColor !== 'transparent') {
         ctx.fillStyle = headlineSlot.backgroundColor;
         ctx.fillRect(hx, hy, hw, hh);
       }
 
-      ctx.fillStyle = headlineSlot.textColor || '#FFFFFF';
-      ctx.font = `bold ${Math.round((headlineSlot.fontSize || 60) * 0.9)}px "${headlineSlot.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
       const textToDraw = testHeadline || 'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी';
-      ctx.fillText(textToDraw, hx + hw / 2, hy + hh / 2, hw - 40);
+      const canonicalLayout = computeCanonicalHeadlineLayout({
+        headline: textToDraw,
+        fontFamily: headlineSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
+        aspectRatio: selectedRatio,
+        isBreakingStyle: false,
+        customBounds: { x: hx, y: hy, width: hw, height: hh },
+        customMaxLines: 3,
+      });
 
-      // 5. Draw Protected Footer Bar
-      const fRatio = footerConfig.footerHeightRatio || 0.08;
+      ctx.save();
+      const textColor = headlineSlot.textColor || '#FFFFFF';
+      const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black';
+      ctx.fillStyle = textColor;
+      ctx.font = `bold ${canonicalLayout.fontSize}px "${canonicalLayout.fontFamily}", "Noto Sans Devanagari", sans-serif`;
+      ctx.textAlign = canonicalLayout.alignment || 'center';
+      ctx.textBaseline = 'middle';
+
+      if (!isBlack) {
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 3;
+      } else {
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+      }
+
+      canonicalLayout.lines.forEach((line, lineIdx) => {
+        const lineY = canonicalLayout.startY + lineIdx * canonicalLayout.lineHeight + canonicalLayout.lineHeight / 2;
+        const lineX = canonicalLayout.alignment === 'center'
+          ? canonicalLayout.boxCenterX
+          : canonicalLayout.alignment === 'left'
+          ? hx + 15
+          : hx + hw - 15;
+        ctx.fillText(line, lineX, lineY);
+      });
+      ctx.restore();
+
+      // LAYER 4: Channel Logo
+      if (headerConfig.showLogo) {
+        const lRect = headerConfig.logoRect || { x: 5, y: 3.5, width: 22, height: 9 };
+        const lx = (lRect.x / 100) * w;
+        const ly = (lRect.y / 100) * h;
+        const lw = (lRect.width / 100) * w;
+        const lh = (lRect.height / 100) * h;
+        try {
+          const logoImg = new Image();
+          logoImg.crossOrigin = 'anonymous';
+          logoImg.src = '/assets/ai_news_maker_logo.png';
+          await new Promise((resolve) => {
+            logoImg.onload = resolve;
+            logoImg.onerror = () => {
+              logoImg.src = '/logo.png';
+              logoImg.onload = resolve;
+              logoImg.onerror = resolve;
+            };
+          });
+          if (logoImg.width > 0) {
+            const lAspect = logoImg.width / logoImg.height;
+            let drawW = lw, drawH = lh;
+            if (lAspect > lw / lh) {
+              drawH = lw / lAspect;
+            } else {
+              drawW = lh * lAspect;
+            }
+            ctx.drawImage(logoImg, lx + (lw - drawW) / 2, ly + (lh - drawH) / 2, drawW, drawH);
+          }
+        } catch {}
+      }
+
+      // LAYER 5: Location Badge
+      if (headerConfig.showLocation) {
+        const locRect = headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 };
+        const bx = (locRect.x / 100) * w;
+        const by = (locRect.y / 100) * h;
+        const bw = (locRect.width / 100) * w;
+        const bh = (locRect.height / 100) * h;
+
+        const badgeAsset = headerConfig.manualLocationAsset || locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url;
+        if (headerConfig.locationBadgeMode === 'static_image' && badgeAsset) {
+          try {
+            const bImg = new Image();
+            bImg.crossOrigin = 'anonymous';
+            bImg.src = badgeAsset;
+            await new Promise((resolve) => {
+              bImg.onload = resolve;
+              bImg.onerror = resolve;
+            });
+            ctx.drawImage(bImg, bx, by, bw, bh);
+          } catch {}
+        } else {
+          ctx.save();
+          ctx.fillStyle = headerConfig.locationBgColor || '#DC2626';
+          ctx.beginPath();
+          ctx.roundRect(bx, by, bw, bh, bh / 2);
+          ctx.fill();
+          ctx.fillStyle = headerConfig.locationTextColor || '#FFFFFF';
+          ctx.font = 'bold 22px "Baloo 2", "Noto Sans Devanagari", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('📍 भोपाल', bx + bw / 2, by + bh / 2);
+          ctx.restore();
+        }
+      }
+
+      // LAYER 6: Date Stamp
+      if (headerConfig.showDate) {
+        const dateRect = headerConfig.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 };
+        const dx = (dateRect.x / 100) * w;
+        const dy = (dateRect.y / 100) * h;
+        const rot = headerConfig.dateRotation ?? 270;
+        ctx.save();
+        ctx.translate(dx, dy);
+        if (rot === 270) {
+          ctx.rotate((-90 * Math.PI) / 180);
+        } else if (rot === 90) {
+          ctx.rotate((90 * Math.PI) / 180);
+        }
+        ctx.fillStyle = '#CBD5E1';
+        ctx.font = 'bold 20px "Noto Sans Devanagari", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const dateStr = new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+        ctx.fillText(dateStr, 0, 0);
+        ctx.restore();
+      }
+
+      // LAYER 7: AI Watermark
+      if (watermarkConfig.enabled) {
+        const wm = watermarkConfig;
+        const rotDeg = wm.rotation ?? 270;
+        const op = wm.opacity ?? 0.85;
+        let wx = (wm.rect?.x ?? 74) / 100 * w;
+        let wy = (wm.rect?.y ?? 3.5) / 100 * h;
+        ctx.save();
+        ctx.globalAlpha = op;
+        ctx.translate(wx, wy);
+        ctx.rotate((rotDeg * Math.PI) / 180);
+        ctx.fillStyle = wm.textColor || '#FFFFFF';
+        ctx.font = 'bold 20px "Baloo 2", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(wm.customText || wm.label || 'AI GENERATED', 0, 0);
+        ctx.restore();
+      }
+
+      // LAYER 8: Full Story Callout
+      if (fullStoryCalloutConfig.enabled) {
+        const cRect = fullStoryCalloutConfig.rect || { x: 50, y: 85, width: 40, height: 4 };
+        const cx = (cRect.x / 100) * w;
+        const cy = (cRect.y / 100) * h;
+        const cw = (cRect.width / 100) * w;
+        const ch = (cRect.height / 100) * h;
+        const calloutAsset = fullStoryCalloutConfig.manualCalloutAsset || manualCalloutAssetUrl;
+        if (calloutAsset) {
+          try {
+            const cImg = new Image();
+            cImg.crossOrigin = 'anonymous';
+            cImg.src = calloutAsset;
+            await new Promise((resolve) => {
+              cImg.onload = resolve;
+              cImg.onerror = resolve;
+            });
+            ctx.drawImage(cImg, cx, cy, cw, ch);
+          } catch {}
+        } else {
+          ctx.save();
+          ctx.fillStyle = '#F59E0B';
+          ctx.beginPath();
+          ctx.roundRect(cx, cy, cw, ch, 6);
+          ctx.fill();
+          ctx.fillStyle = '#0F172A';
+          ctx.font = 'bold 22px "Noto Sans Devanagari", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(fullStoryCalloutConfig.text || 'पूरी खबर विवरण में', cx + cw / 2, cy + ch / 2);
+          ctx.restore();
+        }
+      }
+
+      // LAYER 9: Permanent Protected Footer
+      const fRatio = footerConfig.footerHeightRatio || (selectedRatio === '4:5' ? 0.08 : 0.065);
       const fh = fRatio * h;
       const fw = ((footerConfig.footerWidthPct || 100) / 100) * w;
       const fx = (w - fw) / 2;
       const fy = h - fh;
-      ctx.fillStyle = footerConfig.footerBgColor || '#FFFFFF';
+      let footerBg = primaryFooterColor || footerConfig.primaryFooterColor || footerConfig.footerBgColor || '#FFFFFF';
+      if (bannedFooterColor && footerBg.trim().toLowerCase() === bannedFooterColor.trim().toLowerCase()) {
+        footerBg = '#000000';
+      }
+      ctx.fillStyle = footerBg;
       ctx.fillRect(fx, fy, fw, fh);
       ctx.fillStyle = footerConfig.footerTextColor || '#000000';
       ctx.font = 'bold 24px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(`@${currentUser?.username || 'breakingnewswala'}`, fx + 30, fy + fh / 2 + 8);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`@${currentUser?.username || 'breakingnewswala'}`, fx + 30, fy + fh / 2);
       ctx.textAlign = 'right';
-      ctx.fillText(currentUser?.phone ? `📱 ${currentUser.phone}` : 'सत्यापित डिजिटल समाचार नेटवर्क', fx + fw - 30, fy + fh / 2 + 8);
+      ctx.fillText(currentUser?.phone ? `📱 ${currentUser.phone}` : 'सत्यापित डिजिटल समाचार नेटवर्क', fx + fw - 30, fy + fh / 2);
 
       // Trigger direct download
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
@@ -1313,10 +1563,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
   // Step 8: Save & Publish Handler
   const handleSaveAndPublish = async () => {
-// Video publishing enabled with full manifest
-
     if (!frameName.trim()) {
       setFeedbackMsg({ type: 'error', text: 'कृपया फ्रेम का नाम दर्ज करें।' });
+      return;
+    }
+
+    if (isFooterColorConflict) {
+      setFeedbackMsg({ type: 'error', text: 'प्राइमरी फुटर रंग और प्रतिबंधित (Banned) फुटर रंग समान नहीं हो सकते! कृपया अलग रंग चुनें।' });
       return;
     }
 
@@ -1337,10 +1590,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       sampleReferenceUrl: sampleImage,
       samplePhotoUrl: samplePhotoPreview,
       sampleVideoUrl: sampleVideoPreview,
-      primaryBackgroundAsset: primaryBackgroundMode === 'image' ? primaryBackgroundAsset : undefined,
-      primaryBackgroundMode,
+      primaryBackgroundAsset: primaryBackgroundAsset || undefined,
+      primaryBackgroundMode: 'image',
       primaryBackgroundHex,
       previewImageUrl: primaryBackgroundAsset || sampleImage,
+      primaryFooterColor,
+      bannedFooterColor,
       designCategory: isVideo ? 'Special Frames' : designCategory,
       allowedPlans,
       publicationStatus,
@@ -1353,6 +1608,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       footerConfig: {
         ...footerConfig,
         enforcePermanentFooter: true,
+        primaryFooterColor,
+        bannedFooterColor,
+        footerBgColor: primaryFooterColor || footerConfig.footerBgColor || '#FFFFFF',
       },
       photoSlots: isVideo ? [] : photoSlots,
       photoLayoutVariants: isVideo ? [] : layoutVariants,
@@ -1706,96 +1964,95 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   )}
                 </div>
 
-                {/* Panel B: Primary Background Upload (Clean static artwork / PNG with transparency) */}
+                {/* Panel B: Primary Background Upload (Clean static artwork / PNG with transparency ONLY) */}
                 <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                       <Palette className="w-3.5 h-3.5" />
-                      पैनल B: प्राइमरी बैकग्राउंड अपलोड (Clean Artwork)
+                      पैनल B: पारदर्शी PNG आर्टवर्क अपलोड (Transparent Artwork)
                     </h4>
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-300 font-bold">
-                      वास्तविक बैकग्राउंड
+                      Layer 2 आर्टवर्क
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400">
-                    क्लीन ट्रांसपेरेंट PNG आर्टवर्क या सॉलिड कलर चुनें जो डायनामिक लेयर्स के पीछे दिखेगा।
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    फ्रेम का ओरिजिनल पारदर्शी PNG अपलोड करें जिसमें फोटो का कटआउट व कर्व्स हों। यह फोटो के ऊपर (Layer 2) बैठेगा जिससे कर्व्स व डिज़ाइन पूरी तरह सुरक्षित रहेंगे।
                   </p>
 
-                  <div className="flex items-center gap-2 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => setPrimaryBackgroundMode('image')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                        primaryBackgroundMode === 'image'
-                          ? 'bg-amber-400 text-slate-950'
-                          : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      PNG / इमेज अपलोड
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPrimaryBackgroundMode('solid')}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                        primaryBackgroundMode === 'solid'
-                          ? 'bg-amber-400 text-slate-950'
-                          : 'bg-slate-800 text-slate-300'
-                      }`}
-                    >
-                      सॉलिड कलर मोड
-                    </button>
-                  </div>
-
-                  {primaryBackgroundMode === 'image' ? (
+                  {!primaryBackgroundAsset ? (
                     <div className="border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-xl p-5 text-center cursor-pointer relative bg-slate-900/50 transition-colors">
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/*"
                         onChange={handlePrimaryBgUpload}
                         className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                       />
                       <ImageIcon className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
-                      <span className="text-xs font-bold text-white block">प्राइमरी बैकग्राउंड PNG चुनें</span>
-                      <span className="text-[10px] text-slate-500 mt-0.5 block">पारदर्शी PNG या क्लीन आर्टवर्क</span>
+                      <span className="text-xs font-bold text-white block">पारदर्शी PNG आर्टवर्क चुनें या ड्रैग करें</span>
+                      <span className="text-[10px] text-slate-500 mt-0.5 block">केवल पारदर्शी PNG समर्थित (अनुशंसित 1080x1350 या 1080x1920)</span>
                     </div>
                   ) : (
-                    <div className="space-y-3 pt-2">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={primaryBackgroundHex}
-                          onChange={(e) => setPrimaryBackgroundHex(e.target.value)}
-                          className="w-12 h-10 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={primaryBackgroundHex}
-                          onChange={(e) => setPrimaryBackgroundHex(e.target.value)}
-                          className="px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs w-32"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {['#0B1329', '#1E293B', '#B91C1C', '#0F172A', '#18181B', '#312E81'].map((c) => (
+                    <div className="space-y-3 bg-slate-900/70 border border-slate-800 rounded-xl p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate max-w-[200px]">{primaryBgFileName || 'Frame_Artwork.png'}</span>
+                          </div>
+                          {primaryBgDimensions && (
+                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                              आकार: {primaryBgDimensions.width} × {primaryBgDimensions.height} px
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-[10px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer font-bold border border-slate-700">
+                            बदलें
+                            <input
+                              type="file"
+                              accept="image/png,image/*"
+                              onChange={handlePrimaryBgUpload}
+                              className="hidden"
+                            />
+                          </label>
                           <button
-                            key={c}
                             type="button"
-                            onClick={() => setPrimaryBackgroundHex(c)}
-                            className="w-6 h-6 rounded-md border border-white/20 cursor-pointer"
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
+                            onClick={handleClearPrimaryBg}
+                            className="text-[10px] px-2 py-1 rounded bg-red-950/60 hover:bg-red-900/80 text-red-300 font-bold border border-red-500/40 cursor-pointer"
+                          >
+                            हटाएँ
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
 
-                  {primaryBgFileName && (
-                    <div className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> {primaryBgFileName}
-                    </div>
-                  )}
-                  {primaryBackgroundAsset && primaryBackgroundMode === 'image' && (
-                    <div className="w-28 h-36 border border-slate-700 rounded-lg overflow-hidden mx-auto mt-2">
-                      <img src={primaryBackgroundAsset} alt="Primary Background" className="w-full h-full object-cover" />
+                      {/* Alpha Transparency Status Badge */}
+                      {isPngTransparent === true && (
+                        <div className="p-2 rounded-lg bg-emerald-950/60 border border-emerald-500/40 text-[11px] text-emerald-300 flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span>✓ पारदर्शी PNG सक्रिय: कटआउट व कर्व्स सुरक्षित हैं।</span>
+                        </div>
+                      )}
+                      {isPngTransparent === false && (
+                        <div className="p-2 rounded-lg bg-amber-950/60 border border-amber-500/40 text-[11px] text-amber-300 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span>⚠️ चेतावनी: पारदर्शिता नहीं मिली। फोटो के कर्व्स सही दिखने हेतु पारदर्शी PNG का उपयोग करें।</span>
+                        </div>
+                      )}
+
+                      {/* Checkered Transparency Thumbnail */}
+                      <div
+                        className="w-28 h-36 border border-slate-700 rounded-lg overflow-hidden mx-auto mt-2 relative shadow-inner"
+                        style={{
+                          backgroundImage: 'repeating-conic-gradient(#1e293b 0% 25%, #0f172a 0% 50%)',
+                          backgroundSize: '16px 16px',
+                        }}
+                      >
+                        <img
+                          src={primaryBackgroundAsset}
+                          alt="Primary Background"
+                          className="w-full h-full object-contain pointer-events-none"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2169,7 +2426,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           >
                             <div className="flex items-center gap-2">
                               <span className="text-[11px] font-bold text-slate-200">
-                                केंद्रीय स्वीकृत कॉलआउट लाइब्रेरी ({calloutLibrary.length})
+                                केंद्रीय स्वीकृत कॉलआउट लाइब्रेरी से चुनें ({calloutLibrary.length})
                               </span>
                               {(manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset) && (
                                 <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-semibold truncate max-w-[140px]">
@@ -2275,7 +2532,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             >
                               <div className="flex items-center gap-2">
                                 <span className="text-[11px] font-bold text-slate-200">
-                                  केंद्रीय स्वीकृत लोकेशन बैज लाइब्रेरी ({locationBadgeLibrary.length})
+                                  केंद्रीय स्वीकृत लोकेशन बैज लाइब्रेरी से चुनें ({locationBadgeLibrary.length})
                                 </span>
                                 {(headerConfig.manualLocationAsset || headerConfig.locationBadgeAssetId) && (
                                   <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded font-semibold truncate max-w-[140px]">
@@ -2420,16 +2677,136 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               </div>
 
               {/* Permanent Protected Footer */}
-              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
+                  <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
                     स्थाई फुटर सेटिंग्स (Protected Channel Profile Footer)
                   </h4>
                   <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
                     सुरक्षित फुटर
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+
+                {/* Conflict Alert Banner */}
+                {isFooterColorConflict && (
+                  <div className="p-3 bg-red-950/90 border border-red-500 rounded-xl text-xs font-bold text-red-200 flex items-center gap-2 shadow-lg animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>⚠️ प्राइमरी फुटर रंग और प्रतिबंधित (Banned) फुटर रंग समान नहीं हो सकते! कृपया अलग रंग चुनें।</span>
+                  </div>
+                )}
+
+                {/* Primary Footer Colour & Banned Footer Colour Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Primary Footer Colour (Default for users) */}
+                  <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
+                    <label className="text-[11px] font-bold text-white block">
+                      प्राइमरी फुटर रंग (Default Footer Colour) *
+                    </label>
+                    <p className="text-[10px] text-slate-400">
+                      यूज़र्स के लिए डिफ़ॉल्ट फुटर बैकग्राउंड रंग।
+                    </p>
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="color"
+                        value={primaryFooterColor}
+                        onChange={(e) => {
+                          setPrimaryFooterColor(e.target.value);
+                          setFooterConfig((prev) => ({
+                            ...prev,
+                            primaryFooterColor: e.target.value,
+                            footerBgColor: e.target.value,
+                          }));
+                        }}
+                        className="w-10 h-8 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={primaryFooterColor}
+                        onChange={(e) => {
+                          setPrimaryFooterColor(e.target.value);
+                          setFooterConfig((prev) => ({
+                            ...prev,
+                            primaryFooterColor: e.target.value,
+                            footerBgColor: e.target.value,
+                          }));
+                        }}
+                        className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono text-xs w-28 uppercase"
+                      />
+                    </div>
+                    {/* Presets */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      {['#FFFFFF', '#0F172A', '#FFE600', '#DC2626', '#000000', '#1E3A8A', '#047857'].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => {
+                            setPrimaryFooterColor(c);
+                            setFooterConfig((prev) => ({
+                              ...prev,
+                              primaryFooterColor: c,
+                              footerBgColor: c,
+                            }));
+                          }}
+                          className={`w-6 h-6 rounded-md border transition cursor-pointer ${
+                            primaryFooterColor.toLowerCase() === c.toLowerCase()
+                              ? 'ring-2 ring-amber-400 border-white'
+                              : 'border-white/20 hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: c }}
+                          title={c}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Banned Footer Colour (Forbidden for users) */}
+                  <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
+                    <label className="text-[11px] font-bold text-white block">
+                      प्रतिबंधित फुटर रंग (Banned Footer Colour)
+                    </label>
+                    <p className="text-[10px] text-slate-400">
+                      एडमिन द्वारा प्रतिबंधित रंग जिसे यूज़र स्टूडियो में नहीं चुन सकता।
+                    </p>
+                    <select
+                      value={bannedFooterColor}
+                      onChange={(e) => {
+                        setBannedFooterColor(e.target.value);
+                        setFooterConfig((prev) => ({
+                          ...prev,
+                          bannedFooterColor: e.target.value,
+                        }));
+                      }}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold"
+                    >
+                      <option value="">-- कोई नहीं (None) --</option>
+                      <option value="#FFFFFF">सफेद (White #FFFFFF)</option>
+                      <option value="#000000">काला (Black #000000)</option>
+                      <option value="#DC2626">लाल (Red #DC2626)</option>
+                      <option value="#FFE600">पीला (Yellow #FFE600)</option>
+                      <option value="#0F172A">नेवी डार्क (#0F172A)</option>
+                    </select>
+
+                    {bannedFooterColor && (
+                      <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-300">
+                        <span className="w-4 h-4 rounded border border-white/20 inline-block" style={{ backgroundColor: bannedFooterColor }} />
+                        <span className="font-mono text-[10px]">{bannedFooterColor}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBannedFooterColor('');
+                            setFooterConfig((prev) => ({ ...prev, bannedFooterColor: '' }));
+                          }}
+                          className="text-[10px] text-red-400 hover:text-red-300 ml-auto"
+                        >
+                          हटाएँ
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
                   <div>
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">फुटर चौड़ाई (%)</label>
                     <input
@@ -2442,22 +2819,21 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-300 block mb-1">बैकग्राउंड रंग</label>
-                    <input
-                      type="color"
-                      value={footerConfig.footerBgColor || '#FFFFFF'}
-                      onChange={(e) => setFooterConfig({ ...footerConfig, footerBgColor: e.target.value })}
-                      className="w-full h-8 bg-slate-900 border border-slate-700 rounded-lg cursor-pointer"
-                    />
-                  </div>
-                  <div>
                     <label className="text-[11px] font-bold text-slate-300 block mb-1">टेक्स्ट रंग</label>
-                    <input
-                      type="color"
-                      value={footerConfig.footerTextColor || '#000000'}
-                      onChange={(e) => setFooterConfig({ ...footerConfig, footerTextColor: e.target.value })}
-                      className="w-full h-8 bg-slate-900 border border-slate-700 rounded-lg cursor-pointer"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={footerConfig.footerTextColor || '#000000'}
+                        onChange={(e) => setFooterConfig({ ...footerConfig, footerTextColor: e.target.value })}
+                        className="w-10 h-8 bg-slate-900 border border-slate-700 rounded-lg cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={footerConfig.footerTextColor || '#000000'}
+                        onChange={(e) => setFooterConfig({ ...footerConfig, footerTextColor: e.target.value })}
+                        className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono text-xs w-28 uppercase"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -2610,17 +2986,39 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   style={{
                     width: selectedRatio === '4:5' ? '340px' : '280px',
                     height: selectedRatio === '4:5' ? '425px' : '497px',
-                    backgroundColor: isStatementFrame ? statementBgColor : primaryBackgroundMode === 'solid' ? primaryBackgroundHex : '#0B1329',
+                    backgroundColor: '#0B1329',
                   }}
                 >
-                  {/* Primary Background Asset or Sample Image */}
-                  {(primaryBackgroundAsset || sampleImage) && primaryBackgroundMode === 'image' && (
+                  {/* Underneath: Photo Slots Preview */}
+                  {photoSlots.map((slot) => (
+                    <div
+                      key={slot.id}
+                      className="absolute border border-dashed border-slate-600/60 bg-slate-800/40 pointer-events-none z-0 flex items-center justify-center"
+                      style={{
+                        left: `${slot.rect.x}%`,
+                        top: `${slot.rect.y}%`,
+                        width: `${slot.rect.width}%`,
+                        height: `${slot.rect.height}%`,
+                      }}
+                    >
+                      <Camera className="w-5 h-5 text-slate-500/50" />
+                    </div>
+                  ))}
+
+                  {/* Panel B Artwork on top of photo slot or subtle sample reference */}
+                  {primaryBackgroundAsset ? (
                     <img
-                      src={primaryBackgroundAsset || sampleImage}
-                      alt="Canvas"
-                      className="w-full h-full object-cover pointer-events-none opacity-85 absolute inset-0"
+                      src={primaryBackgroundAsset}
+                      alt="Canvas Artwork"
+                      className="w-full h-full object-contain pointer-events-none absolute inset-0 z-5"
                     />
-                  )}
+                  ) : sampleImage ? (
+                    <img
+                      src={sampleImage}
+                      alt="Reference Sample"
+                      className="w-full h-full object-cover pointer-events-none opacity-40 absolute inset-0 z-5"
+                    />
+                  ) : null}
 
                   {/* Safe Zone Visual Overlay */}
                   {safeZoneConfig.enabled && (
@@ -3478,11 +3876,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
               {/* Dual Previews Side-by-Side */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Preview A: Sample Reference */}
+                {/* Preview A: Sample Reference Jacket (Reference Only) */}
+                {/* Preview A - Original Reference */}
                 <div className="flex flex-col items-center p-4 bg-slate-950/50 border border-slate-800 rounded-2xl space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
                     <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
-                    <span>सैंपल ग्राफिक (Preview A - Original Reference)</span>
+                    <span>पैनल A: सैंपल संदर्भ जैकेट (Reference Only)</span>
                   </div>
                   <div
                     className="relative border-2 border-slate-700 rounded-xl overflow-hidden shadow-xl bg-black"
@@ -3494,38 +3893,29 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     {sampleImage ? (
                       <img src={sampleImage} alt="Sample Reference" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-600 text-xs">
-                        सैंपल ग्राफिक उपलब्ध नहीं
+                      <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center text-slate-600 text-xs">
+                        <Upload className="w-6 h-6 mb-1 text-slate-700" />
+                        <span>सैंपल ग्राफिक उपलब्ध नहीं</span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Preview B: Actual Render with Primary Background */}
+                {/* Preview B - With Primary Background: Exact Canonical Composition with Layer Hierarchy */}
                 <div className="flex flex-col items-center p-4 bg-slate-950/50 border border-amber-500/40 rounded-2xl space-y-2 shadow-xl">
                   <div className="flex items-center gap-2 text-xs font-black text-amber-300">
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>वास्तविक फ्रेम प्रीव्यू (Preview B - With Primary Background)</span>
+                    <span>वास्तविक कैनोनिकल फ्रेम प्रीव्यू (Preview B)</span>
                   </div>
 
                   <div
-                    className="relative border-4 border-amber-500/60 rounded-xl overflow-hidden shadow-2xl"
+                    className="relative border-4 border-amber-500/60 rounded-xl overflow-hidden shadow-2xl bg-[#0B1329]"
                     style={{
                       width: selectedRatio === '4:5' ? '280px' : '230px',
                       height: selectedRatio === '4:5' ? '350px' : '408px',
-                      backgroundColor: isStatementFrame ? statementBgColor : primaryBackgroundMode === 'solid' ? primaryBackgroundHex : '#0B1329',
                     }}
                   >
-                    {/* Primary Background Image */}
-                    {(primaryBackgroundAsset || sampleImage) && primaryBackgroundMode === 'image' && (
-                      <img
-                        src={primaryBackgroundAsset || sampleImage}
-                        alt="Primary Background"
-                        className="w-full h-full object-cover pointer-events-none opacity-90"
-                      />
-                    )}
-
-                    {/* Main Video in Video Mode (Req 13, 14, 18) vs Photo Slots */}
+                    {/* LAYER 1: Photo Slots (Drawn at the bottom z-5) */}
                     {generatorMode === 'video' ? (
                       <div
                         className="absolute overflow-hidden bg-black flex items-center justify-center z-5"
@@ -3544,27 +3934,14 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           playsInline
                           className={`w-full h-full ${videoDisplayMode === 'crop' ? 'object-cover' : 'object-contain'}`}
                         />
-                        {/* Centered Watermarks if enabled */}
-                        {videoWatermarkTextEnabled && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-white/70 font-black text-xs px-2.5 py-1 bg-black/40 rounded-lg backdrop-blur-xs">
-                              {videoWatermarkText}
-                            </span>
-                          </div>
-                        )}
-                        {videoWatermarkLogoEnabled && videoWatermarkLogoUrl && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <img src={videoWatermarkLogoUrl} alt="Watermark" className="max-w-[40%] max-h-[40%] opacity-60 object-contain" />
-                          </div>
-                        )}
                       </div>
                     ) : (
                       photoSlots.map((slot, idx) => {
-                        const testSrc = testPhotos[idx] || samplePhotoPreview || sampleImage;
+                        const testSrc = testPhotos[idx] || samplePhotoPreview;
                         return (
                           <div
                             key={slot.id}
-                            className="absolute overflow-hidden"
+                            className="absolute overflow-hidden z-5"
                             style={{
                               left: `${slot.rect.x}%`,
                               top: `${slot.rect.y}%`,
@@ -3576,8 +3953,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             {testSrc ? (
                               <img src={testSrc} alt={slot.name} className="w-full h-full object-cover" />
                             ) : (
-                              <div className="w-full h-full bg-slate-800 flex items-center justify-center text-[9px] text-slate-400">
-                                फोटो {idx + 1}
+                              <div className="w-full h-full bg-slate-800/90 border border-dashed border-slate-600 flex flex-col items-center justify-center p-2 text-center text-slate-400">
+                                <Camera className="w-5 h-5 mb-1 text-slate-500" />
+                                <span className="text-[9px] font-bold">फोटो स्लॉट {idx + 1}</span>
+                                <span className="text-[8px] text-slate-500">(सैंपल फोटो अपलोड करें)</span>
                               </div>
                             )}
                           </div>
@@ -3585,24 +3964,55 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       })
                     )}
 
-                    {/* Original PNG Frame Overlay (Part 6: Alpha transparency & curves preserved) */}
-                    {(sampleImage || initialFrame?.sampleReferenceUrl) && (
+                    {/* LAYER 2: Panel B Original PNG Artwork (z-12 - Preserving transparency & curves) */}
+                    {primaryBackgroundAsset && (
                       <img
-                        src={sampleImage || initialFrame?.sampleReferenceUrl}
+                        src={primaryBackgroundAsset}
                         alt="Frame Overlay"
                         className="absolute inset-0 w-full h-full object-contain pointer-events-none z-12"
                       />
                     )}
 
-                    {/* Logo (Part 7: Master Admin Sample Identity) */}
+                    {/* LAYER 3: Primary Headline (z-15 - Exact 3 Lines Typography Layout) */}
+                    {textSlots.length > 0 && (() => {
+                      const hSlot = textSlots[0];
+                      const rawText = testHeadline || 'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी';
+                      return (
+                        <div
+                          className="absolute z-15 flex flex-col justify-center px-1 text-center pointer-events-none select-none"
+                          style={{
+                            left: `${hSlot.rect.x}%`,
+                            top: `${hSlot.rect.y}%`,
+                            width: `${hSlot.rect.width}%`,
+                            height: `${hSlot.rect.height}%`,
+                            backgroundColor: hSlot.backgroundColor && hSlot.backgroundColor !== 'transparent' ? hSlot.backgroundColor : undefined,
+                          }}
+                        >
+                          <p
+                            className="font-bold leading-tight line-clamp-3"
+                            style={{
+                              fontFamily: typographyFontFamily || hSlot.fontFamily || 'Noto Sans Devanagari',
+                              color: textSlots[0]?.textColor || typographyConfig?.primaryHeadline?.fontColor || hSlot.textColor || '#FFFFFF',
+                              fontSize: selectedRatio === '4:5' ? '12px' : '11px',
+                              textAlign: (hSlot.alignment as any) || 'center',
+                              textShadow: hSlot.textColor?.toLowerCase() === '#000000' ? 'none' : '0 1px 4px rgba(0,0,0,0.9)',
+                            }}
+                          >
+                            {rawText}
+                          </p>
+                        </div>
+                      );
+                    })()}
+
+                    {/* LAYER 4: Channel Logo (z-16) */}
                     {headerConfig.showLogo && (
                       <div
-                        className="absolute z-16 flex items-center justify-center p-0.5 rounded bg-slate-900/80 border border-white/20 shadow"
+                        className="absolute z-16 flex items-center justify-center p-0.5 rounded bg-slate-900/80 border border-white/20 shadow pointer-events-none"
                         style={{
                           left: `${headerConfig.logoRect?.x ?? 5}%`,
                           top: `${headerConfig.logoRect?.y ?? 3.5}%`,
-                          maxWidth: '22%',
-                          maxHeight: '9%',
+                          maxWidth: `${headerConfig.logoRect?.width ?? 22}%`,
+                          maxHeight: `${headerConfig.logoRect?.height ?? 9}%`,
                         }}
                       >
                         <img
@@ -3616,10 +4026,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Location Badge (Part 7: Bhopal Location) */}
+                    {/* LAYER 5: Location Badge (z-16) */}
                     {headerConfig.showLocation && (
                       <div
-                        className="absolute z-16 flex items-center justify-center"
+                        className="absolute z-16 flex items-center justify-center pointer-events-none"
                         style={{
                           left: `${headerConfig.locationRect?.x ?? 5}%`,
                           top: `${headerConfig.locationRect?.y ?? 13.5}%`,
@@ -3644,29 +4054,29 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Date Stamp */}
+                    {/* LAYER 6: Date Stamp (z-16) */}
                     {headerConfig.showDate && (
                       <div
-                        className="absolute text-[8px] font-bold text-slate-300 z-16"
+                        className="absolute text-[8px] font-bold text-slate-300 z-16 pointer-events-none flex items-center justify-center"
                         style={{
-                          left: `${headerConfig.dateRect?.x ?? 2}%`,
-                          top: `${headerConfig.dateRect?.y ?? 35}%`,
-                          transform: `rotate(${headerConfig.dateRotation ?? 270}deg)`,
+                          left: `${headerConfig.dateRect?.x ?? 5}%`,
+                          top: `${headerConfig.dateRect?.y ?? 18.5}%`,
+                          transform: (headerConfig.dateRotation ?? 270) === 270 ? 'rotate(-90deg) origin-left-top' : undefined,
                         }}
                       >
-                        5 नवंबर 2026
+                        <span>{new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                       </div>
                     )}
 
-                    {/* AI Watermark (Part 3: Rotation, Position & Geometry Parity) */}
+                    {/* LAYER 7: AI Watermark (z-18) */}
                     {watermarkConfig.enabled && (() => {
                       const rot = watermarkConfig.rotation ?? (watermarkConfig.position === 'right_edge' ? 270 : 0);
                       const pos = watermarkConfig.position || 'right_edge';
-                      let posStyle: React.CSSProperties = { right: '10px', top: '35%' };
+                      let posStyle: React.CSSProperties = { right: '8px', top: '35%' };
                       let baseTranslate = 'translateY(-50%)';
 
                       if (pos === 'left_edge') {
-                        posStyle = { left: '10px', top: '35%' };
+                        posStyle = { left: '8px', top: '35%' };
                         baseTranslate = 'translateY(-50%)';
                       } else if (pos === 'top') {
                         posStyle = { top: '12px', left: '50%' };
@@ -3689,7 +4099,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
                       return (
                         <div
-                          className="absolute z-20 pointer-events-none flex items-center justify-center font-bold select-none"
+                          className="absolute z-18 pointer-events-none flex items-center justify-center font-bold select-none"
                           style={{
                             ...posStyle,
                             transform,
@@ -3718,7 +4128,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     {/* Breaking News Ribbon */}
                     {ribbonConfig.enabled && ribbonConfig.customRibbonUrl && (
                       <div
-                        className="absolute z-14"
+                        className="absolute z-14 pointer-events-none"
                         style={{
                           left: `${ribbonConfig.rect?.x ?? 15}%`,
                           top: `${ribbonConfig.rect?.y ?? 60}%`,
@@ -3729,13 +4139,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Full Story Callout */}
+                    {/* LAYER 8: Full Story Callout (z-18) */}
                     {fullStoryCalloutConfig.enabled && (
                       <div
-                        className="absolute z-16 flex items-center justify-center pointer-events-none"
+                        className="absolute z-18 flex items-center justify-center pointer-events-none"
                         style={{
                           left: `${fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                          top: `${fullStoryCalloutConfig.rect?.y ?? 88}%`,
+                          top: `${fullStoryCalloutConfig.rect?.y ?? 85}%`,
                           width: `${fullStoryCalloutConfig.rect?.width ?? 80}%`,
                           height: `${fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
                         }}
@@ -3762,37 +4172,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Primary Headline (Part 5: Exact Font Color, Size, Family & Alignment without overrides) */}
-                    <div
-                      className="absolute px-2 z-15"
-                      style={{
-                        left: `${textSlots[0]?.rect?.x ?? 4}%`,
-                        top: textSlots[0]?.rect?.y ? `${textSlots[0].rect.y}%` : undefined,
-                        bottom: !textSlots[0]?.rect?.y ? `${footerConfig.footerHeightRatio * 100 + 2}%` : undefined,
-                        width: `${textSlots[0]?.rect?.width ?? 92}%`,
-                      }}
-                    >
-                      <div
-                        className="font-bold leading-snug drop-shadow-md px-1.5 py-1 rounded"
-                        style={{
-                          color: textSlots[0]?.textColor || typographyConfig?.primaryHeadline?.fontColor || '#FFFFFF',
-                          fontSize: `${Math.max(10, Math.min(22, Math.round(((textSlots[0]?.fontSize || typographyConfig?.primaryHeadline?.fontSize || 70) / 1080) * (selectedRatio === '4:5' ? 280 : 230))))}px`,
-                          fontFamily: typographyFontFamily || textSlots[0]?.fontFamily || 'Noto Sans Devanagari',
-                          textAlign: (textSlots[0]?.alignment as any) || 'center',
-                          backgroundColor:
-                            textSlots[0]?.backgroundColor === 'transparent' || !textSlots[0]?.backgroundColor
-                              ? 'transparent'
-                              : textSlots[0].backgroundColor,
-                        }}
-                      >
-                        {testHeadline}
-                      </div>
-                    </div>
-
                     {/* Optional POWERED BY Element */}
                     {poweredByConfig.enabled && (
                       <div
-                        className="absolute text-[7px] font-bold px-1.5 py-0.5 rounded shadow-sm z-25 truncate max-w-[90%]"
+                        className="absolute text-[7px] font-bold px-1.5 py-0.5 rounded shadow-sm z-25 truncate max-w-[90%] pointer-events-none"
                         style={{
                           left: `${poweredByConfig.rect.x}%`,
                           top: `${poweredByConfig.rect.y}%`,
@@ -3810,20 +4193,74 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     )}
 
-                    {/* Protected Footer (Part 7: Master Admin Footer) */}
-                    <div
-                      className={`absolute ${generatorMode === 'video' && videoFooterPosition === 'top' ? 'top-0 border-b' : 'bottom-0 border-t'} flex items-center justify-between px-2 text-[7px] font-bold z-30`}
-                      style={{
-                        height: `${footerConfig.footerHeightRatio * 100}%`,
-                        width: `${footerConfig.footerWidthPct || 100}%`,
-                        left: `${(100 - (footerConfig.footerWidthPct || 100)) / 2}%`,
-                        backgroundColor: footerConfig.footerBgColor || '#FFFFFF',
-                        color: footerConfig.footerTextColor || '#000000',
-                      }}
-                    >
-                      <span>@breakingnewswala</span>
-                      <span>📱 9406540644 | सत्यापित डिजिटल समाचार नेटवर्क</span>
-                    </div>
+                    {/* LAYER 9: Permanent Protected Footer (z-20) */}
+                    {(() => {
+                      const fRatio = footerConfig.footerHeightRatio || (selectedRatio === '4:5' ? 0.08 : 0.065);
+                      const fHeightPct = fRatio * 100;
+                      const fWidthPct = footerConfig.footerWidthPct || 100;
+                      let fBg = primaryFooterColor || footerConfig.primaryFooterColor || footerConfig.footerBgColor || '#FFFFFF';
+                      if (bannedFooterColor && fBg.trim().toLowerCase() === bannedFooterColor.trim().toLowerCase()) {
+                        fBg = '#000000';
+                      }
+                      const fColor = footerConfig.footerTextColor || '#000000';
+                      return (
+                        <div
+                          className={`absolute ${generatorMode === 'video' && videoFooterPosition === 'top' ? 'top-0 border-b' : 'bottom-0 border-t'} flex items-center justify-between px-2 text-[7px] font-bold z-20 pointer-events-none select-none`}
+                          style={{
+                            height: `${fHeightPct}%`,
+                            width: `${fWidthPct}%`,
+                            left: `${(100 - fWidthPct) / 2}%`,
+                            backgroundColor: fBg,
+                            color: fColor,
+                          }}
+                        >
+                          <span className="truncate max-w-[45%]">{currentUser?.username ? `@${currentUser.username}` : '@breakingnewswala'}</span>
+                          <span className="truncate max-w-[45%]">📱 9406540644 | सत्यापित नेटवर्क</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Sample Photo Upload Control for Test in Preview B */}
+                  <div className="w-full flex items-center justify-center gap-2 pt-2">
+                    <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer shadow transition">
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>{samplePhotoPreview ? 'सैंपल फोटो बदलें' : 'सैंपल फोटो अपलोड करें (स्लॉट टेस्ट)'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) {
+                              const url = ev.target.result as string;
+                              setSamplePhotoPreview(url);
+                              setTestPhotos((prev) => {
+                                const u = [...prev];
+                                u[0] = url;
+                                return u;
+                              });
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                    {samplePhotoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSamplePhotoPreview('');
+                          setTestPhotos([]);
+                        }}
+                        className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                      >
+                        फोटो हटाएँ
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
