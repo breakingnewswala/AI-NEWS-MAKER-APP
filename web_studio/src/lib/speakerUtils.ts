@@ -69,6 +69,7 @@ export function normalizeHeadlineText(input: any): string {
     .replace(/\[object\s+Object\]/gi, '')
     .replace(/\[object\s+Array\]/gi, '')
     .replace(/\b(?:undefined|null|NaN)\b/gi, '')
+    .replace(/^[\s,;.-]+|[\s,;.-]+$/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 
