@@ -62,6 +62,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         : rawCard.images,
     };
   }, [rawCard]);
+
+  const currentDynamicFrame = React.useMemo(() => {
+    return card.customDynamicFrame || (card.frameDesign ? getDynamicFrameById(card.frameDesign) : null);
+  }, [card.customDynamicFrame, card.frameDesign]);
+  const df = currentDynamicFrame;
+
   const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
   const hasUploadedPhoto = Boolean(
     (card.images?.main &&
@@ -1137,7 +1143,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       )}
 
       {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED (प्रतीकात्मक फोटो)): Vertical along Left Wall, Rotated 90° - Topmost Visual Layer */}
-      {!df?.watermarkConfig?.enabled && (card.photoDisclaimerType === 'ai' ||
+      {!currentDynamicFrame?.watermarkConfig?.enabled && (card.photoDisclaimerType === 'ai' ||
         card.photoDisclaimerType === 'representative' ||
         (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (
         <div
@@ -3468,7 +3474,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <span
                         className="px-2 py-0.5 rounded text-center whitespace-nowrap"
                         style={{
-                          backgroundColor: df.watermarkConfig.watermarkStyle === 'box' ? (df.watermarkConfig.bgColor || 'rgba(0,0,0,0.6)') : 'transparent',
+                          backgroundColor: (df.watermarkConfig.watermarkStyle === 'box' || df.watermarkConfig.watermarkStyle === 'boxed') ? (df.watermarkConfig.bgColor || 'rgba(0,0,0,0.6)') : 'transparent',
                           color: df.watermarkConfig.textColor || '#FFFFFF',
                           fontSize: `${Math.max(8, Math.round((df.watermarkConfig.fontSize || 14) * previewScale))}px`,
                           textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7)',

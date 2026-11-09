@@ -3624,8 +3624,7 @@ export default function App() {
 
       {/* 2. News Generator / Studio Tab */}
       {(currentTab === 'generator' || currentTab === 'studio') && (
-        <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में समस्या आई">
-          <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900 dark:text-slate-100 transition-colors">
+        <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900 dark:text-slate-100 transition-colors">
           {/* Studio Type Selector: On desktop shows both Graphic & Video; on mobile it is integrated into the sticky header */}
           <div className={`hidden lg:block w-full transition-all duration-300 ease-in-out overflow-hidden ${
             isStudioSelectorVisible && (!studioInitialItem ? 'max-h-20 opacity-100 mb-3' : 'max-h-20 opacity-100 mb-3')
@@ -3695,18 +3694,21 @@ export default function App() {
           </div>
 
           {studioMode === 'video' ? (
-            <div className="w-full">
-              <VideoStudioWeb
-                currentUser={currentUser}
-                initialVideo={studioInitialItem}
-                initialVideoUrl={studioInitialVideo || undefined}
-                initialHeadline={studioInitialHeadline || undefined}
-                onBackToGraphic={() => updateStudioMode('graphic')}
-                onNavigateHome={() => setCurrentTab('home')}
-              />
-            </div>
+            <ErrorBoundary fallbackTitle="वीडियो स्टूडियो लोड करने में समस्या आई">
+              <div className="w-full">
+                <VideoStudioWeb
+                  currentUser={currentUser}
+                  initialVideo={studioInitialItem}
+                  initialVideoUrl={studioInitialVideo || undefined}
+                  initialHeadline={studioInitialHeadline || undefined}
+                  onBackToGraphic={() => updateStudioMode('graphic')}
+                  onNavigateHome={() => setCurrentTab('home')}
+                />
+              </div>
+            </ErrorBoundary>
           ) : (
-            <>
+            <ErrorBoundary fallbackTitle="ग्राफिक स्टूडियो लोड करने में समस्या आई">
+              <>
               {/* ============================================================== */}
               {/* 1. MOBILE & TABLET RESPONSIVE WORKSPACE (xl:hidden) */}
               {/* ============================================================== */}
@@ -4355,10 +4357,10 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </>
+              </>
+            </ErrorBoundary>
           )}
         </main>
-      </ErrorBoundary>
       )}
 
       {/* 2. Videos Tab (Rich Video News Feed) */}

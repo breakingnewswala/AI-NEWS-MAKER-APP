@@ -195,20 +195,21 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
       : 'संपादकीय डेस्क आपकी चुनी हुई खबर के लिए पाँच प्रभावी हेडलाइन विकल्प तैयार कर रहा है।';
 
   const displayTitle = title || defaultTitle;
-  const currentSubtitle =
-    mode === 'video_render' && activeStages[activeStepIndex]?.detail
-      ? `${activeStages[activeStepIndex].detail}...`
-      : effectiveSubtitles[subtitleIndex] || effectiveSubtitles[0];
+
+  // Determine current active newsroom step based on elapsed time or loop
+  const activeStepIndex = durationSeconds && durationSeconds > 0
+    ? Math.min(activeStages.length - 1, Math.floor((elapsedSeconds / durationSeconds) * activeStages.length))
+    : Math.floor((Date.now() / 2500) % activeStages.length);
 
   // Calculated progress for presentation timer or indeterminate animation
   const progressPercent = durationSeconds && durationSeconds > 0
     ? Math.min(100, Math.round((elapsedSeconds / durationSeconds) * 100))
     : null;
 
-  // Determine current active newsroom step based on elapsed time or loop
-  const activeStepIndex = durationSeconds && durationSeconds > 0
-    ? Math.min(activeStages.length - 1, Math.floor((elapsedSeconds / durationSeconds) * activeStages.length))
-    : Math.floor((Date.now() / 2500) % activeStages.length);
+  const currentSubtitle =
+    mode === 'video_render' && activeStages[activeStepIndex]?.detail
+      ? `${activeStages[activeStepIndex].detail}...`
+      : effectiveSubtitles[subtitleIndex] || effectiveSubtitles[0];
 
   const CurrentStageIcon = activeStages[activeStepIndex]?.icon || (mode === 'video_render' ? Film : FileText);
 

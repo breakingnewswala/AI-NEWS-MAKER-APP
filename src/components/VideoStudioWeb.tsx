@@ -1175,7 +1175,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
   useEffect(() => {
     const loadPublishedVideoFrames = () => {
-      fetchDynamicFramesFromApi({ frameType: 'video' })
+      fetchDynamicFramesFromApi()
         .then((frames) => {
           const videoOnly = (frames || []).filter(
             (f) => (f.frameMode === 'video' || f.frameType === 'video') && f.publicationStatus === 'published'

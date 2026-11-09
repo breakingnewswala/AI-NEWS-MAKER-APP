@@ -43,6 +43,9 @@ export interface AssetLibraryItem {
     fontWeight?: string | number;
     textColor?: string;
     textAlign?: 'left' | 'center' | 'right';
+    align?: 'left' | 'center' | 'right';
+    color?: string;
+    weight?: string | number;
   };
 }
 
@@ -100,6 +103,8 @@ export interface PhotoSlotConfig {
   required: boolean;
   cropMode?: 'cover' | 'contain' | 'custom';
   cornerRadius?: number;
+  borderRadius?: number; // Alias for cornerRadius
+  defaultAssetUrl?: string; // Fallback default image or sample photo
   border?: { color: string; width: number };
   shadow?: boolean;
   bgRemoval?: boolean; // True for foreground cutout ONLY
@@ -169,6 +174,9 @@ export interface HeaderConfig {
     fontWeight?: string | number;
     textColor?: string;
     textAlign?: 'left' | 'center' | 'right';
+    align?: 'left' | 'center' | 'right';
+    color?: string;
+    weight?: string | number;
   };
 
   showCategory?: boolean;
@@ -191,7 +199,7 @@ export interface HeaderConfig {
   customHeaderUrl?: string;
 }
 
-export type WatermarkStyle = 'badge' | 'subtle_text' | 'boxed' | 'chip';
+export type WatermarkStyle = 'badge' | 'subtle_text' | 'boxed' | 'box' | 'chip';
 export type WatermarkPosition = 'right_edge' | 'left_edge' | 'top' | 'bottom' | 'center' | 'custom';
 export type WatermarkType = 'text' | 'image';
 
@@ -391,3 +399,5 @@ export interface UserStoryPreference {
   primaryStoryFrameId: string | null;
   updatedAt: number;
 }
+
+export type DynamicFrame = DynamicFrameTemplate;

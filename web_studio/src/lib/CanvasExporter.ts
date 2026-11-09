@@ -1787,7 +1787,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
   }
 
   // 6. PRIMARY HEADLINE TEXT (Respecting #000000 Black Text without white/dark shadow collision)
-  const textSlot = df.textSlots[0] || { rect: { x: 7, y: 63, width: 86, height: 27 }, textColor: '#FFFFFF' };
+  const textSlot = df.textSlots[0] || { rect: { x: 7, y: 63, width: 86, height: 27 }, textColor: '#FFFFFF', fontFamily: 'Baloo 2', backgroundColor: 'transparent' };
   const hx = (textSlot.rect.x / 100) * width;
   const hy = (textSlot.rect.y / 100) * height;
   const hw = (textSlot.rect.width / 100) * width;

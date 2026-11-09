@@ -1,3 +1,5 @@
+import type { DynamicFrameTemplate } from './types/dynamicFrame';
+
 export type CardLayout =
   | 'single'
   | 'double' // 50-50 Up & Down (आधी ऊपर, आधी नीचे)
@@ -320,6 +322,8 @@ export interface NewsCardData {
   headlineFontSize: number;
   headlineAlign?: 'justify' | 'center' | 'left';
   headlineFontFamily?: string; // e.g. 'Baloo 2', 'Noto Sans Devanagari', 'Poppins', etc.
+  headlineTextColor?: string; // Explicit headline text color override
+  textColor?: string; // Fallback text color
   highlightColor: string; // default "#FFDE00"
   darkOverlayOpacity: number; // 0 to 1
   showDate?: boolean; // default true: display 270° rotated date on right edge
@@ -333,6 +337,7 @@ export interface NewsCardData {
   footerStyle?: 'single-line' | 'standard'; // Strict single-line horizontal layout
 
   // Advanced Graphic Tools
+  customDynamicFrame?: DynamicFrameTemplate; // Live custom or edited dynamic frame template
   customTextOverlays?: CustomTextOverlay[]; // Floating text badges / custom font texts
   imageFilters?: ImageFilterSettings; // Photo filters & color grading
 }
