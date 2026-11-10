@@ -41,6 +41,7 @@ import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
+import { trackSpaPageView, trackEvent } from './lib/analyticsTracker';
 import { FolderClockIcon } from './icons/FolderClockIcon';
 import {
   FolderOpen,
@@ -536,44 +537,166 @@ export default function App() {
   const initialPageViewTrackedRef = useRef(false);
   const lastTrackedPathRef = useRef<string>(typeof window !== 'undefined' ? (window.location.pathname || '/') : '/');
 
-  const getTabTitle = (tab: AppTab): string => {
+  const getTabMeta = (tab: AppTab): { title: string; description: string; canonical: string } => {
+    const base = 'https://www.ainewsmaker.online';
     switch (tab) {
-      case 'home':
-        return 'AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो';
       case 'studio':
       case 'generator':
-        return 'फोटो न्यूज़ स्टूडियो — AI News Maker';
+        return {
+          title: 'फोटो न्यूज़ स्टूडियो — AI News Maker',
+          description: 'एआई फोटो फ्रेम जनरेटर — 4:5 व 9:16 पोर्ट्रेट फ्रेम, कस्टमाइज़ेबल हेडलाइन, लोगो और स्मार्ट लोकेशन बैज।',
+          canonical: `${base}/studio`,
+        };
       case 'videos':
-        return 'वीडियो न्यूज़ स्टूडियो व रील्स — AI News Maker';
+        return {
+          title: 'वीडियो न्यूज़ स्टूडियो व रील्स — AI News Maker',
+          description: 'एआई वीडियो न्यूज़ स्टूडियो — प्रोफेशनल वीडियो हेडलाइंस, लोअर-थर्ड्स, ब्रेकिंग न्यूज़ वीडियो रील्स और ऑडियो मिक्सर।',
+          canonical: `${base}/videos`,
+        };
       case 'newsroom':
       case 'epaper':
-        return 'लाइव न्यूज़ रूम — AI News Maker';
+        return {
+          title: 'लाइव डिजिटल न्यूज़ रूम — AI News Maker',
+          description: 'लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।',
+          canonical: `${base}/newsroom`,
+        };
       case 'profile':
-        return 'प्रोफ़ाइल एवं पैकेज प्लांस — AI News Maker';
+        return {
+          title: 'प्रोफ़ाइल एवं पैकेज प्लांस — AI News Maker',
+          description: 'एआई न्यूज़ मेकर सब्सक्रिप्शन प्लांस, कॉइन्स वॉलेट और रिपोर्टर प्रोफ़ाइल सेटिंग्स।',
+          canonical: `${base}/profile`,
+        };
       case 'terms':
-        return 'नियम एवं शर्तें (Terms & Conditions) — AI News Maker';
+        return {
+          title: 'नियम एवं शर्तें (Terms & Conditions) — AI News Maker',
+          description: 'एआई न्यूज़ मेकर नियम और शर्तें — आधिकारिक सेवा दिशा-निर्देश और उपयोग नीति।',
+          canonical: `${base}/terms`,
+        };
       case 'privacy':
-        return 'गोपनीयता नीति (Privacy Policy) — AI News Maker';
+        return {
+          title: 'गोपनीयता नीति (Privacy Policy) — AI News Maker',
+          description: 'एआई न्यूज़ मेकर गोपनीयता नीति — यूज़र डेटा सुरक्षा व गोपनीयता संरक्षण मानक।',
+          canonical: `${base}/privacy`,
+        };
       case 'refunds':
-        return 'रिफंड एवं रद्दीकरण नीति (Refund Policy) — AI News Maker';
+        return {
+          title: 'रिफंड एवं रद्दीकरण नीति (Refund Policy) — AI News Maker',
+          description: 'रिफंड व रद्दीकरण नीति — डिजिटल कॉइन्स व पैकेज खरीद रद्दीकरण दिशा-निर्देश।',
+          canonical: `${base}/refunds`,
+        };
       case 'support':
-        return 'सहायता एवं संपर्क (Support) — AI News Maker';
+        return {
+          title: 'सहायता एवं संपर्क (Support) — AI News Maker',
+          description: 'ग्राहक सहायता व संपर्क — एआई न्यूज़ मेकर हेल्पडेस्क, व्हाट्सएप सपोर्ट +91 9669802408।',
+          canonical: `${base}/support`,
+        };
       case 'delete-account':
-        return 'खाता हटाने का अनुरोध — AI News Maker';
+        return {
+          title: 'खाता हटाने का अनुरोध — AI News Maker',
+          description: 'खाता हटाने का अनुरोध — एआई न्यूज़ मेकर डेटा सुरक्षा व अकाउंट डिलीशन प्रक्रिया।',
+          canonical: `${base}/delete-account`,
+        };
+      case 'home':
       default:
-        return 'AI News Maker';
+        return {
+          title: 'AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो',
+          description: 'भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।',
+          canonical: `${base}/`,
+        };
     }
   };
 
-  // Dynamic document title & SPA Google Analytics 4 page_view tracking without duplicates
+  const applyPageMeta = (tab: AppTab) => {
+    if (typeof document === 'undefined') return;
+    const meta = getTabMeta(tab);
+    document.title = meta.title;
+
+    // Update meta description
+    let descTag = document.querySelector('meta[name="description"]');
+    if (!descTag) {
+      descTag = document.createElement('meta');
+      descTag.setAttribute('name', 'description');
+      document.head.appendChild(descTag);
+    }
+    descTag.setAttribute('content', meta.description);
+
+    // Update canonical link
+    let canLink = document.querySelector('link[rel="canonical"]');
+    if (!canLink) {
+      canLink = document.createElement('link');
+      canLink.setAttribute('rel', 'canonical');
+      document.head.appendChild(canLink);
+    }
+    canLink.setAttribute('href', meta.canonical);
+
+    // Update OpenGraph tags
+    const updateOg = (prop: string, val: string) => {
+      let og = document.querySelector(`meta[property="${prop}"]`);
+      if (!og) {
+        og = document.createElement('meta');
+        og.setAttribute('property', prop);
+        document.head.appendChild(og);
+      }
+      og.setAttribute('content', val);
+    };
+    updateOg('og:title', meta.title);
+    updateOg('og:description', meta.description);
+    updateOg('og:url', meta.canonical);
+
+    // Update Twitter card tags
+    const updateTw = (name: string, val: string) => {
+      let tw = document.querySelector(`meta[name="${name}"]`);
+      if (!tw) {
+        tw = document.createElement('meta');
+        tw.setAttribute('name', name);
+        document.head.appendChild(tw);
+      }
+      tw.setAttribute('content', val);
+    };
+    updateTw('twitter:title', meta.title);
+    updateTw('twitter:description', meta.description);
+
+    // Update BreadcrumbList structured data for non-home routes
+    let breadcrumbScript = document.getElementById('route-breadcrumb-schema');
+    if (tab !== 'home') {
+      if (!breadcrumbScript) {
+        breadcrumbScript = document.createElement('script');
+        breadcrumbScript.id = 'route-breadcrumb-schema';
+        breadcrumbScript.setAttribute('type', 'application/ld+json');
+        document.head.appendChild(breadcrumbScript);
+      }
+      breadcrumbScript.textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'होम (Home)',
+            item: 'https://www.ainewsmaker.online/',
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: meta.title.split('—')[0].trim(),
+            item: meta.canonical,
+          },
+        ],
+      });
+    } else if (breadcrumbScript) {
+      breadcrumbScript.remove();
+    }
+  };
+
+  // Dynamic document title, meta tags & SPA Google Analytics 4 / GTM tracking without duplicates
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    const pageTitle = getTabTitle(currentTab);
-    document.title = pageTitle;
+    applyPageMeta(currentTab);
 
     const currentPath = window.location.pathname || '/';
+    const currentMeta = getTabMeta(currentTab);
 
-    // Skip the initial mount to prevent duplicate page views, as gtag('config', 'G-L3HVGF1YEJ') handles initial load
+    // Skip the initial mount to prevent duplicate page views, as gtag('config') and GTM container handle initial load
     if (!initialPageViewTrackedRef.current) {
       initialPageViewTrackedRef.current = true;
       lastTrackedPathRef.current = currentPath;
@@ -583,14 +706,7 @@ export default function App() {
     // Only fire page_view event on actual internal SPA route changes (strictly zero PII)
     if (currentPath !== lastTrackedPathRef.current) {
       lastTrackedPathRef.current = currentPath;
-      if (typeof (window as any).gtag === 'function') {
-        (window as any).gtag('event', 'page_view', {
-          page_title: pageTitle,
-          page_location: window.location.href,
-          page_path: currentPath,
-          send_to: 'G-L3HVGF1YEJ',
-        });
-      }
+      trackSpaPageView(currentMeta.title, currentPath);
     }
   }, [currentTab]);
 

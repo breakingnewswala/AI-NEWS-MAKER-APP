@@ -17084,7 +17084,12 @@ function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
   try {
     const posts = loadNewsDatabase();
     if (Array.isArray(posts) && posts.length > 0) {
-      const published = posts.filter((p) => p && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true)).slice(0, 100);
+      let editorialDb = {};
+      try {
+        editorialDb = loadApprovedEditorialDatabase();
+      } catch {
+      }
+      const published = posts.filter((p) => p && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true || p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED"))).slice(0, 100);
       dynamicUrlsXml = published.map((p) => {
         const modDate = p.timestamp ? new Date(p.timestamp).toISOString().split("T")[0] : today;
         const safeId = encodeURIComponent(p.id || "");
@@ -17124,6 +17129,67 @@ app.get(["/sitemap.xml", "/sitemap"], (_req, res) => {
     res.status(500).send("Error generating sitemap");
   }
 });
+function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  const now = Date.now();
+  const twoDaysMs = 48 * 60 * 60 * 1e3;
+  let newsEntriesXml = "";
+  try {
+    const posts = loadNewsDatabase();
+    if (Array.isArray(posts) && posts.length > 0) {
+      let editorialDb = {};
+      try {
+        editorialDb = loadApprovedEditorialDatabase();
+      } catch {
+      }
+      const published = posts.filter(
+        (p) => p && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true || p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED"))
+      );
+      const recent = published.filter((p) => p.timestamp && now - p.timestamp <= twoDaysMs);
+      const targetPosts = recent.length > 0 ? recent : published.slice(0, 20);
+      newsEntriesXml = targetPosts.map((p) => {
+        const pubIso = p.timestamp ? new Date(p.timestamp).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
+        const safeId = encodeURIComponent(p.id || "");
+        const safeTitle = (p.title || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const imgXml = p.imageUrl ? `
+    <image:image>
+      <image:loc>${p.imageUrl.replace(/&/g, "&amp;")}</image:loc>
+      <image:title>${safeTitle}</image:title>
+    </image:image>` : "";
+        return `  <url>
+    <loc>${cleanBase}/newsroom?article=${safeId}</loc>
+    <news:news>
+      <news:publication>
+        <news:name>AI News Maker</news:name>
+        <news:language>hi</news:language>
+      </news:publication>
+      <news:publication_date>${pubIso}</news:publication_date>
+      <news:title>${safeTitle}</news:title>
+    </news:news>${imgXml}
+  </url>`;
+      }).join("\n");
+    }
+  } catch (err) {
+    console.warn("[Google News Sitemap] Failed to load posts:", err?.message);
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${newsEntriesXml}
+</urlset>`;
+}
+app.get(["/sitemap-news.xml", "/news-sitemap.xml"], (_req, res) => {
+  try {
+    const newsXml = generateNewsSitemapXml();
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=1800");
+    return res.send(newsXml);
+  } catch (err) {
+    console.error("[Google News Sitemap] Error serving sitemap-news.xml:", err?.message);
+    res.status(500).send("Error generating Google News sitemap");
+  }
+});
 app.get("/robots.txt", (_req, res) => {
   res.header("Content-Type", "text/plain; charset=utf-8");
   res.header("Cache-Control", "public, max-age=86400");
@@ -17145,8 +17211,9 @@ Disallow: /admin
 Disallow: /api/
 Disallow: /uploads/private/
 
-# Sitemap location
+# Sitemap locations
 Sitemap: https://www.ainewsmaker.online/sitemap.xml
+Sitemap: https://www.ainewsmaker.online/sitemap-news.xml
 `);
 });
 var RSS_SOURCES_FILE = import_path2.default.join(process.cwd(), "rss_sources_database.json");
@@ -31000,6 +31067,140 @@ async function startServer() {
       app.get(["/lite", "/lite/*"], (_req, res) => {
         res.redirect(301, "/");
       });
+      const injectServerSeoMeta = (rawHtml, req) => {
+        try {
+          const rawPath = (req.path || "/").toLowerCase();
+          const query = req.query || {};
+          const articleId = (query.article || query.news || (req.path.startsWith("/news/") ? req.path.replace("/news/", "") : "")).toString().trim();
+          const cleanBase = "https://www.ainewsmaker.online";
+          let title = "AI News Maker \u2014 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B";
+          let description = "\u092D\u093E\u0930\u0924 \u0915\u093E \u0928\u0902\u092C\u0930 1 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B\u0964 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915\u094D\u0938, \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0914\u0930 \u0908-\u092A\u0947\u092A\u0930 \u092C\u0928\u093E\u090F\u0902 \u0938\u0947\u0915\u0902\u0921\u094B\u0902 \u092E\u0947\u0902\u0964";
+          let canonical = `${cleanBase}${req.path === "/" ? "/" : req.path}`;
+          let ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+          let ogType = "website";
+          let extraJsonLd = "";
+          let prerenderContent = "";
+          if (articleId) {
+            try {
+              const posts = loadNewsDatabase();
+              const found = posts.find((p) => p && (p.id === articleId || p.docId && p.docId === articleId || p.title && encodeURIComponent(p.title) === articleId));
+              if (found) {
+                const safeTitle = (found.title || found.approvedHeadline || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930").trim();
+                const safeSummary = (found.summary || found.approvedCaptionDetailed || found.captionShort || safeTitle).trim();
+                title = `${safeTitle} \u2014 AI News Maker`;
+                description = safeSummary.slice(0, 280);
+                canonical = `${cleanBase}/newsroom?article=${encodeURIComponent(found.id)}`;
+                if (found.imageUrl) ogImage = found.imageUrl;
+                ogType = "article";
+                const isoDate = found.timestamp ? new Date(found.timestamp).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
+                const newsArticleSchema = {
+                  "@context": "https://schema.org",
+                  "@type": "NewsArticle",
+                  "headline": safeTitle,
+                  "description": description,
+                  "image": [ogImage],
+                  "datePublished": isoDate,
+                  "dateModified": isoDate,
+                  "author": [
+                    {
+                      "@type": "Organization",
+                      "name": "AI News Maker Editorial Desk",
+                      "url": cleanBase
+                    }
+                  ],
+                  "publisher": {
+                    "@type": "NewsMediaOrganization",
+                    "name": "AI News Maker",
+                    "logo": {
+                      "@type": "ImageObject",
+                      "url": `${cleanBase}/assets/breaking_news_wala_logo.png`
+                    }
+                  },
+                  "mainEntityOfPage": canonical
+                };
+                extraJsonLd = `
+    <script type="application/ld+json">${JSON.stringify(newsArticleSchema)}</script>`;
+                prerenderContent = `
+                  <article class="bot-news-prerender" style="max-width:800px;margin:20px auto;padding:20px;font-family:sans-serif;color:#f8fafc;">
+                    <header>
+                      <nav aria-label="Breadcrumb"><a href="${cleanBase}/" style="color:#f59e0b;">\u0939\u094B\u092E</a> &raquo; <a href="${cleanBase}/newsroom" style="color:#f59e0b;">\u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0942\u092E</a></nav>
+                      <h1 style="font-size:26px;font-weight:700;margin:15px 0;">${safeTitle}</h1>
+                      <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0921\u0947\u0938\u094D\u0915</p>
+                    </header>
+                    ${found.imageUrl ? `<figure><img src="${found.imageUrl}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
+                    <div class="content" style="line-height:1.7;font-size:16px;">
+                      <p>${safeSummary}</p>
+                    </div>
+                  </article>
+                `;
+              }
+            } catch (err) {
+              console.warn("[SEO Prerender] Error resolving article:", err?.message);
+            }
+          } else if (rawPath.startsWith("/studio") || rawPath.startsWith("/generator")) {
+            title = "\u092B\u094B\u091F\u094B \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u2014 AI News Maker";
+            description = "\u090F\u0906\u0908 \u092B\u094B\u091F\u094B \u092B\u094D\u0930\u0947\u092E \u091C\u0928\u0930\u0947\u091F\u0930 \u2014 4:5 \u0935 9:16 \u092A\u094B\u0930\u094D\u091F\u094D\u0930\u0947\u091F \u092B\u094D\u0930\u0947\u092E, \u0915\u0938\u094D\u091F\u092E\u093E\u0907\u091C\u093C\u0947\u092C\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0928, \u0932\u094B\u0917\u094B \u0914\u0930 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0932\u094B\u0915\u0947\u0936\u0928 \u092C\u0948\u091C\u0964";
+            canonical = `${cleanBase}/studio`;
+          } else if (rawPath.startsWith("/videos")) {
+            title = "\u0935\u0940\u0921\u093F\u092F\u094B \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0935 \u0930\u0940\u0932\u094D\u0938 \u2014 AI News Maker";
+            description = "\u090F\u0906\u0908 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u2014 \u092A\u094D\u0930\u094B\u092B\u0947\u0936\u0928\u0932 \u0935\u0940\u0921\u093F\u092F\u094B \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938, \u0932\u094B\u0905\u0930-\u0925\u0930\u094D\u0921\u094D\u0938, \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0914\u0930 \u0911\u0921\u093F\u092F\u094B \u092E\u093F\u0915\u094D\u0938\u0930\u0964";
+            canonical = `${cleanBase}/videos`;
+          } else if (rawPath.startsWith("/newsroom")) {
+            title = "\u0932\u093E\u0907\u0935 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0942\u092E \u2014 AI News Maker";
+            description = "\u0932\u093E\u0907\u0935 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0942\u092E \u2014 \u092A\u094D\u0930\u092E\u093E\u0923\u093F\u0924 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0938\u092E\u093E\u091A\u093E\u0930, \u0924\u093E\u091C\u093C\u093E \u0938\u0941\u0930\u094D\u0916\u093F\u092F\u093E\u0901 \u0914\u0930 \u092E\u0932\u094D\u091F\u0940-\u0938\u094B\u0930\u094D\u0938 \u0906\u0930\u090F\u0938\u090F\u0938 \u092B\u093C\u0940\u0921\u0964";
+            canonical = `${cleanBase}/newsroom`;
+          } else if (rawPath.startsWith("/profile")) {
+            title = "\u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u090F\u0935\u0902 \u092A\u0948\u0915\u0947\u091C \u092A\u094D\u0932\u093E\u0902\u0938 \u2014 AI News Maker";
+            description = "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930 \u0938\u092C\u094D\u0938\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092A\u094D\u0932\u093E\u0902\u0938, \u0915\u0949\u0907\u0928\u094D\u0938 \u0935\u0949\u0932\u0947\u091F \u0914\u0930 \u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0930 \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0938\u0947\u091F\u093F\u0902\u0917\u094D\u0938\u0964";
+            canonical = `${cleanBase}/profile`;
+          } else if (rawPath.startsWith("/terms")) {
+            title = "\u0928\u093F\u092F\u092E \u090F\u0935\u0902 \u0936\u0930\u094D\u0924\u0947\u0902 (Terms & Conditions) \u2014 AI News Maker";
+            description = "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930 \u0928\u093F\u092F\u092E \u0914\u0930 \u0936\u0930\u094D\u0924\u0947\u0902 \u2014 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u0947\u0935\u093E \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0914\u0930 \u0909\u092A\u092F\u094B\u0917 \u0928\u0940\u0924\u093F\u0964";
+            canonical = `${cleanBase}/terms`;
+          } else if (rawPath.startsWith("/privacy")) {
+            title = "\u0917\u094B\u092A\u0928\u0940\u092F\u0924\u093E \u0928\u0940\u0924\u093F (Privacy Policy) \u2014 AI News Maker";
+            description = "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930 \u0917\u094B\u092A\u0928\u0940\u092F\u0924\u093E \u0928\u0940\u0924\u093F \u2014 \u092F\u0942\u091C\u093C\u0930 \u0921\u0947\u091F\u093E \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0935 \u0917\u094B\u092A\u0928\u0940\u092F\u0924\u093E \u0938\u0902\u0930\u0915\u094D\u0937\u0923 \u092E\u093E\u0928\u0915\u0964";
+            canonical = `${cleanBase}/privacy`;
+          } else if (rawPath.startsWith("/refunds")) {
+            title = "\u0930\u093F\u092B\u0902\u0921 \u090F\u0935\u0902 \u0930\u0926\u094D\u0926\u0940\u0915\u0930\u0923 \u0928\u0940\u0924\u093F (Refund Policy) \u2014 AI News Maker";
+            description = "\u0930\u093F\u092B\u0902\u0921 \u0935 \u0930\u0926\u094D\u0926\u0940\u0915\u0930\u0923 \u0928\u0940\u0924\u093F \u2014 \u0921\u093F\u091C\u093F\u091F\u0932 \u0915\u0949\u0907\u0928\u094D\u0938 \u0935 \u092A\u0948\u0915\u0947\u091C \u0916\u0930\u0940\u0926 \u0930\u0926\u094D\u0926\u0940\u0915\u0930\u0923 \u0926\u093F\u0936\u093E-\u0928\u093F\u0930\u094D\u0926\u0947\u0936\u0964";
+            canonical = `${cleanBase}/refunds`;
+          } else if (rawPath.startsWith("/support")) {
+            title = "\u0938\u0939\u093E\u092F\u0924\u093E \u090F\u0935\u0902 \u0938\u0902\u092A\u0930\u094D\u0915 (Support) \u2014 AI News Maker";
+            description = "\u0917\u094D\u0930\u093E\u0939\u0915 \u0938\u0939\u093E\u092F\u0924\u093E \u0935 \u0938\u0902\u092A\u0930\u094D\u0915 \u2014 \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930 \u0939\u0947\u0932\u094D\u092A\u0921\u0947\u0938\u094D\u0915, \u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A \u0938\u092A\u094B\u0930\u094D\u091F +91 9669802408\u0964";
+            canonical = `${cleanBase}/support`;
+          } else if (rawPath.startsWith("/delete-account")) {
+            title = "\u0916\u093E\u0924\u093E \u0939\u091F\u093E\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u2014 AI News Maker";
+            description = "\u0916\u093E\u0924\u093E \u0939\u091F\u093E\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u2014 \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930 \u0921\u0947\u091F\u093E \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0935 \u0905\u0915\u093E\u0909\u0902\u091F \u0921\u093F\u0932\u0940\u0936\u0928 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E\u0964";
+            canonical = `${cleanBase}/delete-account`;
+          }
+          let modified = rawHtml;
+          modified = modified.replace(/<title>.*?<\/title>/i, `<title>${title}</title>`);
+          modified = modified.replace(/<meta\s+name=["']description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="description" content="${description.replace(/"/g, "&quot;")}" />`);
+          modified = modified.replace(/<link\s+rel=["']canonical["']\s+href=["'][^"']*["']\s*\/?>/i, `<link rel="canonical" href="${canonical}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:title" content="${title.replace(/"/g, "&quot;")}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:description" content="${description.replace(/"/g, "&quot;")}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:url["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:url" content="${canonical}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:type["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:type" content="${ogType}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:title" content="${title.replace(/"/g, "&quot;")}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:description" content="${description.replace(/"/g, "&quot;")}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:image" content="${ogImage}" />`);
+          if (extraJsonLd) {
+            modified = modified.replace("</head>", `${extraJsonLd}
+  </head>`);
+          }
+          const ua = (req.headers["user-agent"] || "").toLowerCase();
+          const isBot = /googlebot|bingbot|yandex|duckduckbot|slurp|baiduspider|twitterbot|facebookexternalhit|whatsapp|linkedinbot|embedly|quora link preview|showyoubot|outbrain/i.test(ua);
+          if (isBot && prerenderContent) {
+            modified = modified.replace('<div id="root">', `<div id="root">${prerenderContent}`);
+          }
+          return modified;
+        } catch (err) {
+          console.warn("[SEO Injection] Fallback to raw HTML:", err?.message);
+          return rawHtml;
+        }
+      };
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {
           return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
@@ -31028,6 +31229,7 @@ async function startServer() {
               }
             }
           }
+          html = injectServerSeoMeta(html, req);
           return res.status(200).set({ "Content-Type": "text/html" }).send(html);
         } catch {
           return res.sendFile(indexHtmlPath);

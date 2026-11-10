@@ -16,5 +16,6 @@ Disallow: /admin
 Disallow: /api/
 Disallow: /uploads/private/
 
-# Sitemap location
+# Sitemap locations
 Sitemap: https://www.ainewsmaker.online/sitemap.xml
+Sitemap: https://www.ainewsmaker.online/sitemap-news.xml

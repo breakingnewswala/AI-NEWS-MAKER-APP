@@ -7735,8 +7735,18 @@ function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online"): string 
   try {
     const posts = loadNewsDatabase();
     if (Array.isArray(posts) && posts.length > 0) {
+      let editorialDb: any = {};
+      try { editorialDb = loadApprovedEditorialDatabase(); } catch {}
       const published = posts
-        .filter((p) => p && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true))
+        .filter((p) => p && (
+          p.publicationStatus === "PUBLISHED" ||
+          p.isPublished === true ||
+          p.editorialApproved === true ||
+          p.approvalStatus === "APPROVED" ||
+          p.status === "APPROVED" ||
+          p.status === "published" ||
+          Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED")
+        ))
         .slice(0, 100);
 
       dynamicUrlsXml = published
@@ -7780,6 +7790,80 @@ app.get(["/sitemap.xml", "/sitemap"], (_req, res) => {
   }
 });
 
+// --- Dedicated Google News Sitemap Handler (<news:news> extension) ---
+function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online"): string {
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  const now = Date.now();
+  const twoDaysMs = 48 * 60 * 60 * 1000;
+
+  let newsEntriesXml = "";
+  try {
+    const posts = loadNewsDatabase();
+    if (Array.isArray(posts) && posts.length > 0) {
+      let editorialDb: any = {};
+      try { editorialDb = loadApprovedEditorialDatabase(); } catch {}
+      const published = posts.filter(
+        (p) => p && (
+          p.publicationStatus === "PUBLISHED" ||
+          p.isPublished === true ||
+          p.editorialApproved === true ||
+          p.approvalStatus === "APPROVED" ||
+          p.status === "APPROVED" ||
+          p.status === "published" ||
+          Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED")
+        )
+      );
+      // Include articles published in the last 48 hours; fallback to recent 20 if none within 48h
+      const recent = published.filter((p) => p.timestamp && now - p.timestamp <= twoDaysMs);
+      const targetPosts = recent.length > 0 ? recent : published.slice(0, 20);
+
+      newsEntriesXml = targetPosts
+        .map((p) => {
+          const pubIso = p.timestamp ? new Date(p.timestamp).toISOString() : new Date().toISOString();
+          const safeId = encodeURIComponent(p.id || "");
+          const safeTitle = (p.title || "ताज़ा समाचार").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          const imgXml = p.imageUrl
+            ? `\n    <image:image>\n      <image:loc>${p.imageUrl.replace(/&/g, "&amp;")}</image:loc>\n      <image:title>${safeTitle}</image:title>\n    </image:image>`
+            : "";
+
+          return `  <url>
+    <loc>${cleanBase}/newsroom?article=${safeId}</loc>
+    <news:news>
+      <news:publication>
+        <news:name>AI News Maker</news:name>
+        <news:language>hi</news:language>
+      </news:publication>
+      <news:publication_date>${pubIso}</news:publication_date>
+      <news:title>${safeTitle}</news:title>
+    </news:news>${imgXml}
+  </url>`;
+        })
+        .join("\n");
+    }
+  } catch (err: any) {
+    console.warn("[Google News Sitemap] Failed to load posts:", err?.message);
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${newsEntriesXml}
+</urlset>`;
+}
+
+app.get(["/sitemap-news.xml", "/news-sitemap.xml"], (_req, res) => {
+  try {
+    const newsXml = generateNewsSitemapXml();
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=1800");
+    return res.send(newsXml);
+  } catch (err: any) {
+    console.error("[Google News Sitemap] Error serving sitemap-news.xml:", err?.message);
+    res.status(500).send("Error generating Google News sitemap");
+  }
+});
+
 app.get("/robots.txt", (_req, res) => {
   res.header("Content-Type", "text/plain; charset=utf-8");
   res.header("Cache-Control", "public, max-age=86400");
@@ -7801,8 +7885,9 @@ Disallow: /admin
 Disallow: /api/
 Disallow: /uploads/private/
 
-# Sitemap location
+# Sitemap locations
 Sitemap: https://www.ainewsmaker.online/sitemap.xml
+Sitemap: https://www.ainewsmaker.online/sitemap-news.xml
 `);
 });
 
@@ -25121,6 +25206,153 @@ async function startServer() {
         res.redirect(301, "/");
       });
 
+      // Server-Side SEO & Bot Prerender Injection Engine
+      const injectServerSeoMeta = (rawHtml: string, req: express.Request): string => {
+        try {
+          const rawPath = (req.path || "/").toLowerCase();
+          const query = req.query || {};
+          const articleId = (
+            query.article ||
+            query.news ||
+            (req.path.startsWith("/news/") ? req.path.replace("/news/", "") : "")
+          ).toString().trim();
+          const cleanBase = "https://www.ainewsmaker.online";
+
+          let title = "AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो";
+          let description = "भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।";
+          let canonical = `${cleanBase}${req.path === "/" ? "/" : req.path}`;
+          let ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+          let ogType = "website";
+          let extraJsonLd = "";
+          let prerenderContent = "";
+
+          // Check if article requested
+          if (articleId) {
+            try {
+              const posts = loadNewsDatabase();
+              const found = posts.find((p) => p && (p.id === articleId || (p.docId && p.docId === articleId) || (p.title && encodeURIComponent(p.title) === articleId)));
+              if (found) {
+                const safeTitle = (found.title || found.approvedHeadline || "ताज़ा समाचार").trim();
+                const safeSummary = (found.summary || found.approvedCaptionDetailed || found.captionShort || safeTitle).trim();
+                title = `${safeTitle} — AI News Maker`;
+                description = safeSummary.slice(0, 280);
+                canonical = `${cleanBase}/newsroom?article=${encodeURIComponent(found.id)}`;
+                if (found.imageUrl) ogImage = found.imageUrl;
+                ogType = "article";
+
+                const isoDate = found.timestamp ? new Date(found.timestamp).toISOString() : new Date().toISOString();
+                const newsArticleSchema = {
+                  "@context": "https://schema.org",
+                  "@type": "NewsArticle",
+                  "headline": safeTitle,
+                  "description": description,
+                  "image": [ogImage],
+                  "datePublished": isoDate,
+                  "dateModified": isoDate,
+                  "author": [
+                    {
+                      "@type": "Organization",
+                      "name": "AI News Maker Editorial Desk",
+                      "url": cleanBase,
+                    },
+                  ],
+                  "publisher": {
+                    "@type": "NewsMediaOrganization",
+                    "name": "AI News Maker",
+                    "logo": {
+                      "@type": "ImageObject",
+                      "url": `${cleanBase}/assets/breaking_news_wala_logo.png`,
+                    },
+                  },
+                  "mainEntityOfPage": canonical,
+                };
+                extraJsonLd = `\n    <script type="application/ld+json">${JSON.stringify(newsArticleSchema)}</script>`;
+
+                prerenderContent = `
+                  <article class="bot-news-prerender" style="max-width:800px;margin:20px auto;padding:20px;font-family:sans-serif;color:#f8fafc;">
+                    <header>
+                      <nav aria-label="Breadcrumb"><a href="${cleanBase}/" style="color:#f59e0b;">होम</a> &raquo; <a href="${cleanBase}/newsroom" style="color:#f59e0b;">न्यूज़ रूम</a></nav>
+                      <h1 style="font-size:26px;font-weight:700;margin:15px 0;">${safeTitle}</h1>
+                      <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker संपादकीय डेस्क</p>
+                    </header>
+                    ${found.imageUrl ? `<figure><img src="${found.imageUrl}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
+                    <div class="content" style="line-height:1.7;font-size:16px;">
+                      <p>${safeSummary}</p>
+                    </div>
+                  </article>
+                `;
+              }
+            } catch (err: any) {
+              console.warn("[SEO Prerender] Error resolving article:", err?.message);
+            }
+          } else if (rawPath.startsWith("/studio") || rawPath.startsWith("/generator")) {
+            title = "फोटो न्यूज़ स्टूडियो — AI News Maker";
+            description = "एआई फोटो फ्रेम जनरेटर — 4:5 व 9:16 पोर्ट्रेट फ्रेम, कस्टमाइज़ेबल हेडलाइन, लोगो और स्मार्ट लोकेशन बैज।";
+            canonical = `${cleanBase}/studio`;
+          } else if (rawPath.startsWith("/videos")) {
+            title = "वीडियो न्यूज़ स्टूडियो व रील्स — AI News Maker";
+            description = "एआई वीडियो न्यूज़ स्टूडियो — प्रोफेशनल वीडियो हेडलाइंस, लोअर-थर्ड्स, ब्रेकिंग न्यूज़ वीडियो रील्स और ऑडियो मिक्सर।";
+            canonical = `${cleanBase}/videos`;
+          } else if (rawPath.startsWith("/newsroom")) {
+            title = "लाइव डिजिटल न्यूज़ रूम — AI News Maker";
+            description = "लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।";
+            canonical = `${cleanBase}/newsroom`;
+          } else if (rawPath.startsWith("/profile")) {
+            title = "प्रोफ़ाइल एवं पैकेज प्लांस — AI News Maker";
+            description = "एआई न्यूज़ मेकर सब्सक्रिप्शन प्लांस, कॉइन्स वॉलेट और रिपोर्टर प्रोफ़ाइल सेटिंग्स।";
+            canonical = `${cleanBase}/profile`;
+          } else if (rawPath.startsWith("/terms")) {
+            title = "नियम एवं शर्तें (Terms & Conditions) — AI News Maker";
+            description = "एआई न्यूज़ मेकर नियम और शर्तें — आधिकारिक सेवा दिशा-निर्देश और उपयोग नीति।";
+            canonical = `${cleanBase}/terms`;
+          } else if (rawPath.startsWith("/privacy")) {
+            title = "गोपनीयता नीति (Privacy Policy) — AI News Maker";
+            description = "एआई न्यूज़ मेकर गोपनीयता नीति — यूज़र डेटा सुरक्षा व गोपनीयता संरक्षण मानक।";
+            canonical = `${cleanBase}/privacy`;
+          } else if (rawPath.startsWith("/refunds")) {
+            title = "रिफंड एवं रद्दीकरण नीति (Refund Policy) — AI News Maker";
+            description = "रिफंड व रद्दीकरण नीति — डिजिटल कॉइन्स व पैकेज खरीद रद्दीकरण दिशा-निर्देश।";
+            canonical = `${cleanBase}/refunds`;
+          } else if (rawPath.startsWith("/support")) {
+            title = "सहायता एवं संपर्क (Support) — AI News Maker";
+            description = "ग्राहक सहायता व संपर्क — एआई न्यूज़ मेकर हेल्पडेस्क, व्हाट्सएप सपोर्ट +91 9669802408।";
+            canonical = `${cleanBase}/support`;
+          } else if (rawPath.startsWith("/delete-account")) {
+            title = "खाता हटाने का अनुरोध — AI News Maker";
+            description = "खाता हटाने का अनुरोध — एआई न्यूज़ मेकर डेटा सुरक्षा व अकाउंट डिलीशन प्रक्रिया।";
+            canonical = `${cleanBase}/delete-account`;
+          }
+
+          let modified = rawHtml;
+          modified = modified.replace(/<title>.*?<\/title>/i, `<title>${title}</title>`);
+          modified = modified.replace(/<meta\s+name=["']description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="description" content="${description.replace(/"/g, '&quot;')}" />`);
+          modified = modified.replace(/<link\s+rel=["']canonical["']\s+href=["'][^"']*["']\s*\/?>/i, `<link rel="canonical" href="${canonical}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:title" content="${title.replace(/"/g, '&quot;')}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:url["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:url" content="${canonical}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:type["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:type" content="${ogType}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:title" content="${title.replace(/"/g, '&quot;')}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:image" content="${ogImage}" />`);
+
+          if (extraJsonLd) {
+            modified = modified.replace("</head>", `${extraJsonLd}\n  </head>`);
+          }
+
+          const ua = (req.headers["user-agent"] || "").toLowerCase();
+          const isBot = /googlebot|bingbot|yandex|duckduckbot|slurp|baiduspider|twitterbot|facebookexternalhit|whatsapp|linkedinbot|embedly|quora link preview|showyoubot|outbrain/i.test(ua);
+          if (isBot && prerenderContent) {
+            modified = modified.replace('<div id="root">', `<div id="root">${prerenderContent}`);
+          }
+
+          return modified;
+        } catch (err: any) {
+          console.warn("[SEO Injection] Fallback to raw HTML:", err?.message);
+          return rawHtml;
+        }
+      };
+
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {
           return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
@@ -25150,6 +25382,7 @@ async function startServer() {
               }
             }
           }
+          html = injectServerSeoMeta(html, req);
           return res.status(200).set({ "Content-Type": "text/html" }).send(html);
         } catch {
           return res.sendFile(indexHtmlPath);
