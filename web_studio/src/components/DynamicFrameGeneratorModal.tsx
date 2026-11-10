@@ -617,7 +617,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 },
       locationStyle: 'pill',
       locationBgColor: '#DC2626',
-      locationTextColor: '#FFFFFF',
+      locationTextColor: '#000000',
       locationFontSize: 24,
       locationShowIcon: true,
       locationAlign: 'center',
@@ -1689,7 +1689,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               const libBadge = locationBadgeLibrary.find(
                 (b) => b.id === headerConfig.locationBadgeAssetId || (b.url || b.assetUrl) === badgeAsset
               );
-              if (!locColor || (locColor.toUpperCase() === '#FFFFFF' && libBadge?.typographyConfig?.textColor)) {
+              if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
                 locColor = libBadge?.typographyConfig?.textColor || '#000000';
               } else if (!locColor && badgeAsset) {
                 locColor = '#000000';

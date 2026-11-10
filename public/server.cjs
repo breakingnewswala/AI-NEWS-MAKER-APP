@@ -19663,7 +19663,9 @@ app.get("/api/dynamic-frames", async (req, res) => {
       ];
       saveDynamicFramesDatabase(frames);
     }
-    let filtered = isMaster ? frames : frames.filter((f) => f.publicationStatus === "published");
+    let filtered = isMaster ? frames : frames.filter(
+      (f) => f.publicationStatus === "published" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
+    );
     const { frameType, frameMode } = req.query;
     if (frameType) {
       filtered = filtered.filter((f) => {

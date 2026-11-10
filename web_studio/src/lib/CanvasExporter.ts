@@ -1858,7 +1858,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
 
     lines.forEach((line, lIdx) => {
-      const lineY = layout.startY + lIdx * lineHeight + lineHeight / 2;
+      const lineY = layout.startY + lIdx * lineHeight;
       let totalLineWidth = 0;
       const spaceWidth = ctx.measureText(' ').width;
       const tokenWidths: number[] = [];

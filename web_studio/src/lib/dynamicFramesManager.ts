@@ -599,9 +599,12 @@ export async function fetchDynamicFramesFromApi(
       const data = await res.json();
       if (data.success && Array.isArray(data.frames)) {
         const normalized = data.frames.map(normalizeDynamicFrame);
+        // The backend is authoritative: API records take precedence over stale localStorage
         const local = getLocalDynamicFrames();
         const map = new Map<string, DynamicFrameTemplate>();
-        local.forEach((f) => map.set(f.id, f));
+        local.forEach((f) => {
+          if (f.id.startsWith('temp_')) map.set(f.id, f);
+        });
         normalized.forEach((f) => map.set(f.id, f));
         const merged = Array.from(map.values());
         saveLocalDynamicFrames(merged);
