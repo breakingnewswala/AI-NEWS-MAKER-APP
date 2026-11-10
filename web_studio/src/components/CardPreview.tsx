@@ -44,7 +44,8 @@ const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     } catch {}
   }
   target.onerror = null;
-  target.style.display = 'none';
+  // Avoid destructive display:none which permanently hides DOM element across React re-renders
+  target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
 };
 
 export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale = 1, className, showSafeZone = false, onChange }) => {
@@ -82,13 +83,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const df = currentDynamicFrame;
 
   const isSuperBreaking = card.frameDesign === 'jacket-breaking-red';
+  const resolvedMainRaw = (
+    card.images?.main ||
+    (card as any).photoUrl ||
+    (card as any).testSamplePhotoUrl ||
+    ''
+  ).trim();
+
   const hasUploadedPhoto = Boolean(
-    (card.images?.main &&
-      card.images.main.trim().length > 0 &&
-      card.images.main !== FALLBACK_NEWS_BG &&
-      !card.images.main.includes('placeholder_news_photo') &&
-      !card.images.main.includes('placeholder_news_search') &&
-      !card.images.main.includes('preview_placeholder')) ||
+    (resolvedMainRaw &&
+      resolvedMainRaw.length > 0 &&
+      resolvedMainRaw !== FALLBACK_NEWS_BG &&
+      !resolvedMainRaw.includes('placeholder_news_photo') &&
+      !resolvedMainRaw.includes('placeholder_news_search') &&
+      !resolvedMainRaw.includes('preview_placeholder')) ||
     (card.images?.second && card.images.second.trim().length > 0)
   );
   const getProxiedImageUrl = (url?: string) => {
@@ -113,7 +121,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   };
 
   const mainPhotoSrc = hasUploadedPhoto
-    ? getProxiedImageUrl(card.images?.main)
+    ? getProxiedImageUrl(resolvedMainRaw)
     : '';
 
   const resolvedSecond = (card.images?.second && card.images.second.trim().length > 0 && card.images.second !== card.images.main)
@@ -638,7 +646,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       objectFit: (slot.cropMode as any) || 'cover',
                       filter: getFilterCss(card.imageFilters),
                     }}
-                    crossOrigin="anonymous"
+                    onError={handleImgError}
                   />
                 </div>
               );
@@ -658,7 +666,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               src={bgUrl}
               alt="Dynamic Frame Artwork Overlay"
               className="w-full h-full object-contain pointer-events-none select-none"
-              crossOrigin="anonymous"
             />
           </div>
         );
@@ -3364,10 +3371,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   }}
                 >
                   <img
-                    src={card.customLogoUrl || (card as any).channelLogo || '/assets/logo.png'}
+                    src={card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png'}
                     alt="Channel Logo"
                     className="max-w-full max-h-full object-contain"
-                    crossOrigin="anonymous"
                   />
                 </div>
               )}
@@ -3382,10 +3388,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      minWidth: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      width: 'max-content',
+                      maxWidth: '85%',
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundImage: `url(${badgeAsset})`,
-                      backgroundSize: 'contain',
+                      backgroundSize: '100% 100%',
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
                       color: locColor,
@@ -3416,7 +3424,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         </span>
                       </div>
                     ) : (
-                      <div className="absolute inset-y-0 left-[28%] right-2 flex items-center justify-center overflow-hidden">
+                      <div
+                        className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
+                        style={{
+                          left: `${Math.round(((df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct) ?? 0.28) * 100)}%`,
+                          right: `${Math.round(((df.sliceConfig?.rightWidthPct ?? df.headerConfig?.sliceConfig?.rightWidthPct) ?? 0.15) * 100)}%`,
+                        }}
+                      >
                         <span
                           className="truncate"
                           style={{

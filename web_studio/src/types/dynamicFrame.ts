@@ -35,6 +35,7 @@ export interface AssetLibraryItem {
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
+  sliceConfig?: { leftWidthPct: number; rightWidthPct: number; centerMinPct?: number };
   // Normalized internal text-marking region relative to the badge image (0 to 100 percentage or 0 to 1 fraction)
   textRegion?: NormalizedRect;
   typographyConfig?: {
@@ -171,6 +172,7 @@ export interface HeaderConfig {
   locationBadgeMode?: LocationBadgeMode;
   manualLocationAsset?: string; // Uploaded manual badge skin or static badge
   locationBadgeAssetId?: string;
+  sliceConfig?: { leftWidthPct: number; rightWidthPct: number; centerMinPct?: number };
   textRegion?: NormalizedRect;
   typographyConfig?: {
     fontFamily?: string;

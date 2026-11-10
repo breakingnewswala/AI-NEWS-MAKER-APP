@@ -10435,10 +10435,14 @@ const DUMMY_ASSET_IDS = new Set([
   "callout_yellow_banner",
   "callout_crimson_strip",
   "callout_neon_blue_tag",
+  "suvichar_sunrise_morning",
+  "suvichar_spiritual_temple",
+  "suvichar_motivation_mountain",
+  "suvichar_crimson_velvet",
 ]);
 
 function getDefaultAssetLibraries(): any[] {
-  // Pure genuine assets only: Location Badges, Story Callouts & Suvichar BGs
+  // Pure genuine assets only: Location Badges, Story Callouts (Suvichar BGs populated via genuine admin uploads only)
   return [
     {
       id: "asset_1794132101671_u0g9s",
@@ -10449,6 +10453,7 @@ function getDefaultAssetLibraries(): any[] {
       enabled: true,
       createdAt: 1794132101671,
       updatedAt: 1794132144005,
+      sliceConfig: { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
       textRegion: { x: 32, y: 24, width: 58, height: 55 },
       typographyConfig: { fontFamily: "Mukta", fontSize: 50, fontWeight: "bold", textColor: "#000000", textAlign: "center" },
     },
@@ -10458,46 +10463,6 @@ function getDefaultAssetLibraries(): any[] {
       category: "general",
       type: "callout_png",
       url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "suvichar_sunrise_morning",
-      name: "स्वर्णिम सूर्योदय व प्रकृति (Morning Suvichar)",
-      category: "morning",
-      type: "suvichar_background",
-      url: "/assets/suvichar_sunrise_morning.jpg",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "suvichar_spiritual_temple",
-      name: "आध्यात्मिक दिव्य मंदिर व दीप आभा (Spiritual)",
-      category: "spiritual",
-      type: "suvichar_background",
-      url: "/assets/suvichar_spiritual_temple.jpg",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "suvichar_motivation_mountain",
-      name: "पर्वत शिखर व खुला आसमान (Motivation / Quotes)",
-      category: "motivation",
-      type: "suvichar_background",
-      url: "/assets/suvichar_motivation_mountain.jpg",
-      enabled: true,
-      createdAt: 1793880000000,
-      updatedAt: 1793880000000,
-    },
-    {
-      id: "suvichar_crimson_velvet",
-      name: "क्लासिक डार्क क्रिमसन वेलवेट ग्रेडिएंट (General)",
-      category: "general",
-      type: "suvichar_background",
-      url: "/assets/suvichar_crimson_velvet.jpg",
       enabled: true,
       createdAt: 1793880000000,
       updatedAt: 1793880000000,
@@ -10537,14 +10502,41 @@ const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
   'df_story_9_16_breaking'
 ]);
 
+const DELETED_FRAMES_TOMBSTONE_FILE = path.join(process.cwd(), "deleted_frames_tombstone.json");
+
+function loadDeletedFramesTombstones(): Set<string> {
+  try {
+    if (fs.existsSync(DELETED_FRAMES_TOMBSTONE_FILE)) {
+      const raw = fs.readFileSync(DELETED_FRAMES_TOMBSTONE_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list);
+    }
+  } catch {}
+  return new Set();
+}
+
+function recordDeletedFrameTombstone(id: string) {
+  try {
+    const tombstones = loadDeletedFramesTombstones();
+    tombstones.add(id);
+    fs.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    if (centralDb && typeof centralDb.writeDoc === "function") {
+      centralDb.writeDoc("system_config", "deleted_frames_tombstones", { tombstones: Array.from(tombstones), updatedAt: Date.now() }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("Failed to write deleted_frames_tombstone.json:", err);
+  }
+}
+
 function loadDynamicFramesDatabase(): any[] {
+  const tombstones = loadDeletedFramesTombstones();
   try {
     if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
       const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed
-          .filter(f => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id));
+          .filter(f => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id));
       }
     }
   } catch {}
@@ -10760,126 +10752,6 @@ app.get("/api/dynamic-frames", async (req, res) => {
       } catch {}
     }
 
-    // If database is empty, seed canonical story frames (graphic_001 is the canonical regular frame)
-    if (frames.length === 0) {
-      frames = [
-        {
-          id: 'df_story_9_16_standard',
-          name: 'स्टैंडर्ड सोशल स्टोरी 9:16 (Standard Story)',
-          description: 'सोशल मीडिया इंस्टाग्राम व फेसबुक स्टोरी के लिए 9:16 वर्टिकल न्यूज़ लेआउट।',
-          aspectRatio: '9:16',
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: 'Story Frames',
-          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-          publicationStatus: 'published',
-          createdBy: 'breakingnewswala.com@gmail.com',
-          createdAt: 1793880000000,
-          updatedAt: 1793880000000,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: 'top_left',
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: 'pill',
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: '#0F172A',
-            footerTextColor: '#F8FAFC',
-          },
-          photoSlots: [
-            {
-              id: 'slot_story_photo',
-              name: 'स्टोरी मुख्य फोटो',
-              slotType: 'normal',
-              rect: { x: 0, y: 0, width: 100, height: 62 },
-              required: true,
-              cropMode: 'cover',
-            },
-          ],
-          textSlots: [
-            {
-              id: 'slot_story_headline',
-              name: 'स्टोरी हेडलाइन',
-              role: 'headline',
-              rect: { x: 7, y: 66, width: 86, height: 25 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 72,
-              fontWeight: 'bold',
-              textColor: '#FFFFFF',
-              alignment: 'left',
-              maxLines: 4,
-            },
-          ],
-        },
-        {
-          id: 'df_story_9_16_breaking',
-          name: 'सुपर ब्रेकिंग स्टोरी 9:16 (Super Breaking Story)',
-          description: '3D रिबन, बड़ी ब्रेकिंग हेडलाइन और उच्च प्रभाव वाली 9:16 सोशल स्टोरी।',
-          aspectRatio: '9:16',
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: 'Story Frames',
-          allowedPlans: ['ADVANCED', 'PRO', 'VIP DESK'],
-          publicationStatus: 'published',
-          createdBy: 'breakingnewswala.com@gmail.com',
-          createdAt: 1793880000000,
-          updatedAt: 1793880000000,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: 'top_left',
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: 'pill',
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: '#FFE600',
-            footerTextColor: '#000000',
-          },
-          ribbonConfig: {
-            enabled: true,
-            ribbonId: 'speed-blue-red',
-            customRibbonUrl: '/assets/breaking_news_ribbon.svg',
-            rect: { x: 12, y: 60, width: 76, height: 6.8 },
-            scalePct: 76,
-          },
-          photoSlots: [
-            {
-              id: 'slot_story_photo',
-              name: 'स्टोरी फोटो',
-              slotType: 'normal',
-              rect: { x: 0, y: 0, width: 100, height: 64 },
-              required: true,
-              cropMode: 'cover',
-            },
-          ],
-          textSlots: [
-            {
-              id: 'slot_story_headline',
-              name: 'ब्रेकिंग स्टोरी हेडलाइन',
-              role: 'headline',
-              rect: { x: 6, y: 68, width: 88, height: 23 },
-              fontFamily: 'Noto Sans Devanagari',
-              fontSize: 74,
-              fontWeight: 'bold',
-              textColor: '#0A0A0A',
-              alignment: 'center',
-              maxLines: 3,
-            },
-          ],
-        },
-      ];
-      saveDynamicFramesDatabase(frames);
-    }
-
     // Filter by publication status and exclude sample/test templates unless Master Admin requests all
     let filtered = isMaster
       ? frames
@@ -11042,10 +10914,27 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
 app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
+    if (id === 'graphic_001') {
+      return res.status(400).json({ error: "सुरक्षित डिफ़ॉल्ट फ्रेम 'Regular Clean News Frame' को हटाया नहीं जा सकता।" });
+    }
+    recordDeletedFrameTombstone(id);
     let all = loadDynamicFramesDatabase();
     all = all.filter((f) => f.id !== id);
     saveDynamicFramesDatabase(all);
-    return res.json({ success: true, message: "Frame deleted successfully." });
+
+    // Also remove from news_template_configs.json if present
+    const newsTemplateFile = path.join(process.cwd(), "news_template_configs.json");
+    if (fs.existsSync(newsTemplateFile)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(newsTemplateFile, "utf-8"));
+        if (raw[id]) {
+          delete raw[id];
+          fs.writeFileSync(newsTemplateFile, JSON.stringify(raw, null, 2), "utf-8");
+        }
+      } catch {}
+    }
+
+    return res.json({ success: true, message: "Frame deleted permanently with tombstone." });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -11125,7 +11014,7 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled, textRegion, typographyConfig } = req.body || {};
+    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig } = req.body || {};
     if (!name || !type || !url) {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background'), and URL are required." });
     }
@@ -11136,6 +11025,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
       category: category || "general",
       url,
       enabled: enabled !== false,
+      sliceConfig: sliceConfig || (type === "location_badge" ? { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 } : undefined),
       textRegion: textRegion || undefined,
       typographyConfig: typographyConfig || undefined,
       createdAt: Date.now(),
@@ -11153,7 +11043,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url, textRegion, typographyConfig } = req.body || {};
+    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
@@ -11165,6 +11055,7 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
       ...(category !== undefined ? { category } : {}),
       ...(enabled !== undefined ? { enabled: Boolean(enabled) } : {}),
       ...(url !== undefined ? { url } : {}),
+      ...(sliceConfig !== undefined ? { sliceConfig } : {}),
       ...(textRegion !== undefined ? { textRegion } : {}),
       ...(typographyConfig !== undefined ? { typographyConfig } : {}),
       updatedAt: Date.now(),

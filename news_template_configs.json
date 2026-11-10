@@ -1,22 +1,4 @@
 {
-  "graphic_004": {
-    "id": "graphic_004",
-    "docId": "graphic_004",
-    "isActive": true,
-    "coinPrice": 150,
-    "selectedTier": "VIP DESK",
-    "category": "Special Frame",
-    "headlineArea": "2-Line Premium Gold Headline Area",
-    "version": "v1.0",
-    "templateId": "graphic_004",
-    "updatedAt": "2026-10-30T13:38:36.315Z",
-    "logoArea": "top_right_box",
-    "customName": "Special Edition Frame",
-    "locationArea": "top_left_box",
-    "allowedPlans": [
-      "VIP DESK"
-    ]
-  },
   "graphic_001": {
     "id": "graphic_001",
     "docId": "graphic_001",
@@ -27,7 +9,7 @@
       "PRO",
       "VIP DESK"
     ],
-    "updatedAt": "2026-10-30T13:38:36.005Z",
+    "updatedAt": "2026-11-10T12:00:00.000Z",
     "isActive": true,
     "category": "Regular Frame",
     "logoArea": "top_right_box",
@@ -37,44 +19,5 @@
     "headlineArea": "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
     "customName": "Regular Clean News Frame",
     "templateId": "graphic_001"
-  },
-  "graphic_003": {
-    "id": "graphic_003",
-    "docId": "graphic_003",
-    "version": "v1.0",
-    "coinPrice": 100,
-    "templateId": "graphic_003",
-    "customName": "Super Breaking News Frame",
-    "locationArea": "top_strip",
-    "allowedPlans": [
-      "PRO",
-      "VIP DESK"
-    ],
-    "isActive": true,
-    "category": "Super Breaking Frame",
-    "headlineArea": "3-Line Red Ribbon Headline Area",
-    "logoArea": "top_right_box",
-    "selectedTier": "PRO",
-    "updatedAt": "2026-10-30T13:38:36.209Z"
-  },
-  "graphic_002": {
-    "id": "graphic_002",
-    "docId": "graphic_002",
-    "customName": "Package Standard Frame",
-    "isActive": true,
-    "category": "Package Frame",
-    "allowedPlans": [
-      "ADVANCED",
-      "PRO",
-      "VIP DESK"
-    ],
-    "locationArea": "top_left_box",
-    "logoArea": "top_right_box",
-    "updatedAt": 1794102372492,
-    "templateId": "graphic_002",
-    "selectedTier": "ADVANCED",
-    "headlineArea": "2-Line Headline Area (डार्�� ब्लू स्ट्रिप)",
-    "version": "v1.0",
-    "coinPrice": 15
   }
 }

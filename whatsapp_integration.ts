@@ -2023,13 +2023,67 @@ export function registerWhatsAppIntegration(
     }
 
     // Attempt sending via Meta Authentication Templates (supports Body-only, Copy-code button, URL button)
-    const candidateTemplates = Array.from(new Set([configuredTemplate, "profile_otp", "auth_otp", "otp_verification", "verification_code"])).filter(Boolean);
-    const candidateLangs = Array.from(new Set([configuredLang, "en_US", "en", "hi"])).filter(Boolean);
+    const candidateTemplates = Array.from(new Set([templateName, "profile_otp", "auth_otp", "otp_verification", "verification_code"])).filter(Boolean);
+    const candidateLangs = Array.from(new Set([templateLang, "en_US", "en", "hi"])).filter(Boolean);
 
     let lastError: any = null;
 
     for (const tName of candidateTemplates) {
       for (const tLang of candidateLangs) {
+        // Variation 0: Approved Meta 'profile_otp' template (5 body parameters + 1 URL button parameter)
+        if (tName === "profile_otp") {
+          try {
+            const payloadProfileOtp: any = {
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to,
+              type: "template",
+              template: {
+                name: "profile_otp",
+                language: { code: tLang || "en_US" },
+                components: [
+                  {
+                    type: "body",
+                    parameters: [
+                      { type: "text", text: String(otpCode) },
+                      { type: "text", text: "verification" },
+                      { type: "text", text: `${validityMinutes} minutes` },
+                      { type: "text", text: "+919669802408" },
+                      { type: "text", text: "+919669802408" }
+                    ]
+                  },
+                  {
+                    type: "button",
+                    sub_type: "url",
+                    index: "0",
+                    parameters: [
+                      { type: "text", text: String(otpCode) }
+                    ]
+                  }
+                ]
+              }
+            };
+
+            const resProfile = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payloadProfileOtp),
+            });
+
+            const resultProfile = await resProfile.json().catch(() => ({}));
+            if (resProfile.ok && resultProfile?.messages?.[0]?.id) {
+              console.log(`[WhatsApp:OTP] Template OTP sent successfully via 'profile_otp' (${tLang}): id=${resultProfile.messages[0].id}`);
+              return resultProfile;
+            }
+            lastError = resultProfile?.error || resultProfile;
+          } catch (err: any) {
+            lastError = err;
+          }
+        }
+
         // Variation 1: Body-only parameter (Most compatible for custom approved templates)
         try {
           const payloadBodyOnly: any = {
@@ -3332,11 +3386,14 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
         const errMsg = String(sendErr?.message || sendErr);
         console.error(`[WhatsApp:OTP] Failed to send OTP to ${maskWaId(destinationWaId)}:`, errMsg);
         
-        if (errMsg.includes("Authentication Error") || errMsg.includes("WHATSAPP_API_ERROR") || errMsg.includes("401") || errMsg.includes("190")) {
+        if (errMsg.includes("Authentication Error") || errMsg.includes("WHATSAPP_API_ERROR") || errMsg.includes("401") || errMsg.includes("190") || errMsg.includes("not configured") || errMsg.includes("CONFIG_MISSING")) {
+          const isConfigMissing = errMsg.includes("not configured") || errMsg.includes("CONFIG_MISSING");
           return res.status(503).json({
             success: false,
-            error: "व्हाट्सएप्प क्लाउड API ऑथेंटिकेशन त्रुटि (Meta Access Token Expired). कृपया एडमिन से संपर्क करें।",
-            errorCode: "WHATSAPP_TOKEN_EXPIRED",
+            error: isConfigMissing
+              ? "व्हाट्सएप्प सेवा कॉन्फ़िगरेशन अनुपलब्ध है (WHATSAPP_ACCESS_TOKEN is not configured). कृपया एडमिन से संपर्क करें।"
+              : "व्हाट्सएप्प क्लाउड API ऑथेंटिकेशन त्रुटि (Meta Access Token Expired). कृपया एडमिन से संपर्क करें।",
+            errorCode: isConfigMissing ? "WHATSAPP_CONFIG_MISSING" : "WHATSAPP_TOKEN_EXPIRED",
             verificationId
           });
         }

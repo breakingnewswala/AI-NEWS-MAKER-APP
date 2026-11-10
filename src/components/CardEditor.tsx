@@ -959,11 +959,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     const reader = new FileReader();
     reader.onload = (e) => {
       if (e.target?.result) {
+        const result = e.target.result as string;
         onChange({
           images: {
             ...card.images,
-            [key]: e.target.result as string,
+            [key]: result,
           },
+          ...(key === 'main' ? { photoUrl: result } : {}),
         });
       }
     };

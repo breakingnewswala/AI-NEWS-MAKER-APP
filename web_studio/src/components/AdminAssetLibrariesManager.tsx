@@ -76,11 +76,23 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     textColor: '#FFFFFF',
     textAlign: 'center',
   });
-  const [sampleLocationText, setSampleLocationText] = useState<'भोपाल' | 'ओरछा' | 'निवाड़ी'>('भोपाल');
+  const [markedSlice, setMarkedSlice] = useState<{ leftWidthPct: number; rightWidthPct: number }>({
+    leftWidthPct: 28,
+    rightWidthPct: 15,
+  });
+  const [sampleLocationText, setSampleLocationText] = useState<string>('भोपाल');
   const [isSavingMarking, setIsSavingMarking] = useState(false);
 
   const openTextMarkingEditor = (item: AssetLibraryItem) => {
     setTextMarkingItem(item);
+    if (item.sliceConfig) {
+      setMarkedSlice({
+        leftWidthPct: Math.round((item.sliceConfig.leftWidthPct ?? 0.28) * 100),
+        rightWidthPct: Math.round((item.sliceConfig.rightWidthPct ?? 0.15) * 100),
+      });
+    } else {
+      setMarkedSlice({ leftWidthPct: 28, rightWidthPct: 15 });
+    }
     if (item.textRegion) {
       setMarkedRegion({
         x: item.textRegion.x ?? 25,
@@ -123,6 +135,11 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
           height: Math.max(5, Math.min(100, markedRegion.height)),
         },
         typographyConfig: markedTypography,
+        sliceConfig: {
+          leftWidthPct: Number((markedSlice.leftWidthPct / 100).toFixed(2)),
+          rightWidthPct: Number((markedSlice.rightWidthPct / 100).toFixed(2)),
+          centerMinPct: Number((Math.max(0.1, (100 - markedSlice.leftWidthPct - markedSlice.rightWidthPct) / 100)).toFixed(2)),
+        },
       };
 
       const res = await updateAssetLibraryItem(textMarkingItem.id, updates, token || undefined);
@@ -373,7 +390,7 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
           <Palette className="w-4 h-4 text-emerald-300" />
           <span>3. सुविचार बैकग्राउंड लाइब्रेरी</span>
           <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-black/40">
-            {items.filter((it) => it.type === 'suvichar_background').length || (activeTab === 'suvichar_background' ? items.length : 4)}
+            {items.filter((it) => it.type === 'suvichar_background').length}
           </span>
         </button>
       </div>
@@ -737,9 +754,9 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
               </div>
 
               {/* Sample Location Buttons */}
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-2 pt-1 flex-wrap">
                 <span className="text-[11px] font-bold text-slate-400">टेस्ट लोकेशन नाम:</span>
-                {(['भोपाल', 'ओरछा', 'निवाड़ी'] as const).map((loc) => (
+                {(['भोपाल', 'जबलपुर', 'छिंदवाड़ा', 'ओरछा', 'निवाड़ी'] as const).map((loc) => (
                   <button
                     key={loc}
                     type="button"
@@ -866,6 +883,65 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* 4. AI 3-Slice Horizontal Stretching Markers */}
+            <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-bold text-amber-300 block">
+                  4. AI स्मार्ट 3-स्लाइस स्ट्रेच मार्कर्स (Per-Asset Stretch Proportions):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMarkedSlice({ leftWidthPct: 28, rightWidthPct: 15 });
+                    setMarkedRegion({ x: 30, y: 15, width: 55, height: 70 });
+                    showToast('✨ AI ने इस बैज के लिए 28% पिन और 15% कैप क्षेत्र सुझाया!');
+                  }}
+                  className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  <span>AI ऑटो-डिटेक्ट स्लाइस</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-slate-400">बायां फिक्स्ड हिस्सा (Left Pin & Divider):</span>
+                    <span className="font-bold text-amber-400">{markedSlice.leftWidthPct}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="50"
+                    value={markedSlice.leftWidthPct}
+                    onChange={(e) => setMarkedSlice({ ...markedSlice, leftWidthPct: Number(e.target.value) })}
+                    className="w-full accent-amber-500"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-slate-400">दायां फिक्स्ड हिस्सा (Right Cap Curve):</span>
+                    <span className="font-bold text-amber-400">{markedSlice.rightWidthPct}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max="35"
+                    value={markedSlice.rightWidthPct}
+                    onChange={(e) => setMarkedSlice({ ...markedSlice, rightWidthPct: Number(e.target.value) })}
+                    className="w-full accent-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="p-2 bg-slate-900/80 rounded-lg border border-slate-800 text-[10px] text-slate-300 flex items-center justify-between">
+                <span>बीच का स्ट्रेचेबल टेक्स्ट ज़ोन (Center Stretch Area):</span>
+                <span className="font-bold text-emerald-400">
+                  {Math.max(10, 100 - markedSlice.leftWidthPct - markedSlice.rightWidthPct)}% (लचीला विस्तार)
+                </span>
               </div>
             </div>
 

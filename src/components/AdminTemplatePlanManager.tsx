@@ -42,7 +42,7 @@ import {
 } from '../lib/graphicTemplatesRegistry';
 import { getEffectiveFrameOptions, FrameOption } from '../lib/HeaderDesigns';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
-import { fetchDynamicFramesFromApi, getLocalDynamicFrames, saveDynamicFrameToApi } from '../lib/dynamicFramesManager';
+import { fetchDynamicFramesFromApi, getLocalDynamicFrames, saveDynamicFrameToApi, deleteDynamicFrameFromApi } from '../lib/dynamicFramesManager';
 import { getAuthToken } from '../lib/apiConfig';
 
 export const CANONICAL_FRAME_CATEGORIES = [
@@ -262,11 +262,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     }
     try {
       const token = getAuthToken();
-      const res = await fetch(`/api/dynamic-frames/${frameId}`, {
-        method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
+      const success = await deleteDynamicFrameFromApi(frameId, token || undefined);
+      if (success) {
         setDynamicFramesList((prev) => prev.filter((f) => f.id !== frameId));
         showToast(frameId, '🗑️ फ्रेम सफलतापूर्वक डिलीट की गई');
       } else {

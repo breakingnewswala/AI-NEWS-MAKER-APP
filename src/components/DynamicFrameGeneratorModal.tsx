@@ -1621,12 +1621,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const lh = (lRect.height / 100) * h;
         const lRot = headerConfig.logoRotation ?? 0;
         try {
-          const logoSrc = currentUser?.channelLogo || currentUser?.profileLogo || '/assets/ai_news_maker_logo.png';
+          const logoSrc = currentUser?.channelLogo || currentUser?.profileLogo || '/assets/breaking_news_wala_logo.png';
           let logoImg: HTMLImageElement;
           try {
             logoImg = await loadImageSafe(logoSrc);
           } catch {
-            logoImg = await loadImageSafe('/logo.png');
+            logoImg = await loadImageSafe('/assets/breaking_news_wala_logo.png');
           }
           if (logoImg && logoImg.width > 0) {
             ctx.save();
@@ -1686,8 +1686,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               const nh = bImg.height || 100;
 
               // Smart 3-Slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
-              const leftSlicePct = 0.28;
-              const rightSlicePct = 0.15;
+              const libBadge = locationBadgeLibrary.find(
+                (b) => b.id === headerConfig.locationBadgeAssetId || (b.url || b.assetUrl) === badgeAsset
+              );
+              const leftSlicePct = headerConfig.sliceConfig?.leftWidthPct ?? libBadge?.sliceConfig?.leftWidthPct ?? 0.28;
+              const rightSlicePct = headerConfig.sliceConfig?.rightWidthPct ?? libBadge?.sliceConfig?.rightWidthPct ?? 0.15;
               const pinW = Math.round(nw * leftSlicePct);
               const capW = Math.round(nw * rightSlicePct);
               const midW = Math.max(1, nw - pinW - capW);
@@ -1703,9 +1706,6 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
               const locText = dummyLocation || 'भोपाल';
               let locColor = headerConfig.locationTextColor;
-              const libBadge = locationBadgeLibrary.find(
-                (b) => b.id === headerConfig.locationBadgeAssetId || (b.url || b.assetUrl) === badgeAsset
-              );
               if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
                 locColor = libBadge?.typographyConfig?.textColor || '#000000';
               } else if (!locColor && badgeAsset) {
@@ -1990,6 +1990,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       calloutAssetUrl: manualCalloutAssetUrl,
       locationBadgeAssetId: headerConfig.locationBadgeAssetId,
       calloutAssetId: fullStoryCalloutConfig.calloutAssetId,
+      sliceConfig: headerConfig.sliceConfig || (headerConfig.locationBadgeAssetId ? locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.sliceConfig : undefined) || { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
       poweredByConfig,
       safeZoneConfig,
       layers,
@@ -2919,6 +2920,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                               manualLocationAsset: assetUrl,
                                               textRegion: item.textRegion,
                                               typographyConfig: item.typographyConfig,
+                                              sliceConfig: item.sliceConfig || { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
                                               locationBadgeMode: 'static_image',
                                               locationTextColor: chosenColor,
                                             });
@@ -2945,6 +2947,81 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                   </div>
                                 )}
                               </>
+                            )}
+
+                            {/* AI 3-Slice Horizontal Stretching Markers */}
+                            {badgeAsset && (
+                              <div className="p-2.5 bg-slate-900/90 rounded-lg border border-slate-800 space-y-2 mt-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold text-amber-300">
+                                    AI 3-स्लाइस स्मार्ट स्ट्रेचिंग (Smart Slices):
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setHeaderConfig({
+                                        ...headerConfig,
+                                        sliceConfig: { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
+                                      });
+                                    }}
+                                    className="text-[9px] text-amber-400 hover:underline cursor-pointer"
+                                  >
+                                    डिफ़ॉल्ट (28% / 15%)
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                  <div>
+                                    <div className="flex justify-between text-slate-400 mb-0.5">
+                                      <span>बायां पिन:</span>
+                                      <span className="text-white font-bold">{Math.round((headerConfig.sliceConfig?.leftWidthPct ?? 0.28) * 100)}%</span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="10"
+                                      max="50"
+                                      value={Math.round((headerConfig.sliceConfig?.leftWidthPct ?? 0.28) * 100)}
+                                      onChange={(e) => {
+                                        const left = Number(e.target.value) / 100;
+                                        const right = headerConfig.sliceConfig?.rightWidthPct ?? 0.15;
+                                        setHeaderConfig({
+                                          ...headerConfig,
+                                          sliceConfig: {
+                                            leftWidthPct: left,
+                                            rightWidthPct: right,
+                                            centerMinPct: Math.max(0.1, 1 - left - right),
+                                          },
+                                        });
+                                      }}
+                                      className="w-full accent-amber-500 h-1"
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between text-slate-400 mb-0.5">
+                                      <span>दायां कैप:</span>
+                                      <span className="text-white font-bold">{Math.round((headerConfig.sliceConfig?.rightWidthPct ?? 0.15) * 100)}%</span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="5"
+                                      max="35"
+                                      value={Math.round((headerConfig.sliceConfig?.rightWidthPct ?? 0.15) * 100)}
+                                      onChange={(e) => {
+                                        const right = Number(e.target.value) / 100;
+                                        const left = headerConfig.sliceConfig?.leftWidthPct ?? 0.28;
+                                        setHeaderConfig({
+                                          ...headerConfig,
+                                          sliceConfig: {
+                                            leftWidthPct: left,
+                                            rightWidthPct: right,
+                                            centerMinPct: Math.max(0.1, 1 - left - right),
+                                          },
+                                        });
+                                      }}
+                                      className="w-full accent-amber-500 h-1"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
                             )}
                           </div>
                         ) : (
@@ -4312,6 +4389,22 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             placeholder="भोपाल"
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
                           />
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            {(['भोपाल', 'जबलपुर', 'छिंदवाड़ा'] as const).map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => setDummyLocation(c)}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition ${
+                                  dummyLocation === c
+                                    ? 'bg-amber-400 text-slate-950 font-black shadow'
+                                    : 'bg-slate-900 text-slate-300 border border-slate-800 hover:text-white'
+                                }`}
+                              >
+                                {c}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 block mb-1">कॉलआउट विवरण (Callout Text)</label>
@@ -4571,11 +4664,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         }}
                       >
                         <img
-                          src={currentUser?.channelLogo || currentUser?.profileLogo || "/assets/ai_news_maker_logo.png"}
+                          src={currentUser?.channelLogo || currentUser?.profileLogo || "/assets/breaking_news_wala_logo.png"}
                           alt="Admin Logo"
                           className="max-h-5 max-w-full object-contain"
                           onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/logo.png';
+                            (e.target as HTMLImageElement).src = '/assets/breaking_news_wala_logo.png';
                           }}
                         />
                       </div>

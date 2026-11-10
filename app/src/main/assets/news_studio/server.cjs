@@ -8102,11 +8102,61 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
       console.warn("[WhatsApp:OTP] Credentials missing, delegating to sendWhatsAppText to log config missing error");
       return await sendWhatsAppText(to, fallbackTextMessage);
     }
-    const candidateTemplates = Array.from(/* @__PURE__ */ new Set([configuredTemplate, "profile_otp", "auth_otp", "otp_verification", "verification_code"])).filter(Boolean);
-    const candidateLangs = Array.from(/* @__PURE__ */ new Set([configuredLang, "en_US", "en", "hi"])).filter(Boolean);
+    const candidateTemplates = Array.from(/* @__PURE__ */ new Set([templateName, "profile_otp", "auth_otp", "otp_verification", "verification_code"])).filter(Boolean);
+    const candidateLangs = Array.from(/* @__PURE__ */ new Set([templateLang, "en_US", "en", "hi"])).filter(Boolean);
     let lastError = null;
     for (const tName of candidateTemplates) {
       for (const tLang of candidateLangs) {
+        if (tName === "profile_otp") {
+          try {
+            const payloadProfileOtp = {
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to,
+              type: "template",
+              template: {
+                name: "profile_otp",
+                language: { code: tLang || "en_US" },
+                components: [
+                  {
+                    type: "body",
+                    parameters: [
+                      { type: "text", text: String(otpCode) },
+                      { type: "text", text: "verification" },
+                      { type: "text", text: `${validityMinutes} minutes` },
+                      { type: "text", text: "+919669802408" },
+                      { type: "text", text: "+919669802408" }
+                    ]
+                  },
+                  {
+                    type: "button",
+                    sub_type: "url",
+                    index: "0",
+                    parameters: [
+                      { type: "text", text: String(otpCode) }
+                    ]
+                  }
+                ]
+              }
+            };
+            const resProfile = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify(payloadProfileOtp)
+            });
+            const resultProfile = await resProfile.json().catch(() => ({}));
+            if (resProfile.ok && resultProfile?.messages?.[0]?.id) {
+              console.log(`[WhatsApp:OTP] Template OTP sent successfully via 'profile_otp' (${tLang}): id=${resultProfile.messages[0].id}`);
+              return resultProfile;
+            }
+            lastError = resultProfile?.error || resultProfile;
+          } catch (err) {
+            lastError = err;
+          }
+        }
         try {
           const payloadBodyOnly = {
             messaging_product: "whatsapp",
@@ -9293,11 +9343,12 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
       } catch (sendErr) {
         const errMsg = String(sendErr?.message || sendErr);
         console.error(`[WhatsApp:OTP] Failed to send OTP to ${maskWaId(destinationWaId)}:`, errMsg);
-        if (errMsg.includes("Authentication Error") || errMsg.includes("WHATSAPP_API_ERROR") || errMsg.includes("401") || errMsg.includes("190")) {
+        if (errMsg.includes("Authentication Error") || errMsg.includes("WHATSAPP_API_ERROR") || errMsg.includes("401") || errMsg.includes("190") || errMsg.includes("not configured") || errMsg.includes("CONFIG_MISSING")) {
+          const isConfigMissing = errMsg.includes("not configured") || errMsg.includes("CONFIG_MISSING");
           return res.status(503).json({
             success: false,
-            error: "\u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A\u094D\u092A \u0915\u094D\u0932\u093E\u0909\u0921 API \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F (Meta Access Token Expired). \u0915\u0943\u092A\u092F\u093E \u090F\u0921\u092E\u093F\u0928 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
-            errorCode: "WHATSAPP_TOKEN_EXPIRED",
+            error: isConfigMissing ? "\u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A\u094D\u092A \u0938\u0947\u0935\u093E \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930\u0947\u0936\u0928 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948 (WHATSAPP_ACCESS_TOKEN is not configured). \u0915\u0943\u092A\u092F\u093E \u090F\u0921\u092E\u093F\u0928 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964" : "\u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A\u094D\u092A \u0915\u094D\u0932\u093E\u0909\u0921 API \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F (Meta Access Token Expired). \u0915\u0943\u092A\u092F\u093E \u090F\u0921\u092E\u093F\u0928 \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
+            errorCode: isConfigMissing ? "WHATSAPP_CONFIG_MISSING" : "WHATSAPP_TOKEN_EXPIRED",
             verificationId
           });
         }
@@ -19239,7 +19290,11 @@ var DUMMY_ASSET_IDS = /* @__PURE__ */ new Set([
   "loc_badge_dark_glass",
   "callout_yellow_banner",
   "callout_crimson_strip",
-  "callout_neon_blue_tag"
+  "callout_neon_blue_tag",
+  "suvichar_sunrise_morning",
+  "suvichar_spiritual_temple",
+  "suvichar_motivation_mountain",
+  "suvichar_crimson_velvet"
 ]);
 function getDefaultAssetLibraries() {
   return [
@@ -19252,6 +19307,7 @@ function getDefaultAssetLibraries() {
       enabled: true,
       createdAt: 1794132101671,
       updatedAt: 1794132144005,
+      sliceConfig: { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
       textRegion: { x: 32, y: 24, width: 58, height: 55 },
       typographyConfig: { fontFamily: "Mukta", fontSize: 50, fontWeight: "bold", textColor: "#000000", textAlign: "center" }
     },
@@ -19261,46 +19317,6 @@ function getDefaultAssetLibraries() {
       category: "general",
       type: "callout_png",
       url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0935\u093F\u0935\u0930\u0923 \u0928\u0940\u091A\u0947 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u092A\u0922\u093C\u0947\u0902</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "suvichar_sunrise_morning",
-      name: "\u0938\u094D\u0935\u0930\u094D\u0923\u093F\u092E \u0938\u0942\u0930\u094D\u092F\u094B\u0926\u092F \u0935 \u092A\u094D\u0930\u0915\u0943\u0924\u093F (Morning Suvichar)",
-      category: "morning",
-      type: "suvichar_background",
-      url: "/assets/suvichar_sunrise_morning.jpg",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "suvichar_spiritual_temple",
-      name: "\u0906\u0927\u094D\u092F\u093E\u0924\u094D\u092E\u093F\u0915 \u0926\u093F\u0935\u094D\u092F \u092E\u0902\u0926\u093F\u0930 \u0935 \u0926\u0940\u092A \u0906\u092D\u093E (Spiritual)",
-      category: "spiritual",
-      type: "suvichar_background",
-      url: "/assets/suvichar_spiritual_temple.jpg",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "suvichar_motivation_mountain",
-      name: "\u092A\u0930\u094D\u0935\u0924 \u0936\u093F\u0916\u0930 \u0935 \u0916\u0941\u0932\u093E \u0906\u0938\u092E\u093E\u0928 (Motivation / Quotes)",
-      category: "motivation",
-      type: "suvichar_background",
-      url: "/assets/suvichar_motivation_mountain.jpg",
-      enabled: true,
-      createdAt: 179388e7,
-      updatedAt: 179388e7
-    },
-    {
-      id: "suvichar_crimson_velvet",
-      name: "\u0915\u094D\u0932\u093E\u0938\u093F\u0915 \u0921\u093E\u0930\u094D\u0915 \u0915\u094D\u0930\u093F\u092E\u0938\u0928 \u0935\u0947\u0932\u0935\u0947\u091F \u0917\u094D\u0930\u0947\u0921\u093F\u090F\u0902\u091F (General)",
-      category: "general",
-      type: "suvichar_background",
-      url: "/assets/suvichar_crimson_velvet.jpg",
       enabled: true,
       createdAt: 179388e7,
       updatedAt: 179388e7
@@ -19339,13 +19355,39 @@ var FORBIDDEN_DYNAMIC_FRAME_IDS = /* @__PURE__ */ new Set([
   "df_story_9_16_standard",
   "df_story_9_16_breaking"
 ]);
+var DELETED_FRAMES_TOMBSTONE_FILE = import_path2.default.join(process.cwd(), "deleted_frames_tombstone.json");
+function loadDeletedFramesTombstones() {
+  try {
+    if (import_fs2.default.existsSync(DELETED_FRAMES_TOMBSTONE_FILE)) {
+      const raw = import_fs2.default.readFileSync(DELETED_FRAMES_TOMBSTONE_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list);
+    }
+  } catch {
+  }
+  return /* @__PURE__ */ new Set();
+}
+function recordDeletedFrameTombstone(id) {
+  try {
+    const tombstones = loadDeletedFramesTombstones();
+    tombstones.add(id);
+    import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    if (centralDb && typeof centralDb.writeDoc === "function") {
+      centralDb.writeDoc("system_config", "deleted_frames_tombstones", { tombstones: Array.from(tombstones), updatedAt: Date.now() }).catch(() => {
+      });
+    }
+  } catch (err) {
+    console.warn("Failed to write deleted_frames_tombstone.json:", err);
+  }
+}
 function loadDynamicFramesDatabase() {
+  const tombstones = loadDeletedFramesTombstones();
   try {
     if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
       const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id));
+        return parsed.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id));
       }
     }
   } catch {
@@ -19551,124 +19593,6 @@ app.get("/api/dynamic-frames", async (req, res) => {
       } catch {
       }
     }
-    if (frames.length === 0) {
-      frames = [
-        {
-          id: "df_story_9_16_standard",
-          name: "\u0938\u094D\u091F\u0948\u0902\u0921\u0930\u094D\u0921 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Standard Story)",
-          description: "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E \u0935 \u092B\u0947\u0938\u092C\u0941\u0915 \u0938\u094D\u091F\u094B\u0930\u0940 \u0915\u0947 \u0932\u093F\u090F 9:16 \u0935\u0930\u094D\u091F\u093F\u0915\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0932\u0947\u0906\u0909\u091F\u0964",
-          aspectRatio: "9:16",
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: "Story Frames",
-          allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-          publicationStatus: "published",
-          createdBy: "breakingnewswala.com@gmail.com",
-          createdAt: 179388e7,
-          updatedAt: 179388e7,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: "top_left",
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: "pill"
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: "#0F172A",
-            footerTextColor: "#F8FAFC"
-          },
-          photoSlots: [
-            {
-              id: "slot_story_photo",
-              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092E\u0941\u0916\u094D\u092F \u092B\u094B\u091F\u094B",
-              slotType: "normal",
-              rect: { x: 0, y: 0, width: 100, height: 62 },
-              required: true,
-              cropMode: "cover"
-            }
-          ],
-          textSlots: [
-            {
-              id: "slot_story_headline",
-              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
-              role: "headline",
-              rect: { x: 7, y: 66, width: 86, height: 25 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 72,
-              fontWeight: "bold",
-              textColor: "#FFFFFF",
-              alignment: "left",
-              maxLines: 4
-            }
-          ]
-        },
-        {
-          id: "df_story_9_16_breaking",
-          name: "\u0938\u0941\u092A\u0930 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 9:16 (Super Breaking Story)",
-          description: "3D \u0930\u093F\u092C\u0928, \u092C\u0921\u093C\u0940 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 \u0909\u091A\u094D\u091A \u092A\u094D\u0930\u092D\u093E\u0935 \u0935\u093E\u0932\u0940 9:16 \u0938\u094B\u0936\u0932 \u0938\u094D\u091F\u094B\u0930\u0940\u0964",
-          aspectRatio: "9:16",
-          canvasWidth: 1080,
-          canvasHeight: 1920,
-          designCategory: "Story Frames",
-          allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
-          publicationStatus: "published",
-          createdBy: "breakingnewswala.com@gmail.com",
-          createdAt: 179388e7,
-          updatedAt: 179388e7,
-          version: 1,
-          headerConfig: {
-            showLogo: true,
-            logoPosition: "top_left",
-            logoRect: { x: 6, y: 3, width: 24, height: 6.5 },
-            showLocation: true,
-            locationRect: { x: 6, y: 10.5, width: 30, height: 3.2 },
-            locationStyle: "pill"
-          },
-          footerConfig: {
-            footerHeightRatio: 0.065,
-            enforcePermanentFooter: true,
-            footerBgColor: "#FFE600",
-            footerTextColor: "#000000"
-          },
-          ribbonConfig: {
-            enabled: true,
-            ribbonId: "speed-blue-red",
-            customRibbonUrl: "/assets/breaking_news_ribbon.svg",
-            rect: { x: 12, y: 60, width: 76, height: 6.8 },
-            scalePct: 76
-          },
-          photoSlots: [
-            {
-              id: "slot_story_photo",
-              name: "\u0938\u094D\u091F\u094B\u0930\u0940 \u092B\u094B\u091F\u094B",
-              slotType: "normal",
-              rect: { x: 0, y: 0, width: 100, height: 64 },
-              required: true,
-              cropMode: "cover"
-            }
-          ],
-          textSlots: [
-            {
-              id: "slot_story_headline",
-              name: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0938\u094D\u091F\u094B\u0930\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
-              role: "headline",
-              rect: { x: 6, y: 68, width: 88, height: 23 },
-              fontFamily: "Noto Sans Devanagari",
-              fontSize: 74,
-              fontWeight: "bold",
-              textColor: "#0A0A0A",
-              alignment: "center",
-              maxLines: 3
-            }
-          ]
-        }
-      ];
-      saveDynamicFramesDatabase(frames);
-    }
     let filtered = isMaster ? frames : frames.filter(
       (f) => f.publicationStatus === "published" && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
     );
@@ -19801,10 +19725,25 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
 app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
+    if (id === "graphic_001") {
+      return res.status(400).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u092B\u094D\u0930\u0947\u092E 'Regular Clean News Frame' \u0915\u094B \u0939\u091F\u093E\u092F\u093E \u0928\u0939\u0940\u0902 \u091C\u093E \u0938\u0915\u0924\u093E\u0964" });
+    }
+    recordDeletedFrameTombstone(id);
     let all = loadDynamicFramesDatabase();
     all = all.filter((f) => f.id !== id);
     saveDynamicFramesDatabase(all);
-    return res.json({ success: true, message: "Frame deleted successfully." });
+    const newsTemplateFile = import_path2.default.join(process.cwd(), "news_template_configs.json");
+    if (import_fs2.default.existsSync(newsTemplateFile)) {
+      try {
+        const raw = JSON.parse(import_fs2.default.readFileSync(newsTemplateFile, "utf-8"));
+        if (raw[id]) {
+          delete raw[id];
+          import_fs2.default.writeFileSync(newsTemplateFile, JSON.stringify(raw, null, 2), "utf-8");
+        }
+      } catch {
+      }
+    }
+    return res.json({ success: true, message: "Frame deleted permanently with tombstone." });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -19860,7 +19799,7 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 });
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled, textRegion, typographyConfig } = req.body || {};
+    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig } = req.body || {};
     if (!name || !type || !url) {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background'), and URL are required." });
     }
@@ -19871,6 +19810,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
       category: category || "general",
       url,
       enabled: enabled !== false,
+      sliceConfig: sliceConfig || (type === "location_badge" ? { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 } : void 0),
       textRegion: textRegion || void 0,
       typographyConfig: typographyConfig || void 0,
       createdAt: Date.now(),
@@ -19887,7 +19827,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url, textRegion, typographyConfig } = req.body || {};
+    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
@@ -19899,6 +19839,7 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
       ...category !== void 0 ? { category } : {},
       ...enabled !== void 0 ? { enabled: Boolean(enabled) } : {},
       ...url !== void 0 ? { url } : {},
+      ...sliceConfig !== void 0 ? { sliceConfig } : {},
       ...textRegion !== void 0 ? { textRegion } : {},
       ...typographyConfig !== void 0 ? { typographyConfig } : {},
       updatedAt: Date.now()

@@ -1,80 +1,23 @@
 {
-  "graphic_004": {
-    "id": "graphic_004",
-    "docId": "graphic_004",
-    "isActive": true,
-    "locationArea": "top_left_box",
-    "headlineArea": "2-Line Premium Gold Headline Area",
-    "customName": "Special Edition Frame",
-    "updatedAt": "2026-10-30T13:38:36.315Z",
-    "category": "Special Frame",
-    "allowedPlans": [
-      "VIP DESK"
-    ],
-    "selectedTier": "VIP DESK",
-    "templateId": "graphic_004",
-    "coinPrice": 150,
-    "version": "v1.0",
-    "logoArea": "top_right_box"
-  },
   "graphic_001": {
     "id": "graphic_001",
     "docId": "graphic_001",
-    "customName": "Regular Clean News Frame",
-    "logoArea": "top_right_box",
-    "selectedTier": "BASIC",
-    "version": "v1.0",
-    "coinPrice": 0,
+    "locationArea": "top_left_box",
     "allowedPlans": [
       "BASIC",
       "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
-    "updatedAt": "2026-10-30T13:38:36.005Z",
+    "updatedAt": "2026-11-10T12:00:00.000Z",
+    "isActive": true,
     "category": "Regular Frame",
-    "isActive": true,
-    "headlineArea": "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
-    "templateId": "graphic_001",
-    "locationArea": "top_left_box"
-  },
-  "graphic_003": {
-    "id": "graphic_003",
-    "docId": "graphic_003",
-    "category": "Super Breaking Frame",
-    "selectedTier": "PRO",
-    "isActive": true,
-    "customName": "Super Breaking News Frame",
-    "version": "v1.0",
-    "updatedAt": "2026-10-30T13:38:36.209Z",
-    "headlineArea": "3-Line Red Ribbon Headline Area",
-    "locationArea": "top_strip",
-    "coinPrice": 100,
-    "templateId": "graphic_003",
-    "allowedPlans": [
-      "PRO",
-      "VIP DESK"
-    ],
-    "logoArea": "top_right_box"
-  },
-  "graphic_002": {
-    "id": "graphic_002",
-    "docId": "graphic_002",
     "logoArea": "top_right_box",
-    "customName": "Package Standard Frame",
-    "locationArea": "top_left_box",
-    "updatedAt": 1793626600497,
-    "templateId": "graphic_002",
-    "isActive": true,
-    "allowedPlans": [
-      "ADVANCED",
-      "PRO",
-      "VIP DESK"
-    ],
-    "headlineArea": "2-Line Headline Area (डार्�� ब्लू स्ट्रिप)",
     "version": "v1.0",
-    "coinPrice": 15,
-    "selectedTier": "ADVANCED",
-    "category": "Package Frame"
+    "selectedTier": "BASIC",
+    "coinPrice": 0,
+    "headlineArea": "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
+    "customName": "Regular Clean News Frame",
+    "templateId": "graphic_001"
   }
 }

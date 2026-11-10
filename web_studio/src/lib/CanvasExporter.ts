@@ -123,9 +123,14 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
       }
     };
 
+    const isOverlayOrLogo = /logo|badge|callout|ribbon|watermark|icon/i.test(effectiveSrc);
+    const transparentFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
+    const photoFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
+    const getFallbackSrc = () => isOverlayOrLogo ? transparentFallback : photoFallback;
+
     const timeout = setTimeout(() => {
       const fallback = new Image();
-      fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
+      fallback.src = getFallbackSrc();
       fallback.onload = () => finish(fallback);
       fallback.onerror = () => finish(fallback);
     }, 6000);
@@ -150,7 +155,7 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
             retryImg.onerror = () => {
               clearTimeout(timeout);
               const fallback = new Image();
-              fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
+              fallback.src = getFallbackSrc();
               fallback.onload = () => finish(fallback);
               fallback.onerror = () => finish(fallback);
             };
@@ -162,7 +167,7 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
 
       clearTimeout(timeout);
       const fallback = new Image();
-      fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
+      fallback.src = getFallbackSrc();
       fallback.onload = () => finish(fallback);
       fallback.onerror = () => finish(fallback);
     };
@@ -352,13 +357,14 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     ? Math.round(height * 0.52)
     : Math.round(headlineStartY + headlineLineHeight * 1.35);
 
-  // Load custom logo image if provided
+  // Load custom logo image if provided, falling back to channel logo or default logo
   let customLogoImg: HTMLImageElement | undefined;
-  if (card.customLogoUrl) {
+  const effectiveLogoUrl = card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png';
+  if (effectiveLogoUrl) {
     try {
-      customLogoImg = await loadImage(card.customLogoUrl);
+      customLogoImg = await loadImage(effectiveLogoUrl);
     } catch (logoErr) {
-      console.warn('Custom logo load warning:', logoErr);
+      console.warn('Logo load warning:', logoErr);
     }
   }
 
@@ -1570,9 +1576,11 @@ async function drawAuthoritativeDynamicFrameCanvas(
         : (df.id === 'df_testing_1_double'
           ? 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&q=80'
           : undefined));
+      const rawMainPhoto = (card.images?.main || (card as any).photoUrl || (card as any).testSamplePhotoUrl || '').trim();
+      const rawSecondPhoto = (card.secondaryPhoto || card.images?.second || '').trim();
       const src = sIdx === 0
-        ? (card.images?.main || defaultAsset)
-        : (card.secondaryPhoto || card.images?.second || defaultAsset || card.images?.main);
+        ? (rawMainPhoto || defaultAsset)
+        : (rawSecondPhoto || defaultAsset || rawMainPhoto);
       if (!src) continue;
 
       try {
@@ -1631,7 +1639,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const ly = (lRect.y / 100) * height;
     const lw = (lRect.width / 100) * width;
     const lh = (lRect.height / 100) * height;
-    const logoToDraw = customLogoImg || (card.customLogoUrl ? await loadImage(card.customLogoUrl).catch(() => null) : null);
+    const resolvedLogoUrl = card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png';
+    const logoToDraw = customLogoImg || (resolvedLogoUrl ? await loadImage(resolvedLogoUrl).catch(() => null) : null);
     if (logoToDraw) {
       ctx.save();
       if (df.headerConfig.logoOpacity !== undefined) {
@@ -1666,40 +1675,48 @@ async function drawAuthoritativeDynamicFrameCanvas(
         const nh = badgeImg.height || 100;
         
         // Smart 3-Slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
-        const leftSlicePct = df.sliceConfig?.leftWidthPct ?? 0.28;
-        const rightSlicePct = df.sliceConfig?.rightWidthPct ?? 0.15;
+        const leftSlicePct = df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct ?? 0.28;
+        const rightSlicePct = df.sliceConfig?.rightWidthPct ?? df.headerConfig?.sliceConfig?.rightWidthPct ?? 0.15;
         const pinW = Math.round(nw * leftSlicePct);
         const capW = Math.round(nw * rightSlicePct);
         const midW = Math.max(1, nw - pinW - capW);
 
         const leftDestW = (pinW / nh) * bh;
         const rightDestW = (capW / nh) * bh;
-        const midDestW = Math.max(10, bw - leftDestW - rightDestW);
-
-        ctx.drawImage(badgeImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
-        ctx.drawImage(badgeImg, pinW, 0, midW, nh, bx + leftDestW, by, midDestW, bh);
-        ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, bx + leftDestW + midDestW, by, rightDestW, bh);
-
-        const textReg = df.headerConfig.textRegion;
-        const tx = textReg ? bx + (textReg.x / 100) * bw : bx + leftDestW;
-        const ty = textReg ? by + (textReg.y / 100) * bh : by;
-        const tw = textReg ? (textReg.width / 100) * bw : midDestW;
-        const th = textReg ? (textReg.height / 100) * bh : bh;
 
         ctx.save();
         const typo = df.headerConfig.typographyConfig;
         let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
-        let locColor = typo?.color || df.headerConfig.locationTextColor;
+        let locColor = typo?.color || typo?.textColor || df.headerConfig.locationTextColor;
         if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
           locColor = '#000000';
         }
         ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
+        const measuredTextW = ctx.measureText(card.location).width;
+
+        // Dynamic horizontal expansion: expand center destination width to fit text + 28px padding
+        const minCenterW = Math.max(10, bw - leftDestW - rightDestW);
+        const neededCenterW = measuredTextW + 28;
+        const midDestW = Math.max(minCenterW, neededCenterW);
+        const dynamicBw = Math.min(width * 0.94 - bx, leftDestW + midDestW + rightDestW);
+        const finalCenterW = dynamicBw - leftDestW - rightDestW;
+
+        ctx.drawImage(badgeImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
+        ctx.drawImage(badgeImg, pinW, 0, midW, nh, bx + leftDestW, by, finalCenterW, bh);
+        ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, bx + leftDestW + finalCenterW, by, rightDestW, bh);
+
+        const textReg = df.headerConfig.textRegion;
+        const tx = textReg ? bx + (textReg.x / 100) * dynamicBw : bx + leftDestW;
+        const ty = textReg ? by + (textReg.y / 100) * bh : by;
+        const tw = textReg ? (textReg.width / 100) * dynamicBw : finalCenterW;
+        const th = textReg ? (textReg.height / 100) * bh : bh;
+
         ctx.fillStyle = locColor;
         ctx.textBaseline = 'middle';
         const align = typo?.align || 'center';
         ctx.textAlign = align === 'left' ? 'left' : align === 'right' ? 'right' : 'center';
 
-        // Auto text shrink for long locations
+        // Auto text shrink only if badge hits max right margin
         let measuredW = ctx.measureText(card.location).width;
         while (measuredW > tw - 4 && fontSize > 10) {
           fontSize -= 1;

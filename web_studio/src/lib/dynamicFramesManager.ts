@@ -516,6 +516,29 @@ export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
 // LOCALSTORAGE & SERVER SYNC IMPLEMENTATION
 // -------------------------------------------------------------
 
+const TOMBSTONE_STORAGE_KEY = 'deleted_dynamic_frame_ids';
+
+export function getDeletedDynamicFrameIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(TOMBSTONE_STORAGE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function recordDeletedDynamicFrameId(id: string) {
+  if (typeof window === 'undefined' || !id) return;
+  try {
+    const set = getDeletedDynamicFrameIds();
+    set.add(id);
+    localStorage.setItem(TOMBSTONE_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
 export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
   if (typeof window === 'undefined') return DEFAULT_DYNAMIC_FRAMES;
   try {
@@ -532,19 +555,21 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
       'df_story_9_16_standard',
       'df_story_9_16_breaking',
     ]);
+    const tombstones = getDeletedDynamicFrameIds();
     const existingIds = new Set(
       parsed
-        .filter((f: any) => !FORBIDDEN_IDS.has(f.id) && f.id !== 'df_reg_4_5_clean')
+        .filter((f: any) => !FORBIDDEN_IDS.has(f.id) && f.id !== 'df_reg_4_5_clean' && !tombstones.has(f.id))
         .map((f: DynamicFrameTemplate) => f.id)
     );
     const merged = parsed.filter(
       (f: any) =>
         !FORBIDDEN_IDS.has(f.id) &&
         f.id !== 'df_reg_4_5_clean' &&
+        !tombstones.has(f.id) &&
         !(f.id !== 'graphic_001' && (f.name?.includes('रेगुलर क्लीन') || f.name?.toLowerCase()?.includes('regular clean')))
     );
     for (const def of DEFAULT_DYNAMIC_FRAMES) {
-      if (!existingIds.has(def.id)) {
+      if (!existingIds.has(def.id) && !tombstones.has(def.id)) {
         merged.push(def);
       }
     }
@@ -657,6 +682,7 @@ export async function saveDynamicFrameToApi(
 
 export async function deleteDynamicFrameFromApi(frameId: string, authToken?: string): Promise<boolean> {
   try {
+    recordDeletedDynamicFrameId(frameId);
     const baseUrl = getApiBaseUrl();
     const headers: Record<string, string> = {};
     if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
@@ -665,11 +691,9 @@ export async function deleteDynamicFrameFromApi(frameId: string, authToken?: str
       method: 'DELETE',
       headers,
     });
-    if (res.ok) {
-      const local = getLocalDynamicFrames();
-      saveLocalDynamicFrames(local.filter((f) => f.id !== frameId));
-      return true;
-    }
+    const local = getLocalDynamicFrames();
+    saveLocalDynamicFrames(local.filter((f) => f.id !== frameId));
+    return res.ok;
   } catch (e) {
     console.warn('Failed to delete frame:', e);
   }
