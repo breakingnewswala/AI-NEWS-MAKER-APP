@@ -62,7 +62,8 @@ export type DynamicDesignCategory =
   | 'बयानबाजी'
   | 'Special Frames'
   | 'Bonus Frames'
-  | 'Custom Frames';
+  | 'Custom Frames'
+  | 'TEST_FRAMES';
 
 export const DYNAMIC_FRAME_CATEGORIES: DynamicDesignCategory[] = [
   'Regular Frames',
@@ -73,6 +74,7 @@ export const DYNAMIC_FRAME_CATEGORIES: DynamicDesignCategory[] = [
   'Special Frames',
   'Bonus Frames',
   'Custom Frames',
+  'TEST_FRAMES',
 ];
 
 export type DynamicPlanTier = 'BASIC' | 'ADVANCED' | 'PRO' | 'VIP DESK';
@@ -403,6 +405,14 @@ export interface DynamicFrameTemplate {
 
   // Layout lock state (Part 8)
   isLayoutLocked?: boolean;
+
+  // Master Test Frame & Approval Workflow (Master Architecture)
+  isTestFrame?: boolean;
+  approvalStatus?: 'PENDING_TEST' | 'IN_TESTING' | 'APPROVED' | 'REJECTED';
+  targetCategory?: DynamicDesignCategory;
+  approvedAt?: number;
+  approvedBy?: string;
+  sliceConfig?: { leftWidthPct: number; rightWidthPct: number; centerMinPct: number };
 }
 
 export interface UserStoryPreference {

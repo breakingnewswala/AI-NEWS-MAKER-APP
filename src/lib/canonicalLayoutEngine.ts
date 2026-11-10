@@ -538,7 +538,9 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   const startFontSize = options.userFontSize
     ? Math.min(spec.headlineArea.maxFontSize, Math.max(spec.headlineArea.minFontSize, Math.round(options.userFontSize * 2.1)))
     : spec.headlineArea.maxFontSize;
-  const endFontSize = spec.headlineArea.minFontSize;
+  const endFontSize = options.customBounds
+    ? Math.min(spec.headlineArea.minFontSize, 24)
+    : spec.headlineArea.minFontSize;
 
   let bestFontSize = endFontSize;
   let bestLines: WordToken[][] = [];

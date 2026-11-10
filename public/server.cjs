@@ -19384,7 +19384,13 @@ function deepMergeFrameConfig(existing, payload) {
     samplePhotoUrl: payload.samplePhotoUrl !== void 0 ? payload.samplePhotoUrl : existing.samplePhotoUrl,
     sampleVideoUrl: payload.sampleVideoUrl !== void 0 ? payload.sampleVideoUrl : existing.sampleVideoUrl,
     calloutAssetUrl: payload.calloutAssetUrl !== void 0 ? payload.calloutAssetUrl : existing.calloutAssetUrl,
-    designCategory: payload.designCategory || existing.designCategory || "Regular Frames",
+    isTestFrame: payload.isTestFrame !== void 0 ? Boolean(payload.isTestFrame) : existing.isTestFrame,
+    approvalStatus: payload.approvalStatus || existing.approvalStatus || "PENDING_TEST",
+    targetCategory: payload.targetCategory !== void 0 ? payload.targetCategory : existing.targetCategory,
+    approvedAt: payload.approvedAt !== void 0 ? payload.approvedAt : existing.approvedAt,
+    approvedBy: payload.approvedBy !== void 0 ? payload.approvedBy : existing.approvedBy,
+    sliceConfig: payload.sliceConfig || existing.sliceConfig,
+    designCategory: payload.designCategory || existing.designCategory || "TEST_FRAMES",
     allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : existing.allowedPlans || ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
     publicationStatus: payload.publicationStatus || existing.publicationStatus || "draft",
     headerConfig: {
@@ -19664,7 +19670,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
       saveDynamicFramesDatabase(frames);
     }
     let filtered = isMaster ? frames : frames.filter(
-      (f) => f.publicationStatus === "published" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
+      (f) => f.publicationStatus === "published" && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
     );
     const { frameType, frameMode } = req.query;
     if (frameType) {
@@ -19714,7 +19720,13 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
       primaryBackgroundAsset: payload.primaryBackgroundAsset || void 0,
       primaryBackgroundMode: payload.primaryBackgroundMode || "image",
       primaryBackgroundHex: payload.primaryBackgroundHex || "#0B1329",
-      designCategory: payload.designCategory || (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"),
+      isTestFrame: payload.isTestFrame !== void 0 ? Boolean(payload.isTestFrame) : true,
+      approvalStatus: payload.approvalStatus || (payload.isTestFrame === false ? "APPROVED" : "PENDING_TEST"),
+      targetCategory: payload.targetCategory || null,
+      approvedAt: payload.approvedAt || null,
+      approvedBy: payload.approvedBy || null,
+      sliceConfig: payload.sliceConfig || null,
+      designCategory: payload.designCategory || (payload.isTestFrame === false ? payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames" : "TEST_FRAMES"),
       allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
       publicationStatus: payload.publicationStatus || "draft",
       createdBy: req.user?.email || "breakingnewswala.com@gmail.com",

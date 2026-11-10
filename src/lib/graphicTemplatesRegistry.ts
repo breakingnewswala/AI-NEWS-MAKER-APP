@@ -76,6 +76,7 @@ export const FRAME_CATEGORIES = [
   'Special Frame',
   'Bonus Frame',
   'Custom Frame',
+  'TEST_FRAMES',
 ] as const;
 
 export type FrameCategory = (typeof FRAME_CATEGORIES)[number];
@@ -462,7 +463,7 @@ export function getTemplateConfig(templateId: string): TemplatePlanConfig {
   if (configs[templateId]) {
     const cfg = configs[templateId];
     if (isSampleTest) {
-      return { ...cfg, category: 'Custom Frames' };
+      return { ...cfg, category: 'TEST_FRAMES' };
     }
     return cfg;
   }
@@ -471,13 +472,13 @@ export function getTemplateConfig(templateId: string): TemplatePlanConfig {
   try {
     const df = getDynamicFrameById(templateId);
     if (df) {
-      const isTestOrSample = isSampleTest || (df as any).isSampleTestTemplate || (df as any).isSample || df.name === '11111' || df.name === '2222' || df.id === 'df_test_11111' || df.id === 'df_test_2222' || df.id === 'df_sample_11111' || df.id === 'df_sample_2222';
+      const isTestOrSample = isSampleTest || (df as any).isSampleTestTemplate || (df as any).isSample || df.name === '11111' || df.name === '2222' || df.id === 'df_test_11111' || df.id === 'df_test_2222' || df.id === 'df_sample_11111' || df.id === 'df_sample_2222' || df.designCategory === 'TEST_FRAMES';
       return {
         allowedPlans: (df.allowedPlans as GraphicPlanCategory[]) || ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
         isActive: df.publicationStatus === 'published',
         version: 'v1.0',
         customName: df.name,
-        category: isTestOrSample ? 'Custom Frames' : df.designCategory,
+        category: isTestOrSample ? 'TEST_FRAMES' : df.designCategory,
         selectedTier: df.allowedPlans?.[0] || 'BASIC',
         previewUrl: df.previewImageUrl || df.sampleReferenceUrl,
         assetUrl: df.sampleReferenceUrl,

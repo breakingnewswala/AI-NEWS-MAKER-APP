@@ -99,14 +99,15 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin
         if (!(df.frameMode !== 'video' && df.frameType !== 'video')) return false;
         if (FORBIDDEN_DYNAMIC_FRAME_IDS.has(df.id)) return false;
         if (df.designCategory === 'Story Frames') return false;
+        // Test frames (e.g. 11111, 2222, or pending approval) never appear in Studio production catalog
+        if (df.designCategory === 'TEST_FRAMES' || (df as any).isTestFrame || (df as any).approvalStatus === 'PENDING_TEST') return false;
         const isTestOrSample = (df as any).isSampleTestTemplate || (df as any).isSample || df.name === '11111' || df.name === '2222' || df.id === 'df_test_11111' || df.id === 'df_test_2222' || df.id === 'df_sample_11111' || df.id === 'df_sample_2222' || df.designCategory === 'Sample Frames';
-        if (!isAdmin && isTestOrSample) return false;
+        if (isTestOrSample) return false;
         return true;
       }
     )
     .map((df) => {
-      const isTestOrSample = (df as any).isSampleTestTemplate || (df as any).isSample || df.name === '11111' || df.name === '2222' || df.id === 'df_test_11111' || df.id === 'df_test_2222' || df.id === 'df_sample_11111' || df.id === 'df_sample_2222' || df.designCategory === 'Custom Frame' || df.designCategory === 'Custom Frames' || df.designCategory === 'Sample Frames';
-      const normCat = isTestOrSample ? 'Custom Frames' : normalizeToCanonicalCategory(df.designCategory);
+      const normCat = normalizeToCanonicalCategory(df.designCategory);
       const tier = df.allowedPlans && df.allowedPlans.length > 0 ? df.allowedPlans[0] : 'BASIC';
       return {
         id: df.id as FrameDesign,
@@ -503,15 +504,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   };
 
   const frameCategoryItems = React.useMemo(() => {
-    return FRAME_CATEGORIES.map((catName) => {
+    return FRAME_CATEGORIES.filter((c) => (c as string) !== 'TEST_FRAMES').map((catName) => {
       const normCatName = normalizeToCanonicalCategory(catName);
       if (catName === 'Custom Frame') {
         const savedCount = savedCustomFramesList.length;
         const customDynamicCount = currentFrameOptions.filter((f) => {
           const cfg = getTemplateConfig(f.id);
           if (!cfg.isActive) return false;
-          const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'Custom Frames' || f.categoryLabel === 'Custom Frame';
-          const c = isTestOrSample ? 'Custom Frames' : normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
+          const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'TEST_FRAMES' || f.categoryLabel === 'Custom Frames' || f.categoryLabel === 'Custom Frame';
+          if (isTestOrSample) return false;
+          const c = normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
           return c === 'Custom Frames';
         }).length;
         return { id: catName, label: catName, badge: `${savedCount + customDynamicCount + 1}` };
@@ -519,8 +521,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       const count = currentFrameOptions.filter((f) => {
         const cfg = getTemplateConfig(f.id);
         if (!cfg.isActive) return false;
-        const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'Custom Frames' || f.categoryLabel === 'Custom Frame';
-        const c = isTestOrSample ? 'Custom Frames' : normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
+        const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'TEST_FRAMES';
+        if (isTestOrSample) return false;
+        const c = normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
         return c === normCatName;
       }).length;
       return { id: catName, label: catName, badge: `${count}` };
@@ -1027,7 +1030,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       if (e.target?.result) {
         const frameDataUrl = e.target.result as string;
         const frameName =
-          window.prompt('कृपया 4:5 कस्टम फ्रेम का नाम दर्ज करें (Enter Frame Name):', 'माय 4:5 मास्टर फ्रेम') ||
+          window.prompt('कृपया 4:5 कस्टम फ्रेम का नाम दर्ज करें (Enter Frame Name):', 'मेरी कस्टम 4:5 फ्रेम') ||
           'कस्टम 4:5 फ्रेम';
 
         saveCustomFrame({
@@ -1592,8 +1595,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 .filter((f) => {
                   const cfg = getTemplateConfig(f.id);
                   if (!cfg.isActive) return false;
-                  const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'Custom Frames' || f.categoryLabel === 'Custom Frame';
-                  const cat = isTestOrSample ? 'Custom Frames' : normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
+                  const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'TEST_FRAMES';
+                  if (isTestOrSample) return false;
+                  const cat = normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
                   const selectedNorm = normalizeToCanonicalCategory(selectedFrameCategory);
                   return cat === selectedNorm;
                 })
@@ -1782,75 +1786,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 });
               })()}
 
-            {/* Admin Sample/Test Library Frames under Custom Frames */}
-            {selectedFrameCategory === 'Custom Frame' &&
-              currentFrameOptions
-                .filter((f) => {
-                  const cfg = getTemplateConfig(f.id);
-                  if (!cfg.isActive) return false;
-                  const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'Custom Frames' || f.categoryLabel === 'Custom Frame';
-                  const cat = isTestOrSample ? 'Custom Frames' : normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
-                  return cat === 'Custom Frames';
-                })
-                .map((f) => {
-                  const isSelected = (card.frameDesign || 'graphic_001') === f.id;
-                  const isPlanAllowed = isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin);
-                  const isUnlocked = effectiveAdmin || isPlanAllowed || unlockedFrameIds.includes(f.id);
-                  const cfg = getTemplateConfig(f.id);
-                  const planDisplay = cfg.allowedPlans.includes('BASIC') 
-                    ? { name: 'BASIC', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' }
-                    : cfg.allowedPlans.includes('ADVANCED')
-                    ? { name: 'ADVANCE', color: 'bg-blue-500/20 text-blue-400 border-blue-500/40' }
-                    : cfg.allowedPlans.includes('PRO')
-                    ? { name: 'PRO', color: 'bg-purple-500/20 text-purple-400 border-purple-500/40' }
-                    : { name: 'VIP', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
 
-                  return (
-                    <div
-                      key={f.id}
-                      onClick={() => {
-                        const match = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
-                        onChange({
-                          frameDesign: f.id,
-                          customDynamicFrame: match || undefined,
-                          aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
-                        });
-                      }}
-                      className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all relative overflow-hidden select-none cursor-pointer ${
-                        isSelected
-                          ? 'border-yellow-400 bg-yellow-500/15 text-white shadow-lg ring-2 ring-yellow-400/40'
-                          : isUnlocked
-                          ? 'border-neutral-800 bg-neutral-950/70 hover:border-neutral-700 text-neutral-300 hover:bg-neutral-900/60'
-                          : 'border-neutral-800/80 bg-neutral-950/40 text-neutral-400 hover:border-amber-500/40'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className={`text-xs font-black tracking-wide truncate ${isUnlocked ? 'text-white' : 'text-neutral-400'}`}>
-                          {f.name}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 flex items-center gap-1 ${planDisplay.color}`}>
-                            {isUnlocked ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Lock className="w-2.5 h-2.5 text-amber-400" />}
-                            <span>{planDisplay.name}</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
-                        {f.description}
-                      </p>
-
-                      <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
-                        <span className={`font-bold flex items-center gap-1 ${isSelected ? 'text-yellow-400' : 'text-emerald-400'}`}>
-                          {isSelected ? '✓ एक्टिव टेम्पलेट' : 'क्लिक करके चुनें'}
-                        </span>
-                        <span className="text-[9px] text-neutral-500 font-mono shrink-0 ml-1">
-                          4:5 अनुपात
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
           </div>
         )}
 

@@ -1650,8 +1650,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
-  // 4. LOCATION BADGE
-  if (df.headerConfig?.showLocation && card.location) {
+  // 4. LOCATION BADGE (Respects Photo News Studio card.showLocation toggle)
+  if (df.headerConfig?.showLocation && card.location && card.showLocation !== false) {
     const locRect = df.headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 };
     const bx = (locRect.x / 100) * width;
     const by = (locRect.y / 100) * height;
@@ -1662,12 +1662,28 @@ async function drawAuthoritativeDynamicFrameCanvas(
     if (locAsset) {
       try {
         const badgeImg = await loadImage(locAsset);
-        ctx.drawImage(badgeImg, bx, by, bw, bh);
+        const nw = badgeImg.width || 400;
+        const nh = badgeImg.height || 100;
+        
+        // Smart 3-Slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
+        const leftSlicePct = df.sliceConfig?.leftWidthPct ?? 0.28;
+        const rightSlicePct = df.sliceConfig?.rightWidthPct ?? 0.15;
+        const pinW = Math.round(nw * leftSlicePct);
+        const capW = Math.round(nw * rightSlicePct);
+        const midW = Math.max(1, nw - pinW - capW);
+
+        const leftDestW = (pinW / nh) * bh;
+        const rightDestW = (capW / nh) * bh;
+        const midDestW = Math.max(10, bw - leftDestW - rightDestW);
+
+        ctx.drawImage(badgeImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
+        ctx.drawImage(badgeImg, pinW, 0, midW, nh, bx + leftDestW, by, midDestW, bh);
+        ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, bx + leftDestW + midDestW, by, rightDestW, bh);
 
         const textReg = df.headerConfig.textRegion;
-        const tx = textReg ? bx + (textReg.x / 100) * bw : bx;
+        const tx = textReg ? bx + (textReg.x / 100) * bw : bx + leftDestW;
         const ty = textReg ? by + (textReg.y / 100) * bh : by;
-        const tw = textReg ? (textReg.width / 100) * bw : bw;
+        const tw = textReg ? (textReg.width / 100) * bw : midDestW;
         const th = textReg ? (textReg.height / 100) * bh : bh;
 
         ctx.save();
@@ -1714,6 +1730,30 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
+  // 4.5 DYNAMIC DATE STAMP (Part 10 & 11: Position, Rotation, Center-Pivot parity & Visibility Toggle)
+  if (df.headerConfig?.showDate && card.showDate !== false) {
+    const dateRect = df.headerConfig.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 };
+    const dx = (dateRect.x / 100) * width;
+    const dy = (dateRect.y / 100) * height;
+    const dw = (dateRect.width / 100) * width;
+    const dh = (dateRect.height / 100) * height;
+    const rotDeg = df.headerConfig.dateRotation ?? 270;
+
+    ctx.save();
+    ctx.translate(dx + dw / 2, dy + dh / 2);
+    ctx.rotate((rotDeg * Math.PI) / 180);
+
+    const dateFontSize = Math.round((df.headerConfig.dateFontSize || 14) * (width / 1080) * 1.4);
+    ctx.font = `bold ${dateFontSize}px "Baloo 2", sans-serif`;
+    ctx.fillStyle = df.headerConfig.dateTextColor || '#CBD5E1';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4;
+    ctx.fillText(card.dateStr || getFormattedHindiDate(), 0, 0);
+    ctx.restore();
+  }
+
   // 5. FULL STORY CALLOUT
   if (df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled') {
     const cRect = df.fullStoryCalloutConfig.rect || { x: 10, y: 88, width: 80, height: 3.5 };
@@ -1750,11 +1790,12 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
-  // 5.5 WATERMARK (Part 4: Rotation, Position & Type Controls)
-  if (df.watermarkConfig?.enabled) {
+  // 5.5 WATERMARK (Part 10 & 12: Dynamic User Mode Sync, Rotation, Position & Type Controls)
+  const isWatermarkOff = card.photoDisclaimerType === 'none' || (card.showAiGenerated === false && card.photoDisclaimerType !== 'representative' && card.photoDisclaimerType !== 'ai');
+  if (df.watermarkConfig?.enabled && !isWatermarkOff) {
     ctx.save();
     const wm = df.watermarkConfig;
-    const rotDeg = wm.rotation ?? 270;
+    const rotDeg = wm.rotation ?? (wm.position === 'right_edge' ? 270 : 0);
     const op = wm.opacity ?? 0.85;
     ctx.globalAlpha = op;
 
@@ -1772,6 +1813,9 @@ async function drawAuthoritativeDynamicFrameCanvas(
     } else if (wm.position === 'center') {
       wx = width / 2;
       wy = height / 2;
+    } else if (wm.rect?.x !== undefined) {
+      wx = (wm.rect.x / 100) * width + ((wm.rect.width || 10) / 200) * width;
+      wy = (wm.rect.y / 100) * height + ((wm.rect.height || 4) / 200) * height;
     }
 
     ctx.translate(wx, wy);
@@ -1787,7 +1831,9 @@ async function drawAuthoritativeDynamicFrameCanvas(
         console.warn('Watermark image load error:', err);
       }
     } else {
-      const wmText = wm.customText || wm.label || 'AI GENERATED';
+      const wmText = card.photoDisclaimerType === 'representative'
+        ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
+        : (card.aiGeneratedText || wm.customText || wm.label || 'AI GENERATED');
       const wmFontSize = Math.round((wm.fontSize || 14) * (width / 1080) * 1.5);
       ctx.font = `bold ${wmFontSize}px "Baloo 2", sans-serif`;
       ctx.fillStyle = wm.textColor || '#FFFFFF';
@@ -1823,12 +1869,13 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const highlightColor = card.highlightColor || (isBlack ? '#DC2626' : '#FFE600');
 
     const align = (textSlot.alignment || 'center') as CanvasTextAlign;
+    const paddedHw = Math.max(50, hw - 30);
     const layout = computeCanonicalHeadlineLayout({
       headline: rawHeadline,
       highlightWords: card.highlightWords,
       fontFamily: fontFam,
       aspectRatio: card.aspectRatio || df.aspectRatio || '4:5',
-      customBounds: { x: hx, y: hy, width: hw, height: hh },
+      customBounds: { x: hx + 15, y: hy, width: paddedHw, height: hh },
       customMaxLines: 3,
       userFontSize: card.headlineFontSize,
       alignment: align as any,
@@ -1843,7 +1890,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.save();
     // Clip to headline bounding box with subtle safety margin
     ctx.beginPath();
-    ctx.rect(hx - 5, hy - 5, hw + 10, hh + 10);
+    ctx.rect(hx - 2, hy - 2, hw + 4, hh + 4);
     ctx.clip();
 
     ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
@@ -1871,10 +1918,13 @@ async function drawAuthoritativeDynamicFrameCanvas(
       });
 
       let curX = align === 'center'
-        ? hx + (hw - totalLineWidth) / 2
+        ? Math.round(hx + (hw - totalLineWidth) / 2)
         : align === 'left'
-        ? hx + 20
-        : hx + hw - totalLineWidth - 20;
+        ? Math.round(hx + 15)
+        : Math.round(hx + hw - totalLineWidth - 15);
+
+      // Safeguard against any right-side clipping
+      curX = Math.max(hx + 5, Math.min(hx + hw - totalLineWidth - 5, curX));
 
       line.forEach((token, tIdx) => {
         ctx.fillStyle = token.isHighlight ? highlightColor : textColor;

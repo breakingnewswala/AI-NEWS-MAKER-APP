@@ -10585,7 +10585,13 @@ function deepMergeFrameConfig(existing: any, payload: any): any {
     samplePhotoUrl: payload.samplePhotoUrl !== undefined ? payload.samplePhotoUrl : existing.samplePhotoUrl,
     sampleVideoUrl: payload.sampleVideoUrl !== undefined ? payload.sampleVideoUrl : existing.sampleVideoUrl,
     calloutAssetUrl: payload.calloutAssetUrl !== undefined ? payload.calloutAssetUrl : existing.calloutAssetUrl,
-    designCategory: payload.designCategory || existing.designCategory || 'Regular Frames',
+    isTestFrame: payload.isTestFrame !== undefined ? Boolean(payload.isTestFrame) : existing.isTestFrame,
+    approvalStatus: payload.approvalStatus || existing.approvalStatus || 'PENDING_TEST',
+    targetCategory: payload.targetCategory !== undefined ? payload.targetCategory : existing.targetCategory,
+    approvedAt: payload.approvedAt !== undefined ? payload.approvedAt : existing.approvedAt,
+    approvedBy: payload.approvedBy !== undefined ? payload.approvedBy : existing.approvedBy,
+    sliceConfig: payload.sliceConfig || existing.sliceConfig,
+    designCategory: payload.designCategory || existing.designCategory || 'TEST_FRAMES',
     allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : (existing.allowedPlans || ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK']),
     publicationStatus: payload.publicationStatus || existing.publicationStatus || 'draft',
     headerConfig: {
@@ -10880,6 +10886,8 @@ app.get("/api/dynamic-frames", async (req, res) => {
       : frames.filter(
           (f) =>
             f.publicationStatus === "published" &&
+            !f.isTestFrame &&
+            f.designCategory !== "TEST_FRAMES" &&
             !f.isSampleTestTemplate &&
             !f.isSample &&
             f.name !== "11111" &&
@@ -10942,7 +10950,13 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
       primaryBackgroundAsset: payload.primaryBackgroundAsset || undefined,
       primaryBackgroundMode: payload.primaryBackgroundMode || 'image',
       primaryBackgroundHex: payload.primaryBackgroundHex || '#0B1329',
-      designCategory: payload.designCategory || (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"),
+      isTestFrame: payload.isTestFrame !== undefined ? Boolean(payload.isTestFrame) : true,
+      approvalStatus: payload.approvalStatus || (payload.isTestFrame === false ? "APPROVED" : "PENDING_TEST"),
+      targetCategory: payload.targetCategory || null,
+      approvedAt: payload.approvedAt || null,
+      approvedBy: payload.approvedBy || null,
+      sliceConfig: payload.sliceConfig || null,
+      designCategory: payload.designCategory || (payload.isTestFrame === false ? (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames") : "TEST_FRAMES"),
       allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
       publicationStatus: payload.publicationStatus || "draft",
       createdBy: (req as any).user?.email || "breakingnewswala.com@gmail.com",

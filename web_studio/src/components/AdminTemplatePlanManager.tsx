@@ -27,6 +27,7 @@ import {
   MapPin,
   Calendar,
   Filter,
+  Trash2,
 } from 'lucide-react';
 import {
   GraphicPlanCategory,
@@ -53,22 +54,36 @@ export const CANONICAL_FRAME_CATEGORIES = [
   'Special Frames',
   'Bonus Frames',
   'Custom Frames',
+  'TEST_FRAMES',
 ] as const;
 
 export type CanonicalFrameCategory = (typeof CANONICAL_FRAME_CATEGORIES)[number];
 
+export const CATEGORY_HINDI_MAP: Record<CanonicalFrameCategory, string> = {
+  'Regular Frames': 'रेगुलर फ्रेम',
+  'Package Frames': 'पैकेज फ्रेम',
+  'Super Breaking': 'सुपर ब्रेकिंग',
+  'Text Breaking': 'टेक्स्ट ब्रेकिंग',
+  'बयानबाजी': 'बयानबाजी',
+  'Special Frames': 'स्पेशल फ्रेम',
+  'Bonus Frames': 'बोनस फ्रेम',
+  'Custom Frames': 'कस्टम फ्रेम',
+  'TEST_FRAMES': 'TEST FRAMES',
+};
+
 export function normalizeToCanonicalCategory(cat?: string): CanonicalFrameCategory {
   if (!cat) return 'Regular Frames';
   const c = cat.trim();
-  if (c === 'Regular Frame' || c === 'Regular Frames') return 'Regular Frames';
-  if (c === 'Story Frame' || c === 'Story Frames') return 'Regular Frames';
-  if (c === 'Package Frame' || c === 'Package Frames') return 'Package Frames';
-  if (c === 'Super Breaking Frame' || c === 'Super Breaking') return 'Super Breaking';
-  if (c === 'Text Breaking Frame' || c === 'Text Breaking') return 'Text Breaking';
+  if (c === 'TEST_FRAMES' || c === 'Test Frames' || c === 'Test Frame' || c === 'TEST FRAMES' || c === 'टेस्ट फ्रेम') return 'TEST_FRAMES';
+  if (c === 'Regular Frame' || c === 'Regular Frames' || c === 'रेगुलर फ्रेम') return 'Regular Frames';
+  if (c === 'Story Frame' || c === 'Story Frames' || c === 'स्टोरी फ्रेम') return 'Regular Frames';
+  if (c === 'Package Frame' || c === 'Package Frames' || c === 'पैकेज फ्रेम') return 'Package Frames';
+  if (c === 'Super Breaking Frame' || c === 'Super Breaking' || c === 'सुपर ब्रेकिंग') return 'Super Breaking';
+  if (c === 'Text Breaking Frame' || c === 'Text Breaking' || c === 'टेक्स्ट ब्रेकिंग') return 'Text Breaking';
   if (c === 'बयानबाज़ी फ्रेम' || c === 'बयानबाजी' || c === 'बयानबाज़ी') return 'बयानबाजी';
-  if (c === 'Special Frame' || c === 'Special Frames') return 'Special Frames';
-  if (c === 'Bonus Frame' || c === 'Bonus Frames') return 'Bonus Frames';
-  if (c === 'Custom Frame' || c === 'Custom Frames' || c === 'Sample Frame' || c === 'Sample Frames') return 'Custom Frames';
+  if (c === 'Special Frame' || c === 'Special Frames' || c === 'स्पेशल फ्रेम') return 'Special Frames';
+  if (c === 'Bonus Frame' || c === 'Bonus Frames' || c === 'बोनस फ्रेम') return 'Bonus Frames';
+  if (c === 'Custom Frame' || c === 'Custom Frames' || c === 'Sample Frame' || c === 'Sample Frames' || c === 'कस्टम फ्रेम') return 'Custom Frames';
   return 'Regular Frames';
 }
 
@@ -96,12 +111,16 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   // Legacy filter test assertions: filterCategory !== 'all' && searchQuery
   const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '9:16'>('all');
   const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | CanonicalFrameCategory>('all');
   
   // Modals & Feedback
   const [previewFrame, setPreviewFrame] = useState<DynamicFrameTemplate | null>(null);
   const [successToast, setSuccessToast] = useState<{ id: string; msg: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempCustomName, setTempCustomName] = useState<string>('');
+  const [approvingFrame, setApprovingFrame] = useState<{ id: string; name: string; currentCategory: string } | null>(null);
+  const [targetApproveCategory, setTargetApproveCategory] = useState<CanonicalFrameCategory>('Regular Frames');
+  const [deletingFrame, setDeletingFrame] = useState<{ id: string; name: string } | null>(null);
 
   const refreshFrames = () => {
     setFrameOptions(getEffectiveFrameOptions());
@@ -206,22 +225,80 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     showToast(frameId, `✅ कॉइन मूल्य ${coinPrice} सेट किया गया`);
   };
 
+  const handleApproveAndPublish = async (frameId: string, category: CanonicalFrameCategory) => {
+    try {
+      const token = getAuthToken();
+      const existing = dynamicFramesList.find((f) => f.id === frameId);
+      if (!existing) {
+        showToast(frameId, '⚠️ फ्रेम नहीं मिला');
+        return;
+      }
+      const updated: DynamicFrameTemplate = {
+        ...existing,
+        designCategory: category as any,
+        isTestFrame: false,
+        approvalStatus: 'APPROVED',
+        approvedAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      const res = await saveDynamicFrameToApi(updated, token);
+      if (res.success) {
+        setDynamicFramesList((prev) => prev.map((f) => (f.id === frameId ? (res.frame || updated) : f)));
+        showToast(frameId, `✅ फ्रेम स्वीकृत कर '${CATEGORY_HINDI_MAP[category] || category}' श्रेणी में प्रकाशित कर दी गई!`);
+        setApprovingFrame(null);
+      } else {
+        showToast(frameId, `❌ फ्रेम स्वीकृति विफल: ${res.error || 'अज्ञात त्रुटि'}`);
+      }
+    } catch (err: any) {
+      showToast(frameId, `❌ त्रुटि: ${err?.message || 'अज्ञात'}`);
+    }
+  };
+
+  const handleDeleteFrame = async (frameId: string) => {
+    if (frameId === 'graphic_001') {
+      alert("सुरक्षित डिफ़ॉल्ट फ्रेम 'Regular Clean News Frame' को हटाया नहीं जा सकता।");
+      setDeletingFrame(null);
+      return;
+    }
+    try {
+      const token = getAuthToken();
+      const res = await fetch(`/api/dynamic-frames/${frameId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        setDynamicFramesList((prev) => prev.filter((f) => f.id !== frameId));
+        showToast(frameId, '🗑️ फ्रेम सफलतापूर्वक डिलीट की गई');
+      } else {
+        showToast(frameId, '❌ फ्रेम डिलीट नहीं हो सका');
+      }
+      setDeletingFrame(null);
+    } catch {
+      showToast(frameId, '❌ सर्वर कनेक्शन त्रुटि');
+      setDeletingFrame(null);
+    }
+  };
+
   // Convert DynamicFrameTemplate or FrameOption to a canonical display object
   const displayItems = useMemo(() => {
-    // 1. Published dynamic frames (authoritative source)
+    // 1. Dynamic frames (authoritative source)
     const dynamicItems = dynamicFramesList.map((df) => {
       const cfg = getEffectiveConfig(df.id);
+      const isTest = (df as any).isTestFrame || df.designCategory === 'TEST_FRAMES' || df.name === '11111' || df.name === '2222' || df.id === 'df_sample_11111' || df.id === 'df_sample_2222';
+      const normCat = isTest ? 'TEST_FRAMES' : normalizeToCanonicalCategory(df.designCategory);
       return {
         id: df.id,
         name: df.name,
         description: df.description || `AI जनरेटेड ${df.aspectRatio} ग्राफिक फ्रेम`,
         aspectRatio: df.aspectRatio || '4:5',
-        category: normalizeToCanonicalCategory(df.designCategory),
-        previewUrl: df.previewImageUrl || df.sampleReferenceUrl || '',
+        category: normCat,
+        previewUrl: df.previewImageUrl || df.primaryBackgroundAsset || df.sampleReferenceUrl || '',
         version: df.version || 1,
         allowedPlans: (cfg.allowedPlans || df.allowedPlans || ['BASIC']) as GraphicPlanCategory[],
         coinPrice: cfg.coinPrice || 0,
         isActive: cfg.isActive !== false,
+        isTestFrame: isTest,
+        approvalStatus: df.approvalStatus || (isTest ? 'PENDING_TEST' : 'APPROVED'),
         rawDynamicFrame: df,
       };
     });
@@ -245,6 +322,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
           allowedPlans: cfg.allowedPlans || ['BASIC'],
           coinPrice: cfg.coinPrice || 0,
           isActive: cfg.isActive !== false,
+          isTestFrame: false,
+          approvalStatus: 'APPROVED' as const,
           rawDynamicFrame: undefined,
         };
       });
@@ -255,17 +334,26 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   // Unified allFrames collection
   const allFrames = displayItems;
 
-  // Filter items (Part 5: Clean filtering by Ratio and Plan Eligibility)
+  // Filter items by Category, Ratio and Plan Eligibility
   const filteredItems = useMemo(() => {
     return displayItems.filter((item) => {
+      if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
       if (selectedRatio !== 'all' && item.aspectRatio !== selectedRatio) return false;
       if (filterPlan !== 'all' && !item.allowedPlans.includes(filterPlan)) return false;
       return true;
     });
-  }, [displayItems, selectedRatio, filterPlan]);
+  }, [displayItems, selectedCategory, selectedRatio, filterPlan]);
 
   const count4_5 = displayItems.filter((i) => i.aspectRatio === '4:5').length;
   const count9_16 = displayItems.filter((i) => i.aspectRatio === '9:16').length;
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: displayItems.length };
+    CANONICAL_FRAME_CATEGORIES.forEach((cat) => {
+      counts[cat] = displayItems.filter((it) => it.category === cat).length;
+    });
+    return counts;
+  }, [displayItems]);
 
   return (
     <div className="space-y-6">
@@ -290,7 +378,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>सभी ग्राफिक फ्रेम्स ({displayItems.length})</span>
+            <span>सभी अनुपात ({displayItems.length})</span>
           </button>
 
           <button
@@ -318,19 +406,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
           </button>
         </div>
 
-        {/* Actions: Refresh & Add New Frame */}
+        {/* Actions: Refresh (Frame creation strictly initiated via AI Frame Generator in Section D) */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent('switch_admin_tab', { detail: { tab: 'frames' } }));
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition shadow-sm whitespace-nowrap cursor-pointer"
-            title="D. AI Frame Generator में नई फ्रेम बनाएं"
-          >
-            <span>+ नई फ्रेम जोड़ें</span>
-          </button>
-
           <button
             type="button"
             onClick={refreshFrames}
@@ -341,6 +418,59 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             <span>रिफ्रेश करें</span>
           </button>
         </div>
+      </div>
+
+      {/* Category Tabs: Order (1) All, (2) Regular Frames, (3) Package Frames, (4) Super Breaking, (5) Text Breaking, (6) बयानबाजी, (7) Special Frames, (8) Bonus Frames, (9) Custom Frames, (10) TEST FRAMES (Admin Only) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none bg-slate-900/90 border border-slate-800 p-2.5 rounded-2xl shadow-md">
+        <button
+          type="button"
+          onClick={() => setSelectedCategory('all')}
+          className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            selectedCategory === 'all'
+              ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
+              : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>सभी ({categoryCounts.all ?? displayItems.length})</span>
+        </button>
+
+        {CANONICAL_FRAME_CATEGORIES.map((cat) => {
+          if (cat === 'TEST_FRAMES' && !isAdmin) return null;
+          const isSelected = selectedCategory === cat;
+          const isTestCat = cat === 'TEST_FRAMES';
+          const count = categoryCounts[cat] || 0;
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setSelectedCategory(cat)}
+              className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                isSelected
+                  ? isTestCat
+                    ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400'
+                    : 'bg-purple-600 text-white shadow-md'
+                  : isTestCat
+                  ? 'bg-amber-950/40 text-amber-300 border border-amber-600/40 hover:bg-amber-900/60'
+                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              {isTestCat && <span>🧪</span>}
+              <span>{CATEGORY_HINDI_MAP[cat] || cat}</span>
+              <span
+                className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isSelected
+                    ? isTestCat
+                      ? 'bg-black/20 text-slate-950'
+                      : 'bg-black/20 text-white'
+                    : 'bg-slate-900 text-slate-400'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Sub Filters: Plan Filter */}
@@ -369,11 +499,20 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredItems.map((item) => {
           const isStory = item.aspectRatio === '9:16';
+          const isTestFrame = item.isTestFrame || item.category === 'TEST_FRAMES';
+          const displayThumb =
+            item.previewUrl ||
+            item.rawDynamicFrame?.previewImageUrl ||
+            item.rawDynamicFrame?.primaryBackgroundAsset ||
+            item.rawDynamicFrame?.sampleReferenceUrl;
+
           return (
             <div
               key={item.id}
               className={`bg-slate-900/90 border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all shadow-md group ${
-                item.isActive
+                isTestFrame
+                  ? 'border-amber-500/40 hover:border-amber-400/80 bg-slate-900/95'
+                  : item.isActive
                   ? 'border-slate-800 hover:border-purple-500/50'
                   : 'border-slate-800/40 opacity-70'
               }`}
@@ -402,34 +541,43 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   </div>
                 </div>
 
-                {/* Frame Preview Thumbnail */}
+                {/* Frame Preview Thumbnail with Aspect-Ratio awareness */}
                 <div
                   onClick={() => {
                     if (item.rawDynamicFrame) {
                       setPreviewFrame(item.rawDynamicFrame);
                     }
                   }}
-                  className={`w-full ${isStory ? 'h-36' : 'h-32'} rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex items-center justify-center relative mb-3 group-hover:border-purple-500/30 transition cursor-pointer`}
+                  className={`w-full ${isStory ? 'aspect-[9/16] max-h-56' : item.aspectRatio === '1:1' ? 'aspect-square max-h-48' : 'aspect-[4/5] max-h-52'} rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex items-center justify-center relative mb-3 group-hover:border-purple-500/30 transition cursor-pointer`}
                   title="क्लिक करके बड़ा प्रीव्यू देखें"
                 >
-                  {item.previewUrl ? (
+                  {displayThumb ? (
                     <img
-                      src={item.previewUrl}
+                      src={displayThumb}
                       alt={item.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
                       }}
                     />
                   ) : (
-                    <Layout className="w-8 h-8 text-slate-700" />
+                    <div className="flex flex-col items-center justify-center p-3 text-center">
+                      <Layout className="w-8 h-8 text-slate-700 mb-1" />
+                      <span className="text-[10px] text-slate-500 font-bold">{item.name}</span>
+                    </div>
                   )}
-                  <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-amber-300 border border-amber-500/30">
-                    📂 {item.category}
+
+                  {/* Badges on preview */}
+                  <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-slate-950/85 backdrop-blur-xs text-[9px] font-bold text-amber-300 border border-amber-500/30 shadow-xs">
+                    📂 {CATEGORY_HINDI_MAP[item.category] || item.category}
                   </span>
-                  <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-xs text-[9px] font-bold text-emerald-300 border border-emerald-500/30">
-                    {item.allowedPlans.join(', ')}
-                  </span>
+
+                  {isTestFrame && (
+                    <span className="absolute top-1.5 right-1.5 px-2 py-0.5 rounded bg-amber-500 text-slate-950 text-[9px] font-black border border-amber-300 shadow-md flex items-center gap-1">
+                      <span>🧪</span>
+                      <span>{item.approvalStatus === 'APPROVED' ? 'स्वीकृत' : item.approvalStatus === 'REJECTED' ? 'अस्वीकृत' : 'परीक्षण लंबित'}</span>
+                    </span>
+                  )}
                 </div>
 
                 {/* Name & Description */}
@@ -438,7 +586,25 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   {item.description}
                 </p>
 
-                {/* Controls: Tier & Coins */}
+                {/* Action for Test Frames: Approve and Publish */}
+                {isTestFrame && (
+                  <div className="mt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setApprovingFrame({ id: item.id, name: item.name, currentCategory: item.category });
+                        setTargetApproveCategory('Regular Frames');
+                      }}
+                      className="w-full py-1.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 text-xs font-black transition flex items-center justify-center gap-1.5 shadow-md active:scale-98 cursor-pointer"
+                      title="इस टेस्ट फ्रेम को स्वीकृत कर प्रोडक्शन श्रेणी में भेजें"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                      <span>फ्रेम को स्वीकृत करें और श्रेणी चुनें</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Controls: Tier & Coins - Positioned cleanly below preview */}
                 <div className="mt-3 pt-2.5 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-xs">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 block mb-0.5">टियर एक्सेस:</label>
@@ -481,7 +647,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   }`}
                 >
                   {item.isActive ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-slate-500" />}
-                  <span>{item.isActive ? 'सक्रिय (Active)' : 'निष्क्रिय (Inactive)'}</span>
+                  <span>{item.isActive ? 'सक्रिय' : 'निष्क्रिय'}</span>
                 </button>
 
                 <div className="flex items-center gap-1.5">
@@ -515,7 +681,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                         });
                       }
                     }}
-                    className="py-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    className="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    title="प्रीव्यू देखें"
                   >
                     <Eye className="w-3.5 h-3.5 text-purple-400" />
                     <span>प्रीव्यू</span>
@@ -550,17 +717,30 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                         });
                       }
                     }}
-                    className="py-1 px-2.5 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-purple-500/40 cursor-pointer"
+                    className="py-1 px-2 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-purple-500/40 cursor-pointer"
+                    title="एडिट करें"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                     <span>एडिट</span>
                   </button>
 
+                  {/* Delete button with safety check */}
+                  {item.id !== 'graphic_001' && (
+                    <button
+                      type="button"
+                      onClick={() => setDeletingFrame({ id: item.id, name: item.name })}
+                      className="py-1 px-2 bg-rose-950/40 hover:bg-rose-900/70 text-rose-300 hover:text-rose-100 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-rose-500/30 cursor-pointer"
+                      title="फ्रेम डिलीट करें"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    </button>
+                  )}
+
                   {onOpenStudioWithTemplate && (
                     <button
                       type="button"
                       onClick={() => onOpenStudioWithTemplate(item.id)}
-                      className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition"
+                      className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
                       title="स्टूडियो में टेस्ट करें"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -783,6 +963,113 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* APPROVAL & PUBLISH TO PRODUCTION CATEGORY MODAL */}
+      {approvingFrame && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <h4 className="text-sm font-black text-white">फ्रेम को स्वीकृत करें और श्रेणी चुनें</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovingFrame(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 space-y-2">
+              <p>
+                फ्रेम: <strong className="text-white">{approvingFrame.name}</strong> (ID: <code className="font-mono text-purple-300">{approvingFrame.id}</code>)
+              </p>
+              <p className="text-slate-400">
+                वर्तमान स्थिति: <span className="text-amber-400 font-bold">🧪 TEST FRAMES (परीक्षण लंबित)</span>
+              </p>
+              <p className="text-slate-400">
+                कृपया वह प्रोडक्शन श्रेणी चुनें जिसमें यह फ्रेम यूज़र्स के लिए प्रकाशित होगी:
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 block">प्रोडक्शन श्रेणी चुनें:</label>
+              <select
+                value={targetApproveCategory}
+                onChange={(e) => setTargetApproveCategory(e.target.value as any)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold"
+              >
+                {CANONICAL_FRAME_CATEGORIES.filter((c) => c !== 'TEST_FRAMES').map((cat) => (
+                  <option key={cat} value={cat}>
+                    {CATEGORY_HINDI_MAP[cat] || cat} ({cat})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/30 text-[11px] text-amber-200">
+              ℹ️ स्वीकृति के बाद यह फ्रेम <strong>{CATEGORY_HINDI_MAP[targetApproveCategory] || targetApproveCategory}</strong> में लाइव हो जाएगी और योग्य यूज़र्स इसका उपयोग कर सकेंगे।
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setApprovingFrame(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApproveAndPublish(approvingFrame.id, targetApproveCategory)}
+                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-xs font-black shadow-md hover:brightness-110 active:scale-98"
+              >
+                मंजूर करें व पब्लिश करें
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deletingFrame && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-rose-950/60 text-rose-400 border border-rose-500/30">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white">फ्रेम हटाने की पुष्टि</h4>
+                <span className="text-[11px] text-slate-400">यह क्रिया पूर्ववत नहीं की जा सकती</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              क्या आप वाकई फ्रेम <strong className="text-white">"{deletingFrame.name}"</strong> (ID: <code className="font-mono text-purple-300">{deletingFrame.id}</code>) को सिस्टम से हमेशा के लिए हटाना चाहते हैं?
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeletingFrame(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+              >
+                नहीं, रखें
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteFrame(deletingFrame.id)}
+                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black shadow-md"
+              >
+                हाँ, डिलीट करें
+              </button>
             </div>
           </div>
         </div>

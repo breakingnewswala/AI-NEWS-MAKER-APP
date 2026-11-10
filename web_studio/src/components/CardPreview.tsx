@@ -44,7 +44,7 @@ const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     } catch {}
   }
   target.onerror = null;
-  target.src = FALLBACK_NEWS_BG;
+  target.style.display = 'none';
 };
 
 export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale = 1, className, showSafeZone = false, onChange }) => {
@@ -112,9 +112,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     return trimmed;
   };
 
-  const mainPhotoSrc = (card.images?.main && card.images.main.trim().length > 0)
-    ? getProxiedImageUrl(card.images.main)
-    : FALLBACK_NEWS_BG;
+  const mainPhotoSrc = hasUploadedPhoto
+    ? getProxiedImageUrl(card.images?.main)
+    : '';
 
   const resolvedSecond = (card.images?.second && card.images.second.trim().length > 0 && card.images.second !== card.images.main)
     ? card.images.second
@@ -595,7 +595,29 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               const src = sIdx === 0
                 ? (mainPhotoSrc || defaultAsset)
                 : (card.secondaryPhoto || card.images?.second || defaultAsset || mainPhotoSrc);
-              if (!src) return null;
+              if (!src) {
+                return (
+                  <div
+                    key={slot.id || sIdx}
+                    className="absolute overflow-hidden bg-slate-900 border border-slate-800/80 flex flex-col items-center justify-center text-slate-500 pointer-events-none select-none"
+                    style={{
+                      left: `${slot.rect.x}%`,
+                      top: `${slot.rect.y}%`,
+                      width: `${slot.rect.width}%`,
+                      height: `${slot.rect.height}%`,
+                      borderRadius: slot.borderRadius ? `${slot.borderRadius}px` : undefined,
+                    }}
+                  >
+                    <Camera className="w-8 h-8 text-slate-600 stroke-[1.5] mb-1.5 opacity-60" />
+                    <span className="text-[11px] font-bold tracking-wide text-slate-400 font-['Poppins']">
+                      {slot.name || `PHOTO SLOT ${sIdx + 1}`}
+                    </span>
+                    <span className="text-[9px] text-slate-500 font-['Noto_Sans_Devanagari'] mt-0.5">
+                      (कृपया फोटो जोड़ें)
+                    </span>
+                  </div>
+                );
+              }
               return (
                 <div
                   key={slot.id || sIdx}
@@ -796,8 +818,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         {card.frameDesign === 'jacket-quote' && (
           <div className="absolute inset-x-0 bottom-0 h-36 sm:h-44 bg-gradient-to-b from-transparent via-black/75 to-black pointer-events-none z-10" />
         )}
-        {/* Render photo layouts only when applicable (for graphic_001, when user has uploaded a photo) */}
-        {!(card.frameDesign === 'graphic_001' && !hasUploadedPhoto) && (
+        {/* Render photo layouts only when applicable (when user has uploaded a photo) */}
+        {hasUploadedPhoto && (
           <>
             {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
             {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
@@ -3351,7 +3373,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               )}
 
               {/* Dynamic Location Badge */}
-              {df.headerConfig?.showLocation && card.location && (() => {
+              {df.headerConfig?.showLocation && card.location && card.showLocation !== false && (() => {
                 const badgeAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
                 const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000');
                 return badgeAsset ? (
@@ -3394,7 +3416,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         </span>
                       </div>
                     ) : (
-                      <span className="truncate px-2">{card.location}</span>
+                      <div className="absolute inset-y-0 left-[28%] right-2 flex items-center justify-center overflow-hidden">
+                        <span
+                          className="truncate"
+                          style={{
+                            color: locColor,
+                            fontFamily: df.headerConfig.typographyConfig?.fontFamily ? `"${df.headerConfig.typographyConfig.fontFamily}", sans-serif` : undefined,
+                            fontWeight: df.headerConfig.typographyConfig?.weight || 800,
+                            fontSize: `${Math.max(9, Math.round((df.headerConfig.typographyConfig?.fontSize || df.headerConfig.locationFontSize || 20) * previewScale))}px`,
+                          }}
+                        >
+                          {card.location}
+                        </span>
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -3418,22 +3452,26 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               })()}
 
               {/* Dynamic Date Stamp */}
-              {df.headerConfig?.showDate && (
-                <div
-                  className="absolute pointer-events-auto flex items-center justify-center text-center font-bold"
-                  style={{
-                    left: `${df.headerConfig.dateRect?.x ?? 2}%`,
-                    top: `${df.headerConfig.dateRect?.y ?? 35}%`,
-                    width: `${df.headerConfig.dateRect?.width ?? 20}%`,
-                    height: `${df.headerConfig.dateRect?.height ?? 4}%`,
-                    transform: `rotate(${df.headerConfig.dateRotation || 0}deg)`,
-                    color: df.headerConfig.dateTextColor || '#CBD5E1',
-                    fontSize: `${Math.max(9, Math.round((df.headerConfig.dateFontSize || 18) * previewScale))}px`,
-                  }}
-                >
-                  <span>{getFormattedHindiDate()}</span>
-                </div>
-              )}
+              {df.headerConfig?.showDate && card.showDate !== false && (() => {
+                const rot = df.headerConfig.dateRotation ?? 270;
+                return (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center text-center font-bold"
+                    style={{
+                      left: `${df.headerConfig.dateRect?.x ?? 5}%`,
+                      top: `${df.headerConfig.dateRect?.y ?? 18.5}%`,
+                      width: `${df.headerConfig.dateRect?.width ?? 34}%`,
+                      height: `${df.headerConfig.dateRect?.height ?? 3.5}%`,
+                      transform: rot !== 0 ? `rotate(${rot}deg)` : undefined,
+                      transformOrigin: 'center center',
+                      color: df.headerConfig.dateTextColor || '#CBD5E1',
+                      fontSize: `${Math.max(9, Math.round((df.headerConfig.dateFontSize || 14) * previewScale))}px`,
+                    }}
+                  >
+                    <span className="truncate">{card.dateStr || getFormattedHindiDate()}</span>
+                  </div>
+                );
+              })()}
 
               {/* Breaking News Ribbon */}
               {df.ribbonConfig?.enabled && (
@@ -3455,8 +3493,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 </div>
               )}
 
-              {/* Watermark (Part 3: Position, Rotation, Center-Pivot parity) */}
+              {/* Watermark (Part 10 & 12: Dynamic User Mode Sync, Position, Rotation, Center-Pivot parity) */}
               {df.watermarkConfig?.enabled && (() => {
+                const isWatermarkOff = card.photoDisclaimerType === 'none' || (card.showAiGenerated === false && card.photoDisclaimerType !== 'representative' && card.photoDisclaimerType !== 'ai');
+                if (isWatermarkOff) return null;
+
                 const rot = df.watermarkConfig.rotation ?? (df.watermarkConfig.position === 'right_edge' ? 270 : 0);
                 const pos = df.watermarkConfig.position || 'right_edge';
                 let posStyle: React.CSSProperties = { right: '12px', top: '35%' };
@@ -3483,6 +3524,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 }
 
                 const transform = baseTranslate ? `${baseTranslate} rotate(${rot}deg)` : `rotate(${rot}deg)`;
+                const wmText = card.photoDisclaimerType === 'representative'
+                  ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
+                  : (card.aiGeneratedText || df.watermarkConfig.customText || df.watermarkConfig.label || 'AI GENERATED');
 
                 return (
                   <div
@@ -3510,7 +3554,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                           textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7)',
                         }}
                       >
-                        {df.watermarkConfig.customText || df.watermarkConfig.label || 'AI GENERATED'}
+                        {wmText}
                       </span>
                     )}
                   </div>

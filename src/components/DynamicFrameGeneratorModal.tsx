@@ -762,7 +762,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const [frameName, setFrameName] = useState<string>(initialFrame?.name || '');
   const [frameDescription, setFrameDescription] = useState<string>(initialFrame?.description || '');
   const [designCategory, setDesignCategory] = useState<DynamicDesignCategory>(
-    initialFrame?.designCategory || (selectedRatio === '9:16' ? 'Story Frames' : 'Regular Frames')
+    initialFrame?.designCategory || 'TEST_FRAMES'
+  );
+  const [isTestFrame, setIsTestFrame] = useState<boolean>(
+    initialFrame?.isTestFrame !== undefined ? initialFrame.isTestFrame : true
+  );
+  const [approvalStatus, setApprovalStatus] = useState<'PENDING_TEST' | 'IN_TESTING' | 'APPROVED' | 'REJECTED'>(
+    initialFrame?.approvalStatus || 'PENDING_TEST'
   );
   const [allowedPlans, setAllowedPlans] = useState<DynamicPlanTier[]>(
     initialFrame?.allowedPlans || ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK']
@@ -1525,25 +1531,27 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
       const rawInput =
         testHeadline ||
-        [dummyLine1, dummyLine2, dummyLine3].filter(Boolean).join(' ') ||
-        'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी';
+        [dummyLine1, dummyLine2, dummyLine3].filter(Boolean).join('\n') ||
+        'मध्य प्रदेश में ऐतिहासिक फैसला:\nकैबिनेट बैठक में बड़े प्रस्तावों को\nमिली अंतिम मंजूरी';
       const textToDraw = normalizeHeadlineText(rawInput);
 
       const headlineAlign = (headlineSlot.alignment || 'center') as CanvasTextAlign;
+      const paddedHw = Math.max(50, hw - 30);
       const canonicalLayout = computeCanonicalHeadlineLayout({
         headline: textToDraw,
         fontFamily: headlineSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
         aspectRatio: selectedRatio,
         isBreakingStyle: false,
-        customBounds: { x: hx, y: hy, width: hw, height: hh },
+        customBounds: { x: hx + 15, y: hy, width: paddedHw, height: hh },
         customMaxLines: 3,
         alignment: headlineAlign as any,
+        ctx,
       });
 
       ctx.save();
       // Clip to headline bounding area with a small safety margin
       ctx.beginPath();
-      ctx.rect(hx - 5, hy - 5, hw + 10, hh + 10);
+      ctx.rect(hx - 2, hy - 2, hw + 4, hh + 4);
       ctx.clip();
 
       if (hRot !== 0) {
@@ -1587,10 +1595,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         });
 
         let curX = headlineAlign === 'center'
-          ? hx + (hw - totalLineWidth) / 2
+          ? Math.round(hx + (hw - totalLineWidth) / 2)
           : headlineAlign === 'left'
-          ? hx + 20
-          : hx + hw - totalLineWidth - 20;
+          ? Math.round(hx + 15)
+          : Math.round(hx + hw - totalLineWidth - 15);
+
+        // Safeguard to ensure text is never drawn outside [hx, hx + hw]
+        curX = Math.max(hx + 5, Math.min(hx + hw - totalLineWidth - 5, curX));
 
         tokens.forEach((token: any, tIdx: number) => {
           const tText = typeof token === 'string' ? token : (token?.text || '');
@@ -1671,17 +1682,23 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           try {
             const bImg = await loadImageSafe(badgeAsset);
             if (bImg && bImg.width > 0) {
-              const bAspect = bImg.width / bImg.height;
-              const boxAspect = bw / bh;
-              let dw = bw, dh = bh;
-              if (bAspect > boxAspect) {
-                dh = bw / bAspect;
-              } else {
-                dw = bh * bAspect;
-              }
-              const dx = bx + (bw - dw) / 2;
-              const dy = by + (bh - dh) / 2;
-              ctx.drawImage(bImg, dx, dy, dw, dh);
+              const nw = bImg.width || 400;
+              const nh = bImg.height || 100;
+
+              // Smart 3-Slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
+              const leftSlicePct = 0.28;
+              const rightSlicePct = 0.15;
+              const pinW = Math.round(nw * leftSlicePct);
+              const capW = Math.round(nw * rightSlicePct);
+              const midW = Math.max(1, nw - pinW - capW);
+
+              const leftDestW = (pinW / nh) * bh;
+              const rightDestW = (capW / nh) * bh;
+              const midDestW = Math.max(10, bw - leftDestW - rightDestW);
+
+              ctx.drawImage(bImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
+              ctx.drawImage(bImg, pinW, 0, midW, nh, bx + leftDestW, by, midDestW, bh);
+              ctx.drawImage(bImg, nw - capW, 0, capW, nh, bx + leftDestW + midDestW, by, rightDestW, bh);
               badgeDrawn = true;
 
               const locText = dummyLocation || 'भोपाल';
@@ -1695,11 +1712,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                 locColor = '#000000';
               }
 
-              const tr = headerConfig.textRegion || libBadge?.textRegion || { x: 32, y: 22, width: 62, height: 56 };
-              const tx = dx + (tr.x / 100) * dw;
-              const ty = dy + (tr.y / 100) * dh;
-              const tw = (tr.width / 100) * dw;
-              const th = (tr.height / 100) * dh;
+              // Text placed inside center stretchable compartment (never overlapping left pin)
+              const tx = bx + leftDestW;
+              const ty = by;
+              const tw = midDestW;
+              const th = bh;
 
               ctx.save();
               let fontSize = Math.max(14, Math.min(36, Math.round(th * 0.75)));
@@ -1931,7 +1948,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       previewImageUrl: primaryBackgroundAsset || sampleImage,
       primaryFooterColor,
       bannedFooterColor,
-      designCategory: isVideo ? 'Special Frames' : designCategory,
+      isTestFrame: initialFrame ? (initialFrame.isTestFrame ?? false) : true,
+      approvalStatus: initialFrame ? (initialFrame.approvalStatus ?? 'APPROVED') : 'PENDING_TEST',
+      designCategory: isVideo ? 'Special Frames' : (initialFrame ? (initialFrame.designCategory || designCategory) : 'TEST_FRAMES'),
       allowedPlans,
       publicationStatus,
       createdBy: currentUser?.email || 'breakingnewswala.com@gmail.com',
@@ -4580,20 +4599,27 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           }}
                         >
                           {headerConfig.locationBadgeMode === 'static_image' && badgeAsset ? (
-                            <div className="relative flex items-center justify-center">
+                            <div className="relative flex items-center justify-center h-6">
                               <img
                                 src={badgeAsset}
                                 alt="Location Badge"
-                                className="max-h-6 object-contain"
+                                className="h-full w-auto object-contain"
                               />
-                              <span
-                                className="absolute right-2 text-[8px] font-black shadow-sm"
-                                style={{
-                                  color: headerConfig.locationTextColor || '#000000',
-                                }}
+                              <div
+                                className="absolute right-1.5 left-[28%] flex items-center justify-center overflow-hidden"
+                                style={{ height: '100%' }}
                               >
-                                {dummyLocation || 'भोपाल'}
-                              </span>
+                                <span
+                                  className="text-[8px] font-black truncate shadow-xs"
+                                  style={{
+                                    color: (headerConfig.locationTextColor && headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF')
+                                      ? headerConfig.locationTextColor
+                                      : '#000000',
+                                  }}
+                                >
+                                  {dummyLocation || 'भोपाल'}
+                                </span>
+                              </div>
                             </div>
                           ) : (
                             <div

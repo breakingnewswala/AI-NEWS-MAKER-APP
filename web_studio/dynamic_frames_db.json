@@ -173,7 +173,7 @@
     "aspectRatio": "4:5",
     "canvasWidth": 1080,
     "canvasHeight": 1350,
-    "designCategory": "Custom Frames",
+    "designCategory": "TEST_FRAMES",
     "allowedPlans": [
       "BASIC",
       "ADVANCED",
@@ -252,7 +252,9 @@
         "alignment": "center",
         "maxLines": 3
       }
-    ]
+    ],
+    "isTestFrame": true,
+    "approvalStatus": "PENDING_TEST"
   },
   {
     "id": "df_sample_2222",
@@ -261,7 +263,7 @@
     "aspectRatio": "4:5",
     "canvasWidth": 1080,
     "canvasHeight": 1350,
-    "designCategory": "Custom Frames",
+    "designCategory": "TEST_FRAMES",
     "allowedPlans": [
       "BASIC",
       "ADVANCED",
@@ -340,6 +342,8 @@
         "alignment": "center",
         "maxLines": 3
       }
-    ]
+    ],
+    "isTestFrame": true,
+    "approvalStatus": "PENDING_TEST"
   }
 ]
