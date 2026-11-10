@@ -533,10 +533,64 @@ export default function App() {
     };
   }, [navigateToTab]);
 
-  // Keep the browser tab title consistently "AI News Maker"
+  const initialPageViewTrackedRef = useRef(false);
+  const lastTrackedPathRef = useRef<string>(typeof window !== 'undefined' ? (window.location.pathname || '/') : '/');
+
+  const getTabTitle = (tab: AppTab): string => {
+    switch (tab) {
+      case 'home':
+        return 'AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो';
+      case 'studio':
+      case 'generator':
+        return 'फोटो न्यूज़ स्टूडियो — AI News Maker';
+      case 'videos':
+        return 'वीडियो न्यूज़ स्टूडियो व रील्स — AI News Maker';
+      case 'newsroom':
+      case 'epaper':
+        return 'लाइव न्यूज़ रूम — AI News Maker';
+      case 'profile':
+        return 'प्रोफ़ाइल एवं पैकेज प्लांस — AI News Maker';
+      case 'terms':
+        return 'नियम एवं शर्तें (Terms & Conditions) — AI News Maker';
+      case 'privacy':
+        return 'गोपनीयता नीति (Privacy Policy) — AI News Maker';
+      case 'refunds':
+        return 'रिफंड एवं रद्दीकरण नीति (Refund Policy) — AI News Maker';
+      case 'support':
+        return 'सहायता एवं संपर्क (Support) — AI News Maker';
+      case 'delete-account':
+        return 'खाता हटाने का अनुरोध — AI News Maker';
+      default:
+        return 'AI News Maker';
+    }
+  };
+
+  // Dynamic document title & SPA Google Analytics 4 page_view tracking without duplicates
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.title = 'AI News Maker';
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const pageTitle = getTabTitle(currentTab);
+    document.title = pageTitle;
+
+    const currentPath = window.location.pathname || '/';
+
+    // Skip the initial mount to prevent duplicate page views, as gtag('config', 'G-L3HVGF1YEJ') handles initial load
+    if (!initialPageViewTrackedRef.current) {
+      initialPageViewTrackedRef.current = true;
+      lastTrackedPathRef.current = currentPath;
+      return;
+    }
+
+    // Only fire page_view event on actual internal SPA route changes (strictly zero PII)
+    if (currentPath !== lastTrackedPathRef.current) {
+      lastTrackedPathRef.current = currentPath;
+      if (typeof (window as any).gtag === 'function') {
+        (window as any).gtag('event', 'page_view', {
+          page_title: pageTitle,
+          page_location: window.location.href,
+          page_path: currentPath,
+          send_to: 'G-L3HVGF1YEJ',
+        });
+      }
     }
   }, [currentTab]);
 

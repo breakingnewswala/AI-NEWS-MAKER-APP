@@ -17057,6 +17057,98 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
     return res.status(500).send(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Error</title><description>${err.message}</description></channel></rss>`);
   }
 });
+function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const staticRoutes = [
+    { path: "/", priority: "1.0", changefreq: "daily" },
+    { path: "/studio", priority: "0.9", changefreq: "weekly" },
+    { path: "/videos", priority: "0.9", changefreq: "weekly" },
+    { path: "/newsroom", priority: "0.9", changefreq: "hourly" },
+    { path: "/profile", priority: "0.8", changefreq: "weekly" },
+    { path: "/support", priority: "0.7", changefreq: "monthly" },
+    { path: "/terms", priority: "0.5", changefreq: "monthly" },
+    { path: "/privacy", priority: "0.5", changefreq: "monthly" },
+    { path: "/refunds", priority: "0.5", changefreq: "monthly" },
+    { path: "/delete-account", priority: "0.4", changefreq: "monthly" }
+  ];
+  const staticUrlsXml = staticRoutes.map(
+    (r) => `  <url>
+    <loc>${cleanBase}${r.path}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${r.changefreq}</changefreq>
+    <priority>${r.priority}</priority>
+  </url>`
+  ).join("\n");
+  let dynamicUrlsXml = "";
+  try {
+    const posts = loadNewsDatabase();
+    if (Array.isArray(posts) && posts.length > 0) {
+      const published = posts.filter((p) => p && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true)).slice(0, 100);
+      dynamicUrlsXml = published.map((p) => {
+        const modDate = p.timestamp ? new Date(p.timestamp).toISOString().split("T")[0] : today;
+        const safeId = encodeURIComponent(p.id || "");
+        const safeTitle = (p.title || "News Article").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const img = p.imageUrl ? `
+    <image:image>
+      <image:loc>${p.imageUrl.replace(/&/g, "&amp;")}</image:loc>
+      <image:title>${safeTitle}</image:title>
+    </image:image>` : "";
+        return `  <url>
+    <loc>${cleanBase}/newsroom?article=${safeId}</loc>
+    <lastmod>${modDate}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>${img}
+  </url>`;
+      }).join("\n");
+    }
+  } catch (err) {
+    console.warn("[Sitemap] Failed to load dynamic posts for sitemap:", err?.message);
+  }
+  const allUrls = dynamicUrlsXml ? `${staticUrlsXml}
+${dynamicUrlsXml}` : staticUrlsXml;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${allUrls}
+</urlset>`;
+}
+app.get(["/sitemap.xml", "/sitemap"], (_req, res) => {
+  try {
+    const sitemapXml = generateSitemapXml();
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=3600");
+    return res.send(sitemapXml);
+  } catch (err) {
+    console.error("[Sitemap] Error serving sitemap.xml:", err?.message);
+    res.status(500).send("Error generating sitemap");
+  }
+});
+app.get("/robots.txt", (_req, res) => {
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  res.header("Cache-Control", "public, max-age=86400");
+  return res.send(`# AI News Maker (https://www.ainewsmaker.online)
+# Robots.txt file for search engine crawlers
+
+User-agent: *
+Allow: /
+Allow: /studio
+Allow: /videos
+Allow: /newsroom
+Allow: /profile
+Allow: /terms
+Allow: /privacy
+Allow: /refunds
+Allow: /support
+Allow: /delete-account
+Disallow: /admin
+Disallow: /api/
+Disallow: /uploads/private/
+
+# Sitemap location
+Sitemap: https://www.ainewsmaker.online/sitemap.xml
+`);
+});
 var RSS_SOURCES_FILE = import_path2.default.join(process.cwd(), "rss_sources_database.json");
 var DEFAULT_PRODUCTION_RSS_SOURCES = [
   {

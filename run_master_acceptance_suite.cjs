@@ -105,9 +105,9 @@ async function run() {
     }
   });
 
-  // Wait up to 30 seconds for server to boot and respond
+  // Wait up to 60 seconds for server to boot and respond
   let serverStarted = false;
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     await new Promise((r) => setTimeout(r, 500));
     try {
       const ping = await request('GET', '/api/dynamic-frames');

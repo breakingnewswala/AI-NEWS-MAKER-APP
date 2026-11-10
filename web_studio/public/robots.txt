@@ -1,0 +1,20 @@
+# AI News Maker (https://www.ainewsmaker.online)
+# Robots.txt file for search engine crawlers
+
+User-agent: *
+Allow: /
+Allow: /studio
+Allow: /videos
+Allow: /newsroom
+Allow: /profile
+Allow: /terms
+Allow: /privacy
+Allow: /refunds
+Allow: /support
+Allow: /delete-account
+Disallow: /admin
+Disallow: /api/
+Disallow: /uploads/private/
+
+# Sitemap location
+Sitemap: https://www.ainewsmaker.online/sitemap.xml
