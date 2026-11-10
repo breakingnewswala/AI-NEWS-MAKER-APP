@@ -68,7 +68,7 @@ export function normalizeToCanonicalCategory(cat?: string): CanonicalFrameCatego
   if (c === 'बयानबाज़ी फ्रेम' || c === 'बयानबाजी' || c === 'बयानबाज़ी') return 'बयानबाजी';
   if (c === 'Special Frame' || c === 'Special Frames') return 'Special Frames';
   if (c === 'Bonus Frame' || c === 'Bonus Frames') return 'Bonus Frames';
-  if (c === 'Custom Frame' || c === 'Custom Frames') return 'Custom Frames';
+  if (c === 'Custom Frame' || c === 'Custom Frames' || c === 'Sample Frame' || c === 'Sample Frames') return 'Custom Frames';
   return 'Regular Frames';
 }
 

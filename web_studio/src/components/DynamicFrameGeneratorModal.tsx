@@ -83,6 +83,7 @@ import {
   getLocalDynamicFrames,
 } from '../lib/dynamicFramesManager';
 import { computeCanonicalHeadlineLayout, normalizeHeadlineText } from '../lib/canonicalLayoutEngine';
+import { drawThemeFooterBar } from '../lib/CanvasExporter';
 
 /**
  * Robust image loader that avoids setting crossOrigin on data: and blob: URLs
@@ -1555,7 +1556,6 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black';
       ctx.fillStyle = textColor;
       ctx.font = `bold ${canonicalLayout.fontSize}px "${canonicalLayout.fontFamily}", "Noto Sans Devanagari", sans-serif`;
-      ctx.textAlign = headlineAlign;
       ctx.textBaseline = 'middle';
 
       if (!isBlack) {
@@ -1567,27 +1567,37 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         ctx.shadowBlur = 0;
       }
 
-      canonicalLayout.lines.forEach((line: any, lineIdx: number) => {
-        const lineY = canonicalLayout.startY + lineIdx * canonicalLayout.lineHeight + canonicalLayout.lineHeight / 2;
-        const lineX = headlineAlign === 'center'
-          ? (hx + hw / 2)
+      const lines = canonicalLayout.lines || [];
+      const lineHeight = canonicalLayout.lineHeight || 60;
+
+      lines.forEach((line: any, lIdx: number) => {
+        const lineY = canonicalLayout.startY + lIdx * lineHeight;
+        let totalLineWidth = 0;
+        const spaceWidth = ctx.measureText(' ').width;
+        const tokenWidths: number[] = [];
+
+        const tokens: any[] = Array.isArray(line) ? line : [{ text: String(line || '') }];
+
+        tokens.forEach((token: any, tIdx: number) => {
+          const tText = typeof token === 'string' ? token : (token?.text || '');
+          const tw = ctx.measureText(tText).width;
+          tokenWidths.push(tw);
+          totalLineWidth += tw;
+          if (tIdx < tokens.length - 1) totalLineWidth += spaceWidth;
+        });
+
+        let curX = headlineAlign === 'center'
+          ? hx + (hw - totalLineWidth) / 2
           : headlineAlign === 'left'
           ? hx + 20
-          : hx + hw - 20;
+          : hx + hw - totalLineWidth - 20;
 
-        let lineString = '';
-        if (Array.isArray(line)) {
-          lineString = line
-            .map((t: any) => (typeof t === 'string' ? t : (t?.text || '')))
-            .join(' ');
-        } else if (typeof line === 'string') {
-          lineString = line;
-        } else if (line && typeof line === 'object') {
-          lineString = line.text || line.headline || '';
-        }
-        lineString = normalizeHeadlineText(lineString);
-
-        ctx.fillText(lineString, lineX, lineY);
+        tokens.forEach((token: any, tIdx: number) => {
+          const tText = typeof token === 'string' ? token : (token?.text || '');
+          ctx.textAlign = 'left';
+          ctx.fillText(tText, curX, lineY);
+          curX += tokenWidths[tIdx] + spaceWidth;
+        });
       });
       ctx.restore();
 
@@ -1846,10 +1856,6 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         footerBg = '#0B1329';
       }
 
-      ctx.save();
-      ctx.fillStyle = footerBg;
-      ctx.fillRect(fx, fy, fw, fh);
-
       const hexClean = footerBg.replace('#', '').trim();
       let isLightBg = true;
       if (hexClean.length === 6) {
@@ -1861,28 +1867,23 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       }
       const footerTextColor = footerConfig.footerTextColor || (isLightBg ? '#0A0A0A' : '#FFFFFF');
 
-      ctx.strokeStyle = isLightBg ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.2)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(fx, fy);
-      ctx.lineTo(fx + fw, fy);
-      ctx.stroke();
-
-      const centerY = fy + fh / 2;
-
-      // Brand handles and name
-      ctx.fillStyle = footerTextColor;
-      ctx.font = 'bold 24px "Noto Sans Devanagari", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      const brandHandle = currentUser?.username ? `@${currentUser.username}` : '@breakingnewswala';
-      ctx.fillText(`BREAKING NEWS WALA | ${brandHandle}`, fx + 25, centerY);
-
-      // Website and WhatsApp helpline
-      ctx.textAlign = 'right';
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillText('🌐 breakingnewswala.com  |  📱 9669802408', fx + fw - 25, centerY);
-      ctx.restore();
+      // Master Admin Sample Footer with Authentic Circular Social Icons
+      await drawThemeFooterBar(
+        ctx,
+        w,
+        h,
+        fh,
+        '@breakingnewswala',
+        '+91 96698 02408',
+        undefined,
+        'breakingnewswala.com',
+        ['youtube', 'facebook', 'instagram', 'twitter'],
+        true,
+        footerBg,
+        footerTextColor,
+        'color',
+        true
+      );
 
       // Trigger direct download
       const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
@@ -4510,7 +4511,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       const hRot = hSlot.rotation ?? 0;
                       return (
                         <div
-                          className="absolute z-15 flex flex-col justify-center px-1 text-center pointer-events-none select-none"
+                          className={`absolute z-15 flex flex-col justify-center px-1 pointer-events-none select-none ${hSlot.alignment === 'left' ? 'items-start text-left' : hSlot.alignment === 'right' ? 'items-end text-right' : 'items-center text-center'}`}
                           style={{
                             left: `${hSlot.rect.x}%`,
                             top: `${hSlot.rect.y}%`,
@@ -4522,7 +4523,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           }}
                         >
                           <p
-                            className="font-bold leading-tight line-clamp-3"
+                            className="font-bold leading-tight line-clamp-3 w-full"
                             style={{
                               fontFamily: typographyFontFamily || hSlot.fontFamily || 'Noto Sans Devanagari',
                               color: textSlots[0]?.textColor || typographyConfig?.primaryHeadline?.fontColor || hSlot.textColor || '#FFFFFF',
@@ -4786,10 +4787,20 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             color: fColor,
                           }}
                         >
-                          <span className="truncate max-w-[48%]">
-                            BREAKING NEWS WALA | {currentUser?.username ? `@${currentUser.username}` : '@breakingnewswala'}
-                          </span>
-                          <span className="truncate max-w-[48%]">🌐 breakingnewswala.com | 📱 9669802408</span>
+                          <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-0.5">
+                              <span className="w-2.5 h-2.5 rounded-full bg-red-600 flex items-center justify-center text-[5px] text-white font-black">▶</span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 flex items-center justify-center text-[5px] text-white font-black">f</span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-pink-600 flex items-center justify-center text-[5px] text-white font-black">📷</span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-sky-500 flex items-center justify-center text-[5px] text-white font-black">𝕏</span>
+                            </div>
+                            <span className="truncate max-w-[95px] font-bold">@breakingnewswala</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[6.5px] truncate">
+                            <span>🌐 breakingnewswala.com</span>
+                            <span>|</span>
+                            <span>📱 +91 96698 02408</span>
+                          </div>
                         </div>
                       );
                     })()}

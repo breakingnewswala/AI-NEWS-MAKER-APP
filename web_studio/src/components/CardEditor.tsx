@@ -101,7 +101,8 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[]): FrameO
         df.designCategory !== 'Story Frames'
     )
     .map((df) => {
-      const normCat = normalizeToCanonicalCategory(df.designCategory);
+      const isTestOrSample = (df as any).isSampleTestTemplate || (df as any).isSample || df.name === '11111' || df.name === '2222' || df.id === 'df_test_11111' || df.id === 'df_test_2222' || df.designCategory === 'Custom Frame' || df.designCategory === 'Custom Frames' || df.designCategory === 'Sample Frames';
+      const normCat = isTestOrSample ? 'Custom Frames' : normalizeToCanonicalCategory(df.designCategory);
       const tier = df.allowedPlans && df.allowedPlans.length > 0 ? df.allowedPlans[0] : 'BASIC';
       return {
         id: df.id as FrameDesign,

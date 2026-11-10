@@ -1658,9 +1658,10 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const bw = (locRect.width / 100) * width;
     const bh = (locRect.height / 100) * height;
 
-    if (df.headerConfig.manualLocationAsset) {
+    const locAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
+    if (locAsset) {
       try {
-        const badgeImg = await loadImage(df.headerConfig.manualLocationAsset);
+        const badgeImg = await loadImage(locAsset);
         ctx.drawImage(badgeImg, bx, by, bw, bh);
 
         const textReg = df.headerConfig.textRegion;
@@ -6654,7 +6655,7 @@ function drawRenderedHeadlineLines(
 }
 
 // Theme Footer Bar (Exact reproduction of Center-Aligned Profile Footer)
-async function drawThemeFooterBar(
+export async function drawThemeFooterBar(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,

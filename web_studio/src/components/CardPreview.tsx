@@ -453,12 +453,16 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const effectiveFontSize = Math.max(7, Math.round(canonicalLayout.fontSize * previewScale));
     const effectiveLineHeight = Math.max(9, Math.round(canonicalLayout.lineHeight * previewScale));
 
+    const headlineAlign = canonicalLayout.alignment || 'center';
+    const alignContainerClass = headlineAlign === 'left' ? 'items-start justify-start text-left' : headlineAlign === 'right' ? 'items-end justify-end text-right' : 'items-center justify-center text-center';
+    const alignLineClass = headlineAlign === 'left' ? 'items-center justify-start text-left' : headlineAlign === 'right' ? 'items-center justify-end text-right' : 'items-center justify-center text-center';
+
     return (
-      <div className="w-full flex flex-col items-center justify-center select-none pointer-events-none">
+      <div className={`w-full flex flex-col ${alignContainerClass} select-none pointer-events-none`}>
         {canonicalLayout.lines.map((line, lIdx) => (
           <div
             key={lIdx}
-            className="w-full flex items-center justify-center whitespace-nowrap text-center leading-none"
+            className={`w-full flex ${alignLineClass} whitespace-nowrap leading-none`}
             style={{
               height: `${effectiveLineHeight}px`,
               marginBottom: lIdx < canonicalLayout.lines.length - 1 ? `${Math.round(2 * previewScale)}px` : undefined,
@@ -3347,8 +3351,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               )}
 
               {/* Dynamic Location Badge */}
-              {df.headerConfig?.showLocation && card.location && (
-                df.headerConfig.manualLocationAsset ? (
+              {df.headerConfig?.showLocation && card.location && (() => {
+                const badgeAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
+                const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000');
+                return badgeAsset ? (
                   <div
                     className="absolute pointer-events-auto flex items-center justify-center font-bold"
                     style={{
@@ -3356,11 +3362,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
                       width: `${df.headerConfig.locationRect?.width ?? 28}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      backgroundImage: `url(${df.headerConfig.manualLocationAsset})`,
+                      backgroundImage: `url(${badgeAsset})`,
                       backgroundSize: 'contain',
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
-                      color: df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000'),
+                      color: locColor,
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                     }}
                   >
@@ -3378,7 +3384,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         <span
                           className="truncate"
                           style={{
-                            color: df.headerConfig.typographyConfig?.color || df.headerConfig.locationTextColor || '#FFFFFF',
+                            color: locColor,
                             fontFamily: df.headerConfig.typographyConfig?.fontFamily ? `"${df.headerConfig.typographyConfig.fontFamily}", sans-serif` : undefined,
                             fontWeight: df.headerConfig.typographyConfig?.weight || 800,
                             fontSize: `${Math.max(9, Math.round((df.headerConfig.typographyConfig?.fontSize || df.headerConfig.locationFontSize || 20) * previewScale))}px`,
@@ -3408,8 +3414,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3 h-3 mr-1 inline shrink-0" />}
                     <span className="truncate">{card.location}</span>
                   </div>
-                )
-              )}
+                );
+              })()}
 
               {/* Dynamic Date Stamp */}
               {df.headerConfig?.showDate && (
@@ -3578,7 +3584,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
               {/* Headline */}
               <div
-                className="absolute pointer-events-auto flex items-center justify-center text-center px-2"
+                className={`absolute pointer-events-auto flex items-center px-2 ${df.textSlots[0]?.alignment === 'left' ? 'justify-start text-left' : df.textSlots[0]?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
                 style={{
                   left: `${df.textSlots[0]?.rect?.x ?? 7}%`,
                   top: `${df.textSlots[0]?.rect?.y ?? 63}%`,
@@ -3588,11 +3594,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 }}
               >
                 <h1
-                  className="font-black leading-snug drop-shadow-md overflow-hidden"
+                  className="font-black leading-snug drop-shadow-md overflow-hidden w-full"
                   style={{
                     color: df.textSlots[0]?.textColor || '#FFFFFF',
                     fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || df.textSlots[0]?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
                     fontSize: `${effectivePreviewFontSize}px`,
+                    textAlign: (df.textSlots[0]?.alignment as any) || 'center',
                   }}
                 >
                   {renderFormattedHeadline(df.textSlots[0]?.textColor || card.headlineTextColor || card.textColor)}

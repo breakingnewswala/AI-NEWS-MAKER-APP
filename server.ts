@@ -10918,6 +10918,7 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
     }
 
     const newFrame = {
+      ...payload,
       id: payload.id && !payload.id.startsWith("temp_") ? payload.id : `df_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: payload.name.trim(),
       description: payload.description || "",
@@ -10927,7 +10928,10 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
       canvasWidth: payload.aspectRatio === '4:3' ? 1440 : 1080,
       canvasHeight: payload.aspectRatio === '4:5' ? 1350 : payload.aspectRatio === '9:16' ? 1920 : 1080,
       sampleReferenceUrl: payload.sampleReferenceUrl || "",
-      previewImageUrl: payload.previewImageUrl || "",
+      previewImageUrl: payload.previewImageUrl || payload.primaryBackgroundAsset || payload.sampleReferenceUrl || "",
+      primaryBackgroundAsset: payload.primaryBackgroundAsset || undefined,
+      primaryBackgroundMode: payload.primaryBackgroundMode || 'image',
+      primaryBackgroundHex: payload.primaryBackgroundHex || '#0B1329',
       designCategory: payload.designCategory || (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"),
       allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
       publicationStatus: payload.publicationStatus || "draft",
