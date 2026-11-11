@@ -304,6 +304,7 @@ export interface FullStoryCalloutConfig {
   innerTextRect?: NormalizedRect;
   textPadding?: number;
   lineHeight?: number;
+  isLocked?: boolean;
 }
 
 export interface PoweredByConfig {

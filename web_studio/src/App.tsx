@@ -42,7 +42,7 @@ import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/da
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
 import { formatCleanLocationText } from './lib/locationUtils';
 
-export const CANONICAL_DEFAULT_HEADLINE = 'मध्य प्रदेश में ऐतिहासिक फैसला:\nकैबिनेट बैठक में बड़े प्रस्तावों को\nमिली अंतिम मंजूरी';
+export const CANONICAL_DEFAULT_HEADLINE = 'कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
 import { trackSpaPageView, trackEvent } from './lib/analyticsTracker';
 import { FolderClockIcon } from './icons/FolderClockIcon';
@@ -2152,6 +2152,10 @@ export default function App() {
         third: '',
         fourth: '',
       },
+      photoUrl: '',
+      testSamplePhotoUrl: '',
+      watermarkImage: undefined,
+      customWatermarkUrl: undefined,
       imagePositions: undefined,
       customFrameOverlayPng: undefined,
       customLogoUrl: savedProfile?.channelLogoUrl || getPermanentUserLogo() || '',
@@ -2217,6 +2221,46 @@ export default function App() {
 
     setActiveStep(1);
     showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
+  };
+
+  const handleRefreshPreview = () => {
+    // Rebuild visual preview while strictly preserving entered user configurations:
+    // Headline text (if entered), selected template, font family, font size,
+    // frame layout, date rotation, watermark rotation, layer positions, user branding.
+    setCard((prev) => {
+      const currentHeadline = prev.headline?.trim() || '';
+      const isHeadlineEmpty =
+        !currentHeadline ||
+        currentHeadline === 'मध्य प्रदेश में ऐतिहासिक फैसला:\nकैबिनेट बैठक में बड़े प्रस्तावों को\nमिली अंतिम मंजूरी' ||
+        currentHeadline === 'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी' ||
+        currentHeadline === CANONICAL_DEFAULT_HEADLINE;
+
+      return {
+        ...prev,
+        // If headline is genuinely empty, restore default instructional text; otherwise preserve user's entered headline!
+        headline: isHeadlineEmpty ? CANONICAL_DEFAULT_HEADLINE : prev.headline,
+        formattedHeadline: isHeadlineEmpty ? CANONICAL_DEFAULT_HEADLINE : prev.formattedHeadline,
+        // Clear stale preview-only images so empty-photo instruction ("फोटो जोड़ने के लिए स्टेप 4 पर जाएँ") is restored when no active photo
+        images: {
+          main: '',
+          second: '',
+          third: '',
+          fourth: '',
+        },
+        photoUrl: '',
+        testSamplePhotoUrl: '',
+        watermarkImage: undefined,
+        customWatermarkUrl: undefined,
+        extractedArticlePhotos: [],
+      };
+    });
+
+    try {
+      localStorage.removeItem('studio_active_news_photos');
+    } catch {}
+
+    window.dispatchEvent(new CustomEvent('ai_news_studio_reset_preview'));
+    showToast('🔄 प्रीव्यू सफलतापूर्वक रिफ्रेश हुआ!');
   };
 
   useEffect(() => {
@@ -4204,16 +4248,11 @@ export default function App() {
                         <span className="truncate">ड्राफ्ट</span>
                       </button>
 
-                      {/* 4. रिफ्रेश (Start a fresh graphic workflow) */}
+                      {/* 4. रिफ्रेश */}
                       <button
                         type="button"
-                        onClick={() => {
-                          handleResetCard();
-                          setActiveMobileStep(1);
-                          setActiveStep(1);
-                          showToast('🔄 कार्ड रीसेट हो गया — नया सत्र तैयार है');
-                        }}
-                        title="नया सत्र / रीसेट"
+                        onClick={handleRefreshPreview}
+                        title="प्रीव्यू रिफ्रेश करें"
                         className="py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center gap-1 active:scale-95 cursor-pointer transition-all"
                       >
                         <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
@@ -4453,9 +4492,9 @@ export default function App() {
                             {/* 4. रिफ्रेश */}
                             <button
                               type="button"
-                              onClick={handleResetCard}
+                              onClick={handleRefreshPreview}
                               className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                              title="नया ग्राफिक / रीसेट सेशन"
+                              title="प्रीव्यू रिफ्रेश करें"
                             >
                               <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
                               <span className="whitespace-nowrap">रिफ्रेश</span>

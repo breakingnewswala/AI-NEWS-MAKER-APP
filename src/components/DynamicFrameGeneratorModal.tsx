@@ -794,13 +794,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   // Stage 7 Test Inputs State
   const [testPhotos, setTestPhotos] = useState<string[]>(['', '', '', '']);
   const [testHeadline, setTestHeadline] = useState<string>(
-    'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी'
+    'कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...'
   );
 
   // Part 2: Sample Test Mode (Dummy Text Input) State
-  const [dummyLine1, setDummyLine1] = useState<string>('मध्य प्रदेश में ऐतिहासिक फैसला:');
-  const [dummyLine2, setDummyLine2] = useState<string>('कैबिनेट बैठक में बड़े प्रस्तावों को');
-  const [dummyLine3, setDummyLine3] = useState<string>('मिली अंतिम मंजूरी');
+  const [dummyLine1, setDummyLine1] = useState<string>('कृपया स्टेप 3 (हेडलाइन) में');
+  const [dummyLine2, setDummyLine2] = useState<string>('जाकर अपनी मुख्य खबर का');
+  const [dummyLine3, setDummyLine3] = useState<string>('शीर्षक दर्ज करें...');
   const [dummyLocation, setDummyLocation] = useState<string>('भोपाल');
   const [dummyCalloutText, setDummyCalloutText] = useState<string>('पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें');
   const [isSampleTestModeExpanded, setIsSampleTestModeExpanded] = useState<boolean>(true);
@@ -809,12 +809,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const [isLayoutLocked, setIsLayoutLocked] = useState<boolean>(Boolean(initialFrame?.isLayoutLocked));
 
   const handleResetSampleText = () => {
-    setDummyLine1('मध्य प्रदेश में ऐतिहासिक फैसला:');
-    setDummyLine2('कैबिनेट बैठक में बड़े प्रस्तावों को');
-    setDummyLine3('मिली अंतिम मंजूरी');
+    setDummyLine1('कृपया स्टेप 3 (हेडलाइन) में');
+    setDummyLine2('जाकर अपनी मुख्य खबर का');
+    setDummyLine3('शीर्षक दर्ज करें...');
     setDummyLocation('भोपाल');
     setDummyCalloutText('पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें');
-    setTestHeadline('मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी');
+    setTestHeadline('कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...');
   };
 
   // Keep footer height aligned with ratio
@@ -1220,7 +1220,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     if (targetLayer.locked && targetLayer.type === 'footer') {
       return;
     }
-    if (targetLayer.locked) return;
+    if (targetLayer.locked || (targetLayer.type === 'callout' && fullStoryCalloutConfig.isLocked)) return;
 
     setIsDraggingElement(true);
     setDragHandle(handle);
@@ -1614,18 +1614,20 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const rawInput =
         testHeadline ||
         [dummyLine1, dummyLine2, dummyLine3].filter(Boolean).join('\n') ||
-        'मध्य प्रदेश में ऐतिहासिक फैसला:\nकैबिनेट बैठक में बड़े प्रस्तावों को\nमिली अंतिम मंजूरी';
+        'कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...';
       const textToDraw = normalizeHeadlineText(rawInput);
 
       const headlineAlign = (headlineSlot.alignment || 'center') as CanvasTextAlign;
       const paddedHw = Math.max(50, hw - 30);
+      const targetFontSize = headlineSlot.fontSize || typographyFontSize || 70;
       const canonicalLayout = computeCanonicalHeadlineLayout({
         headline: textToDraw,
         fontFamily: headlineSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
         aspectRatio: selectedRatio,
         isBreakingStyle: false,
         customBounds: { x: hx + 15, y: hy, width: paddedHw, height: hh },
-        customMaxLines: 3,
+        userFontSize: targetFontSize,
+        customMaxLines: headlineSlot.maxLines || 3,
         alignment: headlineAlign as any,
         ctx,
       });
@@ -1842,19 +1844,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const dateRect = headerConfig.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 };
         const dx = (dateRect.x / 100) * w;
         const dy = (dateRect.y / 100) * h;
+        const dw = (dateRect.width / 100) * w;
+        const dh = (dateRect.height / 100) * h;
         const rot = headerConfig.dateRotation ?? 270;
         ctx.save();
-        ctx.translate(dx, dy);
-        if (rot === 270) {
-          ctx.rotate((-90 * Math.PI) / 180);
-        } else if (rot === 90) {
-          ctx.rotate((90 * Math.PI) / 180);
-        } else if (rot !== 0) {
-          ctx.rotate((rot * Math.PI) / 180);
-        }
-        ctx.fillStyle = '#CBD5E1';
+        ctx.translate(dx + dw / 2, dy + dh / 2);
+        ctx.rotate((rot * Math.PI) / 180);
+        ctx.fillStyle = headerConfig.dateTextColor || '#CBD5E1';
         ctx.font = 'bold 20px "Noto Sans Devanagari", sans-serif';
-        ctx.textAlign = 'left';
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const dateStr = new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'long', year: 'numeric' });
         ctx.fillText(dateStr, 0, 0);
@@ -1866,8 +1864,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const wm = watermarkConfig;
         const rotDeg = wm.rotation ?? 270;
         const op = wm.opacity ?? 0.85;
-        let wx = ((wm.rect?.x ?? 74) / 100) * w;
-        let wy = ((wm.rect?.y ?? 3.5) / 100) * h;
+        const ww = ((wm.rect?.width ?? 15) / 100) * w;
+        const wh = ((wm.rect?.height ?? 3) / 100) * h;
+        let wx = ((wm.rect?.x ?? 74) / 100) * w + ww / 2;
+        let wy = ((wm.rect?.y ?? 3.5) / 100) * h + wh / 2;
         ctx.save();
         ctx.globalAlpha = op;
         ctx.translate(wx, wy);
@@ -3843,6 +3843,33 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             </button>
                           ))}
                         </div>
+
+                        <span className="text-[10px] text-amber-300 font-bold block pt-1">वॉटरमार्क रोटेशन (0°, 90°, 180°, 270°):</span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { deg: 270, label: '270° (लेफ्ट वर्टिकल)' },
+                            { deg: 0, label: '0° (हॉरिज़ॉन्टल)' },
+                            { deg: 90, label: '90° (राइट वर्टिकल)' },
+                            { deg: 180, label: '180° (उल्टा)' },
+                          ].map((item) => (
+                            <button
+                              key={item.deg}
+                              type="button"
+                              disabled={isLayoutLocked || activeLayer.locked}
+                              onClick={() => {
+                                handleRotateActiveLayer(item.deg);
+                                setWatermarkConfig((prev) => ({ ...prev, rotation: item.deg }));
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition ${
+                                (watermarkConfig.rotation ?? 270) === item.deg
+                                  ? 'bg-amber-400 text-slate-950 font-black shadow'
+                                  : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -3874,6 +3901,106 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         </div>
                         <div className="text-[9px] text-slate-400">
                           लोकेशन टेक्स्ट की लंबाई के अनुसार बैज की चौड़ाई लाइव स्टूडियो में स्वतः एडजस्ट होगी।
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Full News Description / Callout Layer Controls (Bug 5 Fix) */}
+                    {activeLayer.type === 'callout' && (
+                      <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-amber-300 font-bold block">पूरी खबर कॉलआउट बॉक्स नियंत्रण (Callout Controls):</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextLocked = !fullStoryCalloutConfig.isLocked;
+                              setFullStoryCalloutConfig((prev) => ({ ...prev, isLocked: nextLocked }));
+                              setLayers((prev) => prev.map((l) => (l.type === 'callout' ? { ...l, locked: nextLocked } : l)));
+                            }}
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition cursor-pointer ${
+                              fullStoryCalloutConfig.isLocked
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                : 'bg-slate-950 text-slate-400 border border-slate-700'
+                            }`}
+                          >
+                            {fullStoryCalloutConfig.isLocked ? <Lock className="w-2.5 h-2.5 text-amber-400" /> : <Unlock className="w-2.5 h-2.5 text-slate-400" />}
+                            <span>{fullStoryCalloutConfig.isLocked ? 'लॉक है' : 'अनलॉक'}</span>
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">फ़ॉन्ट साइज़ (px):</label>
+                            <input
+                              type="number"
+                              min={12}
+                              max={36}
+                              disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                              value={fullStoryCalloutConfig.fontSize || 22}
+                              onChange={(e) => {
+                                const fs = parseInt(e.target.value) || 22;
+                                setFullStoryCalloutConfig((prev) => ({ ...prev, fontSize: fs }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">लाइन हाइट / स्पेसिंग:</label>
+                            <input
+                              type="number"
+                              step={0.1}
+                              min={1.0}
+                              max={2.5}
+                              disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                              value={fullStoryCalloutConfig.lineHeight || 1.3}
+                              onChange={(e) => {
+                                const lh = parseFloat(e.target.value) || 1.3;
+                                setFullStoryCalloutConfig((prev) => ({ ...prev, lineHeight: lh }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">अलाइनमेंट:</label>
+                            <select
+                              disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                              value={fullStoryCalloutConfig.align || 'center'}
+                              onChange={(e) => {
+                                const al = e.target.value as any;
+                                setFullStoryCalloutConfig((prev) => ({ ...prev, align: al }));
+                              }}
+                              className="w-full bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-xs text-white"
+                            >
+                              <option value="center">सेंटर</option>
+                              <option value="left">लेफ्ट</option>
+                              <option value="right">राइट</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">बैकग्राउंड रंग:</label>
+                            <input
+                              type="color"
+                              disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                              value={fullStoryCalloutConfig.bgColor || '#F59E0B'}
+                              onChange={(e) => setFullStoryCalloutConfig((prev) => ({ ...prev, bgColor: e.target.value }))}
+                              className="w-full h-7 rounded border border-slate-700 cursor-pointer bg-slate-950 p-0.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">टेक्स्ट रंग:</label>
+                            <input
+                              type="color"
+                              disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                              value={fullStoryCalloutConfig.textColor || '#0F172A'}
+                              onChange={(e) => setFullStoryCalloutConfig((prev) => ({ ...prev, textColor: e.target.value }))}
+                              className="w-full h-7 rounded border border-slate-700 cursor-pointer bg-slate-950 p-0.5"
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
@@ -4419,11 +4546,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       <label className="text-[10px] text-slate-400 block mb-0.5">देवनागरी फ़ॉन्ट</label>
                       <select
                         value={slot.fontFamily}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const val = e.target.value;
                           setTextSlots((prev) =>
-                            prev.map((s) => (s.id === slot.id ? { ...s, fontFamily: e.target.value } : s))
-                          )
-                        }
+                            prev.map((s) => (s.id === slot.id ? { ...s, fontFamily: val } : s))
+                          );
+                          setTypographyFontFamily(val);
+                        }}
                         className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white"
                       >
                         <option value="Noto Sans Devanagari">Noto Sans Devanagari</option>
@@ -4441,11 +4570,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         min={30}
                         max={120}
                         value={slot.fontSize}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 60;
                           setTextSlots((prev) =>
-                            prev.map((s) => (s.id === slot.id ? { ...s, fontSize: parseInt(e.target.value) || 60 } : s))
-                          )
-                        }
+                            prev.map((s) => (s.id === slot.id ? { ...s, fontSize: val } : s))
+                          );
+                          setTypographyFontSize(val);
+                        }}
                         className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white font-mono"
                       />
                     </div>
@@ -4845,15 +4976,37 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       />
                     )}
 
-                    {/* LAYER 3: Primary Headline (z-15 - Exact 3 Lines Typography Layout) */}
+                    {/* LAYER 3: Primary Headline (z-15 - Exact 3 Lines Typography Layout matching Canvas Marking & Export) */}
                     {textSlots.length > 0 && (() => {
                       const hSlot = textSlots[0];
                       const rawText = normalizeHeadlineText(
                         testHeadline ||
                         [dummyLine1, dummyLine2, dummyLine3].filter(Boolean).join(' ') ||
-                        'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी'
+                        'कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...'
                       );
                       const hRot = hSlot.rotation ?? 0;
+                      const previewW = selectedRatio === '4:5' ? 280 : 230;
+                      const previewH = selectedRatio === '4:5' ? 350 : 408;
+                      const scale = previewW / 1080;
+
+                      const baseHw = (hSlot.rect.width / 100) * 1080;
+                      const baseHh = (hSlot.rect.height / 100) * (selectedRatio === '4:5' ? 1350 : selectedRatio === '9:16' ? 1920 : 1080);
+                      const targetFontSize = hSlot.fontSize || typographyFontSize || 70;
+
+                      const layout = computeCanonicalHeadlineLayout({
+                        headline: rawText,
+                        fontFamily: hSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
+                        aspectRatio: selectedRatio,
+                        isBreakingStyle: false,
+                        customBounds: { x: (hSlot.rect.x / 100) * 1080, y: (hSlot.rect.y / 100) * 1350, width: baseHw - 30, height: baseHh },
+                        userFontSize: targetFontSize,
+                        customMaxLines: hSlot.maxLines || 3,
+                        alignment: (hSlot.alignment || 'center') as any,
+                      });
+
+                      const previewFontSize = Math.max(8, Math.round(layout.fontSize * scale));
+                      const previewLineH = Math.max(10, Math.round(layout.lineHeight * scale));
+
                       return (
                         <div
                           className={`absolute z-15 flex flex-col justify-center px-1 pointer-events-none select-none ${hSlot.alignment === 'left' ? 'items-start text-left' : hSlot.alignment === 'right' ? 'items-end text-right' : 'items-center text-center'}`}
@@ -4867,18 +5020,29 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             backgroundColor: hSlot.backgroundColor && hSlot.backgroundColor !== 'transparent' ? hSlot.backgroundColor : undefined,
                           }}
                         >
-                          <p
-                            className="font-bold leading-tight line-clamp-3 w-full"
+                          <div
+                            className="w-full flex flex-col justify-center"
                             style={{
-                              fontFamily: typographyFontFamily || hSlot.fontFamily || 'Noto Sans Devanagari',
+                              fontFamily: hSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
                               color: textSlots[0]?.textColor || typographyConfig?.primaryHeadline?.fontColor || hSlot.textColor || '#FFFFFF',
-                              fontSize: selectedRatio === '4:5' ? '12px' : '11px',
+                              fontSize: `${previewFontSize}px`,
                               textAlign: (hSlot.alignment as any) || 'center',
                               textShadow: hSlot.textColor?.toLowerCase() === '#000000' ? 'none' : '0 1px 4px rgba(0,0,0,0.9)',
                             }}
                           >
-                            {rawText}
-                          </p>
+                            {(layout.lines || []).map((line: any, lIdx: number) => {
+                              const lineText = Array.isArray(line) ? line.map((tok: any) => tok.text || tok).join(' ') : String(line || '');
+                              return (
+                                <div
+                                  key={lIdx}
+                                  className="w-full truncate font-bold leading-none"
+                                  style={{ height: `${previewLineH}px`, lineHeight: `${previewLineH}px` }}
+                                >
+                                  {lineText}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })()}
@@ -4962,18 +5126,24 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     })()}
 
                     {/* LAYER 6: Date Stamp (z-16) */}
-                    {headerConfig.showDate && (
-                      <div
-                        className="absolute text-[8px] font-bold text-slate-300 z-16 pointer-events-none flex items-center justify-center"
-                        style={{
-                          left: `${headerConfig.dateRect?.x ?? 5}%`,
-                          top: `${headerConfig.dateRect?.y ?? 18.5}%`,
-                          transform: (headerConfig.dateRotation ?? 270) === 270 ? 'rotate(-90deg) origin-left-top' : undefined,
-                        }}
-                      >
-                        <span>{new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                      </div>
-                    )}
+                    {headerConfig.showDate && (() => {
+                      const dateRot = headerConfig.dateRotation ?? 270;
+                      return (
+                        <div
+                          className="absolute text-[8px] font-bold text-slate-300 z-16 pointer-events-none flex items-center justify-center whitespace-nowrap"
+                          style={{
+                            left: `${headerConfig.dateRect?.x ?? 5}%`,
+                            top: `${headerConfig.dateRect?.y ?? 18.5}%`,
+                            width: `${headerConfig.dateRect?.width ?? 34}%`,
+                            height: `${headerConfig.dateRect?.height ?? 3.5}%`,
+                            transform: dateRot !== 0 ? `rotate(${dateRot}deg)` : undefined,
+                            transformOrigin: 'center center',
+                          }}
+                        >
+                          <span>{new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                        </div>
+                      );
+                    })()}
 
                     {/* LAYER 7: AI Watermark (z-18) */}
                     {watermarkConfig.enabled && (() => {
@@ -5229,53 +5399,33 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                 />
               </div>
 
-              {/* Primary Typography Selection (Req 8) */}
-              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3">
-                <h5 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
-                  प्राथमिक टाइपोग्राफी सेटिंग्स (Primary Headline Typography)
-                </h5>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-400 block mb-1">फ़ॉन्ट फ़ैमिली (Font Family)</label>
-                    <select
-                      value={typographyFontFamily}
-                      onChange={(e) => setTypographyFontFamily(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold"
-                    >
-                      <option value="Noto Sans Devanagari">Noto Sans Devanagari</option>
-                      <option value="Rozha One">Rozha One (Bold Editorial)</option>
-                      <option value="Poppins">Poppins</option>
-                      <option value="Tiro Devanagari Hindi">Tiro Devanagari Hindi</option>
-                      <option value="Mukta">Mukta</option>
-                    </select>
+              {/* Primary Typography Synchronization Summary (Bug 7 Fix) */}
+              <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <h5 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
+                    प्राथमिक टाइपोग्राफी सेटिंग्स (Primary Headline Typography)
+                  </h5>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-600/40 px-2 py-0.5 rounded-full">
+                    ✓ स्टेप 6 से सिंक्रोनाइज़्ड
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-2.5">
+                    <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">फ़ॉन्ट फ़ैमिली</span>
+                    <span className="text-xs text-white font-bold">{textSlots[0]?.fontFamily || typographyFontFamily}</span>
                   </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-400 block mb-1">फ़ॉन्ट साइज़ (Font Size)</label>
-                    <input
-                      type="number"
-                      min="36"
-                      max="100"
-                      value={typographyFontSize}
-                      onChange={(e) => setTypographyFontSize(Number(e.target.value))}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold"
-                    />
+                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-2.5">
+                    <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">फ़ॉन्ट साइज़</span>
+                    <span className="text-xs text-amber-300 font-mono font-black">{textSlots[0]?.fontSize || typographyFontSize} px</span>
                   </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-400 block mb-1">वेट (Font Weight)</label>
-                    <select
-                      value={typographyFontWeight}
-                      onChange={(e) => setTypographyFontWeight(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold"
-                    >
-                      <option value="bold">Bold (बोल्ड)</option>
-                      <option value="black">Black (अति बोल्ड)</option>
-                      <option value="semibold">SemiBold</option>
-                      <option value="normal">Normal</option>
-                    </select>
+                  <div className="bg-slate-900 border border-slate-800 rounded-lg p-2.5">
+                    <span className="text-[10px] text-slate-400 block mb-0.5 font-bold">अधिकतम लाइन्स</span>
+                    <span className="text-xs text-white font-bold">{textSlots[0]?.maxLines || 3} लाइन्स (मैक्स)</span>
                   </div>
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  नोट: टाइपोग्राफी बदलने के लिए स्टेप 6 (टेक्स्ट व कोट) पर जाएँ।
+                </p>
               </div>
 
               {/* Design Category Selection */}

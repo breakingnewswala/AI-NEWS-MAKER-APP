@@ -1783,7 +1783,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const dy = (dateRect.y / 100) * height;
     const dw = (dateRect.width / 100) * width;
     const dh = (dateRect.height / 100) * height;
-    const rotDeg = df.headerConfig.dateRotation ?? 270;
+    const rotDeg = card.dateRotation ?? df.headerConfig.dateRotation ?? 270;
 
     ctx.save();
     ctx.translate(dx + dw / 2, dy + dh / 2);
@@ -1807,7 +1807,15 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const cy = (cRect.y / 100) * height;
     const cw = (cRect.width / 100) * width;
     const ch = (cRect.height / 100) * height;
+    const cRot = df.fullStoryCalloutConfig.rotation || 0;
     const calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
+
+    ctx.save();
+    if (cRot !== 0) {
+      ctx.translate(cx + cw / 2, cy + ch / 2);
+      ctx.rotate((cRot * Math.PI) / 180);
+      ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
+    }
 
     if (calloutAsset) {
       try {
@@ -1825,7 +1833,6 @@ async function drawAuthoritativeDynamicFrameCanvas(
         console.warn('Callout asset load warning:', e);
       }
     } else {
-      ctx.save();
       ctx.fillStyle = df.fullStoryCalloutConfig.bgColor || '#DC2626';
       ctx.strokeStyle = df.fullStoryCalloutConfig.borderColor || '#FACC15';
       ctx.lineWidth = df.fullStoryCalloutConfig.borderWidth ?? 2;
@@ -1835,13 +1842,15 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.stroke();
 
       ctx.fillStyle = df.fullStoryCalloutConfig.textColor || '#FFFFFF';
-      const fontSize = Math.round((df.fullStoryCalloutConfig.fontSize || 18) * (width / 1080));
+      const fontSize = Math.round((df.fullStoryCalloutConfig.fontSize || 22) * (width / 1080));
       ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
-      ctx.textAlign = 'center';
+      const align = df.fullStoryCalloutConfig.align || 'center';
+      ctx.textAlign = align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      ctx.fillText(df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में', cx + cw / 2, cy + ch / 2);
-      ctx.restore();
+      const textX = align === 'left' ? cx + 16 : align === 'right' ? cx + cw - 16 : cx + cw / 2;
+      ctx.fillText(df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में', textX, cy + ch / 2);
     }
+    ctx.restore();
   }
 
   // 5.5 WATERMARK (Part 10 & 12: Dynamic User Mode Sync, Rotation, Position & Type Controls)
@@ -1849,7 +1858,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
   if (df.watermarkConfig?.enabled && !isWatermarkOff) {
     ctx.save();
     const wm = df.watermarkConfig;
-    const rotDeg = wm.rotation ?? (wm.position === 'right_edge' ? 270 : 0);
+    const rotDeg = card.watermarkRotation ?? wm.rotation ?? (wm.position === 'right_edge' ? 270 : 0);
     const op = wm.opacity ?? 0.85;
     ctx.globalAlpha = op;
 
@@ -6213,7 +6222,8 @@ function drawPhotoDisclaimerWatermark(
   const x = Math.max(34, Math.round(width * 0.038));
   const y = height * 0.44;
   ctx.translate(x, y);
-  ctx.rotate(-Math.PI / 2);
+  const wmRotDeg = card.watermarkRotation ?? (card as any).watermarkRotation ?? 270;
+  ctx.rotate((wmRotDeg * Math.PI) / 180);
 
   ctx.font = '800 16px "Baloo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
@@ -6259,7 +6269,8 @@ function drawDateStamp(
   const x = width - Math.max(34, Math.round(width * 0.038));
   const y = Math.round(height * 0.22);
   ctx.translate(x, y);
-  ctx.rotate(Math.PI / 2);
+  const dateRotDeg = card.dateRotation ?? (card as any).dateRotation ?? 90;
+  ctx.rotate((dateRotDeg * Math.PI) / 180);
 
   ctx.font = '700 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
   ctx.textAlign = 'center';
