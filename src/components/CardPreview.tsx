@@ -1222,7 +1222,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
           style={{ width: '28px', height: '160px' }}
         >
-          <div className="absolute -rotate-90 whitespace-nowrap bg-black/80 backdrop-blur-md border border-white/30 px-3 py-1 rounded-md shadow-xl flex items-center justify-center">
+          <div
+            className="absolute whitespace-nowrap bg-black/80 backdrop-blur-md border border-white/30 px-3 py-1 rounded-md shadow-xl flex items-center justify-center"
+            style={{
+              transform: `rotate(${card.watermarkRotation ?? (card as any).watermarkRotation ?? 270}deg)`,
+              transformOrigin: 'center center',
+            }}
+          >
             <span className="text-[8.5px] sm:text-[10px] font-black uppercase tracking-[0.16em] text-white px-1 inline-block font-['Baloo_2',sans-serif] drop-shadow">
               {card.photoDisclaimerType === 'representative'
                 ? card.representativePhotoText || 'प्रतीकात्मक फोटो'
@@ -1240,7 +1246,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         >
           <div
             className="absolute whitespace-nowrap flex items-center justify-center"
-            style={{ transform: 'rotate(90deg)' }}
+            style={{
+              transform: `rotate(${card.dateRotation ?? (card as any).dateRotation ?? 90}deg)`,
+              transformOrigin: 'center center',
+            }}
           >
             <span
               className="font-bold tracking-wider text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] font-['Baloo_2',sans-serif]"
@@ -3482,7 +3491,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
               {/* Dynamic Date Stamp */}
               {df.headerConfig?.showDate && card.showDate !== false && (() => {
-                const rot = df.headerConfig.dateRotation ?? 270;
+                const rot = card.dateRotation ?? df.headerConfig.dateRotation ?? 270;
                 return (
                   <div
                     className="absolute pointer-events-auto flex items-center justify-center text-center font-bold"
@@ -3527,7 +3536,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 const isWatermarkOff = card.photoDisclaimerType === 'none' || (card.showAiGenerated === false && card.photoDisclaimerType !== 'representative' && card.photoDisclaimerType !== 'ai');
                 if (isWatermarkOff) return null;
 
-                const rot = df.watermarkConfig.rotation ?? (df.watermarkConfig.position === 'right_edge' ? 270 : 0);
+                const rot = card.watermarkRotation ?? df.watermarkConfig.rotation ?? (df.watermarkConfig.position === 'right_edge' ? 270 : 0);
                 const pos = df.watermarkConfig.position || 'right_edge';
                 let posStyle: React.CSSProperties = { right: '12px', top: '35%' };
                 let baseTranslate = 'translateY(-50%)';

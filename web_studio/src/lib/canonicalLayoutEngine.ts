@@ -534,11 +534,31 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   const manualLines = rawHeadline.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const isManual = manualLines.length > 1;
 
-  // Font size boundary bounds
-  const startFontSize = options.userFontSize
-    ? Math.min(spec.headlineArea.maxFontSize, Math.max(spec.headlineArea.minFontSize, Math.round(options.userFontSize * 2.1)))
+  // Bug 1 Fix: Default instructional headline must have prominent font size >= 70px
+  const isDefaultInstructionalHeadline =
+    rawHeadline.includes('कृपया स्टेप 3') ||
+    rawHeadline.includes('अपनी मुख्य खबर का शीर्षक दर्ज करें') ||
+    rawHeadline.includes('मुख्य खबर का शीर्षक');
+
+  // Bug 4 Fix: Normalize userFontSize (values >= 45 are already canvas pixels; values < 45 are slider units)
+  const normalizedUserFontSize = options.userFontSize
+    ? (options.userFontSize >= 45 ? options.userFontSize : Math.round(options.userFontSize * 2.15))
+    : undefined;
+
+  const maxAllowedFont = options.customBounds
+    ? Math.max(spec.headlineArea.maxFontSize, Math.min(100, Math.round(options.customBounds.height * 0.75)))
     : spec.headlineArea.maxFontSize;
-  const endFontSize = options.customBounds
+
+  // Font size boundary bounds
+  const startFontSize = isDefaultInstructionalHeadline
+    ? Math.max(70, spec.headlineArea.maxFontSize)
+    : normalizedUserFontSize
+    ? Math.min(maxAllowedFont, Math.max(spec.headlineArea.minFontSize, normalizedUserFontSize))
+    : spec.headlineArea.maxFontSize;
+
+  const endFontSize = isDefaultInstructionalHeadline
+    ? 70
+    : options.customBounds
     ? Math.min(spec.headlineArea.minFontSize, 24)
     : spec.headlineArea.minFontSize;
 

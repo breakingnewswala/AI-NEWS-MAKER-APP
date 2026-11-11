@@ -96,7 +96,6 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin
   const publishedDynamic: FrameOption[] = (dynamicFrames || [])
     .filter(
       (df) => {
-        if (df.publicationStatus !== 'published') return false;
         if (!(df.frameMode !== 'video' && df.frameType !== 'video')) return false;
         if (FORBIDDEN_DYNAMIC_FRAME_IDS.has(df.id)) return false;
         if (df.designCategory === 'Story Frames') return false;
@@ -113,7 +112,8 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin
           df.id === 'df_sample_11111' ||
           df.id === 'df_sample_2222' ||
           df.designCategory === 'Sample Frames';
-        if (isTest && !isMaster) return false;
+        if (df.publicationStatus !== 'published' && !isTest) return false;
+        if (isTest && !(isMaster || isAdmin)) return false;
         return true;
       }
     )
@@ -586,12 +586,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       return { id: catName, label: catName, badge: `${count}` };
     });
 
-    if (isMaster) {
+    if (isMaster || isAdmin) {
       const testCount = currentFrameOptions.filter((f) => f.categoryLabel === 'TEST_FRAMES' || (f as any).isTestFrame).length;
       list.unshift({ id: 'TEST_FRAMES', label: 'TEST_FRAMES', badge: `${testCount}` });
     }
     return list;
-  }, [currentFrameOptions, savedCustomFramesList, isMaster]);
+  }, [currentFrameOptions, savedCustomFramesList, isMaster, isAdmin]);
 
   // Load Custom Header & Footer for eligible user or admin assignment
   React.useEffect(() => {
@@ -1659,7 +1659,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               currentFrameOptions
                 .filter((f) => {
                   if (selectedFrameCategory === 'TEST_FRAMES') {
-                    return (f.categoryLabel === 'TEST_FRAMES' || (f as any).isTestFrame) && isMaster;
+                    return (f.categoryLabel === 'TEST_FRAMES' || (f as any).isTestFrame) && (isMaster || isAdmin);
                   }
                   const cfg = getTemplateConfig(f.id);
                   if (!cfg.isActive) return false;
@@ -1728,7 +1728,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
                       {/* Footer Action / Status Strip */}
                       <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
-                        {((f as any).isTestFrame || f.categoryLabel === 'TEST_FRAMES') && isMaster && (
+                        {((f as any).isTestFrame || f.categoryLabel === 'TEST_FRAMES') && (isMaster || isAdmin) && (
                           <button
                             type="button"
                             onClick={(e) => {
