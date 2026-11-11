@@ -1,0 +1,10 @@
+You are an art director for a top Indian digital news channel.
+Given this Hindi news headline: "{{HEADLINE}}",
+write a descriptive, photorealistic, journalistic photography prompt in English for generating a background news photo.
+
+Requirements:
+- Style: authentic journalistic press photography, standard documentary eye-level angle, realistic Indian press coverage, natural daylight.
+- Realistic press photo style, natural ambient daylight, 35mm lens authentic documentary feel.
+- High detail, realistic environment in India.
+- Absolutely NO text, NO typography, NO watermark, NO logo, NO borders.
+Return ONLY the English prompt string.

@@ -128,16 +128,33 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
     const photoFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
     const getFallbackSrc = () => isOverlayOrLogo ? transparentFallback : photoFallback;
 
-    const timeout = setTimeout(() => {
+    const handleDecodeSuccess = (targetImg: HTMLImageElement) => {
+      if (targetImg.naturalWidth > 0 && targetImg.naturalHeight > 0) {
+        finish(targetImg);
+      } else {
+        handleDecodeFailure();
+      }
+    };
+
+    const handleDecodeFailure = () => {
+      clearTimeout(timeout);
       const fallback = new Image();
       fallback.src = getFallbackSrc();
       fallback.onload = () => finish(fallback);
       fallback.onerror = () => finish(fallback);
-    }, 6000);
+    };
+
+    const timeout = setTimeout(handleDecodeFailure, 6000);
 
     img.onload = () => {
       clearTimeout(timeout);
-      finish(img);
+      if (typeof img.decode === 'function') {
+        img.decode()
+          .then(() => handleDecodeSuccess(img))
+          .catch(() => handleDecodeFailure());
+      } else {
+        handleDecodeSuccess(img);
+      }
     };
     img.onerror = () => {
       // If the proxied image failed, retry once with the raw target URL if present in query param
@@ -150,26 +167,22 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
             retryImg.crossOrigin = 'anonymous';
             retryImg.onload = () => {
               clearTimeout(timeout);
-              finish(retryImg);
+              if (typeof retryImg.decode === 'function') {
+                retryImg.decode()
+                  .then(() => handleDecodeSuccess(retryImg))
+                  .catch(() => handleDecodeFailure());
+              } else {
+                handleDecodeSuccess(retryImg);
+              }
             };
-            retryImg.onerror = () => {
-              clearTimeout(timeout);
-              const fallback = new Image();
-              fallback.src = getFallbackSrc();
-              fallback.onload = () => finish(fallback);
-              fallback.onerror = () => finish(fallback);
-            };
+            retryImg.onerror = handleDecodeFailure;
             retryImg.src = rawUrl;
             return;
           }
         } catch {}
       }
 
-      clearTimeout(timeout);
-      const fallback = new Image();
-      fallback.src = getFallbackSrc();
-      fallback.onload = () => finish(fallback);
-      fallback.onerror = () => finish(fallback);
+      handleDecodeFailure();
     };
     img.src = effectiveSrc;
   });
@@ -1106,7 +1119,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       card.footerBgColor || '#FFFFFF',
       card.footerTextColor,
       card.footerIconStyle || 'color',
-      card.showWebsite
+      card.showWebsite,
+      card.customFooterConfig || (df as any)?.footerConfig
     );
   }
 
@@ -2021,8 +2035,10 @@ async function drawGraphic001Canvas(
     ctx.fillRect(0, 0, width, height);
   }
 
-  // 2. TOP PHOTO AREA (Y = 0 to 61.33% Height, ~828px on 1080x1350)
-  const photoH = Math.round(height * 0.6133);
+  // 2. TOP PHOTO AREA (Y = 0 to 61.33% Height, ~828px on 1080x1350, with ratio adjustments)
+  const isStory = card.aspectRatio === '9:16';
+  const isSquare = card.aspectRatio === '1:1';
+  const photoH = isStory ? Math.round(height * 0.64) : isSquare ? Math.round(height * 0.60) : Math.round(height * 0.6133);
   const hasValidMainPhoto = Boolean(
     card.images?.main &&
     card.images.main.trim().length > 0 &&
@@ -3985,7 +4001,8 @@ async function drawDefaultJacketContent(
       card.footerBgColor || '#FFFFFF',
       card.footerTextColor,
       card.footerIconStyle || 'color',
-      card.showWebsite
+      card.showWebsite,
+      card.customFooterConfig || (df as any)?.footerConfig
     );
   }
 
@@ -6736,10 +6753,11 @@ export async function drawThemeFooterBar(
   footerBgColor: string = '#FFFFFF',
   footerTextColor?: string,
   footerIconStyle: 'color' | 'dark' | 'neutral' = 'color',
-  showWebsite?: boolean
+  showWebsite?: boolean,
+  customFooterConfig?: any
 ) {
   const barY = height - barH;
-  const bgColor = footerBgColor || '#FFFFFF';
+  const bgColor = customFooterConfig?.footerBgColor || footerBgColor || '#FFFFFF';
 
   // If user uploaded custom Footer.png, draw it directly over the footer background
   if (customFooterPng) {
@@ -6779,8 +6797,9 @@ export async function drawThemeFooterBar(
     luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
   const isLightBg = luminance >= 0.5;
-  const textColor = (footerTextColor && footerTextColor.trim())
-    ? footerTextColor
+  const effectiveCustomText = customFooterConfig?.footerTextColor || footerTextColor;
+  const textColor = (effectiveCustomText && effectiveCustomText.trim())
+    ? effectiveCustomText
     : (isLightBg ? '#0F172A' : '#FFFFFF');
   const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
 
@@ -7072,8 +7091,10 @@ export async function generateCardCanvas(
 
   try {
     const elemWidth = htmlElement.offsetWidth || 540;
+    const elemHeight = htmlElement.offsetHeight || (elemWidth * 1.25);
+    const ratio = elemHeight / elemWidth;
     const targetWidth = 1080;
-    const targetHeight = 1350;
+    const targetHeight = ratio < 1.1 ? 1080 : ratio > 1.5 ? 1920 : 1350;
     const dynamicScale = targetWidth / elemWidth;
 
     const rawCanvas = await html2canvas(htmlElement, {
@@ -7085,7 +7106,7 @@ export async function generateCardCanvas(
       imageTimeout: 15000,
     });
 
-    // Create normalized 1080x1350 canvas
+    // Create normalized target canvas (1080x1080 for 1:1, 1080x1350 for 4:5, 1080x1920 for 9:16)
     const finalCanvas = document.createElement('canvas');
     finalCanvas.width = targetWidth;
     finalCanvas.height = targetHeight;

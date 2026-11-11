@@ -17,6 +17,8 @@ export interface FrameOption {
   categoryLabel: string; // 'Basic' | 'Advance' | 'Pro' | 'VIP'
   graphicNumber?: number; // 1, 2, 3...
   aspectRatio: '4:5'; // Strictly 4:5
+  rawDynamicFrame?: any;
+  isTestFrame?: boolean;
 }
 
 export const GRAPHIC_1_FRAME_OPTION: FrameOption = {

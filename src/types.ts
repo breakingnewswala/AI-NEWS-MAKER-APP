@@ -151,6 +151,8 @@ export interface NewsCardData {
   headersByDesign?: Partial<Record<FrameDesign, string>>; // Separate header graphic per frame template
   customFooterPng?: string; // Uploaded footer PNG (Footer.png)
   footersByDesign?: Partial<Record<FrameDesign, string>>; // Separate footer graphic per frame template
+  customFooterConfig?: any; // Structured Custom Footer configuration
+  selectedCustomFooterId?: string; // Selected asset library custom footer id
   customFrameOverlayPng?: string; // Full overlay PNG
   customArrowPng?: string; // Custom pointer arrow PNG (ARROW.png)
   frameDesign?: FrameDesign; // Multiple frame styles

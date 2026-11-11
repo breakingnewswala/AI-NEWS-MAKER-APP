@@ -2952,6 +2952,11 @@ app.delete("/api/news-posts/:id", (req, res) => {
     if (centralDb && centralDb.isInitialized) {
       centralDb.deleteNewsPost(id).catch(() => {});
     }
+    getDurableNotificationBoardIds().then((ids) => {
+      if (ids.includes(id)) {
+        saveDurableNotificationBoardIds(ids.filter((x) => x !== id)).catch(() => {});
+      }
+    }).catch(() => {});
     return res.json({ success: true, posts: existing });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -10659,17 +10664,77 @@ function getDefaultAssetLibraries(): any[] {
   ];
 }
 
+const DELETED_ASSETS_TOMBSTONE_FILE = path.join(process.cwd(), "deleted_assets_tombstone.json");
+let memoryAssetTombstones: Set<string> | null = null;
+
+function loadDeletedAssetTombstones(): Set<string> {
+  if (memoryAssetTombstones && memoryAssetTombstones.size > 0) {
+    return new Set(memoryAssetTombstones);
+  }
+  const set = new Set<string>();
+  try {
+    if (fs.existsSync(DELETED_ASSETS_TOMBSTONE_FILE)) {
+      const raw = fs.readFileSync(DELETED_ASSETS_TOMBSTONE_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) list.forEach((id) => set.add(id));
+    }
+  } catch {}
+  memoryAssetTombstones = set;
+  return set;
+}
+
+async function getDurableAssetTombstones(): Promise<Set<string>> {
+  const set = loadDeletedAssetTombstones();
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const cloudDoc = await centralDb.readDoc("system_config", "deleted_assets_tombstones");
+      const docData = cloudDoc?.data || cloudDoc;
+      if (docData && Array.isArray(docData.tombstones)) {
+        docData.tombstones.forEach((id: string) => set.add(id));
+      }
+    } catch {}
+  }
+  memoryAssetTombstones = set;
+  try {
+    fs.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
+  } catch {}
+  return set;
+}
+
+async function recordDeletedAssetTombstone(id: string) {
+  try {
+    const tombstones = await getDurableAssetTombstones();
+    tombstones.add(id);
+    memoryAssetTombstones = tombstones;
+    fs.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    if (centralDb && typeof centralDb.writeDoc === "function") {
+      const res = await centralDb.writeDoc("system_config", "deleted_assets_tombstones", {
+        tombstones: Array.from(tombstones),
+        updatedAt: Date.now()
+      });
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore tombstone write failed: ${res?.error || res?.statusCode || 'Unknown error'}`);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to write durable deleted_assets_tombstone:", err);
+    throw err;
+  }
+}
+
 function loadAssetLibrariesDatabase(): any[] {
   try {
+    const deletedTombstones = loadDeletedAssetTombstones();
     if (fs.existsSync(ASSET_LIBRARIES_DB_FILE)) {
       const raw = fs.readFileSync(ASSET_LIBRARIES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.filter((it: any) => !DUMMY_ASSET_IDS.has(it.id));
+        return parsed.filter((it: any) => !DUMMY_ASSET_IDS.has(it.id) && !deletedTombstones.has(it.id));
       }
     }
   } catch {}
-  return getDefaultAssetLibraries();
+  const deletedTombstones = loadDeletedAssetTombstones();
+  return getDefaultAssetLibraries().filter((it: any) => !deletedTombstones.has(it.id));
 }
 
 function saveAssetLibrariesDatabase(items: any[]) {
@@ -10983,6 +11048,49 @@ app.get("/api/dynamic-frames", async (req, res) => {
   }
 });
 
+// 1b. GET /api/dynamic-frames/:id (Master Admin check for test frames)
+app.get("/api/dynamic-frames/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const isMaster = isAuthorizedMasterAdmin(req);
+    let frames = loadDynamicFramesDatabase();
+    let frame = frames.find((f) => f.id === id);
+
+    if (!frame && centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
+        if (cloudDoc && Array.isArray(cloudDoc.frames)) {
+          frame = cloudDoc.frames.find((f: any) => f.id === id);
+        }
+      } catch {}
+    }
+
+    if (!frame) {
+      return res.status(404).json({ error: "Frame not found." });
+    }
+
+    const isTestFrame =
+      Boolean(frame.isTestFrame) ||
+      frame.designCategory === "TEST_FRAMES" ||
+      frame.publicationStatus !== "published" ||
+      Boolean(frame.isSampleTestTemplate) ||
+      Boolean(frame.isSample) ||
+      frame.name === "11111" ||
+      frame.name === "2222" ||
+      frame.id.startsWith("df_sample_") ||
+      frame.id.startsWith("df_test_") ||
+      frame.designCategory === "Sample Frames";
+
+    if (isTestFrame && !isMaster) {
+      return res.status(403).json({ error: "Access denied: Only Master Admin can view test frames." });
+    }
+
+    return res.json({ success: true, frame });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // 2. POST /api/dynamic-frames (Master Admin only)
 app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
   try {
@@ -11136,6 +11244,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) =
 app.get("/api/admin/asset-libraries", async (req, res) => {
   try {
     const { type, category } = req.query as any;
+    const deletedTombstones = await getDurableAssetTombstones();
     let items = loadAssetLibrariesDatabase();
     if (centralDb && typeof centralDb.readDoc === "function") {
       try {
@@ -11144,14 +11253,19 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
         if (docData && Array.isArray(docData.items) && docData.items.length > 0) {
           const itemMap = new Map<string, any>();
           for (const it of items) itemMap.set(it.id, it);
-          for (const cit of docData.items) itemMap.set(cit.id, { ...itemMap.get(cit.id), ...cit });
-          items = Array.from(itemMap.values()).filter((it: any) => !DUMMY_ASSET_IDS.has(it.id));
+          for (const cit of docData.items) {
+            if (!deletedTombstones.has(cit.id) && !DUMMY_ASSET_IDS.has(cit.id)) {
+              itemMap.set(cit.id, { ...itemMap.get(cit.id), ...cit });
+            }
+          }
+          items = Array.from(itemMap.values()).filter((it: any) => !DUMMY_ASSET_IDS.has(it.id) && !deletedTombstones.has(it.id));
           saveAssetLibrariesDatabase(items);
         }
       } catch (err: any) {
         console.warn("Asset libraries Firestore sync note:", err?.message);
       }
     }
+    items = items.filter((it: any) => !DUMMY_ASSET_IDS.has(it.id) && !deletedTombstones.has(it.id));
 
     // Normalization & alias matching
     const normParam = (type && type !== "all" ? type : category && category !== "all" ? category : null);
@@ -11182,9 +11296,85 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
           it.category === 'suvichar_background' ||
           it.type === 'suvichar'
         );
+      } else if (q === 'custom_footer' || q === 'footer') {
+        items = items.filter((it: any) =>
+          it.type === 'custom_footer' ||
+          it.category === 'custom_footer' ||
+          it.type === 'footer' ||
+          (it.name && /footer|फ़ुटर|फुटर/i.test(it.name))
+        );
       } else {
         items = items.filter((it: any) => it.type === q || it.category === q);
       }
+    }
+
+    // Role and Plan-Based Access Control:
+    // If caller is NOT an Admin, enforce strict visibility & plan validation:
+    // 1. Hide disabled or draft items.
+    // 2. Derive user plan STRICTLY from verified database identity; NEVER trust client-supplied query/header params!
+    // 3. Unauthenticated requests are STRICTLY locked to 'BASIC'.
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isMaster || isAuthorizedAdmin(req);
+
+    if (!isAdmin) {
+      const authUser = getAuthenticatedUser(req);
+      let effectivePlan = 'BASIC';
+
+      if (authUser) {
+        try {
+          const masterUsers = loadUsersMasterDatabase();
+          const cleanEmail = (authUser.email || '').toLowerCase().trim();
+          const uMatch = masterUsers.find(
+            (u: any) =>
+              (u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+              (u.userId && u.userId === authUser.userId)
+          );
+          if (uMatch) {
+            effectivePlan = (uMatch.planName || uMatch.tier || 'BASIC').toUpperCase();
+          } else {
+            const profiles = loadProfilesDatabase();
+            const prof =
+              profiles[cleanEmail] ||
+              Object.values(profiles).find(
+                (p: any) =>
+                  (p.email && p.email.toLowerCase().trim() === cleanEmail) ||
+                  (p.userId && p.userId === authUser.userId)
+              );
+            if (prof) {
+              effectivePlan = (prof.planName || prof.tier || 'BASIC').toUpperCase();
+            }
+          }
+        } catch {}
+      }
+
+      const planHierarchy: Record<string, number> = {
+        BASIC: 1,
+        ADVANCE: 2,
+        ADVANCED: 2,
+        PRO: 3,
+        PROFESSIONAL: 3,
+        'VIP DESK': 4,
+        VIP: 4,
+        ULTRA: 4,
+      };
+      const userRank = planHierarchy[effectivePlan] || 1;
+
+      items = items.filter((it: any) => {
+        // Exclude disabled, draft, or pending
+        if (it.enabled === false) return false;
+        if (it.status === 'draft' || it.status === 'pending') return false;
+
+        // Check plan-based assignment for custom footers or any asset with allowedPlans
+        const plans = it.allowedPlans || it.footerConfig?.allowedPlans;
+        if (Array.isArray(plans) && plans.length > 0 && !plans.includes('ALL')) {
+          const satisfies = plans.some((p: string) => {
+            const pNorm = String(p).trim().toUpperCase();
+            return (planHierarchy[pNorm] || 1) <= userRank;
+          });
+          if (!satisfies) return false;
+        }
+        return true;
+      });
     }
 
     // Map both url and assetUrl
@@ -11203,20 +11393,21 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig } = req.body || {};
-    if (!name || !type || !url) {
-      return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background'), and URL are required." });
+    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    if (!name || !type || (!url && type !== 'custom_footer')) {
+      return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer'), and URL (or footerConfig for custom_footer) are required." });
     }
     const newItem = {
       id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: String(name).trim(),
       type,
       category: category || "general",
-      url,
+      url: url || '',
       enabled: enabled !== false,
       sliceConfig: sliceConfig || (type === "location_badge" ? { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 } : undefined),
       textRegion: textRegion || undefined,
       typographyConfig: typographyConfig || undefined,
+      footerConfig: footerConfig || undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -11232,7 +11423,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig } = req.body || {};
+    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
@@ -11247,6 +11438,7 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
       ...(sliceConfig !== undefined ? { sliceConfig } : {}),
       ...(textRegion !== undefined ? { textRegion } : {}),
       ...(typographyConfig !== undefined ? { typographyConfig } : {}),
+      ...(footerConfig !== undefined ? { footerConfig } : {}),
       updatedAt: Date.now(),
     };
     items[idx] = updated;
@@ -11257,7 +11449,7 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
   }
 });
 
-app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
+app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const items = loadAssetLibrariesDatabase();
@@ -11273,7 +11465,8 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) 
         f.fullStoryCalloutConfig?.manualCalloutAsset === target.url ||
         f.videoConfig?.locationBadgeUrl === target.url ||
         f.calloutAssetUrl === target.url ||
-        f.statementOptions?.curatedBackgroundUrl === target.url
+        f.statementOptions?.curatedBackgroundUrl === target.url ||
+        f.customFooterId === target.id
     );
     if (inUse) {
       return res.status(400).json({
@@ -11282,7 +11475,124 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) 
     }
     const filtered = items.filter((it) => it.id !== id);
     saveAssetLibrariesDatabase(filtered);
+    await recordDeletedAssetTombstone(id);
+    if (centralDb && typeof centralDb.writeDoc === "function") {
+      const dbRes = await centralDb.writeDoc("system_config", "asset_libraries", {
+        items: filtered,
+        updatedAt: Date.now()
+      });
+      if (centralDb.useFirestore && (!dbRes || dbRes.success === false)) {
+        throw new Error(`Durable Firestore asset_libraries sync failed: ${dbRes?.error || dbRes?.statusCode || 'Unknown error'}`);
+      }
+    }
     return res.json({ success: true, message: "एसेट सफलतापूर्वक हटाया गया।" });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Durable Special Notification Board Helpers
+async function getDurableNotificationBoardIds(): Promise<string[]> {
+  const idsSet = new Set<string>();
+  // 1. Read from local disk file
+  try {
+    const locations = resolveAllDatabaseLocations("notification_board_ids.json");
+    for (const loc of locations) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) list.forEach((id: string) => idsSet.add(id));
+      }
+    }
+  } catch {}
+
+  // 2. Read from centralDb
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const boardDoc = await centralDb.readDoc("system_config", "notification_board_ids");
+      if (boardDoc && Array.isArray(boardDoc.ids)) {
+        boardDoc.ids.forEach((id: string) => idsSet.add(id));
+      }
+    } catch {}
+  }
+
+  // 3. Filter out deleted news posts
+  const deletedSet = loadDeletedNewsIds();
+  for (const delId of deletedSet) {
+    idsSet.delete(delId);
+  }
+
+  // 4. Verify against existing news database (only approved/published items allowed)
+  try {
+    const allNews = loadNewsDatabase();
+    const newsMap = new Map(allNews.map((n) => [n.id, n]));
+    const validIds: string[] = [];
+    for (const id of idsSet) {
+      const post = newsMap.get(id);
+      if (post) {
+        if (post.status === "draft" || post.isApproved === false) {
+          continue;
+        }
+      }
+      validIds.push(id);
+    }
+    return validIds;
+  } catch {
+    return Array.from(idsSet);
+  }
+}
+
+async function saveDurableNotificationBoardIds(ids: string[]): Promise<void> {
+  const cleanIds = Array.from(new Set(ids));
+  // 1. Write to local file
+  try {
+    const jsonStr = JSON.stringify(cleanIds, null, 2);
+    const locations = resolveAllDatabaseLocations("notification_board_ids.json");
+    for (const loc of locations) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
+  } catch {}
+
+  // 2. Write to centralDb
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    const res = await centralDb.writeDoc("system_config", "notification_board_ids", {
+      ids: cleanIds,
+      updatedAt: Date.now(),
+    });
+    if (centralDb.useFirestore && (!res || res.success === false)) {
+      throw new Error(`Durable Firestore notification board write failed: ${res?.error || res?.statusCode || 'Unknown error'}`);
+    }
+  }
+}
+
+// Admin Special Notification Board Toggle & Selection
+app.get("/api/admin/notification-board-ids", async (_req, res) => {
+  try {
+    const validIds = await getDurableNotificationBoardIds();
+    return res.json({ success: true, ids: validIds, selectedIds: validIds });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { selected } = req.body || {};
+    const currentIds = await getDurableNotificationBoardIds();
+    const idSet = new Set<string>(currentIds);
+    if (selected) {
+      idSet.add(id);
+    } else {
+      idSet.delete(id);
+    }
+    const updatedIds = Array.from(idSet);
+    await saveDurableNotificationBoardIds(updatedIds);
+    return res.json({ success: true, id, selected: Boolean(selected), ids: updatedIds });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -11293,35 +11603,36 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) 
 app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { sampleBase64, selectedRatio } = req.body || {};
-    if (!selectedRatio || (selectedRatio !== "4:5" && selectedRatio !== "9:16")) {
-      return res.status(400).json({ error: "A valid aspectRatio ('4:5' or '9:16') is required." });
+    if (!selectedRatio || (selectedRatio !== "4:5" && selectedRatio !== "9:16" && selectedRatio !== "1:1")) {
+      return res.status(400).json({ error: "A valid aspectRatio ('4:5', '1:1', or '9:16') is required." });
     }
 
     const isStory = selectedRatio === "9:16";
+    const isSquare = selectedRatio === "1:1";
 
     // Default calibrated heuristic layout if Gemini is not available or encounters errors
     const fallbackLayout = {
       detectedRatio: selectedRatio,
-      headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : { x: 5, y: 3.5, width: 90, height: 15 },
-      logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : { x: 5, y: 3.5, width: 22, height: 9 },
-      locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
-      headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : { x: 7, y: 63, width: 86, height: 27 },
+      headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : isSquare ? { x: 5, y: 3, width: 90, height: 14 } : { x: 5, y: 3.5, width: 90, height: 15 },
+      logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : isSquare ? { x: 5, y: 3, width: 22, height: 8 } : { x: 5, y: 3.5, width: 22, height: 9 },
+      locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : isSquare ? { x: 5, y: 12, width: 28, height: 4.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
+      headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : isSquare ? { x: 6, y: 62, width: 88, height: 28 } : { x: 7, y: 63, width: 86, height: 27 },
       recommendedPhotoSlots: [
         {
           name: "मुख्य समाचार फोटो",
           slotType: "normal",
-          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : { x: 0, y: 0, width: 100, height: 61.33 },
+          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : isSquare ? { x: 0, y: 0, width: 100, height: 60 } : { x: 0, y: 0, width: 100, height: 61.33 },
         },
       ],
       statementDetected: false,
-      quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : { x: 8, y: 22, width: 84, height: 26 },
-      speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
-      speakerDesigRect: isStory ? { x: 8, y: 84, width: 44, height: 6 } : { x: 8, y: 79.5, width: 42, height: 6 },
+      quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : isSquare ? { x: 8, y: 20, width: 84, height: 26 } : { x: 8, y: 22, width: 84, height: 26 },
+      speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : isSquare ? { x: 8, y: 70, width: 42, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
+      speakerDesigRect: isStory ? { x: 8, y: 84, width: 44, height: 6 } : isSquare ? { x: 8, y: 78, width: 42, height: 6 } : { x: 8, y: 79.5, width: 42, height: 6 },
       ribbonDetected: false,
-      ribbonRect: isStory ? { x: 12, y: 60, width: 76, height: 6.8 } : { x: 15, y: 64, width: 70, height: 9 },
-      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : { x: 0, y: 92, width: 100, height: 8 },
-      dateRect: isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : { x: 5, y: 18.5, width: 34, height: 3.2 },
-      watermarkRect: isStory ? { x: 70, y: 3, width: 25, height: 2.8 } : { x: 74, y: 3.5, width: 21, height: 3.5 },
+      ribbonRect: isStory ? { x: 12, y: 60, width: 76, height: 6.8 } : isSquare ? { x: 14, y: 58, width: 72, height: 8 } : { x: 15, y: 64, width: 70, height: 9 },
+      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : isSquare ? { x: 0, y: 92, width: 100, height: 8 } : { x: 0, y: 92, width: 100, height: 8 },
+      dateRect: isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : isSquare ? { x: 5, y: 17, width: 34, height: 3 } : { x: 5, y: 18.5, width: 34, height: 3.2 },
+      watermarkRect: isStory ? { x: 70, y: 3, width: 25, height: 2.8 } : isSquare ? { x: 74, y: 3, width: 21, height: 3.2 } : { x: 74, y: 3.5, width: 21, height: 3.5 },
     };
 
     if (!sampleBase64 || typeof sampleBase64 !== "string") {
@@ -11456,6 +11767,23 @@ app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
     if (!targetFrame) {
       // If frame not found in dynamic db, check if it's standard builtin
       return res.json({ success: true, authorized: true });
+    }
+
+    const isTestFrame =
+      Boolean(targetFrame.isTestFrame) ||
+      targetFrame.designCategory === "TEST_FRAMES" ||
+      targetFrame.publicationStatus !== "published" ||
+      Boolean(targetFrame.isSampleTestTemplate) ||
+      Boolean(targetFrame.isSample) ||
+      targetFrame.name === "11111" ||
+      targetFrame.name === "2222";
+
+    if (isTestFrame && !isMaster) {
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        error: "Access denied: Only Master Admin can export test frames.",
+      });
     }
 
     const masterUsers = loadUsersMasterDatabase();

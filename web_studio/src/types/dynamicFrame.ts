@@ -31,7 +31,7 @@ export interface AssetLibraryItem {
   name: string;
   category?: string; // For suvichar backgrounds: 'morning' | 'spiritual' | 'motivation' | 'general'
   url: string;
-  type: 'location_badge' | 'callout_png' | 'suvichar_background';
+  type: 'location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer';
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
@@ -48,11 +48,40 @@ export interface AssetLibraryItem {
     color?: string;
     weight?: string | number;
   };
+  footerConfig?: CustomFooterConfig;
+}
+
+export interface CustomFooterConfig {
+  footerBgColor: string;
+  footerTextColor: string;
+  footerIconStyle?: 'color' | 'dark' | 'neutral';
+  footerHeightPct?: number; // e.g. 8%
+  elements?: {
+    showWebsite?: boolean;
+    showPhone?: boolean;
+    showSocialIcons?: boolean;
+    showChannelName?: boolean;
+    showTagline?: boolean;
+    customText?: string;
+  };
+  alignment?: 'left' | 'center' | 'right';
+  channelNameAlign?: 'left' | 'center' | 'right';
+  websiteAlign?: 'left' | 'center' | 'right';
+  socialIconsAlign?: 'left' | 'center' | 'right';
+  phoneAlign?: 'left' | 'center' | 'right';
+  taglineAlign?: 'left' | 'center' | 'right';
+  iconSize?: number; // 14 to 36, default 20
+  elementSpacing?: number; // 4 to 32, default 12
+  paddingX?: number; // 8 to 48, default 16
+  paddingY?: number; // 4 to 24, default 8
+  separator?: string; // '|' | '•' | '—' | '/' | 'none'
+  elementOrder?: string[]; // e.g. ['channelName', 'website', 'socialIcons', 'phone', 'tagline', 'customText']
+  allowedPlans?: DynamicPlanTier[];
 }
 
 export type DynamicAspectRatio = '4:5' | '9:16' | '1:1' | '4:3';
 
-export const PHOTO_ALLOWED_ASPECT_RATIOS: DynamicAspectRatio[] = ['4:5', '9:16'];
+export const PHOTO_ALLOWED_ASPECT_RATIOS: DynamicAspectRatio[] = ['4:5', '1:1', '9:16'];
 export const VIDEO_ALLOWED_ASPECT_RATIOS: DynamicAspectRatio[] = ['9:16', '1:1', '4:5', '4:3'];
 
 export type DynamicDesignCategory =
@@ -229,6 +258,17 @@ export interface WatermarkConfig {
 
 export type CalloutVisibilityPolicy = 'optional' | 'forced_on' | 'disabled';
 export type CalloutAssetMode = 'dynamic_overlay' | 'static_image';
+export type ElementVisibilityPolicy = 'always_show' | 'user_toggle' | 'not_included';
+
+export interface FrameVisibilitySettings {
+  logo?: ElementVisibilityPolicy;
+  locationBadge?: ElementVisibilityPolicy;
+  dateStamp?: ElementVisibilityPolicy;
+  watermark?: ElementVisibilityPolicy;
+  headline?: ElementVisibilityPolicy;
+  callout?: ElementVisibilityPolicy;
+  footer?: ElementVisibilityPolicy;
+}
 
 export interface PlanCalloutRule {
   defaultCalloutAsset?: string;
@@ -260,6 +300,10 @@ export interface FullStoryCalloutConfig {
   calloutAssetMode?: CalloutAssetMode;
   calloutVisibilityPolicy?: CalloutVisibilityPolicy;
   planCalloutSettings?: PlanBasedCalloutSettings;
+  scale?: number;
+  innerTextRect?: NormalizedRect;
+  textPadding?: number;
+  lineHeight?: number;
 }
 
 export interface PoweredByConfig {
@@ -415,6 +459,8 @@ export interface DynamicFrameTemplate {
   approvedAt?: number;
   approvedBy?: string;
   sliceConfig?: { leftWidthPct: number; rightWidthPct: number; centerMinPct: number };
+  visibilitySettings?: FrameVisibilitySettings;
+  customFooterId?: string;
 }
 
 export interface UserStoryPreference {

@@ -78,10 +78,11 @@ import {
   getLocalDynamicFrames,
   getDynamicFrameById,
 } from '../lib/dynamicFramesManager';
+import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
 
-function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin: boolean = false): FrameOption[] {
+function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin: boolean = false, isMaster: boolean = false): FrameOption[] {
   const staticFrames = getEffectiveFrameOptions();
   const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
     'df_reg_4_5_clean',
@@ -99,25 +100,45 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin
         if (!(df.frameMode !== 'video' && df.frameType !== 'video')) return false;
         if (FORBIDDEN_DYNAMIC_FRAME_IDS.has(df.id)) return false;
         if (df.designCategory === 'Story Frames') return false;
-        // Test frames (e.g. 11111, 2222, or pending approval) never appear in Studio production catalog
-        if (df.designCategory === 'TEST_FRAMES' || (df as any).isTestFrame || (df as any).approvalStatus === 'PENDING_TEST') return false;
-        const isTestOrSample = (df as any).isSampleTestTemplate || (df as any).isSample || df.name === '11111' || df.name === '2222' || df.id === 'df_test_11111' || df.id === 'df_test_2222' || df.id === 'df_sample_11111' || df.id === 'df_sample_2222' || df.designCategory === 'Sample Frames';
-        if (isTestOrSample) return false;
+        const isTest =
+          df.designCategory === 'TEST_FRAMES' ||
+          Boolean((df as any).isTestFrame) ||
+          (df as any).approvalStatus === 'PENDING_TEST' ||
+          Boolean((df as any).isSampleTestTemplate) ||
+          Boolean((df as any).isSample) ||
+          df.name === '11111' ||
+          df.name === '2222' ||
+          df.id === 'df_test_11111' ||
+          df.id === 'df_test_2222' ||
+          df.id === 'df_sample_11111' ||
+          df.id === 'df_sample_2222' ||
+          df.designCategory === 'Sample Frames';
+        if (isTest && !isMaster) return false;
         return true;
       }
     )
     .map((df) => {
-      const normCat = normalizeToCanonicalCategory(df.designCategory);
+      const isTest =
+        df.designCategory === 'TEST_FRAMES' ||
+        Boolean((df as any).isTestFrame) ||
+        (df as any).approvalStatus === 'PENDING_TEST' ||
+        Boolean((df as any).isSampleTestTemplate) ||
+        Boolean((df as any).isSample) ||
+        df.name === '11111' ||
+        df.name === '2222';
+      const normCat = isTest ? 'TEST_FRAMES' : normalizeToCanonicalCategory(df.designCategory);
       const tier = df.allowedPlans && df.allowedPlans.length > 0 ? df.allowedPlans[0] : 'BASIC';
       return {
         id: df.id as FrameDesign,
         name: df.name,
         description: df.description || `AI जनरेटेड ${df.aspectRatio} फ्रेम`,
-        badge: tier,
+        badge: isTest ? 'TEST FRAME' : tier,
         requiredTier: (tier.toLowerCase() === 'vip desk' ? 'ultra' : tier.toLowerCase()) as any,
-        planCategory: tier as any,
+        planCategory: (isTest ? 'TEST FRAME' : tier) as any,
         categoryLabel: normCat,
         aspectRatio: (df.aspectRatio === '9:16' ? '9:16' : '4:5') as any,
+        rawDynamicFrame: df,
+        isTestFrame: isTest,
       };
     });
 
@@ -346,9 +367,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     }
   }, [isBasicUser, card.headlineFontFamily]);
 
+  const isMaster = isEffectiveSuperAdmin(currentUser) || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
+  const [editingTestFrame, setEditingTestFrame] = React.useState<any>(null);
+
   const [dynamicFramesRaw, setDynamicFramesRaw] = React.useState<DynamicFrameTemplate[]>(() => getLocalDynamicFrames());
   const [currentFrameOptions, setCurrentFrameOptions] = React.useState<FrameOption[]>(() => {
-    return buildUnifiedFrameOptions(getLocalDynamicFrames(), isEffectiveAdmin(currentUser?.email || currentUser?.username));
+    return buildUnifiedFrameOptions(getLocalDynamicFrames(), isEffectiveAdmin(currentUser?.email || currentUser?.username), isMaster);
   });
 
   React.useEffect(() => {
@@ -363,7 +387,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       } catch {}
       if (isMounted) {
         setDynamicFramesRaw(dfs);
-        setCurrentFrameOptions(buildUnifiedFrameOptions(dfs, isEffectiveAdmin(currentUser?.email || currentUser?.username)));
+        setCurrentFrameOptions(buildUnifiedFrameOptions(dfs, isEffectiveAdmin(currentUser?.email || currentUser?.username), isMaster));
         if (card.frameDesign && !card.customDynamicFrame) {
           const match = dfs.find((d) => d.id === card.frameDesign || d.name === card.frameDesign);
           if (match) {
@@ -413,6 +437,32 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const [savedCustomFramesList, setSavedCustomFramesList] = React.useState<CustomFrameItem[]>(() =>
     getCustomFrames(currentUser?.email || currentUser?.username)
   );
+  const [libraryFooters, setLibraryFooters] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    const userTier = (currentUser?.tier || 'basic').toUpperCase();
+    fetch(`/api/admin/asset-libraries?type=custom_footer&userPlan=${encodeURIComponent(userTier)}`, {
+      headers: {
+        'x-user-plan': userTier,
+        ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {})
+      }
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.items)) {
+          const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, 'VIP DESK': 4, ULTRA: 4 };
+          const userRank = planHierarchy[userTier] || 1;
+          const valid = d.items.filter((item: any) => {
+            if (item.type !== 'custom_footer' || item.enabled === false) return false;
+            const plans = item.allowedPlans || item.footerConfig?.allowedPlans;
+            if (!plans || !Array.isArray(plans) || plans.length === 0) return true;
+            return plans.some((p: string) => (planHierarchy[p.toUpperCase()] || 1) <= userRank);
+          });
+          setLibraryFooters(valid);
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.tier, currentUser?.token]);
 
   React.useEffect(() => {
     const handleFramesUpdated = () => {
@@ -504,7 +554,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   };
 
   const frameCategoryItems = React.useMemo(() => {
-    return FRAME_CATEGORIES.filter((c) => (c as string) !== 'TEST_FRAMES').map((catName) => {
+    const list = FRAME_CATEGORIES.filter((c) => (c as string) !== 'TEST_FRAMES').map((catName) => {
       const normCatName = normalizeToCanonicalCategory(catName);
       if (catName === 'Custom Frame') {
         const savedCount = savedCustomFramesList.length;
@@ -528,7 +578,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       }).length;
       return { id: catName, label: catName, badge: `${count}` };
     });
-  }, [currentFrameOptions, savedCustomFramesList]);
+
+    if (isMaster) {
+      const testCount = currentFrameOptions.filter((f) => f.categoryLabel === 'TEST_FRAMES' || (f as any).isTestFrame).length;
+      list.unshift({ id: 'TEST_FRAMES', label: 'TEST_FRAMES', badge: `${testCount}` });
+    }
+    return list;
+  }, [currentFrameOptions, savedCustomFramesList, isMaster]);
 
   // Load Custom Header & Footer for eligible user or admin assignment
   React.useEffect(() => {
@@ -1595,6 +1651,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             {selectedFrameCategory !== 'Custom Frame' &&
               currentFrameOptions
                 .filter((f) => {
+                  if (selectedFrameCategory === 'TEST_FRAMES') {
+                    return (f.categoryLabel === 'TEST_FRAMES' || (f as any).isTestFrame) && isMaster;
+                  }
                   const cfg = getTemplateConfig(f.id);
                   if (!cfg.isActive) return false;
                   const isTestOrSample = (f as any).isSampleTestTemplate || (f as any).isSample || f.name === '11111' || f.name === '2222' || f.id === 'df_test_11111' || f.id === 'df_test_2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.categoryLabel === 'TEST_FRAMES';
@@ -1662,6 +1721,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
                       {/* Footer Action / Status Strip */}
                       <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
+                        {((f as any).isTestFrame || f.categoryLabel === 'TEST_FRAMES') && isMaster && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingTestFrame((f as any).rawDynamicFrame || f);
+                            }}
+                            className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold text-[9px] cursor-pointer"
+                          >
+                            एडिट करें
+                          </button>
+                        )}
                         {isUnlocked ? (
                           <span className={`font-bold flex items-center gap-1 ${isSelected ? 'text-yellow-400' : 'text-emerald-400'}`}>
                             {isSelected ? '✓ एक्टिव टेम्पलेट' : 'क्लिक करके चुनें'}
@@ -3604,104 +3675,63 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <span>🔒 वॉटरमार्क विकल्प केवल एडवांस, प्रो और वीआईपी डेस्क में उपलब्ध हैं।</span>
               </div>
             ) : (
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Box 1: प्रतीकात्मक फोटो (50%) with ON/OFF switch */}
-              {(() => {
-                const isRepActive = card.photoDisclaimerType === 'representative';
-                return (
-                  <div
-                    onClick={() => {
-                      if (isRepActive) {
-                        onChange({
-                          photoDisclaimerType: 'none',
-                          showAiGenerated: false,
-                          photoWatermarkTag: undefined,
-                        });
-                      } else {
-                        onChange({
-                          photoDisclaimerType: 'representative',
-                          showAiGenerated: false,
-                          photoWatermarkTag: 'प्रतीकात्मक फोटो',
-                          representativePhotoText: card.representativePhotoText || 'प्रतीकात्मक फोटो',
-                        });
-                      }
-                    }}
-                    className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all cursor-pointer active:scale-98 select-none ${
-                      isRepActive
-                        ? 'bg-amber-400/15 border-amber-400 shadow-md ring-1 ring-amber-400/50'
-                        : 'bg-neutral-900/90 border-neutral-800 hover:border-neutral-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black flex items-center gap-1.5 text-neutral-200">
-                        <span>📷</span>
-                        <span>प्रतीकात्मक फोटो</span>
-                      </span>
-                      <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider transition-colors ${
-                          isRepActive
-                            ? 'bg-amber-400 text-neutral-950 shadow-sm'
-                            : 'bg-neutral-800 text-neutral-400'
-                        }`}
-                      >
-                        {isRepActive ? 'ON' : 'OFF'}
-                      </span>
-                    </div>
-                    <span className={`text-[10px] leading-tight ${isRepActive ? 'text-amber-300 font-bold' : 'text-neutral-400'}`}>
-                      सांकेतिक तस्वीर टैग
-                    </span>
-                  </div>
-                );
-              })()}
-
-              {/* Box 2: AI Generated (50%) with ON/OFF switch */}
-              {(() => {
-                const isAiActive = card.photoDisclaimerType === 'ai' || card.showAiGenerated;
-                return (
-                  <div
-                    onClick={() => {
-                      if (isAiActive) {
-                        onChange({
-                          photoDisclaimerType: 'none',
-                          showAiGenerated: false,
-                          photoWatermarkTag: undefined,
-                        });
-                      } else {
-                        onChange({
-                          photoDisclaimerType: 'ai',
-                          showAiGenerated: true,
-                          photoWatermarkTag: 'AI जनरेटेड',
-                          aiGeneratedText: card.aiGeneratedText || 'AI जनरेटेड',
-                        });
-                      }
-                    }}
-                    className={`p-3 rounded-xl border flex flex-col justify-between gap-2.5 transition-all cursor-pointer active:scale-98 select-none ${
-                      isAiActive
-                        ? 'bg-blue-500/15 border-blue-400 shadow-md ring-1 ring-blue-400/50'
-                        : 'bg-neutral-900/90 border-neutral-800 hover:border-neutral-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black flex items-center gap-1.5 text-neutral-200">
-                        <span>✨</span>
-                        <span>AI Generated</span>
-                      </span>
-                      <span
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider transition-colors ${
-                          isAiActive
-                            ? 'bg-blue-400 text-neutral-950 shadow-sm'
-                            : 'bg-neutral-800 text-neutral-400'
-                        }`}
-                      >
-                        {isAiActive ? 'ON' : 'OFF'}
-                      </span>
-                    </div>
-                    <span className={`text-[10px] leading-tight ${isAiActive ? 'text-blue-300 font-bold' : 'text-neutral-400'}`}>
-                      AI जनरेटेड इमेज टैग
-                    </span>
-                  </div>
-                );
-              })()}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange({
+                    photoDisclaimerType: 'ai',
+                    showAiGenerated: true,
+                    photoWatermarkTag: 'AI GENERATED',
+                    aiGeneratedText: card.aiGeneratedText || 'AI GENERATED',
+                  });
+                }}
+                className={`py-2.5 px-2 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 ${
+                  card.photoDisclaimerType === 'ai' || card.showAiGenerated
+                    ? 'bg-blue-600 text-white border-blue-400 shadow-md ring-1 ring-blue-400/50'
+                    : 'bg-neutral-900/90 text-neutral-300 border-neutral-800 hover:border-neutral-700'
+                }`}
+              >
+                <span>✨ AI GENERATED</span>
+                <span className="text-[9px] opacity-75 font-normal">AI जनरेटेड इमेज</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange({
+                    photoDisclaimerType: 'representative',
+                    showAiGenerated: false,
+                    photoWatermarkTag: 'प्रतीकात्मक फोटो',
+                    representativePhotoText: card.representativePhotoText || 'प्रतीकात्मक फोटो',
+                  });
+                }}
+                className={`py-2.5 px-2 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 ${
+                  card.photoDisclaimerType === 'representative'
+                    ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-md ring-1 ring-amber-400/50'
+                    : 'bg-neutral-900/90 text-neutral-300 border-neutral-800 hover:border-neutral-700'
+                }`}
+              >
+                <span>📷 प्रतीकात्मक फोटो</span>
+                <span className="text-[9px] opacity-75 font-normal">सांकेतिक तस्वीर</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange({
+                    photoDisclaimerType: 'none',
+                    showAiGenerated: false,
+                    photoWatermarkTag: undefined,
+                  });
+                }}
+                className={`py-2.5 px-2 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 ${
+                  card.photoDisclaimerType === 'none' || !card.photoDisclaimerType
+                    ? 'bg-neutral-800 text-neutral-200 border-neutral-600 shadow-sm'
+                    : 'bg-neutral-900/90 text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                }`}
+              >
+                <span>🚫 OFF (कोई नहीं)</span>
+                <span className="text-[9px] opacity-75 font-normal">वॉटरमार्क बंद</span>
+              </button>
             </div>
             )}
 
@@ -3846,7 +3876,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
             <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-mono font-black">5</span>
             <MapPin className="w-4 h-4 text-emerald-400" />
-            स्टेप 5: स्थान
+            स्टेप 5: स्थान एवं दिनांक
           </span>
           <span className="text-[11px] text-neutral-400">
             स्थान व जिला • दिनांक स्टैम्प
@@ -3864,7 +3894,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <span className="text-[11px] text-neutral-400">शो / हाइड:</span>
               <button
                 type="button"
-                onClick={() => onChange({ showLocation: card.showLocation === false ? true : false })}
+                onClick={() => {
+                  const nextLoc = card.showLocation === false ? true : false;
+                  onChange({
+                    showLocation: nextLoc,
+                    showDate: nextLoc ? card.showDate : false,
+                  });
+                }}
                 className={`text-[10px] font-black px-2.5 py-0.5 rounded border transition-all cursor-pointer ${
                   card.showLocation !== false
                     ? 'bg-green-500/20 border-green-500/60 text-green-300'
@@ -4330,6 +4366,59 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         }}
                       />
                     </label>
+
+                    {/* Central Custom Footer Library Selection */}
+                    {libraryFooters.length > 0 && (
+                      <div className="pt-2 border-t border-neutral-800 space-y-1.5">
+                        <span className="text-[10px] font-bold text-amber-300 block">
+                          🏛️ सेंट्रल कस्टम फ़ुटर लाइब्रेरी से चुनें:
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                          {libraryFooters.map((lf) => {
+                            const isSelected = card.selectedCustomFooterId === lf.id;
+                            return (
+                              <button
+                                key={lf.id}
+                                type="button"
+                                onClick={() => {
+                                  onChange({
+                                    selectedCustomFooterId: lf.id,
+                                    customFooterConfig: lf.footerConfig,
+                                    footerBgColor: lf.footerConfig?.footerBgColor || card.footerBgColor,
+                                    footerTextColor: lf.footerConfig?.footerTextColor || card.footerTextColor,
+                                  });
+                                }}
+                                className={`p-1.5 rounded text-left border transition text-[10px] truncate cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-amber-950/60 border-amber-500 text-amber-200 font-bold'
+                                    : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
+                                }`}
+                              >
+                                <div className="truncate font-bold">{lf.name}</div>
+                                <div
+                                  className="h-2 rounded mt-1 border border-black/20"
+                                  style={{ backgroundColor: lf.footerConfig?.footerBgColor || '#FACC15' }}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {card.selectedCustomFooterId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onChange({
+                                selectedCustomFooterId: undefined,
+                                customFooterConfig: undefined,
+                              });
+                            }}
+                            className="text-[10px] text-red-400 hover:text-red-300 underline cursor-pointer"
+                          >
+                            चयनित फ़ुटर हटाएं
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Save Header + Footer Combo Button */}
@@ -5170,6 +5259,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {editingTestFrame && (
+        <DynamicFrameGeneratorModal
+          isOpen={true}
+          initialFrame={editingTestFrame}
+          onClose={() => setEditingTestFrame(null)}
+          onSaveSuccess={() => {
+            setEditingTestFrame(null);
+            window.dispatchEvent(new Event('template_plans_updated'));
+          }}
+        />
       )}
     </div>
   );

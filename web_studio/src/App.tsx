@@ -227,7 +227,7 @@ export const STUDIO_STEPS = [
   { step: 2, id: 'step-ai', label: 'AI टूल्स', name: 'AI टूल्स', icon: '🤖', title: 'AI टूल्स' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'हेडलाइन' },
   { step: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', name: 'फोटो एवं वॉटरमार्क', icon: '📷', title: 'फोटो एवं वॉटरमार्क' },
-  { step: 5, id: 'step-location', label: 'स्थान', name: 'स्थान', icon: '📍', title: 'स्थान' },
+  { step: 5, id: 'step-location', label: 'स्थान एवं दिनांक', name: 'स्थान एवं दिनांक', icon: '📍', title: 'स्थान एवं दिनांक' },
   { step: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', name: 'हेडर एवं फुटर', icon: '📜', title: 'हेडर एवं फुटर' },
   { step: 7, id: 'step-download', label: 'डाउनलोड एवं कैप्शन', name: 'डाउनलोड एवं कैप्शन', icon: '⬇️', title: 'डाउनलोड एवं कैप्शन' },
 ];
@@ -237,7 +237,7 @@ export const MOBILE_STUDIO_STEPS = [
   { mobileStep: 2, internalStep: 2, id: 'step-ai', label: 'AI टूल्स', key: 'step2' },
   { mobileStep: 3, internalStep: 3, id: 'step-headline', label: 'हेडलाइन', key: 'step3' },
   { mobileStep: 4, internalStep: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', key: 'step4' },
-  { mobileStep: 5, internalStep: 5, id: 'step-location', label: 'स्थान', key: 'step5' },
+  { mobileStep: 5, internalStep: 5, id: 'step-location', label: 'स्थान एवं दिनांक', key: 'step5' },
   { mobileStep: 6, internalStep: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', key: 'step6' },
   { mobileStep: 7, internalStep: 7, id: 'step-download', label: 'डाउनलोड एवं कैप्शन', key: 'step7' },
 ] as const;
@@ -2067,6 +2067,22 @@ export default function App() {
 
   // Full reset / clean card to default template matching user specification (Part C)
   const handleResetCard = () => {
+    const hasUnsavedContent = Boolean(
+      (card.headline && card.headline.trim().length > 0 && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी')) ||
+      (card.images?.main && card.images.main.trim().length > 0)
+    );
+    if (hasUnsavedContent) {
+      const confirmReset = window.confirm('क्या आप स्टूडियो को रिफ्रेश करके नया ग्राफिक शुरू करना चाहते हैं? वर्तमान अनसेव्ड बदलाव हट जाएंगे।');
+      if (!confirmReset) return;
+    }
+
+    // Trigger dynamic frame and catalog refresh without altering permanent database
+    try {
+      window.dispatchEvent(new CustomEvent('template_plans_updated'));
+      window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+      window.dispatchEvent(new CustomEvent('ai_news_dynamic_frames_updated'));
+    } catch {}
+
     // Clear active draft ID reference & direct news session context
     setCurrentDraftId(undefined);
     setAutoFillNews(null);
@@ -2081,6 +2097,8 @@ export default function App() {
       ...prev,
       sourceNewsId: undefined,
       frameDesign: 'graphic_001',
+      aspectRatio: '4:5',
+      customDynamicFrame: undefined,
       headline: '',
       formattedHeadline: '',
       highlightWords: [],
@@ -2129,7 +2147,6 @@ export default function App() {
       showCallout: false,
       calloutTag: '',
       layout: 'single',
-      aspectRatio: '4:5',
       highlightColor: '#FFE600',
       showMasterBranding: true,
       extractedArticlePhotos: [],

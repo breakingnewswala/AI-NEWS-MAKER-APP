@@ -8084,6 +8084,133 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     console.log(`[WhatsApp:Outbound] WhatsApp API response received: messageId=${result?.messages?.[0]?.id || "unknown"}`);
     return result;
   };
+  const sendWhatsAppImage = async (to, imageUrl, caption) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const maskedTo = maskWaId(to);
+    if (!token) throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
+    if (!phoneNumberId) throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
+    if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Outbound:TestMode] Mock image send to ${maskedTo}`);
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
+    }
+    const payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "image",
+      image: {
+        link: imageUrl,
+        ...caption ? { caption: String(caption).slice(0, 1024) } : {}
+      }
+    };
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errorMsg = result?.error?.message || `WhatsApp API request failed (${response.status})`;
+      throw new Error(`WHATSAPP_API_ERROR: ${errorMsg}`);
+    }
+    return result;
+  };
+  const sendWhatsAppNewsBroadcast = async (to, options2) => {
+    const newsTemplate = (process.env.WHATSAPP_NEWS_TEMPLATE || "").trim();
+    const newsTemplateLang = (process.env.WHATSAPP_NEWS_TEMPLATE_LANG || "hi").trim();
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const maskedTo = maskWaId(to);
+    const { headline, summary = "", imageUrl = "", newsId = "", studioUrl = "", isBreaking = false, customMessage = "" } = options2;
+    const resolvedUrl = studioUrl || (newsId ? `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId)}` : "https://ainewsmaker.online/studio");
+    if (newsTemplate && token && phoneNumberId) {
+      try {
+        const templatePayload = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "template",
+          template: {
+            name: newsTemplate,
+            language: { code: newsTemplateLang },
+            components: [
+              ...imageUrl ? [{
+                type: "header",
+                parameters: [{ type: "image", image: { link: imageUrl } }]
+              }] : [],
+              {
+                type: "body",
+                parameters: [
+                  { type: "text", text: (headline || "").slice(0, 120) },
+                  { type: "text", text: (summary || headline || "").slice(0, 500) }
+                ]
+              },
+              {
+                type: "button",
+                sub_type: "url",
+                index: "0",
+                parameters: [
+                  { type: "text", text: newsId ? `?newsId=${encodeURIComponent(newsId)}` : "" }
+                ]
+              }
+            ]
+          }
+        };
+        const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(templatePayload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result?.messages?.[0]?.id) {
+          console.log(`[WhatsApp:NewsBroadcast] Template message dispatched via interactive URL button to ${maskedTo}`);
+          return { method: "meta_template_url_button", templateName: newsTemplate, result };
+        }
+        console.warn(`[WhatsApp:NewsBroadcast] Template ${newsTemplate} rejected (${response.status}):`, JSON.stringify(result));
+      } catch (err) {
+        console.warn(`[WhatsApp:NewsBroadcast] Template send exception:`, err?.message);
+      }
+    }
+    let caption = "";
+    if (isBreaking) caption += `\u{1F534} *\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u2014 \u0924\u0941\u0930\u0902\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902*
+
+`;
+    if (headline) caption += `\u{1F6A8} *${headline.trim()}*
+
+`;
+    if (summary) caption += `${summary.trim()}
+
+`;
+    if (customMessage) caption += `${customMessage.trim()}
+
+`;
+    caption += `\u2728 *\u0907\u0938 \u0916\u092C\u0930 \u0938\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902:*
+${resolvedUrl}
+
+`;
+    caption += `_AI News Maker (\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E) - \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0947\u0935\u093E_
+_\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F STOP \u0932\u093F\u0916\u0947\u0902_`;
+    if (imageUrl && (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))) {
+      try {
+        const imgRes = await sendWhatsAppImage(to, imageUrl, caption.slice(0, 1024));
+        return { method: "media_caption_link", result: imgRes };
+      } catch {
+        const txtRes2 = await sendWhatsAppText(to, caption);
+        return { method: "text_caption_link", result: txtRes2 };
+      }
+    }
+    const txtRes = await sendWhatsAppText(to, caption);
+    return { method: "text_caption_link", result: txtRes };
+  };
   const sendWhatsAppOtpMessage = async (to, otpCode, validityMinutes = 5) => {
     const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
     const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
@@ -9624,12 +9751,26 @@ AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u09
         headline = "",
         summary = "",
         articleUrl = "",
+        newsId = "",
+        imageUrl = "",
+        thumbnailUrl = "",
         customMessage = "",
         testPhone = ""
       } = req.body;
+      const resolvedImage = (imageUrl || thumbnailUrl || "").trim();
+      let resolvedStudioUrl = (articleUrl || "").trim();
+      if (!resolvedStudioUrl && newsId) {
+        resolvedStudioUrl = `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId)}`;
+      }
       const now = Date.now();
       const campaignId = `camp_${now}_${Math.random().toString(36).slice(2, 7)}`;
       let finalMessage = "";
+      const isBreaking = req.body?.isBreaking === true || category === "Breaking News";
+      if (isBreaking) {
+        finalMessage += `\u{1F534} *\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u2014 \u0924\u0941\u0930\u0902\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902*
+
+`;
+      }
       if (headline) finalMessage += `\u{1F6A8} *${headline.trim()}*
 
 `;
@@ -9639,21 +9780,31 @@ AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u09
       if (customMessage) finalMessage += `${customMessage.trim()}
 
 `;
-      if (articleUrl) finalMessage += `\u{1F517} \u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u092A\u0922\u093C\u0947\u0902: ${articleUrl.trim()}
+      if (resolvedStudioUrl) {
+        finalMessage += `\u2728 *\u0907\u0938 \u0916\u092C\u0930 \u0938\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902:*
+${resolvedStudioUrl}
 
 `;
+      }
       finalMessage += `_AI News Maker (\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E) - \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0947\u0935\u093E_
 _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F STOP \u0932\u093F\u0916\u0947\u0902_`;
       if (testPhone) {
         const testWaId = normalizeToWaId(testPhone);
-        const testSent = await sendWhatsAppText(testWaId, `[TEST PREVIEW]
-
-${finalMessage}`);
+        const testSent = await sendWhatsAppNewsBroadcast(testWaId, {
+          headline,
+          summary,
+          imageUrl: resolvedImage,
+          newsId,
+          studioUrl: resolvedStudioUrl,
+          isBreaking,
+          customMessage
+        });
         return res.json({
           success: true,
           testMode: true,
           deliveredTo: testWaId,
-          metaResponse: testSent
+          dispatchMethod: testSent.method,
+          metaResponse: testSent.result
         });
       }
       const recipientNumbers = /* @__PURE__ */ new Set();
@@ -9728,7 +9879,16 @@ ${finalMessage}`);
       const failedRecipients = [];
       for (const phone of recipientsList) {
         try {
-          const sent = await sendWhatsAppText(phone, finalMessage);
+          const sentResult = await sendWhatsAppNewsBroadcast(phone, {
+            headline,
+            summary,
+            imageUrl: resolvedImage,
+            newsId,
+            studioUrl: resolvedStudioUrl,
+            isBreaking,
+            customMessage
+          });
+          const sent = sentResult.result;
           if (sent && (sent.messages || sent.contacts)) {
             successfulDeliveries++;
             const outMsgId = String(sent?.messages?.[0]?.id || `camp-out-${Date.now()}`);
@@ -9739,7 +9899,8 @@ ${finalMessage}`);
               text: finalMessage,
               timestamp: Date.now(),
               status: "sent",
-              campaignId
+              campaignId,
+              dispatchMethod: sentResult.method
             }).catch(() => {
             });
           } else {
@@ -13077,6 +13238,13 @@ app.delete("/api/news-posts/:id", (req, res) => {
       centralDb.deleteNewsPost(id).catch(() => {
       });
     }
+    getDurableNotificationBoardIds().then((ids) => {
+      if (ids.includes(id)) {
+        saveDurableNotificationBoardIds(ids.filter((x) => x !== id)).catch(() => {
+        });
+      }
+    }).catch(() => {
+    });
     return res.json({ success: true, posts: existing });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -19482,18 +19650,77 @@ function getDefaultAssetLibraries() {
     }
   ];
 }
+var DELETED_ASSETS_TOMBSTONE_FILE = import_path2.default.join(process.cwd(), "deleted_assets_tombstone.json");
+var memoryAssetTombstones = null;
+function loadDeletedAssetTombstones() {
+  if (memoryAssetTombstones && memoryAssetTombstones.size > 0) {
+    return new Set(memoryAssetTombstones);
+  }
+  const set = /* @__PURE__ */ new Set();
+  try {
+    if (import_fs2.default.existsSync(DELETED_ASSETS_TOMBSTONE_FILE)) {
+      const raw = import_fs2.default.readFileSync(DELETED_ASSETS_TOMBSTONE_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) list.forEach((id) => set.add(id));
+    }
+  } catch {
+  }
+  memoryAssetTombstones = set;
+  return set;
+}
+async function getDurableAssetTombstones() {
+  const set = loadDeletedAssetTombstones();
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const cloudDoc = await centralDb.readDoc("system_config", "deleted_assets_tombstones");
+      const docData = cloudDoc?.data || cloudDoc;
+      if (docData && Array.isArray(docData.tombstones)) {
+        docData.tombstones.forEach((id) => set.add(id));
+      }
+    } catch {
+    }
+  }
+  memoryAssetTombstones = set;
+  try {
+    import_fs2.default.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
+  } catch {
+  }
+  return set;
+}
+async function recordDeletedAssetTombstone(id) {
+  try {
+    const tombstones = await getDurableAssetTombstones();
+    tombstones.add(id);
+    memoryAssetTombstones = tombstones;
+    import_fs2.default.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    if (centralDb && typeof centralDb.writeDoc === "function") {
+      const res = await centralDb.writeDoc("system_config", "deleted_assets_tombstones", {
+        tombstones: Array.from(tombstones),
+        updatedAt: Date.now()
+      });
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore tombstone write failed: ${res?.error || res?.statusCode || "Unknown error"}`);
+      }
+    }
+  } catch (err) {
+    console.error("Failed to write durable deleted_assets_tombstone:", err);
+    throw err;
+  }
+}
 function loadAssetLibrariesDatabase() {
   try {
+    const deletedTombstones2 = loadDeletedAssetTombstones();
     if (import_fs2.default.existsSync(ASSET_LIBRARIES_DB_FILE)) {
       const raw = import_fs2.default.readFileSync(ASSET_LIBRARIES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.filter((it) => !DUMMY_ASSET_IDS.has(it.id));
+        return parsed.filter((it) => !DUMMY_ASSET_IDS.has(it.id) && !deletedTombstones2.has(it.id));
       }
     }
   } catch {
   }
-  return getDefaultAssetLibraries();
+  const deletedTombstones = loadDeletedAssetTombstones();
+  return getDefaultAssetLibraries().filter((it) => !deletedTombstones.has(it.id));
 }
 function saveAssetLibrariesDatabase(items) {
   try {
@@ -19777,6 +20004,33 @@ app.get("/api/dynamic-frames", async (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.get("/api/dynamic-frames/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const isMaster = isAuthorizedMasterAdmin(req);
+    let frames = loadDynamicFramesDatabase();
+    let frame = frames.find((f) => f.id === id);
+    if (!frame && centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
+        if (cloudDoc && Array.isArray(cloudDoc.frames)) {
+          frame = cloudDoc.frames.find((f) => f.id === id);
+        }
+      } catch {
+      }
+    }
+    if (!frame) {
+      return res.status(404).json({ error: "Frame not found." });
+    }
+    const isTestFrame = Boolean(frame.isTestFrame) || frame.designCategory === "TEST_FRAMES" || frame.publicationStatus !== "published" || Boolean(frame.isSampleTestTemplate) || Boolean(frame.isSample) || frame.name === "11111" || frame.name === "2222" || frame.id.startsWith("df_sample_") || frame.id.startsWith("df_test_") || frame.designCategory === "Sample Frames";
+    if (isTestFrame && !isMaster) {
+      return res.status(403).json({ error: "Access denied: Only Master Admin can view test frames." });
+    }
+    return res.json({ success: true, frame });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
   try {
     const payload = req.body || {};
@@ -19910,6 +20164,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) =
 app.get("/api/admin/asset-libraries", async (req, res) => {
   try {
     const { type, category } = req.query;
+    const deletedTombstones = await getDurableAssetTombstones();
     let items = loadAssetLibrariesDatabase();
     if (centralDb && typeof centralDb.readDoc === "function") {
       try {
@@ -19918,14 +20173,19 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
         if (docData && Array.isArray(docData.items) && docData.items.length > 0) {
           const itemMap = /* @__PURE__ */ new Map();
           for (const it of items) itemMap.set(it.id, it);
-          for (const cit of docData.items) itemMap.set(cit.id, { ...itemMap.get(cit.id), ...cit });
-          items = Array.from(itemMap.values()).filter((it) => !DUMMY_ASSET_IDS.has(it.id));
+          for (const cit of docData.items) {
+            if (!deletedTombstones.has(cit.id) && !DUMMY_ASSET_IDS.has(cit.id)) {
+              itemMap.set(cit.id, { ...itemMap.get(cit.id), ...cit });
+            }
+          }
+          items = Array.from(itemMap.values()).filter((it) => !DUMMY_ASSET_IDS.has(it.id) && !deletedTombstones.has(it.id));
           saveAssetLibrariesDatabase(items);
         }
       } catch (err) {
         console.warn("Asset libraries Firestore sync note:", err?.message);
       }
     }
+    items = items.filter((it) => !DUMMY_ASSET_IDS.has(it.id) && !deletedTombstones.has(it.id));
     const normParam = type && type !== "all" ? type : category && category !== "all" ? category : null;
     if (normParam) {
       const q = String(normParam).toLowerCase().trim();
@@ -19941,9 +20201,64 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
         items = items.filter(
           (it) => it.type === "suvichar_background" || it.category === "suvichar_background" || it.type === "suvichar"
         );
+      } else if (q === "custom_footer" || q === "footer") {
+        items = items.filter(
+          (it) => it.type === "custom_footer" || it.category === "custom_footer" || it.type === "footer" || it.name && /footer|फ़ुटर|फुटर/i.test(it.name)
+        );
       } else {
         items = items.filter((it) => it.type === q || it.category === q);
       }
+    }
+    const isMaster = isAuthorizedMasterAdmin(req);
+    const isAdmin = isMaster || isAuthorizedAdmin(req);
+    if (!isAdmin) {
+      const authUser = getAuthenticatedUser(req);
+      let effectivePlan = "BASIC";
+      if (authUser) {
+        try {
+          const masterUsers = loadUsersMasterDatabase();
+          const cleanEmail = (authUser.email || "").toLowerCase().trim();
+          const uMatch = masterUsers.find(
+            (u) => u.email && u.email.toLowerCase().trim() === cleanEmail || u.userId && u.userId === authUser.userId
+          );
+          if (uMatch) {
+            effectivePlan = (uMatch.planName || uMatch.tier || "BASIC").toUpperCase();
+          } else {
+            const profiles = loadProfilesDatabase();
+            const prof = profiles[cleanEmail] || Object.values(profiles).find(
+              (p) => p.email && p.email.toLowerCase().trim() === cleanEmail || p.userId && p.userId === authUser.userId
+            );
+            if (prof) {
+              effectivePlan = (prof.planName || prof.tier || "BASIC").toUpperCase();
+            }
+          }
+        } catch {
+        }
+      }
+      const planHierarchy = {
+        BASIC: 1,
+        ADVANCE: 2,
+        ADVANCED: 2,
+        PRO: 3,
+        PROFESSIONAL: 3,
+        "VIP DESK": 4,
+        VIP: 4,
+        ULTRA: 4
+      };
+      const userRank = planHierarchy[effectivePlan] || 1;
+      items = items.filter((it) => {
+        if (it.enabled === false) return false;
+        if (it.status === "draft" || it.status === "pending") return false;
+        const plans = it.allowedPlans || it.footerConfig?.allowedPlans;
+        if (Array.isArray(plans) && plans.length > 0 && !plans.includes("ALL")) {
+          const satisfies = plans.some((p) => {
+            const pNorm = String(p).trim().toUpperCase();
+            return (planHierarchy[pNorm] || 1) <= userRank;
+          });
+          if (!satisfies) return false;
+        }
+        return true;
+      });
     }
     const normalized = items.map((it) => ({
       ...it,
@@ -19958,20 +20273,21 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 });
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig } = req.body || {};
-    if (!name || !type || !url) {
-      return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background'), and URL are required." });
+    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    if (!name || !type || !url && type !== "custom_footer") {
+      return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer'), and URL (or footerConfig for custom_footer) are required." });
     }
     const newItem = {
       id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: String(name).trim(),
       type,
       category: category || "general",
-      url,
+      url: url || "",
       enabled: enabled !== false,
       sliceConfig: sliceConfig || (type === "location_badge" ? { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 } : void 0),
       textRegion: textRegion || void 0,
       typographyConfig: typographyConfig || void 0,
+      footerConfig: footerConfig || void 0,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -19986,7 +20302,7 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig } = req.body || {};
+    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
@@ -20001,6 +20317,7 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
       ...sliceConfig !== void 0 ? { sliceConfig } : {},
       ...textRegion !== void 0 ? { textRegion } : {},
       ...typographyConfig !== void 0 ? { typographyConfig } : {},
+      ...footerConfig !== void 0 ? { footerConfig } : {},
       updatedAt: Date.now()
     };
     items[idx] = updated;
@@ -20010,7 +20327,7 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
+app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const items = loadAssetLibrariesDatabase();
@@ -20020,7 +20337,7 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) 
     }
     const frames = loadDynamicFramesDatabase();
     const inUse = frames.some(
-      (f) => f.headerConfig?.manualLocationAsset === target.url || f.fullStoryCalloutConfig?.manualCalloutAsset === target.url || f.videoConfig?.locationBadgeUrl === target.url || f.calloutAssetUrl === target.url || f.statementOptions?.curatedBackgroundUrl === target.url
+      (f) => f.headerConfig?.manualLocationAsset === target.url || f.fullStoryCalloutConfig?.manualCalloutAsset === target.url || f.videoConfig?.locationBadgeUrl === target.url || f.calloutAssetUrl === target.url || f.statementOptions?.curatedBackgroundUrl === target.url || f.customFooterId === target.id
     );
     if (inUse) {
       return res.status(400).json({
@@ -20029,7 +20346,112 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) 
     }
     const filtered = items.filter((it) => it.id !== id);
     saveAssetLibrariesDatabase(filtered);
+    await recordDeletedAssetTombstone(id);
+    if (centralDb && typeof centralDb.writeDoc === "function") {
+      const dbRes = await centralDb.writeDoc("system_config", "asset_libraries", {
+        items: filtered,
+        updatedAt: Date.now()
+      });
+      if (centralDb.useFirestore && (!dbRes || dbRes.success === false)) {
+        throw new Error(`Durable Firestore asset_libraries sync failed: ${dbRes?.error || dbRes?.statusCode || "Unknown error"}`);
+      }
+    }
     return res.json({ success: true, message: "\u090F\u0938\u0947\u091F \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0939\u091F\u093E\u092F\u093E \u0917\u092F\u093E\u0964" });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+async function getDurableNotificationBoardIds() {
+  const idsSet = /* @__PURE__ */ new Set();
+  try {
+    const locations = resolveAllDatabaseLocations("notification_board_ids.json");
+    for (const loc of locations) {
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) list.forEach((id) => idsSet.add(id));
+      }
+    }
+  } catch {
+  }
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const boardDoc = await centralDb.readDoc("system_config", "notification_board_ids");
+      if (boardDoc && Array.isArray(boardDoc.ids)) {
+        boardDoc.ids.forEach((id) => idsSet.add(id));
+      }
+    } catch {
+    }
+  }
+  const deletedSet = loadDeletedNewsIds();
+  for (const delId of deletedSet) {
+    idsSet.delete(delId);
+  }
+  try {
+    const allNews = loadNewsDatabase();
+    const newsMap = new Map(allNews.map((n) => [n.id, n]));
+    const validIds = [];
+    for (const id of idsSet) {
+      const post = newsMap.get(id);
+      if (post) {
+        if (post.status === "draft" || post.isApproved === false) {
+          continue;
+        }
+      }
+      validIds.push(id);
+    }
+    return validIds;
+  } catch {
+    return Array.from(idsSet);
+  }
+}
+async function saveDurableNotificationBoardIds(ids) {
+  const cleanIds = Array.from(new Set(ids));
+  try {
+    const jsonStr = JSON.stringify(cleanIds, null, 2);
+    const locations = resolveAllDatabaseLocations("notification_board_ids.json");
+    for (const loc of locations) {
+      try {
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+  } catch {
+  }
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    const res = await centralDb.writeDoc("system_config", "notification_board_ids", {
+      ids: cleanIds,
+      updatedAt: Date.now()
+    });
+    if (centralDb.useFirestore && (!res || res.success === false)) {
+      throw new Error(`Durable Firestore notification board write failed: ${res?.error || res?.statusCode || "Unknown error"}`);
+    }
+  }
+}
+app.get("/api/admin/notification-board-ids", async (_req, res) => {
+  try {
+    const validIds = await getDurableNotificationBoardIds();
+    return res.json({ success: true, ids: validIds, selectedIds: validIds });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { selected } = req.body || {};
+    const currentIds = await getDurableNotificationBoardIds();
+    const idSet = new Set(currentIds);
+    if (selected) {
+      idSet.add(id);
+    } else {
+      idSet.delete(id);
+    }
+    const updatedIds = Array.from(idSet);
+    await saveDurableNotificationBoardIds(updatedIds);
+    return res.json({ success: true, id, selected: Boolean(selected), ids: updatedIds });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -20037,32 +20459,33 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) 
 app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { sampleBase64, selectedRatio } = req.body || {};
-    if (!selectedRatio || selectedRatio !== "4:5" && selectedRatio !== "9:16") {
-      return res.status(400).json({ error: "A valid aspectRatio ('4:5' or '9:16') is required." });
+    if (!selectedRatio || selectedRatio !== "4:5" && selectedRatio !== "9:16" && selectedRatio !== "1:1") {
+      return res.status(400).json({ error: "A valid aspectRatio ('4:5', '1:1', or '9:16') is required." });
     }
     const isStory = selectedRatio === "9:16";
+    const isSquare = selectedRatio === "1:1";
     const fallbackLayout = {
       detectedRatio: selectedRatio,
-      headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : { x: 5, y: 3.5, width: 90, height: 15 },
-      logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : { x: 5, y: 3.5, width: 22, height: 9 },
-      locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
-      headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : { x: 7, y: 63, width: 86, height: 27 },
+      headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : isSquare ? { x: 5, y: 3, width: 90, height: 14 } : { x: 5, y: 3.5, width: 90, height: 15 },
+      logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : isSquare ? { x: 5, y: 3, width: 22, height: 8 } : { x: 5, y: 3.5, width: 22, height: 9 },
+      locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : isSquare ? { x: 5, y: 12, width: 28, height: 4.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
+      headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : isSquare ? { x: 6, y: 62, width: 88, height: 28 } : { x: 7, y: 63, width: 86, height: 27 },
       recommendedPhotoSlots: [
         {
           name: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092B\u094B\u091F\u094B",
           slotType: "normal",
-          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : { x: 0, y: 0, width: 100, height: 61.33 }
+          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : isSquare ? { x: 0, y: 0, width: 100, height: 60 } : { x: 0, y: 0, width: 100, height: 61.33 }
         }
       ],
       statementDetected: false,
-      quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : { x: 8, y: 22, width: 84, height: 26 },
-      speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
-      speakerDesigRect: isStory ? { x: 8, y: 84, width: 44, height: 6 } : { x: 8, y: 79.5, width: 42, height: 6 },
+      quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : isSquare ? { x: 8, y: 20, width: 84, height: 26 } : { x: 8, y: 22, width: 84, height: 26 },
+      speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : isSquare ? { x: 8, y: 70, width: 42, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
+      speakerDesigRect: isStory ? { x: 8, y: 84, width: 44, height: 6 } : isSquare ? { x: 8, y: 78, width: 42, height: 6 } : { x: 8, y: 79.5, width: 42, height: 6 },
       ribbonDetected: false,
-      ribbonRect: isStory ? { x: 12, y: 60, width: 76, height: 6.8 } : { x: 15, y: 64, width: 70, height: 9 },
-      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : { x: 0, y: 92, width: 100, height: 8 },
-      dateRect: isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : { x: 5, y: 18.5, width: 34, height: 3.2 },
-      watermarkRect: isStory ? { x: 70, y: 3, width: 25, height: 2.8 } : { x: 74, y: 3.5, width: 21, height: 3.5 }
+      ribbonRect: isStory ? { x: 12, y: 60, width: 76, height: 6.8 } : isSquare ? { x: 14, y: 58, width: 72, height: 8 } : { x: 15, y: 64, width: 70, height: 9 },
+      footerRect: isStory ? { x: 0, y: 93.5, width: 100, height: 6.5 } : isSquare ? { x: 0, y: 92, width: 100, height: 8 } : { x: 0, y: 92, width: 100, height: 8 },
+      dateRect: isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : isSquare ? { x: 5, y: 17, width: 34, height: 3 } : { x: 5, y: 18.5, width: 34, height: 3.2 },
+      watermarkRect: isStory ? { x: 70, y: 3, width: 25, height: 2.8 } : isSquare ? { x: 74, y: 3, width: 21, height: 3.2 } : { x: 74, y: 3.5, width: 21, height: 3.5 }
     };
     if (!sampleBase64 || typeof sampleBase64 !== "string") {
       return res.json({ success: true, result: fallbackLayout });
@@ -20181,6 +20604,14 @@ app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
     const targetFrame = frames.find((f) => f.id === frameId);
     if (!targetFrame) {
       return res.json({ success: true, authorized: true });
+    }
+    const isTestFrame = Boolean(targetFrame.isTestFrame) || targetFrame.designCategory === "TEST_FRAMES" || targetFrame.publicationStatus !== "published" || Boolean(targetFrame.isSampleTestTemplate) || Boolean(targetFrame.isSample) || targetFrame.name === "11111" || targetFrame.name === "2222";
+    if (isTestFrame && !isMaster) {
+      return res.status(403).json({
+        success: false,
+        authorized: false,
+        error: "Access denied: Only Master Admin can export test frames."
+      });
     }
     const masterUsers = loadUsersMasterDatabase();
     const targetUser = masterUsers.find(

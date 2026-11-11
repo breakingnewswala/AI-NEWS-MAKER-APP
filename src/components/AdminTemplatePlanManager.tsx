@@ -46,6 +46,7 @@ import { fetchDynamicFramesFromApi, getLocalDynamicFrames, saveDynamicFrameToApi
 import { getAuthToken } from '../lib/apiConfig';
 
 export const CANONICAL_FRAME_CATEGORIES = [
+  'TEST_FRAMES',
   'Regular Frames',
   'Package Frames',
   'Super Breaking',
@@ -54,12 +55,12 @@ export const CANONICAL_FRAME_CATEGORIES = [
   'Special Frames',
   'Bonus Frames',
   'Custom Frames',
-  'TEST_FRAMES',
 ] as const;
 
 export type CanonicalFrameCategory = (typeof CANONICAL_FRAME_CATEGORIES)[number];
 
 export const CATEGORY_HINDI_MAP: Record<CanonicalFrameCategory, string> = {
+  'TEST_FRAMES': 'TEST FRAMES',
   'Regular Frames': 'रेगुलर फ्रेम',
   'Package Frames': 'पैकेज फ्रेम',
   'Super Breaking': 'सुपर ब्रेकिंग',
@@ -68,7 +69,6 @@ export const CATEGORY_HINDI_MAP: Record<CanonicalFrameCategory, string> = {
   'Special Frames': 'स्पेशल फ्रेम',
   'Bonus Frames': 'बोनस फ्रेम',
   'Custom Frames': 'कस्टम फ्रेम',
-  'TEST_FRAMES': 'TEST FRAMES',
 };
 
 export function normalizeToCanonicalCategory(cat?: string): CanonicalFrameCategory {
@@ -109,7 +109,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   // Filters (Part 5: 1:1, Category dropdown & Search removed; Clean Manager UI)
   // Legacy filter test assertions: selectedRatio === 'all' && selectedRatio === '4:5' && selectedRatio === '9:16' && selectedRatio === '1:1'
   // Legacy filter test assertions: filterCategory !== 'all' && searchQuery
-  const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '9:16'>('all');
+  const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '1:1' | '9:16'>('all');
   const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
   const [selectedCategory, setSelectedCategory] = useState<'all' | CanonicalFrameCategory>('all');
   
@@ -342,6 +342,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   }, [displayItems, selectedCategory, selectedRatio, filterPlan]);
 
   const count4_5 = displayItems.filter((i) => i.aspectRatio === '4:5').length;
+  const count1_1 = displayItems.filter((i) => i.aspectRatio === '1:1').length;
   const count9_16 = displayItems.filter((i) => i.aspectRatio === '9:16').length;
 
   const categoryCounts = useMemo(() => {
@@ -388,6 +389,18 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             }`}
           >
             <span>4:5 पोर्ट्रेट ({count4_5})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedRatio('1:1')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap ${
+              selectedRatio === '1:1'
+                ? 'bg-amber-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:text-white'
+            }`}
+          >
+            <span>1:1 स्क्वायर ({count1_1})</span>
           </button>
 
           <button

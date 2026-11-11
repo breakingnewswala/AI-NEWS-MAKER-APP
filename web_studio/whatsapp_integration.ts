@@ -2007,6 +2007,146 @@ export function registerWhatsAppIntegration(
     return result;
   };
 
+  const sendWhatsAppImage = async (to: string, imageUrl: string, caption?: string) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const maskedTo = maskWaId(to);
+
+    if (!token) throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
+    if (!phoneNumberId) throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
+
+    if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Outbound:TestMode] Mock image send to ${maskedTo}`);
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
+    }
+
+    const payload: any = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "image",
+      image: {
+        link: imageUrl,
+        ...(caption ? { caption: String(caption).slice(0, 1024) } : {}),
+      },
+    };
+
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errorMsg = (result as any)?.error?.message || `WhatsApp API request failed (${response.status})`;
+      throw new Error(`WHATSAPP_API_ERROR: ${errorMsg}`);
+    }
+    return result;
+  };
+
+  const sendWhatsAppNewsBroadcast = async (
+    to: string,
+    options: {
+      headline: string;
+      summary?: string;
+      imageUrl?: string;
+      newsId?: string;
+      studioUrl?: string;
+      isBreaking?: boolean;
+      customMessage?: string;
+    }
+  ) => {
+    const newsTemplate = (process.env.WHATSAPP_NEWS_TEMPLATE || "").trim();
+    const newsTemplateLang = (process.env.WHATSAPP_NEWS_TEMPLATE_LANG || "hi").trim();
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const maskedTo = maskWaId(to);
+
+    const { headline, summary = "", imageUrl = "", newsId = "", studioUrl = "", isBreaking = false, customMessage = "" } = options;
+    const resolvedUrl = studioUrl || (newsId ? `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId)}` : "https://ainewsmaker.online/studio");
+
+    // 1. If Meta-Approved News Template is configured, dispatch official interactive URL Button Template message
+    if (newsTemplate && token && phoneNumberId) {
+      try {
+        const templatePayload: any = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "template",
+          template: {
+            name: newsTemplate,
+            language: { code: newsTemplateLang },
+            components: [
+              ...(imageUrl ? [{
+                type: "header",
+                parameters: [{ type: "image", image: { link: imageUrl } }]
+              }] : []),
+              {
+                type: "body",
+                parameters: [
+                  { type: "text", text: (headline || "").slice(0, 120) },
+                  { type: "text", text: (summary || headline || "").slice(0, 500) }
+                ]
+              },
+              {
+                type: "button",
+                sub_type: "url",
+                index: "0",
+                parameters: [
+                  { type: "text", text: newsId ? `?newsId=${encodeURIComponent(newsId)}` : "" }
+                ]
+              }
+            ]
+          }
+        };
+
+        const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(templatePayload),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result?.messages?.[0]?.id) {
+          console.log(`[WhatsApp:NewsBroadcast] Template message dispatched via interactive URL button to ${maskedTo}`);
+          return { method: "meta_template_url_button", templateName: newsTemplate, result };
+        }
+        console.warn(`[WhatsApp:NewsBroadcast] Template ${newsTemplate} rejected (${response.status}):`, JSON.stringify(result));
+      } catch (err: any) {
+        console.warn(`[WhatsApp:NewsBroadcast] Template send exception:`, err?.message);
+      }
+    }
+
+    // 2. Free-form / Active session message fallback with structured rich caption & clickable CTA link
+    let caption = "";
+    if (isBreaking) caption += `🔴 *ब्रेकिंग न्यूज़ — तुरंत ग्राफिक बनाएं*\n\n`;
+    if (headline) caption += `🚨 *${headline.trim()}*\n\n`;
+    if (summary) caption += `${summary.trim()}\n\n`;
+    if (customMessage) caption += `${customMessage.trim()}\n\n`;
+    caption += `✨ *इस खबर से ग्राफिक बनाएं:*\n${resolvedUrl}\n\n`;
+    caption += `_AI News Maker (ब्रेकिंग न्यूज़ वाला) - आधिकारिक समाचार सेवा_\n_नोटिफिकेशन रोकने के लिए STOP लिखें_`;
+
+    if (imageUrl && (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))) {
+      try {
+        const imgRes = await sendWhatsAppImage(to, imageUrl, caption.slice(0, 1024));
+        return { method: "media_caption_link", result: imgRes };
+      } catch {
+        const txtRes = await sendWhatsAppText(to, caption);
+        return { method: "text_caption_link", result: txtRes };
+      }
+    }
+    const txtRes = await sendWhatsAppText(to, caption);
+    return { method: "text_caption_link", result: txtRes };
+  };
+
   const sendWhatsAppOtpMessage = async (to: string, otpCode: string, validityMinutes: number = 5) => {
     const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
     const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
@@ -3705,29 +3845,53 @@ AI News Maker परिवार में आपका हार्दिक �
         headline = "",
         summary = "",
         articleUrl = "",
+        newsId = "",
+        imageUrl = "",
+        thumbnailUrl = "",
         customMessage = "",
         testPhone = "",
       } = req.body;
+
+      const resolvedImage = (imageUrl || thumbnailUrl || "").trim();
+      let resolvedStudioUrl = (articleUrl || "").trim();
+      if (!resolvedStudioUrl && newsId) {
+        resolvedStudioUrl = `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId)}`;
+      }
 
       const now = Date.now();
       const campaignId = `camp_${now}_${Math.random().toString(36).slice(2, 7)}`;
 
       let finalMessage = "";
+      const isBreaking = req.body?.isBreaking === true || category === "Breaking News";
+      if (isBreaking) {
+        finalMessage += `🔴 *ब्रेकिंग न्यूज़ — तुरंत ग्राफिक बनाएं*\n\n`;
+      }
       if (headline) finalMessage += `🚨 *${headline.trim()}*\n\n`;
       if (summary) finalMessage += `${summary.trim()}\n\n`;
       if (customMessage) finalMessage += `${customMessage.trim()}\n\n`;
-      if (articleUrl) finalMessage += `🔗 पूरी खबर पढ़ें: ${articleUrl.trim()}\n\n`;
+      if (resolvedStudioUrl) {
+        finalMessage += `✨ *इस खबर से ग्राफिक बनाएं:*\n${resolvedStudioUrl}\n\n`;
+      }
       finalMessage += `_AI News Maker (ब्रेकिंग न्यूज़ वाला) - आधिकारिक समाचार सेवा_\n_नोटिफिकेशन रोकने के लिए STOP लिखें_`;
 
       // Test Mode
       if (testPhone) {
         const testWaId = normalizeToWaId(testPhone);
-        const testSent = await sendWhatsAppText(testWaId, `[TEST PREVIEW]\n\n${finalMessage}`);
+        const testSent = await sendWhatsAppNewsBroadcast(testWaId, {
+          headline,
+          summary,
+          imageUrl: resolvedImage,
+          newsId,
+          studioUrl: resolvedStudioUrl,
+          isBreaking,
+          customMessage,
+        });
         return res.json({
           success: true,
           testMode: true,
           deliveredTo: testWaId,
-          metaResponse: testSent,
+          dispatchMethod: testSent.method,
+          metaResponse: testSent.result,
         });
       }
 
@@ -3821,7 +3985,16 @@ AI News Maker परिवार में आपका हार्दिक �
 
       for (const phone of recipientsList) {
         try {
-          const sent = await sendWhatsAppText(phone, finalMessage);
+          const sentResult = await sendWhatsAppNewsBroadcast(phone, {
+            headline,
+            summary,
+            imageUrl: resolvedImage,
+            newsId,
+            studioUrl: resolvedStudioUrl,
+            isBreaking,
+            customMessage,
+          });
+          const sent = sentResult.result;
           if (sent && (sent.messages || sent.contacts)) {
             successfulDeliveries++;
             const outMsgId = String(sent?.messages?.[0]?.id || `camp-out-${Date.now()}`);
@@ -3833,6 +4006,7 @@ AI News Maker परिवार में आपका हार्दिक �
               timestamp: Date.now(),
               status: "sent",
               campaignId,
+              dispatchMethod: sentResult.method,
             }).catch(() => {});
           } else {
             failedDeliveries++;

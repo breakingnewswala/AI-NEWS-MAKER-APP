@@ -1,5 +1,6 @@
 import React from 'react';
 import { getSocialIconSrc } from '../lib/socialIconsData';
+import type { CustomFooterConfig } from '../types/dynamicFrame';
 
 export interface FooterGraphicProps {
   channelName?: string;
@@ -14,6 +15,7 @@ export interface FooterGraphicProps {
   footerTextColor?: string;
   footerIconStyle?: 'color' | 'dark' | 'neutral';
   showMasterBranding?: boolean;
+  footerConfig?: CustomFooterConfig;
 }
 
 function getLuminance(hexColor: string): number {
@@ -57,13 +59,17 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   footerTextColor,
   footerIconStyle = 'color',
   showMasterBranding = true,
+  footerConfig,
 }) => {
+  const effectiveBgColor = footerConfig?.footerBgColor || footerBgColor || '#FFFFFF';
+  const effectiveCustomTextColor = footerConfig?.footerTextColor || footerTextColor;
+
   // If user provided custom Footer.png file, render it directly
   if (customFooterPng) {
     return (
       <div
         className="h-full w-full select-none overflow-hidden flex items-center justify-center"
-        style={{ backgroundColor: footerBgColor || '#FFFFFF' }}
+        style={{ backgroundColor: effectiveBgColor }}
       >
         <img
           src={customFooterPng}
@@ -80,12 +86,13 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   }
 
   // Calculate Contrast & Colors
-  const luminance = getLuminance(footerBgColor);
+  const luminance = getLuminance(effectiveBgColor);
   const isLightBg = luminance >= 0.5;
-  const effectiveTextColor = footerTextColor && footerTextColor.trim() !== ''
-    ? footerTextColor
+  const effectiveTextColor = effectiveCustomTextColor && effectiveCustomTextColor.trim() !== ''
+    ? effectiveCustomTextColor
     : (isLightBg ? '#000000' : '#FFFFFF');
   const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
+  const sepChar = footerConfig?.separator === 'none' ? '' : (footerConfig?.separator || '|');
 
   // 1. Social Username: From user profile only, no hardcoded '@AINewsMaker' default
   const rawHandle = (socialHandle || '').trim();
@@ -110,12 +117,16 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     .replace(/^https?:\/\//i, '')
     .replace(/^www\./i, '')
     .replace(/\/$/, '');
-  const isWebsiteActive = Boolean(showWebsite !== false && cleanWebsite);
+  const isWebsiteActive = Boolean(
+    (footerConfig?.elements ? footerConfig.elements.showWebsite !== false : showWebsite !== false) && cleanWebsite
+  );
 
   // 3. WhatsApp Element (Element 3) - Only if provided & enabled, no defaults
   const rawPhone = (whatsappNumber || '').trim().replace(/^\/+/, '');
   const cleanPhone = showMobileNumber !== false && rawPhone ? rawPhone : '';
-  const isWhatsappActive = Boolean(showMobileNumber !== false && cleanPhone);
+  const isWhatsappActive = Boolean(
+    (footerConfig?.elements ? footerConfig.elements.showPhone !== false : showMobileNumber !== false) && cleanPhone
+  );
 
   // Format phone display
   const displayPhone = cleanPhone
@@ -127,7 +138,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     return (
       <div
         style={{
-          backgroundColor: footerBgColor,
+          backgroundColor: effectiveBgColor,
           color: effectiveTextColor,
           fontFamily: 'Noto Sans Devanagari, Arial, Helvetica, sans-serif',
         }}
@@ -167,14 +178,23 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   return (
     <div
       style={{
-        backgroundColor: footerBgColor,
+        backgroundColor: effectiveBgColor,
         color: effectiveTextColor,
         fontFamily: 'Arial, Helvetica, sans-serif',
+        paddingLeft: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : undefined,
+        paddingRight: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : undefined,
       }}
       className="h-full w-full border-t border-neutral-300/40 px-2 sm:px-4 py-0 flex items-center justify-center select-none overflow-hidden text-center"
     >
       {/* Dynamic Center Aligned Elements Row: Up to 3 elements, centered */}
-      <div className={`flex items-center justify-center ${gapClass} max-w-full overflow-hidden flex-nowrap text-center`}>
+      <div
+        className={`flex items-center ${
+          footerConfig?.alignment === 'left' ? 'justify-start' : footerConfig?.alignment === 'right' ? 'justify-end' : 'justify-center'
+        } ${gapClass} max-w-full overflow-hidden flex-nowrap text-center`}
+        style={{
+          gap: footerConfig?.elementSpacing ? `${footerConfig.elementSpacing}px` : undefined,
+        }}
+      >
         {/* ELEMENT 1: Social Media Icons + Username (No circular crop, original shape preserved) */}
         <div className="flex items-center justify-center gap-1.5 sm:gap-2 shrink-0">
           {/* Social Icons list: Original files, object-contain, natural shape */}
@@ -185,6 +205,10 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
                 src={getSocialIconSrc(platform)}
                 alt={platform}
                 className={`${iconSizeClass} object-contain shrink-0`}
+                style={{
+                  width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+                  height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+                }}
                 loading="eager"
                 onError={(e) => {
                   const target = e.currentTarget;
@@ -206,13 +230,13 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         </div>
 
         {/* Partition Divider 1 (between Social and Website, OR Social and WhatsApp if Website is hidden) */}
-        {(isWebsiteActive || isWhatsappActive) && (
+        {sepChar && (isWebsiteActive || isWhatsappActive) && (
           <span
             style={{ color: separatorColor }}
             className="select-none text-xs sm:text-sm font-light opacity-50 shrink-0 px-0.5"
             aria-hidden="true"
           >
-            |
+            {sepChar}
           </span>
         )}
 
@@ -223,6 +247,10 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
               src={getSocialIconSrc('website')}
               alt="Website"
               className={`${iconSizeClass} object-contain shrink-0`}
+              style={{
+                width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+                height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+              }}
               loading="eager"
               onError={(e) => {
                 const target = e.currentTarget;
@@ -239,13 +267,13 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         )}
 
         {/* Partition Divider 2 (between Website and WhatsApp if both are active) */}
-        {isWebsiteActive && isWhatsappActive && (
+        {sepChar && isWebsiteActive && isWhatsappActive && (
           <span
             style={{ color: separatorColor }}
             className="select-none text-xs sm:text-sm font-light opacity-50 shrink-0 px-0.5"
             aria-hidden="true"
           >
-            |
+            {sepChar}
           </span>
         )}
 

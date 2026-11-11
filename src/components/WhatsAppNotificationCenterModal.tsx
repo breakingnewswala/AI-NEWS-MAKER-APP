@@ -73,8 +73,9 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
     if (attachedArticle) {
       setHeadline(attachedArticle.title || '');
       setSummary(attachedArticle.summary || attachedArticle.content?.slice(0, 180) || '');
-      setCategory(attachedArticle.category || 'Breaking News');
-      setArticleUrl(attachedArticle.url || (attachedArticle.id ? `https://ainewsmaker.online/news/${attachedArticle.id}` : 'https://ainewsmaker.online'));
+      setCategory(attachedArticle.breaking ? 'Breaking News' : attachedArticle.category || 'Breaking News');
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ainewsmaker.online';
+      setArticleUrl(attachedArticle.id ? `${baseUrl}/studio?newsId=${encodeURIComponent(attachedArticle.id)}` : `${baseUrl}/studio`);
     }
   }, [attachedArticle]);
 
@@ -154,13 +155,17 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
   // Live Message Preview
   const previewText = useMemo(() => {
     let p = '';
+    const isBreaking = attachedArticle?.breaking || category === 'Breaking News';
+    if (isBreaking) {
+      p += `🔴 *ब्रेकिंग न्यूज़ — तुरंत ग्राफिक बनाएं*\n\n`;
+    }
     if (headline.trim()) p += `🚨 *${headline.trim()}*\n\n`;
     if (summary.trim()) p += `${summary.trim()}\n\n`;
     if (customMessage.trim()) p += `${customMessage.trim()}\n\n`;
-    if (articleUrl.trim()) p += `🔗 पूरी खबर पढ़ें: ${articleUrl.trim()}\n\n`;
+    if (articleUrl.trim()) p += `✨ *इस खबर से ग्राफिक बनाएं:*\n${articleUrl.trim()}\n\n`;
     p += `_AI News Maker (ब्रेकिंग न्यूज़ वाला) - आधिकारिक समाचार सेवा_\n_नोटिफिकेशन रोकने के लिए STOP लिखें_`;
     return p;
-  }, [headline, summary, customMessage, articleUrl]);
+  }, [headline, summary, customMessage, articleUrl, attachedArticle, category]);
 
   // Send Test Message
   const handleSendTestMessage = async () => {

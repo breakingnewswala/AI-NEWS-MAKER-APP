@@ -2208,10 +2208,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3">
                 <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                   <Maximize2 className="w-3.5 h-3.5" />
-                  कैनवास आस्पेक्ट रेशियो चुनें ({generatorMode === 'photo' ? 'फोटो: केवल 4:5 व 9:16' : 'वीडियो रेशियो'})
+                  कैनवास आस्पेक्ट रेशियो चुनें ({generatorMode === 'photo' ? 'फोटो: 4:5, 1:1 व 9:16' : 'वीडियो रेशियो'})
                 </h4>
                 {generatorMode === 'photo' ? (
-                  <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                     <button
                       type="button"
                       onClick={() => setSelectedRatio('4:5')}
@@ -2227,6 +2227,23 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                       <div className="text-[11px] text-slate-300 font-mono">1080 × 1350 px</div>
                       <div className="text-[10px] text-slate-400 mt-1">रेगुलर समाचार व फ़ोटो न्यूज़ ग्राफ़िक्स</div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRatio('1:1')}
+                      className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                        selectedRatio === '1:1'
+                          ? 'bg-amber-500/10 border-amber-500 text-white shadow-lg'
+                          : 'bg-slate-800/50 border-slate-700/80 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-black text-sm">1:1 स्क्वायर</span>
+                        {selectedRatio === '1:1' && <Check className="w-4 h-4 text-amber-400" />}
+                      </div>
+                      <div className="text-[11px] text-slate-300 font-mono">1080 × 1080 px</div>
+                      <div className="text-[10px] text-slate-400 mt-1">स्क्वायर पोस्ट, इंस्टाग्राम व फेसबुक फीड</div>
                     </button>
 
                     <button
@@ -2573,6 +2590,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             <option value={270}>270° (वर्टिकल लेफ्ट एज - डिफ़ॉल्ट)</option>
                             <option value={0}>0° (हॉरिज़ॉन्टल)</option>
                             <option value={90}>90° (वर्टिकल राइट एज)</option>
+                            <option value={180}>180° (उल्टा हॉरिज़ॉन्टल)</option>
                           </select>
                         </div>
                       </div>
@@ -2865,21 +2883,16 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
                       />
                     </div>
-                    {headerConfig.showLocation && (
-                      <div className="space-y-2.5 pt-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-slate-400">मोड:</span>
-                          <select
-                            value={headerConfig.locationBadgeMode || 'dynamic_overlay'}
-                            onChange={(e) => setHeaderConfig({ ...headerConfig, locationBadgeMode: e.target.value as any })}
-                            className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px] w-full"
-                          >
-                            <option value="dynamic_overlay">Mode A: बैज स्किन + डायनामिक टेक्स्ट</option>
-                            <option value="static_image">Mode B: पूर्ण स्टैटिक बैज इमेज</option>
-                          </select>
-                        </div>
+                    {headerConfig.showLocation && (() => {
+                      const badgeAsset =
+                        headerConfig.manualLocationAsset ||
+                        locationBadgeLibrary.find((b) => b.id === headerConfig.locationBadgeAssetId)?.url ||
+                        locationBadgeLibrary.find((b) => b.id === headerConfig.locationBadgeAssetId)?.assetUrl ||
+                        (locationBadgeLibrary.length > 0 ? (locationBadgeLibrary[0].url || locationBadgeLibrary[0].assetUrl) : undefined);
 
-                        {headerConfig.locationBadgeMode === 'static_image' ? (
+                      return (
+                        <div className="space-y-2.5 pt-1">
+                          {/* Location Badge Library Selection */}
                           <div className="space-y-1.5 pt-1">
                             <button
                               type="button"
@@ -2948,6 +2961,41 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 )}
                               </>
                             )}
+
+                            {/* Location Text Color Control */}
+                            <div className="mt-2.5 flex items-center justify-between bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                              <span className="text-[10px] text-slate-300 font-semibold">लोकेशन टेक्स्ट रंग:</span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setHeaderConfig({ ...headerConfig, locationTextColor: '#000000' })}
+                                  className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer border ${
+                                    (headerConfig.locationTextColor || '#000000').toLowerCase() === '#000000'
+                                      ? 'bg-black text-white border-amber-400'
+                                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                                  }`}
+                                >
+                                  काला (Black)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setHeaderConfig({ ...headerConfig, locationTextColor: '#FFFFFF' })}
+                                  className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer border ${
+                                    (headerConfig.locationTextColor || '').toLowerCase() === '#ffffff'
+                                      ? 'bg-white text-black border-amber-400'
+                                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                                  }`}
+                                >
+                                  सफेद (White)
+                                </button>
+                                <input
+                                  type="color"
+                                  value={headerConfig.locationTextColor || '#000000'}
+                                  onChange={(e) => setHeaderConfig({ ...headerConfig, locationTextColor: e.target.value })}
+                                  className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
+                                />
+                              </div>
+                            </div>
 
                             {/* AI 3-Slice Horizontal Stretching Markers */}
                             {badgeAsset && (
@@ -3023,69 +3071,28 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 </div>
                               </div>
                             )}
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">स्टाइल</label>
-                              <select
-                                value={headerConfig.locationStyle || 'pill'}
-                                onChange={(e) => setHeaderConfig({ ...headerConfig, locationStyle: e.target.value as any })}
-                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-[11px]"
-                              >
-                                <option value="pill">Pill (कैप्सूल)</option>
-                                <option value="box">Box (आयताकार)</option>
-                                <option value="strip">Strip (पट्टी)</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-slate-400 block mb-0.5">बैकग्राउंड रंग</label>
-                              <input
-                                type="color"
-                                value={headerConfig.locationBgColor || '#DC2626'}
-                                onChange={(e) => setHeaderConfig({ ...headerConfig, locationBgColor: e.target.value })}
-                                className="w-full h-7 bg-slate-900 rounded cursor-pointer"
-                              />
-                            </div>
-                          </div>
-                        )}
 
-                        {/* Location Text Color Control */}
-                        <div className="mt-2.5 flex items-center justify-between bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                          <span className="text-[10px] text-slate-300 font-semibold">लोकेशन टेक्स्ट रंग:</span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setHeaderConfig({ ...headerConfig, locationTextColor: '#000000' })}
-                              className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer border ${
-                                (headerConfig.locationTextColor || '#000000').toLowerCase() === '#000000'
-                                  ? 'bg-black text-white border-amber-400'
-                                  : 'bg-slate-800 text-slate-400 border-slate-700'
-                              }`}
-                            >
-                              काला (Black)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setHeaderConfig({ ...headerConfig, locationTextColor: '#FFFFFF' })}
-                              className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer border ${
-                                (headerConfig.locationTextColor || '').toLowerCase() === '#ffffff'
-                                  ? 'bg-white text-black border-amber-400'
-                                  : 'bg-slate-800 text-slate-400 border-slate-700'
-                              }`}
-                            >
-                              सफेद (White)
-                            </button>
-                            <input
-                              type="color"
-                              value={headerConfig.locationTextColor || '#000000'}
-                              onChange={(e) => setHeaderConfig({ ...headerConfig, locationTextColor: e.target.value })}
-                              className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
-                            />
+                            {/* Badge Preview */}
+                            {badgeAsset && (
+                              <div className="p-2 bg-slate-900/60 rounded-lg border border-slate-800 flex items-center justify-between mt-2">
+                                <span className="text-[10px] text-slate-400">बैज प्रीव्यू:</span>
+                                <div className="relative h-6 flex items-center justify-center">
+                                  <img src={badgeAsset} alt="Selected Badge" className="h-full w-auto object-contain" />
+                                  <div className="absolute right-1.5 left-[28%] flex items-center justify-center overflow-hidden h-full">
+                                    <span
+                                      className="text-[9px] font-black truncate"
+                                      style={{ color: headerConfig.locationTextColor || '#000000' }}
+                                    >
+                                      {dummyLocation || 'भोपाल'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                   {headerConfig.showLocation && (
                     <div className="pt-2 border-t border-slate-800/80 text-[10px] text-slate-400">
@@ -4691,7 +4698,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             transformOrigin: 'center center',
                           }}
                         >
-                          {headerConfig.locationBadgeMode === 'static_image' && badgeAsset ? (
+                          {badgeAsset ? (
                             <div className="relative flex items-center justify-center h-6">
                               <img
                                 src={badgeAsset}

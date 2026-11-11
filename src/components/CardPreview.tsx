@@ -390,7 +390,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const activeDf = df;
     const activeFont = card.headlineFontFamily || activeDf?.typographyConfig?.primaryFontFamily || activeDf?.textSlots?.[0]?.fontFamily || 'Baloo 2';
     const textSlotRect = activeDf?.textSlots?.[0]?.rect;
-    const canvasH = (activeDf?.aspectRatio === '9:16' || card.aspectRatio === '9:16') ? 1920 : 1350;
+    const canvasH = (activeDf?.aspectRatio === '9:16' || card.aspectRatio === '9:16') ? 1920 : (activeDf?.aspectRatio === '1:1' || card.aspectRatio === '1:1') ? 1080 : 1350;
     const customBounds = textSlotRect ? {
       x: (textSlotRect.x / 100) * 1080,
       y: (textSlotRect.y / 100) * canvasH,
@@ -759,7 +759,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           bottom: card.frameDesign === 'graphic_003'
             ? '0px'
             : card.frameDesign === 'graphic_001'
-            ? '38.67%'
+            ? (card.aspectRatio === '9:16' ? 'calc(36% - 1.5px)' : card.aspectRatio === '1:1' ? 'calc(40% - 1.5px)' : 'calc(38.67% - 1.5px)')
             : card.frameDesign === 'graphic_002'
             ? '47%'
             : card.frameDesign === 'graphic_004'
@@ -1424,6 +1424,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               footerTextColor={card.footerTextColor || '#000000'}
               footerIconStyle={card.footerIconStyle || 'color'}
               showMasterBranding={card.showMasterBranding}
+              footerConfig={card.customFooterConfig || (df as any)?.footerConfig}
             />
           </div>
         </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
@@ -3686,6 +3687,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   footerTextColor={df.footerConfig?.footerTextColor || card.footerTextColor}
                   footerIconStyle={card.footerIconStyle}
                   showMasterBranding={card.showMasterBranding}
+                  footerConfig={card.customFooterConfig || (df as any)?.footerConfig}
                 />
               </div>
             </div>

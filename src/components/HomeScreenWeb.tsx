@@ -697,6 +697,40 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   // Admin Coin Value Configuration state
   const [coinConfigPost, setCoinConfigPost] = useState<NewsFeedPost | null>(null);
+  // News Detail Popup Modal (Phase 15)
+  const [detailModalPost, setDetailModalPost] = useState<NewsFeedPost | null>(null);
+
+  // Special Notification Board Admin IDs (Phase 14)
+  const [adminNotificationBoardIds, setAdminNotificationBoardIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetch(getApiUrl('/api/admin/notification-board-ids'), {
+      headers: getAuthHeaders(),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && Array.isArray(data.selectedIds)) {
+          setAdminNotificationBoardIds(new Set(data.selectedIds));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleNotificationBoard = async (postId: string) => {
+    try {
+      const res = await fetch(getApiUrl(`/api/admin/toggle-notification-board/${encodeURIComponent(postId)}`), {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (data && Array.isArray(data.selectedIds)) {
+        setAdminNotificationBoardIds(new Set(data.selectedIds));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Admin News Card Notification Modals (Phase 1)
   const [isWhatsAppCampaignOpen, setIsWhatsAppCampaignOpen] = useState(false);
   const [campaignArticle, setCampaignArticle] = useState<NewsFeedPost | null>(null);
@@ -1462,14 +1496,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     ? visiblePosts.filter((p) => p.breaking)
     : visiblePosts.slice(0, 6);
 
-  // Identify highlights (exclusive / breaking) for Notification Board Carousel (up to 9 items for multi-item view, excluding admin removed highlights)
+  // Identify highlights (Phase 14: Prioritize Admin Selected Approved News for Notification Board)
   const highlightPosts = useMemo(() => {
     const unremovedFiltered = filteredPosts.filter((p) => !removedHighlightIds.has(p.id));
+    // If admin explicitly selected news for notification board, show those approved news
+    const adminSelected = unremovedFiltered.filter((p) => adminNotificationBoardIds.has(p.id));
+    if (adminSelected.length > 0) return adminSelected.slice(0, 9);
+
     const exclusiveOrBreaking = unremovedFiltered.filter((p) => p.isExclusive || p.breaking);
     if (exclusiveOrBreaking.length > 0) return exclusiveOrBreaking.slice(0, 9);
     if (unremovedFiltered.length > 0) return unremovedFiltered.slice(0, 9);
     return visiblePosts.filter((p) => !removedHighlightIds.has(p.id)).slice(0, 9);
-  }, [filteredPosts, visiblePosts, removedHighlightIds]);
+  }, [filteredPosts, visiblePosts, removedHighlightIds, adminNotificationBoardIds]);
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -2131,9 +2169,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div>
                     {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
                     <div
-                      onClick={() => handleOpenStudioSafe(post)}
+                      onClick={() => setDetailModalPost(post)}
                       className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 mb-2.5 cursor-pointer group/img shadow-inner border border-slate-800/80"
-                      title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                      title="क्लिक करके पूरा विवरण देखें"
                     >
                       <img
                         src={getPostThumbnail(post)}
@@ -2241,14 +2279,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     <div className="flex items-start justify-between gap-1 mb-1.5">
                       <h3
                         onClick={() => {
-                          if (isPostRestricted(post)) {
-                            handleUnlockNewsPost(post);
-                          } else {
-                            onOpenStudioWithNews(post);
-                          }
+                          setDetailModalPost(post);
                         }}
                         className="text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2"
-                        title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                        title="क्लिक करके पूरा विवरण देखें"
                       >
                         {cleanViewerHeadline(post.title)}
                       </h3>
@@ -2588,6 +2622,24 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span>Select</span>
                       </label>
 
+                      {/* Admin Toggle for Special Notification Board (Phase 14) */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleNotificationBoard(post.id);
+                        }}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition ${
+                          adminNotificationBoardIds.has(post.id)
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'bg-slate-800 text-slate-300 hover:text-white'
+                        }`}
+                        title={adminNotificationBoardIds.has(post.id) ? 'नोटिफिकेशन बोर्ड से हटाएं' : 'नोटिफिकेशन बोर्ड में जोड़ें'}
+                      >
+                        <Sparkles className="w-2.5 h-2.5" />
+                        <span>{adminNotificationBoardIds.has(post.id) ? 'बोर्ड में शामिल ✓' : '+ बोर्ड'}</span>
+                      </button>
+
                       {/* RSS/Web Approval Button if pending */}
                       {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                         <button
@@ -2608,7 +2660,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   )}
 
                   <div>
-                    <div className="relative w-full aspect-video rounded-t-xl overflow-hidden bg-slate-950">
+                    <div
+                      onClick={() => setDetailModalPost(post)}
+                      className="relative w-full aspect-video rounded-t-xl overflow-hidden bg-slate-950 cursor-pointer"
+                      title="क्लिक करके पूरा विवरण देखें"
+                    >
                       <img
                         src={displayThumbnail}
                         alt={post.title}
@@ -2689,14 +2745,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       <div className="flex items-start justify-between gap-1">
                         <h4
                           onClick={() => {
-                            if (isPostRestricted(post)) {
-                              handleUnlockNewsPost(post);
-                            } else {
-                              handleOpenStudioSafe(post);
-                            }
+                            setDetailModalPost(post);
                           }}
                           className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
-                          title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                          title="क्लिक करके पूरा विवरण देखें"
                         >
                           {cleanViewerHeadline(post.title)}
                         </h4>
@@ -5035,6 +5087,94 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             }
           }}
         />
+      )}
+
+      {/* News Detail Popup Modal (Phase 15) */}
+      {detailModalPost && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-2xl animate-in fade-in max-h-[90vh] flex flex-col justify-between">
+            <div className="overflow-y-auto pr-1 space-y-4 scrollbar-thin">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    {detailModalPost.categoryName || 'समाचार'}
+                  </span>
+                  {detailModalPost.location && (
+                    <span className="text-xs text-slate-300 font-bold flex items-center gap-1">
+                      📍 {detailModalPost.location}
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-400">
+                    • {formatDynamicTime(detailModalPost.timestamp, detailModalPost.publishedTime)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailModalPost(null)}
+                  className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Main Thumbnail Image */}
+              <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md">
+                <img
+                  src={getPostThumbnail(detailModalPost)}
+                  alt={detailModalPost.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {/* Headline */}
+              <h3 className="text-lg sm:text-xl font-black text-white leading-snug">
+                {cleanViewerHeadline(detailModalPost.title)}
+              </h3>
+
+              {/* Full Description / Summary */}
+              <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+                {decodeHtmlEntities(detailModalPost.approvedCaptionDetailed || detailModalPost.summary || '')}
+              </div>
+
+              {/* Additional Photos if available */}
+              {detailModalPost.additionalPhotos && detailModalPost.additionalPhotos.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-bold text-slate-400">अतिरिक्त तस्वीरें:</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {detailModalPost.additionalPhotos.map((photo, i) => (
+                      <div key={i} className="aspect-video rounded-lg overflow-hidden border border-slate-800 bg-slate-950">
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setDetailModalPost(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer"
+              >
+                बंद करें
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const post = detailModalPost;
+                  setDetailModalPost(null);
+                  handleOpenStudioSafe(post);
+                }}
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>इस खबर से ग्राफिक बनाएं</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showBackToTop && (
