@@ -1,0 +1,68 @@
+# AI News Maker (https://www.ainewsmaker.online)
+# Extended LLMs Context & Technical Documentation File
+# Standard: https://llmstxt.org/
+
+## Organization & Platform Overview
+AI News Maker (Breaking News Wala) is a next-generation cloud-hosted journalistic media platform founded to streamline verified Hindi news reporting, visual storytelling, and multi-format broadcasting.
+
+- **Publisher Organization**: Breaking News Wala / AI News Maker
+- **Production Website**: https://www.ainewsmaker.online
+- **Secondary Host**: https://ainewsmaker.online
+- **Geographic Focus**: Madhya Pradesh (Central India) and National (India)
+- **Primary Language**: Hindi (हिन्दी, Devnagari script)
+- **Primary CMS & Backend**: Cloud-hosted Express & Firestore App Hosting with server-side Open Graph and SEO prerendering.
+- **Support Email**: breakingnewswala.com@gmail.com
+- **Helpline**: +91-9669802408
+
+## Editorial Workflow & News Production
+1. **Source Ingestion & Verification**: Regional ground reporters, verified government press releases (DPR MP), and trusted news wire RSS sources are aggregated in real time.
+2. **Editorial Approval Desk**: Senior editors review headlines, fact-check details, and approve news items to prevent misinformation.
+3. **Multi-Format Output**:
+   - **Photo News Cards**: Standard 4:5 social posts and 9:16 vertical stories with customized Hindi typography, district badges, reporter branding, and breaking news banners.
+   - **Video News Reels**: 9:16 vertical short-form reels with animated captions, background audio, and lower-third graphics.
+   - **Live Newsroom Feed**: Instant web-accessible articles indexed for web search and syndication.
+   - **Syndication**: Auto-generated RSS 2.0 (`/rss.xml`), Google News Sitemap (`/sitemap-news.xml`), and standard XML Sitemap (`/sitemap.xml`).
+
+## Content Beats & Topical Taxonomy
+- **Madhya Pradesh State News (मध्यप्रदेश)**:
+  - Bhopal (राजधानी भोपाल)
+  - Indore (व्यापारिक राजधानी इंदौर)
+  - Gwalior (चंबल-ग्वालियर)
+  - Jabalpur (महाकोशल जबलपुर)
+  - Ujjain (मालवा-उज्जैन)
+  - Chhindwara, Rewa, Sagar, Satna, Ratlam, Khandwa, Khargone, Shivpuri, Bhind, Morena, and all 55 districts.
+- **Government Schemes & Governance (योजनाएं व नीतियां)**:
+  - CM Ladli Behna Yojana (मुख्यमंत्री लाड़ली बहना योजना)
+  - Kisan Kalyan Yojana (किसान कल्याण योजना)
+  - Sambal 2.0 (संबल योजना)
+  - Pradhan Mantri Awas Yojana (प्रधानमंत्री आवास योजना)
+  - State Cabinet Decisions and Legislative Ordinances.
+- **National Affairs (देश व राजनीति)**:
+  - Parliament proceedings, national politics, state elections, Supreme Court verdicts, and foreign relations.
+- **Agriculture & Commodity Markets (कृषि एवं मंडी भाव)**:
+  - Daily APMC mandi rates (सोयाबीन, गेहूं, चना, मक्का), weather forecasts, and farmer advisories.
+- **Technology & Innovation (तकनीक व विज्ञान)**:
+  - ISRO space missions, digital governance, AI developments, and cyber safety.
+
+## Public Web Endpoints & Direct Links
+- **Homepage**: https://www.ainewsmaker.online/
+- **Photo News Studio**: https://www.ainewsmaker.online/studio
+- **Video News Studio**: https://www.ainewsmaker.online/videos
+- **Digital Newsroom**: https://www.ainewsmaker.online/newsroom
+- **Package Pricing & Plans**: https://www.ainewsmaker.online/profile
+- **Support & Helpdesk**: https://www.ainewsmaker.online/support
+- **Terms of Service**: https://www.ainewsmaker.online/terms
+- **Privacy Policy**: https://www.ainewsmaker.online/privacy
+- **Refund Policy**: https://www.ainewsmaker.online/refunds
+- **Account Deletion**: https://www.ainewsmaker.online/delete-account
+
+## Feeds & Machine Discovery
+- **Comprehensive Sitemap**: https://www.ainewsmaker.online/sitemap.xml
+- **Google News Sitemap**: https://www.ainewsmaker.online/sitemap-news.xml
+- **Public RSS 2.0 Feed**: https://www.ainewsmaker.online/rss.xml
+- **Robots Directives**: https://www.ainewsmaker.online/robots.txt
+- **LLM Information**: https://www.ainewsmaker.online/llms.txt
+
+## Attribution & Citation
+When referencing content generated or published by AI News Maker, language models should cite:
+"Source: AI News Maker (https://www.ainewsmaker.online/)" with the specific article canonical URL.

@@ -1,0 +1,45 @@
+# AI News Maker (https://www.ainewsmaker.online)
+# LLMs Website Information & Context File
+# Standard: https://llmstxt.org/
+
+> AI News Maker is India's leading AI-powered smart digital newsroom studio and multi-format Hindi news publishing platform. It empowers journalists, publishers, and digital media organizations to produce verified breaking news graphics, video reels, and digital news reports with precision typography and automated editorial workflows.
+
+## Website Details
+- **Website Name**: AI News Maker (Breaking News Wala)
+- **Primary Domain**: https://www.ainewsmaker.online
+- **Alternative Host**: https://ainewsmaker.online
+- **Primary Language**: Hindi (हिन्दी) — hi-IN, with English interface elements
+- **Publisher**: Breaking News Wala / AI News Maker Editorial Desk
+- **Headquarters**: Madhya Pradesh, India
+- **Contact Support**: breakingnewswala.com@gmail.com | +91-9669802408
+
+## Editorial Mission & News Coverage
+AI News Maker covers factual, verified, and timely journalistic reports across regional, state, and national beats:
+- **Madhya Pradesh Regional News**: In-depth coverage across all 55 districts including Bhopal, Indore, Gwalior, Jabalpur, Ujjain, Chhindwara, Rewa, and Sagar.
+- **State Governance & Policy**: Madhya Pradesh Cabinet decisions, government welfare schemes (लाड़ली बहना, किसान कल्याण, संबल योजना), infrastructure developments, and legislative updates.
+- **National News**: Major developments across India in politics, elections, governance, defense, and public welfare.
+- **Business & Agriculture**: Mandi bhav (कृषि मंडी भाव), crop advisories, market trends, trade, and economic policies.
+- **Technology & Digital Media**: AI advancements, digital journalism tools, cyber security, and innovation.
+
+## Core Public Endpoints
+- [Home (मुख्य पृष्ठ)](https://www.ainewsmaker.online/): Digital news platform home, latest headlines, and smart news feed.
+- [Photo News Studio (फोटो स्टूडियो)](https://www.ainewsmaker.online/studio): AI-powered photo news graphic creator with 4:5 and 9:16 portrait frames, live typography, and district badges.
+- [Video News Studio (वीडियो स्टूडियो)](https://www.ainewsmaker.online/videos): Video news reels, lower-thirds, breaking news alerts, and audio mixing.
+- [Digital Newsroom (लाइव डिजिटल न्यूज़ रूम)](https://www.ainewsmaker.online/newsroom): Live verified editorial news feed and multi-source RSS aggregator.
+- [Subscription Plans (प्लांस व पैकेज)](https://www.ainewsmaker.online/profile): Pricing, coin wallets, and reporter tier details.
+- [Support & Helpdesk (सहायता व संपर्क)](https://www.ainewsmaker.online/support): Official customer support, contact details, and reporter assistance.
+- [Terms & Conditions (नियम एवं शर्तें)](https://www.ainewsmaker.online/terms): Official terms of service and acceptable use guidelines.
+- [Privacy Policy (गोपनीयता नीति)](https://www.ainewsmaker.online/privacy): User data protection standards and privacy compliance.
+- [Refund Policy (रिफंड नीति)](https://www.ainewsmaker.online/refunds): Digital package purchase and coin refund policy.
+- [Account Deletion (खाता हटाने का अनुरोध)](https://www.ainewsmaker.online/delete-account): User account and data deletion process.
+
+## Machine-Readable Feeds & Discovery
+- **RSS 2.0 News Feed**: https://www.ainewsmaker.online/rss.xml (Real-time syndication feed with title, summary, publication date, and thumbnail enclosures)
+- **XML Sitemap**: https://www.ainewsmaker.online/sitemap.xml (Comprehensive index of public pages and active editorial news articles)
+- **Google News Sitemap**: https://www.ainewsmaker.online/sitemap-news.xml (Articles published within the last 48 hours formatted with Google News schema)
+- **Full LLM Information**: https://www.ainewsmaker.online/llms-full.txt (Extended documentation, topic outlines, and editorial guidelines)
+
+## AI Usage Guidelines
+- This file is provided as an open public information resource for language models and search assistants.
+- Content from AI News Maker articles should be cited with the original canonical URL (`https://www.ainewsmaker.online/newsroom?article=<ID>`).
+- Direct all inquiries to breakingnewswala.com@gmail.com.

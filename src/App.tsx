@@ -40,6 +40,9 @@ import {
 import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
+import { formatCleanLocationText } from './lib/locationUtils';
+
+export const CANONICAL_DEFAULT_HEADLINE = 'मध्य प्रदेश में ऐतिहासिक फैसला:\nकैबिनेट बैठक में बड़े प्रस्तावों को\nमिली अंतिम मंजूरी';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
 import { trackSpaPageView, trackEvent } from './lib/analyticsTracker';
 import { FolderClockIcon } from './icons/FolderClockIcon';
@@ -642,6 +645,9 @@ export default function App() {
     updateOg('og:title', meta.title);
     updateOg('og:description', meta.description);
     updateOg('og:url', meta.canonical);
+    updateOg('og:image:width', '1200');
+    updateOg('og:image:height', '630');
+    updateOg('og:image:alt', meta.title);
 
     // Update Twitter card tags
     const updateTw = (name: string, val: string) => {
@@ -655,6 +661,7 @@ export default function App() {
     };
     updateTw('twitter:title', meta.title);
     updateTw('twitter:description', meta.description);
+    updateTw('twitter:image:alt', meta.title);
 
     // Update BreadcrumbList structured data for non-home routes
     let breadcrumbScript = document.getElementById('route-breadcrumb-schema');
@@ -1425,11 +1432,11 @@ export default function App() {
           dateStr: parsed.dateStr || getFormattedHindiDate(),
         };
       } else {
-        // Default clean neutral slate for fresh studio session (Phase 1 specification)
+        // Default clean neutral slate for fresh studio session (Phase 2 & 3 specification)
         initial = {
           ...initial,
-          headline: '',
-          formattedHeadline: '',
+          headline: CANONICAL_DEFAULT_HEADLINE,
+          formattedHeadline: CANONICAL_DEFAULT_HEADLINE,
           highlightWords: [],
           images: { main: '', second: '', third: '', fourth: '' },
           photoUrl: '',
@@ -2131,12 +2138,12 @@ export default function App() {
       frameDesign: 'graphic_001',
       aspectRatio: '4:5',
       customDynamicFrame: undefined,
-      headline: '',
-      formattedHeadline: '',
+      headline: CANONICAL_DEFAULT_HEADLINE,
+      formattedHeadline: CANONICAL_DEFAULT_HEADLINE,
       highlightWords: [],
       headlineAlign: 'center',
       headlineFontSize: 20,
-      location: savedProfile?.district || 'लोकेशन',
+      location: formatCleanLocationText(savedProfile?.district || savedProfile?.city || savedProfile?.location || 'भोपाल'),
       summary: '',
       category: 'ताज़ा खबर',
       images: {

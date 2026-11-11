@@ -193,7 +193,27 @@ app.use("/uploads", express.static(publicUploadsDir));
 // ============================================================================
 // CRYPTOGRAPHIC SESSION TOKEN & AUTHENTICATION ENGINE (HMAC-SHA256 JWT)
 // ============================================================================
-const AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+function initializeAuthSecret(): string {
+  const secret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (secret && typeof secret === "string" && secret.trim().length >= 32) {
+    return secret.trim();
+  }
+
+  if (isProduction) {
+    const errorMsg = "[FATAL SECURITY ERROR] SESSION_SECRET environment variable is missing, empty, or too short (< 32 chars). In production, SESSION_SECRET must be configured via Google Cloud Secret Manager.";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+
+  // Development/Test fallback: Generate an ephemeral 256-bit cryptographically random key in-memory per process run.
+  // Never use a static or predictable hardcoded string.
+  console.warn("[SECURITY WARNING] No SESSION_SECRET configured. Generated ephemeral in-memory 256-bit secret for non-production environment.");
+  return crypto.randomBytes(32).toString("hex");
+}
+
+const AUTH_SECRET = initializeAuthSecret();
 
 interface AuthTokenPayload {
   userId: string;
@@ -228,6 +248,17 @@ function verifyAuthToken(tokenStr: string): AuthTokenPayload | null {
   const parts = tokenStr.trim().split(".");
   if (parts.length !== 3) return null;
   const [encodedHeader, encodedPayload, signature] = parts;
+
+  // Algorithm & Type verification
+  try {
+    const headerJson = Buffer.from(encodedHeader, "base64url").toString("utf8");
+    const header = JSON.parse(headerJson);
+    if (!header || header.alg !== "HS256" || header.typ !== "JWT") {
+      return null;
+    }
+  } catch {
+    return null;
+  }
 
   const expectedSig = crypto
     .createHmac("sha256", AUTH_SECRET)
@@ -598,21 +629,35 @@ function saveCredentialsDatabase(db: Record<string, StoredCredential>): boolean 
   }
 }
 
-function hashPassword(password: string, salt?: string): { salt: string; hash: string } {
+const PBKDF2_ITERATIONS = 210000;
+const PBKDF2_LEGACY_ITERATIONS = 10000;
+
+function hashPassword(password: string, salt?: string, iterations = PBKDF2_ITERATIONS): { salt: string; hash: string; iterations: number } {
   const actualSalt = salt || crypto.randomBytes(16).toString("hex");
-  const hash = crypto.pbkdf2Sync(password, actualSalt, 10000, 64, "sha512").toString("hex");
-  return { salt: actualSalt, hash };
+  const hash = crypto.pbkdf2Sync(password, actualSalt, iterations, 64, "sha512").toString("hex");
+  return { salt: actualSalt, hash, iterations };
 }
 
-function verifyPassword(password: string, salt: string, storedHash: string): boolean {
+function verifyPassword(password: string, salt: string, storedHash: string): { valid: boolean; needsRehash: boolean } {
   try {
-    const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex");
-    const a = Buffer.from(hash, "hex");
-    const b = Buffer.from(storedHash, "hex");
-    if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(a, b);
+    // 1. Check modern 210,000 iterations (OWASP Standard)
+    const modernHash = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, 64, "sha512").toString("hex");
+    const aModern = Buffer.from(modernHash, "hex");
+    const bStored = Buffer.from(storedHash, "hex");
+    if (aModern.length === bStored.length && crypto.timingSafeEqual(aModern, bStored)) {
+      return { valid: true, needsRehash: false };
+    }
+
+    // 2. Backward compatibility: Check legacy 10,000 iterations
+    const legacyHash = crypto.pbkdf2Sync(password, salt, PBKDF2_LEGACY_ITERATIONS, 64, "sha512").toString("hex");
+    const aLegacy = Buffer.from(legacyHash, "hex");
+    if (aLegacy.length === bStored.length && crypto.timingSafeEqual(aLegacy, bStored)) {
+      return { valid: true, needsRehash: true };
+    }
+
+    return { valid: false, needsRehash: false };
   } catch {
-    return false;
+    return { valid: false, needsRehash: false };
   }
 }
 
@@ -1169,6 +1214,8 @@ const UPLOAD_SCREENSHOTS_DIR = path.join(process.cwd(), "public", "uploads", "sc
 const WEB_UPLOAD_SCREENSHOTS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "screenshots");
 const UPLOAD_FONTS_DIR = path.join(process.cwd(), "public", "uploads", "fonts");
 const WEB_UPLOAD_FONTS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "fonts");
+const UPLOAD_FRAMES_DIR = path.join(process.cwd(), "public", "uploads", "frames");
+const WEB_UPLOAD_FRAMES_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "frames");
 
 try {
   fs.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
@@ -1181,6 +1228,8 @@ try {
   fs.mkdirSync(WEB_UPLOAD_SCREENSHOTS_DIR, { recursive: true });
   fs.mkdirSync(UPLOAD_FONTS_DIR, { recursive: true });
   fs.mkdirSync(WEB_UPLOAD_FONTS_DIR, { recursive: true });
+  fs.mkdirSync(UPLOAD_FRAMES_DIR, { recursive: true });
+  fs.mkdirSync(WEB_UPLOAD_FRAMES_DIR, { recursive: true });
 } catch { }
 
 interface ServerRewardClaim {
@@ -3974,9 +4023,27 @@ app.get("/api/admin/analytics/summary", (req, res) => {
 });
 
 // 9. POST /api/upload-logo - Downscaled & compressed logo upload endpoint (PNG & GIF)
-app.post("/api/upload-logo", async (req, res) => {
+app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
   const release = await userDbLock.acquire();
   try {
+    const authUser = (req as any).user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ error: "प्रमाणीकरण आवश्यक है" });
+    }
+
+    const requestingEmail = authUser.email.toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req);
+
+    const clientEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
+    let userOrEmail = requestingEmail;
+    if (clientEmail && clientEmail !== requestingEmail) {
+      if (isAdmin) {
+        userOrEmail = clientEmail;
+      } else {
+        return res.status(403).json({ error: "अनधिकृत: आप केवल अपने चैनल का लोगो अपडेट कर सकते हैं।" });
+      }
+    }
+
     const rawData = req.body?.dataUrl || req.body?.imageBase64 || req.body?.fileData || req.body?.logoData || "";
     if (!rawData || typeof rawData !== "string") {
       return res.status(400).json({ error: "लोगो इमेज डेटा आवश्यक है" });
@@ -3998,7 +4065,6 @@ app.post("/api/upload-logo", async (req, res) => {
     let isGif = magic.format === "gif" || (req.body?.logoType === "gif") || (Boolean(req.body?.fileName && req.body.fileName.toLowerCase().endsWith(".gif")));
     let ext = isGif ? "gif" : (magic.format || "png");
 
-    const userOrEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
     const safeFileBase = userOrEmail ? userOrEmail.replace(/[^a-zA-Z0-9_-]/g, "_") : "logo";
     const filename = `logo-${safeFileBase}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
     
@@ -4603,13 +4669,25 @@ app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
 });
 
 // 12. GET /api/wallet/unlocked-items - Retrieve user's unlocked items and welcome reward status
-app.get("/api/wallet/unlocked-items", (req, res) => {
+app.get("/api/wallet/unlocked-items", requireAuthMiddleware, (req, res) => {
   try {
-    const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
-    const walletKey = email || userId;
-    if (!walletKey) {
-      return res.status(400).json({ error: "User email or ID required" });
+    const authUser = (req as any).user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ error: "प्रमाणीकरण आवश्यक है" });
+    }
+    const requestingEmail = authUser.email.toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req);
+
+    const queryEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const queryUserId = (req.query.userId || "").toString().trim();
+    let walletKey = requestingEmail;
+
+    if ((queryEmail && queryEmail !== requestingEmail) || (queryUserId && queryUserId !== authUser.userId && queryUserId !== requestingEmail)) {
+      if (isAdmin) {
+        walletKey = queryEmail || queryUserId;
+      } else {
+        return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते के अनलॉक आइटम देख सकते हैं।" });
+      }
     }
     const rDb = loadRewardsDatabase();
     const unlocked = rDb.unlockedItems?.[walletKey] || [];
@@ -7343,15 +7421,9 @@ function saveAdminReadNotificationIds(ids: Set<string>): void {
   } catch {}
 }
 
-app.get("/api/admin/notifications", (req, res) => {
+app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.query.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === 'admin' || userRes.role === 'superadmin';
-    if (!isAdmin) {
-      return res.status(403).json({ error: "एडमिन प्रमाणीकरण आवश्यक है" });
-    }
-
     const readIds = loadAdminReadNotificationIds();
 
     // 1. Category: RSS Feed News (New RSS News)
@@ -7535,15 +7607,9 @@ app.get("/api/admin/notifications", (req, res) => {
 });
 
 // Update support / logo request status (Admin action)
-app.post("/api/admin/support/update-status", (req, res) => {
+app.post("/api/admin/support/update-status", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === 'admin' || userRes.role === 'superadmin';
-    if (!isAdmin) {
-      return res.status(403).json({ error: "एडमिन प्रमाणीकरण आवश्यक है" });
-    }
-
     const { id, type, status, adminNotes } = req.body || {};
     if (!id || !status) {
       return res.status(400).json({ error: "अनुरोध आईडी और स्टेटस दोनों अनिवार्य हैं।" });
@@ -7575,15 +7641,9 @@ app.post("/api/admin/support/update-status", (req, res) => {
 });
 
 // Admin endpoint to publish an unpublished RSS news item directly from the notification feed
-app.post("/api/admin/news/publish-rss", (req, res) => {
+app.post("/api/admin/news/publish-rss", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === 'admin' || userRes.role === 'superadmin';
-    if (!isAdmin) {
-      return res.status(403).json({ error: "एडमिन प्रमाणीकरण आवश्यक है" });
-    }
-
     const { id } = req.body || {};
     if (!id) return res.status(400).json({ error: "न्यूज आईडी अनिवार्य है।" });
     const news = loadNewsDatabase();
@@ -7605,15 +7665,9 @@ app.post("/api/admin/news/publish-rss", (req, res) => {
   }
 });
 
-app.post("/api/admin/notifications/mark-read", (req, res) => {
+app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body?.email || req.body?.adminEmail || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === 'admin' || userRes.role === 'superadmin';
-    if (!isAdmin) {
-      return res.status(403).json({ error: "एडमिन प्रमाणीकरण आवश्यक है" });
-    }
-
     const { id, all, ids, category } = req.body || {};
     const readIds = loadAdminReadNotificationIds();
 
@@ -7713,26 +7767,27 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
 // --- Search Engine Sitemap & Robots.txt Handlers ---
 function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online"): string {
   const cleanBase = baseUrl.replace(/\/+$/, "");
+  const releaseBaselineDate = "2026-11-11";
   const today = new Date().toISOString().split("T")[0];
 
   const staticRoutes = [
-    { path: "/", priority: "1.0", changefreq: "daily" },
-    { path: "/studio", priority: "0.9", changefreq: "weekly" },
-    { path: "/videos", priority: "0.9", changefreq: "weekly" },
-    { path: "/newsroom", priority: "0.9", changefreq: "hourly" },
-    { path: "/profile", priority: "0.8", changefreq: "weekly" },
-    { path: "/support", priority: "0.7", changefreq: "monthly" },
-    { path: "/terms", priority: "0.5", changefreq: "monthly" },
-    { path: "/privacy", priority: "0.5", changefreq: "monthly" },
-    { path: "/refunds", priority: "0.5", changefreq: "monthly" },
-    { path: "/delete-account", priority: "0.4", changefreq: "monthly" },
+    { path: "/", priority: "1.0", changefreq: "daily", lastmod: today },
+    { path: "/studio", priority: "0.9", changefreq: "weekly", lastmod: releaseBaselineDate },
+    { path: "/videos", priority: "0.9", changefreq: "weekly", lastmod: releaseBaselineDate },
+    { path: "/newsroom", priority: "0.9", changefreq: "hourly", lastmod: today },
+    { path: "/profile", priority: "0.8", changefreq: "weekly", lastmod: releaseBaselineDate },
+    { path: "/support", priority: "0.7", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/terms", priority: "0.5", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/privacy", priority: "0.5", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/refunds", priority: "0.5", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/delete-account", priority: "0.4", changefreq: "monthly", lastmod: releaseBaselineDate },
   ];
 
   const staticUrlsXml = staticRoutes
     .map(
       (r) => `  <url>
     <loc>${cleanBase}${r.path}</loc>
-    <lastmod>${today}</lastmod>
+    <lastmod>${r.lastmod}</lastmod>
     <changefreq>${r.changefreq}</changefreq>
     <priority>${r.priority}</priority>
   </url>`
@@ -7742,37 +7797,60 @@ function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online"): string 
   let dynamicUrlsXml = "";
   try {
     const posts = loadNewsDatabase();
+    const deletedIds = loadDeletedNewsIds();
     if (Array.isArray(posts) && posts.length > 0) {
       let editorialDb: any = {};
       try { editorialDb = loadApprovedEditorialDatabase(); } catch {}
       const published = posts
-        .filter((p) => p && (
-          p.publicationStatus === "PUBLISHED" ||
-          p.isPublished === true ||
-          p.editorialApproved === true ||
-          p.approvalStatus === "APPROVED" ||
-          p.status === "APPROVED" ||
-          p.status === "published" ||
-          Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED")
-        ))
-        .slice(0, 100);
+        .filter((p) => {
+          if (!p || !p.id || deletedIds.has(p.id) || p._deleted === true) return false;
+          if (p.status === "DRAFT" || p.publicationStatus === "draft" || p.status === "PENDING_APPROVAL") return false;
+          return (
+            p.publicationStatus === "PUBLISHED" ||
+            p.isPublished === true ||
+            p.editorialApproved === true ||
+            p.approvalStatus === "APPROVED" ||
+            p.status === "APPROVED" ||
+            p.status === "published" ||
+            Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED")
+          );
+        });
 
-      dynamicUrlsXml = published
-        .map((p) => {
-          const modDate = p.timestamp ? new Date(p.timestamp).toISOString().split("T")[0] : today;
-          const safeId = encodeURIComponent(p.id || "");
-          const safeTitle = (p.title || "News Article").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-          const img = p.imageUrl
-            ? `\n    <image:image>\n      <image:loc>${p.imageUrl.replace(/&/g, "&amp;")}</image:loc>\n      <image:title>${safeTitle}</image:title>\n    </image:image>`
-            : "";
-          return `  <url>
-    <loc>${cleanBase}/newsroom?article=${safeId}</loc>
+      const seenUrls = new Set<string>();
+      const entryStrings: string[] = [];
+
+      for (const p of published) {
+        const safeId = encodeURIComponent(p.id || "");
+        const articleUrl = `${cleanBase}/newsroom?article=${safeId}`;
+        if (seenUrls.has(articleUrl)) continue;
+        seenUrls.add(articleUrl);
+
+        const modDate = p.timestamp ? new Date(p.timestamp).toISOString().split("T")[0] : releaseBaselineDate;
+        const safeTitle = (p.title || p.approvedHeadline || "News Article")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+
+        let rawImg = p.imageUrl || p.thumbnailUrl || p.customThumbnailUrl || p.approvedGraphicUrl || p.image;
+        if (rawImg && rawImg.startsWith("/")) {
+          rawImg = `${cleanBase}${rawImg}`;
+        }
+
+        const img = rawImg
+          ? `\n    <image:image>\n      <image:loc>${rawImg.replace(/&/g, "&amp;")}</image:loc>\n      <image:title>${safeTitle}</image:title>\n    </image:image>`
+          : "";
+
+        entryStrings.push(`  <url>
+    <loc>${articleUrl}</loc>
     <lastmod>${modDate}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>${img}
-  </url>`;
-        })
-        .join("\n");
+  </url>`);
+      }
+
+      dynamicUrlsXml = entryStrings.join("\n");
     }
   } catch (err: any) {
     console.warn("[Sitemap] Failed to load dynamic posts for sitemap:", err?.message);
@@ -7810,32 +7888,54 @@ function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online"): str
     if (Array.isArray(posts) && posts.length > 0) {
       let editorialDb: any = {};
       try { editorialDb = loadApprovedEditorialDatabase(); } catch {}
+      const deletedIds = loadDeletedNewsIds();
       const published = posts.filter(
-        (p) => p && (
-          p.publicationStatus === "PUBLISHED" ||
-          p.isPublished === true ||
-          p.editorialApproved === true ||
-          p.approvalStatus === "APPROVED" ||
-          p.status === "APPROVED" ||
-          p.status === "published" ||
-          Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED")
-        )
+        (p) => {
+          if (!p || !p.id || deletedIds.has(p.id) || p._deleted === true) return false;
+          if (p.status === "DRAFT" || p.publicationStatus === "draft" || p.status === "PENDING_APPROVAL") return false;
+          return (
+            p.publicationStatus === "PUBLISHED" ||
+            p.isPublished === true ||
+            p.editorialApproved === true ||
+            p.approvalStatus === "APPROVED" ||
+            p.status === "APPROVED" ||
+            p.status === "published" ||
+            Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED")
+          );
+        }
       );
       // Include articles published in the last 48 hours; fallback to recent 20 if none within 48h
       const recent = published.filter((p) => p.timestamp && now - p.timestamp <= twoDaysMs);
       const targetPosts = recent.length > 0 ? recent : published.slice(0, 20);
 
-      newsEntriesXml = targetPosts
-        .map((p) => {
-          const pubIso = p.timestamp ? new Date(p.timestamp).toISOString() : new Date().toISOString();
-          const safeId = encodeURIComponent(p.id || "");
-          const safeTitle = (p.title || "ताज़ा समाचार").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-          const imgXml = p.imageUrl
-            ? `\n    <image:image>\n      <image:loc>${p.imageUrl.replace(/&/g, "&amp;")}</image:loc>\n      <image:title>${safeTitle}</image:title>\n    </image:image>`
-            : "";
+      const seenUrls = new Set<string>();
+      const entryStrings: string[] = [];
 
-          return `  <url>
-    <loc>${cleanBase}/newsroom?article=${safeId}</loc>
+      for (const p of targetPosts) {
+        const safeId = encodeURIComponent(p.id || "");
+        const articleUrl = `${cleanBase}/newsroom?article=${safeId}`;
+        if (seenUrls.has(articleUrl)) continue;
+        seenUrls.add(articleUrl);
+
+        const pubIso = p.timestamp ? new Date(p.timestamp).toISOString() : new Date().toISOString();
+        const safeTitle = (p.title || p.approvedHeadline || "ताज़ा समाचार")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&apos;");
+
+        let rawImg = p.imageUrl || p.thumbnailUrl || p.customThumbnailUrl || p.approvedGraphicUrl || p.image;
+        if (rawImg && rawImg.startsWith("/")) {
+          rawImg = `${cleanBase}${rawImg}`;
+        }
+
+        const imgXml = rawImg
+          ? `\n    <image:image>\n      <image:loc>${rawImg.replace(/&/g, "&amp;")}</image:loc>\n      <image:title>${safeTitle}</image:title>\n    </image:image>`
+          : "";
+
+        entryStrings.push(`  <url>
+    <loc>${articleUrl}</loc>
     <news:news>
       <news:publication>
         <news:name>AI News Maker</news:name>
@@ -7844,9 +7944,10 @@ function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online"): str
       <news:publication_date>${pubIso}</news:publication_date>
       <news:title>${safeTitle}</news:title>
     </news:news>${imgXml}
-  </url>`;
-        })
-        .join("\n");
+  </url>`);
+      }
+
+      newsEntriesXml = entryStrings.join("\n");
     }
   } catch (err: any) {
     console.warn("[Google News Sitemap] Failed to load posts:", err?.message);
@@ -7872,6 +7973,44 @@ app.get(["/sitemap-news.xml", "/news-sitemap.xml"], (_req, res) => {
   }
 });
 
+// --- Public llms.txt & llms-full.txt Handlers (LLM Systems Discovery Standard) ---
+app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
+  const filePath = path.join(process.cwd(), "public", "llms.txt");
+  if (fs.existsSync(filePath)) {
+    res.header("Content-Type", "text/plain; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=86400");
+    return res.sendFile(filePath);
+  }
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  return res.send(`# AI News Maker (https://www.ainewsmaker.online)\n# Standard: https://llmstxt.org/\n\n> India's leading AI-powered smart digital newsroom studio.`);
+});
+
+app.get("/llms-full.txt", (_req, res) => {
+  const filePath = path.join(process.cwd(), "public", "llms-full.txt");
+  if (fs.existsSync(filePath)) {
+    res.header("Content-Type", "text/plain; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=86400");
+    return res.sendFile(filePath);
+  }
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  return res.send(`# AI News Maker (Extended Documentation)`);
+});
+
+// --- Bing Webmaster Verification XML Handler ---
+app.get("/BingSiteAuth.xml", (_req, res) => {
+  const filePath = path.join(process.cwd(), "public", "BingSiteAuth.xml");
+  if (fs.existsSync(filePath)) {
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    return res.sendFile(filePath);
+  }
+  const token = process.env.BING_SITE_AUTH_TOKEN || process.env.MS_VALIDATE_TOKEN;
+  if (token) {
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    return res.send(`<?xml version="1.0"?><users><user>${token}</user></users>`);
+  }
+  return res.status(404).send("BingSiteAuth.xml not configured");
+});
+
 app.get("/robots.txt", (_req, res) => {
   res.header("Content-Type", "text/plain; charset=utf-8");
   res.header("Cache-Control", "public, max-age=86400");
@@ -7889,6 +8028,9 @@ Allow: /privacy
 Allow: /refunds
 Allow: /support
 Allow: /delete-account
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /rss.xml
 Disallow: /admin
 Disallow: /api/
 Disallow: /uploads/private/
@@ -10881,6 +11023,203 @@ async function recordDeletedFrameTombstone(id: string): Promise<boolean> {
   return true;
 }
 
+// --- DYNAMIC FRAMES PER-FRAME FIRESTORE ARCHITECTURE ---
+const MAX_FRAME_DOCUMENT_SIZE_BYTES = 700 * 1024; // 700 KiB safety limit (Firestore 1 MiB hard ceiling)
+
+async function saveFrameBase64AssetAsync(base64Str: string, prefix = "frame_asset"): Promise<string> {
+  if (!base64Str || typeof base64Str !== "string") return base64Str;
+  if (!base64Str.startsWith("data:image/") && !base64Str.startsWith("data:video/")) {
+    return base64Str;
+  }
+  const isVideo = base64Str.startsWith("data:video/");
+  const match = base64Str.match(/^data:(image|video)\/([a-zA-Z0-9+.-]+);base64,/);
+  let ext = "png";
+  if (match && match[2]) {
+    ext = match[2].toLowerCase();
+    if (ext === "jpeg") ext = "jpg";
+    if (ext.includes("svg")) ext = "svg";
+  }
+  const cleanBase64 = base64Str.replace(/^data:(image|video)\/[a-zA-Z0-9+.-]+;base64,/, "");
+  const buffer = Buffer.from(cleanBase64, "base64");
+  const filename = `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
+  const contentType = isVideo ? `video/${ext}` : (ext === "jpg" ? "image/jpeg" : ext === "png" ? "image/png" : `image/${ext}`);
+
+  if (cloudStorage && typeof cloudStorage.saveMedia === "function") {
+    try {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer,
+        filename,
+        contentType,
+        category: "frames",
+        publicRead: true,
+      });
+      if (uploadRes && uploadRes.url) {
+        return uploadRes.url;
+      }
+    } catch (e: any) {
+      console.warn("[saveFrameBase64AssetAsync] Cloud storage upload failed, falling back to local:", e.message);
+    }
+  }
+
+  // Local storage fallback
+  try {
+    fs.mkdirSync(UPLOAD_FRAMES_DIR, { recursive: true });
+    fs.mkdirSync(WEB_UPLOAD_FRAMES_DIR, { recursive: true });
+    fs.writeFileSync(path.join(UPLOAD_FRAMES_DIR, filename), buffer);
+    try { fs.writeFileSync(path.join(WEB_UPLOAD_FRAMES_DIR, filename), buffer); } catch {}
+    return `/uploads/frames/${filename}`;
+  } catch (err: any) {
+    console.error("[saveFrameBase64AssetAsync] Local write failed:", err);
+    return base64Str;
+  }
+}
+
+async function sanitizeFrameAssets(frame: any): Promise<any> {
+  if (!frame || typeof frame !== "object") return frame;
+  const sanitized = { ...frame };
+
+  if (sanitized.primaryBackgroundAsset && typeof sanitized.primaryBackgroundAsset === "string" && sanitized.primaryBackgroundAsset.startsWith("data:")) {
+    sanitized.primaryBackgroundAsset = await saveFrameBase64AssetAsync(sanitized.primaryBackgroundAsset, `bg_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.previewImageUrl && typeof sanitized.previewImageUrl === "string" && sanitized.previewImageUrl.startsWith("data:")) {
+    sanitized.previewImageUrl = await saveFrameBase64AssetAsync(sanitized.previewImageUrl, `preview_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.sampleReferenceUrl && typeof sanitized.sampleReferenceUrl === "string" && sanitized.sampleReferenceUrl.startsWith("data:")) {
+    sanitized.sampleReferenceUrl = await saveFrameBase64AssetAsync(sanitized.sampleReferenceUrl, `ref_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.samplePhotoUrl && typeof sanitized.samplePhotoUrl === "string" && sanitized.samplePhotoUrl.startsWith("data:")) {
+    sanitized.samplePhotoUrl = await saveFrameBase64AssetAsync(sanitized.samplePhotoUrl, `photo_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.sampleVideoUrl && typeof sanitized.sampleVideoUrl === "string" && sanitized.sampleVideoUrl.startsWith("data:")) {
+    sanitized.sampleVideoUrl = await saveFrameBase64AssetAsync(sanitized.sampleVideoUrl, `video_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.calloutAssetUrl && typeof sanitized.calloutAssetUrl === "string" && sanitized.calloutAssetUrl.startsWith("data:")) {
+    sanitized.calloutAssetUrl = await saveFrameBase64AssetAsync(sanitized.calloutAssetUrl, `callout_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.headerConfig && sanitized.headerConfig.manualLocationAsset && typeof sanitized.headerConfig.manualLocationAsset === "string" && sanitized.headerConfig.manualLocationAsset.startsWith("data:")) {
+    sanitized.headerConfig = {
+      ...sanitized.headerConfig,
+      manualLocationAsset: await saveFrameBase64AssetAsync(sanitized.headerConfig.manualLocationAsset, `loc_${sanitized.id || "frame"}`),
+    };
+  }
+  if (sanitized.fullStoryCalloutConfig && sanitized.fullStoryCalloutConfig.manualCalloutAsset && typeof sanitized.fullStoryCalloutConfig.manualCalloutAsset === "string" && sanitized.fullStoryCalloutConfig.manualCalloutAsset.startsWith("data:")) {
+    sanitized.fullStoryCalloutConfig = {
+      ...sanitized.fullStoryCalloutConfig,
+      manualCalloutAsset: await saveFrameBase64AssetAsync(sanitized.fullStoryCalloutConfig.manualCalloutAsset, `callout_${sanitized.id || "frame"}`),
+    };
+  }
+  if (Array.isArray(sanitized.layers)) {
+    sanitized.layers = await Promise.all(
+      sanitized.layers.map(async (l: any) => {
+        if (l && l.assetUrl && typeof l.assetUrl === "string" && l.assetUrl.startsWith("data:")) {
+          return { ...l, assetUrl: await saveFrameBase64AssetAsync(l.assetUrl, `layer_${l.id || "asset"}`) };
+        }
+        if (l && l.content && typeof l.content === "string" && l.content.startsWith("data:image/")) {
+          return { ...l, content: await saveFrameBase64AssetAsync(l.content, `layer_content_${l.id || "asset"}`) };
+        }
+        return l;
+      })
+    );
+  }
+
+  return sanitized;
+}
+
+function validateFrameDocumentSize(frame: any): { valid: boolean; size: number; error?: string } {
+  try {
+    const serialized = JSON.stringify(frame);
+    const byteLength = Buffer.byteLength(serialized, "utf-8");
+    if (byteLength > MAX_FRAME_DOCUMENT_SIZE_BYTES) {
+      return {
+        valid: false,
+        size: byteLength,
+        error: `Frame document size (${Math.round(byteLength / 1024)} KiB) exceeds the allowed limit of 700 KiB (${MAX_FRAME_DOCUMENT_SIZE_BYTES} bytes). Please reduce embedded assets.`,
+      };
+    }
+    return { valid: true, size: byteLength };
+  } catch (err: any) {
+    return { valid: false, size: 0, error: err.message };
+  }
+}
+
+async function saveSingleDynamicFrameAsync(rawFrame: any): Promise<boolean> {
+  if (!rawFrame || !rawFrame.id) {
+    throw new Error("Frame ID is required to save frame document.");
+  }
+  const tombstones = await getDurableFrameTombstones();
+  if (tombstones.has(rawFrame.id) || tombstones.has(rawFrame.name) || FORBIDDEN_DYNAMIC_FRAME_IDS.has(rawFrame.id)) {
+    throw new Error(`Cannot save frame '${rawFrame.id}': ID or name is permanently deleted or forbidden.`);
+  }
+
+  // 1. Sanitize base64 assets to persistent URLs
+  const frame = await sanitizeFrameAssets(rawFrame);
+
+  // 2. Validate serialized document size against 700 KiB limit
+  const sizeValidation = validateFrameDocumentSize(frame);
+  if (!sizeValidation.valid) {
+    throw new Error(sizeValidation.error || "Frame exceeds maximum allowed document size (700 KiB).");
+  }
+
+  // 3. Write individual frame document to Firestore collection 'dynamic_frames'
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    try {
+      const res = await centralDb.writeDoc("dynamic_frames", frame.id, frame);
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore dynamic frame write failed: ${res?.error || res?.statusCode || "Unknown error"}`);
+      }
+    } catch (e: any) {
+      console.error(`[saveSingleDynamicFrameAsync] Durable write error for frame ${frame.id}:`, e.message);
+      if (centralDb.useFirestore) throw e;
+    }
+  }
+
+  // 4. Update local JSON cache
+  try {
+    let local: any[] = [];
+    if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      try {
+        const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) local = parsed;
+      } catch {}
+    }
+    const updated = [frame, ...local.filter((f) => f.id !== frame.id)];
+    fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to update dynamic_frames_db.json cache:", err);
+  }
+
+  return true;
+}
+
+async function deleteSingleDynamicFrameAsync(frameId: string): Promise<boolean> {
+  if (!frameId) return false;
+  await recordDeletedFrameTombstone(frameId);
+
+  // 1. Delete individual frame document from Firestore collection 'dynamic_frames'
+  if (centralDb && typeof centralDb.deleteDoc === "function") {
+    try {
+      await centralDb.deleteDoc("dynamic_frames", frameId);
+    } catch (e: any) {
+      console.warn(`[deleteSingleDynamicFrameAsync] Firestore delete warning for ${frameId}:`, e.message);
+    }
+  }
+
+  // 2. Remove from local JSON cache
+  try {
+    if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const updated = parsed.filter((f) => f.id !== frameId && f.name !== frameId);
+        fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+      }
+    }
+  } catch {}
+
+  return true;
+}
+
 function loadDynamicFramesDatabase(): any[] {
   const tombstones = loadDeletedFramesTombstones();
   try {
@@ -10899,25 +11238,77 @@ function loadDynamicFramesDatabase(): any[] {
 async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
   const tombstones = await getDurableFrameTombstones();
   let frames: any[] = [];
-  if (centralDb && typeof centralDb.readDoc === "function") {
+
+  // 1. Check primary durable storage: Firestore collection 'dynamic_frames' (Per-Frame Documents)
+  if (centralDb && typeof centralDb.listDocs === "function") {
     try {
-      const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
-      const docData = cloudDoc?.data || cloudDoc;
-      if (docData && Array.isArray(docData.frames) && docData.frames.length > 0) {
-        frames = docData.frames;
+      const listRes = await centralDb.listDocs("dynamic_frames", 300);
+      if (listRes && listRes.success && Array.isArray(listRes.documents) && listRes.documents.length > 0) {
+        frames = listRes.documents;
+        // Update local cache
+        try {
+          fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
+        } catch {}
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn("[loadDynamicFramesDatabaseAsync] listDocs dynamic_frames warning:", e.message);
+    }
   }
+
+  // 2. If collection 'dynamic_frames' is empty, check legacy system_config/dynamic_frames or local JSON for migration
   if (frames.length === 0) {
-    try {
-      if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    let legacyFrames: any[] = [];
+    if (centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
+        const docData = cloudDoc?.data || cloudDoc;
+        if (docData && Array.isArray(docData.frames) && docData.frames.length > 0) {
+          legacyFrames = docData.frames;
+        }
+      } catch {}
+    }
+    if (legacyFrames.length === 0 && fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      try {
         const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) frames = parsed;
+        if (Array.isArray(parsed)) legacyFrames = parsed;
+      } catch {}
+    }
+
+    if (legacyFrames.length > 0) {
+      console.log(`[dynamic_frames migration] Migrating ${legacyFrames.length} legacy frames to per-frame collection...`);
+      const validToMigrate = legacyFrames.filter(
+        (f) =>
+          f &&
+          f.id &&
+          !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) &&
+          !tombstones.has(f.id) &&
+          !tombstones.has(f.name) &&
+          !(f.name === "11111" || f.name === "2222" || f.id === "df_sample_11111" || f.id === "df_sample_2222" || f.id === "11111" || f.id === "2222")
+      );
+      for (const f of validToMigrate) {
+        try {
+          await saveSingleDynamicFrameAsync(f);
+          frames.push(f);
+        } catch (mErr: any) {
+          console.warn(`[dynamic_frames migration] Failed to migrate frame ${f.id}:`, mErr.message);
+        }
       }
+    }
+  }
+
+  // 3. Fallback to local cache if Firestore is not available or returned no records
+  if (frames.length === 0 && fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    try {
+      const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) frames = parsed;
     } catch {}
   }
+
   return frames.filter(f =>
+    f &&
+    f.id &&
     !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) &&
     !tombstones.has(f.id) &&
     !tombstones.has(f.name) &&
@@ -10926,20 +11317,20 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
 }
 
 async function saveDynamicFramesDatabaseAsync(frames: any[]): Promise<boolean> {
+  // Update local cache
   try {
     fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
   } catch (err) {
     console.warn("Failed to write dynamic_frames_db.json:", err);
   }
-  if (centralDb && typeof centralDb.writeDoc === "function") {
-    try {
-      const res = await centralDb.writeDoc("system_config", "dynamic_frames", { frames, updatedAt: Date.now() });
-      if (centralDb.useFirestore && (!res || res.success === false)) {
-        throw new Error(`Durable Firestore dynamic frames write failed: ${res?.error || res?.statusCode || 'Unknown error'}`);
+  // Save each frame individually (One Frame, One Firestore Document - never monolithic)
+  for (const f of frames) {
+    if (f && f.id) {
+      try {
+        await saveSingleDynamicFrameAsync(f);
+      } catch (e: any) {
+        console.warn(`[saveDynamicFramesDatabaseAsync] Error saving frame ${f.id}:`, e.message);
       }
-    } catch (e: any) {
-      console.error("[saveDynamicFramesDatabaseAsync] Durable write error:", e.message);
-      if (centralDb.useFirestore) throw e;
     }
   }
   return true;
@@ -11134,19 +11525,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
   try {
     const { aspectRatio, category } = req.query;
     const isMaster = isAuthorizedMasterAdmin(req);
-    const tombstones = await getDurableFrameTombstones();
     let frames = await loadDynamicFramesDatabaseAsync();
-
-    if (frames.length === 0 && centralDb && typeof centralDb.readDoc === "function") {
-      try {
-        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
-        if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
-          frames = cloudDoc.frames
-            .filter((f: any) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && f.id !== 'df_reg_4_5_clean' && !(f.id !== 'graphic_001' && (f.name?.includes('रेगुलर क्लीन') || f.name?.toLowerCase()?.includes('regular clean'))) && !(f.name === '11111' || f.name === '2222' || f.id.includes('11111') || f.id.includes('2222')));
-          await saveDynamicFramesDatabaseAsync(frames);
-        }
-      } catch {}
-    }
 
     // Filter by publication status and exclude sample/test templates unless Master Admin requests all
     let filtered = isMaster
@@ -11199,16 +11578,20 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
     if (tombstones.has(id)) {
       return res.status(404).json({ error: "Frame not found." });
     }
-    let frames = await loadDynamicFramesDatabaseAsync();
-    let frame = frames.find((f) => f.id === id);
 
-    if (!frame && centralDb && typeof centralDb.readDoc === "function") {
+    let frame: any = null;
+    if (centralDb && typeof centralDb.readDoc === "function") {
       try {
-        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
-        if (cloudDoc && Array.isArray(cloudDoc.frames)) {
-          frame = cloudDoc.frames.find((f: any) => f.id === id);
+        const cloudDoc = await centralDb.readDoc("dynamic_frames", id);
+        if (cloudDoc && cloudDoc.success && cloudDoc.data) {
+          frame = cloudDoc.data;
         }
       } catch {}
+    }
+
+    if (!frame) {
+      const frames = await loadDynamicFramesDatabaseAsync();
+      frame = frames.find((f) => f.id === id);
     }
 
     if (!frame) {
@@ -11250,6 +11633,12 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
       return res.status(400).json({ error: `Invalid aspectRatio '${payload.aspectRatio}'. Allowed for ${isVideo ? 'video: 9:16, 1:1, 4:5, 4:3' : 'graphic: 4:5, 9:16, 1:1'}.` });
     }
 
+    const isTestCategory = payload.designCategory === 'TEST_FRAMES' || payload.isTestFrame === true;
+    const isTestFrame = payload.isTestFrame !== undefined ? Boolean(payload.isTestFrame) : isTestCategory;
+    const approvalStatus = payload.approvalStatus || (isTestFrame ? "PENDING_TEST" : "APPROVED");
+    const publicationStatus = isTestFrame ? "draft" : (payload.publicationStatus || "published");
+    const designCategory = payload.designCategory || (isTestFrame ? "TEST_FRAMES" : (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"));
+
     const newFrame = {
       ...payload,
       id: payload.id && !payload.id.startsWith("temp_") ? payload.id : `df_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -11265,15 +11654,15 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
       primaryBackgroundAsset: payload.primaryBackgroundAsset || undefined,
       primaryBackgroundMode: payload.primaryBackgroundMode || 'image',
       primaryBackgroundHex: payload.primaryBackgroundHex || '#0B1329',
-      isTestFrame: payload.isTestFrame !== undefined ? Boolean(payload.isTestFrame) : true,
-      approvalStatus: payload.approvalStatus || (payload.isTestFrame === false ? "APPROVED" : "PENDING_TEST"),
+      isTestFrame,
+      approvalStatus,
       targetCategory: payload.targetCategory || null,
       approvedAt: payload.approvedAt || null,
       approvedBy: payload.approvedBy || null,
       sliceConfig: payload.sliceConfig || null,
-      designCategory: payload.designCategory || (payload.isTestFrame === false ? (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames") : "TEST_FRAMES"),
+      designCategory,
       allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      publicationStatus: payload.publicationStatus || "draft",
+      publicationStatus,
       createdBy: (req as any).user?.email || "breakingnewswala.com@gmail.com",
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -11312,9 +11701,8 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
       poweredByConfig: payload.poweredByConfig,
     };
 
-    const all = await loadDynamicFramesDatabaseAsync();
-    const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
-    await saveDynamicFramesDatabaseAsync(updated);
+    // Save individual frame to durable Firestore storage
+    await saveSingleDynamicFrameAsync(newFrame);
 
     return res.json({ success: true, frame: newFrame });
   } catch (err: any) {
@@ -11327,14 +11715,25 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
   try {
     const { id } = req.params;
     const payload = req.body || {};
-    const all = await loadDynamicFramesDatabaseAsync();
-    const existingIdx = all.findIndex((f) => f.id === id);
 
-    if (existingIdx === -1) {
+    let existing: any = null;
+    if (centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudRes = await centralDb.readDoc("dynamic_frames", id);
+        if (cloudRes && cloudRes.success && cloudRes.data) {
+          existing = cloudRes.data;
+        }
+      } catch {}
+    }
+    if (!existing) {
+      const all = await loadDynamicFramesDatabaseAsync();
+      existing = all.find((f) => f.id === id);
+    }
+
+    if (!existing) {
       return res.status(404).json({ error: "Frame not found." });
     }
 
-    const existing = all[existingIdx];
     const isVideo = payload.frameMode === 'video' || payload.frameType === 'video' || existing.frameMode === 'video' || existing.frameType === 'video';
     const targetRatio = payload.aspectRatio || existing.aspectRatio;
     const allowedRatios = isVideo ? ['9:16', '1:1', '4:5', '4:3'] : ['4:5', '9:16', '1:1'];
@@ -11344,8 +11743,16 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
 
     const updatedFrame = deepMergeFrameConfig(existing, payload);
 
-    all[existingIdx] = updatedFrame;
-    await saveDynamicFramesDatabaseAsync(all);
+    if (payload.designCategory === 'TEST_FRAMES' || payload.isTestFrame === true) {
+      updatedFrame.isTestFrame = true;
+      updatedFrame.designCategory = 'TEST_FRAMES';
+      if (!payload.approvalStatus) {
+        updatedFrame.approvalStatus = updatedFrame.approvalStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_TEST';
+      }
+    }
+
+    // Save single frame document
+    await saveSingleDynamicFrameAsync(updatedFrame);
 
     return res.json({ success: true, frame: updatedFrame });
   } catch (err: any) {
@@ -11360,21 +11767,9 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, 
     if (id === 'graphic_001') {
       return res.status(400).json({ error: "सुरक्षित डिफ़ॉल्ट फ्रेम 'Regular Clean News Frame' को हटाया नहीं जा सकता।" });
     }
-    
-    // Durable Firestore and local tombstone recording
-    let all = await loadDynamicFramesDatabaseAsync();
-    const target = all.find(f => f.id === id || f.name === id);
-    if (target) {
-      if (target.id) await recordDeletedFrameTombstone(target.id);
-      if (target.name === '11111' || target.name === '2222' || target.id === '11111' || target.id === '2222') {
-        await recordDeletedFrameTombstone(target.name);
-      }
-    } else {
-      await recordDeletedFrameTombstone(id);
-    }
 
-    all = all.filter((f) => f.id !== id && f.name !== id && !(id === '11111' && f.id.includes('11111')) && !(id === '2222' && f.id.includes('2222')));
-    await saveDynamicFramesDatabaseAsync(all);
+    // Durable Firestore and local tombstone recording + document deletion
+    await deleteSingleDynamicFrameAsync(id);
 
     // Also remove from news_template_configs.json if present
     const newsTemplateFile = path.join(process.cwd(), "news_template_configs.json");
@@ -11974,34 +12369,89 @@ app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
 // --- SECURE AUTHENTICATION ENDPOINT ---
 app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
-    const { identifier, password, googleUid, profileData } = req.body;
+    const { identifier, password, googleUid, firebaseToken, idToken, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
 
-    // 1. Google OAuth Authentication (Google UID)
-    if (googleUid) {
-      const isSuper = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, '') === "breakingnewswala.com@gmail.com";
-      const isSubAdmin = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, '') === "admin.ainewsmaker@gmail.com";
+    // 1. Google OAuth / Firebase ID Token Authentication
+    if (googleUid || firebaseToken || idToken) {
+      // FIX 1: Never trust user-supplied googleUid or mock string. Require cryptographic token verification.
+      const candidateToken = firebaseToken || idToken || (
+        req.headers.authorization && req.headers.authorization.startsWith("Bearer ")
+          ? req.headers.authorization.slice(7).trim()
+          : ""
+      );
+
+      if (!candidateToken) {
+        return res.status(401).json({
+          success: false,
+          error: "प्रमाणीकरण विफल: Google लॉगिन के लिए वैध Firebase ID टोकन आवश्यक है।",
+        });
+      }
+
+      if (!firebaseAdminAuth) {
+        return res.status(503).json({
+          success: false,
+          error: "प्रमाणीकरण सेवा अस्थायी रूप से अनुपलब्ध है।",
+        });
+      }
+
+      let decoded: any;
+      try {
+        decoded = await firebaseAdminAuth.verifyIdToken(candidateToken, true);
+      } catch (tokenErr: any) {
+        return res.status(401).json({
+          success: false,
+          error: "अवैध या समाप्त टोकन। कृपया पुनः लॉगिन करें।",
+        });
+      }
+
+      if (!decoded || !decoded.email) {
+        return res.status(401).json({
+          success: false,
+          error: "प्रमाणीकरण टोकन में वैध ईमेल नहीं मिला।",
+        });
+      }
+
+      const verifiedEmail = decoded.email.toLowerCase().trim();
+      const verifiedUid = decoded.uid;
+
+      // Reject token if identifier was supplied and differs from the verified token email
+      if (cleanId && cleanId !== verifiedEmail) {
+        return res.status(401).json({
+          success: false,
+          error: "टोकन पहचानकर्ता मेल नहीं खाता।",
+        });
+      }
+
+      // Validate administrative privileges against server-side registered accounts
+      const masterUsers = loadUsersMasterDatabase();
+      const registeredUser = masterUsers.find(
+        (u: any) => (u.email && u.email.toLowerCase().trim() === verifiedEmail) || (u.userId && u.userId === verifiedUid)
+      );
+
+      const isSuper = verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL;
+      const isSubAdmin = verifiedEmail === SUB_ADMIN_EMAIL;
       const isAdmin = isSuper || isSubAdmin;
       const release = await userDbLock.acquire();
       let savedUser: AuthoritativeUser;
       try {
         const allProfiles = loadProfilesDatabase();
         const existing = Object.values(allProfiles).find(
-          (p) => (p.uid && p.uid === googleUid) || (p.userId && p.userId === googleUid) || (p.email && p.email.toLowerCase() === cleanId)
+          (p) => (p.uid && (p.uid === verifiedUid || p.uid === googleUid)) || (p.userId && (p.userId === verifiedUid || p.userId === googleUid)) || (p.email && p.email.toLowerCase() === verifiedEmail)
         );
 
         // Check blocked account
-        const accessCheck = checkUserAccess(cleanId);
+        const accessCheck = checkUserAccess(verifiedEmail);
         if ((existing && existing.isBlocked) || accessCheck.blocked) {
           return res.status(403).json({
             success: false,
             isBlocked: true,
             error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
-            user: existing || { email: cleanId, isBlocked: true },
+            user: existing || { email: verifiedEmail, isBlocked: true },
           });
         }
 
-        const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
+        const isDeletedTombstoned = isUserTombstoned(verifiedEmail) || isUserTombstoned(verifiedUid);
 
         const existingLogo = String(existing?.channelLogoUrl || existing?.channelLogoPngUrl || "").trim();
         const hasRealLogo = Boolean(existingLogo && !existingLogo.includes("ai_news_maker_logo.png"));
@@ -12035,14 +12485,14 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         }
 
         const userPayload: any = {
-          userId: existing?.userId || (cleanId ? `usr_${Buffer.from(cleanId).toString('hex').slice(0, 16)}` : googleUid),
-          uid: existing?.uid || googleUid,
-          email: cleanId,
+          userId: existing?.userId || verifiedUid,
+          uid: verifiedUid,
+          email: verifiedEmail,
           username: safeUsername,
-          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
-          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
-          role: isSuper ? "superadmin" : (isSubAdmin ? "admin" : (existing?.role || "user")),
-          tier: isSuper ? "ultra" : (isSubAdmin ? "ultra" : (existing?.tier || "basic")),
+          fullName: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
+          name: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
+          role: isSuper ? "superadmin" : (isSubAdmin ? "admin" : (registeredUser?.role || existing?.role || "user")),
+          tier: isSuper ? "ultra" : (isSubAdmin ? "ultra" : (registeredUser?.tier || existing?.tier || "basic")),
           planName: isSuper ? "VIP DESK" : (isSubAdmin ? "VIP DESK" : (existing?.planName || "BASIC")),
           channelName: isSuper ? "ब्रेकिंग न्यूज़ वाला" : (isSubAdmin ? "एआई न्यूज़ मेकर" : (isProfileComplete ? (existing?.channelNameHi || existing?.channelName || "") : (profileData?.channelName || ""))),
           channelNameHi: isSuper ? "ब्रेकिंग न्यूज़ वाला" : (isSubAdmin ? "एआई न्यूज़ मेकर" : (isProfileComplete ? (existing?.channelNameHi || "") : (profileData?.channelNameHi || ""))),
@@ -12066,8 +12516,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       }
 
       const token = generateAuthToken({
-        userId: savedUser.userId || googleUid,
-        email: savedUser.email || cleanId,
+        userId: savedUser.userId || verifiedUid,
+        email: savedUser.email || verifiedEmail,
         role: savedUser.role || "user",
         username: savedUser.username,
       });
@@ -12115,12 +12565,24 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
     }
 
     let isPasswordValid = false;
+    let needsRehash = false;
     if (credEntry && credEntry.salt && credEntry.hash) {
-      isPasswordValid = verifyPassword(String(password), credEntry.salt, credEntry.hash);
+      const pwCheck = verifyPassword(String(password), credEntry.salt, credEntry.hash);
+      isPasswordValid = pwCheck.valid;
+      needsRehash = pwCheck.needsRehash;
     }
 
     if (!isPasswordValid) {
       return res.status(401).json({ error: "अमान्य यूज़रनेम या पासवर्ड" });
+    }
+
+    if (needsRehash && credEntry) {
+      try {
+        const upgraded = hashPassword(String(password), credEntry.salt, PBKDF2_ITERATIONS);
+        credEntry.hash = upgraded.hash;
+        (credEntry as any).iterations = PBKDF2_ITERATIONS;
+        saveCredentialsDatabase(creds);
+      } catch {}
     }
 
     const user = match || {
@@ -12889,21 +13351,22 @@ app.post("/api/admin/videos/upload-thumbnail", requireAdminMiddleware, async (re
 });
 
 // POST /api/upload-font - Upload custom font strictly for VIP-Dash (and Admin) users
-app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
+app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
   try {
-    if (!(req as any).user) {
-      (req as any).user = getAuthenticatedUser(req);
+    const authUser = (req as any).user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ success: false, error: "प्रमाणीकरण आवश्यक है।" });
     }
-    const explicitTier = (req.body?.userTier || req.headers["x-user-tier"])?.toString().toLowerCase().trim();
-    const userTier = (
-      explicitTier ||
-      (req as any).user?.tier ||
-      (req as any).user?.subscriptionTier ||
-      "basic"
-    ).toString().toLowerCase().trim();
 
-    const isExplicitTest = Boolean(explicitTier);
-    const isAdmin = !isExplicitTest && ((req as any).user?.role === "admin" || (req as any).user?.role === "superadmin");
+    const cleanEmail = authUser.email.toLowerCase().trim();
+    const allProfiles = loadProfilesDatabase();
+    const profile = allProfiles[cleanEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanEmail);
+    const users = loadUsersMasterDatabase();
+    const dbUser = users.find((u: any) => u.email && u.email.toLowerCase().trim() === cleanEmail);
+
+    const userRole = authUser.role || profile?.role || dbUser?.role || "user";
+    const isAdmin = userRole === "admin" || userRole === "superadmin" || isAuthorizedAdmin(req);
+    const userTier = (dbUser?.tier || profile?.tier || authUser.tier || "basic").toString().toLowerCase().trim();
     const isVipDash = isAdmin || userTier === "vip_dash" || userTier === "vip-dash" || userTier === "vip desk" || userTier === "ultra" || userTier === "vip";
 
     if (!isVipDash) {
@@ -22720,14 +23183,27 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
 });
 
 // Fetch user active frame unlocks
-app.get("/api/wallet/frame-unlocks", (req, res) => {
+app.get("/api/wallet/frame-unlocks", requireAuthMiddleware, (req, res) => {
   try {
-    const email = (req.query.email || "").toString().toLowerCase().trim();
-    if (!email) {
-      return res.json({ success: true, unlocks: [] });
+    const authUser = (req as any).user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ error: "प्रमाणीकरण आवश्यक है" });
     }
+    const requestingEmail = authUser.email.toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req);
+
+    const queryEmail = (req.query.email || "").toString().toLowerCase().trim();
+    let targetEmail = requestingEmail;
+    if (queryEmail && queryEmail !== requestingEmail) {
+      if (isAdmin) {
+        targetEmail = queryEmail;
+      } else {
+        return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते के फ्रेम अनलॉक देख सकते हैं।" });
+      }
+    }
+
     const rDb = loadRewardsDatabase();
-    const userUnlocks = rDb.frameUnlocks?.[email] || {};
+    const userUnlocks = rDb.frameUnlocks?.[targetEmail] || {};
     const now = Date.now();
     const activeFrameIds = Object.keys(userUnlocks).filter((fId) => userUnlocks[fId]?.expiresAt > now);
     return res.json({
@@ -25700,7 +26176,10 @@ async function startServer() {
           const articleId = (
             query.article ||
             query.news ||
-            (req.path.startsWith("/news/") ? req.path.replace("/news/", "") : "")
+            query.newsId ||
+            query.articleId ||
+            (req.path.startsWith("/news/") ? req.path.replace("/news/", "") : "") ||
+            (req.path.startsWith("/article/") ? req.path.replace("/article/", "") : "")
           ).toString().trim();
           const cleanBase = "https://www.ainewsmaker.online";
 
@@ -25715,15 +26194,48 @@ async function startServer() {
           // Check if article requested
           if (articleId) {
             try {
+              let found: any = null;
               const posts = loadNewsDatabase();
-              const found = posts.find((p) => p && (p.id === articleId || (p.docId && p.docId === articleId) || (p.title && encodeURIComponent(p.title) === articleId)));
+              if (Array.isArray(posts)) {
+                found = posts.find((p) => p && (
+                  p.id === articleId ||
+                  (p.docId && p.docId === articleId) ||
+                  (p.title && encodeURIComponent(p.title) === articleId)
+                ));
+              }
+
+              if (!found) {
+                try {
+                  const editorialDb = loadApprovedEditorialDatabase();
+                  if (editorialDb && editorialDb[articleId]) {
+                    found = { id: articleId, ...editorialDb[articleId] };
+                  }
+                } catch {}
+              }
+
               if (found) {
                 const safeTitle = (found.title || found.approvedHeadline || "ताज़ा समाचार").trim();
                 const safeSummary = (found.summary || found.approvedCaptionDetailed || found.captionShort || safeTitle).trim();
                 title = `${safeTitle} — AI News Maker`;
                 description = safeSummary.slice(0, 280);
-                canonical = `${cleanBase}/newsroom?article=${encodeURIComponent(found.id)}`;
-                if (found.imageUrl) ogImage = found.imageUrl;
+                canonical = `${cleanBase}/newsroom?article=${encodeURIComponent(found.id || articleId)}`;
+
+                // Strict Thumbnail Selection Priority (Section 6.2):
+                // 1. Current News Primary Thumbnail (imageUrl / thumbnailUrl)
+                // 2. Admin uploaded / approved graphic (approvedGraphicUrl / customThumbnailUrl / adminThumbnailUrl)
+                // 3. Other valid news thumbnail (image)
+                // 4. Default approved channel branding fallback
+                let selectedThumb = found.imageUrl || found.thumbnailUrl || found.approvedGraphicUrl || found.customThumbnailUrl || found.adminThumbnailUrl || found.image;
+                if (selectedThumb && typeof selectedThumb === "string" && selectedThumb.trim()) {
+                  let cleanThumb = selectedThumb.trim();
+                  if (cleanThumb.startsWith("/")) {
+                    cleanThumb = `${cleanBase}${cleanThumb}`;
+                  }
+                  ogImage = cleanThumb;
+                } else {
+                  ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+                }
+
                 ogType = "article";
 
                 const isoDate = found.timestamp ? new Date(found.timestamp).toISOString() : new Date().toISOString();
@@ -25735,6 +26247,7 @@ async function startServer() {
                   "image": [ogImage],
                   "datePublished": isoDate,
                   "dateModified": isoDate,
+                  "inLanguage": "hi",
                   "author": [
                     {
                       "@type": "Organization",
@@ -25745,6 +26258,7 @@ async function startServer() {
                   "publisher": {
                     "@type": "NewsMediaOrganization",
                     "name": "AI News Maker",
+                    "url": cleanBase,
                     "logo": {
                       "@type": "ImageObject",
                       "url": `${cleanBase}/assets/breaking_news_wala_logo.png`,
@@ -25761,7 +26275,7 @@ async function startServer() {
                       <h1 style="font-size:26px;font-weight:700;margin:15px 0;">${safeTitle}</h1>
                       <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker संपादकीय डेस्क</p>
                     </header>
-                    ${found.imageUrl ? `<figure><img src="${found.imageUrl}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
+                    ${ogImage && !ogImage.includes('breaking_news_wala_logo.png') ? `<figure><img src="${ogImage}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
                     <div class="content" style="line-height:1.7;font-size:16px;">
                       <p>${safeSummary}</p>
                     </div>
@@ -25816,18 +26330,33 @@ async function startServer() {
           modified = modified.replace(/<meta\s+property=["']og:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:title" content="${title.replace(/"/g, '&quot;')}" />`);
           modified = modified.replace(/<meta\s+property=["']og:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />`);
           modified = modified.replace(/<meta\s+property=["']og:url["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:url" content="${canonical}" />`);
-          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />\n    <meta property="og:image:width" content="1200" />\n    <meta property="og:image:height" content="630" />\n    <meta property="og:image:alt" content="${title.replace(/"/g, '&quot;')}" />`);
           modified = modified.replace(/<meta\s+property=["']og:type["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:type" content="${ogType}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:card["']\s+content=["'][^"']*["']\s*\/?>/i, '<meta name="twitter:card" content="summary_large_image" />');
           modified = modified.replace(/<meta\s+name=["']twitter:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:title" content="${title.replace(/"/g, '&quot;')}" />`);
           modified = modified.replace(/<meta\s+name=["']twitter:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />`);
-          modified = modified.replace(/<meta\s+name=["']twitter:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:image" content="${ogImage}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:image" content="${ogImage}" />\n    <meta name="twitter:image:alt" content="${title.replace(/"/g, '&quot;')}" />`);
+
+          // External Ownership Verification Tags (Google Search Console & Bing)
+          const gscToken = process.env.GOOGLE_SITE_VERIFICATION || "";
+          const bingToken = process.env.MS_VALIDATE_TOKEN || process.env.BING_SITE_AUTH_TOKEN || "";
+          let verificationMetaTags = "";
+          if (gscToken) {
+            verificationMetaTags += `\n    <meta name="google-site-verification" content="${gscToken}" />`;
+          }
+          if (bingToken) {
+            verificationMetaTags += `\n    <meta name="msvalidate.01" content="${bingToken}" />`;
+          }
+          if (verificationMetaTags) {
+            modified = modified.replace("</head>", `${verificationMetaTags}\n  </head>`);
+          }
 
           if (extraJsonLd) {
             modified = modified.replace("</head>", `${extraJsonLd}\n  </head>`);
           }
 
           const ua = (req.headers["user-agent"] || "").toLowerCase();
-          const isBot = /googlebot|bingbot|yandex|duckduckbot|slurp|baiduspider|twitterbot|facebookexternalhit|whatsapp|linkedinbot|embedly|quora link preview|showyoubot|outbrain/i.test(ua);
+          const isBot = /googlebot|bingbot|yandex|duckduckbot|slurp|baiduspider|twitterbot|facebookexternalhit|whatsapp|linkedinbot|embedly|quora link preview|showyoubot|outbrain|telegrambot|discordbot|slackbot|applebot/i.test(ua);
           if (isBot && prerenderContent) {
             modified = modified.replace('<div id="root">', `<div id="root">${prerenderContent}`);
           }

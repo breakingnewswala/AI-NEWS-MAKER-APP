@@ -20,6 +20,9 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "emulators": {
     "singleProjectMode": false,
     "firestore": {

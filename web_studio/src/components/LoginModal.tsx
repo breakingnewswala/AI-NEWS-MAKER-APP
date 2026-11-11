@@ -140,7 +140,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   if (!isOpen) return null;
 
   // Helper to process authenticated Google User
-  const processGoogleUser = async (rawEmail: string, displayName?: string) => {
+  const processGoogleUser = async (rawEmail: string, displayName?: string, idToken?: string) => {
       // 1. Strict whitespace cleaning
       const cleanEmail = rawEmail.replace(/\s+/g, '').trim().toLowerCase();
 
@@ -196,12 +196,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       // Authenticate & sync with Cloud backend /api/auth/login
       try {
+        const activeToken = idToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_token') : null);
         const res = await fetch(getApiUrl('/api/auth/login'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(activeToken ? { Authorization: `Bearer ${activeToken}` } : {}),
+          },
           body: JSON.stringify({
-            googleUid: `goog_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`,
             identifier: cleanEmail,
+            firebaseToken: activeToken || undefined,
             profileData: {
               email: cleanEmail,
               name: user.name,
@@ -333,8 +337,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       provider.setCustomParameters({ prompt: 'select_account' });
       signInWithPopup(auth, provider).then(async (userCredential) => {
         if (userCredential?.user?.email) {
+          let idToken = '';
           try {
-            const idToken = await userCredential.user.getIdToken();
+            idToken = (await userCredential.user.getIdToken()) || '';
             if (idToken) {
               safeLocalStorageSet('reporter_auth_token', idToken);
             }
@@ -343,7 +348,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           }
           processGoogleUser(
             userCredential.user.email,
-            userCredential.user.displayName || undefined
+            userCredential.user.displayName || undefined,
+            idToken
           );
         }
       }).catch((firebaseErr: any) => {
@@ -717,23 +723,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <span>Google से जारी रखें (Continue with Google)</span>
               </button>
 
-              {/* Master Admin Fast 1-Click Access */}
+              {/* Master Admin Fast Access */}
               <div className="pt-2 border-t border-neutral-800">
                 <button
                   type="button"
                   onClick={() => {
-                    setLoading(true);
-                    setErrorMessage(null);
-                    processGoogleUser('breakingnewswala.com@gmail.com', 'ब्रेकिंग न्यूज़ वाला');
+                    setUsername('breakingnewswala.com@gmail.com');
+                    setErrorMessage('कृपया मास्टर एडमिन का अधिकृत पासवर्ड दर्ज करें।');
                   }}
                   disabled={loading}
                   className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-yellow-400/60"
                 >
                   <Crown className="w-4 h-4 text-yellow-300" />
-                  <span>👑 मास्टर एडमिन डायरेक्ट लॉगिन (breakingnewswala.com@gmail.com)</span>
+                  <span>👑 मास्टर एडमिन लॉगिन (breakingnewswala.com@gmail.com)</span>
                 </button>
                 <p className="text-[10px] text-amber-400/70 text-center mt-1">
-                  बिना पॉपअप के 1-क्लिक में मास्टर एडमिन एक्सेस
+                  मास्टर एडमिन आईडी लोड करें और अपना सुरक्षित पासवर्ड दर्ज करें
                 </p>
               </div>
 

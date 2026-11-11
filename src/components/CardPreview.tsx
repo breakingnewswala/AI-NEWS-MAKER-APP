@@ -11,6 +11,7 @@ import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
 import { getDynamicFrameById } from '../lib/dynamicFramesManager';
+import { formatCleanLocationText } from '../lib/locationUtils';
 import {
   computeCanonicalHeadlineLayout,
   getTemplateLayoutSpec,
@@ -1085,15 +1086,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         )}
           </>
         ) : (
-          /* Neutral Blank Photo Area (Phase 1.2 Specification) */
-          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none bg-slate-900/90 border-2 border-dashed border-slate-700/60 rounded-lg">
-            <div className="w-14 h-14 rounded-full bg-slate-800/90 border border-slate-700/80 flex items-center justify-center mb-3 shadow-inner">
-              <Camera className="w-7 h-7 text-slate-400 stroke-[1.75]" />
+          /* Neutral Blank Photo Area (Single clean state) */
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none bg-slate-950/40 backdrop-blur-xs">
+            <div className="w-14 h-14 rounded-full bg-slate-900/80 border border-slate-700/60 flex items-center justify-center mb-3 shadow-lg">
+              <Camera className="w-7 h-7 text-slate-300 stroke-[1.75]" />
             </div>
-            <span className="text-sm sm:text-base font-bold text-slate-200 font-['Noto_Sans_Devanagari']">
+            <span className="text-sm sm:text-base font-bold text-white font-['Noto_Sans_Devanagari'] drop-shadow-md">
               फोटो जोड़ने के लिए स्टेप 4 पर जाएँ
             </span>
-            <span className="text-[11px] text-slate-400 font-['Noto_Sans_Devanagari'] mt-1">
+            <span className="text-[11px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-1 drop-shadow-sm">
               (यहाँ आपकी चुनी गई खबर की फोटो प्रदर्शित होगी)
             </span>
           </div>
@@ -1346,9 +1347,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 />
               </div>
               <span className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate inline-block translate-y-[2px] leading-tight">
-                {card.location && card.location.trim() && card.location.trim() !== 'लोकेशन'
-                  ? card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()
-                  : 'लोकेशन'}
+                {formatCleanLocationText(card.location) || 'लोकेशन'}
               </span>
             </div>
           )}
@@ -1401,7 +1400,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 {Boolean(
                   card.headline &&
                   card.headline.trim().length > 0 &&
-                  card.headline.trim() !== 'ताज़ा समाचार' &&
                   !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
                   !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
                   !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
@@ -1452,7 +1450,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
                   </div>
                   <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate inline-block translate-y-[2px] leading-tight">
-                    {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
+                    {formatCleanLocationText(card.location)}
                   </span>
                 </div>
               )}
@@ -1576,7 +1574,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-neutral-950 stroke-[2.5]" />
                 </div>
                 <span className="font-bold text-xs sm:text-sm text-white font-['Noto_Sans_Devanagari'] tracking-wide truncate inline-block translate-y-[2px] leading-tight">
-                  {card.location.replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '').replace(/[:\-–—]+$/, '').trim()}
+                  {formatCleanLocationText(card.location)}
                 </span>
               </div>
             )}
@@ -3116,7 +3114,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 >
                   <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white shrink-0" />
                   <span className="font-black font-['Baloo_2'] tracking-wide truncate">
-                    {card.location}
+                    {formatCleanLocationText(card.location)}
                   </span>
                 </div>
               ) : (
@@ -3173,7 +3171,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               >
                 <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white shrink-0" />
                 <span className="font-black font-['Baloo_2'] tracking-wide truncate">
-                  {card.location}
+                  {formatCleanLocationText(card.location)}
                 </span>
               </div>
             ) : (
@@ -3394,6 +3392,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
               {/* Dynamic Location Badge */}
               {df.headerConfig?.showLocation && card.location && card.showLocation !== false && (() => {
+                const cleanLoc = formatCleanLocationText(card.location);
                 const badgeAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
                 const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000');
                 return badgeAsset ? (
@@ -3434,7 +3433,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                             fontSize: `${Math.max(9, Math.round((df.headerConfig.typographyConfig?.fontSize || df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                           }}
                         >
-                          {card.location}
+                          {cleanLoc}
                         </span>
                       </div>
                     ) : (
@@ -3454,7 +3453,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                             fontSize: `${Math.max(9, Math.round((df.headerConfig.typographyConfig?.fontSize || df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                           }}
                         >
-                          {card.location}
+                          {cleanLoc}
                         </span>
                       </div>
                     )}
@@ -3476,7 +3475,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     }}
                   >
                     {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3 h-3 mr-1 inline shrink-0" />}
-                    <span className="truncate">{card.location}</span>
+                    <span className="truncate">{cleanLoc}</span>
                   </div>
                 );
               })()}
@@ -3726,7 +3725,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               >
                 <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white fill-white shrink-0" />
                 <span className="font-black font-['Baloo_2'] tracking-wide truncate">
-                  {card.location}
+                  {formatCleanLocationText(card.location)}
                 </span>
               </div>
             ) : (

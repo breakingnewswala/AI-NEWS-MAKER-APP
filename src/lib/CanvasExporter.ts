@@ -22,6 +22,7 @@ import {
 import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 import { getApiUrl } from './apiConfig';
 import { getDynamicFrameById } from './dynamicFramesManager';
+import { formatCleanLocationText } from './locationUtils';
 import { DynamicFrame } from '../types/dynamicFrame';
 
 const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
@@ -1356,11 +1357,12 @@ function drawLocationBadge(
   locationText: string
 ) {
   if (!locationText) return;
+  const cleanLoc = formatCleanLocationText(locationText) || 'लोकेशन';
   ctx.save();
   ctx.font = '800 22px "Baloo 2", "Noto Sans Devanagari", sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const textW = ctx.measureText(locationText).width;
+  const textW = ctx.measureText(cleanLoc).width;
   const badgeW = textW + 56;
   const badgeH = 40;
 
@@ -1391,7 +1393,7 @@ function drawLocationBadge(
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(locationText, x + 34, y + badgeH / 2 + 3);
+  ctx.fillText(cleanLoc, x + 34, y + badgeH / 2 + 3);
 
   ctx.restore();
 }
@@ -1706,7 +1708,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
         if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
           locColor = '#000000';
         }
-        const cleanLocText = (card.location || '').replace(/मध्यप्रदेश/g, 'मध्य प्रदेश');
+        const cleanLocText = formatCleanLocationText(card.location || '');
         ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
         const measuredTextW = ctx.measureText(cleanLocText).width;
 
@@ -2302,10 +2304,7 @@ async function drawGraphic001Canvas(
   // 4. TOP-RIGHT LOCATION PILL (Single dynamic location pill)
   if (card.showLocation !== false) {
     const rawLoc = card.location || '';
-    const cleanLoc = rawLoc
-      .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
-      .replace(/[:\-–—]+$/, '')
-      .trim() || 'लोकेशन';
+    const cleanLoc = formatCleanLocationText(rawLoc) || 'लोकेशन';
 
     ctx.save();
     ctx.font = '800 26px "Noto Sans Devanagari", sans-serif';
@@ -2400,7 +2399,6 @@ async function drawGraphic001Canvas(
   const hasUserHeadline = Boolean(
     card.headline &&
     card.headline.trim().length > 0 &&
-    card.headline.trim() !== 'ताज़ा समाचार' &&
     !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
     !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
     !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
@@ -2760,10 +2758,7 @@ async function drawGraphic002Canvas(
 
     // Location text (Clean actual location only)
     const locTextX = locBoxX + 66;
-    const cleanLoc = (card.location || '')
-      .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
-      .replace(/[:\-–—]+$/, '')
-      .trim();
+    const cleanLoc = formatCleanLocationText(card.location || '');
     ctx.fillStyle = '#000000';
     ctx.font = '900 24px "Noto Sans Devanagari", "Poppins", sans-serif';
     ctx.textAlign = 'left';
@@ -3239,10 +3234,7 @@ async function drawGraphic003Canvas(
 
     // Location text & date (Clean actual location only)
     const locTextX = locBoxX + 66;
-    const cleanLoc = (card.location || '')
-      .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, '')
-      .replace(/[:\-–—]+$/, '')
-      .trim();
+    const cleanLoc = formatCleanLocationText(card.location || '');
     ctx.fillStyle = '#000000';
     ctx.font = '900 24px "Noto Sans Devanagari", "Poppins", sans-serif';
     ctx.textAlign = 'left';

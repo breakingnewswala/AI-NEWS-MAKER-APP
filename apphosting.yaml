@@ -31,6 +31,10 @@ env:
     value: "false"
     availability:
       - BUILD
+  - variable: SESSION_SECRET
+    secret: SESSION_SECRET
+    availability:
+      - RUNTIME
   - variable: CASHFREE_APP_ID
     secret: CASHFREE_APP_ID
     availability:

@@ -26,21 +26,37 @@ service cloud.firestore {
 
     function isMasterAdminEmail() {
       return isSignedIn() && (
-        request.auth.token.email == 'breakingnewswala.com@gmail.com' ||
-        request.auth.token.email == 'breakingnewsvala.com@gmail.com'
+        (request.auth.token.email == 'breakingnewswala.com@gmail.com' ||
+         request.auth.token.email == 'breakingnewsvala.com@gmail.com') &&
+        request.auth.token.email_verified == true
       );
     }
 
     function isAdmin() {
       return isSignedIn() && (
         isMasterAdminEmail() ||
-        request.auth.token.email == 'admin.ainewsmaker@gmail.com' ||
+        (request.auth.token.email == 'admin.ainewsmaker@gmail.com' && request.auth.token.email_verified == true) ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isUnchangedOrAdmin(field) {
+      return isAdmin() || (
+        (field in existing() && field in incoming() && incoming()[field] == existing()[field]) ||
+        (!(field in existing()) && (!(field in incoming()) || incoming()[field] == null))
+      );
+    }
+
+    function isAllowedInitialRole() {
+      return isAdmin() || incoming().role == null || incoming().role == 'reporter' || incoming().role == 'user';
+    }
+
+    function isAllowedInitialTier() {
+      return isAdmin() || incoming().tier == null || incoming().tier == 'free' || incoming().tier == 'basic';
     }
 
     function isValidNewsPost(data) {
@@ -115,10 +131,12 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow create: if (isOwner(userId) || isAdmin())
                     && isValidUserProfile(incoming())
-                    && (incoming().role == null || incoming().role == 'reporter' || incoming().role == 'user' || isAdmin());
+                    && isAllowedInitialRole()
+                    && isAllowedInitialTier();
       allow update: if (isOwner(userId) || isAdmin())
                     && isValidUserProfile(incoming())
-                    && (incoming().role == existing().role || isAdmin());
+                    && isUnchangedOrAdmin('role')
+                    && isUnchangedOrAdmin('tier');
       allow delete: if isAdmin();
 
       // Nested Drafts subcollection

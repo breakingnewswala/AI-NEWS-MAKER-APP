@@ -1231,31 +1231,59 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const handleRotateActiveLayer = (deg: number) => {
     if (isLayoutLocked) return;
     if (!selectedLayerId) return;
-    const cleanDeg = (deg + 360) % 360;
+    const cleanDeg = ((deg % 360) + 360) % 360;
+
+    let updatedRect: any = null;
     setLayers((prev) =>
-      prev.map((l) => (l.id === selectedLayerId ? { ...l, rotation: cleanDeg } : l))
+      prev.map((l) => {
+        if (l.id !== selectedLayerId) return l;
+        const w = l.rect.width;
+        const h = l.rect.height;
+        const rad = (cleanDeg * Math.PI) / 180;
+        const halfEx = (Math.abs(w * Math.cos(rad)) + Math.abs(h * Math.sin(rad))) / 2;
+        const halfEy = (Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad))) / 2;
+
+        const cx = l.rect.x + w / 2;
+        const cy = l.rect.y + h / 2;
+        const minX = safeZoneConfig.enabled ? safeZoneConfig.leftMarginPct : 0;
+        const maxX = safeZoneConfig.enabled ? (100 - safeZoneConfig.rightMarginPct) : 100;
+        const minY = safeZoneConfig.enabled ? safeZoneConfig.topMarginPct : 0;
+        const footerHeightPct = footerConfig.footerHeightRatio * 100;
+        const maxSafeY = safeZoneConfig.enabled ? (100 - safeZoneConfig.bottomMarginPct) : (100 - footerHeightPct);
+
+        const minAllowedCx = minX + halfEx;
+        const maxAllowedCx = maxX - halfEx;
+        const minAllowedCy = minY + halfEy;
+        const maxAllowedCy = maxSafeY - halfEy;
+
+        const clampedCx = minAllowedCx > maxAllowedCx ? (minX + maxX) / 2 : Math.max(minAllowedCx, Math.min(maxAllowedCx, cx));
+        const clampedCy = minAllowedCy > maxAllowedCy ? (minY + maxSafeY) / 2 : Math.max(minAllowedCy, Math.min(maxAllowedCy, cy));
+        updatedRect = { ...l.rect, x: Math.round((clampedCx - w / 2) * 10) / 10, y: Math.round((clampedCy - h / 2) * 10) / 10 };
+
+        return { ...l, rotation: cleanDeg, rect: updatedRect };
+      })
     );
 
     if (selectedLayerId.startsWith('layer_photo_')) {
       const slotId = selectedLayerId.replace('layer_photo_', '');
       setPhotoSlots((prev) =>
-        prev.map((s) => (s.id === slotId ? { ...s, rotation: cleanDeg } : s))
+        prev.map((s) => (s.id === slotId ? { ...s, rotation: cleanDeg, ...(updatedRect ? { rect: updatedRect } : {}) } : s))
       );
     } else if (selectedLayerId.startsWith('layer_text_')) {
       const slotId = selectedLayerId.replace('layer_text_', '');
       setTextSlots((prev) =>
-        prev.map((s) => (s.id === slotId ? { ...s, rotation: cleanDeg } : s))
+        prev.map((s) => (s.id === slotId ? { ...s, rotation: cleanDeg, ...(updatedRect ? { rect: updatedRect } : {}) } : s))
       );
     } else if (selectedLayerId === 'layer_logo') {
-      setHeaderConfig((prev) => ({ ...prev, logoRotation: cleanDeg }));
+      setHeaderConfig((prev) => ({ ...prev, logoRotation: cleanDeg, ...(updatedRect ? { logoRect: updatedRect } : {}) }));
     } else if (selectedLayerId === 'layer_location') {
-      setHeaderConfig((prev) => ({ ...prev, locationRotation: cleanDeg }));
+      setHeaderConfig((prev) => ({ ...prev, locationRotation: cleanDeg, ...(updatedRect ? { locationRect: updatedRect } : {}) }));
     } else if (selectedLayerId === 'layer_date') {
-      setHeaderConfig((prev) => ({ ...prev, dateRotation: cleanDeg }));
+      setHeaderConfig((prev) => ({ ...prev, dateRotation: cleanDeg, ...(updatedRect ? { dateRect: updatedRect } : {}) }));
     } else if (selectedLayerId === 'layer_watermark') {
-      setWatermarkConfig((prev) => ({ ...prev, rotation: cleanDeg }));
+      setWatermarkConfig((prev) => ({ ...prev, rotation: cleanDeg, ...(updatedRect ? { rect: updatedRect } : {}) }));
     } else if (selectedLayerId === 'layer_callout') {
-      setFullStoryCalloutConfig((prev) => ({ ...prev, rotation: cleanDeg }));
+      setFullStoryCalloutConfig((prev) => ({ ...prev, rotation: cleanDeg, ...(updatedRect ? { rect: updatedRect } : {}) }));
     }
   };
 
@@ -1306,8 +1334,34 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           const newX = Math.max(0, Math.min(100 - initialLayerRect.width, initialLayerRect.x + dxPct));
           newRect = { ...initialLayerRect, x: newX, y: 100 - footerHeightPct };
         } else {
-          newRect.x = Math.max(0, Math.min(100 - newRect.width, initialLayerRect.x + dxPct));
-          newRect.y = Math.max(0, Math.min(maxY - newRect.height, initialLayerRect.y + dyPct));
+          // Safe-zone boundary constraint accounting for element rotation
+          const w = initialLayerRect.width;
+          const h = initialLayerRect.height;
+          const rot = (selectedLayer.rotation || 0) % 360;
+          const rad = (rot * Math.PI) / 180;
+          const halfEx = (Math.abs(w * Math.cos(rad)) + Math.abs(h * Math.sin(rad))) / 2;
+          const halfEy = (Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad))) / 2;
+
+          const initCx = initialLayerRect.x + w / 2;
+          const initCy = initialLayerRect.y + h / 2;
+          const targetCx = initCx + dxPct;
+          const targetCy = initCy + dyPct;
+
+          const minX = safeZoneConfig.enabled ? safeZoneConfig.leftMarginPct : 0;
+          const maxX = safeZoneConfig.enabled ? (100 - safeZoneConfig.rightMarginPct) : 100;
+          const minY = safeZoneConfig.enabled ? safeZoneConfig.topMarginPct : 0;
+          const maxSafeY = safeZoneConfig.enabled ? (100 - safeZoneConfig.bottomMarginPct) : maxY;
+
+          const minAllowedCx = minX + halfEx;
+          const maxAllowedCx = maxX - halfEx;
+          const minAllowedCy = minY + halfEy;
+          const maxAllowedCy = maxSafeY - halfEy;
+
+          const clampedCx = minAllowedCx > maxAllowedCx ? (minX + maxX) / 2 : Math.max(minAllowedCx, Math.min(maxAllowedCx, targetCx));
+          const clampedCy = minAllowedCy > maxAllowedCy ? (minY + maxSafeY) / 2 : Math.max(minAllowedCy, Math.min(maxAllowedCy, targetCy));
+
+          newRect.x = Math.round((clampedCx - w / 2) * 10) / 10;
+          newRect.y = Math.round((clampedCy - h / 2) * 10) / 10;
         }
       } else if (dragHandle === 'se') {
         newRect.width = Math.max(5, Math.min(100 - newRect.x, initialLayerRect.width + dxPct));
@@ -1976,11 +2030,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       previewImageUrl: primaryBackgroundAsset || sampleImage,
       primaryFooterColor,
       bannedFooterColor,
-      isTestFrame: initialFrame ? (initialFrame.isTestFrame ?? false) : true,
-      approvalStatus: initialFrame ? (initialFrame.approvalStatus ?? 'APPROVED') : 'PENDING_TEST',
-      designCategory: isVideo ? 'Special Frames' : (initialFrame ? (initialFrame.designCategory || designCategory) : 'TEST_FRAMES'),
+      isTestFrame: designCategory === 'TEST_FRAMES' ? true : (initialFrame ? (initialFrame.isTestFrame ?? false) : false),
+      approvalStatus: designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : (initialFrame ? (initialFrame.approvalStatus ?? 'APPROVED') : 'APPROVED'),
+      designCategory: isVideo ? 'Special Frames' : (designCategory || 'Regular Frames'),
       allowedPlans,
-      publicationStatus,
+      publicationStatus: designCategory === 'TEST_FRAMES' ? 'draft' : (publicationStatus || 'published'),
       createdBy: currentUser?.email || 'breakingnewswala.com@gmail.com',
       version: finalVersion,
       headerConfig: {
@@ -4531,50 +4585,30 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
                   {isSampleTestModeExpanded && (
                     <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
-                      {/* 3 Distinct Headline Lines */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">हेडलाइन: लाइन 1</label>
-                          <input
-                            type="text"
-                            value={dummyLine1}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDummyLine1(v);
-                              setTestHeadline([v, dummyLine2, dummyLine3].filter(Boolean).join(' '));
-                            }}
-                            placeholder="लाइन 1"
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
-                          />
+                      {/* Single Canonical Content Input (Phase 5) */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[10px] font-bold text-slate-300">
+                            वास्तविक हेडलाइन / नमूना टेक्स्ट (Single Canonical Content Input)
+                          </label>
+                          <span className="text-[9px] text-amber-400 font-mono">
+                            Enter दबाकर लाइन तोड़ें (1-3 लाइनें)
+                          </span>
                         </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">हेडलाइन: लाइन 2</label>
-                          <input
-                            type="text"
-                            value={dummyLine2}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDummyLine2(v);
-                              setTestHeadline([dummyLine1, v, dummyLine3].filter(Boolean).join(' '));
-                            }}
-                            placeholder="लाइन 2"
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-slate-400 block mb-1">हेडलाइन: लाइन 3</label>
-                          <input
-                            type="text"
-                            value={dummyLine3}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDummyLine3(v);
-                              setTestHeadline([dummyLine1, dummyLine2, v].filter(Boolean).join(' '));
-                            }}
-                            placeholder="लाइन 3"
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold focus:border-amber-400"
-                          />
-                        </div>
+                        <textarea
+                          rows={3}
+                          value={testHeadline}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTestHeadline(val);
+                            const lines = val.split(/\r?\n/).filter(Boolean);
+                            setDummyLine1(lines[0] || '');
+                            setDummyLine2(lines[1] || '');
+                            setDummyLine3(lines[2] || '');
+                          }}
+                          placeholder="यहाँ अपनी मुख्य खबर का शीर्षक दर्ज करें..."
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white text-xs font-bold focus:border-amber-400 font-['Baloo_2'] leading-relaxed"
+                        />
                       </div>
 
                       {/* Location & Callout Full Description */}
@@ -5366,7 +5400,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               className="px-6 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg cursor-pointer disabled:opacity-50"
             >
               <FileCheck className="w-4 h-4" />
-              <span>{isSaving ? 'सेव हो रहा है...' : 'Save & Publish Frame'}</span>
+              <span>{isSaving ? 'सेव हो रहा है...' : (designCategory === 'TEST_FRAMES' ? 'टेस्ट फ्रेम सेव करें' : 'Save & Publish Frame')}</span>
             </button>
           )}
         </div>

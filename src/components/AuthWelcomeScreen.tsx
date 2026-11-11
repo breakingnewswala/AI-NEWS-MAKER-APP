@@ -689,7 +689,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   };
 
   // 1. Google User Success Handler (Handles Existing User vs New Google User -> Direct Home Feed)
-  const handleGoogleUserSuccess = async (email: string, name?: string, picture?: string) => {
+  const handleGoogleUserSuccess = async (email: string, name?: string, picture?: string, idToken?: string) => {
     activateFreeTrial();
     const cleanEmail = email.toLowerCase().trim();
 
@@ -1133,8 +1133,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       provider.setCustomParameters({ prompt: 'select_account' });
       const userCredential = await signInWithPopup(auth, provider);
       if (userCredential?.user?.email) {
+        let idToken = '';
         try {
-          const idToken = await userCredential.user.getIdToken();
+          idToken = (await userCredential.user.getIdToken()) || '';
           if (idToken) {
             safeLocalStorageSet('reporter_auth_token', idToken);
           }
@@ -1144,7 +1145,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         await handleGoogleUserSuccess(
           userCredential.user.email,
           userCredential.user.displayName || undefined,
-          userCredential.user.photoURL || undefined
+          userCredential.user.photoURL || undefined,
+          idToken
         );
         return;
       }
