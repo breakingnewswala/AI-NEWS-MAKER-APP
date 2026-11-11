@@ -12321,6 +12321,10 @@ function generateAuthToken(user) {
   const signature = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
+var LEGACY_AUTH_SECRETS = [
+  "ainewsmaker_prod_sec_token_9669802408_2026",
+  "ai_news_maker_session_secret_2026_secure"
+];
 function verifyAuthToken(tokenStr) {
   if (!tokenStr || typeof tokenStr !== "string") return null;
   const parts = tokenStr.trim().split(".");
@@ -12335,17 +12339,39 @@ function verifyAuthToken(tokenStr) {
   } catch {
     return null;
   }
+  let isValid = false;
+  let isLegacySignature = false;
   const expectedSig = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
-  if (signature.length !== expectedSig.length) return null;
-  const sigBuf = Buffer.from(signature);
-  const expBuf = Buffer.from(expectedSig);
-  if (!import_crypto2.default.timingSafeEqual(sigBuf, expBuf)) return null;
+  if (signature.length === expectedSig.length) {
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expectedSig);
+    if (import_crypto2.default.timingSafeEqual(sigBuf, expBuf)) {
+      isValid = true;
+    }
+  }
+  if (!isValid) {
+    for (const legacySecret of LEGACY_AUTH_SECRETS) {
+      if (!legacySecret) continue;
+      const legacyExpectedSig = import_crypto2.default.createHmac("sha256", legacySecret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
+      if (signature.length === legacyExpectedSig.length) {
+        const sigBuf = Buffer.from(signature);
+        const expBuf = Buffer.from(legacyExpectedSig);
+        if (import_crypto2.default.timingSafeEqual(sigBuf, expBuf)) {
+          isValid = true;
+          isLegacySignature = true;
+          break;
+        }
+      }
+    }
+  }
+  if (!isValid) return null;
   try {
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
     const payload = JSON.parse(payloadJson);
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1e3)) {
       return null;
     }
+    payload.isLegacySignature = isLegacySignature;
     return payload;
   } catch {
     return null;
@@ -12390,7 +12416,7 @@ function getAuthenticatedUser(req) {
   if (!token) return null;
   return verifyAuthToken(token);
 }
-async function resolveAuthenticatedUser(req) {
+async function resolveAuthenticatedUser(req, res) {
   if (req.user) {
     return req.user;
   }
@@ -12495,6 +12521,14 @@ async function resolveAuthenticatedUser(req) {
       isBlocked
     };
     req.user = verified;
+    if (internalPayload.isLegacySignature && res && typeof res.setHeader === "function" && !res.headersSent) {
+      try {
+        const freshToken = generateAuthToken(verified);
+        res.setHeader("X-Refreshed-Token", freshToken);
+        res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
+      } catch {
+      }
+    }
     return verified;
   }
   return null;
@@ -12540,7 +12574,7 @@ function isAuthorizedAdmin(req) {
   return false;
 }
 async function requireAuthMiddleware(req, res, next) {
-  const user = await resolveAuthenticatedUser(req);
+  const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -12558,7 +12592,7 @@ async function requireAuthMiddleware(req, res, next) {
   next();
 }
 async function requireAdminMiddleware(req, res, next) {
-  const user = await resolveAuthenticatedUser(req);
+  const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -12575,7 +12609,7 @@ async function requireAdminMiddleware(req, res, next) {
   next();
 }
 async function requireMasterAdminMiddleware(req, res, next) {
-  const user = await resolveAuthenticatedUser(req);
+  const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -12842,9 +12876,38 @@ app.post("/api/auth/verify-captcha", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
+app.post("/api/auth/refresh-session", async (req, res) => {
+  try {
+    const user = await resolveAuthenticatedUser(req, res);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "\u0938\u0924\u094D\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948 \u092F\u093E \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    const freshToken = generateAuthToken({
+      userId: user.userId,
+      email: user.email,
+      role: user.role,
+      username: user.username
+    });
+    return res.json({
+      success: true,
+      token: freshToken,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        role: user.role,
+        username: user.username
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
 app.use("/api/admin", async (req, res, next) => {
   if (req.method === "OPTIONS") return next();
-  const user = req.user || await resolveAuthenticatedUser(req);
+  const user = req.user || await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -24144,10 +24207,12 @@ function resolveUserTierAndRole(req) {
   return { tier: explicitTier || "basic", role: explicitRole || "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-1.5-flash",
   "gemini-3-flash-preview",
   "gemini-flash-latest",
-  "gemini-3.1-flash-lite",
-  "gemini-2.5-flash"
+  "gemini-3.1-flash-lite"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;

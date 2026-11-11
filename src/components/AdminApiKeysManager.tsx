@@ -369,7 +369,12 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         setNewFreeLabel('');
         fetchKeysData(true);
       } else {
-        showToast(`❌ ${resData.error || 'की जोड़ने में विफलता'}`);
+        if (res.status === 401) {
+          showToast('❌ सत्र समाप्त (401 Unauthorized): कृपया एक बार लॉगआउट करके पुनः एडमिन लॉगिन करें।');
+          window.dispatchEvent(new CustomEvent('open_login_modal'));
+        } else {
+          showToast(`❌ ${resData.error || 'की जोड़ने में विफलता'}`);
+        }
       }
     } catch (err: any) {
       showToast(`❌ नेटवर्क त्रुटि: ${err.message}`);
@@ -453,7 +458,12 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         setPaidKeyInput('');
         fetchKeysData(true);
       } else {
-        showToast(`❌ ${resData.error || 'सेव करने में विफलता'}`);
+        if (res.status === 401) {
+          showToast('❌ सत्र समाप्त (401 Unauthorized): कृपया एक बार लॉगआउट करके पुनः एडमिन लॉगिन करें।');
+          window.dispatchEvent(new CustomEvent('open_login_modal'));
+        } else {
+          showToast(`❌ ${resData.error || 'सेव करने में विफलता'}`);
+        }
       }
     } catch (err: any) {
       showToast(`❌ नेटवर्क त्रुटि: ${err.message}`);

@@ -126,12 +126,21 @@ export function setAuthToken(token: string): void {
   } catch {}
 }
 
+export function clearAuthTokens(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem('reporter_auth_token');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('token');
+  } catch {}
+}
+
 let ongoingAuthPromise: Promise<string> | null = null;
 
 /**
  * Enterprise Automatic Session Token Assurance:
  * Guarantees a cryptographically verified JWT / HMAC session token is active in localStorage.
- * Automatically exchanges active reporter/admin session with /api/auth/login if token is missing or expired.
+ * Automatically exchanges active reporter/admin session with /api/auth/refresh-session or /api/auth/login if token is missing or expired.
  */
 export async function ensureAuthToken(forceRefresh = false): Promise<string> {
   if (typeof window === 'undefined') return '';
@@ -184,36 +193,76 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
       } catch {}
 
       const existingToken = getAuthToken();
-      if (!existingToken && !email) {
-        return '';
+
+      // 1. Primary Seamless Recovery: Call session refresh endpoint with active or legacy token
+      if (existingToken) {
+        try {
+          const refRes = await fetch(getApiUrl('/api/auth/refresh-session'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${existingToken}`,
+            },
+          });
+          if (refRes.ok) {
+            const refData = await refRes.json();
+            if (refData.success && refData.token) {
+              setAuthToken(refData.token);
+              try {
+                const sessStr = localStorage.getItem('reporter_auth_session');
+                if (sessStr) {
+                  const sess = JSON.parse(sessStr);
+                  sess.token = refData.token;
+                  localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
+                }
+              } catch {}
+              return refData.token;
+            }
+          }
+        } catch (refErr) {
+          console.warn('[AUTH] refresh-session attempt notice:', refErr);
+        }
       }
 
-      const res = await fetch(getApiUrl('/api/auth/login'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(existingToken ? { Authorization: `Bearer ${existingToken}` } : {}),
-        },
-        body: JSON.stringify({
-          identifier: email,
-          firebaseToken: existingToken || undefined,
-          profileData: { email, name, username },
-        }),
-      });
+      // 2. Firebase Client Auth Recovery: Retrieve genuine Google ID Token from Firebase Web SDK
+      let firebaseIdToken = '';
+      try {
+        const { auth } = await import('./firebaseConfig');
+        if (auth?.currentUser) {
+          firebaseIdToken = (await auth.currentUser.getIdToken(forceRefresh)) || '';
+        }
+      } catch (fbErr) {
+        console.warn('[AUTH] Firebase client token check notice:', fbErr);
+      }
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.token) {
-          setAuthToken(data.token);
-          try {
-            const sessStr = localStorage.getItem('reporter_auth_session');
-            if (sessStr) {
-              const sess = JSON.parse(sessStr);
-              sess.token = data.token;
-              localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
-            }
-          } catch {}
-          return data.token;
+      if (firebaseIdToken && email) {
+        const res = await fetch(getApiUrl('/api/auth/login'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${firebaseIdToken}`,
+          },
+          body: JSON.stringify({
+            identifier: email,
+            firebaseToken: firebaseIdToken,
+            profileData: { email, name, username },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.token) {
+            setAuthToken(data.token);
+            try {
+              const sessStr = localStorage.getItem('reporter_auth_session');
+              if (sessStr) {
+                const sess = JSON.parse(sessStr);
+                sess.token = data.token;
+                localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
+              }
+            } catch {}
+            return data.token;
+          }
         }
       }
     } catch (err) {
@@ -272,7 +321,15 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           }
         }
       }
-      return originalFetch(input, init);
+      const response = await originalFetch(input, init);
+      // Auto-capture and persist refreshed token from server header
+      try {
+        const refreshed = response?.headers?.get?.('x-refreshed-token');
+        if (refreshed) {
+          setAuthToken(refreshed);
+        }
+      } catch {}
+      return response;
     };
 
     const desc = Object.getOwnPropertyDescriptor(window, 'fetch') || Object.getOwnPropertyDescriptor(Object.getPrototypeOf(window), 'fetch');

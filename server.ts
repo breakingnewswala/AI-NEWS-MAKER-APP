@@ -243,7 +243,12 @@ function generateAuthToken(user: { userId?: string; email?: string; role?: strin
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-function verifyAuthToken(tokenStr: string): AuthTokenPayload | null {
+const LEGACY_AUTH_SECRETS: string[] = [
+  "ainewsmaker_prod_sec_token_9669802408_2026",
+  "ai_news_maker_session_secret_2026_secure",
+];
+
+function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignature?: boolean }) | null {
   if (!tokenStr || typeof tokenStr !== "string") return null;
   const parts = tokenStr.trim().split(".");
   if (parts.length !== 3) return null;
@@ -260,22 +265,52 @@ function verifyAuthToken(tokenStr: string): AuthTokenPayload | null {
     return null;
   }
 
+  // 1. Primary verification with active AUTH_SECRET (from Secret Manager)
+  let isValid = false;
+  let isLegacySignature = false;
+
   const expectedSig = crypto
     .createHmac("sha256", AUTH_SECRET)
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest("base64url");
 
-  if (signature.length !== expectedSig.length) return null;
-  const sigBuf = Buffer.from(signature);
-  const expBuf = Buffer.from(expectedSig);
-  if (!crypto.timingSafeEqual(sigBuf, expBuf)) return null;
+  if (signature.length === expectedSig.length) {
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expectedSig);
+    if (crypto.timingSafeEqual(sigBuf, expBuf)) {
+      isValid = true;
+    }
+  }
+
+  // 2. Dual-secret rotation grace period: verify against legacy pre-rotation secrets
+  if (!isValid) {
+    for (const legacySecret of LEGACY_AUTH_SECRETS) {
+      if (!legacySecret) continue;
+      const legacyExpectedSig = crypto
+        .createHmac("sha256", legacySecret)
+        .update(`${encodedHeader}.${encodedPayload}`)
+        .digest("base64url");
+      if (signature.length === legacyExpectedSig.length) {
+        const sigBuf = Buffer.from(signature);
+        const expBuf = Buffer.from(legacyExpectedSig);
+        if (crypto.timingSafeEqual(sigBuf, expBuf)) {
+          isValid = true;
+          isLegacySignature = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!isValid) return null;
 
   try {
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
-    const payload = JSON.parse(payloadJson) as AuthTokenPayload;
+    const payload = JSON.parse(payloadJson) as AuthTokenPayload & { isLegacySignature?: boolean };
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
       return null; // Token expired
     }
+    payload.isLegacySignature = isLegacySignature;
     return payload;
   } catch {
     return null;
@@ -340,7 +375,7 @@ function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
   return verifyAuthToken(token);
 }
 
-export async function resolveAuthenticatedUser(req: express.Request): Promise<VerifiedUser | null> {
+export async function resolveAuthenticatedUser(req: express.Request, res?: express.Response): Promise<VerifiedUser | null> {
   if ((req as any).user) {
     return (req as any).user;
   }
@@ -449,6 +484,16 @@ export async function resolveAuthenticatedUser(req: express.Request): Promise<Ve
       isBlocked,
     };
     (req as any).user = verified;
+
+    // Seamless secret rotation auto-upgrade: If token was signed with legacy secret, emit refreshed token header
+    if ((internalPayload as any).isLegacySignature && res && typeof res.setHeader === "function" && !res.headersSent) {
+      try {
+        const freshToken = generateAuthToken(verified);
+        res.setHeader("X-Refreshed-Token", freshToken);
+        res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
+      } catch {}
+    }
+
     return verified;
   }
 
@@ -517,7 +562,7 @@ function isAuthorizedAdmin(req: express.Request): boolean {
 }
 
 export async function requireAuthMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const user = await resolveAuthenticatedUser(req);
+  const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -536,7 +581,7 @@ export async function requireAuthMiddleware(req: express.Request, res: express.R
 }
 
 export async function requireAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const user = await resolveAuthenticatedUser(req);
+  const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -554,7 +599,7 @@ export async function requireAdminMiddleware(req: express.Request, res: express.
 }
 
 export async function requireMasterAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const user = await resolveAuthenticatedUser(req);
+  const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -937,11 +982,44 @@ app.post("/api/auth/verify-captcha", (req, res) => {
 });
 
 // ============================================================================
+// SESSION REFRESH ENDPOINT (SEAMLESS TOKEN ROTATION & EXPIRATION ASSURANCE)
+// ============================================================================
+app.post("/api/auth/refresh-session", async (req, res) => {
+  try {
+    const user = await resolveAuthenticatedUser(req, res);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: "सत्र समाप्त हो गया है या अमान्य है। कृपया पुनः लॉगिन करें।",
+      });
+    }
+    const freshToken = generateAuthToken({
+      userId: user.userId,
+      email: user.email,
+      role: user.role,
+      username: user.username,
+    });
+    return res.json({
+      success: true,
+      token: freshToken,
+      user: {
+        userId: user.userId,
+        email: user.email,
+        role: user.role,
+        username: user.username,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// ============================================================================
 // ADMIN ROUTE PERIMETER GUARD (APPLIES TO ALL /api/admin/* ENDPOINTS)
 // ============================================================================
 app.use("/api/admin", async (req, res, next) => {
   if (req.method === "OPTIONS") return next();
-  const user = (req as any).user || await resolveAuthenticatedUser(req);
+  const user = (req as any).user || await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -14664,10 +14742,12 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-1.5-flash",
   "gemini-3-flash-preview",
   "gemini-flash-latest",
   "gemini-3.1-flash-lite",
-  "gemini-2.5-flash",
 ];
 
 async function generateWithFallbackAndRetry(
