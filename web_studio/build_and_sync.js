@@ -366,6 +366,29 @@ ${itemsXml}
   } catch (rssErr) {
     console.warn(' ⚠️ Could not generate rss.xml:', rssErr.message);
   }
+
+  // 7b. Synchronize SEO and LLM discovery files (sitemap.xml, sitemap-news.xml, llms.txt, llms-full.txt, robots.txt)
+  try {
+    const seoFiles = ['sitemap.xml', 'sitemap-news.xml', 'llms.txt', 'llms-full.txt', 'robots.txt'];
+    for (const file of seoFiles) {
+      const srcFile = path.resolve(rootDir, 'public', file);
+      if (fs.existsSync(srcFile)) {
+        const content = fs.readFileSync(srcFile, 'utf-8');
+        targets.forEach((target) => {
+          try {
+            fs.writeFileSync(path.join(target, file), content, 'utf-8');
+          } catch {}
+        });
+        try {
+          fs.writeFileSync(path.join(distDir, file), content, 'utf-8');
+        } catch {}
+      }
+    }
+    console.log(' ✅ Synchronized SEO and discovery files across all bundles');
+  } catch (seoErr) {
+    console.warn(' ⚠️ Could not synchronize SEO files:', seoErr.message);
+  }
+
   // 8. SECURITY PURGE: Guarantee no sensitive vault, key, or credential files exist in any distribution or public directory
   console.log('\n🔒 Step 8: Executing security purge of sensitive files in public and distribution directories...');
   const purgeDirectories = [

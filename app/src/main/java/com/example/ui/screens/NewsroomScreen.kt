@@ -499,8 +499,8 @@ fun BreakingNewsStudioWebView(
                         domStorageEnabled = true
                         allowFileAccess = true
                         allowContentAccess = true
-                        allowFileAccessFromFileURLs = true
-                        allowUniversalAccessFromFileURLs = true
+                        allowFileAccessFromFileURLs = false
+                        allowUniversalAccessFromFileURLs = false
                         databaseEnabled = true
                         cacheMode = WebSettings.LOAD_DEFAULT
                         loadWithOverviewMode = true
@@ -508,7 +508,7 @@ fun BreakingNewsStudioWebView(
                         setSupportZoom(false)
                         builtInZoomControls = false
                         displayZoomControls = false
-                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                         mediaPlaybackRequiresUserGesture = false
                     }
 

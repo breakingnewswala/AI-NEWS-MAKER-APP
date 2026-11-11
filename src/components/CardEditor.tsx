@@ -4477,29 +4477,50 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   })}
               </div>
 
-              {/* Callout Size Slider (Admin allowed range: 80% to 130%) */}
-              <div className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1.5">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-neutral-300">कॉलआउट साइज (Callout Size):</span>
-                  <span className="font-mono text-amber-400 font-bold">
-                    {Math.round((card.calloutScale ?? 1.0) * 100)}% {Math.round((card.calloutScale ?? 1.0) * 100) === 100 ? '(डिफ़ॉल्ट)' : ''}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0.80"
-                  max="1.30"
-                  step="0.05"
-                  value={card.calloutScale ?? 1.0}
-                  onChange={(e) => onChange({ calloutScale: parseFloat(e.target.value) })}
-                  className="w-full accent-amber-400 cursor-pointer"
-                />
-                <div className="flex justify-between text-[9px] text-neutral-500 font-medium">
-                  <span>80% (छोटा)</span>
-                  <span>100% (सामान्य)</span>
-                  <span>130% (बड़ा)</span>
-                </div>
-              </div>
+              {/* Callout Size Slider (Plan-based: Basic locked, Advanced 90-110%, Pro 80-130%, VIP/Admin 70-140%) */}
+              {(() => {
+                const isBasicTier = !effectiveAdmin && (!effectiveTier || effectiveTier === 'basic');
+                const isAdvancedTier = !effectiveAdmin && effectiveTier === 'advanced';
+                const isProTier = !effectiveAdmin && (effectiveTier === 'professional' || effectiveTier === 'pro');
+                const isVipOrAdmin = effectiveAdmin || effectiveTier === 'ultra' || effectiveTier === 'vip' || effectiveTier === 'vip desk';
+
+                const minScale = isBasicTier ? 1.0 : isAdvancedTier ? 0.90 : isProTier ? 0.80 : 0.70;
+                const maxScale = isBasicTier ? 1.0 : isAdvancedTier ? 1.10 : isProTier ? 1.30 : 1.40;
+
+                return (
+                  <div className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-neutral-300">कॉलआउट साइज (Callout Size):</span>
+                      <span className="font-mono text-amber-400 font-bold">
+                        {Math.round((card.calloutScale ?? 1.0) * 100)}% {Math.round((card.calloutScale ?? 1.0) * 100) === 100 ? '(डिफ़ॉल्ट)' : ''}
+                      </span>
+                    </div>
+                    {isBasicTier ? (
+                      <div className="py-1 px-2 bg-neutral-950/80 rounded border border-neutral-800 text-[10px] text-amber-300 font-semibold flex items-center justify-between">
+                        <span>🔒 100% डिफ़ॉल्ट साइज (बेसिक प्लान)</span>
+                        <span className="text-neutral-400 font-normal">साइज बदलने हेतु एडवांस/प्रो अपग्रेड करें</span>
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          type="range"
+                          min={minScale.toFixed(2)}
+                          max={maxScale.toFixed(2)}
+                          step="0.05"
+                          value={card.calloutScale ?? 1.0}
+                          onChange={(e) => onChange({ calloutScale: parseFloat(e.target.value) })}
+                          className="w-full accent-amber-400 cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[9px] text-neutral-500 font-medium">
+                          <span>{Math.round(minScale * 100)}% (छोटा)</span>
+                          <span>100% (सामान्य)</span>
+                          <span>{Math.round(maxScale * 100)}% (बड़ा)</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="text-[10px] text-neutral-400 flex items-center gap-1.5 pt-0.5">
                 <span>📍</span>

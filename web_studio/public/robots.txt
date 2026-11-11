@@ -12,6 +12,9 @@ Allow: /privacy
 Allow: /refunds
 Allow: /support
 Allow: /delete-account
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /rss.xml
 Disallow: /admin
 Disallow: /api/
 Disallow: /uploads/private/

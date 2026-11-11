@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// AI NEWS MAKER — Least-Privilege Firebase Cloud Storage Security Rules
+// Designed to protect user privacy, prevent unauthorized overwrites,
+// and preserve public access to published news graphics and channel assets.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Default deny catch-all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isMasterAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'breakingnewswala.com@gmail.com' ||
+         request.auth.token.email == 'breakingnewsvala.com@gmail.com') &&
+        request.auth.token.email_verified == true
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isMasterAdmin() ||
+        (request.auth.token.email == 'admin.ainewsmaker@gmail.com' && request.auth.token.email_verified == true)
+      );
+    }
+
+    // Validation helpers
+    function isValidImage() {
+      return request.resource.contentType.matches('image/.*')
+        && request.resource.size < 10 * 1024 * 1024; // 10 MB maximum
+    }
+
+    function isValidFont() {
+      return (
+        request.resource.contentType.matches('font/.*') ||
+        request.resource.contentType == 'application/x-font-ttf' ||
+        request.resource.contentType == 'application/x-font-opentype' ||
+        request.resource.contentType == 'application/font-woff' ||
+        request.resource.contentType == 'application/font-woff2'
+      ) && request.resource.size < 15 * 1024 * 1024; // 15 MB maximum
+    }
+
+    // Public Media Assets:
+    // Read is public so that news cards, headlines, logos, and public frames render across all clients.
+    // Client write is blocked: all uploads are processed and sanitized by the backend server via GCS REST API.
+    match /uploads/{category}/{fileName} {
+      allow read: if category in ['logos', 'news', 'graphics', 'thumbnails', 'avatars', 'frames', 'music', 'fonts', 'branding'];
+      allow write: if isAdmin();
+    }
+
+    // User-scoped uploads:
+    // When clients upload directly via Firebase Storage SDK, enforce user isolation.
+    match /users/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) && isValidImage();
+    }
+
+    // Private support request attachments:
+    // Only the ticket owner or admins can read or write attachments.
+    match /support/{inquiryId}/{fileName} {
+      allow read, write: if isSignedIn() && (
+        request.auth.uid == inquiryId ||
+        isAdmin()
+      );
+    }
+  }
+}

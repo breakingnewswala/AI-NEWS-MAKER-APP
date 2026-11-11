@@ -183,18 +183,20 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         }
       } catch {}
 
-      if (!email) {
-        email = 'breakingnewswala.com@gmail.com';
-        name = 'मुख्य संपादक';
-        username = 'breakingnewswala';
+      const existingToken = getAuthToken();
+      if (!existingToken && !email) {
+        return '';
       }
 
       const res = await fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(existingToken ? { Authorization: `Bearer ${existingToken}` } : {}),
+        },
         body: JSON.stringify({
-          googleUid: `goog_${email.replace(/[^a-z0-9]/g, '_')}`,
           identifier: email,
+          firebaseToken: existingToken || undefined,
           profileData: { email, name, username },
         }),
       });

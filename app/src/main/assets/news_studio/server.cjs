@@ -12290,7 +12290,21 @@ if (cloudStorage) {
   app.use("/uploads", cloudStorage.createUploadsMiddleware());
 }
 app.use("/uploads", import_express.default.static(publicUploadsDir));
-var AUTH_SECRET = process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+function initializeAuthSecret() {
+  const secret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+  const isProduction = process.env.NODE_ENV === "production";
+  if (secret && typeof secret === "string" && secret.trim().length >= 32) {
+    return secret.trim();
+  }
+  if (isProduction) {
+    const errorMsg = "[FATAL SECURITY ERROR] SESSION_SECRET environment variable is missing, empty, or too short (< 32 chars). In production, SESSION_SECRET must be configured via Google Cloud Secret Manager.";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  console.warn("[SECURITY WARNING] No SESSION_SECRET configured. Generated ephemeral in-memory 256-bit secret for non-production environment.");
+  return import_crypto2.default.randomBytes(32).toString("hex");
+}
+var AUTH_SECRET = initializeAuthSecret();
 function generateAuthToken(user) {
   const payload = {
     userId: user.userId || "",
@@ -12312,6 +12326,15 @@ function verifyAuthToken(tokenStr) {
   const parts = tokenStr.trim().split(".");
   if (parts.length !== 3) return null;
   const [encodedHeader, encodedPayload, signature] = parts;
+  try {
+    const headerJson = Buffer.from(encodedHeader, "base64url").toString("utf8");
+    const header = JSON.parse(headerJson);
+    if (!header || header.alg !== "HS256" || header.typ !== "JWT") {
+      return null;
+    }
+  } catch {
+    return null;
+  }
   const expectedSig = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
   if (signature.length !== expectedSig.length) return null;
   const sigBuf = Buffer.from(signature);
@@ -12610,20 +12633,29 @@ function saveCredentialsDatabase(db) {
     return false;
   }
 }
-function hashPassword(password, salt) {
+var PBKDF2_ITERATIONS = 21e4;
+var PBKDF2_LEGACY_ITERATIONS = 1e4;
+function hashPassword(password, salt, iterations = PBKDF2_ITERATIONS) {
   const actualSalt = salt || import_crypto2.default.randomBytes(16).toString("hex");
-  const hash = import_crypto2.default.pbkdf2Sync(password, actualSalt, 1e4, 64, "sha512").toString("hex");
-  return { salt: actualSalt, hash };
+  const hash = import_crypto2.default.pbkdf2Sync(password, actualSalt, iterations, 64, "sha512").toString("hex");
+  return { salt: actualSalt, hash, iterations };
 }
 function verifyPassword(password, salt, storedHash) {
   try {
-    const hash = import_crypto2.default.pbkdf2Sync(password, salt, 1e4, 64, "sha512").toString("hex");
-    const a = Buffer.from(hash, "hex");
-    const b = Buffer.from(storedHash, "hex");
-    if (a.length !== b.length) return false;
-    return import_crypto2.default.timingSafeEqual(a, b);
+    const modernHash = import_crypto2.default.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, 64, "sha512").toString("hex");
+    const aModern = Buffer.from(modernHash, "hex");
+    const bStored = Buffer.from(storedHash, "hex");
+    if (aModern.length === bStored.length && import_crypto2.default.timingSafeEqual(aModern, bStored)) {
+      return { valid: true, needsRehash: false };
+    }
+    const legacyHash = import_crypto2.default.pbkdf2Sync(password, salt, PBKDF2_LEGACY_ITERATIONS, 64, "sha512").toString("hex");
+    const aLegacy = Buffer.from(legacyHash, "hex");
+    if (aLegacy.length === bStored.length && import_crypto2.default.timingSafeEqual(aLegacy, bStored)) {
+      return { valid: true, needsRehash: true };
+    }
+    return { valid: false, needsRehash: false };
   } catch {
-    return false;
+    return { valid: false, needsRehash: false };
   }
 }
 function isSafePublicUrl(urlString) {
@@ -12980,6 +13012,8 @@ var UPLOAD_SCREENSHOTS_DIR = import_path2.default.join(process.cwd(), "public", 
 var WEB_UPLOAD_SCREENSHOTS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "screenshots");
 var UPLOAD_FONTS_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "fonts");
 var WEB_UPLOAD_FONTS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "fonts");
+var UPLOAD_FRAMES_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "frames");
+var WEB_UPLOAD_FRAMES_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "frames");
 try {
   import_fs2.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
   import_fs2.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
@@ -12991,6 +13025,8 @@ try {
   import_fs2.default.mkdirSync(WEB_UPLOAD_SCREENSHOTS_DIR, { recursive: true });
   import_fs2.default.mkdirSync(UPLOAD_FONTS_DIR, { recursive: true });
   import_fs2.default.mkdirSync(WEB_UPLOAD_FONTS_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_FRAMES_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_FRAMES_DIR, { recursive: true });
 } catch {
 }
 function loadRewardsDatabase() {
@@ -15200,9 +15236,24 @@ app.get("/api/admin/analytics/summary", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/upload-logo", async (req, res) => {
+app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
   const release = await userDbLock.acquire();
   try {
+    const authUser = req.user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const requestingEmail = authUser.email.toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req);
+    const clientEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
+    let userOrEmail = requestingEmail;
+    if (clientEmail && clientEmail !== requestingEmail) {
+      if (isAdmin) {
+        userOrEmail = clientEmail;
+      } else {
+        return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u091A\u0948\u0928\u0932 \u0915\u093E \u0932\u094B\u0917\u094B \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      }
+    }
     const rawData = req.body?.dataUrl || req.body?.imageBase64 || req.body?.fileData || req.body?.logoData || "";
     if (!rawData || typeof rawData !== "string") {
       return res.status(400).json({ error: "\u0932\u094B\u0917\u094B \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
@@ -15218,7 +15269,6 @@ app.post("/api/upload-logo", async (req, res) => {
     }
     let isGif = magic.format === "gif" || req.body?.logoType === "gif" || Boolean(req.body?.fileName && req.body.fileName.toLowerCase().endsWith(".gif"));
     let ext = isGif ? "gif" : magic.format || "png";
-    const userOrEmail = (req.body?.email || req.body?.username || req.body?.userId || "").trim().toLowerCase();
     const safeFileBase = userOrEmail ? userOrEmail.replace(/[^a-zA-Z0-9_-]/g, "_") : "logo";
     const filename = `logo-${safeFileBase}-${Date.now()}-${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
     let logoUrl = `/uploads/logos/${filename}`;
@@ -15731,13 +15781,23 @@ app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/wallet/unlocked-items", (req, res) => {
+app.get("/api/wallet/unlocked-items", requireAuthMiddleware, (req, res) => {
   try {
-    const email = (req.query.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const userId = (req.query.userId || req.headers["x-user-id"] || email).toString().trim();
-    const walletKey = email || userId;
-    if (!walletKey) {
-      return res.status(400).json({ error: "User email or ID required" });
+    const authUser = req.user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const requestingEmail = authUser.email.toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req);
+    const queryEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const queryUserId = (req.query.userId || "").toString().trim();
+    let walletKey = requestingEmail;
+    if (queryEmail && queryEmail !== requestingEmail || queryUserId && queryUserId !== authUser.userId && queryUserId !== requestingEmail) {
+      if (isAdmin) {
+        walletKey = queryEmail || queryUserId;
+      } else {
+        return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0916\u093E\u0924\u0947 \u0915\u0947 \u0905\u0928\u0932\u0949\u0915 \u0906\u0907\u091F\u092E \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      }
     }
     const rDb = loadRewardsDatabase();
     const unlocked = rDb.unlockedItems?.[walletKey] || [];
@@ -18035,14 +18095,9 @@ function saveAdminReadNotificationIds(ids) {
   } catch {
   }
 }
-app.get("/api/admin/notifications", (req, res) => {
+app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.query.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin) {
-      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
-    }
     const readIds = loadAdminReadNotificationIds();
     const newsDb = loadNewsDatabase();
     const rssItems = [];
@@ -18210,14 +18265,9 @@ app.get("/api/admin/notifications", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/support/update-status", (req, res) => {
+app.post("/api/admin/support/update-status", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin) {
-      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
-    }
     const { id, type, status, adminNotes } = req.body || {};
     if (!id || !status) {
       return res.status(400).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0906\u0908\u0921\u0940 \u0914\u0930 \u0938\u094D\u091F\u0947\u091F\u0938 \u0926\u094B\u0928\u094B\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
@@ -18246,14 +18296,9 @@ app.post("/api/admin/support/update-status", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/news/publish-rss", (req, res) => {
+app.post("/api/admin/news/publish-rss", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin) {
-      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
-    }
     const { id } = req.body || {};
     if (!id) return res.status(400).json({ error: "\u0928\u094D\u092F\u0942\u091C \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
     const news = loadNewsDatabase();
@@ -18273,14 +18318,9 @@ app.post("/api/admin/news/publish-rss", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/admin/notifications/mark-read", (req, res) => {
+app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const reqEmail = (req.body?.email || req.body?.adminEmail || req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isAdmin = isAuthorizedAdmin(req) || isProtectedAdminAccount(reqEmail) || userRes.role === "admin" || userRes.role === "superadmin";
-    if (!isAdmin) {
-      return res.status(403).json({ error: "\u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
-    }
     const { id, all, ids, category } = req.body || {};
     const readIds = loadAdminReadNotificationIds();
     if (id) {
@@ -18371,23 +18411,24 @@ app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
 });
 function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
   const cleanBase = baseUrl.replace(/\/+$/, "");
+  const releaseBaselineDate = "2026-11-11";
   const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   const staticRoutes = [
-    { path: "/", priority: "1.0", changefreq: "daily" },
-    { path: "/studio", priority: "0.9", changefreq: "weekly" },
-    { path: "/videos", priority: "0.9", changefreq: "weekly" },
-    { path: "/newsroom", priority: "0.9", changefreq: "hourly" },
-    { path: "/profile", priority: "0.8", changefreq: "weekly" },
-    { path: "/support", priority: "0.7", changefreq: "monthly" },
-    { path: "/terms", priority: "0.5", changefreq: "monthly" },
-    { path: "/privacy", priority: "0.5", changefreq: "monthly" },
-    { path: "/refunds", priority: "0.5", changefreq: "monthly" },
-    { path: "/delete-account", priority: "0.4", changefreq: "monthly" }
+    { path: "/", priority: "1.0", changefreq: "daily", lastmod: today },
+    { path: "/studio", priority: "0.9", changefreq: "weekly", lastmod: releaseBaselineDate },
+    { path: "/videos", priority: "0.9", changefreq: "weekly", lastmod: releaseBaselineDate },
+    { path: "/newsroom", priority: "0.9", changefreq: "hourly", lastmod: today },
+    { path: "/profile", priority: "0.8", changefreq: "weekly", lastmod: releaseBaselineDate },
+    { path: "/support", priority: "0.7", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/terms", priority: "0.5", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/privacy", priority: "0.5", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/refunds", priority: "0.5", changefreq: "monthly", lastmod: releaseBaselineDate },
+    { path: "/delete-account", priority: "0.4", changefreq: "monthly", lastmod: releaseBaselineDate }
   ];
   const staticUrlsXml = staticRoutes.map(
     (r) => `  <url>
     <loc>${cleanBase}${r.path}</loc>
-    <lastmod>${today}</lastmod>
+    <lastmod>${r.lastmod}</lastmod>
     <changefreq>${r.changefreq}</changefreq>
     <priority>${r.priority}</priority>
   </url>`
@@ -18395,29 +18436,44 @@ function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
   let dynamicUrlsXml = "";
   try {
     const posts = loadNewsDatabase();
+    const deletedIds = loadDeletedNewsIds();
     if (Array.isArray(posts) && posts.length > 0) {
       let editorialDb = {};
       try {
         editorialDb = loadApprovedEditorialDatabase();
       } catch {
       }
-      const published = posts.filter((p) => p && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true || p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED"))).slice(0, 100);
-      dynamicUrlsXml = published.map((p) => {
-        const modDate = p.timestamp ? new Date(p.timestamp).toISOString().split("T")[0] : today;
+      const published = posts.filter((p) => {
+        if (!p || !p.id || deletedIds.has(p.id) || p._deleted === true) return false;
+        if (p.status === "DRAFT" || p.publicationStatus === "draft" || p.status === "PENDING_APPROVAL") return false;
+        return p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true || p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
+      });
+      const seenUrls = /* @__PURE__ */ new Set();
+      const entryStrings = [];
+      for (const p of published) {
         const safeId = encodeURIComponent(p.id || "");
-        const safeTitle = (p.title || "News Article").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const img = p.imageUrl ? `
+        const articleUrl = `${cleanBase}/newsroom?article=${safeId}`;
+        if (seenUrls.has(articleUrl)) continue;
+        seenUrls.add(articleUrl);
+        const modDate = p.timestamp ? new Date(p.timestamp).toISOString().split("T")[0] : releaseBaselineDate;
+        const safeTitle = (p.title || p.approvedHeadline || "News Article").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+        let rawImg = p.imageUrl || p.thumbnailUrl || p.customThumbnailUrl || p.approvedGraphicUrl || p.image;
+        if (rawImg && rawImg.startsWith("/")) {
+          rawImg = `${cleanBase}${rawImg}`;
+        }
+        const img = rawImg ? `
     <image:image>
-      <image:loc>${p.imageUrl.replace(/&/g, "&amp;")}</image:loc>
+      <image:loc>${rawImg.replace(/&/g, "&amp;")}</image:loc>
       <image:title>${safeTitle}</image:title>
     </image:image>` : "";
-        return `  <url>
-    <loc>${cleanBase}/newsroom?article=${safeId}</loc>
+        entryStrings.push(`  <url>
+    <loc>${articleUrl}</loc>
     <lastmod>${modDate}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>${img}
-  </url>`;
-      }).join("\n");
+  </url>`);
+      }
+      dynamicUrlsXml = entryStrings.join("\n");
     }
   } catch (err) {
     console.warn("[Sitemap] Failed to load dynamic posts for sitemap:", err?.message);
@@ -18454,22 +18510,36 @@ function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
         editorialDb = loadApprovedEditorialDatabase();
       } catch {
       }
+      const deletedIds = loadDeletedNewsIds();
       const published = posts.filter(
-        (p) => p && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true || p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED"))
+        (p) => {
+          if (!p || !p.id || deletedIds.has(p.id) || p._deleted === true) return false;
+          if (p.status === "DRAFT" || p.publicationStatus === "draft" || p.status === "PENDING_APPROVAL") return false;
+          return p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true || p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
+        }
       );
       const recent = published.filter((p) => p.timestamp && now - p.timestamp <= twoDaysMs);
       const targetPosts = recent.length > 0 ? recent : published.slice(0, 20);
-      newsEntriesXml = targetPosts.map((p) => {
-        const pubIso = p.timestamp ? new Date(p.timestamp).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
+      const seenUrls = /* @__PURE__ */ new Set();
+      const entryStrings = [];
+      for (const p of targetPosts) {
         const safeId = encodeURIComponent(p.id || "");
-        const safeTitle = (p.title || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const imgXml = p.imageUrl ? `
+        const articleUrl = `${cleanBase}/newsroom?article=${safeId}`;
+        if (seenUrls.has(articleUrl)) continue;
+        seenUrls.add(articleUrl);
+        const pubIso = p.timestamp ? new Date(p.timestamp).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
+        const safeTitle = (p.title || p.approvedHeadline || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+        let rawImg = p.imageUrl || p.thumbnailUrl || p.customThumbnailUrl || p.approvedGraphicUrl || p.image;
+        if (rawImg && rawImg.startsWith("/")) {
+          rawImg = `${cleanBase}${rawImg}`;
+        }
+        const imgXml = rawImg ? `
     <image:image>
-      <image:loc>${p.imageUrl.replace(/&/g, "&amp;")}</image:loc>
+      <image:loc>${rawImg.replace(/&/g, "&amp;")}</image:loc>
       <image:title>${safeTitle}</image:title>
     </image:image>` : "";
-        return `  <url>
-    <loc>${cleanBase}/newsroom?article=${safeId}</loc>
+        entryStrings.push(`  <url>
+    <loc>${articleUrl}</loc>
     <news:news>
       <news:publication>
         <news:name>AI News Maker</news:name>
@@ -18478,8 +18548,9 @@ function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
       <news:publication_date>${pubIso}</news:publication_date>
       <news:title>${safeTitle}</news:title>
     </news:news>${imgXml}
-  </url>`;
-      }).join("\n");
+  </url>`);
+      }
+      newsEntriesXml = entryStrings.join("\n");
     }
   } catch (err) {
     console.warn("[Google News Sitemap] Failed to load posts:", err?.message);
@@ -18502,6 +18573,42 @@ app.get(["/sitemap-news.xml", "/news-sitemap.xml"], (_req, res) => {
     res.status(500).send("Error generating Google News sitemap");
   }
 });
+app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
+  const filePath = import_path2.default.join(process.cwd(), "public", "llms.txt");
+  if (import_fs2.default.existsSync(filePath)) {
+    res.header("Content-Type", "text/plain; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=86400");
+    return res.sendFile(filePath);
+  }
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  return res.send(`# AI News Maker (https://www.ainewsmaker.online)
+# Standard: https://llmstxt.org/
+
+> India's leading AI-powered smart digital newsroom studio.`);
+});
+app.get("/llms-full.txt", (_req, res) => {
+  const filePath = import_path2.default.join(process.cwd(), "public", "llms-full.txt");
+  if (import_fs2.default.existsSync(filePath)) {
+    res.header("Content-Type", "text/plain; charset=utf-8");
+    res.header("Cache-Control", "public, max-age=86400");
+    return res.sendFile(filePath);
+  }
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  return res.send(`# AI News Maker (Extended Documentation)`);
+});
+app.get("/BingSiteAuth.xml", (_req, res) => {
+  const filePath = import_path2.default.join(process.cwd(), "public", "BingSiteAuth.xml");
+  if (import_fs2.default.existsSync(filePath)) {
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    return res.sendFile(filePath);
+  }
+  const token = process.env.BING_SITE_AUTH_TOKEN || process.env.MS_VALIDATE_TOKEN;
+  if (token) {
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    return res.send(`<?xml version="1.0"?><users><user>${token}</user></users>`);
+  }
+  return res.status(404).send("BingSiteAuth.xml not configured");
+});
 app.get("/robots.txt", (_req, res) => {
   res.header("Content-Type", "text/plain; charset=utf-8");
   res.header("Cache-Control", "public, max-age=86400");
@@ -18519,6 +18626,9 @@ Allow: /privacy
 Allow: /refunds
 Allow: /support
 Allow: /delete-account
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /rss.xml
 Disallow: /admin
 Disallow: /api/
 Disallow: /uploads/private/
@@ -20982,6 +21092,182 @@ async function recordDeletedFrameTombstone(id) {
   }
   return true;
 }
+var MAX_FRAME_DOCUMENT_SIZE_BYTES = 700 * 1024;
+async function saveFrameBase64AssetAsync(base64Str, prefix = "frame_asset") {
+  if (!base64Str || typeof base64Str !== "string") return base64Str;
+  if (!base64Str.startsWith("data:image/") && !base64Str.startsWith("data:video/")) {
+    return base64Str;
+  }
+  const isVideo = base64Str.startsWith("data:video/");
+  const match = base64Str.match(/^data:(image|video)\/([a-zA-Z0-9+.-]+);base64,/);
+  let ext = "png";
+  if (match && match[2]) {
+    ext = match[2].toLowerCase();
+    if (ext === "jpeg") ext = "jpg";
+    if (ext.includes("svg")) ext = "svg";
+  }
+  const cleanBase64 = base64Str.replace(/^data:(image|video)\/[a-zA-Z0-9+.-]+;base64,/, "");
+  const buffer = Buffer.from(cleanBase64, "base64");
+  const filename = `${prefix}_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
+  const contentType = isVideo ? `video/${ext}` : ext === "jpg" ? "image/jpeg" : ext === "png" ? "image/png" : `image/${ext}`;
+  if (cloudStorage && typeof cloudStorage.saveMedia === "function") {
+    try {
+      const uploadRes = await cloudStorage.saveMedia({
+        buffer,
+        filename,
+        contentType,
+        category: "frames",
+        publicRead: true
+      });
+      if (uploadRes && uploadRes.url) {
+        return uploadRes.url;
+      }
+    } catch (e) {
+      console.warn("[saveFrameBase64AssetAsync] Cloud storage upload failed, falling back to local:", e.message);
+    }
+  }
+  try {
+    import_fs2.default.mkdirSync(UPLOAD_FRAMES_DIR, { recursive: true });
+    import_fs2.default.mkdirSync(WEB_UPLOAD_FRAMES_DIR, { recursive: true });
+    import_fs2.default.writeFileSync(import_path2.default.join(UPLOAD_FRAMES_DIR, filename), buffer);
+    try {
+      import_fs2.default.writeFileSync(import_path2.default.join(WEB_UPLOAD_FRAMES_DIR, filename), buffer);
+    } catch {
+    }
+    return `/uploads/frames/${filename}`;
+  } catch (err) {
+    console.error("[saveFrameBase64AssetAsync] Local write failed:", err);
+    return base64Str;
+  }
+}
+async function sanitizeFrameAssets(frame) {
+  if (!frame || typeof frame !== "object") return frame;
+  const sanitized = { ...frame };
+  if (sanitized.primaryBackgroundAsset && typeof sanitized.primaryBackgroundAsset === "string" && sanitized.primaryBackgroundAsset.startsWith("data:")) {
+    sanitized.primaryBackgroundAsset = await saveFrameBase64AssetAsync(sanitized.primaryBackgroundAsset, `bg_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.previewImageUrl && typeof sanitized.previewImageUrl === "string" && sanitized.previewImageUrl.startsWith("data:")) {
+    sanitized.previewImageUrl = await saveFrameBase64AssetAsync(sanitized.previewImageUrl, `preview_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.sampleReferenceUrl && typeof sanitized.sampleReferenceUrl === "string" && sanitized.sampleReferenceUrl.startsWith("data:")) {
+    sanitized.sampleReferenceUrl = await saveFrameBase64AssetAsync(sanitized.sampleReferenceUrl, `ref_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.samplePhotoUrl && typeof sanitized.samplePhotoUrl === "string" && sanitized.samplePhotoUrl.startsWith("data:")) {
+    sanitized.samplePhotoUrl = await saveFrameBase64AssetAsync(sanitized.samplePhotoUrl, `photo_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.sampleVideoUrl && typeof sanitized.sampleVideoUrl === "string" && sanitized.sampleVideoUrl.startsWith("data:")) {
+    sanitized.sampleVideoUrl = await saveFrameBase64AssetAsync(sanitized.sampleVideoUrl, `video_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.calloutAssetUrl && typeof sanitized.calloutAssetUrl === "string" && sanitized.calloutAssetUrl.startsWith("data:")) {
+    sanitized.calloutAssetUrl = await saveFrameBase64AssetAsync(sanitized.calloutAssetUrl, `callout_${sanitized.id || "frame"}`);
+  }
+  if (sanitized.headerConfig && sanitized.headerConfig.manualLocationAsset && typeof sanitized.headerConfig.manualLocationAsset === "string" && sanitized.headerConfig.manualLocationAsset.startsWith("data:")) {
+    sanitized.headerConfig = {
+      ...sanitized.headerConfig,
+      manualLocationAsset: await saveFrameBase64AssetAsync(sanitized.headerConfig.manualLocationAsset, `loc_${sanitized.id || "frame"}`)
+    };
+  }
+  if (sanitized.fullStoryCalloutConfig && sanitized.fullStoryCalloutConfig.manualCalloutAsset && typeof sanitized.fullStoryCalloutConfig.manualCalloutAsset === "string" && sanitized.fullStoryCalloutConfig.manualCalloutAsset.startsWith("data:")) {
+    sanitized.fullStoryCalloutConfig = {
+      ...sanitized.fullStoryCalloutConfig,
+      manualCalloutAsset: await saveFrameBase64AssetAsync(sanitized.fullStoryCalloutConfig.manualCalloutAsset, `callout_${sanitized.id || "frame"}`)
+    };
+  }
+  if (Array.isArray(sanitized.layers)) {
+    sanitized.layers = await Promise.all(
+      sanitized.layers.map(async (l) => {
+        if (l && l.assetUrl && typeof l.assetUrl === "string" && l.assetUrl.startsWith("data:")) {
+          return { ...l, assetUrl: await saveFrameBase64AssetAsync(l.assetUrl, `layer_${l.id || "asset"}`) };
+        }
+        if (l && l.content && typeof l.content === "string" && l.content.startsWith("data:image/")) {
+          return { ...l, content: await saveFrameBase64AssetAsync(l.content, `layer_content_${l.id || "asset"}`) };
+        }
+        return l;
+      })
+    );
+  }
+  return sanitized;
+}
+function validateFrameDocumentSize(frame) {
+  try {
+    const serialized = JSON.stringify(frame);
+    const byteLength = Buffer.byteLength(serialized, "utf-8");
+    if (byteLength > MAX_FRAME_DOCUMENT_SIZE_BYTES) {
+      return {
+        valid: false,
+        size: byteLength,
+        error: `Frame document size (${Math.round(byteLength / 1024)} KiB) exceeds the allowed limit of 700 KiB (${MAX_FRAME_DOCUMENT_SIZE_BYTES} bytes). Please reduce embedded assets.`
+      };
+    }
+    return { valid: true, size: byteLength };
+  } catch (err) {
+    return { valid: false, size: 0, error: err.message };
+  }
+}
+async function saveSingleDynamicFrameAsync(rawFrame) {
+  if (!rawFrame || !rawFrame.id) {
+    throw new Error("Frame ID is required to save frame document.");
+  }
+  const tombstones = await getDurableFrameTombstones();
+  if (tombstones.has(rawFrame.id) || tombstones.has(rawFrame.name) || FORBIDDEN_DYNAMIC_FRAME_IDS.has(rawFrame.id)) {
+    throw new Error(`Cannot save frame '${rawFrame.id}': ID or name is permanently deleted or forbidden.`);
+  }
+  const frame = await sanitizeFrameAssets(rawFrame);
+  const sizeValidation = validateFrameDocumentSize(frame);
+  if (!sizeValidation.valid) {
+    throw new Error(sizeValidation.error || "Frame exceeds maximum allowed document size (700 KiB).");
+  }
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    try {
+      const res = await centralDb.writeDoc("dynamic_frames", frame.id, frame);
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore dynamic frame write failed: ${res?.error || res?.statusCode || "Unknown error"}`);
+      }
+    } catch (e) {
+      console.error(`[saveSingleDynamicFrameAsync] Durable write error for frame ${frame.id}:`, e.message);
+      if (centralDb.useFirestore) throw e;
+    }
+  }
+  try {
+    let local = [];
+    if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      try {
+        const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) local = parsed;
+      } catch {
+      }
+    }
+    const updated = [frame, ...local.filter((f) => f.id !== frame.id)];
+    import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to update dynamic_frames_db.json cache:", err);
+  }
+  return true;
+}
+async function deleteSingleDynamicFrameAsync(frameId) {
+  if (!frameId) return false;
+  await recordDeletedFrameTombstone(frameId);
+  if (centralDb && typeof centralDb.deleteDoc === "function") {
+    try {
+      await centralDb.deleteDoc("dynamic_frames", frameId);
+    } catch (e) {
+      console.warn(`[deleteSingleDynamicFrameAsync] Firestore delete warning for ${frameId}:`, e.message);
+    }
+  }
+  try {
+    if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const updated = parsed.filter((f) => f.id !== frameId && f.name !== frameId);
+        import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+      }
+    }
+  } catch {
+  }
+  return true;
+}
 function loadDynamicFramesDatabase() {
   const tombstones = loadDeletedFramesTombstones();
   try {
@@ -20999,48 +21285,66 @@ function loadDynamicFramesDatabase() {
 async function loadDynamicFramesDatabaseAsync() {
   const tombstones = await getDurableFrameTombstones();
   let frames = [];
-  if (centralDb && typeof centralDb.readDoc === "function") {
+  if (centralDb && typeof centralDb.listDocs === "function") {
     try {
-      const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
-      const docData = cloudDoc?.data || cloudDoc;
-      if (docData && Array.isArray(docData.frames) && docData.frames.length > 0) {
-        frames = docData.frames;
+      const listRes = await centralDb.listDocs("dynamic_frames", 300);
+      if (listRes && listRes.success && Array.isArray(listRes.documents) && listRes.documents.length > 0) {
+        frames = listRes.documents;
+        try {
+          import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
+        } catch {
+        }
       }
-    } catch {
+    } catch (e) {
+      console.warn("[loadDynamicFramesDatabaseAsync] listDocs dynamic_frames warning:", e.message);
     }
   }
   if (frames.length === 0) {
-    try {
-      if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    let legacyFrames = [];
+    if (centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
+        const docData = cloudDoc?.data || cloudDoc;
+        if (docData && Array.isArray(docData.frames) && docData.frames.length > 0) {
+          legacyFrames = docData.frames;
+        }
+      } catch {
+      }
+    }
+    if (legacyFrames.length === 0 && import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+      try {
         const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) frames = parsed;
+        if (Array.isArray(parsed)) legacyFrames = parsed;
+      } catch {
       }
+    }
+    if (legacyFrames.length > 0) {
+      console.log(`[dynamic_frames migration] Migrating ${legacyFrames.length} legacy frames to per-frame collection...`);
+      const validToMigrate = legacyFrames.filter(
+        (f) => f && f.id && !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && !(f.name === "11111" || f.name === "2222" || f.id === "df_sample_11111" || f.id === "df_sample_2222" || f.id === "11111" || f.id === "2222")
+      );
+      for (const f of validToMigrate) {
+        try {
+          await saveSingleDynamicFrameAsync(f);
+          frames.push(f);
+        } catch (mErr) {
+          console.warn(`[dynamic_frames migration] Failed to migrate frame ${f.id}:`, mErr.message);
+        }
+      }
+    }
+  }
+  if (frames.length === 0 && import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    try {
+      const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) frames = parsed;
     } catch {
     }
   }
   return frames.filter(
-    (f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && !(f.name === "11111" || f.name === "2222" || f.id === "df_sample_11111" || f.id === "df_sample_2222" || f.id === "11111" || f.id === "2222")
+    (f) => f && f.id && !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && !(f.name === "11111" || f.name === "2222" || f.id === "df_sample_11111" || f.id === "df_sample_2222" || f.id === "11111" || f.id === "2222")
   );
-}
-async function saveDynamicFramesDatabaseAsync(frames) {
-  try {
-    import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
-  } catch (err) {
-    console.warn("Failed to write dynamic_frames_db.json:", err);
-  }
-  if (centralDb && typeof centralDb.writeDoc === "function") {
-    try {
-      const res = await centralDb.writeDoc("system_config", "dynamic_frames", { frames, updatedAt: Date.now() });
-      if (centralDb.useFirestore && (!res || res.success === false)) {
-        throw new Error(`Durable Firestore dynamic frames write failed: ${res?.error || res?.statusCode || "Unknown error"}`);
-      }
-    } catch (e) {
-      console.error("[saveDynamicFramesDatabaseAsync] Durable write error:", e.message);
-      if (centralDb.useFirestore) throw e;
-    }
-  }
-  return true;
 }
 function deepMergeFrameConfig(existing, payload) {
   if (!existing) return payload || {};
@@ -21219,18 +21523,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
   try {
     const { aspectRatio, category } = req.query;
     const isMaster = isAuthorizedMasterAdmin(req);
-    const tombstones = await getDurableFrameTombstones();
     let frames = await loadDynamicFramesDatabaseAsync();
-    if (frames.length === 0 && centralDb && typeof centralDb.readDoc === "function") {
-      try {
-        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
-        if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
-          frames = cloudDoc.frames.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && f.id !== "df_reg_4_5_clean" && !(f.id !== "graphic_001" && (f.name?.includes("\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928") || f.name?.toLowerCase()?.includes("regular clean"))) && !(f.name === "11111" || f.name === "2222" || f.id.includes("11111") || f.id.includes("2222")));
-          await saveDynamicFramesDatabaseAsync(frames);
-        }
-      } catch {
-      }
-    }
     let filtered = isMaster ? frames : frames.filter(
       (f) => f.publicationStatus === "published" && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
     );
@@ -21264,16 +21557,19 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
     if (tombstones.has(id)) {
       return res.status(404).json({ error: "Frame not found." });
     }
-    let frames = await loadDynamicFramesDatabaseAsync();
-    let frame = frames.find((f) => f.id === id);
-    if (!frame && centralDb && typeof centralDb.readDoc === "function") {
+    let frame = null;
+    if (centralDb && typeof centralDb.readDoc === "function") {
       try {
-        const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
-        if (cloudDoc && Array.isArray(cloudDoc.frames)) {
-          frame = cloudDoc.frames.find((f) => f.id === id);
+        const cloudDoc = await centralDb.readDoc("dynamic_frames", id);
+        if (cloudDoc && cloudDoc.success && cloudDoc.data) {
+          frame = cloudDoc.data;
         }
       } catch {
       }
+    }
+    if (!frame) {
+      const frames = await loadDynamicFramesDatabaseAsync();
+      frame = frames.find((f) => f.id === id);
     }
     if (!frame) {
       return res.status(404).json({ error: "Frame not found." });
@@ -21298,6 +21594,11 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
     if (!allowedRatios.includes(payload.aspectRatio)) {
       return res.status(400).json({ error: `Invalid aspectRatio '${payload.aspectRatio}'. Allowed for ${isVideo ? "video: 9:16, 1:1, 4:5, 4:3" : "graphic: 4:5, 9:16, 1:1"}.` });
     }
+    const isTestCategory = payload.designCategory === "TEST_FRAMES" || payload.isTestFrame === true;
+    const isTestFrame = payload.isTestFrame !== void 0 ? Boolean(payload.isTestFrame) : isTestCategory;
+    const approvalStatus = payload.approvalStatus || (isTestFrame ? "PENDING_TEST" : "APPROVED");
+    const publicationStatus = isTestFrame ? "draft" : payload.publicationStatus || "published";
+    const designCategory = payload.designCategory || (isTestFrame ? "TEST_FRAMES" : payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames");
     const newFrame = {
       ...payload,
       id: payload.id && !payload.id.startsWith("temp_") ? payload.id : `df_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -21313,15 +21614,15 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
       primaryBackgroundAsset: payload.primaryBackgroundAsset || void 0,
       primaryBackgroundMode: payload.primaryBackgroundMode || "image",
       primaryBackgroundHex: payload.primaryBackgroundHex || "#0B1329",
-      isTestFrame: payload.isTestFrame !== void 0 ? Boolean(payload.isTestFrame) : true,
-      approvalStatus: payload.approvalStatus || (payload.isTestFrame === false ? "APPROVED" : "PENDING_TEST"),
+      isTestFrame,
+      approvalStatus,
       targetCategory: payload.targetCategory || null,
       approvedAt: payload.approvedAt || null,
       approvedBy: payload.approvedBy || null,
       sliceConfig: payload.sliceConfig || null,
-      designCategory: payload.designCategory || (payload.isTestFrame === false ? payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames" : "TEST_FRAMES"),
+      designCategory,
       allowedPlans: Array.isArray(payload.allowedPlans) && payload.allowedPlans.length > 0 ? payload.allowedPlans : ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      publicationStatus: payload.publicationStatus || "draft",
+      publicationStatus,
       createdBy: req.user?.email || "breakingnewswala.com@gmail.com",
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -21359,9 +21660,7 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
       calloutAssetId: payload.calloutAssetId,
       poweredByConfig: payload.poweredByConfig
     };
-    const all = await loadDynamicFramesDatabaseAsync();
-    const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
-    await saveDynamicFramesDatabaseAsync(updated);
+    await saveSingleDynamicFrameAsync(newFrame);
     return res.json({ success: true, frame: newFrame });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -21371,12 +21670,23 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
   try {
     const { id } = req.params;
     const payload = req.body || {};
-    const all = await loadDynamicFramesDatabaseAsync();
-    const existingIdx = all.findIndex((f) => f.id === id);
-    if (existingIdx === -1) {
+    let existing = null;
+    if (centralDb && typeof centralDb.readDoc === "function") {
+      try {
+        const cloudRes = await centralDb.readDoc("dynamic_frames", id);
+        if (cloudRes && cloudRes.success && cloudRes.data) {
+          existing = cloudRes.data;
+        }
+      } catch {
+      }
+    }
+    if (!existing) {
+      const all = await loadDynamicFramesDatabaseAsync();
+      existing = all.find((f) => f.id === id);
+    }
+    if (!existing) {
       return res.status(404).json({ error: "Frame not found." });
     }
-    const existing = all[existingIdx];
     const isVideo = payload.frameMode === "video" || payload.frameType === "video" || existing.frameMode === "video" || existing.frameType === "video";
     const targetRatio = payload.aspectRatio || existing.aspectRatio;
     const allowedRatios = isVideo ? ["9:16", "1:1", "4:5", "4:3"] : ["4:5", "9:16", "1:1"];
@@ -21384,8 +21694,14 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
       return res.status(400).json({ error: `Invalid aspectRatio '${targetRatio}'.` });
     }
     const updatedFrame = deepMergeFrameConfig(existing, payload);
-    all[existingIdx] = updatedFrame;
-    await saveDynamicFramesDatabaseAsync(all);
+    if (payload.designCategory === "TEST_FRAMES" || payload.isTestFrame === true) {
+      updatedFrame.isTestFrame = true;
+      updatedFrame.designCategory = "TEST_FRAMES";
+      if (!payload.approvalStatus) {
+        updatedFrame.approvalStatus = updatedFrame.approvalStatus === "APPROVED" ? "APPROVED" : "PENDING_TEST";
+      }
+    }
+    await saveSingleDynamicFrameAsync(updatedFrame);
     return res.json({ success: true, frame: updatedFrame });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -21397,18 +21713,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, 
     if (id === "graphic_001") {
       return res.status(400).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u092B\u094D\u0930\u0947\u092E 'Regular Clean News Frame' \u0915\u094B \u0939\u091F\u093E\u092F\u093E \u0928\u0939\u0940\u0902 \u091C\u093E \u0938\u0915\u0924\u093E\u0964" });
     }
-    let all = await loadDynamicFramesDatabaseAsync();
-    const target = all.find((f) => f.id === id || f.name === id);
-    if (target) {
-      if (target.id) await recordDeletedFrameTombstone(target.id);
-      if (target.name === "11111" || target.name === "2222" || target.id === "11111" || target.id === "2222") {
-        await recordDeletedFrameTombstone(target.name);
-      }
-    } else {
-      await recordDeletedFrameTombstone(id);
-    }
-    all = all.filter((f) => f.id !== id && f.name !== id && !(id === "11111" && f.id.includes("11111")) && !(id === "2222" && f.id.includes("2222")));
-    await saveDynamicFramesDatabaseAsync(all);
+    await deleteSingleDynamicFrameAsync(id);
     const newsTemplateFile = import_path2.default.join(process.cwd(), "news_template_configs.json");
     if (import_fs2.default.existsSync(newsTemplateFile)) {
       try {
@@ -21901,29 +22206,69 @@ app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
 });
 app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
-    const { identifier, password, googleUid, profileData } = req.body;
+    const { identifier, password, googleUid, firebaseToken, idToken, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
-    if (googleUid) {
-      const isSuper = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, "") === "breakingnewswala.com@gmail.com";
-      const isSubAdmin = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, "") === "admin.ainewsmaker@gmail.com";
+    if (googleUid || firebaseToken || idToken) {
+      const candidateToken = firebaseToken || idToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "");
+      if (!candidateToken) {
+        return res.status(401).json({
+          success: false,
+          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0935\u093F\u092B\u0932: Google \u0932\u0949\u0917\u093F\u0928 \u0915\u0947 \u0932\u093F\u090F \u0935\u0948\u0927 Firebase ID \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
+        });
+      }
+      if (!firebaseAdminAuth) {
+        return res.status(503).json({
+          success: false,
+          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964"
+        });
+      }
+      let decoded;
+      try {
+        decoded = await firebaseAdminAuth.verifyIdToken(candidateToken, true);
+      } catch (tokenErr) {
+        return res.status(401).json({
+          success: false,
+          error: "\u0905\u0935\u0948\u0927 \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u091F\u094B\u0915\u0928\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
+        });
+      }
+      if (!decoded || !decoded.email) {
+        return res.status(401).json({
+          success: false,
+          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u091F\u094B\u0915\u0928 \u092E\u0947\u0902 \u0935\u0948\u0927 \u0908\u092E\u0947\u0932 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964"
+        });
+      }
+      const verifiedEmail = decoded.email.toLowerCase().trim();
+      const verifiedUid = decoded.uid;
+      if (cleanId && cleanId !== verifiedEmail) {
+        return res.status(401).json({
+          success: false,
+          error: "\u091F\u094B\u0915\u0928 \u092A\u0939\u091A\u093E\u0928\u0915\u0930\u094D\u0924\u093E \u092E\u0947\u0932 \u0928\u0939\u0940\u0902 \u0916\u093E\u0924\u093E\u0964"
+        });
+      }
+      const masterUsers = loadUsersMasterDatabase();
+      const registeredUser = masterUsers.find(
+        (u) => u.email && u.email.toLowerCase().trim() === verifiedEmail || u.userId && u.userId === verifiedUid
+      );
+      const isSuper = verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL;
+      const isSubAdmin = verifiedEmail === SUB_ADMIN_EMAIL;
       const isAdmin = isSuper || isSubAdmin;
       const release = await userDbLock.acquire();
       let savedUser;
       try {
         const allProfiles2 = loadProfilesDatabase();
         const existing = Object.values(allProfiles2).find(
-          (p) => p.uid && p.uid === googleUid || p.userId && p.userId === googleUid || p.email && p.email.toLowerCase() === cleanId
+          (p) => p.uid && (p.uid === verifiedUid || p.uid === googleUid) || p.userId && (p.userId === verifiedUid || p.userId === googleUid) || p.email && p.email.toLowerCase() === verifiedEmail
         );
-        const accessCheck2 = checkUserAccess(cleanId);
+        const accessCheck2 = checkUserAccess(verifiedEmail);
         if (existing && existing.isBlocked || accessCheck2.blocked) {
           return res.status(403).json({
             success: false,
             isBlocked: true,
             error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \u0938\u092A\u094B\u0930\u094D\u091F \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964",
-            user: existing || { email: cleanId, isBlocked: true }
+            user: existing || { email: verifiedEmail, isBlocked: true }
           });
         }
-        const isDeletedTombstoned = isUserTombstoned(cleanId) || isUserTombstoned(googleUid);
+        const isDeletedTombstoned = isUserTombstoned(verifiedEmail) || isUserTombstoned(verifiedUid);
         const existingLogo = String(existing?.channelLogoUrl || existing?.channelLogoPngUrl || "").trim();
         const hasRealLogo = Boolean(existingLogo && !existingLogo.includes("ai_news_maker_logo.png"));
         const existingPhoneDigits = String(existing?.phoneNumber || existing?.mobile || existing?.whatsappNumber || "").replace(/\D/g, "").slice(-10);
@@ -21944,14 +22289,14 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           safeUsername = "";
         }
         const userPayload = {
-          userId: existing?.userId || (cleanId ? `usr_${Buffer.from(cleanId).toString("hex").slice(0, 16)}` : googleUid),
-          uid: existing?.uid || googleUid,
-          email: cleanId,
+          userId: existing?.userId || verifiedUid,
+          uid: verifiedUid,
+          email: verifiedEmail,
           username: safeUsername,
-          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : isSubAdmin ? "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)" : "\u092F\u0942\u091C\u093C\u0930"),
-          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : isSubAdmin ? "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)" : "\u092F\u0942\u091C\u093C\u0930"),
-          role: isSuper ? "superadmin" : isSubAdmin ? "admin" : existing?.role || "user",
-          tier: isSuper ? "ultra" : isSubAdmin ? "ultra" : existing?.tier || "basic",
+          fullName: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : isSubAdmin ? "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)" : "\u092F\u0942\u091C\u093C\u0930"),
+          name: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : isSubAdmin ? "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)" : "\u092F\u0942\u091C\u093C\u0930"),
+          role: isSuper ? "superadmin" : isSubAdmin ? "admin" : registeredUser?.role || existing?.role || "user",
+          tier: isSuper ? "ultra" : isSubAdmin ? "ultra" : registeredUser?.tier || existing?.tier || "basic",
           planName: isSuper ? "VIP DESK" : isSubAdmin ? "VIP DESK" : existing?.planName || "BASIC",
           channelName: isSuper ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isSubAdmin ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isProfileComplete ? existing?.channelNameHi || existing?.channelName || "" : profileData?.channelName || "",
           channelNameHi: isSuper ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isSubAdmin ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isProfileComplete ? existing?.channelNameHi || "" : profileData?.channelNameHi || "",
@@ -21973,8 +22318,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         release();
       }
       const token2 = generateAuthToken({
-        userId: savedUser.userId || googleUid,
-        email: savedUser.email || cleanId,
+        userId: savedUser.userId || verifiedUid,
+        email: savedUser.email || verifiedEmail,
         role: savedUser.role || "user",
         username: savedUser.username
       });
@@ -22015,11 +22360,23 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       );
     }
     let isPasswordValid = false;
+    let needsRehash = false;
     if (credEntry && credEntry.salt && credEntry.hash) {
-      isPasswordValid = verifyPassword(String(password), credEntry.salt, credEntry.hash);
+      const pwCheck = verifyPassword(String(password), credEntry.salt, credEntry.hash);
+      isPasswordValid = pwCheck.valid;
+      needsRehash = pwCheck.needsRehash;
     }
     if (!isPasswordValid) {
       return res.status(401).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092F\u0942\u091C\u093C\u0930\u0928\u0947\u092E \u092F\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921" });
+    }
+    if (needsRehash && credEntry) {
+      try {
+        const upgraded = hashPassword(String(password), credEntry.salt, PBKDF2_ITERATIONS);
+        credEntry.hash = upgraded.hash;
+        credEntry.iterations = PBKDF2_ITERATIONS;
+        saveCredentialsDatabase(creds);
+      } catch {
+      }
     }
     const user = match || {
       username: credEntry?.username || cleanId,
@@ -22650,15 +23007,20 @@ app.post("/api/admin/videos/upload-thumbnail", requireAdminMiddleware, async (re
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/upload-font", enforceUserAccessMiddleware, async (req, res) => {
+app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
   try {
-    if (!req.user) {
-      req.user = getAuthenticatedUser(req);
+    const authUser = req.user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ success: false, error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
-    const explicitTier = (req.body?.userTier || req.headers["x-user-tier"])?.toString().toLowerCase().trim();
-    const userTier = (explicitTier || req.user?.tier || req.user?.subscriptionTier || "basic").toString().toLowerCase().trim();
-    const isExplicitTest = Boolean(explicitTier);
-    const isAdmin = !isExplicitTest && (req.user?.role === "admin" || req.user?.role === "superadmin");
+    const cleanEmail = authUser.email.toLowerCase().trim();
+    const allProfiles = loadProfilesDatabase();
+    const profile = allProfiles[cleanEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanEmail);
+    const users = loadUsersMasterDatabase();
+    const dbUser = users.find((u) => u.email && u.email.toLowerCase().trim() === cleanEmail);
+    const userRole = authUser.role || profile?.role || dbUser?.role || "user";
+    const isAdmin = userRole === "admin" || userRole === "superadmin" || isAuthorizedAdmin(req);
+    const userTier = (dbUser?.tier || profile?.tier || authUser.tier || "basic").toString().toLowerCase().trim();
     const isVipDash = isAdmin || userTier === "vip_dash" || userTier === "vip-dash" || userTier === "vip desk" || userTier === "ultra" || userTier === "vip";
     if (!isVipDash) {
       return res.status(403).json({
@@ -30208,14 +30570,25 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/wallet/frame-unlocks", (req, res) => {
+app.get("/api/wallet/frame-unlocks", requireAuthMiddleware, (req, res) => {
   try {
-    const email = (req.query.email || "").toString().toLowerCase().trim();
-    if (!email) {
-      return res.json({ success: true, unlocks: [] });
+    const authUser = req.user;
+    if (!authUser || !authUser.email) {
+      return res.status(401).json({ error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const requestingEmail = authUser.email.toLowerCase().trim();
+    const isAdmin = isAuthorizedAdmin(req);
+    const queryEmail = (req.query.email || "").toString().toLowerCase().trim();
+    let targetEmail = requestingEmail;
+    if (queryEmail && queryEmail !== requestingEmail) {
+      if (isAdmin) {
+        targetEmail = queryEmail;
+      } else {
+        return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0916\u093E\u0924\u0947 \u0915\u0947 \u092B\u094D\u0930\u0947\u092E \u0905\u0928\u0932\u0949\u0915 \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      }
     }
     const rDb = loadRewardsDatabase();
-    const userUnlocks = rDb.frameUnlocks?.[email] || {};
+    const userUnlocks = rDb.frameUnlocks?.[targetEmail] || {};
     const now = Date.now();
     const activeFrameIds = Object.keys(userUnlocks).filter((fId) => userUnlocks[fId]?.expiresAt > now);
     return res.json({
@@ -32767,7 +33140,7 @@ async function startServer() {
         try {
           const rawPath = (req.path || "/").toLowerCase();
           const query = req.query || {};
-          const articleId = (query.article || query.news || (req.path.startsWith("/news/") ? req.path.replace("/news/", "") : "")).toString().trim();
+          const articleId = (query.article || query.news || query.newsId || query.articleId || (req.path.startsWith("/news/") ? req.path.replace("/news/", "") : "") || (req.path.startsWith("/article/") ? req.path.replace("/article/", "") : "")).toString().trim();
           const cleanBase = "https://www.ainewsmaker.online";
           let title = "AI News Maker \u2014 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B";
           let description = "\u092D\u093E\u0930\u0924 \u0915\u093E \u0928\u0902\u092C\u0930 1 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B\u0964 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915\u094D\u0938, \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0914\u0930 \u0908-\u092A\u0947\u092A\u0930 \u092C\u0928\u093E\u090F\u0902 \u0938\u0947\u0915\u0902\u0921\u094B\u0902 \u092E\u0947\u0902\u0964";
@@ -32778,15 +33151,36 @@ async function startServer() {
           let prerenderContent = "";
           if (articleId) {
             try {
+              let found = null;
               const posts = loadNewsDatabase();
-              const found = posts.find((p) => p && (p.id === articleId || p.docId && p.docId === articleId || p.title && encodeURIComponent(p.title) === articleId));
+              if (Array.isArray(posts)) {
+                found = posts.find((p) => p && (p.id === articleId || p.docId && p.docId === articleId || p.title && encodeURIComponent(p.title) === articleId));
+              }
+              if (!found) {
+                try {
+                  const editorialDb = loadApprovedEditorialDatabase();
+                  if (editorialDb && editorialDb[articleId]) {
+                    found = { id: articleId, ...editorialDb[articleId] };
+                  }
+                } catch {
+                }
+              }
               if (found) {
                 const safeTitle = (found.title || found.approvedHeadline || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930").trim();
                 const safeSummary = (found.summary || found.approvedCaptionDetailed || found.captionShort || safeTitle).trim();
                 title = `${safeTitle} \u2014 AI News Maker`;
                 description = safeSummary.slice(0, 280);
-                canonical = `${cleanBase}/newsroom?article=${encodeURIComponent(found.id)}`;
-                if (found.imageUrl) ogImage = found.imageUrl;
+                canonical = `${cleanBase}/newsroom?article=${encodeURIComponent(found.id || articleId)}`;
+                let selectedThumb = found.imageUrl || found.thumbnailUrl || found.approvedGraphicUrl || found.customThumbnailUrl || found.adminThumbnailUrl || found.image;
+                if (selectedThumb && typeof selectedThumb === "string" && selectedThumb.trim()) {
+                  let cleanThumb = selectedThumb.trim();
+                  if (cleanThumb.startsWith("/")) {
+                    cleanThumb = `${cleanBase}${cleanThumb}`;
+                  }
+                  ogImage = cleanThumb;
+                } else {
+                  ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+                }
                 ogType = "article";
                 const isoDate = found.timestamp ? new Date(found.timestamp).toISOString() : (/* @__PURE__ */ new Date()).toISOString();
                 const newsArticleSchema = {
@@ -32797,6 +33191,7 @@ async function startServer() {
                   "image": [ogImage],
                   "datePublished": isoDate,
                   "dateModified": isoDate,
+                  "inLanguage": "hi",
                   "author": [
                     {
                       "@type": "Organization",
@@ -32807,6 +33202,7 @@ async function startServer() {
                   "publisher": {
                     "@type": "NewsMediaOrganization",
                     "name": "AI News Maker",
+                    "url": cleanBase,
                     "logo": {
                       "@type": "ImageObject",
                       "url": `${cleanBase}/assets/breaking_news_wala_logo.png`
@@ -32823,7 +33219,7 @@ async function startServer() {
                       <h1 style="font-size:26px;font-weight:700;margin:15px 0;">${safeTitle}</h1>
                       <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0921\u0947\u0938\u094D\u0915</p>
                     </header>
-                    ${found.imageUrl ? `<figure><img src="${found.imageUrl}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
+                    ${ogImage && !ogImage.includes("breaking_news_wala_logo.png") ? `<figure><img src="${ogImage}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
                     <div class="content" style="line-height:1.7;font-size:16px;">
                       <p>${safeSummary}</p>
                     </div>
@@ -32877,17 +33273,37 @@ async function startServer() {
           modified = modified.replace(/<meta\s+property=["']og:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:title" content="${title.replace(/"/g, "&quot;")}" />`);
           modified = modified.replace(/<meta\s+property=["']og:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:description" content="${description.replace(/"/g, "&quot;")}" />`);
           modified = modified.replace(/<meta\s+property=["']og:url["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:url" content="${canonical}" />`);
-          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />`);
+          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="${title.replace(/"/g, "&quot;")}" />`);
           modified = modified.replace(/<meta\s+property=["']og:type["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:type" content="${ogType}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:card["']\s+content=["'][^"']*["']\s*\/?>/i, '<meta name="twitter:card" content="summary_large_image" />');
           modified = modified.replace(/<meta\s+name=["']twitter:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:title" content="${title.replace(/"/g, "&quot;")}" />`);
           modified = modified.replace(/<meta\s+name=["']twitter:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:description" content="${description.replace(/"/g, "&quot;")}" />`);
-          modified = modified.replace(/<meta\s+name=["']twitter:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:image" content="${ogImage}" />`);
+          modified = modified.replace(/<meta\s+name=["']twitter:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:image" content="${ogImage}" />
+    <meta name="twitter:image:alt" content="${title.replace(/"/g, "&quot;")}" />`);
+          const gscToken = process.env.GOOGLE_SITE_VERIFICATION || "";
+          const bingToken = process.env.MS_VALIDATE_TOKEN || process.env.BING_SITE_AUTH_TOKEN || "";
+          let verificationMetaTags = "";
+          if (gscToken) {
+            verificationMetaTags += `
+    <meta name="google-site-verification" content="${gscToken}" />`;
+          }
+          if (bingToken) {
+            verificationMetaTags += `
+    <meta name="msvalidate.01" content="${bingToken}" />`;
+          }
+          if (verificationMetaTags) {
+            modified = modified.replace("</head>", `${verificationMetaTags}
+  </head>`);
+          }
           if (extraJsonLd) {
             modified = modified.replace("</head>", `${extraJsonLd}
   </head>`);
           }
           const ua = (req.headers["user-agent"] || "").toLowerCase();
-          const isBot = /googlebot|bingbot|yandex|duckduckbot|slurp|baiduspider|twitterbot|facebookexternalhit|whatsapp|linkedinbot|embedly|quora link preview|showyoubot|outbrain/i.test(ua);
+          const isBot = /googlebot|bingbot|yandex|duckduckbot|slurp|baiduspider|twitterbot|facebookexternalhit|whatsapp|linkedinbot|embedly|quora link preview|showyoubot|outbrain|telegrambot|discordbot|slackbot|applebot/i.test(ua);
           if (isBot && prerenderContent) {
             modified = modified.replace('<div id="root">', `<div id="root">${prerenderContent}`);
           }
