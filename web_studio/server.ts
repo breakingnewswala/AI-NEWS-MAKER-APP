@@ -8315,7 +8315,7 @@ async function extractBestNewsImage(
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
         },
-        signal: AbortSignal.timeout(4500),
+        signal: AbortSignal.timeout(1800),
       });
       if (resp.ok) {
         const html = await resp.text();
@@ -8426,6 +8426,8 @@ function cleanAndCraftHindiHeadline(rawHeadline: string, articleText: string): {
   return { title, summary, location: detectedLocation };
 }
 
+let isGeminiQuotaPausedUntil = 0;
+
 async function processRssItemWithAiEditorial(
   rawTitle: string,
   rawDesc: string,
@@ -8434,8 +8436,17 @@ async function processRssItemWithAiEditorial(
 ): Promise<{ title: string; summary: string; location: string; categoryName: string }> {
   const fallback = cleanAndCraftHindiHeadline(rawTitle, rawDesc);
 
+  if (Date.now() < isGeminiQuotaPausedUntil) {
+    return {
+      title: fallback.title,
+      summary: fallback.summary,
+      location: fallback.location,
+      categoryName: sourceCategory || "देश",
+    };
+  }
+
   try {
-    const parsed = await executeGeminiWithKeyPool(async (ai) => {
+    const aiPromise = executeGeminiWithKeyPool(async (ai) => {
       const prompt = `आप एक वरिष्ठ, निष्पक्ष और तथ्यपरक हिंदी समाचार संपादक हैं।
 नीचे दी गई खबर के विवरण और शीर्षक का विश्लेषण करें और एक तथ्यपरक, स्पष्ट, संक्षिप्त और निष्पक्ष हिंदी हेडलाइन (Headline) व 2 वाक्यों का संक्षिप्त सार (Summary) तैयार करें।
 
@@ -8447,7 +8458,7 @@ async function processRssItemWithAiEditorial(
 5. आउटपुट केवल वैध JSON में दें:
 {"headline": "तथ्यात्मक हेडलाइन", "summary": "संक्षिप्त विवरण", "location": "जिले/शहर का नाम"}`;
 
-      const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+      const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 1), {
         contents: `${prompt}\n\nमूल शीर्षक: ${rawTitle}\nमूल विवरण: ${rawDesc.slice(0, 500)}`,
         config: { temperature: 0.2 },
       });
@@ -8460,6 +8471,9 @@ async function processRssItemWithAiEditorial(
       return null;
     });
 
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500));
+    const parsed: any = await Promise.race([aiPromise, timeoutPromise]);
+
     if (parsed && parsed.headline && parsed.headline.trim().length > 5) {
       return {
         title: parsed.headline.trim(),
@@ -8468,8 +8482,11 @@ async function processRssItemWithAiEditorial(
         categoryName: sourceCategory || "देश",
       };
     }
-  } catch {
-    // Fallback cleanly to editorial heuristics
+  } catch (err: any) {
+    const msg = String(err?.message || err);
+    if (msg.includes("quota") || msg.includes("rate") || msg.includes("429")) {
+      isGeminiQuotaPausedUntil = Date.now() + 60000;
+    }
   }
 
   return {
@@ -8551,75 +8568,85 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
     items = syntheticItems;
   }
 
-  for (const itemXml of items.slice(0, 15)) {
-    const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
-    const rawTitle = titleMatch ? decodeHtmlEntities(titleMatch[1] || titleMatch[2] || "") : "";
-    if (!rawTitle) continue;
+  const candidateXmls = items.slice(0, 10);
+  const parsedPromises = candidateXmls.map(async (itemXml) => {
+    try {
+      const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
+      const rawTitle = titleMatch ? decodeHtmlEntities(titleMatch[1] || titleMatch[2] || "") : "";
+      if (!rawTitle) return null;
 
+      const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) ||
+        itemXml.match(/<link\s+href=["']([^"']+)["']/i);
+      const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
 
-    const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) ||
-      itemXml.match(/<link\s+href=["']([^"']+)["']/i);
-    const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
+      const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) ||
+        itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
+      const rawDesc = descMatch ? decodeHtmlEntities(descMatch[1] || descMatch[2] || "") : "";
 
-    const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) ||
-      itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
-    const rawDesc = descMatch ? decodeHtmlEntities(descMatch[1] || descMatch[2] || "") : "";
+      const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) ||
+        itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
+      const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
+      let timestamp = Date.now();
+      if (pubDateStr) {
+        const parsedTime = Date.parse(pubDateStr);
+        if (!isNaN(parsedTime)) timestamp = parsedTime;
+      }
 
+      // 1. Strict Priority Image Selection (media:content -> enclosure -> content img -> og:image -> twitter:image -> article img)
+      const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
 
-    const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) ||
-      itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
-    const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
-    let timestamp = Date.now();
-    if (pubDateStr) {
-      const parsedTime = Date.parse(pubDateStr);
-      if (!isNaN(parsedTime)) timestamp = parsedTime;
+      // 2. Article-Aware AI Editorial Headline & Summary Generation
+      const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
+
+      const catName = editorial.categoryName || source.category || "देश";
+      const catKey = resolveCategoryKeyFromName(catName, link || source.url);
+
+      const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
+
+      const postId = `rss-${source.id}-${hashStr}`;
+
+      return {
+        id: postId,
+        sourceId: source.id,
+        sourceFeedUrl: source.url,
+        sourceChannel: source.name,
+        sourceChannelId: (source as any).channelId || source.name,
+        sourceCategoryId: source.category,
+        title: editorial.title,
+        summary: editorial.summary,
+        sourceUrl: link, // PRESERVE original article URL
+
+        category: catKey,
+        categoryName: catName,
+        publishedTime: formatRelativeTime(timestamp),
+        imageUrl,
+        breaking: editorial.title.includes("बड़ा") || editorial.title.includes("फैसला") || editorial.title.includes("कार्रवाई"),
+        isExclusive: false,
+        isBonus: false,
+        rewardCoins: 0,
+        timestamp,
+        fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
+        location: editorial.location || "",
+        ingestionStatus: "PARSED",
+        approvalStatus: "PENDING_APPROVAL",
+        publicationStatus: "UNPUBLISHED",
+        status: "PENDING_APPROVAL",
+        isApproved: false,
+        isPrePublished: false,
+        isPublished: false,
+        editorialApproved: false,
+        visibility: "public",
+      } as StoredNewsPost;
+    } catch {
+      return null;
     }
+  });
 
-    // 1. Strict Priority Image Selection (media:content -> enclosure -> content img -> og:image -> twitter:image -> article img)
-    const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
-
-    // 2. Article-Aware AI Editorial Headline & Summary Generation
-    const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
-
-    const catName = editorial.categoryName || source.category || "देश";
-    const catKey = resolveCategoryKeyFromName(catName, link || source.url);
-
-    const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
-
-    const postId = `rss-${source.id}-${hashStr}`;
-
-    posts.push({
-      id: postId,
-      sourceId: source.id,
-      sourceFeedUrl: source.url,
-      sourceChannel: source.name,
-      sourceChannelId: (source as any).channelId || source.name,
-      sourceCategoryId: source.category,
-      title: editorial.title,
-      summary: editorial.summary,
-      sourceUrl: link, // PRESERVE original article URL
-
-      category: catKey,
-      categoryName: catName,
-      publishedTime: formatRelativeTime(timestamp),
-      imageUrl,
-      breaking: editorial.title.includes("बड़ा") || editorial.title.includes("फैसला") || editorial.title.includes("कार्रवाई"),
-      isExclusive: false,
-      isBonus: false,
-      rewardCoins: 0,
-      timestamp,
-      fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
-      location: editorial.location || "",
-      ingestionStatus: "PARSED",
-      approvalStatus: "PENDING_APPROVAL",
-      publicationStatus: "UNPUBLISHED",
-      status: "PENDING_APPROVAL",
-      isApproved: false,
-      isPrePublished: false,
-      isPublished: false,
-      editorialApproved: false,
-      visibility: "public",
-    });
+  const settled = await Promise.allSettled(parsedPromises);
+  for (const s of settled) {
+    if (s.status === "fulfilled" && s.value) {
+      posts.push(s.value);
+    }
   }
 
   return posts;
@@ -9677,7 +9704,7 @@ app.post("/api/admin/web-scrape", requireAdminMiddleware, async (req, res) => {
 app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
   return res.json({
     success: true,
-    lastSyncResult,
+    lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
     intervalMinutes: 5,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS,

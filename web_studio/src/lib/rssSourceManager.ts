@@ -236,7 +236,7 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
   return list;
 }
 
-import { getApiUrl, getAuthHeaders } from './apiConfig';
+import { getApiUrl, getAuthHeaders, ensureAuthToken } from './apiConfig';
 import type { NewsFeedPost } from '../data/newsFeedData';
 
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
@@ -448,11 +448,34 @@ export interface RssSyncResult {
 
 export async function syncAllSourcesLive(): Promise<RssSyncResult> {
   try {
+    let token = await ensureAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const syncUrl = getApiUrl('/api/admin/rss-sync');
-    const res = await fetch(syncUrl, {
+    let res = await fetch(syncUrl, {
       method: 'POST',
-      headers: getAdminAuthHeaders(),
+      headers,
+      body: JSON.stringify({}),
     });
+
+    if (res.status === 401) {
+      token = await ensureAuthToken(true);
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      res = await fetch(syncUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({}),
+      });
+    }
+
     if (res.ok) {
       const data = await res.json();
       // Fetch latest production posts from /api/news-posts to update active synced feed
@@ -502,23 +525,52 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
         failedSourcesCount: data.failedSourcesCount,
         durationMs: data.durationMs,
       };
+    } else {
+      let errText = 'सिंक विफल रहा';
+      try {
+        const errJson = await res.json();
+        if (errJson && errJson.error) errText = errJson.error;
+      } catch {}
+      return { success: false, error: errText };
     }
   } catch (err: any) {
     console.warn('Live RSS sync error:', err);
     return { success: false, error: err?.message || 'सिंक त्रुटि' };
   }
-  return { success: false, error: 'सिंक विफल रहा' };
 }
 
 
 
 export async function scrapeAllWebSourcesLive(): Promise<RssSyncResult> {
   try {
+    let token = await ensureAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const scrapeUrl = getApiUrl('/api/admin/web-scrape');
-    const res = await fetch(scrapeUrl, {
+    let res = await fetch(scrapeUrl, {
       method: 'POST',
-      headers: getAdminAuthHeaders(),
+      headers,
+      body: JSON.stringify({}),
     });
+
+    if (res.status === 401) {
+      token = await ensureAuthToken(true);
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      res = await fetch(scrapeUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({}),
+      });
+    }
+
     if (res.ok) {
       const data = await res.json();
       try {
@@ -554,12 +606,18 @@ export async function scrapeAllWebSourcesLive(): Promise<RssSyncResult> {
         failedSourcesCount: data.failedSourcesCount,
         durationMs: data.durationMs,
       };
+    } else {
+      let errText = 'वेब स्क्रैप विफल रहा';
+      try {
+        const errJson = await res.json();
+        if (errJson && errJson.error) errText = errJson.error;
+      } catch {}
+      return { success: false, error: errText };
     }
   } catch (err: any) {
     console.warn('Live Web Scrape error:', err);
     return { success: false, error: err?.message || 'वेब स्क्रैप त्रुटि' };
   }
-  return { success: false, error: 'वेब स्क्रैप विफल रहा' };
 }
 
 // =========================================================================

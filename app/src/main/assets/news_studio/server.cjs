@@ -18898,7 +18898,7 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0"
         },
-        signal: AbortSignal.timeout(4500)
+        signal: AbortSignal.timeout(1800)
       });
       if (resp.ok) {
         const html = await resp.text();
@@ -18992,10 +18992,19 @@ function cleanAndCraftHindiHeadline(rawHeadline, articleText) {
   }
   return { title, summary, location: detectedLocation };
 }
+var isGeminiQuotaPausedUntil = 0;
 async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, sourceUrl) {
   const fallback = cleanAndCraftHindiHeadline(rawTitle, rawDesc);
+  if (Date.now() < isGeminiQuotaPausedUntil) {
+    return {
+      title: fallback.title,
+      summary: fallback.summary,
+      location: fallback.location,
+      categoryName: sourceCategory || "\u0926\u0947\u0936"
+    };
+  }
   try {
-    const parsed = await executeGeminiWithKeyPool(async (ai) => {
+    const aiPromise = executeGeminiWithKeyPool(async (ai) => {
       const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920, \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0914\u0930 \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0939\u093F\u0902\u0926\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
 \u0928\u0940\u091A\u0947 \u0926\u0940 \u0917\u0908 \u0916\u092C\u0930 \u0915\u0947 \u0935\u093F\u0935\u0930\u0923 \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0915\u093E \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0947\u0902 \u0914\u0930 \u090F\u0915 \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u0938\u094D\u092A\u0937\u094D\u091F, \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (Headline) \u0935 2 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0938\u093E\u0930 (Summary) \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
 
@@ -19006,7 +19015,7 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
 4. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0905\u0927\u093F\u0915\u0924\u092E 12 \u0938\u0947 14 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0940 \u0939\u094B (\u0924\u093E\u0915\u093F 4:5 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921 \u092E\u0947\u0902 2-3 \u0932\u093E\u0907\u0928\u094B\u0902 \u092E\u0947\u0902 \u0938\u0939\u0940 \u0926\u093F\u0916\u0947)\u0964
 5. \u0906\u0909\u091F\u092A\u0941\u091F \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092E\u0947\u0902 \u0926\u0947\u0902:
 {"headline": "\u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928", "summary": "\u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935\u093F\u0935\u0930\u0923", "location": "\u091C\u093F\u0932\u0947/\u0936\u0939\u0930 \u0915\u093E \u0928\u093E\u092E"}`;
-      const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+      const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 1), {
         contents: `${prompt}
 
 \u092E\u0942\u0932 \u0936\u0940\u0930\u094D\u0937\u0915: ${rawTitle}
@@ -19020,6 +19029,8 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
       }
       return null;
     });
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2500));
+    const parsed = await Promise.race([aiPromise, timeoutPromise]);
     if (parsed && parsed.headline && parsed.headline.trim().length > 5) {
       return {
         title: parsed.headline.trim(),
@@ -19028,7 +19039,11 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
         categoryName: sourceCategory || "\u0926\u0947\u0936"
       };
     }
-  } catch {
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (msg.includes("quota") || msg.includes("rate") || msg.includes("429")) {
+      isGeminiQuotaPausedUntil = Date.now() + 6e4;
+    }
   }
   return {
     title: fallback.title,
@@ -19086,63 +19101,74 @@ async function parseRssItemsFromXml(xmlText, source) {
     }
     items = syntheticItems;
   }
-  for (const itemXml of items.slice(0, 15)) {
-    const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
-    const rawTitle = titleMatch ? decodeHtmlEntities(titleMatch[1] || titleMatch[2] || "") : "";
-    if (!rawTitle) continue;
-    const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) || itemXml.match(/<link\s+href=["']([^"']+)["']/i);
-    const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
-    const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) || itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
-    const rawDesc = descMatch ? decodeHtmlEntities(descMatch[1] || descMatch[2] || "") : "";
-    const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) || itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
-    const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
-    let timestamp = Date.now();
-    if (pubDateStr) {
-      const parsedTime = Date.parse(pubDateStr);
-      if (!isNaN(parsedTime)) timestamp = parsedTime;
-    }
-    const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
-    const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
-    const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
-    const catKey = resolveCategoryKeyFromName(catName, link || source.url);
-    const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
-    const postId = `rss-${source.id}-${hashStr}`;
-    posts.push({
-      id: postId,
-      sourceId: source.id,
-      sourceFeedUrl: source.url,
-      sourceChannel: source.name,
-      sourceChannelId: source.channelId || source.name,
-      sourceCategoryId: source.category,
-      title: editorial.title,
-      summary: editorial.summary,
-      sourceUrl: link,
-      // PRESERVE original article URL
-      category: catKey,
-      categoryName: catName,
-      publishedTime: formatRelativeTime(timestamp),
-      imageUrl,
-      breaking: editorial.title.includes("\u092C\u0921\u093C\u093E") || editorial.title.includes("\u092B\u0948\u0938\u0932\u093E") || editorial.title.includes("\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908"),
-      isExclusive: false,
-      isBonus: false,
-      rewardCoins: 0,
-      timestamp,
-      fullContent: editorial.summary ? `${editorial.title}
+  const candidateXmls = items.slice(0, 10);
+  const parsedPromises = candidateXmls.map(async (itemXml) => {
+    try {
+      const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
+      const rawTitle = titleMatch ? decodeHtmlEntities(titleMatch[1] || titleMatch[2] || "") : "";
+      if (!rawTitle) return null;
+      const linkMatch = itemXml.match(/<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/link>/i) || itemXml.match(/<link\s+href=["']([^"']+)["']/i);
+      const link = linkMatch ? (linkMatch[1] || linkMatch[2] || "").trim() : source.url;
+      const descMatch = itemXml.match(/<description>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/description>/i) || itemXml.match(/<summary>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/summary>/i);
+      const rawDesc = descMatch ? decodeHtmlEntities(descMatch[1] || descMatch[2] || "") : "";
+      const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i) || itemXml.match(/<dc:date>([\s\S]*?)<\/dc:date>/i);
+      const pubDateStr = pubDateMatch ? pubDateMatch[1].trim() : "";
+      let timestamp = Date.now();
+      if (pubDateStr) {
+        const parsedTime = Date.parse(pubDateStr);
+        if (!isNaN(parsedTime)) timestamp = parsedTime;
+      }
+      const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
+      const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
+      const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
+      const catKey = resolveCategoryKeyFromName(catName, link || source.url);
+      const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
+      const postId = `rss-${source.id}-${hashStr}`;
+      return {
+        id: postId,
+        sourceId: source.id,
+        sourceFeedUrl: source.url,
+        sourceChannel: source.name,
+        sourceChannelId: source.channelId || source.name,
+        sourceCategoryId: source.category,
+        title: editorial.title,
+        summary: editorial.summary,
+        sourceUrl: link,
+        // PRESERVE original article URL
+        category: catKey,
+        categoryName: catName,
+        publishedTime: formatRelativeTime(timestamp),
+        imageUrl,
+        breaking: editorial.title.includes("\u092C\u0921\u093C\u093E") || editorial.title.includes("\u092B\u0948\u0938\u0932\u093E") || editorial.title.includes("\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908"),
+        isExclusive: false,
+        isBonus: false,
+        rewardCoins: 0,
+        timestamp,
+        fullContent: editorial.summary ? `${editorial.title}
 
 ${editorial.summary}
 
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
-      location: editorial.location || "",
-      ingestionStatus: "PARSED",
-      approvalStatus: "PENDING_APPROVAL",
-      publicationStatus: "UNPUBLISHED",
-      status: "PENDING_APPROVAL",
-      isApproved: false,
-      isPrePublished: false,
-      isPublished: false,
-      editorialApproved: false,
-      visibility: "public"
-    });
+        location: editorial.location || "",
+        ingestionStatus: "PARSED",
+        approvalStatus: "PENDING_APPROVAL",
+        publicationStatus: "UNPUBLISHED",
+        status: "PENDING_APPROVAL",
+        isApproved: false,
+        isPrePublished: false,
+        isPublished: false,
+        editorialApproved: false,
+        visibility: "public"
+      };
+    } catch {
+      return null;
+    }
+  });
+  const settled = await Promise.allSettled(parsedPromises);
+  for (const s of settled) {
+    if (s.status === "fulfilled" && s.value) {
+      posts.push(s.value);
+    }
   }
   return posts;
 }
@@ -19997,7 +20023,7 @@ app.post("/api/admin/web-scrape", requireAdminMiddleware, async (req, res) => {
 app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
   return res.json({
     success: true,
-    lastSyncResult,
+    lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
     intervalMinutes: 5,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS

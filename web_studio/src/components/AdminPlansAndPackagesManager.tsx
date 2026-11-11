@@ -5279,6 +5279,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         parts.push(`${res.newArticlesCount ?? res.totalNewItems ?? 0} नए समाचार जुड़े`);
                         if (res.updatedArticlesCount) parts.push(`${res.updatedArticlesCount} अपडेट`);
                         if (res.skippedDuplicatesCount) parts.push(`${res.skippedDuplicatesCount} पहले से मौजूद`);
+                        if (res.failedSourcesCount) parts.push(`(${res.failedSourcesCount} स्रोत असफल)`);
                         if (res.durationMs) parts.push(`(${((res.durationMs)/1000).toFixed(1)}s)`);
                         setRssMsg({
                           type: 'success',
@@ -5381,7 +5382,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     required
                     value={newSourceUrl}
                     onChange={(e) => setNewSourceUrl(e.target.value)}
-                    placeholder="https://feed.aajtak.in/rss/topstories.xml"
+                    placeholder="https://www.aajtak.in/rssfeeds/?id=home"
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
                   />
                 </div>
@@ -5792,6 +5793,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         parts.push(`${res.newArticlesCount ?? res.totalNewItems ?? 0} नए समाचार जुड़े`);
                         if (res.updatedArticlesCount) parts.push(`${res.updatedArticlesCount} अपडेट`);
                         if (res.skippedDuplicatesCount) parts.push(`${res.skippedDuplicatesCount} पहले से मौजूद`);
+                        if (res.failedSourcesCount) parts.push(`(${res.failedSourcesCount} स्रोत असफल)`);
                         if (res.durationMs) parts.push(`(${((res.durationMs)/1000).toFixed(1)}s)`);
                         setRssMsg({
                           type: 'success',
