@@ -354,7 +354,7 @@ export async function resolveAuthenticatedUser(req: express.Request): Promise<Ve
 
         if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
           userRole = "superadmin";
-        } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+        } else if (email === REGULAR_ADMIN_EMAIL) {
           userRole = "admin";
         }
 
@@ -405,7 +405,7 @@ export async function resolveAuthenticatedUser(req: express.Request): Promise<Ve
 
     if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
       userRole = "superadmin";
-    } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+    } else if (email === REGULAR_ADMIN_EMAIL) {
       userRole = "admin";
     }
 
@@ -545,6 +545,13 @@ registerWhatsAppIntegration(app, centralDb, {
   requireAdminMiddleware,
   requireAuthMiddleware,
   requireMasterAdminMiddleware,
+  getNewsDatabase: () => (typeof loadNewsDatabase === "function" ? loadNewsDatabase() : []),
+  getApprovedEditorialDatabase: () => (typeof loadApprovedEditorialDatabase === "function" ? loadApprovedEditorialDatabase() : {}),
+  getUsersDatabase: () => (typeof loadUsersMasterDatabase === "function" ? loadUsersMasterDatabase() : []),
+  getProfilesDatabase: () => (typeof loadProfilesDatabase === "function" ? loadProfilesDatabase() : {}),
+  getDynamicFramesDatabase: () => (typeof loadDynamicFramesDatabase === "function" ? loadDynamicFramesDatabase() : []),
+  getAssetLibrariesDatabase: () => (typeof loadAssetLibrariesDatabase === "function" ? loadAssetLibrariesDatabase() : []),
+  getCloudStorage: () => cloudStorage,
 });
 
 
@@ -1092,6 +1099,7 @@ interface StoredNewsPost {
   rewardCoins?: number;
   fullContent?: string;
   district?: string;
+  location?: string;
   location?: string;
   timestamp: number;
   expiresAt?: number;
@@ -4991,6 +4999,7 @@ interface AuthoritativeUser {
   state?: string;
   district?: string;
   location?: string;
+  location?: string;
   address?: string;
   pincode?: string;
   assembly?: string;
@@ -5147,47 +5156,45 @@ function saveUsersAccountsDatabase(accounts: any[]): void {
 }
 
 function loadUsersMasterDatabase(): AuthoritativeUser[] {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
-    const unique = new Map<string, any>();
-    for (const u of centralDb.cache.users.values()) {
-      const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
-      if (!key) continue;
-      if (!unique.has(key)) {
-        unique.set(key, u);
-      } else {
-        const existing = unique.get(key);
-        const isBlocked = Boolean(existing.isBlocked || u.isBlocked);
-        unique.set(key, { ...existing, ...u, isBlocked });
-      }
-    }
-    const list = Array.from(unique.values()) as AuthoritativeUser[];
-    list.sort((a, b) => {
-      const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
-      const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
-      return timeB - timeA;
-    });
-    return list;
-  }
+  const unique = new Map<string, any>();
   try {
     const locations = resolveAllDatabaseLocations("users_master_database.json");
     for (const loc of locations) {
       if (fs.existsSync(loc)) {
         const raw = fs.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.sort((a, b) => {
-            const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
-            const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
-            return timeB - timeA;
-          });
-          return parsed;
+        if (Array.isArray(parsed)) {
+          for (const u of parsed) {
+            const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
+            if (!key) continue;
+            if (!unique.has(key)) {
+              unique.set(key, u);
+            }
+          }
         }
       }
     }
   } catch (e) {
     console.error("Error reading users_master_database.json:", e);
   }
-  return [];
+
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    for (const u of centralDb.cache.users.values()) {
+      const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
+      if (!key) continue;
+      const existing = unique.get(key);
+      const isBlocked = Boolean(existing?.isBlocked || u.isBlocked);
+      unique.set(key, { ...(existing || {}), ...u, isBlocked });
+    }
+  }
+
+  const list = Array.from(unique.values()) as AuthoritativeUser[];
+  list.sort((a, b) => {
+    const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
+    const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
+    return timeB - timeA;
+  });
+  return list;
 }
 
 function saveUsersMasterDatabase(users: AuthoritativeUser[]): boolean {
@@ -5549,12 +5556,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
           ? 'breakingnewswala'
           : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name, existing.username)));
 
-    const safeIncomingLogo = (userPayload.channelLogoUrl && !userPayload.channelLogoUrl.includes('/assets/ai_news_maker_logo.png'))
-      ? userPayload.channelLogoUrl
-      : (existing.channelLogoUrl || userPayload.channelLogoUrl || '');
-    const safeIncomingLogoPng = (userPayload.channelLogoPngUrl && !userPayload.channelLogoPngUrl.includes('/assets/ai_news_maker_logo.png'))
-      ? userPayload.channelLogoPngUrl
-      : (existing.channelLogoPngUrl || existing.channelLogoUrl || userPayload.channelLogoPngUrl);
+    const safeIncomingLogo = userPayload.channelLogoUrl || existing.channelLogoUrl || '';
+    const safeIncomingLogoPng = userPayload.channelLogoPngUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || userPayload.channelLogoUrl || '';
 
     const oldNormPhone = (existing.mobileNumber || existing.mobile || '').toString().replace(/\D/g, '').slice(-10);
     const newNormPhone = (userPayload.mobileNumber || userPayload.mobile || '').toString().replace(/\D/g, '').slice(-10);
@@ -5614,9 +5617,9 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      role: isSuper ? 'superadmin' : (userPayload.role || existing.role || 'user'),
-      tier: isSuper ? 'ultra' : (existing.tier && existing.tier !== 'basic' ? existing.tier : (userPayload.tier || existing.tier || 'basic')),
-      planName: isSuper ? 'VIP DESK' : (existing.tier && existing.tier !== 'basic' ? (existing.planName || existing.tier.toUpperCase()) : (userPayload.planName || existing.planName || 'BASIC')),
+      role: isBreakingNewsWala ? 'superadmin' : (cleanEmail === 'admin.ainewsmaker@gmail.com' ? 'admin' : (existing.role || 'reporter')),
+      tier: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'ultra' : (existing.tier || 'basic'),
+      planName: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'VIP DESK' : (existing.planName || (existing.tier ? existing.tier.toUpperCase() : 'BASIC')),
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
@@ -5670,9 +5673,9 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || null,
-      role: isSuper ? 'superadmin' : (userPayload.role || 'user'),
-      tier: isSuper ? 'ultra' : (userPayload.tier || 'basic'),
-      planName: isSuper ? 'VIP DESK' : (userPayload.planName || 'BASIC'),
+      role: isBreakingNewsWala ? 'superadmin' : (cleanEmail === 'admin.ainewsmaker@gmail.com' ? 'admin' : 'reporter'),
+      tier: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'ultra' : 'basic',
+      planName: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'VIP DESK' : 'BASIC',
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
@@ -5889,7 +5892,7 @@ function reconcileAllUsers() {
           district: p.district || '',
           websiteUrl: p.websiteUrl || '',
           socialIcons: p.socialIcons,
-          role: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'superadmin' : ((p.role as any) || 'user')),
+          role: (email === 'breakingnewswala.com@gmail.com' ? 'superadmin' : email === 'admin.ainewsmaker@gmail.com' ? 'admin' : ((p.role as any) || 'user')),
           tier: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'ultra' : ((p.tier as any) || 'basic')),
           planName: (email === 'admin.ainewsmaker@gmail.com' || email === 'breakingnewswala.com@gmail.com' ? 'VIP DESK' : (
             p.tier === 'ultra' ? 'VIP DESK' :
@@ -5910,39 +5913,39 @@ function reconcileAllUsers() {
       }
     }
 
-    // 3. Guaranteed Privileged Accounts: BOTH Super Admin Accounts
-    const superAdminEmail = 'admin.ainewsmaker@gmail.com';
-    const existingSuper = userMap.get(superAdminEmail);
-    const superProf = profiles[superAdminEmail];
-    userMap.set(superAdminEmail, {
-      userId: existingSuper?.userId || 'user-1791697518060',
-      email: superAdminEmail,
-      name: superProf?.fullName || existingSuper?.fullName || 'सुपर एडमिन (Super Admin)',
-      fullName: superProf?.fullName || existingSuper?.fullName || 'सुपर एडमिन (Super Admin)',
-      username: superProf?.username || existingSuper?.username || 'admin.ainewsmaker',
-      role: 'superadmin',
+    // 3. Guaranteed Privileged Accounts: Master Admin and Sub Admin
+    const subAdminEmail = 'admin.ainewsmaker@gmail.com';
+    const existingSub = userMap.get(subAdminEmail);
+    const subProf = profiles[subAdminEmail];
+    userMap.set(subAdminEmail, {
+      userId: existingSub?.userId || 'user-1791697518060',
+      email: subAdminEmail,
+      name: subProf?.fullName || existingSub?.fullName || 'जोनल एडमिन (Admin)',
+      fullName: subProf?.fullName || existingSub?.fullName || 'जोनल एडमिन (Admin)',
+      username: subProf?.username || existingSub?.username || 'admin.ainewsmaker',
+      role: 'admin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: superProf?.channelNameHi || existingSuper?.channelName || 'एआई न्यूज़ मेकर',
-      channelNameHi: superProf?.channelNameHi || existingSuper?.channelNameHi || 'एआई न्यूज़ मेकर',
-      channelNameEn: superProf?.channelNameEn || existingSuper?.channelNameEn || 'AI News Maker',
-      channelLogoUrl: superProf?.channelLogoUrl || existingSuper?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-      channelLogoPngUrl: superProf?.channelLogoPngUrl || existingSuper?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
-      channelLogoGifUrl: superProf?.channelLogoGifUrl || existingSuper?.channelLogoGifUrl || '',
-      channelLogoType: superProf?.channelLogoType || existingSuper?.channelLogoType || 'png',
-      mobile: superProf?.mobileNumber || existingSuper?.mobile || '9669802408',
-      mobileNumber: superProf?.mobileNumber || existingSuper?.mobileNumber || '9669802408',
-      district: superProf?.district || existingSuper?.district || 'हेडक्वार्टर सेंट्रल डेस्क',
-      websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || 'ainewsmaker.online',
+      channelName: subProf?.channelNameHi || existingSub?.channelName || 'एआई न्यूज़ मेकर',
+      channelNameHi: subProf?.channelNameHi || existingSub?.channelNameHi || 'एआई न्यूज़ मेकर',
+      channelNameEn: subProf?.channelNameEn || existingSub?.channelNameEn || 'AI News Maker',
+      channelLogoUrl: subProf?.channelLogoUrl || existingSub?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
+      channelLogoPngUrl: subProf?.channelLogoPngUrl || existingSub?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
+      channelLogoGifUrl: subProf?.channelLogoGifUrl || existingSub?.channelLogoGifUrl || '',
+      channelLogoType: subProf?.channelLogoType || existingSub?.channelLogoType || 'png',
+      mobile: subProf?.mobileNumber || existingSub?.mobile || '9669802408',
+      mobileNumber: subProf?.mobileNumber || existingSub?.mobileNumber || '9669802408',
+      district: subProf?.district || existingSub?.district || 'हेडक्वार्टर सेंट्रल डेस्क',
+      websiteUrl: subProf?.websiteUrl || existingSub?.websiteUrl || 'ainewsmaker.online',
       isBlocked: false,
-      isProfileLocked: true,
-      createdAt: existingSuper?.createdAt || 1791697518060,
+      isProfileLocked: false,
+      createdAt: existingSub?.createdAt || 1791697518060,
       trialStartedAt: 1791697518060,
       trialEndsAt: 2107057518060,
       activatedAt: 1791697518060,
       expiresAt: 2107057518060,
-      activatedVia: 'Super Admin Preset',
-      lastLoginAt: existingSuper?.lastLoginAt || Date.now(),
+      activatedVia: 'Admin Preset',
+      lastLoginAt: existingSub?.lastLoginAt || Date.now(),
     });
 
     const adminEmail = 'breakingnewswala.com@gmail.com';
@@ -5969,7 +5972,7 @@ function reconcileAllUsers() {
       district: adminProf?.district || existingAdmin?.district || 'सेंट्रल डेस्क / भोपाल',
       websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || 'breakingnewswala.com',
       isBlocked: false,
-      isProfileLocked: true,
+      isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
       trialStartedAt: 1791792137805,
       trialEndsAt: 2107057518060,
@@ -9787,6 +9790,7 @@ interface StoredUserProfile {
   tier?: string;
   email?: string;
   district?: string;
+  location?: string;
   channelNameHi: string;
   channelNameEn: string;
   channelLogoUrl: string;
@@ -9806,22 +9810,21 @@ interface StoredUserProfile {
 }
 
 function loadProfilesDatabase(): Record<string, StoredUserProfile> {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
-    const dict: Record<string, StoredUserProfile> = {};
-    for (const [k, v] of centralDb.cache.users.entries()) {
-      dict[k] = v as any;
-    }
-    return dict;
-  }
+  const dict: Record<string, StoredUserProfile> = {};
   try {
     if (fs.existsSync(PROFILES_DB_FILE)) {
       const raw = fs.readFileSync(PROFILES_DB_FILE, "utf-8");
-      return JSON.parse(raw);
+      Object.assign(dict, JSON.parse(raw));
     }
   } catch (err) {
     console.error("Error reading user_profiles_db.json:", err);
   }
-  return {};
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    for (const [k, v] of centralDb.cache.users.entries()) {
+      dict[k] = v as any;
+    }
+  }
+  return dict;
 }
 
 function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean {
@@ -10129,21 +10132,27 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const reqEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
 
     // Prevent regular user profiles from overwriting global admin master branding
-    const isMasterAdminEmail = (profile.email && (profile.email.toLowerCase() === 'admin.ainewsmaker@gmail.com' || profile.email.toLowerCase() === 'breakingnewswala.com@gmail.com')) ||
+    const isMasterAdminEmail = (profile.email && profile.email.toLowerCase() === 'breakingnewswala.com@gmail.com') ||
       cleanId === 'breakingnewswala.com@gmail.com' ||
-      cleanId === 'usr_627265616b69' ||
-      cleanId === 'admin';
+      cleanId === 'usr_627265616b69';
+
+    const isSubAdminEmail = (profile.email && profile.email.toLowerCase() === 'admin.ainewsmaker@gmail.com') ||
+      cleanId === 'admin.ainewsmaker@gmail.com' ||
+      cleanId === 'user-1791697518060';
 
     const isAdmin = isAuthorizedAdmin(req) ||
       (reqKey === "master-admin") ||
       (reqRole === "superadmin" || reqRole === "admin") ||
       (reqEmail.includes("breakingnewswala") || reqEmail.includes("admin"));
 
-    if ((cleanId === 'admin' || isMasterAdminEmail) && !isAdmin) {
+    if ((cleanId === 'admin' || isMasterAdminEmail || isSubAdminEmail) && !isAdmin) {
       return res.status(403).json({ error: "अनधिकृत: एडमिन प्रोफाइल केवल अधिकृत मास्टर एडमिन द्वारा ही संशोधित की जा सकती है" });
     }
 
-    const existing: any = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles['breakingnewswala.com@gmail.com'] || allProfiles['usr_627265616b69'] : null) || {};
+    const existing: any = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles['breakingnewswala.com@gmail.com'] || allProfiles['usr_627265616b69'] : isSubAdminEmail ? allProfiles['admin.ainewsmaker@gmail.com'] || allProfiles['user-1791697518060'] : null) || {};
+    if (isSubAdminEmail) {
+      existing.role = 'admin';
+    }
 
     const isTargetBlocked = Boolean(existing.isBlocked) || checkUserAccess(cleanId).blocked || (profile.email && checkUserAccess(profile.email).blocked);
     if (isTargetBlocked && !isAdmin) {
@@ -10174,6 +10183,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
           (otherEmail && thisEmail && otherEmail === thisEmail) ||
           (otherUserId && thisUserId && otherUserId === thisUserId) ||
           (isMasterAdminEmail && (otherEmail === 'breakingnewswala.com@gmail.com' || otherEmail === 'admin.ainewsmaker@gmail.com' || otherUserId === 'usr_627265616b69' || otherUserId === 'user-1791697518060' || k === 'admin')) ||
+          (isSubAdminEmail && (otherEmail === 'admin.ainewsmaker@gmail.com' || otherEmail === 'breakingnewswala.com@gmail.com' || otherUserId === 'user-1791697518060' || otherUserId === 'usr_627265616b69' || k === 'admin')) ||
           (isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail));
 
         if (!isSameUser) {
@@ -10185,9 +10195,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     }
 
-    // Backend uniqueness enforcement for 10-digit mobile number
+    // Backend uniqueness enforcement for 10-digit mobile number (exempting authorized admin accounts sharing official contact)
     const normMobile = (finalMobile || "").toString().replace(/\D/g, '').slice(-10);
-    if (normMobile.length === 10) {
+    if (normMobile.length === 10 && !isMasterAdminEmail && !isSubAdminEmail) {
       for (const [k, p] of Object.entries(allProfiles)) {
         const otherEmail = (p.email || k).toLowerCase().trim();
         const thisEmail = (profile.email || cleanId).toLowerCase().trim();
@@ -10197,7 +10207,6 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         const isSameUser = (k === cleanId) ||
           (otherEmail && thisEmail && otherEmail === thisEmail) ||
           (otherUserId && thisUserId && otherUserId === thisUserId) ||
-          (isMasterAdminEmail && (otherEmail === 'breakingnewswala.com@gmail.com' || otherEmail === 'admin.ainewsmaker@gmail.com' || otherUserId === 'usr_627265616b69' || otherUserId === 'user-1791697518060' || k === 'admin')) ||
           (isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail));
 
         if (!isSameUser) {
@@ -10209,14 +10218,24 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     }
 
-    // Non-admin callers cannot escalate their role or tier, or unblock themselves
-    const safeRole = isAdmin
-      ? (profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter"))
-      : (existing.role || (isMasterAdminEmail ? "admin" : "reporter"));
-    const safeTier = isAdmin
-      ? (profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic"))
-      : (existing.tier || (isMasterAdminEmail ? "ultra" : "basic"));
-    const safeIsBlocked = isAdmin
+    // Role & Tier Protection: Profile updates NEVER automatically escalate role or tier.
+    // Client-supplied req.body.tier or req.body.role is NEVER trusted for new or existing users.
+    // Authorized roles/tiers are strictly preserved from server-verified databases.
+    const isMasterCaller = isAuthorizedMasterAdmin(req);
+    const masterUsers = loadUsersMasterDatabase();
+    const cleanUserEmail = (profile.email || existing.email || cleanId).toString().toLowerCase().trim();
+    const matchedMasterUser = masterUsers.find((u: any) =>
+      (u.email && u.email.toLowerCase().trim() === cleanUserEmail) ||
+      (u.userId && u.userId.toLowerCase().trim() === cleanId)
+    );
+
+    const safeRole = (isMasterCaller && profile.role)
+      ? profile.role
+      : (existing.role || (isMasterAdminEmail ? "superadmin" : isSubAdminEmail ? "admin" : "reporter"));
+    const safeTier = (isMasterCaller && profile.tier)
+      ? profile.tier
+      : (existing.tier || (isMasterAdminEmail ? "ultra" : isSubAdminEmail ? "ultra" : (matchedMasterUser?.tier || "basic")));
+    const safeIsBlocked = isMasterCaller
       ? (profile.isBlocked !== undefined ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked))
       : Boolean(existing.isBlocked);
 
@@ -10272,16 +10291,25 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       role: safeRole,
       tier: safeTier,
       isBlocked: safeIsBlocked,
-      isLocked: isMasterAdminEmail ? true : safeIsLocked,
-      isProfileLocked: isMasterAdminEmail ? true : safeIsLocked,
-      isProfileComplete: isMasterAdminEmail ? true : isProfileComplete,
-      profileStatus: isMasterAdminEmail ? "active" : (isProfileComplete ? "active" : "incomplete"),
+      isLocked: (isMasterAdminEmail || isSubAdminEmail) ? false : safeIsLocked,
+      isProfileLocked: (isMasterAdminEmail || isSubAdminEmail) ? false : safeIsLocked,
+      isProfileComplete: (isMasterAdminEmail || isSubAdminEmail) ? true : isProfileComplete,
+      profileStatus: (isMasterAdminEmail || isSubAdminEmail) ? "active" : (isProfileComplete ? "active" : "incomplete"),
       email: profile.email || existing.email || "",
-      district: profile.district || existing.district || "",
+      district: profile.district || profile.location || existing.district || existing.location || "",
+      location: profile.location || profile.district || existing.location || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: (profile.channelLogoUrl && !profile.channelLogoUrl.includes('/assets/ai_news_maker_logo.png')) ? profile.channelLogoUrl : (existing.channelLogoUrl || profile.channelLogoUrl || ""),
-      channelLogoPngUrl: (profile.channelLogoPngUrl && !profile.channelLogoPngUrl.includes('/assets/ai_news_maker_logo.png')) ? profile.channelLogoPngUrl : (existing.channelLogoPngUrl || existing.channelLogoUrl || profile.channelLogoPngUrl),
+      channelLogoUrl: isMasterAdminEmail
+        ? '/assets/breaking_news_wala_logo.png'
+        : isSubAdminEmail
+          ? '/assets/ai_news_maker_logo.png'
+          : (profile.channelLogoUrl || existing.channelLogoUrl || ""),
+      channelLogoPngUrl: isMasterAdminEmail
+        ? '/assets/breaking_news_wala_logo.png'
+        : isSubAdminEmail
+          ? '/assets/ai_news_maker_logo.png'
+          : (profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || ""),
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || "",
@@ -10293,7 +10321,11 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       whatsappMarketingConsentSource: profile.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: profile.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: profile.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      activeLogoUrl: existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : undefined),
+      activeLogoUrl: isMasterAdminEmail
+        ? '/assets/breaking_news_wala_logo.png'
+        : isSubAdminEmail
+          ? '/assets/ai_news_maker_logo.png'
+          : (existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : undefined)),
       logoApprovalStatus: existing.logoApprovalStatus || "none",
       approvedLogoRequestId: existing.approvedLogoRequestId,
       logoApprovedAt: existing.logoApprovedAt,
@@ -10308,7 +10340,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
 
     // If user has an approved logo and is non-admin, prevent clearing or defaulting it
     if (!isAdmin && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
-      if (!profile.channelLogoUrl || profile.channelLogoUrl.includes("ai_news_maker_logo.png") || profile.channelLogoUrl.trim() === "") {
+      if (!profile.channelLogoUrl || profile.channelLogoUrl.trim() === "") {
         updated.channelLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
         updated.channelLogoPngUrl = existing.channelLogoPngUrl || existing.activeLogoUrl || existing.channelLogoUrl;
         updated.activeLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
@@ -10351,6 +10383,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       } catch (brErr) {
         console.warn("Error syncing admin branding:", brErr);
       }
+    } else if (isSubAdminEmail) {
+      allProfiles['admin.ainewsmaker@gmail.com'] = updated;
+      allProfiles['user-1791697518060'] = { ...updated, userId: 'user-1791697518060', uid: 'user-1791697518060' };
     } else if (updated.email) {
       const em = updated.email.toLowerCase().trim();
       for (const [k, p] of Object.entries(allProfiles)) {
@@ -10377,6 +10412,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
           username: updated.username || users[uIdx].username,
           mobile: updated.mobileNumber || users[uIdx].mobile,
           mobileNumber: updated.mobileNumber || users[uIdx].mobileNumber,
+          district: updated.district || updated.location || users[uIdx].district || '',
+          location: updated.location || updated.district || users[uIdx].location || '',
           websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
           socialIcons: updated.socialIcons || users[uIdx].socialIcons,
           socialLinks: updated.socialLinks || users[uIdx].socialLinks,
@@ -10758,28 +10795,90 @@ const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
 
 const DELETED_FRAMES_TOMBSTONE_FILE = path.join(process.cwd(), "deleted_frames_tombstone.json");
 
+let memoryFrameTombstones: Set<string> | null = null;
+
 function loadDeletedFramesTombstones(): Set<string> {
+  const set = new Set<string>();
   try {
     if (fs.existsSync(DELETED_FRAMES_TOMBSTONE_FILE)) {
       const raw = fs.readFileSync(DELETED_FRAMES_TOMBSTONE_FILE, "utf-8");
       const list = JSON.parse(raw);
-      if (Array.isArray(list)) return new Set(list);
+      if (Array.isArray(list)) list.forEach((t: any) => set.add(typeof t === 'string' ? t : (t.id || t.name)));
     }
   } catch {}
-  return new Set();
+  if (memoryFrameTombstones && memoryFrameTombstones.size > 0) {
+    memoryFrameTombstones.forEach(id => set.add(id));
+  }
+  // Always enforce permanent tombstones for sample/test frames
+  set.add('11111');
+  set.add('2222');
+  set.add('df_sample_11111');
+  set.add('df_sample_2222');
+  set.add('df_test_11111');
+  set.add('df_test_2222');
+  return set;
 }
 
-function recordDeletedFrameTombstone(id: string) {
-  try {
-    const tombstones = loadDeletedFramesTombstones();
-    tombstones.add(id);
-    fs.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
-    if (centralDb && typeof centralDb.writeDoc === "function") {
-      centralDb.writeDoc("system_config", "deleted_frames_tombstones", { tombstones: Array.from(tombstones), updatedAt: Date.now() }).catch(() => {});
+async function getDurableFrameTombstones(): Promise<Set<string>> {
+  const set = loadDeletedFramesTombstones();
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const cloudDoc = await centralDb.readDoc("system_config", "deleted_frames_tombstones");
+      const docData = cloudDoc?.data || cloudDoc;
+      if (docData && Array.isArray(docData.tombstones)) {
+        docData.tombstones.forEach((id: string) => set.add(typeof id === 'string' ? id : (id as any).id || (id as any).name));
+      }
+    } catch (e: any) {
+      console.warn("[getDurableFrameTombstones] Firestore read warning:", e.message);
     }
-  } catch (err) {
-    console.warn("Failed to write deleted_frames_tombstone.json:", err);
   }
+  set.add('11111');
+  set.add('2222');
+  set.add('df_sample_11111');
+  set.add('df_sample_2222');
+  set.add('df_test_11111');
+  set.add('df_test_2222');
+  memoryFrameTombstones = set;
+  try {
+    fs.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
+  } catch {}
+  return set;
+}
+
+async function recordDeletedFrameTombstone(id: string): Promise<boolean> {
+  const tombstones = await getDurableFrameTombstones();
+  tombstones.add(id);
+  tombstones.add('11111');
+  tombstones.add('2222');
+  tombstones.add('df_sample_11111');
+  tombstones.add('df_sample_2222');
+  tombstones.add('df_test_11111');
+  tombstones.add('df_test_2222');
+  memoryFrameTombstones = tombstones;
+
+  try {
+    fs.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+  } catch (fsErr) {
+    console.warn("Failed to write deleted_frames_tombstone.json:", fsErr);
+  }
+
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    try {
+      const res = await centralDb.writeDoc("system_config", "deleted_frames_tombstones", {
+        tombstones: Array.from(tombstones),
+        updatedAt: Date.now()
+      });
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore frame tombstone write failed: ${res?.error || res?.statusCode || 'Unknown error'}`);
+      }
+    } catch (writeErr: any) {
+      console.error("[recordDeletedFrameTombstone] Durable Firestore write error:", writeErr.message);
+      if (centralDb.useFirestore) {
+        throw writeErr;
+      }
+    }
+  }
+  return true;
 }
 
 function loadDynamicFramesDatabase(): any[] {
@@ -10790,22 +10889,64 @@ function loadDynamicFramesDatabase(): any[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed
-          .filter(f => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id));
+          .filter(f => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && !(f.name === '11111' || f.name === '2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.id === '11111' || f.id === '2222'));
       }
     }
   } catch {}
   return [];
 }
 
-function saveDynamicFramesDatabase(frames: any[]) {
+async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
+  const tombstones = await getDurableFrameTombstones();
+  let frames: any[] = [];
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
+      const docData = cloudDoc?.data || cloudDoc;
+      if (docData && Array.isArray(docData.frames) && docData.frames.length > 0) {
+        frames = docData.frames;
+      }
+    } catch {}
+  }
+  if (frames.length === 0) {
+    try {
+      if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+        const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) frames = parsed;
+      }
+    } catch {}
+  }
+  return frames.filter(f =>
+    !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) &&
+    !tombstones.has(f.id) &&
+    !tombstones.has(f.name) &&
+    !(f.name === '11111' || f.name === '2222' || f.id === 'df_sample_11111' || f.id === 'df_sample_2222' || f.id === '11111' || f.id === '2222')
+  );
+}
+
+async function saveDynamicFramesDatabaseAsync(frames: any[]): Promise<boolean> {
   try {
     fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
   } catch (err) {
     console.warn("Failed to write dynamic_frames_db.json:", err);
   }
   if (centralDb && typeof centralDb.writeDoc === "function") {
-    centralDb.writeDoc("system_config", "dynamic_frames", { frames, updatedAt: Date.now() }).catch(() => {});
+    try {
+      const res = await centralDb.writeDoc("system_config", "dynamic_frames", { frames, updatedAt: Date.now() });
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore dynamic frames write failed: ${res?.error || res?.statusCode || 'Unknown error'}`);
+      }
+    } catch (e: any) {
+      console.error("[saveDynamicFramesDatabaseAsync] Durable write error:", e.message);
+      if (centralDb.useFirestore) throw e;
+    }
   }
+  return true;
+}
+
+function saveDynamicFramesDatabase(frames: any[]) {
+  saveDynamicFramesDatabaseAsync(frames).catch(() => {});
 }
 
 function deepMergeFrameConfig(existing: any, payload: any): any {
@@ -10993,15 +11134,16 @@ app.get("/api/dynamic-frames", async (req, res) => {
   try {
     const { aspectRatio, category } = req.query;
     const isMaster = isAuthorizedMasterAdmin(req);
-    let frames = loadDynamicFramesDatabase();
+    const tombstones = await getDurableFrameTombstones();
+    let frames = await loadDynamicFramesDatabaseAsync();
 
     if (frames.length === 0 && centralDb && typeof centralDb.readDoc === "function") {
       try {
         const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
         if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
           frames = cloudDoc.frames
-            .filter((f: any) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && f.id !== 'df_reg_4_5_clean' && !(f.id !== 'graphic_001' && (f.name?.includes('रेगुलर क्लीन') || f.name?.toLowerCase()?.includes('regular clean'))));
-          saveDynamicFramesDatabase(frames);
+            .filter((f: any) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && f.id !== 'df_reg_4_5_clean' && !(f.id !== 'graphic_001' && (f.name?.includes('रेगुलर क्लीन') || f.name?.toLowerCase()?.includes('regular clean'))) && !(f.name === '11111' || f.name === '2222' || f.id.includes('11111') || f.id.includes('2222')));
+          await saveDynamicFramesDatabaseAsync(frames);
         }
       } catch {}
     }
@@ -11053,7 +11195,11 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const isMaster = isAuthorizedMasterAdmin(req);
-    let frames = loadDynamicFramesDatabase();
+    const tombstones = await getDurableFrameTombstones();
+    if (tombstones.has(id)) {
+      return res.status(404).json({ error: "Frame not found." });
+    }
+    let frames = await loadDynamicFramesDatabaseAsync();
     let frame = frames.find((f) => f.id === id);
 
     if (!frame && centralDb && typeof centralDb.readDoc === "function") {
@@ -11092,7 +11238,7 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
 });
 
 // 2. POST /api/dynamic-frames (Master Admin only)
-app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
+app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.name || !payload.aspectRatio) {
@@ -11166,9 +11312,9 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
       poweredByConfig: payload.poweredByConfig,
     };
 
-    const all = loadDynamicFramesDatabase();
+    const all = await loadDynamicFramesDatabaseAsync();
     const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
-    saveDynamicFramesDatabase(updated);
+    await saveDynamicFramesDatabaseAsync(updated);
 
     return res.json({ success: true, frame: newFrame });
   } catch (err: any) {
@@ -11177,11 +11323,11 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
 });
 
 // 3. PUT /api/dynamic-frames/:id (Master Admin only)
-app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const payload = req.body || {};
-    const all = loadDynamicFramesDatabase();
+    const all = await loadDynamicFramesDatabaseAsync();
     const existingIdx = all.findIndex((f) => f.id === id);
 
     if (existingIdx === -1) {
@@ -11199,7 +11345,7 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
     const updatedFrame = deepMergeFrameConfig(existing, payload);
 
     all[existingIdx] = updatedFrame;
-    saveDynamicFramesDatabase(all);
+    await saveDynamicFramesDatabaseAsync(all);
 
     return res.json({ success: true, frame: updatedFrame });
   } catch (err: any) {
@@ -11208,16 +11354,27 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
 });
 
 // 4. DELETE /api/dynamic-frames/:id (Master Admin only)
-app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     if (id === 'graphic_001') {
       return res.status(400).json({ error: "सुरक्षित डिफ़ॉल्ट फ्रेम 'Regular Clean News Frame' को हटाया नहीं जा सकता।" });
     }
-    recordDeletedFrameTombstone(id);
-    let all = loadDynamicFramesDatabase();
-    all = all.filter((f) => f.id !== id);
-    saveDynamicFramesDatabase(all);
+    
+    // Durable Firestore and local tombstone recording
+    let all = await loadDynamicFramesDatabaseAsync();
+    const target = all.find(f => f.id === id || f.name === id);
+    if (target) {
+      if (target.id) await recordDeletedFrameTombstone(target.id);
+      if (target.name === '11111' || target.name === '2222' || target.id === '11111' || target.id === '2222') {
+        await recordDeletedFrameTombstone(target.name);
+      }
+    } else {
+      await recordDeletedFrameTombstone(id);
+    }
+
+    all = all.filter((f) => f.id !== id && f.name !== id && !(id === '11111' && f.id.includes('11111')) && !(id === '2222' && f.id.includes('2222')));
+    await saveDynamicFramesDatabaseAsync(all);
 
     // Also remove from news_template_configs.json if present
     const newsTemplateFile = path.join(process.cwd(), "news_template_configs.json");
@@ -11231,7 +11388,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) =
       } catch {}
     }
 
-    return res.json({ success: true, message: "Frame deleted permanently with tombstone." });
+    return res.json({ success: true, message: "Frame deleted permanently with durable tombstone." });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -11822,8 +11979,9 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
     // 1. Google OAuth Authentication (Google UID)
     if (googleUid) {
-      const isSuper = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, '') === "admin.ainewsmaker@gmail.com";
-      const isAdmin = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, '') === "breakingnewswala.com@gmail.com";
+      const isSuper = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, '') === "breakingnewswala.com@gmail.com";
+      const isSubAdmin = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, '') === "admin.ainewsmaker@gmail.com";
+      const isAdmin = isSuper || isSubAdmin;
       const release = await userDbLock.acquire();
       let savedUser: AuthoritativeUser;
       try {
@@ -11852,7 +12010,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
         const isProfileComplete = Boolean(
           !isDeletedTombstoned &&
-          (isSuper || isAdmin || (
+          (isSuper || isSubAdmin || (
             existing &&
             existing.isProfileComplete &&
             existing.channelNameHi &&
@@ -11865,9 +12023,9 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
         let safeUsername: string;
         if (isSuper) {
-          safeUsername = "AI News Maker";
-        } else if (isAdmin) {
           safeUsername = "breakingnewswala";
+        } else if (isSubAdmin) {
+          safeUsername = "AI News Maker";
         } else if (isProfileComplete && existing?.username) {
           safeUsername = existing.username;
         } else if (profileData?.username && !profileData.username.includes('@')) {
@@ -11881,25 +12039,25 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           uid: existing?.uid || googleUid,
           email: cleanId,
           username: safeUsername,
-          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "सुपर एडमिन (Super Admin)" : (isAdmin ? "मुख्य संपादक" : "यूज़र")),
-          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "सुपर एडमिन (Super Admin)" : (isAdmin ? "मुख्य संपादक" : "यूज़र")),
-          role: isSuper ? "superadmin" : (isAdmin ? "superadmin" : (existing?.role || "user")),
-          tier: isSuper ? "ultra" : (isAdmin ? "ultra" : (existing?.tier || "basic")),
-          planName: isSuper ? "VIP DESK" : (isAdmin ? "VIP DESK" : (existing?.planName || "BASIC")),
-          channelName: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (isProfileComplete ? (existing?.channelNameHi || existing?.channelName || "") : (profileData?.channelName || ""))),
-          channelNameHi: isSuper ? "एआई न्यूज़ मेकर" : (isAdmin ? "ब्रेकिंग न्यूज़ वाला" : (isProfileComplete ? (existing?.channelNameHi || "") : (profileData?.channelNameHi || ""))),
-          channelNameEn: isSuper ? "AI News Maker" : (isAdmin ? "Breaking News Wala" : (isProfileComplete ? (existing?.channelNameEn || "") : (profileData?.channelNameEn || ""))),
-          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
-          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : (isAdmin ? "/assets/breaking_news_wala_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
+          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
+          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
+          role: isSuper ? "superadmin" : (isSubAdmin ? "admin" : (existing?.role || "user")),
+          tier: isSuper ? "ultra" : (isSubAdmin ? "ultra" : (existing?.tier || "basic")),
+          planName: isSuper ? "VIP DESK" : (isSubAdmin ? "VIP DESK" : (existing?.planName || "BASIC")),
+          channelName: isSuper ? "ब्रेकिंग न्यूज़ वाला" : (isSubAdmin ? "एआई न्यूज़ मेकर" : (isProfileComplete ? (existing?.channelNameHi || existing?.channelName || "") : (profileData?.channelName || ""))),
+          channelNameHi: isSuper ? "ब्रेकिंग न्यूज़ वाला" : (isSubAdmin ? "एआई न्यूज़ मेकर" : (isProfileComplete ? (existing?.channelNameHi || "") : (profileData?.channelNameHi || ""))),
+          channelNameEn: isSuper ? "BREAKING NEWS WALA" : (isSubAdmin ? "AI News Maker" : (isProfileComplete ? (existing?.channelNameEn || "") : (profileData?.channelNameEn || ""))),
+          channelLogoUrl: isSuper ? "/assets/breaking_news_wala_logo.png" : (isSubAdmin ? "/assets/ai_news_maker_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
+          channelLogoPngUrl: isSuper ? "/assets/breaking_news_wala_logo.png" : (isSubAdmin ? "/assets/ai_news_maker_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
           channelLogoGifUrl: isProfileComplete ? (existing?.channelLogoGifUrl || "") : "",
           channelLogoType: existing?.channelLogoType || "png",
-          mobile: isSuper || isAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
-          mobileNumber: isSuper || isAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
-          district: isSuper ? "हेडक्वार्टर सेंट्रल डेस्क" : (isAdmin ? "सेंट्रल डेस्क / भोपाल" : (existing?.district || "")),
-          websiteUrl: isSuper ? "ainewsmaker.online" : (isAdmin ? "breakingnewswala.com" : (isProfileComplete ? (existing?.websiteUrl || "") : (profileData?.websiteUrl || ""))),
-          isProfileLocked: isSuper || isAdmin ? true : Boolean(isProfileComplete && existing?.isProfileLocked),
-          isProfileComplete: isSuper || isAdmin ? true : isProfileComplete,
-          profileStatus: isSuper || isAdmin ? "active" : (isProfileComplete ? "active" : "incomplete"),
+          mobile: isSuper || isSubAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
+          mobileNumber: isSuper || isSubAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
+          district: isSuper ? "सेंट्रल डेस्क / भोपाल" : (isSubAdmin ? "हेडक्वार्टर सेंट्रल डेस्क" : (existing?.district || "")),
+          websiteUrl: isSuper ? "breakingnewswala.com" : (isSubAdmin ? "ainewsmaker.online" : (isProfileComplete ? (existing?.websiteUrl || "") : (profileData?.websiteUrl || ""))),
+          isProfileLocked: isSuper || isSubAdmin ? false : Boolean(isProfileComplete && existing?.isProfileLocked),
+          isProfileComplete: isSuper || isSubAdmin ? true : isProfileComplete,
+          profileStatus: isSuper || isSubAdmin ? "active" : (isProfileComplete ? "active" : "incomplete"),
         };
 
         savedUser = registerOrUpdateUserAuthoritative(userPayload);

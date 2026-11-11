@@ -14,7 +14,7 @@ try {
   if (fs.existsSync(rootSrc)) {
     fs.cpSync(rootSrc, studioSrc, { recursive: true, force: true });
   }
-  const filesToSync = ['server.ts', 'whatsapp_integration.ts', 'index.html'];
+  const filesToSync = ['server.ts', 'whatsapp_integration.ts', 'index.html', 'asset_libraries_db.json', 'dynamic_frames_db.json', 'deleted_frames_tombstone.json'];
   for (const file of filesToSync) {
     const srcFile = path.join(rootDir, file);
     const destFile = path.join(webStudioDir, file);

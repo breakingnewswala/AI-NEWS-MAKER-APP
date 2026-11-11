@@ -89,34 +89,6 @@ export const HeaderGraphic: React.FC<HeaderGraphicProps> = ({
           </div>
         )}
       </div>
-
-      {/* 2. Right: Signature Curved Stripes cascading down from top-right */}
-      <div className="shrink-0">
-        <svg
-          width="130"
-          height="155"
-          viewBox="0 0 130 155"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-24 sm:w-32 h-auto"
-        >
-          {/* Black background curve */}
-          <path
-            d="M130 0H20C65 24 115 65 130 155V0Z"
-            fill="#050505"
-          />
-          {/* Yellow curve */}
-          <path
-            d="M130 0H38C75 22 118 60 130 135V0Z"
-            fill="#FFDD00"
-          />
-          {/* Red curve */}
-          <path
-            d="M130 0H56C90 20 120 54 130 110V0Z"
-            fill="#E50914"
-          />
-        </svg>
-      </div>
     </div>
   );
 };

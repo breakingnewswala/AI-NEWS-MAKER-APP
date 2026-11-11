@@ -580,7 +580,8 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
         }
       }
       const totalH = lines.length * lineH;
-      if (!manualOverflow && lines.length <= maxLines && totalH <= maxH) {
+      // Pass 1: Prefer exact manual line count (preserving user line breaks) if it fits cleanly
+      if (!manualOverflow && lines.length === manualLines.length && totalH <= maxH) {
         bestFontSize = s;
         bestLines = lines;
         bestLineH = lineH;
@@ -620,6 +621,49 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     }
   }
 
+  // Pass 2 for manual lines: If exact line-for-line didn't fit, allow lines to wrap up to maxLines
+  if (isManual && !fitsCleanly) {
+    for (let s = startFontSize; s >= endFontSize; s -= 2) {
+      const lineH = Math.round(s * 1.30);
+      const spaceW = measureTextWidth(' ', fontFam, s, '900', options.ctx);
+      const lines: WordToken[][] = [];
+      let manualOverflow = false;
+
+      for (const mLine of manualLines) {
+        const mTokens = parseHeadlineTokens(mLine, options.highlightWords);
+        let curLine: WordToken[] = [];
+        let curWidth = 0;
+
+        for (const token of mTokens) {
+          const w = measureTextWidth(token.text, fontFam, s, '900', options.ctx);
+          const needed = curLine.length === 0 ? w : curWidth + spaceW + w;
+          if (needed > maxW && curLine.length > 0) {
+            lines.push(curLine);
+            curLine = [token];
+            curWidth = w;
+          } else {
+            curLine.push(token);
+            curWidth = needed;
+          }
+        }
+        if (curLine.length > 0) lines.push(curLine);
+        if (lines.length > maxLines) {
+          manualOverflow = true;
+          break;
+        }
+      }
+      const totalH = lines.length * lineH;
+      if (!manualOverflow && lines.length <= maxLines && totalH <= maxH) {
+        bestFontSize = s;
+        bestLines = lines;
+        bestLineH = lineH;
+        bestTotalH = totalH;
+        fitsCleanly = true;
+        break;
+      }
+    }
+  }
+
   // Fallback if headline is excessively long even at minFontSize
   if (!fitsCleanly) {
     const spaceW = measureTextWidth(' ', fontFam, endFontSize, '900', options.ctx);
@@ -635,19 +679,19 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
         lines.push(curLine);
         curLine = [token];
         curWidth = w;
-        if (lines.length >= maxLines) break; // Strict clamp to prevent overflow
       } else {
         curLine.push(token);
         curWidth = needed;
       }
     }
-    if (curLine.length > 0 && lines.length < maxLines) {
+    if (curLine.length > 0) {
       lines.push(curLine);
     }
     bestFontSize = endFontSize;
     bestLines = lines;
     bestLineH = Math.round(endFontSize * 1.30);
     bestTotalH = lines.length * bestLineH;
+    fitsCleanly = false;
   }
 
   // Calculate precise geometric coordinates for every line

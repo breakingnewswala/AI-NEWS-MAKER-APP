@@ -1092,8 +1092,9 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     }
   }
 
-  // 7C. Date Stamp: Vertical along Right Wall, Rotated 270° in Hindi
-  if (card.showDate !== false && card.frameDesign !== 'jacket-default' && card.frameDesign !== 'jacket-text-breaking' && card.frameDesign !== 'jacket-morning' && card.frameDesign !== 'jacket-epaper') {
+  // 7C. Date Stamp: Vertical along Right Wall, Rotated 270° in Hindi (Legacy / Standard only; Dynamic Frames render their own single date layer)
+  const isDynamicFrameActive = Boolean(card.customDynamicFrame || (card.frameDesign && card.frameDesign.startsWith('df_')));
+  if (card.showDate !== false && !isDynamicFrameActive && card.frameDesign !== 'jacket-default' && card.frameDesign !== 'jacket-text-breaking' && card.frameDesign !== 'jacket-morning' && card.frameDesign !== 'jacket-epaper') {
     drawDateStamp(ctx, width, height, card);
   }
 
@@ -1705,8 +1706,9 @@ async function drawAuthoritativeDynamicFrameCanvas(
         if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
           locColor = '#000000';
         }
+        const cleanLocText = (card.location || '').replace(/मध्यप्रदेश/g, 'मध्य प्रदेश');
         ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
-        const measuredTextW = ctx.measureText(card.location).width;
+        const measuredTextW = ctx.measureText(cleanLocText).width;
 
         // Dynamic horizontal expansion: expand center destination width to fit text + 28px padding
         const minCenterW = Math.max(10, bw - leftDestW - rightDestW);
@@ -1714,6 +1716,17 @@ async function drawAuthoritativeDynamicFrameCanvas(
         const midDestW = Math.max(minCenterW, neededCenterW);
         const dynamicBw = Math.min(width * 0.94 - bx, leftDestW + midDestW + rightDestW);
         const finalCenterW = dynamicBw - leftDestW - rightDestW;
+
+        // Draw background color if selected by user or frame config
+        const bgCol = card.locationBgColor || df.headerConfig.locationBgColor;
+        if (bgCol) {
+          ctx.save();
+          ctx.fillStyle = bgCol;
+          ctx.beginPath();
+          ctx.roundRect(bx, by, dynamicBw, bh, bh / 2);
+          ctx.fill();
+          ctx.restore();
+        }
 
         ctx.drawImage(badgeImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
         ctx.drawImage(badgeImg, pinW, 0, midW, nh, bx + leftDestW, by, finalCenterW, bh);
@@ -1731,15 +1744,15 @@ async function drawAuthoritativeDynamicFrameCanvas(
         ctx.textAlign = align === 'left' ? 'left' : align === 'right' ? 'right' : 'center';
 
         // Auto text shrink only if badge hits max right margin
-        let measuredW = ctx.measureText(card.location).width;
+        let measuredW = ctx.measureText(cleanLocText).width;
         while (measuredW > tw - 4 && fontSize > 10) {
           fontSize -= 1;
           ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
-          measuredW = ctx.measureText(card.location).width;
+          measuredW = ctx.measureText(cleanLocText).width;
         }
 
         const drawTx = align === 'left' ? tx + 4 : align === 'right' ? tx + tw - 4 : tx + tw / 2;
-        ctx.fillText(card.location, drawTx, ty + th / 2);
+        ctx.fillText(cleanLocText, drawTx, ty + th / 2);
         ctx.restore();
       } catch (e) {
         console.warn('Location badge image load warning:', e);
@@ -1786,7 +1799,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
   }
 
   // 5. FULL STORY CALLOUT
-  if (df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled') {
+  if (df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && card.showCallout !== false) {
     const cRect = df.fullStoryCalloutConfig.rect || { x: 10, y: 88, width: 80, height: 3.5 };
     const cx = (cRect.x / 100) * width;
     const cy = (cRect.y / 100) * height;
@@ -1797,7 +1810,15 @@ async function drawAuthoritativeDynamicFrameCanvas(
     if (calloutAsset) {
       try {
         const cImg = await loadImage(calloutAsset);
-        ctx.drawImage(cImg, cx, cy, cw, ch);
+        const origW = cImg.naturalWidth || cImg.width || 480;
+        const origH = cImg.naturalHeight || cImg.height || 72;
+        const userScale = Math.max(0.8, Math.min(1.3, card.calloutScale ?? 1.0));
+        const scale = Math.min((cw * userScale) / origW, (ch * userScale) / origH);
+        const drawW = Math.round(origW * scale);
+        const drawH = Math.round(origH * scale);
+        const drawX = Math.round(cx + (cw - drawW) / 2);
+        const drawY = Math.round(cy + (ch - drawH) / 2);
+        ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
       } catch (e) {
         console.warn('Callout asset load warning:', e);
       }
@@ -2388,62 +2409,62 @@ async function drawGraphic001Canvas(
     !card.headline.includes('आप स्टेप 3')
   );
 
+  // Always draw authentic red headline gradient banner with chevrons and streak beam
+  ctx.save();
+  const redGrad = ctx.createLinearGradient(0, bannerY, 0, bannerY + bannerH);
+  redGrad.addColorStop(0, '#E20000');
+  redGrad.addColorStop(0.5, '#BA0000');
+  redGrad.addColorStop(1, '#900000');
+  ctx.fillStyle = redGrad;
+  ctx.fillRect(0, bannerY, width, bannerH);
+
+  // Left & Right Dark Red Chevron Accent Stripes (matching original SVG and preview)
+  ctx.save();
+  ctx.fillStyle = '#7A0005';
+  ctx.globalAlpha = 0.6;
+  const scaleX = width / 1080;
+  const scaleY = height / 1350;
+
+  const drawChevron = (pts: [number, number][]) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0] * scaleX, pts[0][1] * scaleY);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i][0] * scaleX, pts[i][1] * scaleY);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  // Left chevrons
+  drawChevron([[0, 800], [60, 800], [30, 860], [0, 860]]);
+  drawChevron([[0, 880], [75, 880], [35, 960], [0, 960]]);
+  drawChevron([[0, 980], [90, 980], [40, 1080], [0, 1080]]);
+  drawChevron([[0, 1100], [80, 1100], [30, 1200], [0, 1200]]);
+
+  // Right chevrons
+  drawChevron([[1080, 800], [1020, 800], [1050, 860], [1080, 860]]);
+  drawChevron([[1080, 880], [1005, 880], [1045, 960], [1080, 960]]);
+  drawChevron([[1080, 980], [990, 980], [1040, 1080], [1080, 1080]]);
+  drawChevron([[1080, 1100], [1000, 1100], [1050, 1200], [1080, 1200]]);
+  ctx.restore();
+
+  // Glowing Divider Beam above headline banner (matching SVG streakGlow / CardPreview)
+  const streakGrad = ctx.createLinearGradient(0, bannerY, width, bannerY);
+  streakGrad.addColorStop(0, 'rgba(255, 26, 26, 0)');
+  streakGrad.addColorStop(0.35, 'rgba(255, 77, 0, 0.85)');
+  streakGrad.addColorStop(0.5, '#FFE600');
+  streakGrad.addColorStop(0.65, 'rgba(255, 77, 0, 0.85)');
+  streakGrad.addColorStop(1, 'rgba(255, 26, 26, 0)');
+  ctx.fillStyle = streakGrad;
+  ctx.fillRect(0, bannerY - 3, width, 6);
+
+  // Bevel highlight lines matching banner edges
+  ctx.fillStyle = 'rgba(255, 230, 160, 0.85)';
+  ctx.fillRect(0, bannerY, width, 3);
+  ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
+  ctx.fillRect(0, bannerY + bannerH - 3, width, 3);
+
   if (hasUserHeadline) {
-    ctx.save();
-    // Red Gradient Overlay covering instructions printed on background image
-    const redGrad = ctx.createLinearGradient(0, bannerY, 0, bannerY + bannerH);
-    redGrad.addColorStop(0, '#E20000');
-    redGrad.addColorStop(0.5, '#BA0000');
-    redGrad.addColorStop(1, '#900000');
-    ctx.fillStyle = redGrad;
-    ctx.fillRect(0, bannerY, width, bannerH);
-
-    // Left & Right Dark Red Chevron Accent Stripes (matching original SVG and preview)
-    ctx.save();
-    ctx.fillStyle = '#7A0005';
-    ctx.globalAlpha = 0.6;
-    const scaleX = width / 1080;
-    const scaleY = height / 1350;
-
-    const drawChevron = (pts: [number, number][]) => {
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0] * scaleX, pts[0][1] * scaleY);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i][0] * scaleX, pts[i][1] * scaleY);
-      }
-      ctx.closePath();
-      ctx.fill();
-    };
-
-    // Left chevrons
-    drawChevron([[0, 800], [60, 800], [30, 860], [0, 860]]);
-    drawChevron([[0, 880], [75, 880], [35, 960], [0, 960]]);
-    drawChevron([[0, 980], [90, 980], [40, 1080], [0, 1080]]);
-    drawChevron([[0, 1100], [80, 1100], [30, 1200], [0, 1200]]);
-
-    // Right chevrons
-    drawChevron([[1080, 800], [1020, 800], [1050, 860], [1080, 860]]);
-    drawChevron([[1080, 880], [1005, 880], [1045, 960], [1080, 960]]);
-    drawChevron([[1080, 980], [990, 980], [1040, 1080], [1080, 1080]]);
-    drawChevron([[1080, 1100], [1000, 1100], [1050, 1200], [1080, 1200]]);
-    ctx.restore();
-
-    // Glowing Divider Beam above headline banner (matching SVG streakGlow / CardPreview)
-    const streakGrad = ctx.createLinearGradient(0, bannerY, width, bannerY);
-    streakGrad.addColorStop(0, 'rgba(255, 26, 26, 0)');
-    streakGrad.addColorStop(0.35, 'rgba(255, 77, 0, 0.85)');
-    streakGrad.addColorStop(0.5, '#FFE600');
-    streakGrad.addColorStop(0.65, 'rgba(255, 77, 0, 0.85)');
-    streakGrad.addColorStop(1, 'rgba(255, 26, 26, 0)');
-    ctx.fillStyle = streakGrad;
-    ctx.fillRect(0, bannerY - 3, width, 6);
-
-    // Bevel highlight lines matching banner edges
-    ctx.fillStyle = 'rgba(255, 230, 160, 0.85)';
-    ctx.fillRect(0, bannerY, width, 3);
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
-    ctx.fillRect(0, bannerY + bannerH - 3, width, 3);
-
     // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
     const rawHeadline = card.formattedHeadline || card.headline;
     const fontFam = card.headlineFontFamily || 'Baloo 2';
@@ -2480,10 +2501,8 @@ async function drawGraphic001Canvas(
         curX += ctx.measureText(token.text + spacing).width;
       }
     });
-    ctx.restore();
   }
-  // NOTE: If !hasUserHeadline, nothing is drawn over the red banner,
-  // allowing the authentic background image's Step 3 instructions to show through!
+  ctx.restore();
 
   // 6. BOTTOM FOOTER AREA (Exact 8.0% / 0.08 footer height ratio = 108px on 1350px canvas, remaining from 92.0%)
   const footerH = height - (bannerY + bannerH);

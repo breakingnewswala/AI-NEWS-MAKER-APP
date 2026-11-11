@@ -36,5 +36,135 @@
     "enabled": true,
     "createdAt": 1793880000000,
     "updatedAt": 1793880000000
+  },
+  {
+    "id": "footer_regular_gold",
+    "name": "रेगुलर क्लीन फ़ुटर (White & Gold)",
+    "type": "custom_footer",
+    "category": "regular",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#FFFFFF",
+      "footerTextColor": "#000000",
+      "accentColor": "#D97706",
+      "layout": "standard"
+    },
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "footer_branding_navy",
+    "name": "ब्रांडिंग डार्क फ़ुटर (Navy & Gold Accent)",
+    "type": "custom_footer",
+    "category": "branding",
+    "enabled": true,
+    "allowedPlans": [
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#0F172A",
+      "footerTextColor": "#F8FAFC",
+      "accentColor": "#F59E0B",
+      "layout": "branding"
+    },
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "footer_social_blue",
+    "name": "सोशल मीडिया हाइलाइट फ़ुटर (Royal Blue)",
+    "type": "custom_footer",
+    "category": "social",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#1E3A8A",
+      "footerTextColor": "#FFFFFF",
+      "accentColor": "#38BDF8",
+      "layout": "social"
+    },
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "footer_news_breaking_red",
+    "name": "न्यूज़ अलर्ट रेड फ़ुटर (Breaking Red)",
+    "type": "custom_footer",
+    "category": "news",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#B91C1C",
+      "footerTextColor": "#FFFFFF",
+      "accentColor": "#FDE047",
+      "layout": "news"
+    },
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "footer_special_vip_gold",
+    "name": "स्पेशल वीआईपी गोल्ड फ़ुटर (VIP Gold Special)",
+    "type": "custom_footer",
+    "category": "special",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#78350F",
+      "footerTextColor": "#FEF08A",
+      "accentColor": "#FACC15",
+      "layout": "special"
+    },
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "callout_special_gold",
+    "name": "गोल्डन वीआईपी स्टोरी कॉलआउट (Gold VIP)",
+    "category": "special",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='gGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%2378350F'/><stop offset='50%' stop-color='%23B45309'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23gGrad)' stroke='%23FDE047' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FDE047'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FEF08A'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FDE047'/><polygon points='436,28 448,36 436,44' fill='%2378350F'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "callout_breaking_red",
+    "name": "ब्रेकिंग न्यूज़ रेड कॉलआउट (Breaking Red)",
+    "category": "breaking",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='rGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23B91C1C'/><stop offset='70%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23rGrad)' stroke='%23FFFFFF' stroke-width='2.5'/><polygon points='38,24 54,36 38,48' fill='%23FFFFFF'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FFFFFF'/><polygon points='436,28 448,36 436,44' fill='%23DC2626'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
   }
 ]

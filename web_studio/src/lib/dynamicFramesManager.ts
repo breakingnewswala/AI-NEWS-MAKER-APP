@@ -386,131 +386,10 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
 }
 
 // -------------------------------------------------------------
-// DEFAULT SEED DYNAMIC FRAMES (Production-grade 4:5 and 9:16)
+// DEFAULT SEED DYNAMIC FRAMES
 // -------------------------------------------------------------
 
-export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [
-  {
-    id: 'df_sample_11111',
-    name: '11111',
-    description: 'AI जनरेटेड 4:5 सैंपल फ्रेम',
-    aspectRatio: '4:5',
-    canvasWidth: 1080,
-    canvasHeight: 1350,
-    designCategory: 'TEST_FRAMES',
-    isTestFrame: true,
-    approvalStatus: 'PENDING_TEST',
-    allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-    publicationStatus: 'published',
-    createdBy: 'breakingnewswala.com@gmail.com',
-    createdAt: 1794240000000,
-    updatedAt: 1794240000000,
-    version: 1,
-    primaryBackgroundHex: '#0B1329',
-    headerConfig: {
-      showLogo: true,
-      logoPosition: 'top_left',
-      logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
-      showLocation: true,
-      locationRect: { x: 68, y: 5.5, width: 28, height: 4.5 },
-      locationStyle: 'pill',
-      locationTextColor: '#000000',
-      showDate: true,
-      dateRect: { x: 5, y: 25, width: 34, height: 3.5 },
-      dateRotation: 270,
-    },
-    footerConfig: {
-      footerHeightRatio: 0.08,
-      enforcePermanentFooter: true,
-      footerBgColor: '#FACC15',
-      footerTextColor: '#0A0A0A',
-    },
-    photoSlots: [
-      {
-        id: 'slot_photo_main',
-        name: 'मुख्य फोटो',
-        slotType: 'normal',
-        rect: { x: 0, y: 0, width: 100, height: 61.33 },
-        required: true,
-        cropMode: 'cover',
-      },
-    ],
-    textSlots: [
-      {
-        id: 'slot_text_headline',
-        name: 'मुख्य हेडलाइन (Main Headline)',
-        role: 'headline',
-        rect: { x: 7, y: 63, width: 86, height: 27 },
-        fontFamily: 'Noto Sans Devanagari',
-        fontSize: 70,
-        fontWeight: 'bold',
-        textColor: '#FFFFFF',
-        alignment: 'center',
-        maxLines: 3,
-      },
-    ],
-  },
-  {
-    id: 'df_sample_2222',
-    name: '2222',
-    description: 'AI जनरेटेड 4:5 सैंपल फ्रेम',
-    aspectRatio: '4:5',
-    canvasWidth: 1080,
-    canvasHeight: 1350,
-    designCategory: 'TEST_FRAMES',
-    isTestFrame: true,
-    approvalStatus: 'PENDING_TEST',
-    allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-    publicationStatus: 'published',
-    createdBy: 'breakingnewswala.com@gmail.com',
-    createdAt: 1794240000000,
-    updatedAt: 1794240000000,
-    version: 1,
-    primaryBackgroundHex: '#0B1329',
-    headerConfig: {
-      showLogo: true,
-      logoPosition: 'top_left',
-      logoRect: { x: 5, y: 3.5, width: 22, height: 9 },
-      showLocation: true,
-      locationRect: { x: 68, y: 5.5, width: 28, height: 4.5 },
-      locationStyle: 'pill',
-      locationTextColor: '#000000',
-      showDate: true,
-      dateRect: { x: 5, y: 25, width: 34, height: 3.5 },
-      dateRotation: 270,
-    },
-    footerConfig: {
-      footerHeightRatio: 0.08,
-      enforcePermanentFooter: true,
-      footerBgColor: '#FFFFFF',
-      footerTextColor: '#0A0A0A',
-    },
-    photoSlots: [
-      {
-        id: 'slot_photo_main',
-        name: 'मुख्य फोटो',
-        slotType: 'normal',
-        rect: { x: 0, y: 0, width: 100, height: 61.33 },
-        required: true,
-        cropMode: 'cover',
-      },
-    ],
-    textSlots: [
-      {
-        id: 'slot_text_headline',
-        name: 'मुख्य हेडलाइन (Main Headline)',
-        role: 'headline',
-        rect: { x: 7, y: 63, width: 86, height: 27 },
-        fontFamily: 'Noto Sans Devanagari',
-        fontSize: 70,
-        fontWeight: 'bold',
-        textColor: '#000000',
-        alignment: 'center',
-        maxLines: 3,
-      },
-    ],
-  },
-];
+export const DEFAULT_DYNAMIC_FRAMES: DynamicFrameTemplate[] = [];
 
 // -------------------------------------------------------------
 // LOCALSTORAGE & SERVER SYNC IMPLEMENTATION
@@ -558,7 +437,7 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
     const tombstones = getDeletedDynamicFrameIds();
     const existingIds = new Set(
       parsed
-        .filter((f: any) => !FORBIDDEN_IDS.has(f.id) && f.id !== 'df_reg_4_5_clean' && !tombstones.has(f.id))
+        .filter((f: any) => !FORBIDDEN_IDS.has(f.id) && f.id !== 'df_reg_4_5_clean' && !tombstones.has(f.id) && !tombstones.has(f.name))
         .map((f: DynamicFrameTemplate) => f.id)
     );
     const merged = parsed.filter(
@@ -566,6 +445,7 @@ export function getLocalDynamicFrames(): DynamicFrameTemplate[] {
         !FORBIDDEN_IDS.has(f.id) &&
         f.id !== 'df_reg_4_5_clean' &&
         !tombstones.has(f.id) &&
+        !tombstones.has(f.name) &&
         !(f.id !== 'graphic_001' && (f.name?.includes('रेगुलर क्लीन') || f.name?.toLowerCase()?.includes('regular clean')))
     );
     for (const def of DEFAULT_DYNAMIC_FRAMES) {
@@ -692,7 +572,7 @@ export async function deleteDynamicFrameFromApi(frameId: string, authToken?: str
       headers,
     });
     const local = getLocalDynamicFrames();
-    saveLocalDynamicFrames(local.filter((f) => f.id !== frameId));
+    saveLocalDynamicFrames(local.filter((f) => f.id !== frameId && f.name !== frameId && !(frameId === '11111' && f.id.includes('11111')) && !(frameId === '2222' && f.id.includes('2222'))));
     return res.ok;
   } catch (e) {
     console.warn('Failed to delete frame:', e);

@@ -825,8 +825,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         {card.frameDesign === 'jacket-quote' && (
           <div className="absolute inset-x-0 bottom-0 h-36 sm:h-44 bg-gradient-to-b from-transparent via-black/75 to-black pointer-events-none z-10" />
         )}
-        {/* Render photo layouts only when applicable (when user has uploaded a photo) */}
-        {hasUploadedPhoto && (
+        {/* Render photo layouts when user has uploaded a photo, otherwise show Neutral Blank Photo Area */}
+        {hasUploadedPhoto ? (
           <>
             {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
             {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
@@ -1084,6 +1084,19 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           </div>
         )}
           </>
+        ) : (
+          /* Neutral Blank Photo Area (Phase 1.2 Specification) */
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center select-none bg-slate-900/90 border-2 border-dashed border-slate-700/60 rounded-lg">
+            <div className="w-14 h-14 rounded-full bg-slate-800/90 border border-slate-700/80 flex items-center justify-center mb-3 shadow-inner">
+              <Camera className="w-7 h-7 text-slate-400 stroke-[1.75]" />
+            </div>
+            <span className="text-sm sm:text-base font-bold text-slate-200 font-['Noto_Sans_Devanagari']">
+              फोटो जोड़ने के लिए स्टेप 4 पर जाएँ
+            </span>
+            <span className="text-[11px] text-slate-400 font-['Noto_Sans_Devanagari'] mt-1">
+              (यहाँ आपकी चुनी गई खबर की फोटो प्रदर्शित होगी)
+            </span>
+          </div>
         )}
 
         {/* Optional user-controlled dark overlay */}
@@ -1166,8 +1179,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           ) : null
         ) : getActiveHeaderPng(card) ? (
           <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
-        ) : (card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default') ? (
-          /* graphic_001, graphic_002, graphic_003, graphic_004 and jacket-default have their own dedicated top elements */
+        ) : (Boolean(currentDynamicFrame) || Boolean(card.customDynamicFrame) || card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default' || (card.frameDesign && card.frameDesign.startsWith('df_'))) ? (
+          /* Dynamic frames and canonical graphic templates have their own dedicated header and logo elements */
           null
         ) : card.frameDesign === 'custom-png' ? (
           !card.hideDefaultHeaderInCustomFrame && (
@@ -1218,8 +1231,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         </div>
       )}
 
-      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Topmost Visual Layer */}
-      {card.showDate !== false && (
+      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Topmost Visual Layer (Standard frames only; Dynamic frames use their own date layer) */}
+      {card.showDate !== false && !currentDynamicFrame && !card.customDynamicFrame && !card.frameDesign?.startsWith('df_') && (
         <div
           className="absolute right-3 sm:right-4 top-[22%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
           style={{ width: '24px', height: '180px' }}
@@ -1341,66 +1354,66 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           )}
 
           {/* Red Headline Area (Top: 61.33%, Height: 30.67% - Expanded by ~30px with 8% footer):
-              - When no headline is entered, the authentic background image's Step 3 instructions show.
-              - When user writes a headline, this red banner overlay replaces instructions with their headline in real time. */}
-          {Boolean(
-            card.headline &&
-            card.headline.trim().length > 0 &&
-            card.headline.trim() !== 'ताज़ा समाचार' &&
-            !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
-            !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
-            !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
-            !card.headline.includes('स्टेप 3 में जाकर अपनी मुख्य खबर') &&
-            card.headline.trim() !== 'आप स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर के शीर्षक को दर्ज कर सकते हैं' &&
-            !card.headline.includes('आप स्टेप 3')
-          ) && (
+              - Always renders the authentic red banner overlay to ensure clean default slate.
+              - When user writes a headline, text is rendered centered in real time. */}
+          <div
+            className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
+            style={{
+              top: '61.33%',
+              height: '30.67%',
+              background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
+              boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
+            }}
+          >
+            {/* Glowing Divider Beam above headline banner matching CanvasExporter */}
             <div
-              className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
+              className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
               style={{
-                top: '61.33%',
-                height: '30.67%',
-                background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
-                boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
+                background: 'linear-gradient(90deg, rgba(255,26,26,0) 0%, rgba(255,77,0,0.85) 35%, #FFE600 50%, rgba(255,77,0,0.85) 65%, rgba(255,26,26,0) 100%)',
+                boxShadow: '0 0 10px #FFE600',
               }}
-            >
-              {/* Glowing Divider Beam above headline banner matching CanvasExporter */}
-              <div
-                className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
-                style={{
-                  background: 'linear-gradient(90deg, rgba(255,26,26,0) 0%, rgba(255,77,0,0.85) 35%, #FFE600 50%, rgba(255,77,0,0.85) 65%, rgba(255,26,26,0) 100%)',
-                  boxShadow: '0 0 10px #FFE600',
-                }}
-              />
-              {/* Subtle top & bottom banner highlight bevels */}
-              <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-85 pointer-events-none" />
-              <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-75 pointer-events-none" />
+            />
+            {/* Subtle top & bottom banner highlight bevels */}
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-85 pointer-events-none" />
+            <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-75 pointer-events-none" />
 
-              {/* Left & Right Dark Red Chevron Accent Stripes matching exported graphic */}
-              <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
-                <g fill="#7A0005" opacity="0.6">
-                  <polygon points="0,20 60,20 30,80 0,80" />
-                  <polygon points="0,100 75,100 35,180 0,180" />
-                  <polygon points="0,200 90,200 40,300 0,300" />
-                  <polygon points="0,320 80,320 30,420 0,420" />
-                </g>
-              </svg>
-              <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
-                <g fill="#7A0005" opacity="0.6">
-                  <polygon points="100,20 40,20 70,80 100,80" />
-                  <polygon points="100,100 25,100 65,180 100,180" />
-                  <polygon points="100,200 10,200 60,300 100,300" />
-                  <polygon points="100,320 20,320 70,420 100,420" />
-                </g>
-              </svg>
+            {/* Left & Right Dark Red Chevron Accent Stripes matching exported graphic */}
+            <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+              <g fill="#7A0005" opacity="0.6">
+                <polygon points="0,20 60,20 30,80 0,80" />
+                <polygon points="0,100 75,100 35,180 0,180" />
+                <polygon points="0,200 90,200 40,300 0,300" />
+                <polygon points="0,320 80,320 30,420 0,420" />
+              </g>
+            </svg>
+            <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+              <g fill="#7A0005" opacity="0.6">
+                <polygon points="100,20 40,20 70,80 100,80" />
+                <polygon points="100,100 25,100 65,180 100,180" />
+                <polygon points="100,200 10,200 60,300 100,300" />
+                <polygon points="100,320 20,320 70,420 100,420" />
+              </g>
+            </svg>
 
-              {/* Headline Text: Center vertically & horizontally within Title Safe bounds (balanced into optical red center) */}
-              <div className="relative z-10 w-full h-full flex items-center justify-center px-[10%] pt-2 sm:pt-3">
-                <div className="w-full flex items-center justify-center text-center">
-                  {renderFormattedHeadline()}
-                </div>
+            {/* Headline Text: Center vertically & horizontally within Title Safe bounds (balanced into optical red center) */}
+            <div className="relative z-10 w-full h-full flex items-center justify-center px-[10%] pt-2 sm:pt-3">
+              <div className="w-full flex items-center justify-center text-center">
+                {Boolean(
+                  card.headline &&
+                  card.headline.trim().length > 0 &&
+                  card.headline.trim() !== 'ताज़ा समाचार' &&
+                  !card.headline.includes('यहाँ आपकी हेडलाइन आएगी') &&
+                  !card.headline.includes('आपकी चुनी गयी खबर को यहां') &&
+                  !card.headline.includes('यहाँ आपकी न्यूज़ की') &&
+                  !card.headline.includes('स्टेप 3 में जाकर अपनी मुख्य खबर') &&
+                  card.headline.trim() !== 'आप स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर के शीर्षक को दर्ज कर सकते हैं' &&
+                  !card.headline.includes('आप स्टेप 3')
+                ) ? (
+                  renderFormattedHeadline()
+                ) : null}
               </div>
             </div>
-          )}
+          </div>
 
           {/* Bottom Master Branding Footer (Bottom 0 to 8.0%):
               Renders user's actual saved Footer with correct social media icons */}
@@ -3448,11 +3461,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   </div>
                 ) : (
                   <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2"
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2.5"
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      minWidth: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      width: 'max-content',
+                      maxWidth: '85%',
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
                       color: df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000'),
@@ -3577,7 +3592,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               })()}
 
               {/* Full Story Callout */}
-              {df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && (
+              {df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && card.showCallout !== false && (
                 (card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset) ? (
                   <div
                     className="absolute pointer-events-auto flex items-center justify-center"
@@ -3586,7 +3601,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
                       width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
                       height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
-                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg)`,
+                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
+                      transformOrigin: 'center center',
                     }}
                   >
                     <img
@@ -3607,7 +3623,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
                       borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',
                       borderWidth: `${df.fullStoryCalloutConfig.borderWidth ?? 1}px`,
-                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg)`,
+                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
+                      transformOrigin: 'center center',
                       fontSize: `${Math.max(9, Math.round((df.fullStoryCalloutConfig.fontSize || 18) * previewScale))}px`,
                     }}
                   >

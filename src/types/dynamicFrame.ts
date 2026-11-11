@@ -375,6 +375,7 @@ export interface FrameLayer {
   visible: boolean;
   locked: boolean;
   zIndex: number;
+  rotation?: number;
 }
 
 export type StatementBackgroundMode = 'solid' | 'curated' | 'ai_generated';

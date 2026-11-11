@@ -141,6 +141,7 @@ export interface NewsCardData {
   customLogoPngUrl?: string; // Dedicated PNG logo
   customLogoGifUrl?: string; // Dedicated GIF animated logo
   customCalloutAssetUrl?: string;
+  calloutScale?: number; // Scaling multiplier of story callout (0.8 to 1.3, default 1.0)
   customLocationBadgeAssetUrl?: string;
   logoScale?: number; // Scaling percentage of brand logo (0.5 to 2.0, default 1.0)
   logoSizePercent?: number; // Scaling percentage alias (50 to 180, default 125)

@@ -438,31 +438,38 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     getCustomFrames(currentUser?.email || currentUser?.username)
   );
   const [libraryFooters, setLibraryFooters] = React.useState<any[]>([]);
+  const [libraryCallouts, setLibraryCallouts] = React.useState<any[]>([]);
+  const [footerCategoryFilter, setFooterCategoryFilter] = React.useState<string>('all');
+  const [calloutCategoryFilter, setCalloutCategoryFilter] = React.useState<string>('all');
 
   React.useEffect(() => {
-    const userTier = (currentUser?.tier || 'basic').toUpperCase();
-    fetch(`/api/admin/asset-libraries?type=custom_footer&userPlan=${encodeURIComponent(userTier)}`, {
+    fetch(`/api/admin/asset-libraries?type=custom_footer`, {
       headers: {
-        'x-user-plan': userTier,
         ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {})
       }
     })
       .then((r) => r.json())
       .then((d) => {
         if (d.success && Array.isArray(d.items)) {
-          const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, 'VIP DESK': 4, ULTRA: 4 };
-          const userRank = planHierarchy[userTier] || 1;
-          const valid = d.items.filter((item: any) => {
-            if (item.type !== 'custom_footer' || item.enabled === false) return false;
-            const plans = item.allowedPlans || item.footerConfig?.allowedPlans;
-            if (!plans || !Array.isArray(plans) || plans.length === 0) return true;
-            return plans.some((p: string) => (planHierarchy[p.toUpperCase()] || 1) <= userRank);
-          });
+          const valid = d.items.filter((item: any) => item.enabled !== false);
           setLibraryFooters(valid);
         }
       })
       .catch(() => {});
-  }, [currentUser?.tier, currentUser?.token]);
+
+    fetch(`/api/admin/asset-libraries?type=callout_png`, {
+      headers: {
+        ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {})
+      }
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.items)) {
+          setLibraryCallouts(d.items.filter((it: any) => it.enabled !== false));
+        }
+      })
+      .catch(() => {});
+  }, [currentUser?.token]);
 
   React.useEffect(() => {
     const handleFramesUpdated = () => {
@@ -1903,9 +1910,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           const df = getDynamicFrameById(card.frameDesign || '');
           if (!df || !df.fullStoryCalloutConfig?.enabled) return null;
           const planSettings = df.fullStoryCalloutConfig.planCalloutSettings;
-          const isProOrVip = effectiveAdmin || effectiveTier === 'pro' || effectiveTier === 'vip';
-          const rule = effectiveTier === 'vip' ? (planSettings?.vipDesk || planSettings?.pro) : planSettings?.pro;
-          const alternatives = rule?.allowedAlternativeAssets || [];
+          const isProOrVip = effectiveAdmin || effectiveTier === 'pro' || effectiveTier === 'vip' || effectiveTier === 'professional' || effectiveTier === 'ultra';
+          const rule = (effectiveTier === 'vip' || effectiveTier === 'ultra') ? (planSettings?.vipDesk || planSettings?.pro) : planSettings?.pro;
+          const alternatives = [
+            ...(rule?.allowedAlternativeAssets || []),
+            ...libraryCallouts.map((lc) => ({ id: lc.id, name: lc.name, url: lc.url || lc.assetUrl }))
+          ];
 
           if (!isProOrVip || alternatives.length === 0) {
             return null; // Basic & Advanced users are locked to Admin default
@@ -4209,7 +4219,297 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         )}
 
 
-        {/* 1. Master Branding Card with ON/OFF Toggle (Top of Step 6) */}
+        {/* 1. Central Custom Footer Library Selection (Top of Step 6) */}
+        <div className="p-3 bg-neutral-950/80 border border-amber-500/40 rounded-xl space-y-3 text-xs shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+              <span className="text-base">🏛️</span>
+              <span>कस्टम फ़ुटर लाइब्रेरी (Custom Footers)</span>
+            </span>
+            {card.selectedCustomFooterId && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange({
+                    selectedCustomFooterId: undefined,
+                    customFooterConfig: undefined,
+                    customFooterPng: undefined,
+                  });
+                }}
+                className="text-[10px] text-red-400 hover:text-red-300 underline font-semibold cursor-pointer"
+              >
+                ✕ फ़ुटर हटाएं
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-neutral-400 leading-relaxed">
+            सेंट्रल एसेट लाइब्रेरी से आधुनिक फ़ुटर डिज़ाइन चुनें। प्रो और वीआईपी डेस्क प्लान के लिए विशेष स्टाइल्स उपलब्ध हैं।
+          </p>
+
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            {[
+              { id: 'all', label: 'सब (All)' },
+              { id: 'regular', label: 'रेगुलर फ़ुटर' },
+              { id: 'branding', label: 'ब्रांडिंग फ़ुटर' },
+              { id: 'social', label: 'सोशल मीडिया फ़ुटर' },
+              { id: 'news', label: 'न्यूज़ फ़ुटर' },
+              { id: 'special', label: 'स्पेशल फ़ुटर' },
+            ].map((cat) => {
+              const isCatActive = footerCategoryFilter === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setFooterCategoryFilter(cat.id)}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all cursor-pointer ${
+                    isCatActive
+                      ? 'bg-amber-500 text-neutral-950 shadow-sm font-black'
+                      : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-neutral-200'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+            {libraryFooters
+              .filter((lf) => {
+                if (footerCategoryFilter === 'all') return true;
+                const c = String(lf.category || '').toLowerCase().trim();
+                if (footerCategoryFilter === 'regular') return c === 'regular' || c.includes('रेगुलर');
+                if (footerCategoryFilter === 'branding') return c === 'branding' || c.includes('ब्रांडिंग');
+                if (footerCategoryFilter === 'social') return c === 'social' || c.includes('सोशल');
+                if (footerCategoryFilter === 'news') return c === 'news' || c.includes('न्यूज़') || c.includes('न्यूज');
+                if (footerCategoryFilter === 'special') return c === 'special' || c.includes('स्पेशल');
+                return true;
+              })
+              .map((lf) => {
+                const isSelected = card.selectedCustomFooterId === lf.id;
+                const plans = lf.allowedPlans || lf.footerConfig?.allowedPlans;
+                const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, PROFESSIONAL: 3, 'VIP DESK': 4, VIP: 4, ULTRA: 4 };
+                const userTierRank = effectiveAdmin ? 99 : (effectiveTier === 'ultra' ? 4 : (effectiveTier === 'professional' ? 3 : (effectiveTier === 'advanced' ? 2 : 1)));
+                const isAllowed = effectiveAdmin || !plans || !Array.isArray(plans) || plans.length === 0 || plans.some((p: string) => (planHierarchy[p.toUpperCase()] || 1) <= userTierRank);
+
+                return (
+                  <button
+                    key={lf.id}
+                    type="button"
+                    onClick={() => {
+                      if (!isAllowed) {
+                        alert('यह प्रीमियम कस्टम फ़ुटर केवल प्रो या वीआईपी डेस्क प्लान के लिए उपलब्ध है।');
+                        return;
+                      }
+                      onChange({
+                        selectedCustomFooterId: lf.id,
+                        customFooterConfig: lf.footerConfig,
+                        customFooterPng: lf.assetUrl || lf.url || undefined,
+                        footerBgColor: lf.footerConfig?.footerBgColor || card.footerBgColor,
+                        footerTextColor: lf.footerConfig?.footerTextColor || card.footerTextColor,
+                      });
+                    }}
+                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer relative ${
+                      isSelected
+                        ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                        : isAllowed
+                          ? 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
+                          : 'bg-neutral-950/60 border-neutral-800 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <span className="font-bold text-[11px] text-neutral-200 truncate">{lf.name}</span>
+                      {!isAllowed ? (
+                        <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-400 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-600/40 shrink-0">
+                          <Lock className="w-2.5 h-2.5" />
+                          <span>PRO</span>
+                        </span>
+                      ) : isSelected ? (
+                        <span className="text-[10px] font-black text-amber-400 shrink-0">✓ चयनित</span>
+                      ) : null}
+                    </div>
+
+                    {/* Color stripe preview */}
+                    <div
+                      className="h-3 rounded border border-black/30 flex items-center px-1.5 text-[8px] font-bold overflow-hidden"
+                      style={{
+                        backgroundColor: lf.footerConfig?.footerBgColor || '#FFFFFF',
+                        color: lf.footerConfig?.footerTextColor || '#000000',
+                      }}
+                    >
+                      <span className="truncate">फ़ुटर पूर्वावलोकन • {lf.category || 'general'}</span>
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+
+        {/* 2. Story Callout Selection from Central Asset Library (Step 6) */}
+        <div className="p-3 bg-neutral-950/80 border border-amber-500/30 rounded-xl space-y-3 text-xs shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+              <span>📢 स्टोरी कॉलआउट (Story Callout)</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const nextState = card.showCallout === false ? true : false;
+                onChange({ showCallout: nextState });
+              }}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
+                card.showCallout !== false
+                  ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-sm'
+                  : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
+              }`}
+            >
+              <span>{card.showCallout !== false ? '✓ चालू (ON)' : '✕ बंद (OFF)'}</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-neutral-400 leading-relaxed">
+            'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें' कॉलआउट का डिज़ाइन व साइज सेट करें। पोज़ीशन एडमिन द्वारा सेफ ज़ोन में फिक्स रहती है।
+          </p>
+
+          {card.showCallout !== false && (
+            <div className="space-y-3 pt-2 border-t border-neutral-800 animate-in fade-in duration-150">
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                {[
+                  { id: 'all', label: 'सब (All)' },
+                  { id: 'general', label: 'सामान्य' },
+                  { id: 'special', label: 'स्पेशल (VIP)' },
+                  { id: 'breaking', label: 'ब्रेकिंग' },
+                ].map((cat) => {
+                  const isCatActive = calloutCategoryFilter === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setCalloutCategoryFilter(cat.id)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all cursor-pointer ${
+                        isCatActive
+                          ? 'bg-amber-500 text-neutral-950 shadow-sm font-black'
+                          : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-neutral-200'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Callouts Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {/* Default option */}
+                <button
+                  type="button"
+                  onClick={() => onChange({ customCalloutAssetUrl: undefined })}
+                  className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 ${
+                    !card.customCalloutAssetUrl
+                      ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                      : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-200">
+                    <span>डिफ़ॉल्ट कॉलआउट (Default)</span>
+                    {!card.customCalloutAssetUrl && <span className="text-[10px] font-black text-amber-400">✓ चयनित</span>}
+                  </div>
+                  <div className="h-6 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center px-2 text-[9px] text-amber-300 font-bold">
+                    🔴 पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें
+                  </div>
+                </button>
+
+                {/* Library Callouts */}
+                {libraryCallouts
+                  .filter((lc) => {
+                    if (calloutCategoryFilter === 'all') return true;
+                    const c = String(lc.category || '').toLowerCase().trim();
+                    return c === calloutCategoryFilter;
+                  })
+                  .map((lc) => {
+                    const isSelected = card.customCalloutAssetUrl === (lc.url || lc.assetUrl);
+                    const plans = lc.allowedPlans;
+                    const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, PROFESSIONAL: 3, 'VIP DESK': 4, VIP: 4, ULTRA: 4 };
+                    const userTierRank = effectiveAdmin ? 99 : (effectiveTier === 'ultra' ? 4 : (effectiveTier === 'professional' ? 3 : (effectiveTier === 'advanced' ? 2 : 1)));
+                    const isAllowed = effectiveAdmin || !plans || !Array.isArray(plans) || plans.length === 0 || plans.some((p: string) => (planHierarchy[p.toUpperCase()] || 1) <= userTierRank);
+
+                    return (
+                      <button
+                        key={lc.id}
+                        type="button"
+                        onClick={() => {
+                          if (!isAllowed) {
+                            alert('यह प्रीमियम स्टोरी कॉलआउट केवल प्रो या वीआईपी डेस्क प्लान के लिए उपलब्ध है।');
+                            return;
+                          }
+                          onChange({ customCalloutAssetUrl: lc.url || lc.assetUrl });
+                        }}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 relative ${
+                          isSelected
+                            ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                            : isAllowed
+                              ? 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
+                              : 'bg-neutral-950/60 border-neutral-800 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[11px] font-bold text-neutral-200">
+                          <span className="truncate">{lc.name}</span>
+                          {!isAllowed ? (
+                            <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-400 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-600/40 shrink-0">
+                              <Lock className="w-2.5 h-2.5" />
+                              <span>PRO</span>
+                            </span>
+                          ) : isSelected ? (
+                            <span className="text-[10px] font-black text-amber-400 shrink-0">✓ चयनित</span>
+                          ) : null}
+                        </div>
+                        <div className="h-6 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center p-1 overflow-hidden">
+                          {lc.url || lc.assetUrl ? (
+                            <img src={lc.url || lc.assetUrl} alt={lc.name} className="h-full w-full object-contain" />
+                          ) : (
+                            <span className="text-[9px] text-neutral-400">कॉलआउट</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+              </div>
+
+              {/* Callout Size Slider (Admin allowed range: 80% to 130%) */}
+              <div className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-neutral-300">कॉलआउट साइज (Callout Size):</span>
+                  <span className="font-mono text-amber-400 font-bold">
+                    {Math.round((card.calloutScale ?? 1.0) * 100)}% {Math.round((card.calloutScale ?? 1.0) * 100) === 100 ? '(डिफ़ॉल्ट)' : ''}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.80"
+                  max="1.30"
+                  step="0.05"
+                  value={card.calloutScale ?? 1.0}
+                  onChange={(e) => onChange({ calloutScale: parseFloat(e.target.value) })}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+                <div className="flex justify-between text-[9px] text-neutral-500 font-medium">
+                  <span>80% (छोटा)</span>
+                  <span>100% (सामान्य)</span>
+                  <span>130% (बड़ा)</span>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-neutral-400 flex items-center gap-1.5 pt-0.5">
+                <span>📍</span>
+                <span>पोज़ीशन: एडमिन द्वारा निर्धारित सेफ ज़ोन में सुरक्षित (Locked)। ओरिजिनल PNG का अनुपात 100% सुरक्षित रहेगा।</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 3. Master Branding Card with ON/OFF Toggle (Third in Step 6) */}
         <div className="p-3 bg-neutral-950/80 border border-blue-900/40 rounded-xl space-y-2.5 text-xs">
           <div className="flex items-center justify-between text-blue-300 font-bold">
             <span className="flex items-center gap-1.5">
@@ -4720,22 +5020,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                         {FOOTER_BG_PRIMARY_PRESETS.map((p) => {
                           const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+                          const activeDf = getDynamicFrameById(card.frameDesign || '');
+                          const isColorBanned = Boolean(
+                            activeDf && (
+                              (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
+                              (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF')
+                            )
+                          );
                           return (
                             <button
                               key={p.color}
                               type="button"
-                              onClick={() => onChange({ footerBgColor: p.color })}
-                              className={`px-2 py-1.5 rounded-lg text-left text-xs font-bold border flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
-                                isSel ? 'ring-2 ring-yellow-400 scale-[1.02] shadow-md border-yellow-400' : 'hover:border-neutral-500'
+                              disabled={isColorBanned}
+                              onClick={() => {
+                                if (isColorBanned) return;
+                                onChange({ footerBgColor: p.color });
+                              }}
+                              className={`px-2 py-1.5 rounded-lg text-left text-xs font-bold border flex items-center justify-between gap-1.5 transition-all ${
+                                isColorBanned
+                                  ? 'opacity-40 cursor-not-allowed bg-neutral-900 border-neutral-800'
+                                  : isSel
+                                    ? 'ring-2 ring-yellow-400 scale-[1.02] shadow-md border-yellow-400 cursor-pointer'
+                                    : 'hover:border-neutral-500 cursor-pointer'
                               } ${p.border}`}
                               style={{ backgroundColor: p.color, color: '#0F172A' }}
-                              title={`${p.nameHi} - ${p.color}`}
+                              title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} - ${p.color}`}
                             >
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <span className="w-3.5 h-3.5 rounded-full border border-neutral-400/60 shrink-0 shadow-inner" style={{ backgroundColor: p.color }} />
                                 <span className="text-[10.5px] truncate">{p.nameHi}</span>
                               </div>
-                              <span className="font-mono text-[9px] text-neutral-600 shrink-0">{p.color}</span>
+                              {isColorBanned ? (
+                                <span className="font-mono text-[8px] text-red-600 font-black shrink-0">🚫 आरक्षित</span>
+                              ) : (
+                                <span className="font-mono text-[9px] text-neutral-600 shrink-0">{p.color}</span>
+                              )}
                             </button>
                           );
                         })}

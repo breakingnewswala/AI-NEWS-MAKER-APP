@@ -647,20 +647,26 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 
               {/* Actions Row */}
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                {/* Active Status Dot Indicator (Phase 7.1 - No bulky text button) */}
                 <button
                   type="button"
                   onClick={() => handleToggleActive(item.id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                    item.isActive
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      : 'bg-slate-800 text-slate-400 border border-slate-700'
-                  }`}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition cursor-pointer shrink-0"
+                  title={item.isActive ? 'फ्रेम सक्रिय है (क्लिक करके निष्क्रिय करें)' : 'फ्रेम निष्क्रिय है (क्लिक करके सक्रिय करें)'}
                 >
-                  {item.isActive ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-slate-500" />}
-                  <span>{item.isActive ? 'सक्रिय' : 'निष्क्रिय'}</span>
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full transition-all ${
+                      item.isActive
+                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                        : 'bg-slate-600'
+                    }`}
+                  />
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {item.isActive ? 'Active' : 'Off'}
+                  </span>
                 </button>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 flex-wrap justify-end">
                   <button
                     type="button"
                     onClick={() => {
@@ -750,10 +756,11 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                     <button
                       type="button"
                       onClick={() => onOpenStudioWithTemplate(item.id)}
-                      className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                      className="py-1 px-2 bg-emerald-950/50 hover:bg-emerald-900/80 text-emerald-300 hover:text-white border border-emerald-600/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                       title="स्टूडियो में टेस्ट करें"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="hidden sm:inline">टेस्ट</span>
                     </button>
                   )}
                 </div>

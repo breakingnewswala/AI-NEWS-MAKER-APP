@@ -143,7 +143,7 @@ interface ProfileScreenWebProps {
   currentUser: ReporterUser | null;
   onLogout: () => void;
   onAddNewPost: (post: Omit<NewsFeedPost, 'id' | 'timestamp'>) => void;
-  onOpenStudio: () => void;
+  onOpenStudio: (templateId?: string) => void;
   onOpenOnboarding?: () => void;
   onNavigateToGenerator?: () => void;
   categories?: { id: string; name: string }[];
@@ -175,6 +175,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const isRealAdmin = isUserAdmin(effectiveUser) || isUserAdmin(currentUser);
   const isAdmin = isEffectiveAdmin(effectiveUser) || isRealAdmin;
   const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
+  const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+  const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+  const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isAdmin ? '/assets/ai_news_maker_logo.png' : ''));
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
@@ -1504,7 +1507,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           console.warn('GIF upload server sync warning:', err);
         }
         setChannelProfile((prev) => {
-          const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '');
+          const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || defaultAdminLogo;
           const updated = {
             ...prev,
             channelLogoGifUrl: finalUrl,
@@ -1555,7 +1558,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const handleRemoveGifLogo = async () => {
     const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
     setChannelProfile((prev) => {
-      const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '');
+      const existingPng = prev.channelLogoPngUrl || (prev.channelLogoUrl?.endsWith('.gif') ? '' : prev.channelLogoUrl) || defaultAdminLogo;
       const updated = {
         ...prev,
         channelLogoGifUrl: undefined,
@@ -1690,7 +1693,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const handleAdminResetLogo = async () => {
     const confirmed = window.confirm('क्या आप चैनल लोगो को डिफ़ॉल्ट पर रीसेट करना चाहते हैं?');
     if (!confirmed) return;
-    const defaultLogo = isAdmin ? '/assets/ai_news_maker_logo.png' : '';
+    const defaultLogo = defaultAdminLogo;
     setChannelProfile((prev) => ({
       ...prev,
       channelLogoUrl: defaultLogo,
@@ -1736,7 +1739,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const effectiveHeaderPng = isProOrVipUser ? customHeaderPng : '';
     const effectiveFooterPng = isProOrVipUser ? customFooterPng : '';
 
-    const primaryPngLogo = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '');
+    const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+    const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+    const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isAdmin ? '/assets/ai_news_maker_logo.png' : ''));
+
+    const primaryPngLogo = isBnwAdmin
+      ? '/assets/breaking_news_wala_logo.png'
+      : isAinewsAdmin
+        ? '/assets/ai_news_maker_logo.png'
+        : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo);
     const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
     const finalDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
@@ -2385,7 +2396,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <div className="flex items-center gap-3">
                         <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
                           <img
-                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : '')}
+                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo}
                             alt="PNG Logo"
                             className="w-full h-full object-contain"
                           />
@@ -2613,7 +2624,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               src={
                                 logoReqType === 'gif'
                                   ? (channelProfile.channelLogoGifUrl || '/assets/ai_news_maker_logo.png')
-                                  : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || (isAdmin ? '/assets/ai_news_maker_logo.png' : ''))
+                                  : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo)
                               }
                               alt="Current Asset"
                               className="max-h-20 w-auto object-contain"

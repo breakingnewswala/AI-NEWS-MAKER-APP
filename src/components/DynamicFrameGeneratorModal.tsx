@@ -359,8 +359,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     return () => window.removeEventListener('resize', checkWidth);
   }, []);
 
-  // Wizard Stage
-  const [currentStage, setCurrentStage] = useState<WizardStage>('upload_aspect');
+  // Wizard Stage: Open directly at canvas_marking if editing existing frame
+  const [currentStage, setCurrentStage] = useState<WizardStage>(initialFrame ? 'canvas_marking' : 'upload_aspect');
 
   // Generator Mode: Photo vs Video
   const [generatorMode, setGeneratorMode] = useState<FrameMode>(
@@ -745,18 +745,32 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     }
   );
 
-  // Comprehensive Layers State
-  const [layers, setLayers] = useState<FrameLayer[]>(
-    initialFrame?.layers && initialFrame.layers.length > 0
-      ? initialFrame.layers
-      : [
-          { id: 'layer_photo_1', name: 'मुख्य फोटो', type: 'photo', rect: { x: 0, y: 0, width: 100, height: 61.33 }, visible: true, locked: false, zIndex: 1 },
-          { id: 'layer_headline', name: 'हेडलाइन लेयर', type: 'text', rect: { x: 7, y: 63, width: 86, height: 27 }, visible: true, locked: false, zIndex: 5 },
-          { id: 'layer_logo', name: 'चैनल लोगो', type: 'logo', rect: { x: 5, y: 3.5, width: 22, height: 9 }, visible: true, locked: false, zIndex: 10 },
-          { id: 'layer_location', name: 'लोकेशन बैज', type: 'location', rect: { x: 5, y: 13.5, width: 28, height: 4.5 }, visible: true, locked: false, zIndex: 11 },
-          { id: 'layer_footer', name: 'स्थाई फुटर (Protected)', type: 'footer', rect: { x: 0, y: 92, width: 100, height: 8 }, visible: true, locked: true, zIndex: 20 },
-        ]
-  );
+  // Comprehensive Layers State: Ensure all 8 canonical zones are always present and properly configured
+  const [layers, setLayers] = useState<FrameLayer[]>(() => {
+    const raw = initialFrame?.layers && initialFrame.layers.length > 0 ? [...initialFrame.layers] : [];
+    const ensure = (id: string, name: string, type: FrameLayer['type'], rect: NormalizedRect, visible: boolean, zIndex: number, rotation: number = 0) => {
+      const existing = raw.find((l) => l.id === id || l.type === type);
+      if (!existing) {
+        raw.push({ id, name, type, rect, visible, locked: type === 'footer', zIndex, rotation });
+      } else {
+        if (existing.rotation === undefined && rotation) existing.rotation = rotation;
+      }
+    };
+    const h = initialFrame?.headerConfig;
+    const w = initialFrame?.watermarkConfig;
+    const c = initialFrame?.fullStoryCalloutConfig;
+
+    ensure('layer_photo_1', 'मुख्य फोटो', 'photo', { x: 0, y: 0, width: 100, height: 61.33 }, true, 1);
+    ensure('layer_headline', 'हेडलाइन लेयर', 'text', { x: 7, y: 63, width: 86, height: 27 }, true, 5);
+    ensure('layer_logo', 'चैनल लोगो', 'logo', h?.logoRect || { x: 5, y: 3.5, width: 22, height: 9 }, h?.showLogo !== false, 10, h?.logoRotation || 0);
+    ensure('layer_location', 'लोकेशन बैज', 'location', h?.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 }, h?.showLocation !== false, 11, h?.locationRotation || 0);
+    ensure('layer_date', 'दिनांक मुहर (Date Stamp)', 'date', h?.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 }, h?.showDate !== false, 12, h?.dateRotation ?? 270);
+    ensure('layer_watermark', 'वॉटरमार्क (AI Watermark)', 'watermark', w?.rect || { x: 80, y: 35, width: 15, height: 3 }, w?.enabled !== false, 13, w?.rotation ?? 270);
+    ensure('layer_callout', 'पूरी खबर कॉलआउट (Callout)', 'callout', c?.rect || { x: 10, y: 88, width: 80, height: 3.5 }, c?.enabled !== false, 14, c?.rotation || 0);
+    ensure('layer_footer', 'स्थाई फुटर (Protected)', 'footer', { x: 0, y: 92, width: 100, height: 8 }, true, 20);
+
+    return raw;
+  });
 
   // Stage 8: Metadata & Publishing
   const [frameName, setFrameName] = useState<string>(initialFrame?.name || '');
@@ -888,69 +902,64 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     }
 
     // Logo layer
-    if (headerConfig.showLogo && headerConfig.logoRect) {
-      newLayers.push({
-        id: 'layer_logo',
-        name: 'चैनल लोगो (Logo)',
-        type: 'logo',
-        rect: headerConfig.logoRect,
-        visible: true,
-        locked: false,
-        zIndex: 30,
-      });
-    }
+    newLayers.push({
+      id: 'layer_logo',
+      name: 'चैनल लोगो (Logo)',
+      type: 'logo',
+      rect: headerConfig.logoRect || { x: 5, y: 3.5, width: 22, height: 9 },
+      visible: Boolean(headerConfig.showLogo),
+      locked: false,
+      zIndex: 30,
+      rotation: headerConfig.logoRotation || 0,
+    });
 
     // Location Badge layer
-    if (headerConfig.showLocation && headerConfig.locationRect) {
-      newLayers.push({
-        id: 'layer_location',
-        name: 'लोकेशन बैज (Location Badge)',
-        type: 'location',
-        rect: headerConfig.locationRect,
-        visible: true,
-        locked: false,
-        zIndex: 31,
-      });
-    }
+    newLayers.push({
+      id: 'layer_location',
+      name: 'लोकेशन बैज (Location Badge)',
+      type: 'location',
+      rect: headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 },
+      visible: Boolean(headerConfig.showLocation),
+      locked: false,
+      zIndex: 31,
+      rotation: headerConfig.locationRotation || 0,
+    });
 
     // Date stamp layer
-    if (headerConfig.showDate && headerConfig.dateRect) {
-      newLayers.push({
-        id: 'layer_date',
-        name: 'दिनांक मुहर (Date Stamp)',
-        type: 'date',
-        rect: headerConfig.dateRect,
-        visible: true,
-        locked: false,
-        zIndex: 32,
-      });
-    }
+    newLayers.push({
+      id: 'layer_date',
+      name: 'दिनांक मुहर (Date Stamp)',
+      type: 'date',
+      rect: headerConfig.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 },
+      visible: Boolean(headerConfig.showDate),
+      locked: false,
+      zIndex: 32,
+      rotation: headerConfig.dateRotation ?? 270,
+    });
 
     // Watermark layer
-    if (watermarkConfig.enabled && watermarkConfig.rect) {
-      newLayers.push({
-        id: 'layer_watermark',
-        name: 'वॉटरमार्क (AI Watermark)',
-        type: 'watermark',
-        rect: watermarkConfig.rect,
-        visible: true,
-        locked: false,
-        zIndex: 33,
-      });
-    }
+    newLayers.push({
+      id: 'layer_watermark',
+      name: 'वॉटरमार्क (AI Watermark)',
+      type: 'watermark',
+      rect: watermarkConfig.rect || { x: 80, y: 35, width: 15, height: 3 },
+      visible: Boolean(watermarkConfig.enabled),
+      locked: false,
+      zIndex: 33,
+      rotation: watermarkConfig.rotation ?? 270,
+    });
 
     // Callout layer
-    if (fullStoryCalloutConfig.enabled && fullStoryCalloutConfig.rect) {
-      newLayers.push({
-        id: 'layer_callout',
-        name: 'पूरी खबर कॉलआउट (Callout)',
-        type: 'callout',
-        rect: fullStoryCalloutConfig.rect,
-        visible: true,
-        locked: false,
-        zIndex: 34,
-      });
-    }
+    newLayers.push({
+      id: 'layer_callout',
+      name: 'पूरी खबर कॉलआउट (Callout)',
+      type: 'callout',
+      rect: fullStoryCalloutConfig.rect || { x: 10, y: 88, width: 80, height: 3.5 },
+      visible: Boolean(fullStoryCalloutConfig.enabled),
+      locked: false,
+      zIndex: 34,
+      rotation: fullStoryCalloutConfig.rotation || 0,
+    });
 
     // Optional Powered By Branding layer
     if (poweredByConfig.enabled && poweredByConfig.rect) {
@@ -1254,6 +1263,25 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     setLayers((prev) =>
       prev.map((l) => (l.id === layerId ? { ...l, locked: !l.locked } : l))
     );
+  };
+
+  const handleToggleLayerVisibility = (layerId: string) => {
+    if (isLayoutLocked) return;
+    const target = layers.find((l) => l.id === layerId);
+    if (!target) return;
+    const nextVis = target.visible === false ? true : false;
+
+    setLayers((prev) =>
+      prev.map((l) => (l.id === layerId ? { ...l, visible: nextVis } : l))
+    );
+
+    if (target.type === 'logo') setHeaderConfig((prev) => ({ ...prev, showLogo: nextVis }));
+    if (target.type === 'location') setHeaderConfig((prev) => ({ ...prev, showLocation: nextVis }));
+    if (target.type === 'date') setHeaderConfig((prev) => ({ ...prev, showDate: nextVis }));
+    if (target.type === 'ribbon') setRibbonConfig((prev) => ({ ...prev, enabled: nextVis }));
+    if (target.type === 'watermark') setWatermarkConfig((prev) => ({ ...prev, enabled: nextVis }));
+    if (target.type === 'callout') setFullStoryCalloutConfig((prev) => ({ ...prev, enabled: nextVis }));
+    if (target.type === 'powered_by') setPoweredByConfig((prev) => ({ ...prev, enabled: nextVis }));
   };
 
   const handleCanvasPointerMove = (e: React.PointerEvent) => {
@@ -3531,12 +3559,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   {layers.map((layer) => {
                     const isSelected = selectedLayerId === layer.id;
                     const isFooter = layer.type === 'footer';
+                    const isHidden = layer.visible === false;
                     return (
                       <div
                         key={layer.id}
                         onPointerDown={(e) => handleLayerPointerDown(layer.id, 'move', e)}
                         className={`absolute border-2 transition-all flex flex-col justify-between p-1 select-none ${
-                          isFooter
+                          isHidden
+                            ? 'border-slate-700/60 bg-slate-900/30 opacity-40 hover:opacity-80'
+                            : isFooter
                             ? 'border-emerald-500 bg-emerald-500/25 cursor-pointer'
                             : isSelected
                             ? 'border-amber-400 bg-amber-500/30 ring-2 ring-amber-300 shadow-xl cursor-move'
@@ -3548,18 +3579,59 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           width: `${layer.rect.width}%`,
                           height: `${layer.rect.height}%`,
                           zIndex: isSelected ? 40 : layer.zIndex,
+                          transform: layer.rotation ? `rotate(${layer.rotation}deg)` : undefined,
+                          transformOrigin: 'center center',
                         }}
                       >
                         <div className="flex items-center justify-between pointer-events-none gap-1">
                           <span className="text-[8px] font-black text-white bg-slate-950/90 px-1 py-0.5 rounded truncate max-w-full">
-                            {layer.name}
+                            {layer.name} {isHidden && <span className="text-red-400 text-[7px] font-bold">[OFF]</span>}
                           </span>
                           {isSelected && !isFooter && (
                             <span className="text-[7px] font-mono text-amber-300 bg-amber-950/80 px-1 py-0.2 rounded">
-                              {Math.round(layer.rect.width)}×{Math.round(layer.rect.height)}%
+                              {Math.round(layer.rect.width)}×{Math.round(layer.rect.height)}% {layer.rotation ? `(${layer.rotation}°)` : ''}
                             </span>
                           )}
                         </div>
+
+                        {/* Live Zone Visual Previews */}
+                        {layer.type === 'location' && (
+                          <div className="flex-1 flex items-center justify-center overflow-hidden pointer-events-none p-0.5">
+                            <div
+                              className="px-1.5 py-0.5 rounded text-[7px] font-bold text-white shadow flex items-center gap-0.5 truncate"
+                              style={{
+                                backgroundColor: headerConfig.locationBgColor || '#DC2626',
+                                color: headerConfig.locationTextColor || '#FFFFFF',
+                              }}
+                            >
+                              <span>📍 {dummyLocation || 'भोपाल'}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {layer.type === 'date' && (
+                          <div className="flex-1 flex items-center justify-center overflow-hidden pointer-events-none p-0.5">
+                            <span className="text-[7px] font-bold text-slate-200 truncate">
+                              📅 {new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'short' })}
+                            </span>
+                          </div>
+                        )}
+
+                        {layer.type === 'watermark' && (
+                          <div className="flex-1 flex items-center justify-center overflow-hidden pointer-events-none p-0.5">
+                            <span className="text-[7px] font-black text-amber-200 bg-black/70 px-1 py-0.2 rounded truncate">
+                              {watermarkConfig.customText || watermarkConfig.label || 'AI GENERATED'}
+                            </span>
+                          </div>
+                        )}
+
+                        {layer.type === 'callout' && (
+                          <div className="flex-1 flex items-center justify-center overflow-hidden pointer-events-none p-0.5">
+                            <span className="text-[7px] font-bold text-amber-300 bg-amber-950/80 border border-amber-500/40 px-1 rounded truncate">
+                              📢 पूरी खबर नीचे पढ़ें
+                            </span>
+                          </div>
+                        )}
 
                         {isFooter && (
                           <span className="text-[8px] font-bold text-emerald-300 text-center pointer-events-none">
@@ -3610,8 +3682,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             : 'bg-slate-900 text-slate-300 hover:bg-slate-850'
                         }`}
                       >
-                        <span className="truncate">{l.name}</span>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${l.visible !== false ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                          <span className="truncate">{l.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {l.visible === false && (
+                            <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.2 rounded font-normal">बंद</span>
+                          )}
+                          {l.rotation ? <span className="text-[9px] font-mono opacity-80">{l.rotation}°</span> : null}
                           {l.locked && <Lock className="w-3 h-3 text-amber-300" />}
                         </div>
                       </div>
@@ -3631,6 +3710,119 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         z-index: {activeLayer.zIndex}
                       </span>
                     </div>
+
+                    {/* Visibility & Status Toggle */}
+                    <div className="flex items-center justify-between p-2 bg-slate-900 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-300 font-bold">लेयर दृश्यता (Visibility):</span>
+                      <button
+                        type="button"
+                        disabled={isLayoutLocked}
+                        onClick={() => handleToggleLayerVisibility(activeLayer.id)}
+                        className={`px-2.5 py-1 rounded text-[10px] font-black transition cursor-pointer flex items-center gap-1 ${
+                          activeLayer.visible !== false
+                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                            : 'bg-slate-800 text-slate-400 border border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        <span>{activeLayer.visible !== false ? '✓ चालू (Visible: ON)' : '✕ बंद (Visible: OFF)'}</span>
+                      </button>
+                    </div>
+
+                    {/* Date Stamp Rotation & Style Selector */}
+                    {activeLayer.type === 'date' && (
+                      <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg space-y-2">
+                        <span className="text-[10px] text-amber-300 font-bold block">डेट स्टैम्प रोटेशन (0°, 90°, 180°, 270°):</span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {[
+                            { deg: 270, label: '270° (लेफ्ट वर्टिकल)' },
+                            { deg: 0, label: '0° (हॉरिज़ॉन्टल)' },
+                            { deg: 90, label: '90° (राइट वर्टिकल)' },
+                            { deg: 180, label: '180° (उल्टा)' },
+                          ].map((item) => (
+                            <button
+                              key={item.deg}
+                              type="button"
+                              disabled={isLayoutLocked}
+                              onClick={() => {
+                                handleRotateActiveLayer(item.deg);
+                                setHeaderConfig((prev) => ({ ...prev, dateRotation: item.deg }));
+                              }}
+                              className={`px-2 py-1 rounded text-[10px] font-bold cursor-pointer transition ${
+                                (headerConfig.dateRotation ?? 270) === item.deg
+                                  ? 'bg-amber-400 text-slate-950 font-black shadow'
+                                  : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Watermark Mode & Rotation Controls */}
+                    {activeLayer.type === 'watermark' && (
+                      <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg space-y-2">
+                        <span className="text-[10px] text-amber-300 font-bold block">वॉटरमार्क मोड (Canonical Watermark Layer):</span>
+                        <div className="grid grid-cols-3 gap-1">
+                          {['AI GENERATED', 'प्रतीकात्मक फोटो', 'OFF'].map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              disabled={isLayoutLocked}
+                              onClick={() => {
+                                if (mode === 'OFF') {
+                                  setWatermarkConfig((prev) => ({ ...prev, enabled: false }));
+                                  setLayers((prev) => prev.map((l) => (l.type === 'watermark' ? { ...l, visible: false } : l)));
+                                } else {
+                                  setWatermarkConfig((prev) => ({ ...prev, enabled: true, customText: mode, label: mode }));
+                                  setLayers((prev) => prev.map((l) => (l.type === 'watermark' ? { ...l, visible: true } : l)));
+                                }
+                              }}
+                              className={`px-1.5 py-1 rounded text-[9px] font-bold cursor-pointer transition truncate ${
+                                (mode === 'OFF' ? !watermarkConfig.enabled : (watermarkConfig.enabled && (watermarkConfig.customText === mode || watermarkConfig.label === mode)))
+                                  ? 'bg-amber-400 text-slate-950 font-black shadow'
+                                  : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-700'
+                              }`}
+                            >
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Location Badge Background & Text Color Controls */}
+                    {activeLayer.type === 'location' && (
+                      <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg space-y-2">
+                        <span className="text-[10px] text-amber-300 font-bold block">लोकेशन बैज स्टाइल (3-Slice Design):</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">बैकग्राउंड रंग:</label>
+                            <input
+                              type="color"
+                              disabled={isLayoutLocked}
+                              value={headerConfig.locationBgColor || '#DC2626'}
+                              onChange={(e) => setHeaderConfig((prev) => ({ ...prev, locationBgColor: e.target.value }))}
+                              className="w-full h-7 rounded border border-slate-700 cursor-pointer bg-slate-950 p-0.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-slate-400 block mb-0.5">टेक्स्ट रंग:</label>
+                            <input
+                              type="color"
+                              disabled={isLayoutLocked}
+                              value={headerConfig.locationTextColor || '#FFFFFF'}
+                              onChange={(e) => setHeaderConfig((prev) => ({ ...prev, locationTextColor: e.target.value }))}
+                              className="w-full h-7 rounded border border-slate-700 cursor-pointer bg-slate-950 p-0.5"
+                            />
+                          </div>
+                        </div>
+                        <div className="text-[9px] text-slate-400">
+                          लोकेशन टेक्स्ट की लंबाई के अनुसार बैज की चौड़ाई लाइव स्टूडियो में स्वतः एडजस्ट होगी।
+                        </div>
+                      </div>
+                    )}
 
                     {/* Numeric X, Y, W, H Controls */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

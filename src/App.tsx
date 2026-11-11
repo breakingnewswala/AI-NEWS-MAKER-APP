@@ -1405,16 +1405,48 @@ export default function App() {
       dateStr: getFormattedHindiDate(),
     };
 
+    let hasExplicitNewsContext = false;
+    try {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        hasExplicitNewsContext = Boolean(urlParams.get('newsId') || urlParams.get('draftId') || sessionStorage.getItem('active_news_edit_id'));
+      }
+    } catch {}
+
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
+      if (saved && hasExplicitNewsContext) {
         const parsed = JSON.parse(saved);
         initial = {
           ...initial,
           ...parsed,
           headlineFontSize: parsed.headlineFontSize || 20,
-          showDate: parsed.showDate !== undefined ? parsed.showDate : true,
+          showDate: parsed.showDate !== undefined ? parsed.showDate : false,
           dateStr: parsed.dateStr || getFormattedHindiDate(),
+        };
+      } else {
+        // Default clean neutral slate for fresh studio session (Phase 1 specification)
+        initial = {
+          ...initial,
+          headline: '',
+          formattedHeadline: '',
+          highlightWords: [],
+          images: { main: '', second: '', third: '', fourth: '' },
+          photoUrl: '',
+          showDate: false,
+          showWatermark: false,
+          watermarkType: 'OFF',
+          photoDisclaimerType: 'none',
+          isSymbolicPhoto: false,
+          showAiPhotoBadge: false,
+          showSymbolicPhotoBadge: false,
+          showLocationBadge: false,
+          showCallout: false,
+          calloutTag: '',
+          customFooterPng: undefined,
+          customDynamicFrame: undefined,
+          frameDesign: 'graphic_001',
+          templateId: 'graphic_001',
         };
       }
     } catch (e) {
@@ -2138,18 +2170,24 @@ export default function App() {
       dateStr: '',
       showDate: false,
       showWatermark: false,
+      watermarkType: 'OFF',
+      photoDisclaimerType: 'none',
+      isSymbolicPhoto: false,
       showSuperBreakingWatermark: false,
       showTextWatermark: false,
       showAiPhotoBadge: false,
       showSymbolicPhotoBadge: false,
       customTextOverlays: [],
       showLocation: true,
+      showLocationBadge: false,
       showCallout: false,
       calloutTag: '',
+      customCalloutAssetUrl: undefined,
       layout: 'single',
       highlightColor: '#FFE600',
       showMasterBranding: true,
       extractedArticlePhotos: [],
+      templateId: 'graphic_001',
     }));
 
     try {
@@ -3031,6 +3069,26 @@ export default function App() {
     }
   };
 
+  // Deep-link news resolution from WhatsApp CTA or shared URL (?newsId=... or ?articleId=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetNewsId = urlParams.get('newsId') || urlParams.get('articleId') || sessionStorage.getItem('pending_news_deep_link');
+      if (!targetNewsId) return;
+
+      sessionStorage.setItem('pending_news_deep_link', targetNewsId);
+
+      if (posts && posts.length > 0) {
+        const found = posts.find((p) => String(p.id) === String(targetNewsId));
+        if (found) {
+          handleOpenStudioWithNews(found);
+          sessionStorage.removeItem('pending_news_deep_link');
+        }
+      }
+    } catch {}
+  }, [posts]);
+
   const handleOpenStudioWithVideo = async (vid: VideoFeedItem) => {
     if (currentUser?.email && !isUserAdmin(currentUser)) {
       try {
@@ -3249,17 +3307,17 @@ export default function App() {
               const profileStr = userSpecificStr || localStorage.getItem('user_channel_profile');
               if (profileStr) {
                 const parsed = JSON.parse(profileStr);
+                const isAdminAcc = Boolean(user.email && (user.email.toLowerCase() === 'admin.ainewsmaker@gmail.com' || user.email.toLowerCase() === 'breakingnewswala.com@gmail.com'));
                 const hasValidChannelName = Boolean(
                   parsed?.channelNameHi &&
                   parsed.channelNameHi.trim() &&
                   parsed.channelNameHi.trim() !== 'सेटअप अधूरा (Incomplete)' &&
-                  parsed.channelNameHi.trim() !== 'एआई न्यूज़ मेकर' &&
-                  parsed.channelNameHi.trim().toLowerCase() !== 'ai news maker'
+                  (isAdminAcc || (parsed.channelNameHi.trim() !== 'एआई न्यूज़ मेकर' && parsed.channelNameHi.trim().toLowerCase() !== 'ai news maker'))
                 );
                 const logoCandidate = (parsed?.channelLogoUrl || parsed?.channelLogoPngUrl || parsed?.channelLogoGifUrl || '').trim();
                 const hasValidLogo = Boolean(
                   logoCandidate &&
-                  logoCandidate !== '/assets/ai_news_maker_logo.png' &&
+                  (isAdminAcc || logoCandidate !== '/assets/ai_news_maker_logo.png') &&
                   !logoCandidate.includes('googleusercontent.com')
                 );
                 const rawPhone = (parsed?.whatsappNumber || parsed?.mobileNumber || parsed?.mobile || getUserSubscription().primaryMobile || '').replace(/\D/g, '').slice(-10);
@@ -4648,7 +4706,27 @@ export default function App() {
             currentUser={currentUser}
             onLogout={handleLogout}
             onAddNewPost={handleAddNewPost}
-            onOpenStudio={() => {
+            onOpenStudio={(templateId?: string) => {
+              if (templateId) {
+                const df = getDynamicFrameById(templateId);
+                if (df) {
+                  setCard((prev) => ({
+                    ...prev,
+                    frameDesign: df.id,
+                    templateId: df.id,
+                    aspectRatio: df.aspectRatio || '4:5',
+                    customDynamicFrame: df,
+                    isTestMode: true,
+                  }));
+                } else {
+                  setCard((prev) => ({
+                    ...prev,
+                    frameDesign: templateId,
+                    templateId: templateId,
+                    isTestMode: true,
+                  }));
+                }
+              }
               navigateToTab('studio');
             }}
             onNavigateToGenerator={() => {

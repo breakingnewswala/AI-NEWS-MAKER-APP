@@ -46,6 +46,8 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
   const [headline, setHeadline] = useState<string>('');
   const [summary, setSummary] = useState<string>('');
   const [articleUrl, setArticleUrl] = useState<string>('');
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [newsId, setNewsId] = useState<string>('');
   const [customMessage, setCustomMessage] = useState<string>('');
   const [testPhone, setTestPhone] = useState<string>('');
   const [customNumbersText, setCustomNumbersText] = useState<string>('');
@@ -73,9 +75,15 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
     if (attachedArticle) {
       setHeadline(attachedArticle.title || '');
       setSummary(attachedArticle.summary || attachedArticle.content?.slice(0, 180) || '');
-      setCategory(attachedArticle.breaking ? 'Breaking News' : attachedArticle.category || 'Breaking News');
+      setCategory((attachedArticle as any).breaking ? 'Breaking News' : attachedArticle.category || 'Breaking News');
+      const resolvedImg = attachedArticle.imageUrl || (attachedArticle as any).thumbnailUrl || (attachedArticle as any).mediaUrl || '';
+      setImageUrl(resolvedImg);
+      setNewsId(attachedArticle.id || '');
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ainewsmaker.online';
       setArticleUrl(attachedArticle.id ? `${baseUrl}/studio?newsId=${encodeURIComponent(attachedArticle.id)}` : `${baseUrl}/studio`);
+    } else {
+      setImageUrl('');
+      setNewsId('');
     }
   }, [attachedArticle]);
 
@@ -192,6 +200,9 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
           customMessage,
           articleUrl,
           category,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          newsId,
         }),
       });
       const data = await res.json();
@@ -236,6 +247,9 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
           summary,
           customMessage,
           articleUrl,
+          imageUrl,
+          thumbnailUrl: imageUrl,
+          newsId,
         }),
       });
 
@@ -510,6 +524,51 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
                 />
               </div>
 
+              {/* Thumbnail Warning & Preview Card */}
+              {imageUrl ? (
+                <div className="p-2.5 bg-slate-900 border border-slate-700 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      मूल थंबनेल (Image Header) संलग्न है
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl('')}
+                      className="text-[10px] text-red-400 hover:text-red-300 underline font-semibold cursor-pointer"
+                    >
+                      छवि हटाएं
+                    </button>
+                  </div>
+                  <div className="relative rounded-lg overflow-hidden border border-slate-700 aspect-video max-h-32 bg-slate-950">
+                    <img src={imageUrl} alt="Thumbnail Preview" className="w-full h-full object-cover" />
+                  </div>
+                  <input
+                    type="text"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="छवि URL..."
+                    className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded text-[10px] text-slate-300 font-mono"
+                  />
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold">⚠️ थंबनेल अनुपलब्ध:</span> इस समाचार में कोई थंबनेल/छवि नहीं है। केवल टेक्स्ट संदेश भेजा जाएगा। आप नीचे सीधे इमेज URL जोड़ सकते हैं:
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="थंबनेल इमेज URL पेस्ट करें (उदा. https://...)"
+                    className="w-full px-2.5 py-1.5 bg-slate-950 border border-amber-500/40 rounded-lg text-white text-xs font-mono focus:border-amber-400 focus:outline-hidden"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">खबर लिंक (Article URL):</label>
                 <input
@@ -536,9 +595,55 @@ export const WhatsAppNotificationCenterModal: React.FC<WhatsAppNotificationCente
                     <span>WhatsApp Sender: <b>+1 555-706-1955</b></span>
                   </div>
 
-                  {/* Message Bubble */}
-                  <div className="bg-[#005c4b] text-white p-3.5 rounded-xl rounded-tl-none text-xs leading-relaxed shadow space-y-1.5 whitespace-pre-wrap font-sans">
-                    {previewText}
+                  {/* Message Bubble with Ordered Components */}
+                  <div className="bg-[#005c4b] text-white p-3.5 rounded-xl rounded-tl-none text-xs leading-relaxed shadow space-y-2 whitespace-pre-wrap font-sans">
+                    {/* Component 1: Image Header */}
+                    {imageUrl && (
+                      <div className="rounded-lg overflow-hidden border border-emerald-600/50 aspect-video max-h-40 bg-black/40">
+                        <img src={imageUrl} alt="WhatsApp Image Header" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+
+                    {/* Component 2: Headline */}
+                    {headline.trim() && (
+                      <div className="font-extrabold text-white text-sm">
+                        {category === 'Breaking News' ? '🔴 ब्रेकिंग: ' : '🚨 '}
+                        {headline.trim()}
+                      </div>
+                    )}
+
+                    {/* Component 3: Summary */}
+                    {summary.trim() && (
+                      <div className="text-slate-100 text-xs">
+                        {summary.trim()}
+                      </div>
+                    )}
+
+                    {/* Component 4: Custom Message */}
+                    {customMessage.trim() && (
+                      <div className="text-amber-200 text-xs italic">
+                        {customMessage.trim()}
+                      </div>
+                    )}
+
+                    {/* Component 5: Fixed Footer */}
+                    <div className="text-[10px] text-emerald-200/80 pt-1 border-t border-emerald-600/40">
+                      _AI News Maker (ब्रेकिंग न्यूज़ वाला) - आधिकारिक समाचार सेवा_<br />
+                      _नोटिफिकेशन रोकने के लिए STOP लिखें_
+                    </div>
+
+                    {/* Component 6: Interactive CTA URL Button or Fallback Text Link */}
+                    <div className="pt-2 border-t border-emerald-600/40">
+                      <div className="w-full py-2 px-3 bg-[#00a884]/20 text-[#25d366] text-center font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 border border-[#00a884]/40 shadow-sm cursor-pointer hover:bg-[#00a884]/30 transition">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>इस खबर से ग्राफिक बनाएं</span>
+                      </div>
+                      <div className="text-[9px] text-emerald-200/70 text-center mt-1">
+                        • Meta स्वीकृत टेम्पलेट पर: इंटरैक्टिव URL बटन<br />
+                        • फॉलबैक मोड पर: मीडिया इमेज + कैप्शन में सीधा वेब लिंक
+                      </div>
+                    </div>
+
                     <div className="text-[10px] text-emerald-200/60 text-right">
                       {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} ✓✓
                     </div>

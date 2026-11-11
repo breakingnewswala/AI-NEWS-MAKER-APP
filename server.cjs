@@ -6562,11 +6562,105 @@ var flowCache = /* @__PURE__ */ new Map();
 var faqCache = /* @__PURE__ */ new Map();
 var flowSessionCache = /* @__PURE__ */ new Map();
 var quickReplyCache = /* @__PURE__ */ new Map();
+var templateCache = /* @__PURE__ */ new Map();
+var userNewsSessionCache = /* @__PURE__ */ new Map();
 var WHATSAPP_FLOWS_FILE = import_path.default.join(process.cwd(), "whatsapp_flows_db.json");
 var WHATSAPP_FAQS_FILE = import_path.default.join(process.cwd(), "whatsapp_faqs_db.json");
 var WHATSAPP_FLOW_SESSIONS_FILE = import_path.default.join(process.cwd(), "whatsapp_flow_sessions_db.json");
 var WHATSAPP_QUICK_REPLIES_FILE = import_path.default.join(process.cwd(), "whatsapp_quick_replies_db.json");
 var WHATSAPP_SETTINGS_FILE = import_path.default.join(process.cwd(), "whatsapp_automation_settings.json");
+var WHATSAPP_TEMPLATES_FILE = import_path.default.join(process.cwd(), "whatsapp_templates_db.json");
+var WHATSAPP_NEWS_SESSIONS_FILE = import_path.default.join(process.cwd(), "whatsapp_news_sessions_db.json");
+var DEFAULT_SEEDED_TEMPLATES = {
+  news_broadcast_v1: {
+    id: "tpl_news_broadcast_v1",
+    name: "news_broadcast_v1",
+    category: "MARKETING",
+    language: "hi",
+    status: "MOCK_APPROVED",
+    components: [
+      {
+        type: "HEADER",
+        format: "IMAGE",
+        example: { header_handle: ["https://ainewsmaker.online/og-image.jpg"] }
+      },
+      {
+        type: "BODY",
+        text: "\u{1F6A8} *{{1}}*\n\n{{2}}\n\n\u2728 \u0905\u092A\u0928\u0940 \u092A\u0938\u0902\u0926\u0940\u0926\u093E \u0928\u094D\u092F\u0942\u091C\u093C \u0915\u093E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0924\u0941\u0930\u0902\u0924 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964",
+        example: { body_text: [["\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936 \u092E\u0947\u0902 \u092D\u093E\u0930\u0940 \u092C\u093E\u0930\u093F\u0936 \u0915\u093E \u0905\u0932\u0930\u094D\u091F", "\u092E\u094C\u0938\u092E \u0935\u093F\u092D\u093E\u0917 \u0928\u0947 15 \u091C\u093F\u0932\u094B\u0902 \u092E\u0947\u0902 \u092D\u093E\u0930\u0940 \u092C\u093E\u0930\u093F\u0936 \u0915\u0940 \u091A\u0947\u0924\u093E\u0935\u0928\u0940 \u091C\u093E\u0930\u0940 \u0915\u0940 \u0939\u0948\u0964"]] }
+      },
+      {
+        type: "FOOTER",
+        text: "AI News Maker - \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0947\u0935\u093E"
+      },
+      {
+        type: "BUTTONS",
+        buttons: [
+          {
+            type: "URL",
+            text: "\u0907\u0938 \u0916\u092C\u0930 \u0938\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902",
+            url: "https://ainewsmaker.online/studio{{1}}",
+            example: ["?newsId=sample_123"]
+          }
+        ]
+      }
+    ],
+    last_updated_time: 17313e8,
+    createdAt: 17313e8
+  },
+  profile_otp: {
+    id: "tpl_profile_otp",
+    name: "profile_otp",
+    category: "AUTHENTICATION",
+    language: "en_US",
+    status: "APPROVED",
+    components: [
+      {
+        type: "BODY",
+        text: "\u{1F510} *AI NEWS MAKER - WhatsApp \u0938\u0924\u094D\u092F\u093E\u092A\u0928 OTP*\n\n\u0906\u092A\u0915\u093E 6-\u0905\u0902\u0915\u094B\u0902 \u0915\u093E \u0935\u0947\u0930\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0915\u094B\u0921 \u0939\u0948: *{{1}}*\n\n\u092F\u0939 \u0915\u094B\u0921 {{2}} \u092E\u093F\u0928\u091F \u0915\u0947 \u0932\u093F\u090F \u0935\u0948\u0927 \u0939\u0948\u0964 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0915\u093E\u0930\u0923\u094B\u0902 \u0938\u0947 \u092F\u0939 OTP \u0915\u093F\u0938\u0940 \u0915\u0947 \u0938\u093E\u0925 \u0938\u093E\u091D\u093E \u0928 \u0915\u0930\u0947\u0902\u0964\n\n\u2014 AI News Maker (ainewsmaker.online)",
+        example: { body_text: [["482910", "5"]] }
+      }
+    ],
+    last_updated_time: 17313e8,
+    createdAt: 17313e8
+  },
+  breaking_news_alert: {
+    id: "tpl_breaking_news_alert",
+    name: "breaking_news_alert",
+    category: "MARKETING",
+    language: "hi",
+    status: "APPROVED",
+    components: [
+      {
+        type: "HEADER",
+        format: "IMAGE",
+        example: { header_handle: ["https://ainewsmaker.online/og-image.jpg"] }
+      },
+      {
+        type: "BODY",
+        text: "\u{1F534} *\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C*\n\n\u{1F6A8} *{{1}}*\n\n{{2}}\n\n\u2728 1-\u0915\u094D\u0932\u093F\u0915 \u092E\u0947\u0902 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902\u0964",
+        example: { body_text: [["\u0935\u093F\u0936\u0947\u0937 \u0938\u092E\u093E\u091A\u093E\u0930 \u092C\u0941\u0932\u0947\u091F\u093F\u0928", "\u0932\u093E\u0907\u0935 \u0905\u092A\u0921\u0947\u091F \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902\u0964"]] }
+      },
+      {
+        type: "FOOTER",
+        text: "AI News Maker (\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E)"
+      },
+      {
+        type: "BUTTONS",
+        buttons: [
+          {
+            type: "URL",
+            text: "\u0907\u0938 \u0916\u092C\u0930 \u0938\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902",
+            url: "https://ainewsmaker.online/studio{{1}}",
+            example: ["?newsId=breaking_sample"]
+          }
+        ]
+      }
+    ],
+    last_updated_time: 17313e8,
+    createdAt: 17313e8
+  }
+};
 var DEFAULT_SEEDED_FLOWS = [
   {
     id: "flow_welcome_menu",
@@ -7062,6 +7156,66 @@ function saveAutomationSettings(settings, centralDb2) {
     }
     return true;
   } catch {
+    return false;
+  }
+}
+function loadTemplatesDatabase(centralDb2) {
+  const result = { ...DEFAULT_SEEDED_TEMPLATES };
+  try {
+    if (import_fs.default.existsSync(WHATSAPP_TEMPLATES_FILE)) {
+      const raw = import_fs.default.readFileSync(WHATSAPP_TEMPLATES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        Object.assign(result, parsed);
+      }
+    }
+  } catch (err) {
+    console.error("[WhatsApp:Templates] Error reading templates file:", err?.message || err);
+  }
+  return result;
+}
+function saveTemplatesDatabase(templates, centralDb2) {
+  try {
+    import_fs.default.writeFileSync(WHATSAPP_TEMPLATES_FILE, JSON.stringify(templates, null, 2), "utf-8");
+    if (centralDb2?.useFirestore && typeof centralDb2.writeDoc === "function") {
+      for (const [id, t] of Object.entries(templates)) {
+        centralDb2.writeDoc("whatsapp_templates", id, t).catch(() => {
+        });
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("[WhatsApp:Templates] Error saving templates file:", err?.message || err);
+    return false;
+  }
+}
+function loadNewsSessionsDatabase(centralDb2) {
+  const result = {};
+  try {
+    if (import_fs.default.existsSync(WHATSAPP_NEWS_SESSIONS_FILE)) {
+      const raw = import_fs.default.readFileSync(WHATSAPP_NEWS_SESSIONS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        Object.assign(result, parsed);
+      }
+    }
+  } catch (err) {
+    console.error("[WhatsApp:NewsSessions] Error reading news sessions file:", err?.message || err);
+  }
+  return result;
+}
+function saveNewsSessionsDatabase(sessions, centralDb2) {
+  try {
+    import_fs.default.writeFileSync(WHATSAPP_NEWS_SESSIONS_FILE, JSON.stringify(sessions, null, 2), "utf-8");
+    if (centralDb2?.useFirestore && typeof centralDb2.writeDoc === "function") {
+      for (const [waId, s] of Object.entries(sessions)) {
+        centralDb2.writeDoc("whatsapp_news_sessions", waId, s).catch(() => {
+        });
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error("[WhatsApp:NewsSessions] Error saving news sessions file:", err?.message || err);
     return false;
   }
 }
@@ -7968,6 +8122,87 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     }
     next();
   });
+  const requireMasterAdmin = options?.requireMasterAdminMiddleware || ((req, res, next) => {
+    const authUser = req.user;
+    if (!authUser) {
+      return res.status(401).json({
+        success: false,
+        error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u0915\u0943\u092A\u092F\u093E \u0935\u0948\u0927 \u091F\u094B\u0915\u0928 \u0915\u0947 \u0938\u093E\u0925 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    const role = (authUser.role || "").toLowerCase();
+    const email = (authUser.email || "").toLowerCase().trim();
+    const isMaster = email === "breakingnewswala.com@gmail.com" || email === "breakingnewsvala.com@gmail.com";
+    if (role !== "superadmin" && !isMaster) {
+      return res.status(403).json({
+        success: false,
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0907\u0938 \u0915\u093E\u0930\u094D\u092F \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0938\u094D\u091F\u0930 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Master Admin) \u0905\u0927\u093F\u0915\u093E\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964"
+      });
+    }
+    next();
+  });
+  const getCleanDigits10 = (raw) => {
+    const digits = String(raw || "").replace(/\D/g, "");
+    return digits.slice(-10);
+  };
+  const findUserByWaId = (waId) => {
+    const cleanTarget = getCleanDigits10(waId);
+    if (!cleanTarget || cleanTarget.length < 10) return null;
+    if (centralDb2?.cache?.users) {
+      for (const u of centralDb2.cache.users.values()) {
+        const uPhone = getCleanDigits10(u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || u.phone);
+        if (uPhone && uPhone === cleanTarget) return u;
+      }
+    }
+    if (options?.getUsersDatabase) {
+      try {
+        const list = options.getUsersDatabase();
+        if (Array.isArray(list)) {
+          for (const u of list) {
+            const uPhone = getCleanDigits10(u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || u.phone);
+            if (uPhone && uPhone === cleanTarget) return u;
+          }
+        }
+      } catch {
+      }
+    }
+    return null;
+  };
+  const isUserVipDesk = (user, waId) => {
+    let resolvedUser = user;
+    if (!resolvedUser && waId) {
+      resolvedUser = findUserByWaId(waId);
+    }
+    if (!resolvedUser) return false;
+    const role = (resolvedUser.role || "").toLowerCase().trim();
+    const email = (resolvedUser.email || "").toLowerCase().trim();
+    const tier = (resolvedUser.tier || "").toLowerCase().trim();
+    const planName = (resolvedUser.planName || "").toUpperCase().trim();
+    const isVipDeskRole = role === "vip_desk" || resolvedUser.isVipDesk === true || resolvedUser.vipDeskAccess === true;
+    if (role === "admin" || role === "superadmin" || email === "breakingnewswala.com@gmail.com" || email === "breakingnewsvala.com@gmail.com" || email === "admin.ainewsmaker@gmail.com") {
+      return true;
+    }
+    if (isVipDeskRole || tier === "ultra" || tier === "vip" || planName.includes("VIP")) {
+      return true;
+    }
+    if (options?.getProfilesDatabase) {
+      try {
+        const profiles = options.getProfilesDatabase();
+        const prof = profiles[email] || profiles[resolvedUser.id] || profiles[resolvedUser.userId];
+        if (prof) {
+          const pRole = (prof.role || "").toLowerCase().trim();
+          const pTier = (prof.tier || "").toLowerCase().trim();
+          const pPlan = (prof.planName || "").toUpperCase().trim();
+          const pIsVip = pRole === "vip_desk" || prof.isVipDesk === true || prof.vipDeskAccess === true;
+          if (pIsVip || pTier === "ultra" || pTier === "vip" || pPlan.includes("VIP")) {
+            return true;
+          }
+        }
+      } catch {
+      }
+    }
+    return false;
+  };
   const safeEqual = (a, b) => {
     const left = Buffer.from(String(a || ""));
     const right = Buffer.from(String(b || ""));
@@ -8049,7 +8284,7 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     }
     if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
       console.log(`[WhatsApp:Outbound:TestMode] Mock send to ${maskedTo}`);
-      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }] };
     }
     console.log(`[WhatsApp:Outbound] WhatsApp outbound request started to ${maskedTo} via Graph API ${version}`);
     let response;
@@ -8084,6 +8319,35 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     console.log(`[WhatsApp:Outbound] WhatsApp API response received: messageId=${result?.messages?.[0]?.id || "unknown"}`);
     return result;
   };
+  const uploadWhatsAppMedia = async (fileBuffer, mimeType = "image/jpeg", filename = "graphic.jpg") => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    if (!token) throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
+    if (!phoneNumberId) throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
+    if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Outbound:TestMode] Mock media upload (${mimeType}, ${fileBuffer.length} bytes)`);
+      return { id: `media_test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` };
+    }
+    const formData = new FormData();
+    formData.append("messaging_product", "whatsapp");
+    formData.append("type", mimeType);
+    const blob = new Blob([fileBuffer], { type: mimeType });
+    formData.append("file", blob, filename);
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/media`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.id) {
+      const errMsg = result?.error?.message || `WhatsApp Media upload failed (HTTP ${response.status})`;
+      throw new Error(`WHATSAPP_MEDIA_UPLOAD_ERROR: ${errMsg}`);
+    }
+    return result;
+  };
   const sendWhatsAppImage = async (to, imageUrl, caption) => {
     const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
     const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
@@ -8093,17 +8357,17 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     if (!phoneNumberId) throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
     if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
       console.log(`[WhatsApp:Outbound:TestMode] Mock image send to ${maskedTo}`);
-      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }] };
     }
+    const isMediaId = !imageUrl.startsWith("http://") && !imageUrl.startsWith("https://");
+    const imageObj = isMediaId ? { id: imageUrl } : { link: imageUrl };
+    if (caption) imageObj.caption = String(caption).slice(0, 1024);
     const payload = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to,
       type: "image",
-      image: {
-        link: imageUrl,
-        ...caption ? { caption: String(caption).slice(0, 1024) } : {}
-      }
+      image: imageObj
     };
     const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
       method: "POST",
@@ -8162,6 +8426,14 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
             ]
           }
         };
+        if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+          console.log(`[WhatsApp:NewsBroadcast:TestMode] Mock template message dispatched via interactive URL button to ${maskedTo}`);
+          return {
+            method: "meta_template_url_button",
+            templateName: newsTemplate,
+            result: { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.tpl_${Date.now()}` }] }
+          };
+        }
         const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
           method: "POST",
           headers: {
@@ -8193,7 +8465,7 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     if (customMessage) caption += `${customMessage.trim()}
 
 `;
-    caption += `\u2728 *\u0907\u0938 \u0916\u092C\u0930 \u0938\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902:*
+    caption += `\u2728 *\u0907\u0938 \u0916\u092C\u0930 \u0938\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0902 (\u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0932\u093F\u0902\u0915):*
 ${resolvedUrl}
 
 `;
@@ -8202,14 +8474,14 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
     if (imageUrl && (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))) {
       try {
         const imgRes = await sendWhatsAppImage(to, imageUrl, caption.slice(0, 1024));
-        return { method: "media_caption_link", result: imgRes };
+        return { method: "fallback_media_text_url", result: imgRes };
       } catch {
         const txtRes2 = await sendWhatsAppText(to, caption);
-        return { method: "text_caption_link", result: txtRes2 };
+        return { method: "fallback_text_only_url", result: txtRes2 };
       }
     }
     const txtRes = await sendWhatsAppText(to, caption);
-    return { method: "text_caption_link", result: txtRes };
+    return { method: "fallback_text_only_url", result: txtRes };
   };
   const sendWhatsAppOtpMessage = async (to, otpCode, validityMinutes = 5) => {
     const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
@@ -8642,6 +8914,397 @@ ${knowledge.slice(0, 1e3)}` };
     if (activeHandlingMode === "waiting_human") {
       console.log(`[WhatsApp:Handoff] AI reply suppressed: conversation ${conversationId} is in 'waiting_human' mode awaiting operator pickup. Inbound message recorded for live inbox.`);
       return;
+    }
+    let userNewsSession = userNewsSessionCache.get(waId);
+    if (!userNewsSession) {
+      const allNewsSessions = loadNewsSessionsDatabase(centralDb2);
+      if (allNewsSessions[waId]) {
+        userNewsSession = allNewsSessions[waId];
+        userNewsSessionCache.set(waId, userNewsSession);
+      }
+    }
+    const isNewsCommand = /^\s*(?:टॉप\s*(?:5|10)?\s*खबरें?|आज\s*की\s*खबरें?|मध्य\s*प्रदेश\s*की\s*खबरें?|ताजा\s*खबरें?|top\s*(?:5|10)?\s*news|today\s*news|news|खबरें?)\s*$/i.test(textBody);
+    const numericChoiceMatch = textBody.match(/^\s*(?:खबर\s*नंबर\s*|number\s*|#\s*)?([1-9]|10)\s*$/i);
+    const hasActiveNewsSession = Boolean(userNewsSession && Array.isArray(userNewsSession.items) && userNewsSession.items.length > 0);
+    const isGraphicCommand = /^\s*(?:इस\s*खबर\s*का\s*)?(?:ग्राफिक\s*बनाओ|graphic|फोटो\s*बनाओ|कार्ड\s*बनाओ)\s*$/i.test(textBody);
+    const isHeadlineCommand = /^\s*(?:इस\s*खबर\s*की\s*)?(?:हेडलाइन\s*बनाओ|शीर्षक\s*बनाओ|headline)\s*$/i.test(textBody);
+    const isCaptionCommand = /^\s*(?:इस\s*खबर\s*का\s*)?(?:कैप्शन\s*बनाओ|caption)\s*$/i.test(textBody);
+    const isScriptCommand = /^\s*(?:इस\s*खबर\s*की\s*)?(?:वीडियो\s*स्क्रिप्ट\s*बनाओ|स्क्रिप्ट\s*बनाओ|video\s*script|script)\s*$/i.test(textBody);
+    const isVipCommandDetected = isNewsCommand || isGraphicCommand || isHeadlineCommand || isCaptionCommand || isScriptCommand || hasActiveNewsSession && Boolean(numericChoiceMatch);
+    if (isVipCommandDetected) {
+      console.log(`[WhatsApp:VIPDesk] Command detected from ${maskedWa}: "${textBody}"`);
+      const senderUser = findUserByWaId(waId);
+      const isVip = isUserVipDesk(senderUser, waId);
+      if (!isVip) {
+        console.log(`[WhatsApp:VIPDesk] User ${maskedWa} is not VIP Desk. Sending polite restriction.`);
+        const nonVipNotice = `\u{1F31F} *AI News Maker \u2014 VIP Desk \u0935\u093F\u0936\u0947\u0937 \u0938\u0947\u0935\u093E*
+
+\u0928\u092E\u0938\u094D\u0924\u0947! \u092F\u0939 AI Newsroom Assistant \u0938\u0941\u0935\u093F\u0927\u093E \u0915\u0947\u0935\u0932 \u0939\u092E\u093E\u0930\u0947 *VIP Desk* \u0938\u092C\u094D\u0938\u0915\u094D\u0930\u093E\u0907\u092C\u0930\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964
+
+VIP Desk \u0915\u0947 \u0938\u093E\u0925 \u0906\u092A\u0915\u094B \u092E\u093F\u0932\u0924\u093E \u0939\u0948:
+\u2022 WhatsApp \u092A\u0930 \u0924\u0941\u0930\u0902\u0924 \u0924\u093E\u091C\u093C\u093E \u0914\u0930 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0916\u092C\u0930\u0947\u0902
+\u2022 1-\u0915\u094D\u0932\u093F\u0915 \u092E\u0947\u0902 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0914\u0930 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092A\u094B\u0938\u094D\u091F
+\u2022 AI \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0914\u0930 30-\u0938\u0947\u0915\u0902\u0921 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F \u091C\u0928\u0930\u0947\u0936\u0928
+
+\u{1F449} \u0906\u091C \u0939\u0940 VIP Desk \u092E\u0947\u0902 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u092F\u0939\u093E\u0901 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902:
+https://ainewsmaker.online/plans
+
+\u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F '\u090F\u091C\u0947\u0902\u091F' \u0932\u093F\u0916\u0915\u0930 \u092D\u0947\u091C\u0947\u0902\u0964`;
+        const sent2 = await sendWhatsAppText(waId, nonVipNotice);
+        const outMsgId2 = String(sent2?.messages?.[0]?.id || `vip-restrict-${now}`);
+        const outRecord = {
+          messageId: outMsgId2,
+          metaMessageId: outMsgId2,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: nonVipNotice,
+          timestamp: now,
+          status: "sent"
+        };
+        await requireWrite("whatsapp_messages", sha2562(outMsgId2), outRecord).catch(() => {
+        });
+        messageCache.set(sha2562(outMsgId2), outRecord);
+        return;
+      }
+      if (isNewsCommand) {
+        const targetCount = /10/.test(textBody) ? 10 : 5;
+        let allPosts = [];
+        if (options?.getNewsDatabase) {
+          try {
+            allPosts = options.getNewsDatabase();
+          } catch {
+          }
+        }
+        if ((!allPosts || allPosts.length === 0) && centralDb2?.cache?.news) {
+          allPosts = Array.from(centralDb2.cache.news.values());
+        }
+        let filtered = (allPosts || []).filter((p) => p && p.title && !p.deleted && p.id !== "[object Object]");
+        const isMpRequested = /मध्य\s*प्रदेश|mp/i.test(textBody);
+        if (isMpRequested) {
+          const mpPosts = filtered.filter(
+            (p) => /मध्य\s*प्रदेश|भोपाल|इंदौर|ग्वालियर|जबलपुर|उज्जैन|रीवा|सतना|सीधी|mp/i.test(`${p.title} ${p.summary || ""} ${p.location || ""}`)
+          );
+          if (mpPosts.length > 0) filtered = mpPosts;
+        }
+        filtered.sort((a, b) => {
+          if (a.isBreaking && !b.isBreaking) return -1;
+          if (!a.isBreaking && b.isBreaking) return 1;
+          return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+        });
+        const selectedPosts = filtered.slice(0, targetCount);
+        if (selectedPosts.length === 0) {
+          const noNewsMsg = "\u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0925\u094B\u0921\u093C\u0940 \u0926\u0947\u0930 \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964";
+          await sendWhatsAppText(waId, noNewsMsg);
+          return;
+        }
+        const items = selectedPosts.map((p, idx) => ({
+          index: idx + 1,
+          id: String(p.id),
+          title: String(p.title || "").trim(),
+          summary: String(p.summary || p.content || "").slice(0, 300).trim(),
+          imageUrl: String(p.thumbnailUrl || p.imageUrl || p.mediaUrl || "").trim(),
+          category: String(p.category || "\u0924\u093E\u091C\u093C\u093E \u0916\u092C\u0930").trim(),
+          location: String(p.location || "").trim()
+        }));
+        const sessionData = {
+          waId,
+          userEmail: senderUser?.email || "",
+          items,
+          selectedItem: null,
+          createdAt: now,
+          updatedAt: now
+        };
+        userNewsSessionCache.set(waId, sessionData);
+        saveNewsSessionsDatabase({ ...loadNewsSessionsDatabase(centralDb2), [waId]: sessionData }, centralDb2);
+        const regionLabel = isMpRequested ? " (\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936)" : "";
+        const listMessage = `\u{1F4F0} *\u0906\u091C \u0915\u0940 \u091F\u0949\u092A ${items.length} \u0916\u092C\u0930\u0947\u0902${regionLabel} \u2014 AI News Maker VIP Desk*:
+
+` + items.map((it) => `${it.index}\uFE0F\u20E3 *${it.title}*`).join("\n\n") + `
+
+\u{1F449} \u0915\u093F\u0938\u0940 \u092D\u0940 \u0916\u092C\u0930 \u0915\u093E \u0924\u0941\u0930\u0902\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u092C\u0938 \u0909\u0938\u0915\u093E \u0928\u0902\u092C\u0930 (\u091C\u0948\u0938\u0947 *1* \u092F\u093E *2*) \u092D\u0947\u091C\u0947\u0902!`;
+        const sent2 = await sendWhatsAppText(waId, listMessage);
+        const outMsgId2 = String(sent2?.messages?.[0]?.id || `vip-news-${now}`);
+        const outRecord = {
+          messageId: outMsgId2,
+          metaMessageId: outMsgId2,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: listMessage,
+          timestamp: now,
+          status: "sent"
+        };
+        await requireWrite("whatsapp_messages", sha2562(outMsgId2), outRecord).catch(() => {
+        });
+        messageCache.set(sha2562(outMsgId2), outRecord);
+        return;
+      }
+      if (hasActiveNewsSession && numericChoiceMatch || isGraphicCommand) {
+        let chosenItem = null;
+        if (numericChoiceMatch) {
+          const chosenIndex = parseInt(numericChoiceMatch[1], 10);
+          chosenItem = userNewsSession?.items?.[chosenIndex - 1] || null;
+          if (!chosenItem) {
+            const rangeMsg = `\u092E\u093E\u092B\u093C \u0915\u0940\u091C\u093F\u090F, \u0915\u094D\u0930\u092E\u093E\u0902\u0915 ${chosenIndex} \u0915\u0940 \u0915\u094B\u0908 \u0916\u092C\u0930 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u0940\u0964 \u0915\u0943\u092A\u092F\u093E 1 \u0938\u0947 ${userNewsSession?.items?.length || 5} \u0924\u0915 \u0915\u093E \u0928\u0902\u092C\u0930 \u091A\u0941\u0928\u0947\u0902\u0964`;
+            await sendWhatsAppText(waId, rangeMsg);
+            return;
+          }
+        } else if (isGraphicCommand) {
+          chosenItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+          if (!chosenItem) {
+            const noSelMsg = "\u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 '\u091F\u0949\u092A 5 \u0916\u092C\u0930\u0947\u0902' \u0932\u093F\u0916\u0915\u0930 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0942\u091A\u0940 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902 \u0914\u0930 \u092B\u093F\u0930 \u0909\u0938\u0915\u093E \u0928\u0902\u092C\u0930 \u092D\u0947\u091C\u0947\u0902\u0964";
+            await sendWhatsAppText(waId, noSelMsg);
+            return;
+          }
+        }
+        userNewsSession.selectedItem = chosenItem;
+        userNewsSession.updatedAt = now;
+        userNewsSessionCache.set(waId, userNewsSession);
+        saveNewsSessionsDatabase({ ...loadNewsSessionsDatabase(centralDb2), [waId]: userNewsSession }, centralDb2);
+        const ackMsg = `\u23F3 \u0906\u092A\u0915\u0940 \u091A\u0941\u0928\u0940 \u0917\u0908 \u0916\u092C\u0930 *'${chosenItem.title}'* \u0915\u093E \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0924\u0948\u092F\u093E\u0930 \u0915\u093F\u092F\u093E \u091C\u093E \u0930\u0939\u093E \u0939\u0948...`;
+        const sentAck = await sendWhatsAppText(waId, ackMsg);
+        const outAckId = String(sentAck?.messages?.[0]?.id || `vip-ack-${now}`);
+        await requireWrite("whatsapp_messages", sha2562(outAckId), {
+          messageId: outAckId,
+          metaMessageId: outAckId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: ackMsg,
+          timestamp: now,
+          status: "sent"
+        }).catch(() => {
+        });
+        const resolvedUrl = chosenItem.imageUrl && (chosenItem.imageUrl.startsWith("http://") || chosenItem.imageUrl.startsWith("https://")) ? chosenItem.imageUrl : "https://ainewsmaker.online/og-image.jpg";
+        const graphicCaption = `\u{1F6A8} *${chosenItem.title}*
+
+${chosenItem.summary ? `${chosenItem.summary}
+
+` : ""}\u{1F3A8} *\u0907\u0938 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u092E\u0947\u0902 \u0915\u0938\u094D\u091F\u092E\u093E\u0907\u091C\u093C \u0915\u0930\u0947\u0902:*
+https://ainewsmaker.online/studio?newsId=${encodeURIComponent(chosenItem.id)}
+
+\u2728 _AI News Maker (\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E) - VIP Desk_`;
+        try {
+          const sentImg = await sendWhatsAppImage(waId, resolvedUrl, graphicCaption.slice(0, 1024));
+          const outImgId = String(sentImg?.messages?.[0]?.id || `vip-img-${now}`);
+          await requireWrite("whatsapp_messages", sha2562(outImgId), {
+            messageId: outImgId,
+            metaMessageId: outImgId,
+            conversationId,
+            waId,
+            direction: "outbound",
+            senderType: "vip_newsroom_assistant",
+            text: graphicCaption,
+            mediaUrl: resolvedUrl,
+            timestamp: now,
+            status: "sent"
+          }).catch(() => {
+          });
+        } catch (imgErr) {
+          console.warn("[WhatsApp:VIPDesk] sendWhatsAppImage fallback to text:", imgErr?.message || imgErr);
+          const sentTxt = await sendWhatsAppText(waId, graphicCaption);
+          const outTxtId = String(sentTxt?.messages?.[0]?.id || `vip-img-fb-${now}`);
+          await requireWrite("whatsapp_messages", sha2562(outTxtId), {
+            messageId: outTxtId,
+            metaMessageId: outTxtId,
+            conversationId,
+            waId,
+            direction: "outbound",
+            senderType: "vip_newsroom_assistant",
+            text: graphicCaption,
+            timestamp: now,
+            status: "sent"
+          }).catch(() => {
+          });
+        }
+        if (senderUser && senderUser.coins !== void 0 && Number(senderUser.coins) > 0) {
+          senderUser.coins = Math.max(0, Number(senderUser.coins) - 1);
+          if (centralDb2?.writeDoc) {
+            centralDb2.writeDoc("users", senderUser.email || senderUser.id, senderUser).catch(() => {
+            });
+          }
+        }
+        await recordAuditEvent(centralDb2, {
+          conversationId,
+          eventType: "vip_news_graphic_generated",
+          previousValue: null,
+          newValue: chosenItem.id,
+          actorId: waId,
+          actorType: "customer",
+          metadata: { newsId: chosenItem.id, title: chosenItem.title }
+        });
+        return;
+      }
+      if (isHeadlineCommand) {
+        const targetItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+        if (!targetItem) {
+          await sendWhatsAppText(waId, "\u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u0915\u093F\u0938\u0940 \u0916\u092C\u0930 \u0915\u093E \u0928\u0902\u092C\u0930 \u091A\u0941\u0928\u0947\u0902 (\u0909\u0926\u093E. 1 \u092F\u093E 2) \u092F\u093E '\u091F\u0949\u092A 5 \u0916\u092C\u0930\u0947\u0902' \u0932\u093F\u0916\u0915\u0930 \u092D\u0947\u091C\u0947\u0902\u0964");
+          return;
+        }
+        const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
+        const configuredModel = (process.env.WHATSAPP_GEMINI_MODEL || "gemini-3.5-flash").trim();
+        const model = configuredModel === "gemini-2.5-flash" || configuredModel === "gemini-2.0-flash" ? "gemini-3.5-flash" : configuredModel;
+        let headlines = "";
+        if (apiKey) {
+          try {
+            const ai = new import_genai.GoogleGenAI({ apiKey });
+            const resp = await ai.models.generateContent({
+              model,
+              contents: [
+                "\u0906\u092A AI NEWS MAKER (\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E) \u0915\u0947 \u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964 \u0928\u0940\u091A\u0947 \u0926\u0940 \u0917\u0908 \u0916\u092C\u0930 \u0915\u0947 \u0932\u093F\u090F 3 \u0906\u0915\u0930\u094D\u0937\u0915, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0914\u0930 \u0938\u0902\u0924\u0941\u0932\u093F\u0924 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964 \u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u090F\u0915 \u0905\u0932\u0917 \u0936\u0948\u0932\u0940 (\u091C\u0948\u0938\u0947: \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915, \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923\u093E\u0924\u094D\u092E\u0915) \u092E\u0947\u0902 \u0939\u094B\u0964 \u0915\u0947\u0935\u0932 3 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0940 \u0928\u0902\u092C\u0930\u092F\u0941\u0915\u094D\u0924 \u0938\u0942\u091A\u0940 \u0926\u0947\u0902\u0964",
+                `\u0936\u0940\u0930\u094D\u0937\u0915: ${targetItem.title}
+\u0935\u093F\u0935\u0930\u0923: ${targetItem.summary || targetItem.title}`
+              ].join("\n\n")
+            });
+            headlines = String(resp.text || "").trim();
+          } catch (err) {
+            console.warn("[WhatsApp:VIPDesk] Headline Gemini exception:", err?.message);
+          }
+        }
+        if (!headlines) {
+          headlines = `1\uFE0F\u20E3 \u{1F6A8} \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917: ${targetItem.title}
+2\uFE0F\u20E3 \u{1F4E2} \u092C\u0921\u093C\u093E \u0905\u092A\u0921\u0947\u091F: ${targetItem.title}
+3\uFE0F\u20E3 \u{1F50D} \u0935\u093F\u0936\u0947\u0937 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ${targetItem.title}`;
+        }
+        const reply2 = `\u270D\uFE0F *\u0938\u092E\u093E\u091A\u093E\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A (AI News Editor)*:
+
+${headlines}
+
+\u{1F3A8} *\u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u092E\u0947\u0902 \u090F\u0921\u093F\u091F \u0915\u0930\u0947\u0902:*
+https://ainewsmaker.online/studio?newsId=${encodeURIComponent(targetItem.id)}`;
+        const sentH = await sendWhatsAppText(waId, reply2);
+        const outHId = String(sentH?.messages?.[0]?.id || `vip-h-${now}`);
+        await requireWrite("whatsapp_messages", sha2562(outHId), {
+          messageId: outHId,
+          metaMessageId: outHId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: reply2,
+          timestamp: now,
+          status: "sent"
+        }).catch(() => {
+        });
+        return;
+      }
+      if (isCaptionCommand) {
+        const targetItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+        if (!targetItem) {
+          await sendWhatsAppText(waId, "\u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u0915\u093F\u0938\u0940 \u0916\u092C\u0930 \u0915\u093E \u0928\u0902\u092C\u0930 \u091A\u0941\u0928\u0947\u0902 (\u0909\u0926\u093E. 1 \u092F\u093E 2) \u092F\u093E '\u091F\u0949\u092A 5 \u0916\u092C\u0930\u0947\u0902' \u0932\u093F\u0916\u0915\u0930 \u092D\u0947\u091C\u0947\u0902\u0964");
+          return;
+        }
+        const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
+        const configuredModel = (process.env.WHATSAPP_GEMINI_MODEL || "gemini-3.5-flash").trim();
+        const model = configuredModel === "gemini-2.5-flash" || configuredModel === "gemini-2.0-flash" ? "gemini-3.5-flash" : configuredModel;
+        let socialCaption = "";
+        if (apiKey) {
+          try {
+            const ai = new import_genai.GoogleGenAI({ apiKey });
+            const resp = await ai.models.generateContent({
+              model,
+              contents: [
+                "\u0906\u092A AI News Maker \u0915\u0947 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u092E\u0948\u0928\u0947\u091C\u0930 \u0939\u0948\u0902\u0964 \u0907\u0938 \u0916\u092C\u0930 \u0915\u0947 \u0932\u093F\u090F WhatsApp, Facebook \u0914\u0930 Instagram \u0915\u0947 \u0932\u093F\u090F 1 \u0906\u0915\u0930\u094D\u0937\u0915 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902 \u091C\u093F\u0938\u092E\u0947\u0902 \u0909\u092A\u092F\u0941\u0915\u094D\u0924 \u0907\u092E\u094B\u091C\u0940 \u0914\u0930 4-5 \u092A\u094D\u0930\u093E\u0938\u0902\u0917\u093F\u0915 \u0939\u0948\u0936\u091F\u0948\u0917 (#) \u0936\u093E\u092E\u093F\u0932 \u0939\u094B\u0902\u0964",
+                `\u0936\u0940\u0930\u094D\u0937\u0915: ${targetItem.title}
+\u0935\u093F\u0935\u0930\u0923: ${targetItem.summary || targetItem.title}`
+              ].join("\n\n")
+            });
+            socialCaption = String(resp.text || "").trim();
+          } catch (err) {
+            console.warn("[WhatsApp:VIPDesk] Caption Gemini exception:", err?.message);
+          }
+        }
+        if (!socialCaption) {
+          socialCaption = `\u{1F6A8} ${targetItem.title}
+
+${targetItem.summary || ""}
+
+#BreakingNews #HindiNews #AINewsMaker #LatestUpdates`;
+        }
+        const reply2 = `\u{1F4F1} *\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 (Facebook/Instagram/WhatsApp)*:
+
+${socialCaption}
+
+\u{1F3A8} *\u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u092E\u0947\u0902 \u092A\u094B\u0938\u094D\u091F \u092C\u0928\u093E\u090F\u0902:*
+https://ainewsmaker.online/studio?newsId=${encodeURIComponent(targetItem.id)}`;
+        const sentC = await sendWhatsAppText(waId, reply2);
+        const outCId = String(sentC?.messages?.[0]?.id || `vip-cap-${now}`);
+        await requireWrite("whatsapp_messages", sha2562(outCId), {
+          messageId: outCId,
+          metaMessageId: outCId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: reply2,
+          timestamp: now,
+          status: "sent"
+        }).catch(() => {
+        });
+        return;
+      }
+      if (isScriptCommand) {
+        const targetItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+        if (!targetItem) {
+          await sendWhatsAppText(waId, "\u0915\u0943\u092A\u092F\u093E \u092A\u0939\u0932\u0947 \u0915\u093F\u0938\u0940 \u0916\u092C\u0930 \u0915\u093E \u0928\u0902\u092C\u0930 \u091A\u0941\u0928\u0947\u0902 (\u0909\u0926\u093E. 1 \u092F\u093E 2) \u092F\u093E '\u091F\u0949\u092A 5 \u0916\u092C\u0930\u0947\u0902' \u0932\u093F\u0916\u0915\u0930 \u092D\u0947\u091C\u0947\u0902\u0964");
+          return;
+        }
+        const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
+        const configuredModel = (process.env.WHATSAPP_GEMINI_MODEL || "gemini-3.5-flash").trim();
+        const model = configuredModel === "gemini-2.5-flash" || configuredModel === "gemini-2.0-flash" ? "gemini-3.5-flash" : configuredModel;
+        let videoScript = "";
+        if (apiKey) {
+          try {
+            const ai = new import_genai.GoogleGenAI({ apiKey });
+            const resp = await ai.models.generateContent({
+              model,
+              contents: [
+                "\u0906\u092A AI News Maker \u0915\u0947 \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0902\u0915\u0930 \u0939\u0948\u0902\u0964 \u0907\u0938 \u0916\u092C\u0930 \u0915\u0947 \u0932\u093F\u090F 30 \u0938\u0947\u0915\u0902\u0921 \u0915\u0940 \u091F\u0940\u0935\u0940/\u092F\u0942\u091F\u094D\u092F\u0942\u092C \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0902\u0915\u0930 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964 \u0907\u0938\u092E\u0947\u0902 [\u0913\u092A\u0928\u093F\u0902\u0917], [\u092E\u0941\u0916\u094D\u092F \u0916\u092C\u0930], \u0914\u0930 [\u0915\u094D\u0932\u094B\u091C\u093F\u0902\u0917] \u0938\u094D\u092A\u0937\u094D\u091F \u0930\u0942\u092A \u0938\u0947 \u091A\u093F\u0939\u094D\u0928\u093F\u0924 \u0939\u094B\u0902\u0964",
+                `\u0936\u0940\u0930\u094D\u0937\u0915: ${targetItem.title}
+\u0935\u093F\u0935\u0930\u0923: ${targetItem.summary || targetItem.title}`
+              ].join("\n\n")
+            });
+            videoScript = String(resp.text || "").trim();
+          } catch (err) {
+            console.warn("[WhatsApp:VIPDesk] Video script Gemini exception:", err?.message);
+          }
+        }
+        if (!videoScript) {
+          videoScript = `[\u0913\u092A\u0928\u093F\u0902\u0917]
+\u0928\u092E\u0938\u094D\u0915\u093E\u0930, \u092E\u0948\u0902 \u0939\u0942\u0901 AI News Maker \u0914\u0930 \u0907\u0938 \u0935\u0915\u094D\u0924 \u0915\u0940 \u092C\u0921\u093C\u0940 \u0916\u092C\u0930...
+
+[\u092E\u0941\u0916\u094D\u092F \u0916\u092C\u0930]
+${targetItem.title}\u0964 ${targetItem.summary || ""}
+
+[\u0915\u094D\u0932\u094B\u091C\u093F\u0902\u0917]
+\u0905\u0927\u093F\u0915 \u0905\u092A\u0921\u0947\u091F\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u091C\u0941\u0921\u093C\u0947 \u0930\u0939\u093F\u090F Breaking News Wala \u0915\u0947 \u0938\u093E\u0925\u0964`;
+        }
+        const reply2 = `\u{1F3AC} *30-\u0938\u0947\u0915\u0902\u0921 \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0902\u0915\u0930 \u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F*:
+
+${videoScript}
+
+\u{1F3A8} *\u0935\u0940\u0921\u093F\u092F\u094B \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u092E\u0947\u0902 \u0916\u094B\u0932\u0947\u0902:*
+https://ainewsmaker.online/studio?newsId=${encodeURIComponent(targetItem.id)}`;
+        const sentS = await sendWhatsAppText(waId, reply2);
+        const outSId = String(sentS?.messages?.[0]?.id || `vip-scr-${now}`);
+        await requireWrite("whatsapp_messages", sha2562(outSId), {
+          messageId: outSId,
+          metaMessageId: outSId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: reply2,
+          timestamp: now,
+          status: "sent"
+        }).catch(() => {
+        });
+        return;
+      }
     }
     const isConsent1 = /^\s*1\s*$/i.test(textBody) || /फीचर्स|अपडेट|feature|update/i.test(textBody);
     const isConsent2 = /^\s*2\s*$/i.test(textBody) || /ब्रेकिंग|समाचार|breaking|news alert/i.test(textBody);
@@ -9341,7 +10004,7 @@ _\u0915\u0949\u0907\u0928\u094D\u0938 \u0915\u093E \u0909\u092A\u092F\u094B\u091
     }
     console.log("[WhatsApp:Inbound] Webhook signature verified successfully");
     if (req.body?.object !== "whatsapp_business_account") return res.sendStatus(404);
-    if (!centralDb2?.useFirestore || !getTaskConfig()) return res.sendStatus(503);
+    if (!centralDb2?.useFirestore) return res.sendStatus(503);
     const statuses = [];
     for (const entry of req.body?.entry || []) {
       for (const change of entry?.changes || []) {
@@ -10551,22 +11214,92 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
       const actorEmail = req.user?.email || "admin";
       const updatedConv = {
         ...convDoc,
-        status: "closed",
+        status: "resolved",
+        handlingMode: "ai",
+        assignedOperatorId: null,
+        assignedOperatorName: null,
         closedAt: now,
         closedBy: actorEmail,
+        resolvedAt: now,
+        resolvedBy: actorEmail,
+        reactivatedToAiAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
         updatedAt: now
       };
       await requireWrite("whatsapp_conversations", convId, updatedConv);
       conversationCache.set(convId, updatedConv);
       await recordAuditEvent(centralDb2, {
         conversationId: convId,
-        eventType: "conversation_closed",
-        previousValue: convDoc.status || "open",
-        newValue: "closed",
+        eventType: "conversation_closed_and_reactivated_to_ai",
+        previousValue: `${convDoc.status || "open"}:${convDoc.handlingMode || "human"}`,
+        newValue: "resolved:ai",
         actorId: actorEmail,
         actorType: "operator"
       });
-      return res.json({ success: true, conversationId: convId, status: "closed" });
+      return res.json({ success: true, conversationId: convId, status: "resolved", handlingMode: "ai" });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/operator/logout", requireAdmin, async (req, res) => {
+    try {
+      const actorEmail = req.user?.email || "admin";
+      const operatorId = String(req.body?.operatorId || actorEmail).trim().toLowerCase();
+      const autoReturnToAiOnLogout = Boolean(req.body?.autoReturnToAiOnLogout === true);
+      const now = Date.now();
+      let convList = [];
+      if (centralDb2?.listDocs) {
+        try {
+          const listRes = await centralDb2.listDocs("whatsapp_conversations", 500);
+          convList = listRes?.documents || [];
+        } catch {
+        }
+      }
+      if (convList.length === 0 && conversationCache.size > 0) {
+        convList = Array.from(conversationCache.values());
+      }
+      let transitionedCount = 0;
+      const targetMode = autoReturnToAiOnLogout ? "ai" : "waiting_human";
+      for (const conv of convList) {
+        if (!conv) continue;
+        const convOp = String(conv.assignedOperatorId || conv.assignedOperatorEmail || "").toLowerCase().trim();
+        const isOpen = conv.status !== "closed" && conv.status !== "resolved";
+        if (isOpen && (convOp === operatorId || convOp === actorEmail)) {
+          const updatedConv = {
+            ...conv,
+            handlingMode: targetMode,
+            status: autoReturnToAiOnLogout ? conv.status : "human_requested",
+            assignedOperatorId: null,
+            assignedOperatorName: null,
+            operatorLoggedOutAt: now,
+            conversationVersion: Number(conv.conversationVersion || 0) + 1,
+            updatedAt: now,
+            ...autoReturnToAiOnLogout ? { reactivatedToAiAt: now } : {}
+          };
+          const convId = conv.conversationId || conv.id;
+          if (convId) {
+            await requireWrite("whatsapp_conversations", convId, updatedConv).catch(() => {
+            });
+            conversationCache.set(convId, updatedConv);
+            transitionedCount++;
+            await recordAuditEvent(centralDb2, {
+              conversationId: convId,
+              eventType: autoReturnToAiOnLogout ? "operator_logout_auto_ai_reactivated" : "operator_logout_requeued_to_waiting_human",
+              previousValue: `operator:${operatorId}`,
+              newValue: `mode:${targetMode}`,
+              actorId: actorEmail,
+              actorType: "operator"
+            });
+          }
+        }
+      }
+      return res.json({
+        success: true,
+        operatorId,
+        transitionedCount,
+        mode: targetMode,
+        autoReturnToAiOnLogout
+      });
     } catch (err) {
       return res.status(500).json({ success: false, error: String(err?.message || err) });
     }
@@ -11001,6 +11734,414 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
       return res.status(500).json({ success: false, error: err?.message || "Failed to save settings" });
     }
   });
+  app2.get("/api/admin/whatsapp/templates", requireAdmin, async (_req, res) => {
+    try {
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+      const localTemplates = loadTemplatesDatabase(centralDb2);
+      let syncedWithMeta = false;
+      let metaError = null;
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        try {
+          const metaResp = await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=100`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const metaData = await metaResp.json().catch(() => ({}));
+          if (metaResp.ok && Array.isArray(metaData?.data)) {
+            syncedWithMeta = true;
+            for (const item of metaData.data) {
+              const name = String(item.name || "").trim();
+              if (name) {
+                localTemplates[name] = {
+                  ...localTemplates[name] || {},
+                  id: item.id || localTemplates[name]?.id,
+                  name,
+                  status: item.status || "APPROVED",
+                  category: item.category || localTemplates[name]?.category || "MARKETING",
+                  language: item.language || localTemplates[name]?.language || "hi",
+                  components: item.components || localTemplates[name]?.components || [],
+                  last_updated_time: Date.now()
+                };
+              }
+            }
+            saveTemplatesDatabase(localTemplates, centralDb2);
+          } else {
+            metaError = metaData?.error?.message || `Meta Graph API returned HTTP ${metaResp.status}`;
+          }
+        } catch (fetchErr) {
+          metaError = String(fetchErr?.message || fetchErr);
+        }
+      }
+      const templatesList = Object.values(localTemplates).sort(
+        (a, b) => (Number(b.last_updated_time) || 0) - (Number(a.last_updated_time) || 0)
+      );
+      return res.json({
+        success: true,
+        templates: templatesList,
+        syncedWithMeta,
+        metaError: metaError || void 0,
+        wabaId
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load templates" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/templates", requireAdmin, async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const rawName = String(payload.name || "").trim().toLowerCase();
+      if (!rawName || !/^[a-z0-9_]+$/.test(rawName)) {
+        return res.status(400).json({
+          success: false,
+          error: "\u0905\u092E\u093E\u0928\u094D\u092F \u091F\u0947\u092E\u094D\u092A\u094D\u0932\u0947\u091F \u0928\u093E\u092E: \u0915\u0947\u0935\u0932 \u091B\u094B\u091F\u0947 \u0905\u0915\u094D\u0937\u0930 (a-z), \u0905\u0902\u0915 (0-9) \u0914\u0930 \u0905\u0902\u0921\u0930\u0938\u094D\u0915\u094B\u0930 (_) \u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0902\u0964"
+        });
+      }
+      const category = (payload.category || "MARKETING").toUpperCase();
+      const language = (payload.language || "hi").trim();
+      const bodyText = String(payload.bodyText || payload.text || "").trim();
+      if (!bodyText) {
+        return res.status(400).json({
+          success: false,
+          error: "\u091F\u0947\u092E\u094D\u092A\u094D\u0932\u0947\u091F \u092C\u0949\u0921\u0940 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
+        });
+      }
+      const headerType = (payload.headerType || "NONE").toUpperCase();
+      const headerText = String(payload.headerText || "").trim();
+      const headerSampleUrl = String(payload.headerSampleUrl || payload.imageUrl || "https://ainewsmaker.online/og-image.jpg").trim();
+      const footerText = String(payload.footerText || "").trim();
+      const buttonType = (payload.buttonType || "NONE").toUpperCase();
+      const buttonLabel = String(payload.buttonLabel || payload.buttonText || "").trim();
+      const buttonUrl = String(payload.buttonUrl || "").trim();
+      const bodySamples = Array.isArray(payload.bodySamples) ? payload.bodySamples : payload.bodySample ? [payload.bodySample] : [];
+      const components = [];
+      if (headerType === "IMAGE") {
+        components.push({
+          type: "HEADER",
+          format: "IMAGE",
+          example: { header_handle: [headerSampleUrl] }
+        });
+      } else if (headerType === "TEXT" && headerText) {
+        components.push({
+          type: "HEADER",
+          format: "TEXT",
+          text: headerText
+        });
+      }
+      const bodyComponent = {
+        type: "BODY",
+        text: bodyText
+      };
+      if (bodySamples.length > 0) {
+        bodyComponent.example = { body_text: [bodySamples] };
+      }
+      components.push(bodyComponent);
+      if (footerText) {
+        components.push({
+          type: "FOOTER",
+          text: footerText
+        });
+      }
+      if (buttonType === "URL" && buttonLabel && buttonUrl) {
+        const buttonObj = {
+          type: "URL",
+          text: buttonLabel,
+          url: buttonUrl
+        };
+        if (buttonUrl.includes("{{1}}")) {
+          buttonObj.example = ["?newsId=sample_news_123"];
+        }
+        components.push({
+          type: "BUTTONS",
+          buttons: [buttonObj]
+        });
+      }
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+      let metaStatus = "PENDING";
+      let metaTemplateId = `tpl_${rawName}_${Date.now()}`;
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        const metaPayload = {
+          name: rawName,
+          category,
+          language,
+          components
+        };
+        const metaResp = await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(metaPayload)
+        });
+        const metaResult = await metaResp.json().catch(() => ({}));
+        if (!metaResp.ok) {
+          const errMsg = metaResult?.error?.message || `Meta Graph API error (HTTP ${metaResp.status})`;
+          return res.status(400).json({
+            success: false,
+            error: `Meta Template Submission Error: ${errMsg}`,
+            metaError: metaResult
+          });
+        }
+        if (metaResult?.id) metaTemplateId = metaResult.id;
+        if (metaResult?.status) metaStatus = metaResult.status;
+      } else {
+        metaStatus = process.env.NODE_ENV === "test" ? "MOCK_APPROVED" : "SIMULATED";
+      }
+      const now = Date.now();
+      const templateDoc = {
+        id: metaTemplateId,
+        name: rawName,
+        category,
+        language,
+        status: metaStatus,
+        headerType,
+        headerText: headerType === "TEXT" ? headerText : void 0,
+        headerSampleUrl: headerType === "IMAGE" ? headerSampleUrl : void 0,
+        bodyText,
+        bodySamples,
+        footerText: footerText || void 0,
+        buttonType,
+        buttonLabel: buttonType === "URL" ? buttonLabel : void 0,
+        buttonUrl: buttonType === "URL" ? buttonUrl : void 0,
+        components,
+        createdAt: now,
+        last_updated_time: now,
+        createdBy: req.user?.email || "admin"
+      };
+      const localTemplates = loadTemplatesDatabase(centralDb2);
+      localTemplates[rawName] = templateDoc;
+      saveTemplatesDatabase(localTemplates, centralDb2);
+      templateCache.set(rawName, templateDoc);
+      return res.json({
+        success: true,
+        template: templateDoc,
+        message: "\u091F\u0947\u092E\u094D\u092A\u094D\u0932\u0947\u091F \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 Meta WhatsApp API \u092E\u0947\u0902 \u091C\u092E\u093E \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to create template" });
+    }
+  });
+  app2.delete("/api/admin/whatsapp/templates/:name", requireAdmin, async (req, res) => {
+    try {
+      const name = String(req.params.name || "").trim().toLowerCase();
+      if (!name) return res.status(400).json({ success: false, error: "Template name is required" });
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        try {
+          await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates?name=${encodeURIComponent(name)}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` }
+          });
+        } catch (delErr) {
+          console.warn("[WhatsApp:Templates] Meta delete warning:", delErr?.message);
+        }
+      }
+      const localTemplates = loadTemplatesDatabase(centralDb2);
+      delete localTemplates[name];
+      saveTemplatesDatabase(localTemplates, centralDb2);
+      templateCache.delete(name);
+      if (centralDb2?.useFirestore && typeof centralDb2.deleteDoc === "function") {
+        centralDb2.deleteDoc("whatsapp_templates", name).catch(() => {
+        });
+      }
+      return res.json({ success: true, deletedName: name });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete template" });
+    }
+  });
+  app2.post("/api/admin/whatsapp/templates/sync", requireAdmin, async (_req, res) => {
+    try {
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+      const localTemplates = loadTemplatesDatabase(centralDb2);
+      let syncCount = 0;
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        const metaResp = await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=100`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const metaData = await metaResp.json().catch(() => ({}));
+        if (metaResp.ok && Array.isArray(metaData?.data)) {
+          for (const item of metaData.data) {
+            const name = String(item.name || "").trim();
+            if (name) {
+              localTemplates[name] = {
+                ...localTemplates[name] || {},
+                id: item.id || localTemplates[name]?.id,
+                name,
+                status: item.status || "APPROVED",
+                category: item.category || localTemplates[name]?.category || "MARKETING",
+                language: item.language || localTemplates[name]?.language || "hi",
+                components: item.components || localTemplates[name]?.components || [],
+                last_updated_time: Date.now()
+              };
+              syncCount++;
+            }
+          }
+          saveTemplatesDatabase(localTemplates, centralDb2);
+        }
+      }
+      return res.json({
+        success: true,
+        syncedCount: syncCount,
+        templates: Object.values(localTemplates)
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to sync templates" });
+    }
+  });
+  app2.get("/api/whatsapp/news/render-graphic", async (req, res) => {
+    try {
+      const newsId = String(req.query.newsId || "").trim();
+      const phone = String(req.query.phone || req.query.waId || "").trim();
+      const email = String(req.query.email || "").trim().toLowerCase();
+      let targetPost = null;
+      if (newsId && options?.getNewsDatabase) {
+        try {
+          const allNews = options.getNewsDatabase();
+          if (Array.isArray(allNews)) {
+            targetPost = allNews.find((p) => p && String(p.id) === newsId);
+          }
+        } catch {
+        }
+      }
+      if (!targetPost && newsId && options?.getApprovedEditorialDatabase) {
+        try {
+          const editorial = options.getApprovedEditorialDatabase();
+          if (editorial && editorial[newsId]) targetPost = editorial[newsId];
+        } catch {
+        }
+      }
+      let userProfile = null;
+      if (options?.getProfilesDatabase) {
+        try {
+          const profiles = options.getProfilesDatabase();
+          if (profiles) {
+            if (email && profiles[email]) userProfile = profiles[email];
+            if (!userProfile && phone) {
+              const cleanP = getCleanDigits10(phone);
+              userProfile = Object.values(profiles).find((pr) => pr && getCleanDigits10(pr.mobileNumber || pr.whatsappNumber || "") === cleanP);
+            }
+          }
+        } catch {
+        }
+      }
+      let dynamicFrame = null;
+      const requestedFrameId = String(req.query.frameId || userProfile?.frameDesign || "").trim();
+      if (requestedFrameId && options?.getDynamicFramesDatabase) {
+        try {
+          const frames = options.getDynamicFramesDatabase();
+          if (Array.isArray(frames)) {
+            dynamicFrame = frames.find((f) => f && f.id === requestedFrameId);
+          }
+        } catch {
+        }
+      }
+      const primaryColor = dynamicFrame?.theme?.primaryColor || dynamicFrame?.primaryColor || "#b91c1c";
+      const secondaryColor = dynamicFrame?.theme?.secondaryColor || dynamicFrame?.secondaryColor || "#dc2626";
+      const accentColor = dynamicFrame?.theme?.accentColor || dynamicFrame?.accentColor || "#f59e0b";
+      const headline = String(targetPost?.title || req.query.headline || "AI News Maker \u2014 \u0924\u093E\u091C\u093C\u093E \u0916\u092C\u0930").slice(0, 140);
+      const category = String(targetPost?.category || req.query.category || "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C").slice(0, 30);
+      const brand = String(userProfile?.channelNameHi || userProfile?.channelNameEn || req.query.brand || "AI NEWS MAKER").slice(0, 40);
+      const logoUrl = String(userProfile?.channelLogoUrl || userProfile?.channelLogoPngUrl || req.query.logoUrl || "https://ainewsmaker.online/assets/breaking_news_wala_logo.png").trim();
+      const leadPhoto = String(targetPost?.thumbnailUrl || targetPost?.imageUrl || req.query.imageUrl || "https://ainewsmaker.online/og-image.jpg").trim();
+      const location = String(targetPost?.location || userProfile?.location || userProfile?.district || req.query.location || "").slice(0, 30);
+      const escapeXml = (str) => str.replace(/[<>&'"]/g, (c) => {
+        switch (c) {
+          case "<":
+            return "&lt;";
+          case ">":
+            return "&gt;";
+          case "&":
+            return "&amp;";
+          case "'":
+            return "&apos;";
+          case '"':
+            return "&quot;";
+          default:
+            return c;
+        }
+      });
+      const safeHeadline = escapeXml(headline);
+      const safeCategory = escapeXml(category);
+      const safeBrand = escapeXml(brand);
+      const safeLocation = escapeXml(location);
+      const safePhoto = escapeXml(leadPhoto);
+      const safeLogo = escapeXml(logoUrl);
+      const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${primaryColor}" />
+      <stop offset="50%" stop-color="${secondaryColor}" />
+      <stop offset="100%" stop-color="${primaryColor}" />
+    </linearGradient>
+    <linearGradient id="goldAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${accentColor}" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1080" height="1080" fill="url(#bg)" />
+
+  <!-- Canonical Studio Header (graphic_001) -->
+  <rect x="0" y="0" width="1080" height="110" fill="url(#headerGrad)" />
+  <image href="${safeLogo}" x="30" y="15" width="80" height="80" preserveAspectRatio="xMidYMid meet" />
+  <text x="130" y="65" fill="#ffffff" font-family="'Noto Sans Devanagari', 'Mukta', sans-serif" font-size="34" font-weight="900" filter="url(#shadow)">${safeBrand}</text>
+  <rect x="850" y="30" width="200" height="50" rx="8" fill="#020617" stroke="${accentColor}" stroke-width="2" />
+  <text x="950" y="62" fill="${accentColor}" font-family="'Noto Sans Devanagari', sans-serif" font-size="20" font-weight="bold" text-anchor="middle">LIVE NEWS</text>
+
+  <!-- Editorial Lead Photo (Aspect Ratio 16:9 in Frame) -->
+  <rect x="30" y="125" width="1020" height="570" rx="16" fill="#1e293b" />
+  <image href="${safePhoto}" x="30" y="125" width="1020" height="570" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 16px)" />
+
+  <!-- Breaking Banner Ribbon & Location Pill -->
+  <rect x="50" y="145" width="240" height="55" rx="8" fill="${secondaryColor}" stroke="#ffffff" stroke-width="2" filter="url(#shadow)" />
+  <text x="170" y="180" fill="#ffffff" font-family="'Noto Sans Devanagari', sans-serif" font-size="24" font-weight="900" text-anchor="middle">\u{1F6A8} ${safeCategory}</text>
+  ${safeLocation ? `<rect x="310" y="145" width="200" height="55" rx="8" fill="#020617" opacity="0.9" stroke="${accentColor}" stroke-width="1.5" />
+  <text x="410" y="180" fill="#fef08a" font-family="'Noto Sans Devanagari', sans-serif" font-size="22" font-weight="bold" text-anchor="middle">\u{1F4CD} ${safeLocation}</text>` : ""}
+
+  <!-- Graphic Studio Headline Card (graphic_001 Bottom Polygon) -->
+  <rect x="30" y="710" width="1020" height="255" rx="16" fill="#ffffff" filter="url(#shadow)" />
+  <polygon points="30,710 120,710 80,750 30,750" fill="${secondaryColor}" />
+  <foreignObject x="60" y="725" width="960" height="225">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: 'Noto Sans Devanagari', 'Mukta', sans-serif; font-size: 38px; font-weight: 900; line-height: 1.35; color: #020617; text-align: left; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;">
+      ${safeHeadline}
+    </div>
+  </foreignObject>
+
+  <!-- Studio Custom Footer Strip -->
+  <rect x="0" y="985" width="1080" height="95" fill="#020617" />
+  <line x1="0" y1="985" x2="1080" y2="985" stroke="${accentColor}" stroke-width="3" />
+  <text x="50" y="1040" fill="#94a3b8" font-family="'Noto Sans Devanagari', sans-serif" font-size="22" font-weight="600">AI News Maker Studio \u2022 Breaking News Wala</text>
+  <text x="1030" y="1040" fill="${accentColor}" font-family="'Noto Sans Devanagari', sans-serif" font-size="24" font-weight="bold" text-anchor="end">\u{1F3A8} ainewsmaker.online</text>
+</svg>`;
+      res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.send(svg);
+    } catch (err) {
+      return res.status(500).send("Error rendering graphic");
+    }
+  });
+  return {
+    sendWhatsAppText,
+    sendWhatsAppImage,
+    uploadWhatsAppMedia,
+    sendWhatsAppNewsBroadcast
+  };
 }
 
 // server.ts
@@ -11270,7 +12411,7 @@ async function resolveAuthenticatedUser(req) {
         }
         if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
           userRole = "superadmin";
-        } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+        } else if (email === REGULAR_ADMIN_EMAIL) {
           userRole = "admin";
         }
         const verified = {
@@ -11319,7 +12460,7 @@ async function resolveAuthenticatedUser(req) {
     }
     if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
       userRole = "superadmin";
-    } else if (email === REGULAR_ADMIN_EMAIL && userRole !== "superadmin") {
+    } else if (email === REGULAR_ADMIN_EMAIL) {
       userRole = "admin";
     }
     const verified = {
@@ -11430,7 +12571,14 @@ async function requireMasterAdminMiddleware(req, res, next) {
 registerWhatsAppIntegration(app, centralDb, {
   requireAdminMiddleware,
   requireAuthMiddleware,
-  requireMasterAdminMiddleware
+  requireMasterAdminMiddleware,
+  getNewsDatabase: () => typeof loadNewsDatabase === "function" ? loadNewsDatabase() : [],
+  getApprovedEditorialDatabase: () => typeof loadApprovedEditorialDatabase === "function" ? loadApprovedEditorialDatabase() : {},
+  getUsersDatabase: () => typeof loadUsersMasterDatabase === "function" ? loadUsersMasterDatabase() : [],
+  getProfilesDatabase: () => typeof loadProfilesDatabase === "function" ? loadProfilesDatabase() : {},
+  getDynamicFramesDatabase: () => typeof loadDynamicFramesDatabase === "function" ? loadDynamicFramesDatabase() : [],
+  getAssetLibrariesDatabase: () => typeof loadAssetLibrariesDatabase === "function" ? loadAssetLibrariesDatabase() : [],
+  getCloudStorage: () => cloudStorage
 });
 var CREDENTIALS_DB_FILE = import_path2.default.join(process.cwd(), "auth_credentials_db.json");
 function loadCredentialsDatabase() {
@@ -15001,47 +16149,43 @@ function saveUsersAccountsDatabase(accounts) {
   }
 }
 function loadUsersMasterDatabase() {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
-    const unique = /* @__PURE__ */ new Map();
-    for (const u of centralDb.cache.users.values()) {
-      const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
-      if (!key) continue;
-      if (!unique.has(key)) {
-        unique.set(key, u);
-      } else {
-        const existing = unique.get(key);
-        const isBlocked = Boolean(existing.isBlocked || u.isBlocked);
-        unique.set(key, { ...existing, ...u, isBlocked });
-      }
-    }
-    const list = Array.from(unique.values());
-    list.sort((a, b) => {
-      const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
-      const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
-      return timeB - timeA;
-    });
-    return list;
-  }
+  const unique = /* @__PURE__ */ new Map();
   try {
     const locations = resolveAllDatabaseLocations("users_master_database.json");
     for (const loc of locations) {
       if (import_fs2.default.existsSync(loc)) {
         const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.sort((a, b) => {
-            const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
-            const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
-            return timeB - timeA;
-          });
-          return parsed;
+        if (Array.isArray(parsed)) {
+          for (const u of parsed) {
+            const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
+            if (!key) continue;
+            if (!unique.has(key)) {
+              unique.set(key, u);
+            }
+          }
         }
       }
     }
   } catch (e) {
     console.error("Error reading users_master_database.json:", e);
   }
-  return [];
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    for (const u of centralDb.cache.users.values()) {
+      const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
+      if (!key) continue;
+      const existing = unique.get(key);
+      const isBlocked = Boolean(existing?.isBlocked || u.isBlocked);
+      unique.set(key, { ...existing || {}, ...u, isBlocked });
+    }
+  }
+  const list = Array.from(unique.values());
+  list.sort((a, b) => {
+    const timeA = Number(a.createdAt) || Number(a.trialStartedAt) || 0;
+    const timeB = Number(b.createdAt) || Number(b.trialStartedAt) || 0;
+    return timeB - timeA;
+  });
+  return list;
 }
 function saveUsersMasterDatabase(users) {
   if (centralDb && centralDb.useFirestore) {
@@ -15364,8 +16508,8 @@ function registerOrUpdateUserAuthoritative(userPayload) {
     const preservedTrialStart = existing.trialStartedAt || existing.createdAt || now;
     const preservedTrialEnds = existing.trialEndsAt || preservedTrialStart + SEVEN_DAYS_MS;
     const safeUsername = rawReqUser || existing.username || (cleanEmail === "admin.ainewsmaker@gmail.com" ? "AI News Maker" : isBreakingNewsWala ? "breakingnewswala" : cleanGenerateUsername(void 0, userPayload.fullName || userPayload.name, existing.username));
-    const safeIncomingLogo = userPayload.channelLogoUrl && !userPayload.channelLogoUrl.includes("/assets/ai_news_maker_logo.png") ? userPayload.channelLogoUrl : existing.channelLogoUrl || userPayload.channelLogoUrl || "";
-    const safeIncomingLogoPng = userPayload.channelLogoPngUrl && !userPayload.channelLogoPngUrl.includes("/assets/ai_news_maker_logo.png") ? userPayload.channelLogoPngUrl : existing.channelLogoPngUrl || existing.channelLogoUrl || userPayload.channelLogoPngUrl;
+    const safeIncomingLogo = userPayload.channelLogoUrl || existing.channelLogoUrl || "";
+    const safeIncomingLogoPng = userPayload.channelLogoPngUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || userPayload.channelLogoUrl || "";
     const oldNormPhone = (existing.mobileNumber || existing.mobile || "").toString().replace(/\D/g, "").slice(-10);
     const newNormPhone = (userPayload.mobileNumber || userPayload.mobile || "").toString().replace(/\D/g, "").slice(-10);
     const isPhoneChanged = Boolean(oldNormPhone && newNormPhone && oldNormPhone !== newNormPhone);
@@ -15421,9 +16565,9 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      role: isSuper ? "superadmin" : userPayload.role || existing.role || "user",
-      tier: isSuper ? "ultra" : existing.tier && existing.tier !== "basic" ? existing.tier : userPayload.tier || existing.tier || "basic",
-      planName: isSuper ? "VIP DESK" : existing.tier && existing.tier !== "basic" ? existing.planName || existing.tier.toUpperCase() : userPayload.planName || existing.planName || "BASIC",
+      role: isBreakingNewsWala ? "superadmin" : cleanEmail === "admin.ainewsmaker@gmail.com" ? "admin" : existing.role || "reporter",
+      tier: isBreakingNewsWala || cleanEmail === "admin.ainewsmaker@gmail.com" ? "ultra" : existing.tier || "basic",
+      planName: isBreakingNewsWala || cleanEmail === "admin.ainewsmaker@gmail.com" ? "VIP DESK" : existing.planName || (existing.tier ? existing.tier.toUpperCase() : "BASIC"),
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
@@ -15470,9 +16614,9 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || null,
-      role: isSuper ? "superadmin" : userPayload.role || "user",
-      tier: isSuper ? "ultra" : userPayload.tier || "basic",
-      planName: isSuper ? "VIP DESK" : userPayload.planName || "BASIC",
+      role: isBreakingNewsWala ? "superadmin" : cleanEmail === "admin.ainewsmaker@gmail.com" ? "admin" : "reporter",
+      tier: isBreakingNewsWala || cleanEmail === "admin.ainewsmaker@gmail.com" ? "ultra" : "basic",
+      planName: isBreakingNewsWala || cleanEmail === "admin.ainewsmaker@gmail.com" ? "VIP DESK" : "BASIC",
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
@@ -15655,7 +16799,7 @@ function reconcileAllUsers() {
           district: p.district || "",
           websiteUrl: p.websiteUrl || "",
           socialIcons: p.socialIcons,
-          role: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "superadmin" : p.role || "user",
+          role: email === "breakingnewswala.com@gmail.com" ? "superadmin" : email === "admin.ainewsmaker@gmail.com" ? "admin" : p.role || "user",
           tier: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "ultra" : p.tier || "basic",
           planName: email === "admin.ainewsmaker@gmail.com" || email === "breakingnewswala.com@gmail.com" ? "VIP DESK" : p.tier === "ultra" ? "VIP DESK" : p.tier === "professional" || p.tier === "pro" ? "PRO" : p.tier === "advanced" || p.tier === "advance" ? "ADVANCE" : "BASIC",
           hasActivePaidPlan: Boolean(p.hasActivePaidPlan || p.tier === "advanced" || p.tier === "pro" || p.tier === "ultra"),
@@ -15670,38 +16814,38 @@ function reconcileAllUsers() {
         });
       }
     }
-    const superAdminEmail = "admin.ainewsmaker@gmail.com";
-    const existingSuper = userMap.get(superAdminEmail);
-    const superProf = profiles[superAdminEmail];
-    userMap.set(superAdminEmail, {
-      userId: existingSuper?.userId || "user-1791697518060",
-      email: superAdminEmail,
-      name: superProf?.fullName || existingSuper?.fullName || "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
-      fullName: superProf?.fullName || existingSuper?.fullName || "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)",
-      username: superProf?.username || existingSuper?.username || "admin.ainewsmaker",
-      role: "superadmin",
+    const subAdminEmail = "admin.ainewsmaker@gmail.com";
+    const existingSub = userMap.get(subAdminEmail);
+    const subProf = profiles[subAdminEmail];
+    userMap.set(subAdminEmail, {
+      userId: existingSub?.userId || "user-1791697518060",
+      email: subAdminEmail,
+      name: subProf?.fullName || existingSub?.fullName || "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)",
+      fullName: subProf?.fullName || existingSub?.fullName || "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)",
+      username: subProf?.username || existingSub?.username || "admin.ainewsmaker",
+      role: "admin",
       tier: "ultra",
       planName: "VIP DESK",
-      channelName: superProf?.channelNameHi || existingSuper?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameHi: superProf?.channelNameHi || existingSuper?.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-      channelNameEn: superProf?.channelNameEn || existingSuper?.channelNameEn || "AI News Maker",
-      channelLogoUrl: superProf?.channelLogoUrl || existingSuper?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
-      channelLogoPngUrl: superProf?.channelLogoPngUrl || existingSuper?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
-      channelLogoGifUrl: superProf?.channelLogoGifUrl || existingSuper?.channelLogoGifUrl || "",
-      channelLogoType: superProf?.channelLogoType || existingSuper?.channelLogoType || "png",
-      mobile: superProf?.mobileNumber || existingSuper?.mobile || "9669802408",
-      mobileNumber: superProf?.mobileNumber || existingSuper?.mobileNumber || "9669802408",
-      district: superProf?.district || existingSuper?.district || "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
-      websiteUrl: superProf?.websiteUrl || existingSuper?.websiteUrl || "ainewsmaker.online",
+      channelName: subProf?.channelNameHi || existingSub?.channelName || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameHi: subProf?.channelNameHi || existingSub?.channelNameHi || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+      channelNameEn: subProf?.channelNameEn || existingSub?.channelNameEn || "AI News Maker",
+      channelLogoUrl: subProf?.channelLogoUrl || existingSub?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoPngUrl: subProf?.channelLogoPngUrl || existingSub?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
+      channelLogoGifUrl: subProf?.channelLogoGifUrl || existingSub?.channelLogoGifUrl || "",
+      channelLogoType: subProf?.channelLogoType || existingSub?.channelLogoType || "png",
+      mobile: subProf?.mobileNumber || existingSub?.mobile || "9669802408",
+      mobileNumber: subProf?.mobileNumber || existingSub?.mobileNumber || "9669802408",
+      district: subProf?.district || existingSub?.district || "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
+      websiteUrl: subProf?.websiteUrl || existingSub?.websiteUrl || "ainewsmaker.online",
       isBlocked: false,
-      isProfileLocked: true,
-      createdAt: existingSuper?.createdAt || 1791697518060,
+      isProfileLocked: false,
+      createdAt: existingSub?.createdAt || 1791697518060,
       trialStartedAt: 1791697518060,
       trialEndsAt: 2107057518060,
       activatedAt: 1791697518060,
       expiresAt: 2107057518060,
-      activatedVia: "Super Admin Preset",
-      lastLoginAt: existingSuper?.lastLoginAt || Date.now()
+      activatedVia: "Admin Preset",
+      lastLoginAt: existingSub?.lastLoginAt || Date.now()
     });
     const adminEmail = "breakingnewswala.com@gmail.com";
     const existingAdmin = userMap.get(adminEmail) || userMap.get("breakingnewswala@gmail.com");
@@ -15727,7 +16871,7 @@ function reconcileAllUsers() {
       district: adminProf?.district || existingAdmin?.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
       websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || "breakingnewswala.com",
       isBlocked: false,
-      isProfileLocked: true,
+      isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
       trialStartedAt: 1791792137805,
       trialEndsAt: 2107057518060,
@@ -18944,22 +20088,21 @@ app.get("/api/account-deletion-requests", (_req, res) => {
 });
 app.use("/uploads", import_express.default.static(import_path2.default.join(process.cwd(), "public", "uploads")));
 function loadProfilesDatabase() {
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
-    const dict = {};
-    for (const [k, v] of centralDb.cache.users.entries()) {
-      dict[k] = v;
-    }
-    return dict;
-  }
+  const dict = {};
   try {
     if (import_fs2.default.existsSync(PROFILES_DB_FILE)) {
       const raw = import_fs2.default.readFileSync(PROFILES_DB_FILE, "utf-8");
-      return JSON.parse(raw);
+      Object.assign(dict, JSON.parse(raw));
     }
   } catch (err) {
     console.error("Error reading user_profiles_db.json:", err);
   }
-  return {};
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
+    for (const [k, v] of centralDb.cache.users.entries()) {
+      dict[k] = v;
+    }
+  }
+  return dict;
 }
 function saveProfilesDatabase(data) {
   if (centralDb && centralDb.useFirestore) {
@@ -19217,12 +20360,16 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const reqKey = (req.headers["x-admin-key"] || "").toString();
     const reqRole = (req.headers["x-user-role"] || "").toString().toLowerCase();
     const reqEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
-    const isMasterAdminEmail = profile.email && (profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || profile.email.toLowerCase() === "breakingnewswala.com@gmail.com") || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69" || cleanId === "admin";
+    const isMasterAdminEmail = profile.email && profile.email.toLowerCase() === "breakingnewswala.com@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69";
+    const isSubAdminEmail = profile.email && profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "user-1791697518060";
     const isAdmin = isAuthorizedAdmin(req) || reqKey === "master-admin" || (reqRole === "superadmin" || reqRole === "admin") || (reqEmail.includes("breakingnewswala") || reqEmail.includes("admin"));
-    if ((cleanId === "admin" || isMasterAdminEmail) && !isAdmin) {
+    if ((cleanId === "admin" || isMasterAdminEmail || isSubAdminEmail) && !isAdmin) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
-    const existing = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : null) || {};
+    const existing = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : isSubAdminEmail ? allProfiles["admin.ainewsmaker@gmail.com"] || allProfiles["user-1791697518060"] : null) || {};
+    if (isSubAdminEmail) {
+      existing.role = "admin";
+    }
     const isTargetBlocked = Boolean(existing.isBlocked) || checkUserAccess(cleanId).blocked || profile.email && checkUserAccess(profile.email).blocked;
     if (isTargetBlocked && !isAdmin) {
       return res.status(403).json({ success: false, error: "\u0906\u092A\u0915\u093E \u0916\u093E\u0924\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0926\u094D\u0935\u093E\u0930\u093E \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964", blocked: true });
@@ -19242,7 +20389,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         const thisEmail = (profile.email || cleanId).toLowerCase().trim();
         const thisUserId = (profile.userId || profile.uid || cleanId).toLowerCase().trim();
         const otherUserId = (p.userId || p.uid || k).toLowerCase().trim();
-        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isMasterAdminEmail && (otherEmail === "breakingnewswala.com@gmail.com" || otherEmail === "admin.ainewsmaker@gmail.com" || otherUserId === "usr_627265616b69" || otherUserId === "user-1791697518060" || k === "admin") || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
+        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isMasterAdminEmail && (otherEmail === "breakingnewswala.com@gmail.com" || otherEmail === "admin.ainewsmaker@gmail.com" || otherUserId === "usr_627265616b69" || otherUserId === "user-1791697518060" || k === "admin") || isSubAdminEmail && (otherEmail === "admin.ainewsmaker@gmail.com" || otherEmail === "breakingnewswala.com@gmail.com" || otherUserId === "user-1791697518060" || otherUserId === "usr_627265616b69" || k === "admin") || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
         if (!isSameUser) {
           const otherUname = (p.username || "").toLowerCase().trim().replace(/^@/, "");
           if (otherUname && otherUname === normUsername) {
@@ -19252,13 +20399,13 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     }
     const normMobile = (finalMobile || "").toString().replace(/\D/g, "").slice(-10);
-    if (normMobile.length === 10) {
+    if (normMobile.length === 10 && !isMasterAdminEmail && !isSubAdminEmail) {
       for (const [k, p] of Object.entries(allProfiles)) {
         const otherEmail = (p.email || k).toLowerCase().trim();
         const thisEmail = (profile.email || cleanId).toLowerCase().trim();
         const thisUserId = (profile.userId || profile.uid || cleanId).toLowerCase().trim();
         const otherUserId = (p.userId || p.uid || k).toLowerCase().trim();
-        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isMasterAdminEmail && (otherEmail === "breakingnewswala.com@gmail.com" || otherEmail === "admin.ainewsmaker@gmail.com" || otherUserId === "usr_627265616b69" || otherUserId === "user-1791697518060" || k === "admin") || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
+        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
         if (!isSameUser) {
           const otherMob = (p.mobileNumber || p.mobile || "").toString().replace(/\D/g, "").slice(-10);
           if (otherMob.length === 10 && otherMob === normMobile) {
@@ -19267,9 +20414,15 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         }
       }
     }
-    const safeRole = isAdmin ? profile.role || existing.role || (isMasterAdminEmail ? "admin" : "reporter") : existing.role || (isMasterAdminEmail ? "admin" : "reporter");
-    const safeTier = isAdmin ? profile.tier || existing.tier || (isMasterAdminEmail ? "ultra" : "basic") : existing.tier || (isMasterAdminEmail ? "ultra" : "basic");
-    const safeIsBlocked = isAdmin ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
+    const isMasterCaller = isAuthorizedMasterAdmin(req);
+    const masterUsers = loadUsersMasterDatabase();
+    const cleanUserEmail = (profile.email || existing.email || cleanId).toString().toLowerCase().trim();
+    const matchedMasterUser = masterUsers.find(
+      (u) => u.email && u.email.toLowerCase().trim() === cleanUserEmail || u.userId && u.userId.toLowerCase().trim() === cleanId
+    );
+    const safeRole = isMasterCaller && profile.role ? profile.role : existing.role || (isMasterAdminEmail ? "superadmin" : isSubAdminEmail ? "admin" : "reporter");
+    const safeTier = isMasterCaller && profile.tier ? profile.tier : existing.tier || (isMasterAdminEmail ? "ultra" : isSubAdminEmail ? "ultra" : matchedMasterUser?.tier || "basic");
+    const safeIsBlocked = isMasterCaller ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
     const finalChannelHi = (profile.channelNameHi || profile.channelName || existing.channelNameHi || existing.channelName || "").toString().trim();
     const isProfileComplete = Boolean(
       (profile.isProfileComplete !== void 0 ? profile.isProfileComplete : existing.isProfileComplete) && finalChannelHi && finalChannelHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
@@ -19312,16 +20465,17 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       role: safeRole,
       tier: safeTier,
       isBlocked: safeIsBlocked,
-      isLocked: isMasterAdminEmail ? true : safeIsLocked,
-      isProfileLocked: isMasterAdminEmail ? true : safeIsLocked,
-      isProfileComplete: isMasterAdminEmail ? true : isProfileComplete,
-      profileStatus: isMasterAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
+      isLocked: isMasterAdminEmail || isSubAdminEmail ? false : safeIsLocked,
+      isProfileLocked: isMasterAdminEmail || isSubAdminEmail ? false : safeIsLocked,
+      isProfileComplete: isMasterAdminEmail || isSubAdminEmail ? true : isProfileComplete,
+      profileStatus: isMasterAdminEmail || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
       email: profile.email || existing.email || "",
-      district: profile.district || existing.district || "",
+      district: profile.district || profile.location || existing.district || existing.location || "",
+      location: profile.location || profile.district || existing.location || existing.district || "",
       channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: profile.channelLogoUrl && !profile.channelLogoUrl.includes("/assets/ai_news_maker_logo.png") ? profile.channelLogoUrl : existing.channelLogoUrl || profile.channelLogoUrl || "",
-      channelLogoPngUrl: profile.channelLogoPngUrl && !profile.channelLogoPngUrl.includes("/assets/ai_news_maker_logo.png") ? profile.channelLogoPngUrl : existing.channelLogoPngUrl || existing.channelLogoUrl || profile.channelLogoPngUrl,
+      channelLogoUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoUrl || existing.channelLogoUrl || "",
+      channelLogoPngUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || "",
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || "",
@@ -19333,7 +20487,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       whatsappMarketingConsentSource: profile.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: profile.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: profile.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      activeLogoUrl: existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
+      activeLogoUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
       logoApprovalStatus: existing.logoApprovalStatus || "none",
       approvedLogoRequestId: existing.approvedLogoRequestId,
       logoApprovedAt: existing.logoApprovedAt,
@@ -19346,7 +20500,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       updatedAt: Date.now()
     };
     if (!isAdmin && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
-      if (!profile.channelLogoUrl || profile.channelLogoUrl.includes("ai_news_maker_logo.png") || profile.channelLogoUrl.trim() === "") {
+      if (!profile.channelLogoUrl || profile.channelLogoUrl.trim() === "") {
         updated.channelLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
         updated.channelLogoPngUrl = existing.channelLogoPngUrl || existing.activeLogoUrl || existing.channelLogoUrl;
         updated.activeLogoUrl = existing.activeLogoUrl || existing.channelLogoUrl;
@@ -19387,6 +20541,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       } catch (brErr) {
         console.warn("Error syncing admin branding:", brErr);
       }
+    } else if (isSubAdminEmail) {
+      allProfiles["admin.ainewsmaker@gmail.com"] = updated;
+      allProfiles["user-1791697518060"] = { ...updated, userId: "user-1791697518060", uid: "user-1791697518060" };
     } else if (updated.email) {
       const em = updated.email.toLowerCase().trim();
       for (const [k, p] of Object.entries(allProfiles)) {
@@ -19411,6 +20568,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
           username: updated.username || users[uIdx].username,
           mobile: updated.mobileNumber || users[uIdx].mobile,
           mobileNumber: updated.mobileNumber || users[uIdx].mobileNumber,
+          district: updated.district || updated.location || users[uIdx].district || "",
+          location: updated.location || updated.district || users[uIdx].location || "",
           websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
           socialIcons: updated.socialIcons || users[uIdx].socialIcons,
           socialLinks: updated.socialLinks || users[uIdx].socialLinks,
@@ -19742,29 +20901,86 @@ var FORBIDDEN_DYNAMIC_FRAME_IDS = /* @__PURE__ */ new Set([
   "df_story_9_16_breaking"
 ]);
 var DELETED_FRAMES_TOMBSTONE_FILE = import_path2.default.join(process.cwd(), "deleted_frames_tombstone.json");
+var memoryFrameTombstones = null;
 function loadDeletedFramesTombstones() {
+  const set = /* @__PURE__ */ new Set();
   try {
     if (import_fs2.default.existsSync(DELETED_FRAMES_TOMBSTONE_FILE)) {
       const raw = import_fs2.default.readFileSync(DELETED_FRAMES_TOMBSTONE_FILE, "utf-8");
       const list = JSON.parse(raw);
-      if (Array.isArray(list)) return new Set(list);
+      if (Array.isArray(list)) list.forEach((t) => set.add(typeof t === "string" ? t : t.id || t.name));
     }
   } catch {
   }
-  return /* @__PURE__ */ new Set();
-}
-function recordDeletedFrameTombstone(id) {
-  try {
-    const tombstones = loadDeletedFramesTombstones();
-    tombstones.add(id);
-    import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
-    if (centralDb && typeof centralDb.writeDoc === "function") {
-      centralDb.writeDoc("system_config", "deleted_frames_tombstones", { tombstones: Array.from(tombstones), updatedAt: Date.now() }).catch(() => {
-      });
-    }
-  } catch (err) {
-    console.warn("Failed to write deleted_frames_tombstone.json:", err);
+  if (memoryFrameTombstones && memoryFrameTombstones.size > 0) {
+    memoryFrameTombstones.forEach((id) => set.add(id));
   }
+  set.add("11111");
+  set.add("2222");
+  set.add("df_sample_11111");
+  set.add("df_sample_2222");
+  set.add("df_test_11111");
+  set.add("df_test_2222");
+  return set;
+}
+async function getDurableFrameTombstones() {
+  const set = loadDeletedFramesTombstones();
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const cloudDoc = await centralDb.readDoc("system_config", "deleted_frames_tombstones");
+      const docData = cloudDoc?.data || cloudDoc;
+      if (docData && Array.isArray(docData.tombstones)) {
+        docData.tombstones.forEach((id) => set.add(typeof id === "string" ? id : id.id || id.name));
+      }
+    } catch (e) {
+      console.warn("[getDurableFrameTombstones] Firestore read warning:", e.message);
+    }
+  }
+  set.add("11111");
+  set.add("2222");
+  set.add("df_sample_11111");
+  set.add("df_sample_2222");
+  set.add("df_test_11111");
+  set.add("df_test_2222");
+  memoryFrameTombstones = set;
+  try {
+    import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
+  } catch {
+  }
+  return set;
+}
+async function recordDeletedFrameTombstone(id) {
+  const tombstones = await getDurableFrameTombstones();
+  tombstones.add(id);
+  tombstones.add("11111");
+  tombstones.add("2222");
+  tombstones.add("df_sample_11111");
+  tombstones.add("df_sample_2222");
+  tombstones.add("df_test_11111");
+  tombstones.add("df_test_2222");
+  memoryFrameTombstones = tombstones;
+  try {
+    import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+  } catch (fsErr) {
+    console.warn("Failed to write deleted_frames_tombstone.json:", fsErr);
+  }
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    try {
+      const res = await centralDb.writeDoc("system_config", "deleted_frames_tombstones", {
+        tombstones: Array.from(tombstones),
+        updatedAt: Date.now()
+      });
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore frame tombstone write failed: ${res?.error || res?.statusCode || "Unknown error"}`);
+      }
+    } catch (writeErr) {
+      console.error("[recordDeletedFrameTombstone] Durable Firestore write error:", writeErr.message);
+      if (centralDb.useFirestore) {
+        throw writeErr;
+      }
+    }
+  }
+  return true;
 }
 function loadDynamicFramesDatabase() {
   const tombstones = loadDeletedFramesTombstones();
@@ -19773,23 +20989,58 @@ function loadDynamicFramesDatabase() {
       const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id));
+        return parsed.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && !(f.name === "11111" || f.name === "2222" || f.id === "df_sample_11111" || f.id === "df_sample_2222" || f.id === "11111" || f.id === "2222"));
       }
     }
   } catch {
   }
   return [];
 }
-function saveDynamicFramesDatabase(frames) {
+async function loadDynamicFramesDatabaseAsync() {
+  const tombstones = await getDurableFrameTombstones();
+  let frames = [];
+  if (centralDb && typeof centralDb.readDoc === "function") {
+    try {
+      const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
+      const docData = cloudDoc?.data || cloudDoc;
+      if (docData && Array.isArray(docData.frames) && docData.frames.length > 0) {
+        frames = docData.frames;
+      }
+    } catch {
+    }
+  }
+  if (frames.length === 0) {
+    try {
+      if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+        const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) frames = parsed;
+      }
+    } catch {
+    }
+  }
+  return frames.filter(
+    (f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && !(f.name === "11111" || f.name === "2222" || f.id === "df_sample_11111" || f.id === "df_sample_2222" || f.id === "11111" || f.id === "2222")
+  );
+}
+async function saveDynamicFramesDatabaseAsync(frames) {
   try {
     import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
   } catch (err) {
     console.warn("Failed to write dynamic_frames_db.json:", err);
   }
   if (centralDb && typeof centralDb.writeDoc === "function") {
-    centralDb.writeDoc("system_config", "dynamic_frames", { frames, updatedAt: Date.now() }).catch(() => {
-    });
+    try {
+      const res = await centralDb.writeDoc("system_config", "dynamic_frames", { frames, updatedAt: Date.now() });
+      if (centralDb.useFirestore && (!res || res.success === false)) {
+        throw new Error(`Durable Firestore dynamic frames write failed: ${res?.error || res?.statusCode || "Unknown error"}`);
+      }
+    } catch (e) {
+      console.error("[saveDynamicFramesDatabaseAsync] Durable write error:", e.message);
+      if (centralDb.useFirestore) throw e;
+    }
   }
+  return true;
 }
 function deepMergeFrameConfig(existing, payload) {
   if (!existing) return payload || {};
@@ -19968,13 +21219,14 @@ app.get("/api/dynamic-frames", async (req, res) => {
   try {
     const { aspectRatio, category } = req.query;
     const isMaster = isAuthorizedMasterAdmin(req);
-    let frames = loadDynamicFramesDatabase();
+    const tombstones = await getDurableFrameTombstones();
+    let frames = await loadDynamicFramesDatabaseAsync();
     if (frames.length === 0 && centralDb && typeof centralDb.readDoc === "function") {
       try {
         const cloudDoc = await centralDb.readDoc("system_config", "dynamic_frames");
         if (cloudDoc && Array.isArray(cloudDoc.frames) && cloudDoc.frames.length > 0) {
-          frames = cloudDoc.frames.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && f.id !== "df_reg_4_5_clean" && !(f.id !== "graphic_001" && (f.name?.includes("\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928") || f.name?.toLowerCase()?.includes("regular clean"))));
-          saveDynamicFramesDatabase(frames);
+          frames = cloudDoc.frames.filter((f) => !FORBIDDEN_DYNAMIC_FRAME_IDS.has(f.id) && !tombstones.has(f.id) && !tombstones.has(f.name) && f.id !== "df_reg_4_5_clean" && !(f.id !== "graphic_001" && (f.name?.includes("\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928") || f.name?.toLowerCase()?.includes("regular clean"))) && !(f.name === "11111" || f.name === "2222" || f.id.includes("11111") || f.id.includes("2222")));
+          await saveDynamicFramesDatabaseAsync(frames);
         }
       } catch {
       }
@@ -20008,7 +21260,11 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const isMaster = isAuthorizedMasterAdmin(req);
-    let frames = loadDynamicFramesDatabase();
+    const tombstones = await getDurableFrameTombstones();
+    if (tombstones.has(id)) {
+      return res.status(404).json({ error: "Frame not found." });
+    }
+    let frames = await loadDynamicFramesDatabaseAsync();
     let frame = frames.find((f) => f.id === id);
     if (!frame && centralDb && typeof centralDb.readDoc === "function") {
       try {
@@ -20031,7 +21287,7 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
+app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const payload = req.body || {};
     if (!payload.name || !payload.aspectRatio) {
@@ -20103,19 +21359,19 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, (req, res) => {
       calloutAssetId: payload.calloutAssetId,
       poweredByConfig: payload.poweredByConfig
     };
-    const all = loadDynamicFramesDatabase();
+    const all = await loadDynamicFramesDatabaseAsync();
     const updated = [newFrame, ...all.filter((f) => f.id !== newFrame.id)];
-    saveDynamicFramesDatabase(updated);
+    await saveDynamicFramesDatabaseAsync(updated);
     return res.json({ success: true, frame: newFrame });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const payload = req.body || {};
-    const all = loadDynamicFramesDatabase();
+    const all = await loadDynamicFramesDatabaseAsync();
     const existingIdx = all.findIndex((f) => f.id === id);
     if (existingIdx === -1) {
       return res.status(404).json({ error: "Frame not found." });
@@ -20129,22 +21385,30 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
     }
     const updatedFrame = deepMergeFrameConfig(existing, payload);
     all[existingIdx] = updatedFrame;
-    saveDynamicFramesDatabase(all);
+    await saveDynamicFramesDatabaseAsync(all);
     return res.json({ success: true, frame: updatedFrame });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) => {
+app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     if (id === "graphic_001") {
       return res.status(400).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u092B\u094D\u0930\u0947\u092E 'Regular Clean News Frame' \u0915\u094B \u0939\u091F\u093E\u092F\u093E \u0928\u0939\u0940\u0902 \u091C\u093E \u0938\u0915\u0924\u093E\u0964" });
     }
-    recordDeletedFrameTombstone(id);
-    let all = loadDynamicFramesDatabase();
-    all = all.filter((f) => f.id !== id);
-    saveDynamicFramesDatabase(all);
+    let all = await loadDynamicFramesDatabaseAsync();
+    const target = all.find((f) => f.id === id || f.name === id);
+    if (target) {
+      if (target.id) await recordDeletedFrameTombstone(target.id);
+      if (target.name === "11111" || target.name === "2222" || target.id === "11111" || target.id === "2222") {
+        await recordDeletedFrameTombstone(target.name);
+      }
+    } else {
+      await recordDeletedFrameTombstone(id);
+    }
+    all = all.filter((f) => f.id !== id && f.name !== id && !(id === "11111" && f.id.includes("11111")) && !(id === "2222" && f.id.includes("2222")));
+    await saveDynamicFramesDatabaseAsync(all);
     const newsTemplateFile = import_path2.default.join(process.cwd(), "news_template_configs.json");
     if (import_fs2.default.existsSync(newsTemplateFile)) {
       try {
@@ -20156,7 +21420,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, (req, res) =
       } catch {
       }
     }
-    return res.json({ success: true, message: "Frame deleted permanently with tombstone." });
+    return res.json({ success: true, message: "Frame deleted permanently with durable tombstone." });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -20640,8 +21904,9 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
     const { identifier, password, googleUid, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
     if (googleUid) {
-      const isSuper = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, "") === "admin.ainewsmaker@gmail.com";
-      const isAdmin = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, "") === "breakingnewswala.com@gmail.com";
+      const isSuper = cleanId === "breakingnewswala.com@gmail.com" || cleanId.replace(/\s+/g, "") === "breakingnewswala.com@gmail.com";
+      const isSubAdmin = cleanId === "admin.ainewsmaker@gmail.com" || cleanId.replace(/\s+/g, "") === "admin.ainewsmaker@gmail.com";
+      const isAdmin = isSuper || isSubAdmin;
       const release = await userDbLock.acquire();
       let savedUser;
       try {
@@ -20664,13 +21929,13 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         const existingPhoneDigits = String(existing?.phoneNumber || existing?.mobile || existing?.whatsappNumber || "").replace(/\D/g, "").slice(-10);
         const isWhatsappVerified = Boolean(existing?.whatsappVerified === true || existing?.isMobileVerified === true || existing?.phoneVerified === true);
         const isProfileComplete = Boolean(
-          !isDeletedTombstoned && (isSuper || isAdmin || existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && hasRealLogo && existingPhoneDigits.length === 10 && isWhatsappVerified)
+          !isDeletedTombstoned && (isSuper || isSubAdmin || existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && hasRealLogo && existingPhoneDigits.length === 10 && isWhatsappVerified)
         );
         let safeUsername;
         if (isSuper) {
-          safeUsername = "AI News Maker";
-        } else if (isAdmin) {
           safeUsername = "breakingnewswala";
+        } else if (isSubAdmin) {
+          safeUsername = "AI News Maker";
         } else if (isProfileComplete && existing?.username) {
           safeUsername = existing.username;
         } else if (profileData?.username && !profileData.username.includes("@")) {
@@ -20683,25 +21948,25 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           uid: existing?.uid || googleUid,
           email: cleanId,
           username: safeUsername,
-          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : isAdmin ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : "\u092F\u0942\u091C\u093C\u0930"),
-          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u0938\u0941\u092A\u0930 \u090F\u0921\u092E\u093F\u0928 (Super Admin)" : isAdmin ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : "\u092F\u0942\u091C\u093C\u0930"),
-          role: isSuper ? "superadmin" : isAdmin ? "superadmin" : existing?.role || "user",
-          tier: isSuper ? "ultra" : isAdmin ? "ultra" : existing?.tier || "basic",
-          planName: isSuper ? "VIP DESK" : isAdmin ? "VIP DESK" : existing?.planName || "BASIC",
-          channelName: isSuper ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isProfileComplete ? existing?.channelNameHi || existing?.channelName || "" : profileData?.channelName || "",
-          channelNameHi: isSuper ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isAdmin ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isProfileComplete ? existing?.channelNameHi || "" : profileData?.channelNameHi || "",
-          channelNameEn: isSuper ? "AI News Maker" : isAdmin ? "Breaking News Wala" : isProfileComplete ? existing?.channelNameEn || "" : profileData?.channelNameEn || "",
-          channelLogoUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
-          channelLogoPngUrl: isSuper ? "/assets/ai_news_maker_logo.png" : isAdmin ? "/assets/breaking_news_wala_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
+          fullName: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : isSubAdmin ? "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)" : "\u092F\u0942\u091C\u093C\u0930"),
+          name: profileData?.name || profileData?.fullName || existing?.fullName || (isSuper ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : isSubAdmin ? "\u091C\u094B\u0928\u0932 \u090F\u0921\u092E\u093F\u0928 (Admin)" : "\u092F\u0942\u091C\u093C\u0930"),
+          role: isSuper ? "superadmin" : isSubAdmin ? "admin" : existing?.role || "user",
+          tier: isSuper ? "ultra" : isSubAdmin ? "ultra" : existing?.tier || "basic",
+          planName: isSuper ? "VIP DESK" : isSubAdmin ? "VIP DESK" : existing?.planName || "BASIC",
+          channelName: isSuper ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isSubAdmin ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isProfileComplete ? existing?.channelNameHi || existing?.channelName || "" : profileData?.channelName || "",
+          channelNameHi: isSuper ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : isSubAdmin ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isProfileComplete ? existing?.channelNameHi || "" : profileData?.channelNameHi || "",
+          channelNameEn: isSuper ? "BREAKING NEWS WALA" : isSubAdmin ? "AI News Maker" : isProfileComplete ? existing?.channelNameEn || "" : profileData?.channelNameEn || "",
+          channelLogoUrl: isSuper ? "/assets/breaking_news_wala_logo.png" : isSubAdmin ? "/assets/ai_news_maker_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
+          channelLogoPngUrl: isSuper ? "/assets/breaking_news_wala_logo.png" : isSubAdmin ? "/assets/ai_news_maker_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
           channelLogoGifUrl: isProfileComplete ? existing?.channelLogoGifUrl || "" : "",
           channelLogoType: existing?.channelLogoType || "png",
-          mobile: isSuper || isAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
-          mobileNumber: isSuper || isAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
-          district: isSuper ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : isAdmin ? "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" : existing?.district || "",
-          websiteUrl: isSuper ? "ainewsmaker.online" : isAdmin ? "breakingnewswala.com" : isProfileComplete ? existing?.websiteUrl || "" : profileData?.websiteUrl || "",
-          isProfileLocked: isSuper || isAdmin ? true : Boolean(isProfileComplete && existing?.isProfileLocked),
-          isProfileComplete: isSuper || isAdmin ? true : isProfileComplete,
-          profileStatus: isSuper || isAdmin ? "active" : isProfileComplete ? "active" : "incomplete"
+          mobile: isSuper || isSubAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
+          mobileNumber: isSuper || isSubAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
+          district: isSuper ? "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" : isSubAdmin ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : existing?.district || "",
+          websiteUrl: isSuper ? "breakingnewswala.com" : isSubAdmin ? "ainewsmaker.online" : isProfileComplete ? existing?.websiteUrl || "" : profileData?.websiteUrl || "",
+          isProfileLocked: isSuper || isSubAdmin ? false : Boolean(isProfileComplete && existing?.isProfileLocked),
+          isProfileComplete: isSuper || isSubAdmin ? true : isProfileComplete,
+          profileStatus: isSuper || isSubAdmin ? "active" : isProfileComplete ? "active" : "incomplete"
         };
         savedUser = registerOrUpdateUserAuthoritative(userPayload);
       } finally {

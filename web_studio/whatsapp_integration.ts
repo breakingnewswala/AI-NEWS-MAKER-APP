@@ -164,12 +164,107 @@ export const flowCache = new Map<string, WhatsAppFlow>();
 export const faqCache = new Map<string, WhatsAppFAQ>();
 export const flowSessionCache = new Map<string, FlowSession>();
 export const quickReplyCache = new Map<string, QuickReply>();
+export const templateCache = new Map<string, any>();
+export const userNewsSessionCache = new Map<string, any>();
 
 const WHATSAPP_FLOWS_FILE = path.join(process.cwd(), "whatsapp_flows_db.json");
 const WHATSAPP_FAQS_FILE = path.join(process.cwd(), "whatsapp_faqs_db.json");
 const WHATSAPP_FLOW_SESSIONS_FILE = path.join(process.cwd(), "whatsapp_flow_sessions_db.json");
 const WHATSAPP_QUICK_REPLIES_FILE = path.join(process.cwd(), "whatsapp_quick_replies_db.json");
 const WHATSAPP_SETTINGS_FILE = path.join(process.cwd(), "whatsapp_automation_settings.json");
+const WHATSAPP_TEMPLATES_FILE = path.join(process.cwd(), "whatsapp_templates_db.json");
+const WHATSAPP_NEWS_SESSIONS_FILE = path.join(process.cwd(), "whatsapp_news_sessions_db.json");
+
+export const DEFAULT_SEEDED_TEMPLATES: Record<string, any> = {
+  news_broadcast_v1: {
+    id: "tpl_news_broadcast_v1",
+    name: "news_broadcast_v1",
+    category: "MARKETING",
+    language: "hi",
+    status: "MOCK_APPROVED",
+    components: [
+      {
+        type: "HEADER",
+        format: "IMAGE",
+        example: { header_handle: ["https://ainewsmaker.online/og-image.jpg"] },
+      },
+      {
+        type: "BODY",
+        text: "🚨 *{{1}}*\n\n{{2}}\n\n✨ अपनी पसंदीदा न्यूज़ का ग्राफिक तुरंत तैयार करें।",
+        example: { body_text: [["मध्य प्रदेश में भारी बारिश का अलर्ट", "मौसम विभाग ने 15 जिलों में भारी बारिश की चेतावनी जारी की है।"]] },
+      },
+      {
+        type: "FOOTER",
+        text: "AI News Maker - आधिकारिक समाचार सेवा",
+      },
+      {
+        type: "BUTTONS",
+        buttons: [
+          {
+            type: "URL",
+            text: "इस खबर से ग्राफिक बनाएं",
+            url: "https://ainewsmaker.online/studio{{1}}",
+            example: ["?newsId=sample_123"],
+          },
+        ],
+      },
+    ],
+    last_updated_time: 1731300000000,
+    createdAt: 1731300000000,
+  },
+  profile_otp: {
+    id: "tpl_profile_otp",
+    name: "profile_otp",
+    category: "AUTHENTICATION",
+    language: "en_US",
+    status: "APPROVED",
+    components: [
+      {
+        type: "BODY",
+        text: "🔐 *AI NEWS MAKER - WhatsApp सत्यापन OTP*\n\nआपका 6-अंकों का वेरिफिकेशन कोड है: *{{1}}*\n\nयह कोड {{2}} मिनट के लिए वैध है। सुरक्षा कारणों से यह OTP किसी के साथ साझा न करें।\n\n— AI News Maker (ainewsmaker.online)",
+        example: { body_text: [["482910", "5"]] },
+      },
+    ],
+    last_updated_time: 1731300000000,
+    createdAt: 1731300000000,
+  },
+  breaking_news_alert: {
+    id: "tpl_breaking_news_alert",
+    name: "breaking_news_alert",
+    category: "MARKETING",
+    language: "hi",
+    status: "APPROVED",
+    components: [
+      {
+        type: "HEADER",
+        format: "IMAGE",
+        example: { header_handle: ["https://ainewsmaker.online/og-image.jpg"] },
+      },
+      {
+        type: "BODY",
+        text: "🔴 *ब्रेकिंग न्यूज़*\n\n🚨 *{{1}}*\n\n{{2}}\n\n✨ 1-क्लिक में सोशल मीडिया ग्राफिक बनाएं।",
+        example: { body_text: [["विशेष समाचार बुलेटिन", "लाइव अपडेट प्राप्त करें।"]] },
+      },
+      {
+        type: "FOOTER",
+        text: "AI News Maker (ब्रेकिंग न्यूज़ वाला)",
+      },
+      {
+        type: "BUTTONS",
+        buttons: [
+          {
+            type: "URL",
+            text: "इस खबर से ग्राफिक बनाएं",
+            url: "https://ainewsmaker.online/studio{{1}}",
+            example: ["?newsId=breaking_sample"],
+          },
+        ],
+      },
+    ],
+    last_updated_time: 1731300000000,
+    createdAt: 1731300000000,
+  },
+};
 
 export const DEFAULT_SEEDED_FLOWS: WhatsAppFlow[] = [
   {
@@ -700,6 +795,68 @@ export function saveAutomationSettings(settings: WhatsAppAutomationSettings, cen
     }
     return true;
   } catch {
+    return false;
+  }
+}
+
+export function loadTemplatesDatabase(centralDb?: any): Record<string, any> {
+  const result: Record<string, any> = { ...DEFAULT_SEEDED_TEMPLATES };
+  try {
+    if (fs.existsSync(WHATSAPP_TEMPLATES_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_TEMPLATES_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        Object.assign(result, parsed);
+      }
+    }
+  } catch (err: any) {
+    console.error("[WhatsApp:Templates] Error reading templates file:", err?.message || err);
+  }
+  return result;
+}
+
+export function saveTemplatesDatabase(templates: Record<string, any>, centralDb?: any): boolean {
+  try {
+    fs.writeFileSync(WHATSAPP_TEMPLATES_FILE, JSON.stringify(templates, null, 2), "utf-8");
+    if (centralDb?.useFirestore && typeof centralDb.writeDoc === "function") {
+      for (const [id, t] of Object.entries(templates)) {
+        centralDb.writeDoc("whatsapp_templates", id, t).catch(() => {});
+      }
+    }
+    return true;
+  } catch (err: any) {
+    console.error("[WhatsApp:Templates] Error saving templates file:", err?.message || err);
+    return false;
+  }
+}
+
+export function loadNewsSessionsDatabase(centralDb?: any): Record<string, any> {
+  const result: Record<string, any> = {};
+  try {
+    if (fs.existsSync(WHATSAPP_NEWS_SESSIONS_FILE)) {
+      const raw = fs.readFileSync(WHATSAPP_NEWS_SESSIONS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        Object.assign(result, parsed);
+      }
+    }
+  } catch (err: any) {
+    console.error("[WhatsApp:NewsSessions] Error reading news sessions file:", err?.message || err);
+  }
+  return result;
+}
+
+export function saveNewsSessionsDatabase(sessions: Record<string, any>, centralDb?: any): boolean {
+  try {
+    fs.writeFileSync(WHATSAPP_NEWS_SESSIONS_FILE, JSON.stringify(sessions, null, 2), "utf-8");
+    if (centralDb?.useFirestore && typeof centralDb.writeDoc === "function") {
+      for (const [waId, s] of Object.entries(sessions)) {
+        centralDb.writeDoc("whatsapp_news_sessions", waId, s).catch(() => {});
+      }
+    }
+    return true;
+  } catch (err: any) {
+    console.error("[WhatsApp:NewsSessions] Error saving news sessions file:", err?.message || err);
     return false;
   }
 }
@@ -1843,7 +2000,18 @@ export const releaseVerifiedPhoneNumber = async (cleanPhone: string, countryCode
 export function registerWhatsAppIntegration(
   app: any,
   centralDb: any,
-  options?: { requireAdminMiddleware?: any; requireAuthMiddleware?: any; requireMasterAdminMiddleware?: any }
+  options?: {
+    requireAdminMiddleware?: any;
+    requireAuthMiddleware?: any;
+    requireMasterAdminMiddleware?: any;
+    getNewsDatabase?: () => any[];
+    getApprovedEditorialDatabase?: () => any;
+    getUsersDatabase?: () => any[];
+    getProfilesDatabase?: () => any;
+    getDynamicFramesDatabase?: () => any[];
+    getAssetLibrariesDatabase?: () => any[];
+    getCloudStorage?: () => any;
+  }
 ) {
   const webhookPath = "/api/whatsapp/webhook";
 
@@ -1867,6 +2035,105 @@ export function registerWhatsAppIntegration(
     }
     next();
   });
+
+  const requireMasterAdmin = options?.requireMasterAdminMiddleware || ((req: any, res: any, next: any) => {
+    const authUser = req.user;
+    if (!authUser) {
+      return res.status(401).json({
+        success: false,
+        error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): कृपया वैध टोकन के साथ लॉगिन करें।",
+      });
+    }
+    const role = (authUser.role || "").toLowerCase();
+    const email = (authUser.email || "").toLowerCase().trim();
+    const isMaster = email === "breakingnewswala.com@gmail.com" || email === "breakingnewsvala.com@gmail.com";
+    if (role !== "superadmin" && !isMaster) {
+      return res.status(403).json({
+        success: false,
+        error: "अनधिकृत (403 Forbidden): इस कार्य के लिए मास्टर व्यवस्थापक (Master Admin) अधिकार आवश्यक हैं।",
+      });
+    }
+    next();
+  });
+
+  const getCleanDigits10 = (raw: string) => {
+    const digits = String(raw || "").replace(/\D/g, "");
+    return digits.slice(-10);
+  };
+
+  const findUserByWaId = (waId: string) => {
+    const cleanTarget = getCleanDigits10(waId);
+    if (!cleanTarget || cleanTarget.length < 10) return null;
+
+    if (centralDb?.cache?.users) {
+      for (const u of centralDb.cache.users.values()) {
+        const uPhone = getCleanDigits10(u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || u.phone);
+        if (uPhone && uPhone === cleanTarget) return u;
+      }
+    }
+
+    if (options?.getUsersDatabase) {
+      try {
+        const list = options.getUsersDatabase();
+        if (Array.isArray(list)) {
+          for (const u of list) {
+            const uPhone = getCleanDigits10(u.whatsappNumber || u.primaryPhone || u.mobileNumber || u.mobile || u.phone);
+            if (uPhone && uPhone === cleanTarget) return u;
+          }
+        }
+      } catch {}
+    }
+
+    return null;
+  };
+
+  const isUserVipDesk = (user: any, waId?: string) => {
+    let resolvedUser = user;
+    if (!resolvedUser && waId) {
+      resolvedUser = findUserByWaId(waId);
+    }
+    if (!resolvedUser) return false;
+
+    const role = (resolvedUser.role || "").toLowerCase().trim();
+    const email = (resolvedUser.email || "").toLowerCase().trim();
+    const tier = (resolvedUser.tier || "").toLowerCase().trim();
+    const planName = (resolvedUser.planName || "").toUpperCase().trim();
+    const isVipDeskRole = role === "vip_desk" || resolvedUser.isVipDesk === true || resolvedUser.vipDeskAccess === true;
+
+    // Master admins always have system management access
+    if (
+      role === "admin" ||
+      role === "superadmin" ||
+      email === "breakingnewswala.com@gmail.com" ||
+      email === "breakingnewsvala.com@gmail.com" ||
+      email === "admin.ainewsmaker@gmail.com"
+    ) {
+      return true;
+    }
+
+    // Active VIP Desk role or exclusive VIP plan tier (Pro-only accounts without VIP role are excluded)
+    if (isVipDeskRole || tier === "ultra" || tier === "vip" || planName.includes("VIP")) {
+      return true;
+    }
+
+    if (options?.getProfilesDatabase) {
+      try {
+        const profiles = options.getProfilesDatabase();
+        const prof = profiles[email] || profiles[resolvedUser.id] || profiles[resolvedUser.userId];
+        if (prof) {
+          const pRole = (prof.role || "").toLowerCase().trim();
+          const pTier = (prof.tier || "").toLowerCase().trim();
+          const pPlan = (prof.planName || "").toUpperCase().trim();
+          const pIsVip = pRole === "vip_desk" || prof.isVipDesk === true || prof.vipDeskAccess === true;
+          if (pIsVip || pTier === "ultra" || pTier === "vip" || pPlan.includes("VIP")) {
+            return true;
+          }
+        }
+      } catch {}
+    }
+
+    return false;
+  };
 
   const safeEqual = (a: string, b: string) => {
     const left = Buffer.from(String(a || ""));
@@ -1969,7 +2236,7 @@ export function registerWhatsAppIntegration(
 
     if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
       console.log(`[WhatsApp:Outbound:TestMode] Mock send to ${maskedTo}`);
-      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }] };
     }
     console.log(`[WhatsApp:Outbound] WhatsApp outbound request started to ${maskedTo} via Graph API ${version}`);
     let response: any;
@@ -2007,6 +2274,41 @@ export function registerWhatsAppIntegration(
     return result;
   };
 
+  const uploadWhatsAppMedia = async (fileBuffer: Buffer, mimeType: string = "image/jpeg", filename: string = "graphic.jpg") => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+
+    if (!token) throw new Error("WHATSAPP_ACCESS_TOKEN is not configured");
+    if (!phoneNumberId) throw new Error("WHATSAPP_PHONE_NUMBER_ID is not configured");
+
+    if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Outbound:TestMode] Mock media upload (${mimeType}, ${fileBuffer.length} bytes)`);
+      return { id: `media_test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` };
+    }
+
+    const formData = new FormData();
+    formData.append("messaging_product", "whatsapp");
+    formData.append("type", mimeType);
+    const blob = new Blob([fileBuffer], { type: mimeType });
+    formData.append("file", blob, filename);
+
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/media`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !(result as any)?.id) {
+      const errMsg = (result as any)?.error?.message || `WhatsApp Media upload failed (HTTP ${response.status})`;
+      throw new Error(`WHATSAPP_MEDIA_UPLOAD_ERROR: ${errMsg}`);
+    }
+    return result;
+  };
+
   const sendWhatsAppImage = async (to: string, imageUrl: string, caption?: string) => {
     const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
     const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
@@ -2018,18 +2320,19 @@ export function registerWhatsAppIntegration(
 
     if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
       console.log(`[WhatsApp:Outbound:TestMode] Mock image send to ${maskedTo}`);
-      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}` }] };
+      return { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }] };
     }
+
+    const isMediaId = !imageUrl.startsWith("http://") && !imageUrl.startsWith("https://");
+    const imageObj: any = isMediaId ? { id: imageUrl } : { link: imageUrl };
+    if (caption) imageObj.caption = String(caption).slice(0, 1024);
 
     const payload: any = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to,
       type: "image",
-      image: {
-        link: imageUrl,
-        ...(caption ? { caption: String(caption).slice(0, 1024) } : {}),
-      },
+      image: imageObj,
     };
 
     const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
@@ -2106,6 +2409,15 @@ export function registerWhatsAppIntegration(
           }
         };
 
+        if (process.env.NODE_ENV === "test" || token.startsWith("test_")) {
+          console.log(`[WhatsApp:NewsBroadcast:TestMode] Mock template message dispatched via interactive URL button to ${maskedTo}`);
+          return {
+            method: "meta_template_url_button",
+            templateName: newsTemplate,
+            result: { messaging_product: "whatsapp", contacts: [{ input: to, wa_id: to }], messages: [{ id: `wamid.tpl_${Date.now()}` }] },
+          };
+        }
+
         const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
           method: "POST",
           headers: {
@@ -2125,26 +2437,26 @@ export function registerWhatsAppIntegration(
       }
     }
 
-    // 2. Free-form / Active session message fallback with structured rich caption & clickable CTA link
+    // 2. Free-form / Active session message fallback with structured rich caption & clickable ordinary text link
     let caption = "";
     if (isBreaking) caption += `🔴 *ब्रेकिंग न्यूज़ — तुरंत ग्राफिक बनाएं*\n\n`;
     if (headline) caption += `🚨 *${headline.trim()}*\n\n`;
     if (summary) caption += `${summary.trim()}\n\n`;
     if (customMessage) caption += `${customMessage.trim()}\n\n`;
-    caption += `✨ *इस खबर से ग्राफिक बनाएं:*\n${resolvedUrl}\n\n`;
+    caption += `✨ *इस खबर से ग्राफिक बनाएं (वेबसाइट लिंक):*\n${resolvedUrl}\n\n`;
     caption += `_AI News Maker (ब्रेकिंग न्यूज़ वाला) - आधिकारिक समाचार सेवा_\n_नोटिफिकेशन रोकने के लिए STOP लिखें_`;
 
     if (imageUrl && (imageUrl.startsWith("http://") || imageUrl.startsWith("https://"))) {
       try {
         const imgRes = await sendWhatsAppImage(to, imageUrl, caption.slice(0, 1024));
-        return { method: "media_caption_link", result: imgRes };
+        return { method: "fallback_media_text_url", result: imgRes };
       } catch {
         const txtRes = await sendWhatsAppText(to, caption);
-        return { method: "text_caption_link", result: txtRes };
+        return { method: "fallback_text_only_url", result: txtRes };
       }
     }
     const txtRes = await sendWhatsAppText(to, caption);
-    return { method: "text_caption_link", result: txtRes };
+    return { method: "fallback_text_only_url", result: txtRes };
   };
 
   const sendWhatsAppOtpMessage = async (to: string, otpCode: string, validityMinutes: number = 5) => {
@@ -2631,6 +2943,388 @@ export function registerWhatsAppIntegration(
     if (activeHandlingMode === "waiting_human") {
       console.log(`[WhatsApp:Handoff] AI reply suppressed: conversation ${conversationId} is in 'waiting_human' mode awaiting operator pickup. Inbound message recorded for live inbox.`);
       return;
+    }
+
+    // =========================================================================
+    // VIP DESK WHATSAPP NEWSROOM ASSISTANT & EXTENSIBLE COMMANDS
+    // =========================================================================
+    let userNewsSession = userNewsSessionCache.get(waId);
+    if (!userNewsSession) {
+      const allNewsSessions = loadNewsSessionsDatabase(centralDb);
+      if (allNewsSessions[waId]) {
+        userNewsSession = allNewsSessions[waId];
+        userNewsSessionCache.set(waId, userNewsSession);
+      }
+    }
+
+    const isNewsCommand = /^\s*(?:टॉप\s*(?:5|10)?\s*खबरें?|आज\s*की\s*खबरें?|मध्य\s*प्रदेश\s*की\s*खबरें?|ताजा\s*खबरें?|top\s*(?:5|10)?\s*news|today\s*news|news|खबरें?)\s*$/i.test(textBody);
+    const numericChoiceMatch = textBody.match(/^\s*(?:खबर\s*नंबर\s*|number\s*|#\s*)?([1-9]|10)\s*$/i);
+    const hasActiveNewsSession = Boolean(userNewsSession && Array.isArray(userNewsSession.items) && userNewsSession.items.length > 0);
+    const isGraphicCommand = /^\s*(?:इस\s*खबर\s*का\s*)?(?:ग्राफिक\s*बनाओ|graphic|फोटो\s*बनाओ|कार्ड\s*बनाओ)\s*$/i.test(textBody);
+    const isHeadlineCommand = /^\s*(?:इस\s*खबर\s*की\s*)?(?:हेडलाइन\s*बनाओ|शीर्षक\s*बनाओ|headline)\s*$/i.test(textBody);
+    const isCaptionCommand = /^\s*(?:इस\s*खबर\s*का\s*)?(?:कैप्शन\s*बनाओ|caption)\s*$/i.test(textBody);
+    const isScriptCommand = /^\s*(?:इस\s*खबर\s*की\s*)?(?:वीडियो\s*स्क्रिप्ट\s*बनाओ|स्क्रिप्ट\s*बनाओ|video\s*script|script)\s*$/i.test(textBody);
+
+    const isVipCommandDetected =
+      isNewsCommand ||
+      isGraphicCommand ||
+      isHeadlineCommand ||
+      isCaptionCommand ||
+      isScriptCommand ||
+      (hasActiveNewsSession && Boolean(numericChoiceMatch));
+
+    if (isVipCommandDetected) {
+      console.log(`[WhatsApp:VIPDesk] Command detected from ${maskedWa}: "${textBody}"`);
+      const senderUser = findUserByWaId(waId);
+      const isVip = isUserVipDesk(senderUser, waId);
+
+      if (!isVip) {
+        console.log(`[WhatsApp:VIPDesk] User ${maskedWa} is not VIP Desk. Sending polite restriction.`);
+        const nonVipNotice = `🌟 *AI News Maker — VIP Desk विशेष सेवा*\n\nनमस्ते! यह AI Newsroom Assistant सुविधा केवल हमारे *VIP Desk* सब्सक्राइबर्स के लिए उपलब्ध है।\n\nVIP Desk के साथ आपको मिलता है:\n• WhatsApp पर तुरंत ताज़ा और ब्रेकिंग खबरें\n• 1-क्लिक में न्यूज़ ग्राफिक और सोशल मीडिया पोस्ट\n• AI हेडलाइन और 30-सेकंड वीडियो स्क्रिप्ट जनरेशन\n\n👉 आज ही VIP Desk में अपग्रेड करने के लिए यहाँ क्लिक करें:\nhttps://ainewsmaker.online/plans\n\nसहायता के लिए 'एजेंट' लिखकर भेजें।`;
+
+        const sent = await sendWhatsAppText(waId, nonVipNotice);
+        const outMsgId = String(sent?.messages?.[0]?.id || `vip-restrict-${now}`);
+        const outRecord = {
+          messageId: outMsgId,
+          metaMessageId: outMsgId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: nonVipNotice,
+          timestamp: now,
+          status: "sent",
+        };
+        await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord).catch(() => {});
+        messageCache.set(sha256(outMsgId), outRecord);
+        return;
+      }
+
+      // --- VIP COMMAND 1: TOP NEWS QUERY ---
+      if (isNewsCommand) {
+        const targetCount = /10/.test(textBody) ? 10 : 5;
+        let allPosts: any[] = [];
+        if (options?.getNewsDatabase) {
+          try {
+            allPosts = options.getNewsDatabase();
+          } catch {}
+        }
+        if ((!allPosts || allPosts.length === 0) && centralDb?.cache?.news) {
+          allPosts = Array.from(centralDb.cache.news.values());
+        }
+
+        let filtered = (allPosts || []).filter((p: any) => p && p.title && !p.deleted && p.id !== "[object Object]");
+        const isMpRequested = /मध्य\s*प्रदेश|mp/i.test(textBody);
+        if (isMpRequested) {
+          const mpPosts = filtered.filter((p: any) =>
+            /मध्य\s*प्रदेश|भोपाल|इंदौर|ग्वालियर|जबलपुर|उज्जैन|रीवा|सतना|सीधी|mp/i.test(`${p.title} ${p.summary || ""} ${p.location || ""}`)
+          );
+          if (mpPosts.length > 0) filtered = mpPosts;
+        }
+
+        filtered.sort((a: any, b: any) => {
+          if (a.isBreaking && !b.isBreaking) return -1;
+          if (!a.isBreaking && b.isBreaking) return 1;
+          return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
+        });
+
+        const selectedPosts = filtered.slice(0, targetCount);
+        if (selectedPosts.length === 0) {
+          const noNewsMsg = "वर्तमान में कोई ताज़ा समाचार उपलब्ध नहीं है। कृपया थोड़ी देर बाद पुनः प्रयास करें।";
+          await sendWhatsAppText(waId, noNewsMsg);
+          return;
+        }
+
+        const items = selectedPosts.map((p: any, idx: number) => ({
+          index: idx + 1,
+          id: String(p.id),
+          title: String(p.title || "").trim(),
+          summary: String(p.summary || p.content || "").slice(0, 300).trim(),
+          imageUrl: String(p.thumbnailUrl || p.imageUrl || p.mediaUrl || "").trim(),
+          category: String(p.category || "ताज़ा खबर").trim(),
+          location: String(p.location || "").trim(),
+        }));
+
+        const sessionData = {
+          waId,
+          userEmail: senderUser?.email || "",
+          items,
+          selectedItem: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        userNewsSessionCache.set(waId, sessionData);
+        saveNewsSessionsDatabase({ ...loadNewsSessionsDatabase(centralDb), [waId]: sessionData }, centralDb);
+
+        const regionLabel = isMpRequested ? " (मध्य प्रदेश)" : "";
+        const listMessage = `📰 *आज की टॉप ${items.length} खबरें${regionLabel} — AI News Maker VIP Desk*:\n\n` +
+          items.map((it: any) => `${it.index}️⃣ *${it.title}*`).join("\n\n") +
+          `\n\n👉 किसी भी खबर का तुरंत ग्राफिक बनाने के लिए बस उसका नंबर (जैसे *1* या *2*) भेजें!`;
+
+        const sent = await sendWhatsAppText(waId, listMessage);
+        const outMsgId = String(sent?.messages?.[0]?.id || `vip-news-${now}`);
+        const outRecord = {
+          messageId: outMsgId,
+          metaMessageId: outMsgId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: listMessage,
+          timestamp: now,
+          status: "sent",
+        };
+        await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord).catch(() => {});
+        messageCache.set(sha256(outMsgId), outRecord);
+        return;
+      }
+
+      // --- VIP COMMAND 2: NUMERIC SELECTION OR GRAPHIC GENERATION ---
+      if ((hasActiveNewsSession && numericChoiceMatch) || isGraphicCommand) {
+        let chosenItem: any = null;
+        if (numericChoiceMatch) {
+          const chosenIndex = parseInt(numericChoiceMatch[1], 10);
+          chosenItem = userNewsSession?.items?.[chosenIndex - 1] || null;
+          if (!chosenItem) {
+            const rangeMsg = `माफ़ कीजिए, क्रमांक ${chosenIndex} की कोई खबर नहीं मिली। कृपया 1 से ${userNewsSession?.items?.length || 5} तक का नंबर चुनें।`;
+            await sendWhatsAppText(waId, rangeMsg);
+            return;
+          }
+        } else if (isGraphicCommand) {
+          chosenItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+          if (!chosenItem) {
+            const noSelMsg = "कृपया पहले 'टॉप 5 खबरें' लिखकर समाचार सूची प्राप्त करें और फिर उसका नंबर भेजें।";
+            await sendWhatsAppText(waId, noSelMsg);
+            return;
+          }
+        }
+
+        userNewsSession.selectedItem = chosenItem;
+        userNewsSession.updatedAt = now;
+        userNewsSessionCache.set(waId, userNewsSession);
+        saveNewsSessionsDatabase({ ...loadNewsSessionsDatabase(centralDb), [waId]: userNewsSession }, centralDb);
+
+        const ackMsg = `⏳ आपकी चुनी गई खबर *'${chosenItem.title}'* का ग्राफिक तैयार किया जा रहा है...`;
+        const sentAck = await sendWhatsAppText(waId, ackMsg);
+        const outAckId = String(sentAck?.messages?.[0]?.id || `vip-ack-${now}`);
+        await requireWrite("whatsapp_messages", sha256(outAckId), {
+          messageId: outAckId,
+          metaMessageId: outAckId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: ackMsg,
+          timestamp: now,
+          status: "sent",
+        }).catch(() => {});
+
+        const resolvedUrl = chosenItem.imageUrl && (chosenItem.imageUrl.startsWith("http://") || chosenItem.imageUrl.startsWith("https://"))
+          ? chosenItem.imageUrl
+          : "https://ainewsmaker.online/og-image.jpg";
+
+        const graphicCaption = `🚨 *${chosenItem.title}*\n\n${chosenItem.summary ? `${chosenItem.summary}\n\n` : ""}🎨 *इस ग्राफिक को स्टूडियो में कस्टमाइज़ करें:*\nhttps://ainewsmaker.online/studio?newsId=${encodeURIComponent(chosenItem.id)}\n\n✨ _AI News Maker (ब्रेकिंग न्यूज़ वाला) - VIP Desk_`;
+
+        try {
+          const sentImg = await sendWhatsAppImage(waId, resolvedUrl, graphicCaption.slice(0, 1024));
+          const outImgId = String(sentImg?.messages?.[0]?.id || `vip-img-${now}`);
+          await requireWrite("whatsapp_messages", sha256(outImgId), {
+            messageId: outImgId,
+            metaMessageId: outImgId,
+            conversationId,
+            waId,
+            direction: "outbound",
+            senderType: "vip_newsroom_assistant",
+            text: graphicCaption,
+            mediaUrl: resolvedUrl,
+            timestamp: now,
+            status: "sent",
+          }).catch(() => {});
+        } catch (imgErr: any) {
+          console.warn("[WhatsApp:VIPDesk] sendWhatsAppImage fallback to text:", imgErr?.message || imgErr);
+          const sentTxt = await sendWhatsAppText(waId, graphicCaption);
+          const outTxtId = String(sentTxt?.messages?.[0]?.id || `vip-img-fb-${now}`);
+          await requireWrite("whatsapp_messages", sha256(outTxtId), {
+            messageId: outTxtId,
+            metaMessageId: outTxtId,
+            conversationId,
+            waId,
+            direction: "outbound",
+            senderType: "vip_newsroom_assistant",
+            text: graphicCaption,
+            timestamp: now,
+            status: "sent",
+          }).catch(() => {});
+        }
+
+        if (senderUser && senderUser.coins !== undefined && Number(senderUser.coins) > 0) {
+          senderUser.coins = Math.max(0, Number(senderUser.coins) - 1);
+          if (centralDb?.writeDoc) {
+            centralDb.writeDoc("users", senderUser.email || senderUser.id, senderUser).catch(() => {});
+          }
+        }
+
+        await recordAuditEvent(centralDb, {
+          conversationId,
+          eventType: "vip_news_graphic_generated",
+          previousValue: null,
+          newValue: chosenItem.id,
+          actorId: waId,
+          actorType: "customer",
+          metadata: { newsId: chosenItem.id, title: chosenItem.title },
+        });
+        return;
+      }
+
+      // --- VIP COMMAND 3: AI HEADLINE GENERATION ---
+      if (isHeadlineCommand) {
+        const targetItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+        if (!targetItem) {
+          await sendWhatsAppText(waId, "कृपया पहले किसी खबर का नंबर चुनें (उदा. 1 या 2) या 'टॉप 5 खबरें' लिखकर भेजें।");
+          return;
+        }
+
+        const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
+        const configuredModel = (process.env.WHATSAPP_GEMINI_MODEL || "gemini-3.5-flash").trim();
+        const model = (configuredModel === "gemini-2.5-flash" || configuredModel === "gemini-2.0-flash") ? "gemini-3.5-flash" : configuredModel;
+        let headlines = "";
+
+        if (apiKey) {
+          try {
+            const ai = new GoogleGenAI({ apiKey });
+            const resp = await ai.models.generateContent({
+              model,
+              contents: [
+                "आप AI NEWS MAKER (ब्रेकिंग न्यूज़ वाला) के मुख्य समाचार संपादक हैं। नीचे दी गई खबर के लिए 3 आकर्षक, प्रभावशाली और संतुलित हेडलाइन विकल्प शुद्ध हिंदी में तैयार करें। प्रत्येक हेडलाइन एक अलग शैली (जैसे: ब्रेकिंग, तथ्यात्मक, विश्लेषणात्मक) में हो। केवल 3 हेडलाइन की नंबरयुक्त सूची दें।",
+                `शीर्षक: ${targetItem.title}\nविवरण: ${targetItem.summary || targetItem.title}`,
+              ].join("\n\n"),
+            });
+            headlines = String(resp.text || "").trim();
+          } catch (err: any) {
+            console.warn("[WhatsApp:VIPDesk] Headline Gemini exception:", err?.message);
+          }
+        }
+
+        if (!headlines) {
+          headlines = `1️⃣ 🚨 ब्रेकिंग: ${targetItem.title}\n2️⃣ 📢 बड़ा अपडेट: ${targetItem.title}\n3️⃣ 🔍 विशेष रिपोर्ट: ${targetItem.title}`;
+        }
+
+        const reply = `✍️ *समाचार हेडलाइन विकल्प (AI News Editor)*:\n\n${headlines}\n\n🎨 *स्टूडियो में एडिट करें:*\nhttps://ainewsmaker.online/studio?newsId=${encodeURIComponent(targetItem.id)}`;
+        const sentH = await sendWhatsAppText(waId, reply);
+        const outHId = String(sentH?.messages?.[0]?.id || `vip-h-${now}`);
+        await requireWrite("whatsapp_messages", sha256(outHId), {
+          messageId: outHId,
+          metaMessageId: outHId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: reply,
+          timestamp: now,
+          status: "sent",
+        }).catch(() => {});
+        return;
+      }
+
+      // --- VIP COMMAND 4: AI CAPTION GENERATION ---
+      if (isCaptionCommand) {
+        const targetItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+        if (!targetItem) {
+          await sendWhatsAppText(waId, "कृपया पहले किसी खबर का नंबर चुनें (उदा. 1 या 2) या 'टॉप 5 खबरें' लिखकर भेजें।");
+          return;
+        }
+
+        const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
+        const configuredModel = (process.env.WHATSAPP_GEMINI_MODEL || "gemini-3.5-flash").trim();
+        const model = (configuredModel === "gemini-2.5-flash" || configuredModel === "gemini-2.0-flash") ? "gemini-3.5-flash" : configuredModel;
+        let socialCaption = "";
+
+        if (apiKey) {
+          try {
+            const ai = new GoogleGenAI({ apiKey });
+            const resp = await ai.models.generateContent({
+              model,
+              contents: [
+                "आप AI News Maker के सोशल मीडिया मैनेजर हैं। इस खबर के लिए WhatsApp, Facebook और Instagram के लिए 1 आकर्षक सोशल मीडिया कैप्शन तैयार करें जिसमें उपयुक्त इमोजी और 4-5 प्रासंगिक हैशटैग (#) शामिल हों।",
+                `शीर्षक: ${targetItem.title}\nविवरण: ${targetItem.summary || targetItem.title}`,
+              ].join("\n\n"),
+            });
+            socialCaption = String(resp.text || "").trim();
+          } catch (err: any) {
+            console.warn("[WhatsApp:VIPDesk] Caption Gemini exception:", err?.message);
+          }
+        }
+
+        if (!socialCaption) {
+          socialCaption = `🚨 ${targetItem.title}\n\n${targetItem.summary || ""}\n\n#BreakingNews #HindiNews #AINewsMaker #LatestUpdates`;
+        }
+
+        const reply = `📱 *सोशल मीडिया कैप्शन (Facebook/Instagram/WhatsApp)*:\n\n${socialCaption}\n\n🎨 *स्टूडियो में पोस्ट बनाएं:*\nhttps://ainewsmaker.online/studio?newsId=${encodeURIComponent(targetItem.id)}`;
+        const sentC = await sendWhatsAppText(waId, reply);
+        const outCId = String(sentC?.messages?.[0]?.id || `vip-cap-${now}`);
+        await requireWrite("whatsapp_messages", sha256(outCId), {
+          messageId: outCId,
+          metaMessageId: outCId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: reply,
+          timestamp: now,
+          status: "sent",
+        }).catch(() => {});
+        return;
+      }
+
+      // --- VIP COMMAND 5: VIDEO SCRIPT GENERATION ---
+      if (isScriptCommand) {
+        const targetItem = userNewsSession?.selectedItem || userNewsSession?.items?.[0] || null;
+        if (!targetItem) {
+          await sendWhatsAppText(waId, "कृपया पहले किसी खबर का नंबर चुनें (उदा. 1 या 2) या 'टॉप 5 खबरें' लिखकर भेजें।");
+          return;
+        }
+
+        const apiKey = (process.env.GEMINI_API_KEY || process.env["GEMINI_API-KEY"] || "").trim();
+        const configuredModel = (process.env.WHATSAPP_GEMINI_MODEL || "gemini-3.5-flash").trim();
+        const model = (configuredModel === "gemini-2.5-flash" || configuredModel === "gemini-2.0-flash") ? "gemini-3.5-flash" : configuredModel;
+        let videoScript = "";
+
+        if (apiKey) {
+          try {
+            const ai = new GoogleGenAI({ apiKey });
+            const resp = await ai.models.generateContent({
+              model,
+              contents: [
+                "आप AI News Maker के न्यूज़ एंकर हैं। इस खबर के लिए 30 सेकंड की टीवी/यूट्यूब न्यूज़ एंकर वीडियो स्क्रिप्ट तैयार करें। इसमें [ओपनिंग], [मुख्य खबर], और [क्लोजिंग] स्पष्ट रूप से चिह्नित हों।",
+                `शीर्षक: ${targetItem.title}\nविवरण: ${targetItem.summary || targetItem.title}`,
+              ].join("\n\n"),
+            });
+            videoScript = String(resp.text || "").trim();
+          } catch (err: any) {
+            console.warn("[WhatsApp:VIPDesk] Video script Gemini exception:", err?.message);
+          }
+        }
+
+        if (!videoScript) {
+          videoScript = `[ओपनिंग]\nनमस्कार, मैं हूँ AI News Maker और इस वक्त की बड़ी खबर...\n\n[मुख्य खबर]\n${targetItem.title}। ${targetItem.summary || ""}\n\n[क्लोजिंग]\nअधिक अपडेट्स के लिए जुड़े रहिए Breaking News Wala के साथ।`;
+        }
+
+        const reply = `🎬 *30-सेकंड न्यूज़ एंकर वीडियो स्क्रिप्ट*:\n\n${videoScript}\n\n🎨 *वीडियो स्टूडियो में खोलें:*\nhttps://ainewsmaker.online/studio?newsId=${encodeURIComponent(targetItem.id)}`;
+        const sentS = await sendWhatsAppText(waId, reply);
+        const outSId = String(sentS?.messages?.[0]?.id || `vip-scr-${now}`);
+        await requireWrite("whatsapp_messages", sha256(outSId), {
+          messageId: outSId,
+          metaMessageId: outSId,
+          conversationId,
+          waId,
+          direction: "outbound",
+          senderType: "vip_newsroom_assistant",
+          text: reply,
+          timestamp: now,
+          status: "sent",
+        }).catch(() => {});
+        return;
+      }
     }
 
     // --- USER CONSENT & ONBOARDING PREFERENCE HANDLER ---
@@ -3383,7 +4077,7 @@ _कॉइन्स का उपयोग नए प्रीमियम ट�
     }
     console.log("[WhatsApp:Inbound] Webhook signature verified successfully");
     if (req.body?.object !== "whatsapp_business_account") return res.sendStatus(404);
-    if (!centralDb?.useFirestore || !getTaskConfig()) return res.sendStatus(503);
+    if (!centralDb?.useFirestore) return res.sendStatus(503);
 
     // 1. Process Meta Delivery Status Callbacks (PART 6)
     const statuses: any[] = [];
@@ -4815,9 +5509,16 @@ AI News Maker परिवार में आपका हार्दिक �
       const actorEmail = req.user?.email || "admin";
       const updatedConv = {
         ...convDoc,
-        status: "closed",
+        status: "resolved",
+        handlingMode: "ai",
+        assignedOperatorId: null,
+        assignedOperatorName: null,
         closedAt: now,
         closedBy: actorEmail,
+        resolvedAt: now,
+        resolvedBy: actorEmail,
+        reactivatedToAiAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
         updatedAt: now,
       };
 
@@ -4826,14 +5527,90 @@ AI News Maker परिवार में आपका हार्दिक �
 
       await recordAuditEvent(centralDb, {
         conversationId: convId,
-        eventType: "conversation_closed",
-        previousValue: convDoc.status || "open",
-        newValue: "closed",
+        eventType: "conversation_closed_and_reactivated_to_ai",
+        previousValue: `${convDoc.status || "open"}:${convDoc.handlingMode || "human"}`,
+        newValue: "resolved:ai",
         actorId: actorEmail,
         actorType: "operator",
       });
 
-      return res.json({ success: true, conversationId: convId, status: "closed" });
+      return res.json({ success: true, conversationId: convId, status: "resolved", handlingMode: "ai" });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/operator/logout
+   * Handles safe operator sign-out:
+   * Prevents abrupt abandonment to AI while unassigned conversations wait for team pickup.
+   * By default requeues active conversations to 'waiting_human' unassigned.
+   * If autoReturnToAiOnLogout is explicitly requested, transitions them to 'ai'.
+   */
+  app.post("/api/admin/whatsapp/operator/logout", requireAdmin, async (req: any, res: any) => {
+    try {
+      const actorEmail = req.user?.email || "admin";
+      const operatorId = String(req.body?.operatorId || actorEmail).trim().toLowerCase();
+      const autoReturnToAiOnLogout = Boolean(req.body?.autoReturnToAiOnLogout === true);
+      const now = Date.now();
+
+      let convList: any[] = [];
+      if (centralDb?.listDocs) {
+        try {
+          const listRes = await centralDb.listDocs("whatsapp_conversations", 500);
+          convList = listRes?.documents || [];
+        } catch {}
+      }
+      if (convList.length === 0 && conversationCache.size > 0) {
+        convList = Array.from(conversationCache.values());
+      }
+
+      let transitionedCount = 0;
+      const targetMode = autoReturnToAiOnLogout ? "ai" : "waiting_human";
+
+      for (const conv of convList) {
+        if (!conv) continue;
+        const convOp = String(conv.assignedOperatorId || conv.assignedOperatorEmail || "").toLowerCase().trim();
+        const isOpen = conv.status !== "closed" && conv.status !== "resolved";
+
+        if (isOpen && (convOp === operatorId || convOp === actorEmail)) {
+          const updatedConv = {
+            ...conv,
+            handlingMode: targetMode,
+            status: autoReturnToAiOnLogout ? conv.status : "human_requested",
+            assignedOperatorId: null,
+            assignedOperatorName: null,
+            operatorLoggedOutAt: now,
+            conversationVersion: Number(conv.conversationVersion || 0) + 1,
+            updatedAt: now,
+            ...(autoReturnToAiOnLogout ? { reactivatedToAiAt: now } : {}),
+          };
+
+          const convId = conv.conversationId || conv.id;
+          if (convId) {
+            await requireWrite("whatsapp_conversations", convId, updatedConv).catch(() => {});
+            conversationCache.set(convId, updatedConv);
+            transitionedCount++;
+
+            await recordAuditEvent(centralDb, {
+              conversationId: convId,
+              eventType: autoReturnToAiOnLogout ? "operator_logout_auto_ai_reactivated" : "operator_logout_requeued_to_waiting_human",
+              previousValue: `operator:${operatorId}`,
+              newValue: `mode:${targetMode}`,
+              actorId: actorEmail,
+              actorType: "operator",
+            });
+          }
+        }
+      }
+
+      return res.json({
+        success: true,
+        operatorId,
+        transitionedCount,
+        mode: targetMode,
+        autoReturnToAiOnLogout,
+      });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: String(err?.message || err) });
     }
@@ -5329,4 +6106,473 @@ AI News Maker परिवार में आपका हार्दिक �
       return res.status(500).json({ success: false, error: err?.message || "Failed to save settings" });
     }
   });
+
+  // =========================================================================
+  // WHATSAPP MESSAGE TEMPLATE MANAGER APIS (Meta Graph API Integration)
+  // =========================================================================
+
+  /**
+   * GET /api/admin/whatsapp/templates
+   * Retrieves all message templates, syncing live status with Meta Graph API if credentials are configured.
+   */
+  app.get("/api/admin/whatsapp/templates", requireAdmin, async (_req: any, res: any) => {
+    try {
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+
+      const localTemplates = loadTemplatesDatabase(centralDb);
+      let syncedWithMeta = false;
+      let metaError: string | null = null;
+
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        try {
+          const metaResp = await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=100`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const metaData = await metaResp.json().catch(() => ({}));
+          if (metaResp.ok && Array.isArray(metaData?.data)) {
+            syncedWithMeta = true;
+            for (const item of metaData.data) {
+              const name = String(item.name || "").trim();
+              if (name) {
+                localTemplates[name] = {
+                  ...(localTemplates[name] || {}),
+                  id: item.id || localTemplates[name]?.id,
+                  name,
+                  status: item.status || "APPROVED",
+                  category: item.category || localTemplates[name]?.category || "MARKETING",
+                  language: item.language || localTemplates[name]?.language || "hi",
+                  components: item.components || localTemplates[name]?.components || [],
+                  last_updated_time: Date.now(),
+                };
+              }
+            }
+            saveTemplatesDatabase(localTemplates, centralDb);
+          } else {
+            metaError = metaData?.error?.message || `Meta Graph API returned HTTP ${metaResp.status}`;
+          }
+        } catch (fetchErr: any) {
+          metaError = String(fetchErr?.message || fetchErr);
+        }
+      }
+
+      const templatesList = Object.values(localTemplates).sort((a: any, b: any) =>
+        (Number(b.last_updated_time) || 0) - (Number(a.last_updated_time) || 0)
+      );
+
+      return res.json({
+        success: true,
+        templates: templatesList,
+        syncedWithMeta,
+        metaError: metaError || undefined,
+        wabaId,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to load templates" });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/templates
+   * Submits a new message template to Meta Graph API and stores it in database.
+   */
+  app.post("/api/admin/whatsapp/templates", requireAdmin, async (req: any, res: any) => {
+    try {
+      const payload = req.body || {};
+      const rawName = String(payload.name || "").trim().toLowerCase();
+      if (!rawName || !/^[a-z0-9_]+$/.test(rawName)) {
+        return res.status(400).json({
+          success: false,
+          error: "अमान्य टेम्प्लेट नाम: केवल छोटे अक्षर (a-z), अंक (0-9) और अंडरस्कोर (_) मान्य हैं।",
+        });
+      }
+
+      const category = (payload.category || "MARKETING").toUpperCase();
+      const language = (payload.language || "hi").trim();
+      const bodyText = String(payload.bodyText || payload.text || "").trim();
+      if (!bodyText) {
+        return res.status(400).json({
+          success: false,
+          error: "टेम्प्लेट बॉडी टेक्स्ट आवश्यक है।",
+        });
+      }
+
+      const headerType = (payload.headerType || "NONE").toUpperCase();
+      const headerText = String(payload.headerText || "").trim();
+      const headerSampleUrl = String(payload.headerSampleUrl || payload.imageUrl || "https://ainewsmaker.online/og-image.jpg").trim();
+      const footerText = String(payload.footerText || "").trim();
+      const buttonType = (payload.buttonType || "NONE").toUpperCase();
+      const buttonLabel = String(payload.buttonLabel || payload.buttonText || "").trim();
+      const buttonUrl = String(payload.buttonUrl || "").trim();
+      const bodySamples = Array.isArray(payload.bodySamples) ? payload.bodySamples : (payload.bodySample ? [payload.bodySample] : []);
+
+      // Build Meta-compliant components array
+      const components: any[] = [];
+
+      if (headerType === "IMAGE") {
+        components.push({
+          type: "HEADER",
+          format: "IMAGE",
+          example: { header_handle: [headerSampleUrl] },
+        });
+      } else if (headerType === "TEXT" && headerText) {
+        components.push({
+          type: "HEADER",
+          format: "TEXT",
+          text: headerText,
+        });
+      }
+
+      const bodyComponent: any = {
+        type: "BODY",
+        text: bodyText,
+      };
+      if (bodySamples.length > 0) {
+        bodyComponent.example = { body_text: [bodySamples] };
+      }
+      components.push(bodyComponent);
+
+      if (footerText) {
+        components.push({
+          type: "FOOTER",
+          text: footerText,
+        });
+      }
+
+      if (buttonType === "URL" && buttonLabel && buttonUrl) {
+        const buttonObj: any = {
+          type: "URL",
+          text: buttonLabel,
+          url: buttonUrl,
+        };
+        if (buttonUrl.includes("{{1}}")) {
+          buttonObj.example = ["?newsId=sample_news_123"];
+        }
+        components.push({
+          type: "BUTTONS",
+          buttons: [buttonObj],
+        });
+      }
+
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+
+      let metaStatus = "PENDING";
+      let metaTemplateId = `tpl_${rawName}_${Date.now()}`;
+
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        const metaPayload = {
+          name: rawName,
+          category,
+          language,
+          components,
+        };
+
+        const metaResp = await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(metaPayload),
+        });
+
+        const metaResult = await metaResp.json().catch(() => ({}));
+        if (!metaResp.ok) {
+          const errMsg = metaResult?.error?.message || `Meta Graph API error (HTTP ${metaResp.status})`;
+          return res.status(400).json({
+            success: false,
+            error: `Meta Template Submission Error: ${errMsg}`,
+            metaError: metaResult,
+          });
+        }
+
+        if (metaResult?.id) metaTemplateId = metaResult.id;
+        if (metaResult?.status) metaStatus = metaResult.status;
+      } else {
+        // Offline development / test mode without a real Meta API response:
+        // Must NEVER be falsely marked as genuine APPROVED. Explicitly labeled MOCK_APPROVED / SIMULATED.
+        metaStatus = process.env.NODE_ENV === "test" ? "MOCK_APPROVED" : "SIMULATED";
+      }
+
+      const now = Date.now();
+      const templateDoc = {
+        id: metaTemplateId,
+        name: rawName,
+        category,
+        language,
+        status: metaStatus,
+        headerType,
+        headerText: headerType === "TEXT" ? headerText : undefined,
+        headerSampleUrl: headerType === "IMAGE" ? headerSampleUrl : undefined,
+        bodyText,
+        bodySamples,
+        footerText: footerText || undefined,
+        buttonType,
+        buttonLabel: buttonType === "URL" ? buttonLabel : undefined,
+        buttonUrl: buttonType === "URL" ? buttonUrl : undefined,
+        components,
+        createdAt: now,
+        last_updated_time: now,
+        createdBy: req.user?.email || "admin",
+      };
+
+      const localTemplates = loadTemplatesDatabase(centralDb);
+      localTemplates[rawName] = templateDoc;
+      saveTemplatesDatabase(localTemplates, centralDb);
+      templateCache.set(rawName, templateDoc);
+
+      return res.json({
+        success: true,
+        template: templateDoc,
+        message: "टेम्प्लेट सफलतापूर्वक Meta WhatsApp API में जमा कर दिया गया है।",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to create template" });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/whatsapp/templates/:name
+   * Deletes a template from Meta Graph API and local database.
+   */
+  app.delete("/api/admin/whatsapp/templates/:name", requireAdmin, async (req: any, res: any) => {
+    try {
+      const name = String(req.params.name || "").trim().toLowerCase();
+      if (!name) return res.status(400).json({ success: false, error: "Template name is required" });
+
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        try {
+          await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates?name=${encodeURIComponent(name)}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } catch (delErr: any) {
+          console.warn("[WhatsApp:Templates] Meta delete warning:", delErr?.message);
+        }
+      }
+
+      const localTemplates = loadTemplatesDatabase(centralDb);
+      delete localTemplates[name];
+      saveTemplatesDatabase(localTemplates, centralDb);
+      templateCache.delete(name);
+
+      if (centralDb?.useFirestore && typeof centralDb.deleteDoc === "function") {
+        centralDb.deleteDoc("whatsapp_templates", name).catch(() => {});
+      }
+
+      return res.json({ success: true, deletedName: name });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to delete template" });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/templates/sync
+   * Forces a live sync of template statuses from Meta Graph API.
+   */
+  app.post("/api/admin/whatsapp/templates/sync", requireAdmin, async (_req: any, res: any) => {
+    try {
+      const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+      const wabaId = (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "1136242015583003").trim();
+      const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+
+      const localTemplates = loadTemplatesDatabase(centralDb);
+      let syncCount = 0;
+
+      if (token && wabaId && !token.startsWith("test_") && process.env.NODE_ENV !== "test") {
+        const metaResp = await fetch(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=100`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const metaData = await metaResp.json().catch(() => ({}));
+        if (metaResp.ok && Array.isArray(metaData?.data)) {
+          for (const item of metaData.data) {
+            const name = String(item.name || "").trim();
+            if (name) {
+              localTemplates[name] = {
+                ...(localTemplates[name] || {}),
+                id: item.id || localTemplates[name]?.id,
+                name,
+                status: item.status || "APPROVED",
+                category: item.category || localTemplates[name]?.category || "MARKETING",
+                language: item.language || localTemplates[name]?.language || "hi",
+                components: item.components || localTemplates[name]?.components || [],
+                last_updated_time: Date.now(),
+              };
+              syncCount++;
+            }
+          }
+          saveTemplatesDatabase(localTemplates, centralDb);
+        }
+      }
+
+      return res.json({
+        success: true,
+        syncedCount: syncCount,
+        templates: Object.values(localTemplates),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message || "Failed to sync templates" });
+    }
+  });
+
+  /**
+   * GET /api/whatsapp/news/render-graphic
+   * Canonical Graphic Studio Frame (graphic_001) renderer for VIP WhatsApp messages.
+   * Uses approved editorial database, user branding, channel logo, and Studio layout.
+   */
+  app.get("/api/whatsapp/news/render-graphic", async (req: any, res: any) => {
+    try {
+      const newsId = String(req.query.newsId || "").trim();
+      const phone = String(req.query.phone || req.query.waId || "").trim();
+      const email = String(req.query.email || "").trim().toLowerCase();
+
+      let targetPost: any = null;
+      if (newsId && options?.getNewsDatabase) {
+        try {
+          const allNews = options.getNewsDatabase();
+          if (Array.isArray(allNews)) {
+            targetPost = allNews.find((p: any) => p && String(p.id) === newsId);
+          }
+        } catch {}
+      }
+      if (!targetPost && newsId && options?.getApprovedEditorialDatabase) {
+        try {
+          const editorial = options.getApprovedEditorialDatabase();
+          if (editorial && editorial[newsId]) targetPost = editorial[newsId];
+        } catch {}
+      }
+
+      let userProfile: any = null;
+      if (options?.getProfilesDatabase) {
+        try {
+          const profiles = options.getProfilesDatabase();
+          if (profiles) {
+            if (email && profiles[email]) userProfile = profiles[email];
+            if (!userProfile && phone) {
+              const cleanP = getCleanDigits10(phone);
+              userProfile = Object.values(profiles).find((pr: any) => pr && getCleanDigits10(pr.mobileNumber || pr.whatsappNumber || "") === cleanP);
+            }
+          }
+        } catch {}
+      }
+
+      let dynamicFrame: any = null;
+      const requestedFrameId = String(req.query.frameId || userProfile?.frameDesign || "").trim();
+      if (requestedFrameId && options?.getDynamicFramesDatabase) {
+        try {
+          const frames = options.getDynamicFramesDatabase();
+          if (Array.isArray(frames)) {
+            dynamicFrame = frames.find((f: any) => f && f.id === requestedFrameId);
+          }
+        } catch {}
+      }
+
+      const primaryColor = dynamicFrame?.theme?.primaryColor || dynamicFrame?.primaryColor || "#b91c1c";
+      const secondaryColor = dynamicFrame?.theme?.secondaryColor || dynamicFrame?.secondaryColor || "#dc2626";
+      const accentColor = dynamicFrame?.theme?.accentColor || dynamicFrame?.accentColor || "#f59e0b";
+
+      const headline = String(targetPost?.title || req.query.headline || "AI News Maker — ताज़ा खबर").slice(0, 140);
+      const category = String(targetPost?.category || req.query.category || "ब्रेकिंग न्यूज़").slice(0, 30);
+      const brand = String(userProfile?.channelNameHi || userProfile?.channelNameEn || req.query.brand || "AI NEWS MAKER").slice(0, 40);
+      const logoUrl = String(userProfile?.channelLogoUrl || userProfile?.channelLogoPngUrl || req.query.logoUrl || "https://ainewsmaker.online/assets/breaking_news_wala_logo.png").trim();
+      const leadPhoto = String(targetPost?.thumbnailUrl || targetPost?.imageUrl || req.query.imageUrl || "https://ainewsmaker.online/og-image.jpg").trim();
+      const location = String(targetPost?.location || userProfile?.location || userProfile?.district || req.query.location || "").slice(0, 30);
+
+      // Escape XML characters in text fields
+      const escapeXml = (str: string) => str.replace(/[<>&'"]/g, (c) => {
+        switch (c) {
+          case '<': return '&lt;';
+          case '>': return '&gt;';
+          case '&': return '&amp;';
+          case '\'': return '&apos;';
+          case '"': return '&quot;';
+          default: return c;
+        }
+      });
+
+      const safeHeadline = escapeXml(headline);
+      const safeCategory = escapeXml(category);
+      const safeBrand = escapeXml(brand);
+      const safeLocation = escapeXml(location);
+      const safePhoto = escapeXml(leadPhoto);
+      const safeLogo = escapeXml(logoUrl);
+
+      const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${primaryColor}" />
+      <stop offset="50%" stop-color="${secondaryColor}" />
+      <stop offset="100%" stop-color="${primaryColor}" />
+    </linearGradient>
+    <linearGradient id="goldAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${accentColor}" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1080" height="1080" fill="url(#bg)" />
+
+  <!-- Canonical Studio Header (graphic_001) -->
+  <rect x="0" y="0" width="1080" height="110" fill="url(#headerGrad)" />
+  <image href="${safeLogo}" x="30" y="15" width="80" height="80" preserveAspectRatio="xMidYMid meet" />
+  <text x="130" y="65" fill="#ffffff" font-family="'Noto Sans Devanagari', 'Mukta', sans-serif" font-size="34" font-weight="900" filter="url(#shadow)">${safeBrand}</text>
+  <rect x="850" y="30" width="200" height="50" rx="8" fill="#020617" stroke="${accentColor}" stroke-width="2" />
+  <text x="950" y="62" fill="${accentColor}" font-family="'Noto Sans Devanagari', sans-serif" font-size="20" font-weight="bold" text-anchor="middle">LIVE NEWS</text>
+
+  <!-- Editorial Lead Photo (Aspect Ratio 16:9 in Frame) -->
+  <rect x="30" y="125" width="1020" height="570" rx="16" fill="#1e293b" />
+  <image href="${safePhoto}" x="30" y="125" width="1020" height="570" preserveAspectRatio="xMidYMid slice" clip-path="inset(0 round 16px)" />
+
+  <!-- Breaking Banner Ribbon & Location Pill -->
+  <rect x="50" y="145" width="240" height="55" rx="8" fill="${secondaryColor}" stroke="#ffffff" stroke-width="2" filter="url(#shadow)" />
+  <text x="170" y="180" fill="#ffffff" font-family="'Noto Sans Devanagari', sans-serif" font-size="24" font-weight="900" text-anchor="middle">🚨 ${safeCategory}</text>
+  ${safeLocation ? `<rect x="310" y="145" width="200" height="55" rx="8" fill="#020617" opacity="0.9" stroke="${accentColor}" stroke-width="1.5" />
+  <text x="410" y="180" fill="#fef08a" font-family="'Noto Sans Devanagari', sans-serif" font-size="22" font-weight="bold" text-anchor="middle">📍 ${safeLocation}</text>` : ''}
+
+  <!-- Graphic Studio Headline Card (graphic_001 Bottom Polygon) -->
+  <rect x="30" y="710" width="1020" height="255" rx="16" fill="#ffffff" filter="url(#shadow)" />
+  <polygon points="30,710 120,710 80,750 30,750" fill="${secondaryColor}" />
+  <foreignObject x="60" y="725" width="960" height="225">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: 'Noto Sans Devanagari', 'Mukta', sans-serif; font-size: 38px; font-weight: 900; line-height: 1.35; color: #020617; text-align: left; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;">
+      ${safeHeadline}
+    </div>
+  </foreignObject>
+
+  <!-- Studio Custom Footer Strip -->
+  <rect x="0" y="985" width="1080" height="95" fill="#020617" />
+  <line x1="0" y1="985" x2="1080" y2="985" stroke="${accentColor}" stroke-width="3" />
+  <text x="50" y="1040" fill="#94a3b8" font-family="'Noto Sans Devanagari', sans-serif" font-size="22" font-weight="600">AI News Maker Studio • Breaking News Wala</text>
+  <text x="1030" y="1040" fill="${accentColor}" font-family="'Noto Sans Devanagari', sans-serif" font-size="24" font-weight="bold" text-anchor="end">🎨 ainewsmaker.online</text>
+</svg>`;
+
+      res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.send(svg);
+    } catch (err: any) {
+      return res.status(500).send("Error rendering graphic");
+    }
+  });
+
+  return {
+    sendWhatsAppText,
+    sendWhatsAppImage,
+    uploadWhatsAppMedia,
+    sendWhatsAppNewsBroadcast,
+  };
 }

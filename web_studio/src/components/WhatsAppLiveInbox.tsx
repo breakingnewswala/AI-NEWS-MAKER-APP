@@ -42,13 +42,14 @@ import {
   BookOpen,
   Key,
   CheckCircle,
+  FileText,
 } from 'lucide-react';
 
 interface WhatsAppLiveInboxProps {
   currentUser?: any;
 }
 
-type MainTab = 'inbox' | 'flows' | 'faqs' | 'quick_replies' | 'settings';
+type MainTab = 'inbox' | 'flows' | 'faqs' | 'quick_replies' | 'templates' | 'settings';
 
 export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUser }) => {
   const [activeTab, setActiveTab] = useState<MainTab>('inbox');
@@ -125,6 +126,33 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
   const [isLoadingQr, setIsLoadingQr] = useState(false);
   const [editingQr, setEditingQr] = useState<any | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+
+  // ==========================================
+  // TAB 6: TEMPLATE MANAGER STATE
+  // ==========================================
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState<boolean>(false);
+  const [isSyncingTemplates, setIsSyncingTemplates] = useState<boolean>(false);
+  const [isCreateTemplateModalOpen, setIsCreateTemplateModalOpen] = useState<boolean>(false);
+  const [templateFilter, setTemplateFilter] = useState<'all' | 'APPROVED' | 'PENDING' | 'MOCK_APPROVED' | 'REJECTED'>('all');
+  const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<any | null>(null);
+
+  // Create Template Form State
+  const [tplName, setTplName] = useState('');
+  const [tplCategory, setTplCategory] = useState<'MARKETING' | 'UTILITY' | 'AUTHENTICATION'>('MARKETING');
+  const [tplLanguage, setTplLanguage] = useState('hi');
+  const [tplHeaderType, setTplHeaderType] = useState<'NONE' | 'TEXT' | 'IMAGE'>('IMAGE');
+  const [tplHeaderText, setTplHeaderText] = useState('');
+  const [tplHeaderSampleUrl, setTplHeaderSampleUrl] = useState('https://ainewsmaker.online/og-image.jpg');
+  const [tplBodyText, setTplBodyText] = useState('🚨 *{{1}}*\n\n{{2}}\n\n✨ अपनी पसंदीदा न्यूज़ का ग्राफिक तुरंत तैयार करें।');
+  const [tplBodySample1, setTplBodySample1] = useState('मध्य प्रदेश में भारी बारिश का अलर्ट');
+  const [tplBodySample2, setTplBodySample2] = useState('मौसम विभाग ने 15 जिलों में भारी बारिश की चेतावनी जारी की है।');
+  const [tplFooterText, setTplFooterText] = useState('AI News Maker - आधिकारिक समाचार सेवा');
+  const [tplButtonType, setTplButtonType] = useState<'NONE' | 'URL' | 'QUICK_REPLY'>('URL');
+  const [tplButtonLabel, setTplButtonLabel] = useState('इस खबर से ग्राफिक बनाएं');
+  const [tplButtonUrl, setTplButtonUrl] = useState('https://ainewsmaker.online/studio{{1}}');
+  const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false);
+  const [tplError, setTplError] = useState('');
 
   // ==========================================
   // TAB 5: AUTOMATION SETTINGS STATE
@@ -687,6 +715,119 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
     }
   };
 
+  // ==========================================
+  // TEMPLATE MANAGER HANDLERS
+  // ==========================================
+  const fetchTemplates = async () => {
+    setIsLoadingTemplates(true);
+    try {
+      const res = await fetch('/api/admin/whatsapp/templates');
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.templates)) {
+        setTemplates(data.templates);
+      }
+    } catch (err: any) {
+      console.warn('Could not fetch templates:', err);
+    } finally {
+      setIsLoadingTemplates(false);
+    }
+  };
+
+  const handleSyncTemplates = async () => {
+    setIsSyncingTemplates(true);
+    try {
+      const res = await fetch('/api/admin/whatsapp/templates/sync', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActionNotice({ type: 'success', text: `✅ Meta Graph API से ${data.syncedCount || 0} टेम्प्लेट्स सिंक हो गए!` });
+        if (Array.isArray(data.templates)) {
+          setTemplates(data.templates);
+        } else {
+          fetchTemplates();
+        }
+      } else {
+        setActionNotice({ type: 'error', text: data.error || 'सिंक करने में विफलता' });
+      }
+    } catch (err: any) {
+      setActionNotice({ type: 'error', text: err.message || 'सिंक विफल' });
+    } finally {
+      setIsSyncingTemplates(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (name: string) => {
+    if (!confirm(`क्या आप वाकई टेम्प्लेट "${name}" को Meta API और डेटाबेस से हटाना चाहते हैं?`)) return;
+    try {
+      const res = await fetch(`/api/admin/whatsapp/templates/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActionNotice({ type: 'success', text: `✅ टेम्प्लेट "${name}" सफलतापूर्वक हटा दिया गया!` });
+        setTemplates((prev) => prev.filter((t) => t.name !== name));
+      } else {
+        setActionNotice({ type: 'error', text: data.error || 'हटाने में समस्या आई' });
+      }
+    } catch (err: any) {
+      setActionNotice({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleCreateTemplateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTplError('');
+    const cleanName = tplName.trim().toLowerCase();
+    if (!cleanName || !/^[a-z0-9_]+$/.test(cleanName)) {
+      setTplError('टेम्प्लेट नाम केवल लोअरकेस लेटर्स, अंक और अंडरस्कोर (उदा. news_broadcast_v1) में होना चाहिए।');
+      return;
+    }
+    if (!tplBodyText.trim()) {
+      setTplError('बॉडी टेक्स्ट आवश्यक है।');
+      return;
+    }
+
+    setIsSubmittingTemplate(true);
+    try {
+      const bodySamples: string[] = [];
+      if (tplBodySample1.trim()) bodySamples.push(tplBodySample1.trim());
+      if (tplBodySample2.trim()) bodySamples.push(tplBodySample2.trim());
+
+      const res = await fetch('/api/admin/whatsapp/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cleanName,
+          category: tplCategory,
+          language: tplLanguage,
+          headerType: tplHeaderType,
+          headerText: tplHeaderText,
+          headerSampleUrl: tplHeaderSampleUrl,
+          bodyText: tplBodyText,
+          bodySamples,
+          footerText: tplFooterText,
+          buttonType: tplButtonType,
+          buttonLabel: tplButtonLabel,
+          buttonUrl: tplButtonUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActionNotice({ type: 'success', text: `✅ टेम्प्लेट "${cleanName}" सफलतापूर्वक जमा कर दिया गया!` });
+        setIsCreateTemplateModalOpen(false);
+        fetchTemplates();
+      } else {
+        setTplError(data.error || 'टेम्प्लेट जमा करने में विफलता');
+      }
+    } catch (err: any) {
+      setTplError(err.message || 'नेटवर्क समस्या');
+    } finally {
+      setIsSubmittingTemplate(false);
+    }
+  };
+
   // Switch tabs loader
   useEffect(() => {
     if (activeTab === 'flows') fetchFlows();
@@ -695,6 +836,7 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
       fetchCategories();
     }
     if (activeTab === 'quick_replies') fetchQuickReplies();
+    if (activeTab === 'templates') fetchTemplates();
     if (activeTab === 'settings') fetchSettings();
   }, [activeTab, faqCategory, faqSearch]);
 
@@ -736,13 +878,14 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
               if (activeTab === 'flows') fetchFlows();
               if (activeTab === 'faqs') fetchFaqs();
               if (activeTab === 'quick_replies') fetchQuickReplies();
+              if (activeTab === 'templates') fetchTemplates();
               if (activeTab === 'settings') fetchSettings();
             }}
-            disabled={isLoadingList || isLoadingFlows || isLoadingFaqs}
+            disabled={isLoadingList || isLoadingFlows || isLoadingFaqs || isLoadingTemplates || isSyncingTemplates}
             className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition cursor-pointer"
             title="रिफ्रेश करें"
           >
-            <RefreshCw className={`w-4 h-4 ${(isLoadingList || isLoadingFlows || isLoadingFaqs) ? 'animate-spin text-amber-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${(isLoadingList || isLoadingFlows || isLoadingFaqs || isLoadingTemplates || isSyncingTemplates) ? 'animate-spin text-amber-400' : ''}`} />
           </button>
         </div>
       </div>
@@ -815,6 +958,24 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
           <Zap className="w-3.5 h-3.5" />
           <span>Quick Responses</span>
         </button>
+
+        {isMasterOrAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('templates')}
+            className={`px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-2 transition shrink-0 cursor-pointer ${
+              activeTab === 'templates'
+                ? 'bg-emerald-500 text-slate-950 shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Template Manager</span>
+            <span className="text-[10px] px-1.5 py-0.2 bg-slate-800/60 rounded text-slate-300">
+              {templates.length}
+            </span>
+          </button>
+        )}
 
         {isMasterOrAdmin && (
           <button
@@ -2495,6 +2656,607 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
                 </button>
               </div>
             </form>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: WHATSAPP MESSAGE TEMPLATE MANAGER (Meta Graph API)                  */}
+      {/* ========================================================================= */}
+      {activeTab === 'templates' && isMasterOrAdmin && (
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5 bg-slate-950">
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-5 shadow-lg">
+            <div>
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-base font-black text-white">
+                  WhatsApp Message Template Manager
+                </h3>
+                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-full border border-emerald-500/30">
+                  Meta Graph API v21.0
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                आधिकारिक Meta WhatsApp Cloud API संदेश टेम्प्लेट (Image Header, Variables, Interactive Buttons) का लाइव प्रबंधन एवं स्थिति सिंक
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSyncTemplates}
+                disabled={isSyncingTemplates}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                title="Meta से नवीनतम अनुमोदन स्थिति सिंक करें"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingTemplates ? 'animate-spin text-emerald-400' : ''}`} />
+                <span>{isSyncingTemplates ? 'सिंक हो रहा है...' : 'सिंक स्थिति'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCreateTemplateModalOpen(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black rounded-xl shadow-md flex items-center gap-1.5 transition cursor-pointer active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>नया टेम्प्लेट बनाएं</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Counters */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-slate-900 p-3.5 rounded-xl border border-slate-800">
+              <span className="text-[11px] text-slate-400 block mb-1">कुल टेम्प्लेट्स</span>
+              <span className="text-xl font-black text-white">{templates.length}</span>
+            </div>
+            <div className="bg-slate-900 p-3.5 rounded-xl border border-emerald-500/20">
+              <span className="text-[11px] text-emerald-400 block mb-1">Meta स्वीकृत (Approved)</span>
+              <span className="text-xl font-black text-emerald-400">
+                {templates.filter((t) => (t.status || '').toUpperCase() === 'APPROVED').length}
+              </span>
+            </div>
+            <div className="bg-slate-900 p-3.5 rounded-xl border border-yellow-500/20">
+              <span className="text-[11px] text-yellow-400 block mb-1">प्रतीक्षारत (Pending)</span>
+              <span className="text-xl font-black text-yellow-400">
+                {templates.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length}
+              </span>
+            </div>
+            <div className="bg-slate-900 p-3.5 rounded-xl border border-purple-500/20">
+              <span className="text-[11px] text-purple-400 block mb-1">सिम्युलेटेड (Mock)</span>
+              <span className="text-xl font-black text-purple-400">
+                {templates.filter((t) => (t.status || '').toUpperCase() === 'MOCK_APPROVED' || (t.status || '').toUpperCase() === 'SIMULATED').length}
+              </span>
+            </div>
+            <div className="bg-slate-900 p-3.5 rounded-xl border border-red-500/20">
+              <span className="text-[11px] text-red-400 block mb-1">अस्वीकृत (Rejected)</span>
+              <span className="text-xl font-black text-red-400">
+                {templates.filter((t) => (t.status || '').toUpperCase() === 'REJECTED').length}
+              </span>
+            </div>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-2">
+            {(['all', 'APPROVED', 'PENDING', 'MOCK_APPROVED', 'REJECTED'] as const).map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setTemplateFilter(st as any)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  templateFilter === (st as any)
+                    ? 'bg-slate-800 text-white border border-slate-600 shadow'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {st === 'all' ? 'सभी' : st === 'APPROVED' ? 'Meta स्वीकृत' : st === 'PENDING' ? 'समीक्षाधीन' : st === 'MOCK_APPROVED' ? 'सिम्युलेटेड (Mock)' : 'अस्वीकृत'}
+              </button>
+            ))}
+          </div>
+
+          {/* Templates Grid */}
+          {isLoadingTemplates ? (
+            <div className="p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2 bg-slate-900 rounded-2xl border border-slate-800">
+              <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+              <span>टेम्प्लेट्स लोड हो रहे हैं...</span>
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="p-10 text-center bg-slate-900 rounded-2xl border border-slate-800 space-y-3">
+              <FileText className="w-10 h-10 text-slate-600 mx-auto" />
+              <div className="text-sm font-bold text-slate-300">कोई टेम्प्लेट नहीं मिला</div>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Meta WhatsApp Cloud API के लिए एक नया इंटरएक्टिव संदेश टेम्प्लेट बनाएं।
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsCreateTemplateModalOpen(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                पहला टेम्प्लेट बनाएं
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {templates
+                .filter((t) => templateFilter === 'all' || (t.status || '').toUpperCase() === templateFilter)
+                .map((t) => {
+                  const status = (t.status || 'PENDING').toUpperCase();
+                  const statusColor =
+                    status === 'APPROVED'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : status === 'MOCK_APPROVED' || status === 'SIMULATED'
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                      : status === 'PENDING'
+                      ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+                      : status === 'REJECTED'
+                      ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+
+                  const comps = Array.isArray(t.components) ? t.components : [];
+                  const headerComp = comps.find((c: any) => c.type === 'HEADER') || (t.headerType !== 'NONE' ? { format: t.headerType } : null);
+                  const bodyComp = comps.find((c: any) => c.type === 'BODY') || { text: t.bodyText };
+                  const footerComp = comps.find((c: any) => c.type === 'FOOTER') || (t.footerText ? { text: t.footerText } : null);
+                  const buttonsComp = comps.find((c: any) => c.type === 'BUTTONS') || (t.buttonType === 'URL' ? { buttons: [{ text: t.buttonLabel, url: t.buttonUrl }] } : null);
+
+                  return (
+                    <div
+                      key={t.name || t.id}
+                      className="bg-slate-900 rounded-2xl border border-slate-800 p-4 flex flex-col justify-between hover:border-slate-700 transition shadow-lg space-y-3"
+                    >
+                      <div className="space-y-2">
+                        {/* Name and Status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-mono font-bold text-sm text-white break-all">{t.name}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border uppercase shrink-0 ${statusColor}`}>
+                            {status}
+                          </span>
+                        </div>
+
+                        {/* Badges */}
+                        <div className="flex flex-wrap gap-1.5 text-[10px]">
+                          <span className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded font-semibold">
+                            {t.category || 'MARKETING'}
+                          </span>
+                          <span className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded font-semibold uppercase">
+                            {t.language || 'hi'}
+                          </span>
+                          {headerComp && (
+                            <span className="px-2 py-0.5 bg-blue-950/60 text-blue-300 border border-blue-800/40 rounded font-semibold">
+                              Header: {headerComp.format || 'TEXT'}
+                            </span>
+                          )}
+                          {buttonsComp && (
+                            <span className="px-2 py-0.5 bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 rounded font-semibold">
+                              URL Button
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Body Preview */}
+                        <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800/60 text-xs text-slate-300 line-clamp-3 font-sans leading-relaxed whitespace-pre-wrap">
+                          {bodyComp?.text || t.bodyText || '—'}
+                        </div>
+
+                        {footerComp?.text && (
+                          <div className="text-[10px] text-slate-500 italic truncate">
+                            फूटर: {footerComp.text}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                        <span className="text-[10px] text-slate-500">
+                          {formatIST(t.last_updated_time || t.createdAt)}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTemplateForPreview(t)}
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer"
+                            title="पूर्वावलोकन देखें"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTemplate(t.name)}
+                            className="p-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 rounded-lg transition cursor-pointer"
+                            title="टेम्प्लेट हटाएं"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* CREATE TEMPLATE MODAL WITH LIVE WHATSAPP PHONE PREVIEW                     */}
+          {/* ========================================================================= */}
+          {isCreateTemplateModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+                {/* Modal Header */}
+                <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-850">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                      <Plus className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white">नया Meta WhatsApp टेम्प्लेट बनाएं</h4>
+                      <p className="text-[11px] text-slate-400">Meta Graph API v21.0 में नया संदेश टेम्प्लेट सबमिट करें</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateTemplateModalOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Body: 2 Columns */}
+                <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Left Column: Form */}
+                  <form onSubmit={handleCreateTemplateSubmit} className="space-y-3.5 text-xs">
+                    {tplError && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        <div>{tplError}</div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block font-bold text-slate-300 mb-1">
+                        टेम्प्लेट नाम (Template Name):
+                      </label>
+                      <input
+                        type="text"
+                        value={tplName}
+                        onChange={(e) => setTplName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                        placeholder="उदा. news_broadcast_v1, special_alert"
+                        required
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono focus:border-emerald-400 focus:outline-hidden"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-0.5 block">
+                        केवल छोटे अक्षर (a-z), अंक और अंडरस्कोर (_) मान्य हैं।
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-300 mb-1">श्रेणी (Category):</label>
+                        <select
+                          value={tplCategory}
+                          onChange={(e: any) => setTplCategory(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-emerald-400 focus:outline-hidden cursor-pointer"
+                        >
+                          <option value="MARKETING">MARKETING (मार्केटिंग / समाचार)</option>
+                          <option value="UTILITY">UTILITY (उपयोगिता)</option>
+                          <option value="AUTHENTICATION">AUTHENTICATION (सत्यापन OTP)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-300 mb-1">भाषा (Language):</label>
+                        <select
+                          value={tplLanguage}
+                          onChange={(e) => setTplLanguage(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-emerald-400 focus:outline-hidden cursor-pointer"
+                        >
+                          <option value="hi">हिन्दी (hi)</option>
+                          <option value="en_US">English (US)</option>
+                          <option value="en_GB">English (UK)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Header Configuration */}
+                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                      <label className="block font-bold text-slate-300">हेडर प्रारूप (Header Type):</label>
+                      <div className="flex items-center gap-3">
+                        {(['IMAGE', 'TEXT', 'NONE'] as const).map((h) => (
+                          <label key={h} className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                            <input
+                              type="radio"
+                              name="headerType"
+                              value={h}
+                              checked={tplHeaderType === h}
+                              onChange={() => setTplHeaderType(h)}
+                              className="accent-emerald-400"
+                            />
+                            <span>{h === 'IMAGE' ? 'छवि (Image)' : h === 'TEXT' ? 'टेक्स्ट' : 'कोई नहीं'}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {tplHeaderType === 'IMAGE' && (
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">नमूना छवि URL (Sample Image URL):</label>
+                          <input
+                            type="text"
+                            value={tplHeaderSampleUrl}
+                            onChange={(e) => setTplHeaderSampleUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-[11px]"
+                          />
+                        </div>
+                      )}
+
+                      {tplHeaderType === 'TEXT' && (
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">हेडर टेक्स्ट:</label>
+                          <input
+                            type="text"
+                            value={tplHeaderText}
+                            onChange={(e) => setTplHeaderText(e.target.value)}
+                            placeholder="उदा. AI News Maker ब्रेकिंग बुलेटिन"
+                            className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-[11px]"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Body Text & Sample Variables */}
+                    <div>
+                      <label className="block font-bold text-slate-300 mb-1">
+                        बॉडी टेक्स्ट (Body Text with Variables):
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={tplBodyText}
+                        onChange={(e) => setTplBodyText(e.target.value)}
+                        placeholder="संदेश लिखें... वैरिएबल जोड़ने के लिए {{1}}, {{2}} का प्रयोग करें"
+                        required
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white leading-relaxed focus:border-emerald-400 focus:outline-hidden"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-0.5 block">
+                        उदाहरण: 🚨 *{'{{1}}'}*\n\n{'{{2}}'}
+                      </span>
+                    </div>
+
+                    {tplBodyText.includes('{{1}}') && (
+                      <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <label className="block font-bold text-amber-400 text-[11px]">
+                          वैरिएबल नमूने (Meta Approval हेतु Sample Values):
+                        </label>
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={tplBodySample1}
+                            onChange={(e) => setTplBodySample1(e.target.value)}
+                            placeholder="Sample for {{1}} (उदा. मध्य प्रदेश में भारी बारिश)"
+                            className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-[11px]"
+                          />
+                          {tplBodyText.includes('{{2}}') && (
+                            <input
+                              type="text"
+                              value={tplBodySample2}
+                              onChange={(e) => setTplBodySample2(e.target.value)}
+                              placeholder="Sample for {{2}} (उदा. मौसम विभाग का रेड अलर्ट जारी)"
+                              className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-[11px]"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Footer Text */}
+                    <div>
+                      <label className="block font-bold text-slate-300 mb-1">फूटर टेक्स्ट (Footer - Optional):</label>
+                      <input
+                        type="text"
+                        value={tplFooterText}
+                        onChange={(e) => setTplFooterText(e.target.value)}
+                        placeholder="AI News Maker - आधिकारिक समाचार सेवा"
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-emerald-400 focus:outline-hidden"
+                      />
+                    </div>
+
+                    {/* Interactive Button */}
+                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                      <label className="block font-bold text-slate-300">बटन प्रकार (Action Button):</label>
+                      <div className="flex items-center gap-3">
+                        {(['URL', 'NONE'] as const).map((b) => (
+                          <label key={b} className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                            <input
+                              type="radio"
+                              name="buttonType"
+                              value={b}
+                              checked={tplButtonType === b}
+                              onChange={() => setTplButtonType(b)}
+                              className="accent-emerald-400"
+                            />
+                            <span>{b === 'URL' ? 'इंटरएक्टिव URL बटन' : 'कोई नहीं'}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {tplButtonType === 'URL' && (
+                        <div className="space-y-2 pt-1">
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">बटन लेबल:</label>
+                            <input
+                              type="text"
+                              value={tplButtonLabel}
+                              onChange={(e) => setTplButtonLabel(e.target.value)}
+                              placeholder="इस खबर से ग्राफिक बनाएं"
+                              className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-[11px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-slate-400 mb-1">URL (Dynamic URL हेतु {'{{1}}'} जोड़ें):</label>
+                            <input
+                              type="text"
+                              value={tplButtonUrl}
+                              onChange={(e) => setTplButtonUrl(e.target.value)}
+                              placeholder="https://ainewsmaker.online/studio{{1}}"
+                              className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-[11px]"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Submit Button */}
+                    <div className="pt-2">
+                      <button
+                        type="submit"
+                        disabled={isSubmittingTemplate}
+                        className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50"
+                      >
+                        {isSubmittingTemplate ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                            <span>Meta API में जमा हो रहा है...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4" />
+                            <span>Meta API में टेम्प्लेट जमा करें (Submit to Meta)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Right Column: Live Phone Simulator */}
+                  <div className="space-y-2 flex flex-col items-center">
+                    <label className="text-xs font-black text-emerald-400 uppercase tracking-wider self-start flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>लाइव WhatsApp पूर्वावलोकन (Live Preview)</span>
+                    </label>
+
+                    {/* Phone Frame */}
+                    <div className="w-full max-w-[320px] bg-[#0b141a] rounded-3xl border-4 border-slate-700 p-3 shadow-2xl flex flex-col min-h-[440px] justify-between">
+                      <div className="space-y-2">
+                        {/* WhatsApp Top Bar */}
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-800 text-[11px] text-slate-300">
+                          <div className="w-7 h-7 rounded-full bg-emerald-700 flex items-center justify-center font-bold text-white text-xs">
+                            AI
+                          </div>
+                          <div className="leading-tight flex-1">
+                            <div className="font-bold text-white flex items-center gap-1">
+                              <span>AI News Maker</span>
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                            </div>
+                            <span className="text-[9px] text-emerald-400">आधिकारिक व्यावसायिक खाता</span>
+                          </div>
+                        </div>
+
+                        {/* WhatsApp Chat Bubble */}
+                        <div className="bg-[#005c4b] text-white p-3 rounded-xl rounded-tl-none shadow-md space-y-2 text-xs leading-relaxed font-sans">
+                          {/* Image Header Preview */}
+                          {tplHeaderType === 'IMAGE' && tplHeaderSampleUrl && (
+                            <div className="rounded-lg overflow-hidden border border-emerald-600/50 aspect-video max-h-36 bg-black/40">
+                              <img src={tplHeaderSampleUrl} alt="Template Header" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+
+                          {tplHeaderType === 'TEXT' && tplHeaderText && (
+                            <div className="font-extrabold text-white text-xs pb-1 border-b border-emerald-600/40">
+                              {tplHeaderText}
+                            </div>
+                          )}
+
+                          {/* Body Text with Variable Replacement */}
+                          <div className="whitespace-pre-wrap">
+                            {tplBodyText
+                              .replace(/\{\{1\}\}/g, tplBodySample1 || 'वैरिएबल 1')
+                              .replace(/\{\{2\}\}/g, tplBodySample2 || 'वैरिएबल 2') || 'बॉडी टेक्स्ट यहाँ दिखाई देगा...'}
+                          </div>
+
+                          {/* Footer */}
+                          {tplFooterText && (
+                            <div className="text-[10px] text-emerald-200/80 pt-1 border-t border-emerald-600/40 italic">
+                              _{tplFooterText}_
+                            </div>
+                          )}
+
+                          {/* Interactive Button Preview */}
+                          {tplButtonType === 'URL' && tplButtonLabel && (
+                            <div className="pt-2 border-t border-emerald-600/40">
+                              <div className="w-full py-2 px-3 bg-[#00a884]/20 hover:bg-[#00a884]/30 text-[#25d366] text-center font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 border border-[#00a884]/40 transition shadow-sm">
+                                <ExternalLink className="w-3.5 h-3.5 text-amber-300" />
+                                <span>{tplButtonLabel}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="text-[9px] text-emerald-200/60 text-right">
+                            {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} ✓✓
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-slate-500 text-center pt-2">
+                        Meta Cloud API लाइव पूर्वावलोकन
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TEMPLATE DETAIL / PREVIEW MODAL                                           */}
+          {/* ========================================================================= */}
+          {selectedTemplateForPreview && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-5 space-y-4 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                    <span className="font-mono font-bold text-white text-sm">{selectedTemplateForPreview.name}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemplateForPreview(null)}
+                    className="p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">अनुमोदन स्थिति:</span>
+                    <span className="font-bold text-emerald-400 uppercase">{selectedTemplateForPreview.status || 'APPROVED'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">श्रेणी:</span>
+                    <span className="text-white font-semibold">{selectedTemplateForPreview.category || 'MARKETING'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">भाषा:</span>
+                    <span className="text-white font-semibold uppercase">{selectedTemplateForPreview.language || 'hi'}</span>
+                  </div>
+                </div>
+
+                {/* Raw Components Preview */}
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 max-h-60 overflow-y-auto">
+                  <span className="text-[10px] font-bold text-slate-400 block mb-1">Components Payload:</span>
+                  <pre className="text-[10px] text-slate-300 font-mono whitespace-pre-wrap">
+                    {JSON.stringify(selectedTemplateForPreview.components || selectedTemplateForPreview, null, 2)}
+                  </pre>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTemplateForPreview(null)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+                  >
+                    बंद करें
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}

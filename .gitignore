@@ -123,4 +123,7 @@ web_studio/deleted_users_tombstones.json
 
 scripts/*
 test_*.cjs
+verify_*.cjs
+whatsapp_news_sessions_db.json
+whatsapp_templates_db.json
 !scripts/test_headline_regen_coin_pricing.cjs
