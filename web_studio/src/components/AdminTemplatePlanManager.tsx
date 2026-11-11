@@ -238,6 +238,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
         designCategory: category as any,
         isTestFrame: false,
         approvalStatus: 'APPROVED',
+        publicationStatus: 'published',
         approvedAt: Date.now(),
         updatedAt: Date.now(),
       };

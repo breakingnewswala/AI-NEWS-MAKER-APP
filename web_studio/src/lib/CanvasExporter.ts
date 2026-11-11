@@ -66,13 +66,29 @@ if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D
   };
 }
 
+// Helper to get safe proxied image URL for remote/cross-origin resources
+const getSafeImageUrl = (rawUrl: string): string => {
+  if (!rawUrl || !rawUrl.trim()) return '';
+  const trimmed = rawUrl.trim();
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+  if (trimmed.startsWith('/api/proxy-image')) return getApiUrl(trimmed);
+  if (
+    typeof window !== 'undefined' &&
+    (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+    (!trimmed.startsWith(window.location.origin) || trimmed.includes('storage.googleapis.com'))
+  ) {
+    return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(trimmed)}`);
+  }
+  return trimmed;
+};
+
 /**
  * High-resolution canvas renderer for News Graphic Cards (1080x1350 4:5 or 1080x1080 1:1)
  */
 export const loadImage = async (src: string): Promise<HTMLImageElement> => {
   if (!src || !src.trim()) {
     const fallback = new Image();
-    fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
+    fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
     await new Promise((r) => { fallback.onload = r; fallback.onerror = r; });
     return fallback;
   }
@@ -92,17 +108,26 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
     !effectiveSrc.startsWith('data:')
   ) {
     try {
-      // 1. Try direct fetch with cors
-      const directRes = await fetch(effectiveSrc, { mode: 'cors' }).catch(() => null);
-      if (directRes && directRes.ok) {
-        const b = await directRes.blob();
-        effectiveSrc = URL.createObjectURL(b);
-      } else {
-        // 2. Fall back to backend image proxy
+      // 1. If cross-origin or storage URL, try backend proxy first to avoid GCS CORS blocks
+      const isCrossOrigin = !effectiveSrc.startsWith(window.location.origin) || effectiveSrc.includes('storage.googleapis.com');
+      if (isCrossOrigin) {
         const proxiedUrl = getApiUrl(`/api/proxy-image?url=${encodeURIComponent(effectiveSrc)}`);
         const proxyRes = await fetch(proxiedUrl).catch(() => null);
         if (proxyRes && proxyRes.ok) {
           const b = await proxyRes.blob();
+          effectiveSrc = URL.createObjectURL(b);
+        } else {
+          // Direct fetch fallback
+          const directRes = await fetch(effectiveSrc, { mode: 'cors' }).catch(() => null);
+          if (directRes && directRes.ok) {
+            const b = await directRes.blob();
+            effectiveSrc = URL.createObjectURL(b);
+          }
+        }
+      } else {
+        const directRes = await fetch(effectiveSrc, { mode: 'cors' }).catch(() => null);
+        if (directRes && directRes.ok) {
+          const b = await directRes.blob();
           effectiveSrc = URL.createObjectURL(b);
         }
       }
@@ -124,10 +149,10 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
       }
     };
 
-    const isOverlayOrLogo = /logo|badge|callout|ribbon|watermark|icon/i.test(effectiveSrc);
+    const isOverlayOrFrame = /logo|badge|callout|ribbon|watermark|icon|frame|overlay|background|bg_|uploads/i.test(effectiveSrc);
     const transparentFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
     const photoFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
-    const getFallbackSrc = () => isOverlayOrLogo ? transparentFallback : photoFallback;
+    const getFallbackSrc = () => isOverlayOrFrame ? transparentFallback : photoFallback;
 
     const handleDecodeSuccess = (targetImg: HTMLImageElement) => {
       if (targetImg.naturalWidth > 0 && targetImg.naturalHeight > 0) {
@@ -145,14 +170,25 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
       fallback.onerror = () => finish(fallback);
     };
 
-    const timeout = setTimeout(handleDecodeFailure, 6000);
+    const timeout = setTimeout(handleDecodeFailure, 8000);
 
     img.onload = () => {
       clearTimeout(timeout);
+      // If already loaded and valid dimensions exist, resolve immediately
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        finish(img);
+        return;
+      }
       if (typeof img.decode === 'function') {
         img.decode()
           .then(() => handleDecodeSuccess(img))
-          .catch(() => handleDecodeFailure());
+          .catch(() => {
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+              finish(img);
+            } else {
+              handleDecodeFailure();
+            }
+          });
       } else {
         handleDecodeSuccess(img);
       }
@@ -168,10 +204,20 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
             retryImg.crossOrigin = 'anonymous';
             retryImg.onload = () => {
               clearTimeout(timeout);
+              if (retryImg.naturalWidth > 0 && retryImg.naturalHeight > 0) {
+                finish(retryImg);
+                return;
+              }
               if (typeof retryImg.decode === 'function') {
                 retryImg.decode()
                   .then(() => handleDecodeSuccess(retryImg))
-                  .catch(() => handleDecodeFailure());
+                  .catch(() => {
+                    if (retryImg.naturalWidth > 0 && retryImg.naturalHeight > 0) {
+                      finish(retryImg);
+                    } else {
+                      handleDecodeFailure();
+                    }
+                  });
               } else {
                 handleDecodeSuccess(retryImg);
               }
@@ -1649,6 +1695,17 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
+  // 2.5 TRANSPARENT OVERLAY ASSET (If configured separately)
+  const overlayUrl = (df as any).transparentOverlayAsset || (df as any).overlayAssetUrl;
+  if (overlayUrl && overlayUrl !== bgArtworkUrl) {
+    try {
+      const overlayImg = await loadImage(overlayUrl);
+      ctx.drawImage(overlayImg, 0, 0, width, height);
+    } catch (e) {
+      console.warn('Dynamic frame overlay asset load error:', e);
+    }
+  }
+
   // 3. LOGO
   if (df.headerConfig?.showLogo) {
     const lRect = df.headerConfig.logoRect || { x: 5, y: 3.5, width: 22, height: 9 };
@@ -1714,10 +1771,11 @@ async function drawAuthoritativeDynamicFrameCanvas(
 
         // Dynamic horizontal expansion: expand center destination width to fit text + 28px padding
         const minCenterW = Math.max(10, bw - leftDestW - rightDestW);
-        const neededCenterW = measuredTextW + 28;
+        const neededCenterW = measuredTextW + 36;
         const midDestW = Math.max(minCenterW, neededCenterW);
-        const dynamicBw = Math.min(width * 0.94 - bx, leftDestW + midDestW + rightDestW);
-        const finalCenterW = dynamicBw - leftDestW - rightDestW;
+        const maxBw = Math.max(bw, width - bx - 20);
+        const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
+        const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
 
         // Draw background color if selected by user or frame config
         const bgCol = card.locationBgColor || df.headerConfig.locationBgColor;
@@ -1767,7 +1825,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.fill();
 
       ctx.fillStyle = df.headerConfig.locationTextColor || '#FFFFFF';
-      const fontSize = Math.round((df.headerConfig.locationFontSize || 20) * (width / 1080));
+      const fontSize = Math.max(14, Math.min(32, Math.round(bh * 0.60)));
       ctx.font = `800 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -1784,8 +1842,10 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const dw = (dateRect.width / 100) * width;
     const dh = (dateRect.height / 100) * height;
     const rotDeg = card.dateRotation ?? df.headerConfig.dateRotation ?? 270;
+    const dateOpacity = card.dateOpacity ?? df.headerConfig.dateOpacity ?? 0.90;
 
     ctx.save();
+    ctx.globalAlpha = Math.max(0.15, Math.min(1.0, dateOpacity));
     ctx.translate(dx + dw / 2, dy + dh / 2);
     ctx.rotate((rotDeg * Math.PI) / 180);
 
@@ -1854,13 +1914,13 @@ async function drawAuthoritativeDynamicFrameCanvas(
   }
 
   // 5.5 WATERMARK (Part 10 & 12: Dynamic User Mode Sync, Rotation, Position & Type Controls)
-  const isWatermarkOff = card.photoDisclaimerType === 'none' || (card.showAiGenerated === false && card.photoDisclaimerType !== 'representative' && card.photoDisclaimerType !== 'ai');
-  if (df.watermarkConfig?.enabled && !isWatermarkOff) {
+  const isDisclaimerOff = card.photoDisclaimerType === 'none' || (card.showAiGenerated === false && card.photoDisclaimerType !== 'representative' && card.photoDisclaimerType !== 'ai');
+  if (df.watermarkConfig?.enabled && !isDisclaimerOff) {
     ctx.save();
     const wm = df.watermarkConfig;
     const rotDeg = card.watermarkRotation ?? wm.rotation ?? (wm.position === 'right_edge' ? 270 : 0);
-    const op = wm.opacity ?? 0.85;
-    ctx.globalAlpha = op;
+    const op = card.watermarkOpacity ?? wm.opacity ?? 0.85;
+    ctx.globalAlpha = Math.max(0.15, Math.min(1.0, op));
 
     let wx = width - 40;
     let wy = height * 0.35;
@@ -1909,7 +1969,36 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.restore();
   }
 
-  // 6. PRIMARY HEADLINE TEXT (Respecting #000000 Black Text without white/dark shadow collision)
+  // 5.6 DEDICATED TEXT WATERMARK (Works independently from photo disclaimer)
+  if (card.showTextWatermark === true || card.showSuperBreakingWatermark === true) {
+    ctx.save();
+    const textContent = (card.textWatermarkContent || card.channelNameEn || card.brandName || card.watermarkText || 'BREAKING NEWS WALA').trim();
+    const textOpacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.20;
+    const textColor = card.textWatermarkColor || 'white';
+    ctx.globalAlpha = Math.max(0.05, Math.min(0.9, textOpacity));
+
+    const colorHex = textColor === 'black' ? '#000000' : textColor === 'red' ? '#DC2626' : '#FFFFFF';
+    ctx.fillStyle = colorHex;
+    ctx.font = '900 24px "Arial", "Noto Sans Devanagari", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.save();
+    ctx.translate(width / 2, height * 0.40);
+    ctx.rotate((-20 * Math.PI) / 180);
+    const stepX = 280;
+    const stepY = 100;
+    for (let row = -4; row <= 4; row++) {
+      const offsetX = (row % 2) * (stepX / 2);
+      for (let col = -3; col <= 3; col++) {
+        ctx.fillText(textContent.toUpperCase(), col * stepX + offsetX, row * stepY);
+      }
+    }
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // 6. PRIMARY HEADLINE TEXT (Respecting #000000 Black Text & Max 4 Lines with Font Autoscaling)
   const textSlot = df.textSlots[0] || { rect: { x: 7, y: 63, width: 86, height: 27 }, textColor: '#FFFFFF', fontFamily: 'Baloo 2', backgroundColor: 'transparent' };
   const hx = (textSlot.rect.x / 100) * width;
   const hy = (textSlot.rect.y / 100) * height;
@@ -1939,7 +2028,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       fontFamily: fontFam,
       aspectRatio: card.aspectRatio || df.aspectRatio || '4:5',
       customBounds: { x: hx + 15, y: hy, width: paddedHw, height: hh },
-      customMaxLines: 3,
+      customMaxLines: 4,
       userFontSize: card.headlineFontSize,
       alignment: align as any,
       ctx,
@@ -1951,9 +2040,9 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const startY = layout.startY + lineHeight / 2;
 
     ctx.save();
-    // Clip to headline bounding box with subtle safety margin
+    // Clip to headline bounding box with safety margin to prevent any text clipping
     ctx.beginPath();
-    ctx.rect(hx - 2, hy - 2, hw + 4, hh + 4);
+    ctx.rect(hx - 2, hy - 4, hw + 4, hh + 12);
     ctx.clip();
 
     ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
@@ -1996,7 +2085,6 @@ async function drawAuthoritativeDynamicFrameCanvas(
         curX += tokenWidths[tIdx] + spaceWidth;
       });
     });
-    ctx.restore();
     ctx.restore();
   }
 

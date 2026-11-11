@@ -183,10 +183,10 @@ export function getTemplateLayoutSpec(
   let headlineSafeBottom = bannerY + bannerH - 18;
   let maxHeadlineW = headlineSafeRight - headlineSafeLeft;
   let maxHeadlineH = headlineSafeBottom - headlineSafeTop;
-  let maxLines = 3;
-  let supportsFourLines = false;
+  let maxLines = 4;
+  let supportsFourLines = true;
   let defaultFontSize = 70;
-  let minFontSize = 36;
+  let minFontSize = 26;
   let maxFontSize = 84;
 
   if (templateId === 'graphic_001') {
@@ -225,10 +225,10 @@ export function getTemplateLayoutSpec(
     headlineSafeBottom = bannerY + bannerH - 14;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
-    maxLines = 3;
-    supportsFourLines = false;
+    maxLines = 4;
+    supportsFourLines = true;
     defaultFontSize = 72;
-    minFontSize = 36;
+    minFontSize = 26;
     maxFontSize = 84;
   } else if (templateId === 'graphic_003') {
     // Graphic 3: Modern Minimalist Pro News
@@ -244,10 +244,10 @@ export function getTemplateLayoutSpec(
     headlineSafeBottom = bannerY + bannerH - 16;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
-    maxLines = 3;
-    supportsFourLines = false;
+    maxLines = 4;
+    supportsFourLines = true;
     defaultFontSize = 74;
-    minFontSize = 38;
+    minFontSize = 26;
     maxFontSize = 88;
   } else if (templateId === 'graphic_004') {
     // Graphic 4: Top Headline, Photo Middle, Footer Bottom
@@ -263,10 +263,10 @@ export function getTemplateLayoutSpec(
     headlineSafeBottom = bannerY + bannerH - 8;
     maxHeadlineH = headlineSafeBottom - headlineSafeTop;
 
-    maxLines = 3;
-    supportsFourLines = false;
+    maxLines = 4;
+    supportsFourLines = true;
     defaultFontSize = 82;
-    minFontSize = 42;
+    minFontSize = 26;
     maxFontSize = 94;
   } else if (templateId === 'jacket-morning') {
     // Morning Jacket (Suvichar / Quotes)
@@ -503,7 +503,9 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   const spec = getTemplateLayoutSpec(options.templateId, options.aspectRatio);
   const rawHeadline = cleanHeadlineText(options.headline || '');
   const fontFam = options.fontFamily || 'Baloo 2';
-  const maxLines = options.customMaxLines || spec.headlineArea.maxLines;
+  const maxLines = spec.templateId === 'jacket-morning'
+    ? (options.customMaxLines || spec.headlineArea.maxLines)
+    : Math.min(4, Math.max(3, options.customMaxLines || spec.headlineArea.maxLines || 4));
   const maxW = options.customBounds?.width || spec.headlineArea.maxWidth;
   const maxH = options.customBounds?.height || spec.headlineArea.maxHeight;
 
@@ -684,7 +686,42 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     }
   }
 
-  // Fallback if headline is excessively long even at minFontSize
+  // Fallback if headline is excessively long even at minFontSize: continue stepping down to 20px so text fits cleanly within maxLines
+  if (!fitsCleanly && !isDefaultInstructionalHeadline) {
+    for (let s = endFontSize - 2; s >= 20; s -= 2) {
+      const lineH = Math.round(s * 1.30);
+      const spaceW = measureTextWidth(' ', fontFam, s, '900', options.ctx);
+      const allTokens = parseHeadlineTokens(rawHeadline, options.highlightWords);
+      const lines: WordToken[][] = [];
+      let curLine: WordToken[] = [];
+      let curWidth = 0;
+
+      for (const token of allTokens) {
+        const w = measureTextWidth(token.text, fontFam, s, '900', options.ctx);
+        const needed = curLine.length === 0 ? w : curWidth + spaceW + w;
+        if (needed > maxW && curLine.length > 0) {
+          lines.push(curLine);
+          curLine = [token];
+          curWidth = w;
+        } else {
+          curLine.push(token);
+          curWidth = needed;
+        }
+      }
+      if (curLine.length > 0) lines.push(curLine);
+      const totalH = lines.length * lineH;
+      if (lines.length <= maxLines && totalH <= maxH) {
+        bestFontSize = s;
+        bestLines = lines;
+        bestLineH = lineH;
+        bestTotalH = totalH;
+        fitsCleanly = true;
+        break;
+      }
+    }
+  }
+
+  // Final fallback if headline exceeds available space even at 20px
   if (!fitsCleanly) {
     const spaceW = measureTextWidth(' ', fontFam, endFontSize, '900', options.ctx);
     const allTokens = parseHeadlineTokens(rawHeadline, options.highlightWords);
