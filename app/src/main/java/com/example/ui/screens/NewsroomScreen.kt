@@ -569,6 +569,9 @@ fun BreakingNewsStudioWebView(
                                     "localStorage.setItem('ai_news_user', JSON.stringify(sess)); " +
                                     "localStorage.setItem('user_channel_profile', JSON.stringify(prof)); " +
                                     "localStorage.setItem('user_profile_breakingnewswala.com@gmail.com', JSON.stringify(prof)); " +
+                                    "if (!localStorage.getItem('CUSTOM_CLOUD_API_URL') || localStorage.getItem('CUSTOM_CLOUD_API_URL').indexOf('ais-dev-vhpz665wuo3aifiyjrbnrh') !== -1) { " +
+                                    "  localStorage.setItem('CUSTOM_CLOUD_API_URL', 'https://www.ainewsmaker.online'); " +
+                                    "} " +
                                     "if (window.applyAndroidChannelProfile) { window.applyAndroidChannelProfile(prof); } " +
                                     "} catch(e) {} })();",
                                     null

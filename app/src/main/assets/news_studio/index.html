@@ -178,6 +178,41 @@
           localStorage.setItem('ai_news_user', JSON.stringify(masterAdminSession));
           localStorage.setItem('user_channel_profile', JSON.stringify(masterAdminProfile));
           localStorage.setItem('user_profile_breakingnewswala.com@gmail.com', JSON.stringify(masterAdminProfile));
+
+          // Connect Android WebView directly to live production server (https://www.ainewsmaker.online)
+          var existingCloudUrl = localStorage.getItem('CUSTOM_CLOUD_API_URL') || '';
+          if (!existingCloudUrl || existingCloudUrl.indexOf('ais-dev-vhpz665wuo3aifiyjrbnrh') !== -1) {
+            localStorage.setItem('CUSTOM_CLOUD_API_URL', 'https://www.ainewsmaker.online');
+          }
+          localStorage.setItem('cloud_server_url', localStorage.getItem('CUSTOM_CLOUD_API_URL') || 'https://www.ainewsmaker.online');
+
+          // Ensure bare fetch('/api/...') calls inside Android WebView route to live production server with offline fallback
+          if (typeof window.fetch === 'function' && (window.location.hostname === 'appassets.androidplatform.net' || window.location.protocol === 'file:')) {
+            var nativeFetch = window.fetch.bind(window);
+            window.fetch = function(input, init) {
+              var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : String(input));
+              var cloudBase = (localStorage.getItem('CUSTOM_CLOUD_API_URL') || 'https://www.ainewsmaker.online').replace(/\/+$/, '');
+              var apiPath = '';
+
+              if (urlStr.indexOf('/api/') === 0) {
+                apiPath = urlStr;
+              } else if (urlStr.indexOf('https://appassets.androidplatform.net/api/') === 0) {
+                apiPath = urlStr.replace('https://appassets.androidplatform.net', '');
+              } else if (urlStr.indexOf('https://ais-dev-vhpz665wuo3aifiyjrbnrh-101130074623.asia-southeast1.run.app/api/') === 0) {
+                apiPath = urlStr.replace('https://ais-dev-vhpz665wuo3aifiyjrbnrh-101130074623.asia-southeast1.run.app', '');
+              }
+
+              if (apiPath) {
+                var liveUrl = cloudBase + apiPath;
+                return nativeFetch(liveUrl, init).catch(function(err) {
+                  // Offline fallback to bundled JSON assets if network is unreachable
+                  var fallbackUrl = 'https://appassets.androidplatform.net' + apiPath;
+                  return nativeFetch(fallbackUrl, init);
+                });
+              }
+              return nativeFetch(input, init);
+            };
+          }
         } catch (e) {}
 
         window.addEventListener('error', function(e) {

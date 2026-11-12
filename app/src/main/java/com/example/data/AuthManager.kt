@@ -31,10 +31,10 @@ object AuthManager {
 
     const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
     const val FALLBACK_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
-    const val DEFAULT_CLOUD_SERVER_URL = "https://ainewsmaker.online"
+    const val DEFAULT_CLOUD_SERVER_URL = "https://www.ainewsmaker.online"
     const val DEFAULT_OPENAI_API_KEY: String = ""
 
-    const val ACCOUNT_DELETION_WEB_URL = "https://ainewsmaker.online/delete-account"
+    const val ACCOUNT_DELETION_WEB_URL = "https://www.ainewsmaker.online/delete-account"
     const val TEST_REVIEWER_EMAIL = "google-reviewer@ainewsmaker.online"
     const val TEST_REVIEWER_OTP = "123456"
     const val TEST_REVIEWER_PASSWORD = "GoogleReview2026!"
