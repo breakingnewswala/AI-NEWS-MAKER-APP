@@ -1,1 +1,586 @@
-[]
+[
+  {
+    "id": "df_1794406067554_albmw",
+    "docId": "df_1794406067554_albmw",
+    "locationBadgeAssetId": "asset_1794132101671_u0g9s",
+    "version": 2,
+    "footerConfig": {
+      "footerWidthPct": 100,
+      "enforcePermanentFooter": true,
+      "footerAlignment": "center",
+      "footerBgColor": "#FFFFFF",
+      "footerTextColor": "#000000",
+      "footerHeightRatio": 0.08
+    },
+    "sliceConfig": {
+      "centerMinPct": 0.57,
+      "leftWidthPct": 0.28,
+      "rightWidthPct": 0.15
+    },
+    "approvedBy": null,
+    "targetCategory": null,
+    "primaryFooterColor": "#FFFFFF",
+    "previewImageUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/preview_df_1794406067554_albmw_1794406069106_b34b91d7.png",
+    "description": "",
+    "aspectRatio": "4:5",
+    "designCategory": "Special Frames",
+    "name": "TEST 2",
+    "typographyConfig": {
+      "minFontSize": 24,
+      "secondaryHeadline": {},
+      "fontWeight": "bold",
+      "primaryFontSize": 72,
+      "primaryFontFamily": "Noto Sans Devanagari",
+      "primaryHeadline": {}
+    },
+    "headerConfig": {
+      "dateTextColor": "#CBD5E1",
+      "typographyConfig": {
+        "fontWeight": "bold",
+        "textAlign": "center",
+        "textColor": "#000000",
+        "fontSize": 65,
+        "fontFamily": "Noto Sans Devanagari"
+      },
+      "locationBadgeMode": "static_image",
+      "logoPaddingPx": 4,
+      "logoPosition": "top_left",
+      "dateAlign": "center",
+      "dateBgColor": "rgba(0,0,0,0.7)",
+      "showDate": true,
+      "dateRect": {
+        "x": -11.4,
+        "y": 39.7,
+        "height": 3.2,
+        "width": 34
+      },
+      "showLocation": true,
+      "dateFontSize": 20,
+      "dateStampStyle": "only_text",
+      "dateFormat": "hi_full",
+      "manualLocationAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/loc_df_1794406067554_albmw_1794406072741_d9c9e5f6.png",
+      "locationBgColor": "#DC2626",
+      "locationStyle": "pill",
+      "showLogo": true,
+      "textRegion": {
+        "x": 32,
+        "y": 27,
+        "width": 58,
+        "height": 55
+      },
+      "dateRotation": 270,
+      "logoOpacity": 1,
+      "locationFontSize": 24,
+      "locationTextColor": "#000000",
+      "locationAlign": "center",
+      "logoRect": {
+        "width": 22,
+        "x": 4,
+        "y": 4,
+        "height": 9
+      },
+      "locationRect": {
+        "x": 68,
+        "y": 4,
+        "width": 28,
+        "height": 4.5
+      },
+      "sliceConfig": {
+        "rightWidthPct": 0.15,
+        "centerMinPct": 0.57,
+        "leftWidthPct": 0.28
+      },
+      "logoScalePct": 100,
+      "logoAlign": "left",
+      "locationBadgeAssetId": "asset_1794132101671_u0g9s",
+      "locationShowIcon": true,
+      "dateOpacity": 0.9
+    },
+    "fullStoryCalloutConfig": {
+      "bgColor": "#DC2626",
+      "enabled": true,
+      "calloutAssetId": "callout_breaking_red",
+      "textColor": "#FFFFFF",
+      "borderWidth": 1,
+      "text": "पूरी खबर डिस्क्रिप्शन में",
+      "calloutVisibilityPolicy": "optional",
+      "borderColor": "#FACC15",
+      "manualCalloutAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/callout_df_1794406067554_albmw_1794406074872_8b8f3ecb.png",
+      "planCalloutSettings": {},
+      "calloutAssetMode": "static_image",
+      "rect": {
+        "x": 10,
+        "y": 86.8,
+        "width": 80,
+        "height": 3.5
+      },
+      "align": "center",
+      "fontSize": 18,
+      "rotation": 0,
+      "showIcon": true
+    },
+    "createdAt": 1794406067554,
+    "primaryBackgroundAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/bg_df_1794406067554_albmw_1794406067634_bc02512b.png",
+    "safeZoneConfig": {
+      "headerSafeAreaPct": 12,
+      "bottomMarginPct": 8,
+      "enabled": true,
+      "footerSafeAreaPct": 8,
+      "rightMarginPct": 4,
+      "leftMarginPct": 4,
+      "topMarginPct": 4
+    },
+    "photoSlots": [
+      {
+        "id": "slot_photo_1",
+        "name": "मुख्य फोटो (Main Photo)",
+        "slotType": "normal",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 58.476470588235294
+        },
+        "required": true,
+        "cropMode": "cover",
+        "bgRemoval": false
+      }
+    ],
+    "isStatementFrame": false,
+    "frameType": "graphic",
+    "primaryBackgroundMode": "image",
+    "activePhotoLayoutMode": "single",
+    "createdBy": "breakingnewswala.com@gmail.com",
+    "updatedAt": 1794411111559,
+    "approvalStatus": "APPROVED",
+    "photoLayoutVariants": [
+      {
+        "id": "var_single",
+        "mode": "single",
+        "label": "सिंगल फोटो (1 Photo Full)",
+        "enabled": true,
+        "slots": [
+          {
+            "id": "slot_photo_1",
+            "name": "मुख्य फोटो (Main Photo)",
+            "slotType": "normal",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 62
+            },
+            "required": true,
+            "cropMode": "cover",
+            "bgRemoval": false
+          }
+        ]
+      },
+      {
+        "id": "var_dual_50_50",
+        "mode": "dual_50_50",
+        "label": "ड्यूल 50:50 स्प्लिट (Side-by-Side)",
+        "enabled": true,
+        "slots": [
+          {
+            "id": "slot_photo_1",
+            "name": "बायाँ फोटो (Left Photo)",
+            "slotType": "normal",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 49.5,
+              "height": 62
+            },
+            "required": true,
+            "cropMode": "cover",
+            "bgRemoval": false
+          },
+          {
+            "id": "slot_photo_2",
+            "name": "दायाँ फोटो (Right Photo)",
+            "slotType": "normal",
+            "rect": {
+              "x": 50.5,
+              "y": 0,
+              "width": 49.5,
+              "height": 62
+            },
+            "required": true,
+            "cropMode": "cover",
+            "bgRemoval": false
+          }
+        ]
+      },
+      {
+        "id": "var_dual_vertical",
+        "mode": "dual_vertical",
+        "label": "ड्यूल वर्टिकल (Top / Bottom)",
+        "enabled": true,
+        "slots": [
+          {
+            "id": "slot_photo_1",
+            "name": "ऊपरी फोटो (Top Photo)",
+            "slotType": "normal",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 100,
+              "height": 30.5
+            },
+            "required": true,
+            "cropMode": "cover",
+            "bgRemoval": false
+          },
+          {
+            "id": "slot_photo_2",
+            "name": "निचला फोटो (Bottom Photo)",
+            "slotType": "normal",
+            "rect": {
+              "x": 0,
+              "y": 31.5,
+              "width": 100,
+              "height": 30.5
+            },
+            "required": true,
+            "cropMode": "cover",
+            "bgRemoval": false
+          }
+        ]
+      },
+      {
+        "id": "var_triple",
+        "mode": "triple",
+        "label": "ट्रिपल फोटो (1 Large + 2 Small)",
+        "enabled": true,
+        "slots": [
+          {
+            "id": "slot_photo_1",
+            "name": "बड़ा फोटो (Left Main)",
+            "slotType": "normal",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 59.5,
+              "height": 62
+            },
+            "required": true,
+            "cropMode": "cover",
+            "bgRemoval": false
+          },
+          {
+            "id": "slot_photo_2",
+            "name": "छोटा फोटो 1 (Top Right)",
+            "slotType": "normal",
+            "rect": {
+              "x": 60.5,
+              "y": 0,
+              "width": 39.5,
+              "height": 30.5
+            },
+            "required": false,
+            "cropMode": "cover",
+            "bgRemoval": false
+          },
+          {
+            "id": "slot_photo_3",
+            "name": "छोटा फोटो 2 (Bottom Right)",
+            "slotType": "normal",
+            "rect": {
+              "x": 60.5,
+              "y": 31.5,
+              "width": 39.5,
+              "height": 30.5
+            },
+            "required": false,
+            "cropMode": "cover",
+            "bgRemoval": false
+          }
+        ]
+      },
+      {
+        "id": "var_quad",
+        "mode": "quad",
+        "label": "फोर फोटो (2×2 Grid)",
+        "enabled": true,
+        "slots": [
+          {
+            "id": "slot_photo_1",
+            "name": "फोटो 1 (Top Left)",
+            "slotType": "normal",
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 49.5,
+              "height": 30.5
+            },
+            "required": true,
+            "cropMode": "cover",
+            "bgRemoval": false
+          },
+          {
+            "id": "slot_photo_2",
+            "name": "फोटो 2 (Top Right)",
+            "slotType": "normal",
+            "rect": {
+              "x": 50.5,
+              "y": 0,
+              "width": 49.5,
+              "height": 30.5
+            },
+            "required": false,
+            "cropMode": "cover",
+            "bgRemoval": false
+          },
+          {
+            "id": "slot_photo_3",
+            "name": "फोटो 3 (Bottom Left)",
+            "slotType": "normal",
+            "rect": {
+              "x": 0,
+              "y": 31.5,
+              "width": 49.5,
+              "height": 30.5
+            },
+            "required": false,
+            "cropMode": "cover",
+            "bgRemoval": false
+          },
+          {
+            "id": "slot_photo_4",
+            "name": "फोटो 4 (Bottom Right)",
+            "slotType": "normal",
+            "rect": {
+              "x": 50.5,
+              "y": 31.5,
+              "width": 49.5,
+              "height": 30.5
+            },
+            "required": false,
+            "cropMode": "cover",
+            "bgRemoval": false
+          }
+        ]
+      }
+    ],
+    "layers": [
+      {
+        "id": "layer_photo_slot_photo_1",
+        "name": "मुख्य फोटो (Main Photo)",
+        "type": "photo",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 58.476470588235294
+        },
+        "visible": true,
+        "locked": false,
+        "zIndex": 5
+      },
+      {
+        "id": "layer_text_slot_text_headline",
+        "name": "मुख्य हेडलाइन (Main Headline)",
+        "type": "text",
+        "rect": {
+          "x": 7,
+          "y": 59.9,
+          "width": 86,
+          "height": 27
+        },
+        "visible": true,
+        "locked": false,
+        "zIndex": 15
+      },
+      {
+        "id": "layer_logo",
+        "name": "चैनल लोगो (Logo)",
+        "type": "logo",
+        "rect": {
+          "x": 4,
+          "y": 4,
+          "width": 22,
+          "height": 9
+        },
+        "visible": true,
+        "locked": false,
+        "zIndex": 30,
+        "rotation": 0
+      },
+      {
+        "id": "layer_location",
+        "name": "लोकेशन बैज (Location Badge)",
+        "type": "location",
+        "rect": {
+          "x": 68,
+          "y": 4,
+          "width": 28,
+          "height": 4.5
+        },
+        "visible": true,
+        "locked": false,
+        "zIndex": 31,
+        "rotation": 0
+      },
+      {
+        "id": "layer_date",
+        "name": "दिनांक मुहर (Date Stamp)",
+        "type": "date",
+        "rect": {
+          "x": -11.4,
+          "y": 39.7,
+          "width": 34,
+          "height": 3.2
+        },
+        "visible": true,
+        "locked": false,
+        "zIndex": 32,
+        "rotation": 270
+      },
+      {
+        "id": "layer_watermark",
+        "name": "वॉटरमार्क (AI Watermark)",
+        "type": "watermark",
+        "rect": {
+          "x": 83.7,
+          "y": 35.5,
+          "width": 21,
+          "height": 3.5
+        },
+        "visible": true,
+        "locked": false,
+        "zIndex": 33,
+        "rotation": 90
+      },
+      {
+        "id": "layer_callout",
+        "name": "पूरी खबर कॉलआउट (Callout)",
+        "type": "callout",
+        "rect": {
+          "x": 10,
+          "y": 86.8,
+          "width": 80,
+          "height": 3.5
+        },
+        "visible": true,
+        "locked": false,
+        "zIndex": 34,
+        "rotation": 0
+      },
+      {
+        "id": "layer_footer",
+        "name": "स्थाई फुटर (Permanent Footer)",
+        "type": "footer",
+        "rect": {
+          "x": 0,
+          "y": 92,
+          "width": 100,
+          "height": 8
+        },
+        "visible": true,
+        "locked": true,
+        "zIndex": 50
+      }
+    ],
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "isTestFrame": false,
+    "isLayoutLocked": false,
+    "sampleReferenceUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/ref_df_1794406067554_albmw_1794406070588_80021934.png",
+    "primaryBackgroundHex": "#0B1329",
+    "ribbonConfig": {
+      "rotation": 0,
+      "ribbonId": "speed-blue-red",
+      "scalePct": 70,
+      "customRibbonUrl": "/assets/breaking_news_ribbon.svg",
+      "rect": {
+        "height": 8,
+        "x": 15,
+        "width": 70,
+        "y": 60
+      },
+      "enabled": false
+    },
+    "samplePhotoUrl": "",
+    "approvedAt": 1794411110643,
+    "watermarkConfig": {
+      "align": "center",
+      "watermarkStyle": "badge",
+      "position": "right_edge",
+      "textColor": "#FFFFFF",
+      "label": "AI GENERATED",
+      "opacity": 0.85,
+      "rect": {
+        "x": 83.7,
+        "y": 35.5,
+        "width": 21,
+        "height": 3.5
+      },
+      "customText": "AI GENERATED",
+      "rotation": 90,
+      "enabled": true,
+      "fontSize": 14,
+      "type": "text",
+      "bgColor": "rgba(0,0,0,0.6)"
+    },
+    "calloutAssetUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/callout_df_1794406067554_albmw_1794406072447_ab4314e3.png",
+    "publicationStatus": "published",
+    "calloutAssetId": "callout_breaking_red",
+    "sampleVideoUrl": "",
+    "statementOptions": {
+      "backgroundMode": "solid",
+      "solidBackgroundHex": "#C81E1E",
+      "cutoutPosition": "right",
+      "curatedBackgroundId": "bg_crimson_editorial",
+      "aiPrompt": "गंभीर राजनीतिक वक्तव्य के लिए डार्क एलिगेंट बैकग्राउंड"
+    },
+    "frameMode": "photo",
+    "textSlots": [
+      {
+        "id": "slot_text_headline",
+        "name": "मुख्य हेडलाइन (Main Headline)",
+        "role": "headline",
+        "rect": {
+          "x": 7,
+          "y": 59.9,
+          "width": 86,
+          "height": 27
+        },
+        "fontFamily": "Noto Sans Devanagari",
+        "fontSize": 72,
+        "fontWeight": "bold",
+        "textColor": "#000000",
+        "alignment": "center",
+        "maxLines": 3,
+        "lineHeight": 1.3,
+        "padding": 12,
+        "backgroundColor": "transparent"
+      }
+    ],
+    "canvasWidth": 1080,
+    "bannedFooterColor": "",
+    "poweredByConfig": {
+      "borderWidth": 1,
+      "enabled": false,
+      "text": "POWERED BY AINEWSMAKER.ONLINE",
+      "textColor": "#FFFFFF",
+      "opacity": 0.85,
+      "alignment": "center",
+      "fontSize": 16,
+      "borderColor": "#3B82F6",
+      "rotation": 0,
+      "bgColor": "rgba(15, 23, 42, 0.85)",
+      "rect": {
+        "x": 55,
+        "y": 92,
+        "height": 3.5,
+        "width": 42
+      }
+    },
+    "canvasHeight": 1350
+  }
+]

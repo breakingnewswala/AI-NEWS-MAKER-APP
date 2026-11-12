@@ -127,3 +127,8 @@ verify_*.cjs
 whatsapp_news_sessions_db.json
 whatsapp_templates_db.json
 !scripts/test_headline_regen_coin_pricing.cjs
+
+# Temporary audit & test output
+.tmp_chrome_audit/
+actual_audit_verified_export.*
+actual_export_audit.*

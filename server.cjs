@@ -32,8 +32,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // server_firestore_adapter.cjs
 var require_server_firestore_adapter = __commonJS({
   "server_firestore_adapter.cjs"(exports2, module2) {
-    var http = require("http");
-    var https = require("https");
+    var http2 = require("http");
+    var https2 = require("https");
     var fs3 = require("fs");
     var path3 = require("path");
     var firebaseConfig = null;
@@ -52,7 +52,7 @@ var require_server_firestore_adapter = __commonJS({
     var tokenExpiry = 0;
     function getMetadataAccessTokenInternal() {
       return new Promise((resolve) => {
-        const req = http.get(
+        const req = http2.get(
           {
             host: "metadata.google.internal",
             path: "/computeMetadata/v1/instance/service-accounts/default/token",
@@ -116,7 +116,7 @@ var require_server_firestore_adapter = __commonJS({
     }
     function getRuntimeServiceAccount() {
       return new Promise((resolve) => {
-        const req = http.get(
+        const req = http2.get(
           {
             host: "metadata.google.internal",
             path: "/computeMetadata/v1/instance/service-accounts/default/email",
@@ -194,7 +194,7 @@ var require_server_firestore_adapter = __commonJS({
       const payload = JSON.stringify({ fields });
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -233,7 +233,7 @@ var require_server_firestore_adapter = __commonJS({
       if (!token) return { success: false, error: "No access token available" };
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -278,7 +278,7 @@ var require_server_firestore_adapter = __commonJS({
       const encodedPath = encodeURIComponent(destinationPath);
       const uploadUrl = `/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}&uploadType=media`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firebasestorage.googleapis.com",
             path: uploadUrl,
@@ -375,7 +375,7 @@ var require_server_firestore_adapter = __commonJS({
       if (!token) return { success: false, error: "No access token available" };
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -411,7 +411,7 @@ var require_server_firestore_adapter = __commonJS({
       if (!token) return { success: false, error: "No access token available" };
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}?pageSize=${pageSize}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -563,9 +563,9 @@ var require_cloud_storage_service = __commonJS({
   "cloud_storage_service.cjs"(exports2, module2) {
     var fs3 = require("fs");
     var path3 = require("path");
-    var https = require("https");
+    var https2 = require("https");
     var { getMetadataAccessToken } = require_server_firestore_adapter();
-    var httpsAgent = new https.Agent({
+    var httpsAgent = new https2.Agent({
       keepAlive: true,
       maxSockets: 25
     });
@@ -648,7 +648,7 @@ var require_cloud_storage_service = __commonJS({
             uploadEndpoint += "&predefinedAcl=publicRead";
           }
           const uploadResult = await new Promise((resolve, reject) => {
-            const uReq = https.request(
+            const uReq = https2.request(
               uploadEndpoint,
               {
                 method: "POST",
@@ -759,7 +759,7 @@ var require_cloud_storage_service = __commonJS({
           if (!token) return { success: true, warning: "No token to delete GCS object" };
           const deleteEndpoint = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(this.bucketName)}/o/${encodeURIComponent(gcsPath)}`;
           await new Promise((resolve, reject) => {
-            const dReq = https.request(
+            const dReq = https2.request(
               deleteEndpoint,
               {
                 method: "DELETE",
@@ -820,8 +820,8 @@ var require_cloud_storage_service = __commonJS({
 // ../server_firestore_adapter.cjs
 var require_server_firestore_adapter2 = __commonJS({
   "../server_firestore_adapter.cjs"(exports2, module2) {
-    var http = require("http");
-    var https = require("https");
+    var http2 = require("http");
+    var https2 = require("https");
     var fs3 = require("fs");
     var path3 = require("path");
     var firebaseConfig = null;
@@ -840,7 +840,7 @@ var require_server_firestore_adapter2 = __commonJS({
     var tokenExpiry = 0;
     function getMetadataAccessTokenInternal() {
       return new Promise((resolve) => {
-        const req = http.get(
+        const req = http2.get(
           {
             host: "metadata.google.internal",
             path: "/computeMetadata/v1/instance/service-accounts/default/token",
@@ -904,7 +904,7 @@ var require_server_firestore_adapter2 = __commonJS({
     }
     function getRuntimeServiceAccount() {
       return new Promise((resolve) => {
-        const req = http.get(
+        const req = http2.get(
           {
             host: "metadata.google.internal",
             path: "/computeMetadata/v1/instance/service-accounts/default/email",
@@ -982,7 +982,7 @@ var require_server_firestore_adapter2 = __commonJS({
       const payload = JSON.stringify({ fields });
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -1021,7 +1021,7 @@ var require_server_firestore_adapter2 = __commonJS({
       if (!token) return { success: false, error: "No access token available" };
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -1066,7 +1066,7 @@ var require_server_firestore_adapter2 = __commonJS({
       const encodedPath = encodeURIComponent(destinationPath);
       const uploadUrl = `/v0/b/${STORAGE_BUCKET}/o?name=${encodedPath}&uploadType=media`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firebasestorage.googleapis.com",
             path: uploadUrl,
@@ -1163,7 +1163,7 @@ var require_server_firestore_adapter2 = __commonJS({
       if (!token) return { success: false, error: "No access token available" };
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}/${encodeURIComponent(docId)}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -1199,7 +1199,7 @@ var require_server_firestore_adapter2 = __commonJS({
       if (!token) return { success: false, error: "No access token available" };
       const docPath = `/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${collection}?pageSize=${pageSize}`;
       return new Promise((resolve) => {
-        const req = https.request(
+        const req = https2.request(
           {
             host: "firestore.googleapis.com",
             path: docPath,
@@ -1351,9 +1351,9 @@ var require_cloud_storage_service2 = __commonJS({
   "../cloud_storage_service.cjs"(exports2, module2) {
     var fs3 = require("fs");
     var path3 = require("path");
-    var https = require("https");
+    var https2 = require("https");
     var { getMetadataAccessToken } = require_server_firestore_adapter2();
-    var httpsAgent = new https.Agent({
+    var httpsAgent = new https2.Agent({
       keepAlive: true,
       maxSockets: 25
     });
@@ -1436,7 +1436,7 @@ var require_cloud_storage_service2 = __commonJS({
             uploadEndpoint += "&predefinedAcl=publicRead";
           }
           const uploadResult = await new Promise((resolve, reject) => {
-            const uReq = https.request(
+            const uReq = https2.request(
               uploadEndpoint,
               {
                 method: "POST",
@@ -1547,7 +1547,7 @@ var require_cloud_storage_service2 = __commonJS({
           if (!token) return { success: true, warning: "No token to delete GCS object" };
           const deleteEndpoint = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(this.bucketName)}/o/${encodeURIComponent(gcsPath)}`;
           await new Promise((resolve, reject) => {
-            const dReq = https.request(
+            const dReq = https2.request(
               deleteEndpoint,
               {
                 method: "DELETE",
@@ -1608,18 +1608,18 @@ var require_cloud_storage_service2 = __commonJS({
 // firestore_database_service.cjs
 var require_firestore_database_service = __commonJS({
   "firestore_database_service.cjs"(exports2, module2) {
-    var http = require("http");
-    var https = require("https");
+    var http2 = require("http");
+    var https2 = require("https");
     var fs3 = require("fs");
     var path3 = require("path");
     var crypto2 = require("crypto");
     var adapter = require_server_firestore_adapter();
-    var httpsAgent = new https.Agent({
+    var httpsAgent = new https2.Agent({
       keepAlive: true,
       maxSockets: 20,
       keepAliveMsecs: 6e4
     });
-    var httpAgent = new http.Agent({
+    var httpAgent = new http2.Agent({
       keepAlive: true,
       maxSockets: 20,
       keepAliveMsecs: 6e4
@@ -1705,7 +1705,7 @@ var require_firestore_database_service = __commonJS({
           const parts = emu.split(":");
           return {
             isEmulator: true,
-            transport: http,
+            transport: http2,
             host: parts[0] || "127.0.0.1",
             port: parts[1] ? parseInt(parts[1], 10) : 8080,
             agent: httpAgent
@@ -1713,7 +1713,7 @@ var require_firestore_database_service = __commonJS({
         }
         return {
           isEmulator: false,
-          transport: https,
+          transport: https2,
           host: "firestore.googleapis.com",
           port: 443,
           agent: httpsAgent
@@ -3961,18 +3961,18 @@ var require_firestore_database_service = __commonJS({
 // ../firestore_database_service.cjs
 var require_firestore_database_service2 = __commonJS({
   "../firestore_database_service.cjs"(exports2, module2) {
-    var http = require("http");
-    var https = require("https");
+    var http2 = require("http");
+    var https2 = require("https");
     var fs3 = require("fs");
     var path3 = require("path");
     var crypto2 = require("crypto");
     var adapter = require_server_firestore_adapter2();
-    var httpsAgent = new https.Agent({
+    var httpsAgent = new https2.Agent({
       keepAlive: true,
       maxSockets: 20,
       keepAliveMsecs: 6e4
     });
-    var httpAgent = new http.Agent({
+    var httpAgent = new http2.Agent({
       keepAlive: true,
       maxSockets: 20,
       keepAliveMsecs: 6e4
@@ -4058,7 +4058,7 @@ var require_firestore_database_service2 = __commonJS({
           const parts = emu.split(":");
           return {
             isEmulator: true,
-            transport: http,
+            transport: http2,
             host: parts[0] || "127.0.0.1",
             port: parts[1] ? parseInt(parts[1], 10) : 8080,
             agent: httpAgent
@@ -4066,7 +4066,7 @@ var require_firestore_database_service2 = __commonJS({
         }
         return {
           isEmulator: false,
-          transport: https,
+          transport: https2,
           host: "firestore.googleapis.com",
           port: 443,
           agent: httpsAgent
@@ -6530,6 +6530,10 @@ var import_genai2 = require("@google/genai");
 var import_openai = __toESM(require("openai"), 1);
 var import_dotenv = __toESM(require("dotenv"), 1);
 var import_crypto2 = __toESM(require("crypto"), 1);
+var import_dns = __toESM(require("dns"), 1);
+var import_net = __toESM(require("net"), 1);
+var import_http = __toESM(require("http"), 1);
+var import_https = __toESM(require("https"), 1);
 
 // whatsapp_integration.ts
 var import_fs = __toESM(require("fs"), 1);
@@ -12755,8 +12759,194 @@ function isSafePublicUrl(urlString) {
     return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F URL \u0938\u0902\u0930\u091A\u0928\u093E\u0964" };
   }
 }
+function isIpLiteral(str) {
+  if (!str || typeof str !== "string") return false;
+  let clean = str.trim();
+  if (clean.startsWith("[") && clean.endsWith("]")) clean = clean.slice(1, -1);
+  return import_net.default.isIP(clean) !== 0;
+}
+function isBlockedIpAddress(ip) {
+  if (!ip || typeof ip !== "string") return true;
+  let cleanIp = ip.toLowerCase().trim();
+  if (cleanIp.startsWith("[") && cleanIp.endsWith("]")) cleanIp = cleanIp.slice(1, -1);
+  if (cleanIp.startsWith("::ffff:") || cleanIp.startsWith("::ffff:0:")) {
+    const lastPart = cleanIp.split(":").pop() || "";
+    if (import_net.default.isIPv4(lastPart)) return isBlockedIpAddress(lastPart);
+  }
+  if (import_net.default.isIPv4(cleanIp)) {
+    const parts = cleanIp.split(".").map((p) => parseInt(p, 10));
+    if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return true;
+    const [b0, b1, b2, b3] = parts;
+    if (b0 === 0 || // 0.0.0.0/8 Current network
+    b0 === 10 || // 10.0.0.0/8 RFC1918 Private
+    b0 === 100 && b1 >= 64 && b1 <= 127 || // 100.64.0.0/10 Carrier-grade NAT
+    b0 === 127 || // 127.0.0.0/8 Loopback
+    b0 === 169 && b1 === 254 || // 169.254.0.0/16 Link-local & Metadata
+    b0 === 172 && b1 >= 16 && b1 <= 31 || // 172.16.0.0/12 RFC1918 Private
+    b0 === 192 && b1 === 0 && b2 === 0 || // 192.0.0.0/24 IETF Protocol
+    b0 === 192 && b1 === 0 && b2 === 2 || // 192.0.2.0/24 TEST-NET-1
+    b0 === 192 && b1 === 88 && b2 === 99 || // 192.88.99.0/24 6to4
+    b0 === 192 && b1 === 168 || // 192.168.0.0/16 RFC1918 Private
+    b0 === 198 && (b1 === 18 || b1 === 19) || // 198.18.0.0/15 Benchmark
+    b0 === 198 && b1 === 51 && b2 === 100 || // 198.51.100.0/24 TEST-NET-2
+    b0 === 203 && b1 === 0 && b2 === 113 || // 203.0.113.0/24 TEST-NET-3
+    b0 >= 224) {
+      return true;
+    }
+    return false;
+  }
+  if (import_net.default.isIPv6(cleanIp)) {
+    if (cleanIp === "::" || cleanIp === "::1" || cleanIp === "0:0:0:0:0:0:0:1") return true;
+    if (/^f[cd][0-9a-f]{2}:/i.test(cleanIp) || cleanIp.startsWith("fc") || cleanIp.startsWith("fd")) return true;
+    if (/^fe[89ab][0-9a-f]{1}:/i.test(cleanIp) || cleanIp.startsWith("fe8") || cleanIp.startsWith("fe9") || cleanIp.startsWith("fea") || cleanIp.startsWith("feb")) return true;
+    if (/^fec[0-9a-f]{1}:/i.test(cleanIp) || cleanIp.startsWith("fec")) return true;
+    if (/^ff[0-9a-f]{2}:/i.test(cleanIp) || cleanIp.startsWith("ff")) return true;
+    if (cleanIp.startsWith("2001:db8:") || cleanIp.startsWith("2001:0db8:")) return true;
+    if (cleanIp.startsWith("100::") || cleanIp.startsWith("0100:0000:")) return true;
+    return false;
+  }
+  return true;
+}
+async function validateAndPinDns(hostname) {
+  const cleanHost = (hostname || "").toLowerCase().trim();
+  if (!cleanHost) return { safe: false, error: "\u0939\u094B\u0938\u094D\u091F\u0928\u0947\u092E \u0930\u093F\u0915\u094D\u0924 \u0939\u0948\u0964" };
+  if (cleanHost === "localhost" || cleanHost.endsWith(".localhost") || cleanHost.endsWith(".local") || cleanHost.endsWith(".internal")) {
+    return { safe: false, error: "\u0932\u094B\u0915\u0932\u0939\u094B\u0938\u094D\u091F \u0905\u0925\u0935\u093E \u0906\u0902\u0924\u0930\u093F\u0915 \u0921\u094B\u092E\u0947\u0928 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0939\u0948\u0964" };
+  }
+  if (isIpLiteral(cleanHost)) {
+    if (isBlockedIpAddress(cleanHost)) {
+      return { safe: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0928\u093F\u091C\u0940 IP/Localhost/Metadata \u0932\u093F\u0902\u0915 \u0905\u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948\u0964" };
+    }
+    const cleanIp = cleanHost.startsWith("[") && cleanHost.endsWith("]") ? cleanHost.slice(1, -1) : cleanHost;
+    return { safe: true, pinnedIp: cleanIp, pinnedFamily: import_net.default.isIPv6(cleanIp) ? 6 : 4 };
+  }
+  let addresses;
+  try {
+    addresses = await import_dns.default.promises.lookup(cleanHost, { all: true, verbatim: true });
+  } catch (err) {
+    return { safe: false, error: "DNS \u0930\u0947\u091C\u094B\u0932\u094D\u092F\u0942\u0936\u0928 \u0935\u093F\u092B\u0932: " + (err.message || "\u0905\u092E\u093E\u0928\u094D\u092F \u0939\u094B\u0938\u094D\u091F") };
+  }
+  if (!addresses || addresses.length === 0) {
+    return { safe: false, error: "DNS \u0930\u0947\u091C\u094B\u0932\u094D\u092F\u0942\u0936\u0928 \u0935\u093F\u092B\u0932: \u0939\u094B\u0938\u094D\u091F \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" };
+  }
+  for (const record of addresses) {
+    if (isBlockedIpAddress(record.address)) {
+      return { safe: false, error: `\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0925\u0935\u093E \u0928\u093F\u091C\u0940 IP (${record.address}) \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0939\u0948\u0964` };
+    }
+  }
+  return { safe: true, pinnedIp: addresses[0].address, pinnedFamily: addresses[0].family };
+}
+function fetchPinnedImage(rawUrl, redirectCount = 0, maxRedirects = 3) {
+  return new Promise(async (resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return reject({ status: 400, message: "Invalid URL format" });
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return reject({ status: 403, message: "Only http and https protocols are supported." });
+    }
+    const dnsResult = await validateAndPinDns(parsed.hostname);
+    if (!dnsResult.safe || !dnsResult.pinnedIp || !dnsResult.pinnedFamily) {
+      return reject({ status: 403, message: dnsResult.error || "DNS safety validation failed." });
+    }
+    const { pinnedIp, pinnedFamily } = dnsResult;
+    const isHttps = parsed.protocol === "https:";
+    const client = isHttps ? import_https.default : import_http.default;
+    const port = parsed.port ? parseInt(parsed.port, 10) : isHttps ? 443 : 80;
+    const reqOptions = {
+      host: parsed.hostname,
+      port,
+      path: parsed.pathname + parsed.search,
+      method: "GET",
+      headers: {
+        Host: parsed.host,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
+      },
+      timeout: 8e3,
+      lookup: (requestedHost, opts, cb) => {
+        if (requestedHost.toLowerCase() !== parsed.hostname.toLowerCase()) {
+          return cb(new Error(`Hostname mismatch in pinned connection: expected ${parsed.hostname}, got ${requestedHost}`));
+        }
+        if (opts && opts.all) {
+          cb(null, [{ address: pinnedIp, family: pinnedFamily }]);
+        } else {
+          cb(null, pinnedIp, pinnedFamily);
+        }
+      }
+    };
+    if (isHttps) {
+      reqOptions.servername = parsed.hostname;
+    }
+    const req = client.request(reqOptions, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400) {
+        res.resume();
+        const location = res.headers["location"];
+        if (!location) {
+          return reject({ status: 400, message: "Redirect missing location header." });
+        }
+        if (redirectCount >= maxRedirects) {
+          return reject({ status: 400, message: "Too many redirects." });
+        }
+        const nextUrl = new URL(location, rawUrl).toString();
+        return resolve(fetchPinnedImage(nextUrl, redirectCount + 1, maxRedirects));
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject({ status: res.statusCode || 500, message: `Upstream returned status ${res.statusCode}` });
+      }
+      const contentType = res.headers["content-type"] || "";
+      if (!contentType.toLowerCase().startsWith("image/")) {
+        res.resume();
+        return reject({ status: 415, message: "Invalid content type: only images are allowed." });
+      }
+      const chunks = [];
+      let totalLength = 0;
+      const MAX_SIZE = 10 * 1024 * 1024;
+      res.on("data", (chunk) => {
+        totalLength += chunk.length;
+        if (totalLength > MAX_SIZE) {
+          req.destroy(new Error("Image exceeds 10MB limit"));
+          return reject({ status: 413, message: "Image size exceeds 10MB limit." });
+        }
+        chunks.push(chunk);
+      });
+      res.on("end", () => {
+        const buffer = Buffer.concat(chunks);
+        resolve({
+          status: 200,
+          contentType,
+          buffer,
+          remoteAddress: req.socket?.remoteAddress,
+          pinnedIp
+        });
+      });
+    });
+    req.on("socket", (socket) => {
+      socket.on("connect", () => {
+        if (socket.remoteAddress && socket.remoteAddress !== pinnedIp) {
+          socket.destroy(new Error("Remote address mismatch with pinned IP"));
+        }
+      });
+    });
+    req.on("timeout", () => {
+      req.destroy(new Error("Request timeout"));
+      reject({ status: 504, message: "Image fetch timed out." });
+    });
+    req.on("error", (err) => {
+      reject({ status: 500, message: err.message || "Network error in image fetch." });
+    });
+    req.end();
+  });
+}
 function isValidImageMagicBytes(buf) {
-  if (!buf || buf.length < 8) return { valid: false };
+  if (!buf || buf.length < 4) return { valid: false };
+  if (buf[0] === 0 && buf[1] === 0 && buf[2] === 1 && buf[3] === 0) {
+    return { valid: true, format: "ico" };
+  }
+  if (buf.length < 8) return { valid: false };
   if (buf[0] === 137 && buf[1] === 80 && buf[2] === 78 && buf[3] === 71 && buf[4] === 13 && buf[5] === 10 && buf[6] === 26 && buf[7] === 10) {
     return { valid: true, format: "png" };
   }
@@ -20648,6 +20838,11 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     }
     const safeIsLocked = isAdmin ? profile.isLocked !== void 0 ? Boolean(profile.isLocked) : Boolean(existing.isLocked) : isProfileComplete ? true : false;
+    const effectiveTier = (safeTier || existing.tier || "basic").toLowerCase();
+    const isProOrVipUser = effectiveTier === "pro" || effectiveTier === "professional" || effectiveTier === "vip" || effectiveTier === "ultra" || isMasterAdminEmail || isSubAdminEmail;
+    if (profile.customFooterPng && !isProOrVipUser) {
+      return res.status(403).json({ error: "\u0915\u0938\u094D\u091F\u092E \u092B\u0942\u091F\u0930 \u0938\u0941\u0935\u093F\u0927\u093E \u0915\u0947\u0935\u0932 Pro \u0914\u0930 VIP Desk \u092A\u094D\u0932\u093E\u0928 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964" });
+    }
     const updated = {
       ...existing,
       ...profile,
@@ -20689,7 +20884,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       socialIcons: profile.socialIcons || existing.socialIcons,
       socialLinks: profile.socialLinks ? { ...existing.socialLinks || {}, ...profile.socialLinks } : existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
-      customFooterPng: profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng,
+      customFooterPng: isProOrVipUser ? profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng : void 0,
       updatedAt: Date.now()
     };
     if (!isAdmin && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
@@ -21608,7 +21803,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
     const isMaster = isAuthorizedMasterAdmin(req);
     let frames = await loadDynamicFramesDatabaseAsync();
     let filtered = isMaster ? frames : frames.filter(
-      (f) => (f.publicationStatus === "published" || f.approvalStatus === "APPROVED") && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
+      (f) => f.publicationStatus === "published" && f.approvalStatus === "APPROVED" && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
     );
     const { frameType, frameMode } = req.query;
     if (frameType) {
@@ -21657,9 +21852,9 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
     if (!frame) {
       return res.status(404).json({ error: "Frame not found." });
     }
-    const isTestFrame = Boolean(frame.isTestFrame) || frame.designCategory === "TEST_FRAMES" || frame.publicationStatus !== "published" || Boolean(frame.isSampleTestTemplate) || Boolean(frame.isSample) || frame.name === "11111" || frame.name === "2222" || frame.id.startsWith("df_sample_") || frame.id.startsWith("df_test_") || frame.designCategory === "Sample Frames";
+    const isTestFrame = Boolean(frame.isTestFrame) || frame.designCategory === "TEST_FRAMES" || frame.publicationStatus !== "published" || frame.approvalStatus !== "APPROVED" || Boolean(frame.isSampleTestTemplate) || Boolean(frame.isSample) || frame.name === "11111" || frame.name === "2222" || frame.id.startsWith("df_sample_") || frame.id.startsWith("df_test_") || frame.designCategory === "Sample Frames";
     if (isTestFrame && !isMaster) {
-      return res.status(403).json({ error: "Access denied: Only Master Admin can view test frames." });
+      return res.status(403).json({ error: "Access denied: Only Master Admin can view unapproved or test frames." });
     }
     return res.json({ success: true, frame });
   } catch (err) {
@@ -21682,6 +21877,22 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
     const approvalStatus = payload.approvalStatus || (isTestFrame ? "PENDING_TEST" : "APPROVED");
     const publicationStatus = isTestFrame ? "draft" : payload.publicationStatus || "published";
     const designCategory = payload.designCategory || (isTestFrame ? "TEST_FRAMES" : payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames");
+    const bannedColor = payload.footerConfig?.bannedFooterColor || payload.bannedFooterColor;
+    const footerBg = payload.footerConfig?.footerBgColor || payload.footerBgColor;
+    const footerText = payload.footerConfig?.footerTextColor || payload.footerTextColor;
+    if (bannedColor) {
+      const cleanBanned = String(bannedColor).trim().toLowerCase();
+      if (footerBg && cleanBanned === String(footerBg).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `\u092B\u0942\u091F\u0930 \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0915\u0932\u0930 '${footerBg}' \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 (Banned) \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0930\u0902\u0917 \u091A\u0941\u0928\u0947\u0902\u0964`
+        });
+      }
+      if (footerText && cleanBanned === String(footerText).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `\u092B\u0942\u091F\u0930 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930 '${footerText}' \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 (Banned) \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0930\u0902\u0917 \u091A\u0941\u0928\u0947\u0902\u0964`
+        });
+      }
+    }
     const newFrame = {
       ...payload,
       id: payload.id && !payload.id.startsWith("temp_") ? payload.id : `df_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -21723,7 +21934,9 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
         footerBgColor: payload.footerConfig?.footerBgColor || "#FFFFFF",
         footerTextColor: payload.footerConfig?.footerTextColor || "#000000",
         footerWidthPct: typeof payload.footerConfig?.footerWidthPct === "number" ? Math.max(70, Math.min(100, payload.footerConfig.footerWidthPct)) : 100,
-        footerAlignment: payload.footerConfig?.footerAlignment || "center"
+        footerAlignment: payload.footerConfig?.footerAlignment || "center",
+        bannedFooterColor: payload.footerConfig?.bannedFooterColor || payload.bannedFooterColor || "",
+        primaryFooterColor: payload.footerConfig?.primaryFooterColor || payload.primaryFooterColor || "#FACC15"
       },
       watermarkConfig: payload.watermarkConfig || { enabled: false },
       fullStoryCalloutConfig: payload.fullStoryCalloutConfig || { enabled: false },
@@ -21777,24 +21990,47 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
       return res.status(400).json({ error: `Invalid aspectRatio '${targetRatio}'.` });
     }
     const updatedFrame = deepMergeFrameConfig(existing, payload);
-    if (payload.designCategory === "TEST_FRAMES" || payload.isTestFrame === true) {
-      updatedFrame.isTestFrame = true;
-      updatedFrame.designCategory = "TEST_FRAMES";
-      if (!payload.approvalStatus) {
-        updatedFrame.approvalStatus = updatedFrame.approvalStatus === "APPROVED" ? "APPROVED" : "PENDING_TEST";
+    if (payload.designCategory !== void 0) {
+      updatedFrame.designCategory = payload.designCategory;
+      if (payload.designCategory === "TEST_FRAMES") {
+        updatedFrame.isTestFrame = true;
+      } else if (payload.isTestFrame !== void 0) {
+        updatedFrame.isTestFrame = Boolean(payload.isTestFrame);
       }
-      updatedFrame.publicationStatus = "draft";
-    } else if (payload.designCategory && payload.designCategory !== "TEST_FRAMES" || payload.approvalStatus === "APPROVED" || payload.isTestFrame === false) {
-      updatedFrame.isTestFrame = false;
-      if (payload.designCategory && payload.designCategory !== "TEST_FRAMES") {
-        updatedFrame.designCategory = payload.designCategory;
-      }
-      if (payload.approvalStatus) {
+    } else if (payload.isTestFrame !== void 0) {
+      updatedFrame.isTestFrame = Boolean(payload.isTestFrame);
+    }
+    if (payload.approvalStatus !== void 0) {
+      const allowedApprovals = ["PENDING_TEST", "APPROVED", "REJECTED"];
+      if (allowedApprovals.includes(payload.approvalStatus)) {
         updatedFrame.approvalStatus = payload.approvalStatus;
-      } else if (updatedFrame.approvalStatus !== "REJECTED") {
-        updatedFrame.approvalStatus = "APPROVED";
       }
-      updatedFrame.publicationStatus = "published";
+    } else if (!updatedFrame.approvalStatus) {
+      updatedFrame.approvalStatus = updatedFrame.isTestFrame ? "PENDING_TEST" : "APPROVED";
+    }
+    if (payload.publicationStatus !== void 0) {
+      const allowedPub = ["draft", "published", "archived"];
+      if (allowedPub.includes(payload.publicationStatus)) {
+        updatedFrame.publicationStatus = payload.publicationStatus;
+      }
+    } else if (!updatedFrame.publicationStatus) {
+      updatedFrame.publicationStatus = updatedFrame.isTestFrame ? "draft" : "published";
+    }
+    const bannedColor = payload.footerConfig?.bannedFooterColor || payload.bannedFooterColor || existing?.footerConfig?.bannedFooterColor || existing?.bannedFooterColor;
+    const footerBg = payload.footerConfig?.footerBgColor || payload.footerBgColor || updatedFrame.footerConfig?.footerBgColor;
+    const footerText = payload.footerConfig?.footerTextColor || payload.footerTextColor || updatedFrame.footerConfig?.footerTextColor;
+    if (bannedColor) {
+      const cleanBanned = String(bannedColor).trim().toLowerCase();
+      if (footerBg && cleanBanned === String(footerBg).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `\u092B\u0942\u091F\u0930 \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0915\u0932\u0930 '${footerBg}' \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 (Banned) \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0930\u0902\u0917 \u091A\u0941\u0928\u0947\u0902\u0964`
+        });
+      }
+      if (footerText && cleanBanned === String(footerText).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `\u092B\u0942\u091F\u0930 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930 '${footerText}' \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 (Banned) \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0930\u0902\u0917 \u091A\u0941\u0928\u0947\u0902\u0964`
+        });
+      }
     }
     await saveSingleDynamicFrameAsync(updatedFrame);
     return res.json({ success: true, frame: updatedFrame });
@@ -21941,6 +22177,12 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
     if (!name || !type || !url && type !== "custom_footer") {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer'), and URL (or footerConfig for custom_footer) are required." });
     }
+    const isCustomFooter = type === "custom_footer" || category === "custom_footer" || footerConfig !== void 0;
+    if (isCustomFooter && !isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u0915\u0938\u094D\u091F\u092E \u092B\u0942\u091F\u0930 \u0932\u093E\u0907\u092C\u094D\u0930\u0947\u0930\u0940 \u092E\u0947\u0902 \u0928\u0908 \u0938\u0902\u092A\u0924\u094D\u0924\u093F \u091C\u094B\u0921\u093C \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+      });
+    }
     const newItem = {
       id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: String(name).trim(),
@@ -21966,15 +22208,23 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    const { name, type, category, enabled, url, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
       return res.status(404).json({ error: "Asset item not found." });
     }
+    const target = items[idx];
+    const isCustomFooter = target.type === "custom_footer" || target.category === "custom_footer" || target.footerConfig !== void 0 || type === "custom_footer" || category === "custom_footer" || footerConfig !== void 0;
+    if (isCustomFooter && !isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u0915\u0938\u094D\u091F\u092E \u092B\u0942\u091F\u0930 \u0932\u093E\u0907\u092C\u094D\u0930\u0947\u0930\u0940 \u0915\u094B \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+      });
+    }
     const updated = {
       ...items[idx],
       ...name !== void 0 ? { name: String(name).trim() } : {},
+      ...type !== void 0 ? { type } : {},
       ...category !== void 0 ? { category } : {},
       ...enabled !== void 0 ? { enabled: Boolean(enabled) } : {},
       ...url !== void 0 ? { url } : {},
@@ -21998,6 +22248,12 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
     const target = items.find((it) => it.id === id);
     if (!target) {
       return res.status(404).json({ error: "Asset item not found." });
+    }
+    const isCustomFooter = target.type === "custom_footer" || target.category === "custom_footer" || target.footerConfig !== void 0;
+    if (isCustomFooter && !isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({
+        error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u0915\u0938\u094D\u091F\u092E \u092B\u0942\u091F\u0930 \u0932\u093E\u0907\u092C\u094D\u0930\u0947\u0930\u0940 \u0938\u0947 \u0938\u0902\u092A\u0924\u094D\u0924\u093F \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+      });
     }
     const frames = loadDynamicFramesDatabase();
     const inUse = frames.some(
@@ -23865,38 +24121,33 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
       imageUrl = decodeURIComponent(parts[parts.length - 1]);
     }
     const urlValidation = isSafePublicUrl(imageUrl);
-    if (!urlValidation.safe) {
+    if (!urlValidation.safe || !urlValidation.parsedUrl) {
       return res.status(403).json({ error: "\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0932\u093F\u0902\u0915 (SSRF Protection): " + (urlValidation.error || "\u0905\u092E\u093E\u0928\u094D\u092F URL") });
     }
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8e3);
-    const response = await fetch(imageUrl, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
+    let fetchRes;
+    try {
+      fetchRes = await fetchPinnedImage(imageUrl, 0, 3);
+    } catch (fetchErr) {
+      const status = typeof fetchErr?.status === "number" ? fetchErr.status : 500;
+      const message = fetchErr?.message || "Error proxying image";
+      if (status === 403) {
+        return res.status(403).json({ error: "\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0932\u093F\u0902\u0915 (SSRF / DNS Pinning Protection): " + message });
       }
-    }).finally(() => clearTimeout(timeoutId));
-    if (!response.ok) {
-      return res.status(response.status).send(`Failed to fetch image: ${response.statusText}`);
+      return res.status(status).send(message);
     }
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.toLowerCase().startsWith("image/")) {
-      return res.status(415).send("Invalid content type: only images are allowed.");
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    if (buffer.length > 10 * 1024 * 1024) {
-      return res.status(413).send("Image size exceeds 10MB limit.");
+    const { contentType, buffer } = fetchRes;
+    const isSvg = contentType.includes("svg") || buffer.slice(0, 100).toString("utf8").includes("<svg");
+    if (!isSvg) {
+      const mb = isValidImageMagicBytes(buffer);
+      if (!mb.valid) {
+        return res.status(415).send("Invalid image format or corrupted image payload.");
+      }
     }
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("Access-Control-Allow-Origin", "*");
     return res.send(buffer);
   } catch (err) {
-    if (err.name === "AbortError") {
-      return res.status(504).send("Image fetch timed out.");
-    }
     return res.status(500).send("Error proxying image");
   }
 });
@@ -32500,7 +32751,7 @@ app.get("/api/user-download-status", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/verify-download-entitlement", (req, res) => {
+app.post("/api/verify-download-entitlement", async (req, res) => {
   try {
     const { email, frameId, checkOnly, isBonus, headlineScheduleMode, hasScheduledHeadlines, card } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
@@ -32561,6 +32812,41 @@ app.post("/api/verify-download-entitlement", (req, res) => {
           headlineScheduleLocked: true,
           requiredTier: "PRO"
         });
+      }
+    }
+    const hasCustomFooter = Boolean(card?.customFooterPng || card?.customFooterId);
+    const userTierKey = (tier || "basic").toLowerCase();
+    const isProOrVipUser = userTierKey === "ultra" || userTierKey === "vip" || userTierKey === "vip_desk" || userTierKey === "professional" || userTierKey === "pro" || isAdminAccount;
+    if (hasCustomFooter && !isProOrVipUser) {
+      return res.status(403).json({
+        allowed: false,
+        error: "\u0915\u0938\u094D\u091F\u092E \u092B\u0942\u091F\u0930 \u0938\u0941\u0935\u093F\u0927\u093E \u0915\u0947\u0935\u0932 Pro \u0914\u0930 VIP Desk \u092A\u094D\u0932\u093E\u0928 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964",
+        customFooterLocked: true,
+        requiredTier: "PRO"
+      });
+    }
+    if (card?.frameDesign && card.frameDesign.startsWith("df_")) {
+      const dynamicFrames = await loadDynamicFramesDatabaseAsync();
+      const df = dynamicFrames.find((f) => f.id === card.frameDesign);
+      const bannedColor = df?.footerConfig?.bannedFooterColor || df?.bannedFooterColor;
+      if (bannedColor) {
+        const cleanBanned = String(bannedColor).trim().toLowerCase();
+        const cardBg = card.footerBgColor ? String(card.footerBgColor).trim().toLowerCase() : "";
+        const cardText = card.footerTextColor ? String(card.footerTextColor).trim().toLowerCase() : "";
+        if (cardBg && cleanBanned === cardBg) {
+          return res.status(400).json({
+            allowed: false,
+            error: `\u092B\u0942\u091F\u0930 \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0915\u0932\u0930 '${card.footerBgColor}' \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 (Banned) \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0930\u0902\u0917 \u091A\u0941\u0928\u0947\u0902\u0964`,
+            bannedFooterColorViolation: true
+          });
+        }
+        if (cardText && cleanBanned === cardText) {
+          return res.status(400).json({
+            allowed: false,
+            error: `\u092B\u0942\u091F\u0930 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930 '${card.footerTextColor}' \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 (Banned) \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0926\u0942\u0938\u0930\u093E \u0930\u0902\u0917 \u091A\u0941\u0928\u0947\u0902\u0964`,
+            bannedFooterColorViolation: true
+          });
+        }
       }
     }
     if (frameId) {

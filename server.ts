@@ -6,6 +6,10 @@ import { GoogleGenAI, Type } from "@google/genai";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import dns from "dns";
+import net from "net";
+import http from "http";
+import https from "https";
 import {
   registerWhatsAppIntegration,
   releaseVerifiedPhoneNumber,
@@ -558,13 +562,13 @@ export async function requireAuthMiddleware(req: express.Request, res: express.R
   if (!user) {
     return res.status(401).json({
       success: false,
-      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): कृपया वैध टोकन के साथ लॉगिन करें।",
+      error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ (401 Unauthorized): à¤•à¥ƒà¤ªà¤¯à¤¾ à¤µà¥ˆà¤§ à¤Ÿà¥‹à¤•à¤¨ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤²à¥‰à¤—à¤¿à¤¨ à¤•à¤°à¥‡à¤‚à¥¤",
     });
   }
   if (user.isBlocked) {
     return res.status(403).json({
       success: false,
-      error: "आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है (403 Forbidden)।",
+      error: "à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆ (403 Forbidden)à¥¤",
       isBlocked: true,
     });
   }
@@ -577,14 +581,14 @@ export async function requireAdminMiddleware(req: express.Request, res: express.
   if (!user) {
     return res.status(401).json({
       success: false,
-      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
+      error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ (401 Unauthorized): à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤à¤‚à¤¡à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸ à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¥à¤¯ à¤‘à¤¥à¥‡à¤‚à¤Ÿà¤¿à¤•à¥‡à¤¶à¤¨ à¤Ÿà¥‹à¤•à¤¨ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤",
     });
   }
   (req as any).user = user;
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({
       success: false,
-      error: "अनधिकृत (403 Forbidden): इस कार्य के लिए व्यवस्थापक (Admin) अधिकार आवश्यक हैं।",
+      error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤‡à¤¸ à¤•à¤¾à¤°à¥à¤¯ à¤•à¥‡ à¤²à¤¿à¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤…à¤§à¤¿à¤•à¤¾à¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¤‚à¥¤",
     });
   }
   next();
@@ -595,14 +599,14 @@ export async function requireMasterAdminMiddleware(req: express.Request, res: ex
   if (!user) {
     return res.status(401).json({
       success: false,
-      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): मास्टर एडमिन एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
+      error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ (401 Unauthorized): à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤à¤‚à¤¡à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸ à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¥à¤¯ à¤‘à¤¥à¥‡à¤‚à¤Ÿà¤¿à¤•à¥‡à¤¶à¤¨ à¤Ÿà¥‹à¤•à¤¨ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤",
     });
   }
   (req as any).user = user;
   if (!isAuthorizedMasterAdmin(req)) {
     return res.status(403).json({
       success: false,
-      error: "अनधिकृत (403 Forbidden): यह कार्य केवल अधिकृत मास्टर एडमिन (breakingnewswala.com@gmail.com) के लिए आरक्षित है।",
+      error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤¯à¤¹ à¤•à¤¾à¤°à¥à¤¯ à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤•à¥‡ à¤²à¤¿à¤ à¤†à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¹à¥ˆà¥¤",
     });
   }
   next();
@@ -704,23 +708,23 @@ function verifyPassword(password: string, salt: string, storedHash: string): { v
 function isSafePublicUrl(urlString: string): { safe: boolean; error?: string; parsedUrl?: URL } {
   try {
     const trimmed = (urlString || "").trim();
-    if (!trimmed) return { safe: false, error: "URL रिक्त है।" };
+    if (!trimmed) return { safe: false, error: "URL à¤°à¤¿à¤•à¥à¤¤ à¤¹à¥ˆà¥¤" };
 
     let parsed: URL;
     try {
       parsed = new URL(trimmed);
     } catch {
-      return { safe: false, error: "अमान्य URL संरचना।" };
+      return { safe: false, error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ URL à¤¸à¤‚à¤°à¤šà¤¨à¤¾à¥¤" };
     }
 
     // 1. Strict protocol check: only http and https
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return { safe: false, error: "केवल HTTP और HTTPS लिंक मान्य हैं।" };
+      return { safe: false, error: "à¤•à¥‡à¤µà¤² HTTP à¤”à¤° HTTPS à¤²à¤¿à¤‚à¤• à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤" };
     }
 
     // 2. Reject credentials in URL (e.g. http://user:pass@evil.com)
     if (parsed.username || parsed.password) {
-      return { safe: false, error: "URL में क्रेडेंशियल्स की अनुमति नहीं है।" };
+      return { safe: false, error: "URL à¤®à¥‡à¤‚ à¤•à¥à¤°à¥‡à¤¡à¥‡à¤‚à¤¶à¤¿à¤¯à¤²à¥à¤¸ à¤•à¥€ à¤…à¤¨à¥à¤®à¤¤à¤¿ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤" };
     }
 
     const hostname = parsed.hostname.toLowerCase().trim();
@@ -729,7 +733,7 @@ function isSafePublicUrl(urlString: string): { safe: boolean; error?: string; pa
     if (parsed.port) {
       const p = parseInt(parsed.port, 10);
       if (![80, 443, 8080, 8443].includes(p)) {
-        return { safe: false, error: "अमान्य अथवा प्रतिबंधित पोर्ट।" };
+        return { safe: false, error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤…à¤¥à¤µà¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¥‹à¤°à¥à¤Ÿà¥¤" };
       }
     }
 
@@ -744,15 +748,15 @@ function isSafePublicUrl(urlString: string): { safe: boolean; error?: string; pa
       hostname === "metadata" ||
       hostname === "metadata.google.internal"
     ) {
-      return { safe: false, error: "अमान्य अथवा निजी IP/Localhost/Metadata लिंक स्वीकार्य नहीं है।" };
+      return { safe: false, error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤…à¤¥à¤µà¤¾ à¤¨à¤¿à¤œà¥€ IP/Localhost/Metadata à¤²à¤¿à¤‚à¤• à¤¸à¥à¤µà¥€à¤•à¤¾à¤°à¥à¤¯ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤" };
     }
 
     // 5. Detect octal, hex, or dword numeric IPs
     if (/^\d+$/.test(hostname)) {
-      return { safe: false, error: "न्यूमेरिक IP लिंक प्रतिबंधित है।" };
+      return { safe: false, error: "à¤¨à¥à¤¯à¥‚à¤®à¥‡à¤°à¤¿à¤• IP à¤²à¤¿à¤‚à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆà¥¤" };
     }
     if (/^0x[0-9a-f]+$/i.test(hostname)) {
-      return { safe: false, error: "हेक्स IP लिंक प्रतिबंधित है।" };
+      return { safe: false, error: "à¤¹à¥‡à¤•à¥à¤¸ IP à¤²à¤¿à¤‚à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆà¥¤" };
     }
 
     // 6. IPv6 check
@@ -766,22 +770,22 @@ function isSafePublicUrl(urlString: string): { safe: boolean; error?: string; pa
         inner.startsWith("fc00:") ||
         inner.startsWith("fd00:")
       ) {
-        return { safe: false, error: "IPv6 निजी/लूपबैक लिंक प्रतिबंधित है।" };
+        return { safe: false, error: "IPv6 à¤¨à¤¿à¤œà¥€/à¤²à¥‚à¤ªà¤¬à¥ˆà¤• à¤²à¤¿à¤‚à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆà¥¤" };
       }
     }
     if (hostname === "::1" || hostname.includes("::ffff:")) {
-      return { safe: false, error: "IPv6 निजी/लूपबैक लिंक प्रतिबंधित है।" };
+      return { safe: false, error: "IPv6 à¤¨à¤¿à¤œà¥€/à¤²à¥‚à¤ªà¤¬à¥ˆà¤• à¤²à¤¿à¤‚à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆà¥¤" };
     }
 
     // 7. IPv4 dotted-quad check (including octal notation detection)
     const ipv4Parts = hostname.split(".");
     if (ipv4Parts.length === 4 && ipv4Parts.every((part) => /^\d+$/.test(part))) {
       if (ipv4Parts.some((part) => part.length > 1 && part.startsWith("0"))) {
-        return { safe: false, error: "अमान्य IP फॉर्मेट।" };
+        return { safe: false, error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ IP à¤«à¥‰à¤°à¥à¤®à¥‡à¤Ÿà¥¤" };
       }
       const [b1, b2, b3, b4] = ipv4Parts.map((p) => parseInt(p, 10));
       if ([b1, b2, b3, b4].some((b) => isNaN(b) || b < 0 || b > 255)) {
-        return { safe: false, error: "अमान्य IP पता।" };
+        return { safe: false, error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ IP à¤ªà¤¤à¤¾à¥¤" };
       }
 
       // Check loopback, private ranges, link-local, carrier NAT
@@ -798,21 +802,255 @@ function isSafePublicUrl(urlString: string): { safe: boolean; error?: string; pa
         (b1 === 203 && b2 === 0 && b3 === 113) || // TEST-NET-3
         b1 >= 224 // 224.0.0.0/4 Multicast & Reserved
       ) {
-        return { safe: false, error: "अमान्य अथवा निजी IP/Localhost/Metadata लिंक स्वीकार्य नहीं है।" };
+        return { safe: false, error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤…à¤¥à¤µà¤¾ à¤¨à¤¿à¤œà¥€ IP/Localhost/Metadata à¤²à¤¿à¤‚à¤• à¤¸à¥à¤µà¥€à¤•à¤¾à¤°à¥à¤¯ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤" };
       }
     }
 
     return { safe: true, parsedUrl: parsed };
   } catch {
-    return { safe: false, error: "अमान्य URL संरचना।" };
+    return { safe: false, error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ URL à¤¸à¤‚à¤°à¤šà¤¨à¤¾à¥¤" };
   }
+}
+
+// ============================================================================
+// DNS REBINDING & IP RANGE CHECKER & SOCKET IP PINNING
+// ============================================================================
+function isIpLiteral(str: string): boolean {
+  if (!str || typeof str !== 'string') return false;
+  let clean = str.trim();
+  if (clean.startsWith('[') && clean.endsWith(']')) clean = clean.slice(1, -1);
+  return net.isIP(clean) !== 0;
+}
+
+function isBlockedIpAddress(ip: string): boolean {
+  if (!ip || typeof ip !== 'string') return true;
+  let cleanIp = ip.toLowerCase().trim();
+  if (cleanIp.startsWith('[') && cleanIp.endsWith(']')) cleanIp = cleanIp.slice(1, -1);
+  if (cleanIp.startsWith('::ffff:') || cleanIp.startsWith('::ffff:0:')) {
+    const lastPart = cleanIp.split(':').pop() || '';
+    if (net.isIPv4(lastPart)) return isBlockedIpAddress(lastPart);
+  }
+  if (net.isIPv4(cleanIp)) {
+    const parts = cleanIp.split('.').map((p) => parseInt(p, 10));
+    if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return true;
+    const [b0, b1, b2, b3] = parts;
+    if (
+      b0 === 0 || // 0.0.0.0/8 Current network
+      b0 === 10 || // 10.0.0.0/8 RFC1918 Private
+      (b0 === 100 && b1 >= 64 && b1 <= 127) || // 100.64.0.0/10 Carrier-grade NAT
+      b0 === 127 || // 127.0.0.0/8 Loopback
+      (b0 === 169 && b1 === 254) || // 169.254.0.0/16 Link-local & Metadata
+      (b0 === 172 && b1 >= 16 && b1 <= 31) || // 172.16.0.0/12 RFC1918 Private
+      (b0 === 192 && b1 === 0 && b2 === 0) || // 192.0.0.0/24 IETF Protocol
+      (b0 === 192 && b1 === 0 && b2 === 2) || // 192.0.2.0/24 TEST-NET-1
+      (b0 === 192 && b1 === 88 && b2 === 99) || // 192.88.99.0/24 6to4
+      (b0 === 192 && b1 === 168) || // 192.168.0.0/16 RFC1918 Private
+      (b0 === 198 && (b1 === 18 || b1 === 19)) || // 198.18.0.0/15 Benchmark
+      (b0 === 198 && b1 === 51 && b2 === 100) || // 198.51.100.0/24 TEST-NET-2
+      (b0 === 203 && b1 === 0 && b2 === 113) || // 203.0.113.0/24 TEST-NET-3
+      b0 >= 224 // 224.0.0.0+ Multicast & Class E Reserved
+    ) {
+      return true;
+    }
+    return false;
+  }
+  if (net.isIPv6(cleanIp)) {
+    if (cleanIp === '::' || cleanIp === '::1' || cleanIp === '0:0:0:0:0:0:0:1') return true;
+    if (/^f[cd][0-9a-f]{2}:/i.test(cleanIp) || cleanIp.startsWith('fc') || cleanIp.startsWith('fd')) return true;
+    if (/^fe[89ab][0-9a-f]{1}:/i.test(cleanIp) || cleanIp.startsWith('fe8') || cleanIp.startsWith('fe9') || cleanIp.startsWith('fea') || cleanIp.startsWith('feb')) return true;
+    if (/^fec[0-9a-f]{1}:/i.test(cleanIp) || cleanIp.startsWith('fec')) return true;
+    if (/^ff[0-9a-f]{2}:/i.test(cleanIp) || cleanIp.startsWith('ff')) return true;
+    if (cleanIp.startsWith('2001:db8:') || cleanIp.startsWith('2001:0db8:')) return true;
+    if (cleanIp.startsWith('100::') || cleanIp.startsWith('0100:0000:')) return true;
+    return false;
+  }
+  return true;
+}
+
+async function validateAndPinDns(hostname: string): Promise<{ safe: boolean; error?: string; pinnedIp?: string; pinnedFamily?: number }> {
+  const cleanHost = (hostname || '').toLowerCase().trim();
+  if (!cleanHost) return { safe: false, error: 'à¤¹à¥‹à¤¸à¥à¤Ÿà¤¨à¥‡à¤® à¤°à¤¿à¤•à¥à¤¤ à¤¹à¥ˆà¥¤' };
+  if (cleanHost === 'localhost' || cleanHost.endsWith('.localhost') || cleanHost.endsWith('.local') || cleanHost.endsWith('.internal')) {
+    return { safe: false, error: 'à¤²à¥‹à¤•à¤²à¤¹à¥‹à¤¸à¥à¤Ÿ à¤…à¤¥à¤µà¤¾ à¤†à¤‚à¤¤à¤°à¤¿à¤• à¤¡à¥‹à¤®à¥‡à¤¨ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆà¥¤' };
+  }
+  if (isIpLiteral(cleanHost)) {
+    if (isBlockedIpAddress(cleanHost)) {
+      return { safe: false, error: 'à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤…à¤¥à¤µà¤¾ à¤¨à¤¿à¤œà¥€ IP/Localhost/Metadata à¤²à¤¿à¤‚à¤• à¤…à¤¸à¥à¤µà¥€à¤•à¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤' };
+    }
+    const cleanIp = cleanHost.startsWith('[') && cleanHost.endsWith(']') ? cleanHost.slice(1, -1) : cleanHost;
+    return { safe: true, pinnedIp: cleanIp, pinnedFamily: net.isIPv6(cleanIp) ? 6 : 4 };
+  }
+  let addresses: dns.LookupAddress[];
+  try {
+    addresses = await dns.promises.lookup(cleanHost, { all: true, verbatim: true });
+  } catch (err: any) {
+    return { safe: false, error: 'DNS à¤°à¥‡à¤œà¥‹à¤²à¥à¤¯à¥‚à¤¶à¤¨ à¤µà¤¿à¤«à¤²: ' + (err.message || 'à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥‹à¤¸à¥à¤Ÿ') };
+  }
+  if (!addresses || addresses.length === 0) {
+    return { safe: false, error: 'DNS à¤°à¥‡à¤œà¥‹à¤²à¥à¤¯à¥‚à¤¶à¤¨ à¤µà¤¿à¤«à¤²: à¤¹à¥‹à¤¸à¥à¤Ÿ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤' };
+  }
+  for (const record of addresses) {
+    if (isBlockedIpAddress(record.address)) {
+      return { safe: false, error: `à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤…à¤¥à¤µà¤¾ à¤¨à¤¿à¤œà¥€ IP (${record.address}) à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆà¥¤` };
+    }
+  }
+  return { safe: true, pinnedIp: addresses[0].address, pinnedFamily: addresses[0].family };
+}
+
+async function checkDnsSafety(hostname: string): Promise<{ safe: boolean; error?: string }> {
+  const res = await validateAndPinDns(hostname);
+  if (!res.safe) {
+    return { safe: false, error: res.error };
+  }
+  return { safe: true };
+}
+
+interface PinnedImageResult {
+  status: number;
+  contentType: string;
+  buffer: Buffer;
+  remoteAddress?: string;
+  pinnedIp: string;
+}
+
+function fetchPinnedImage(
+  rawUrl: string,
+  redirectCount = 0,
+  maxRedirects = 3
+): Promise<PinnedImageResult> {
+  return new Promise(async (resolve, reject) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return reject({ status: 400, message: "Invalid URL format" });
+    }
+
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return reject({ status: 403, message: "Only http and https protocols are supported." });
+    }
+
+    const dnsResult = await validateAndPinDns(parsed.hostname);
+    if (!dnsResult.safe || !dnsResult.pinnedIp || !dnsResult.pinnedFamily) {
+      return reject({ status: 403, message: dnsResult.error || "DNS safety validation failed." });
+    }
+
+    const { pinnedIp, pinnedFamily } = dnsResult;
+    const isHttps = parsed.protocol === "https:";
+    const client = isHttps ? https : http;
+    const port = parsed.port ? parseInt(parsed.port, 10) : (isHttps ? 443 : 80);
+
+    const reqOptions: any = {
+      host: parsed.hostname,
+      port,
+      path: parsed.pathname + parsed.search,
+      method: "GET",
+      headers: {
+        Host: parsed.host,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      },
+      timeout: 8000,
+      lookup: (requestedHost: string, opts: any, cb: any) => {
+        if (requestedHost.toLowerCase() !== parsed.hostname.toLowerCase()) {
+          return cb(new Error(`Hostname mismatch in pinned connection: expected ${parsed.hostname}, got ${requestedHost}`));
+        }
+        if (opts && opts.all) {
+          cb(null, [{ address: pinnedIp, family: pinnedFamily }]);
+        } else {
+          cb(null, pinnedIp, pinnedFamily);
+        }
+      },
+    };
+
+    if (isHttps) {
+      reqOptions.servername = parsed.hostname; // TLS SNI & Hostname Certificate Validation
+    }
+
+    const req = client.request(reqOptions, (res) => {
+      // Handle Redirects
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400) {
+        res.resume();
+        const location = res.headers["location"];
+        if (!location) {
+          return reject({ status: 400, message: "Redirect missing location header." });
+        }
+        if (redirectCount >= maxRedirects) {
+          return reject({ status: 400, message: "Too many redirects." });
+        }
+        const nextUrl = new URL(location, rawUrl).toString();
+        return resolve(fetchPinnedImage(nextUrl, redirectCount + 1, maxRedirects));
+      }
+
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject({ status: res.statusCode || 500, message: `Upstream returned status ${res.statusCode}` });
+      }
+
+      const contentType = res.headers["content-type"] || "";
+      if (!contentType.toLowerCase().startsWith("image/")) {
+        res.resume();
+        return reject({ status: 415, message: "Invalid content type: only images are allowed." });
+      }
+
+      const chunks: Buffer[] = [];
+      let totalLength = 0;
+      const MAX_SIZE = 10 * 1024 * 1024; // 10MB limit
+
+      res.on("data", (chunk: Buffer) => {
+        totalLength += chunk.length;
+        if (totalLength > MAX_SIZE) {
+          req.destroy(new Error("Image exceeds 10MB limit"));
+          return reject({ status: 413, message: "Image size exceeds 10MB limit." });
+        }
+        chunks.push(chunk);
+      });
+
+      res.on("end", () => {
+        const buffer = Buffer.concat(chunks);
+        resolve({
+          status: 200,
+          contentType,
+          buffer,
+          remoteAddress: req.socket?.remoteAddress,
+          pinnedIp,
+        });
+      });
+    });
+
+    req.on("socket", (socket) => {
+      socket.on("connect", () => {
+        if (socket.remoteAddress && socket.remoteAddress !== pinnedIp) {
+          socket.destroy(new Error("Remote address mismatch with pinned IP"));
+        }
+      });
+    });
+
+    req.on("timeout", () => {
+      req.destroy(new Error("Request timeout"));
+      reject({ status: 504, message: "Image fetch timed out." });
+    });
+
+    req.on("error", (err: any) => {
+      reject({ status: 500, message: err.message || "Network error in image fetch." });
+    });
+
+    req.end();
+  });
 }
 
 // ============================================================================
 // MAGIC BYTES FILE VALIDATOR (PNG, JPEG, GIF, WEBP)
 // ============================================================================
-function isValidImageMagicBytes(buf: Buffer): { valid: boolean; format?: "png" | "jpg" | "gif" | "webp" } {
-  if (!buf || buf.length < 8) return { valid: false };
+function isValidImageMagicBytes(buf: Buffer): { valid: boolean; format?: "png" | "jpg" | "gif" | "webp" | "ico" } {
+  if (!buf || buf.length < 4) return { valid: false };
+
+  // ICO: 00 00 01 00
+  if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01 && buf[3] === 0x00) {
+    return { valid: true, format: "ico" };
+  }
+
+  if (buf.length < 8) return { valid: false };
 
   // PNG: 89 50 4E 47 0D 0A 1A 0A
   if (
@@ -862,7 +1100,7 @@ function authRateLimiter(req: any, res: any, next: any) {
   const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown-ip';
   const check = checkRateLimit(`auth_${String(ip)}`, 15, 60000);
   if (!check.allowed) {
-    return res.status(429).json({ error: "अत्यधिक लॉगिन प्रयास। कृपया 1 मिनट बाद पुनः प्रयास करें।" });
+    return res.status(429).json({ error: "à¤…à¤¤à¥à¤¯à¤§à¤¿à¤• à¤²à¥‰à¤—à¤¿à¤¨ à¤ªà¥à¤°à¤¯à¤¾à¤¸à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ 1 à¤®à¤¿à¤¨à¤Ÿ à¤¬à¤¾à¤¦ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤" });
   }
   next();
 }
@@ -982,7 +1220,7 @@ app.post("/api/auth/refresh-session", async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        error: "सत्र समाप्त हो गया है या अमान्य है। कृपया पुनः लॉगिन करें।",
+        error: "à¤¸à¤¤à¥à¤° à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆ à¤¯à¤¾ à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤²à¥‰à¤—à¤¿à¤¨ à¤•à¤°à¥‡à¤‚à¥¤",
       });
     }
     const freshToken = generateAuthToken({
@@ -1015,14 +1253,14 @@ app.use("/api/admin", async (req, res, next) => {
   if (!user) {
     return res.status(401).json({
       success: false,
-      error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
+      error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ (401 Unauthorized): à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤à¤‚à¤¡à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸ à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¥à¤¯ à¤‘à¤¥à¥‡à¤‚à¤Ÿà¤¿à¤•à¥‡à¤¶à¤¨ à¤Ÿà¥‹à¤•à¤¨ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤",
     });
   }
   (req as any).user = user;
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({
       success: false,
-      error: "अनधिकृत (403 Forbidden): इस कार्य के लिए व्यवस्थापक (Admin) अधिकार आवश्यक हैं।",
+      error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤‡à¤¸ à¤•à¤¾à¤°à¥à¤¯ à¤•à¥‡ à¤²à¤¿à¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤…à¤§à¤¿à¤•à¤¾à¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¤‚à¥¤",
     });
   }
   next();
@@ -1032,7 +1270,7 @@ app.use("/api/admin", async (req, res, next) => {
 app.get("/api/admin/audit-logs", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही ऑडिट लॉग देख सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤‘à¤¡à¤¿à¤Ÿ à¤²à¥‰à¤— à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const logs = loadAuditLogs();
     return res.json({ success: true, logs, total: logs.length });
@@ -1063,7 +1301,7 @@ try {
 let quotaExceededInfo = {
   isExceeded: false,
   lastChecked: new Date().toISOString(),
-  message: "Google Gemini AI मॉडल सेवा सक्रिय और तैयार है।",
+  message: "Google Gemini AI à¤®à¥‰à¤¡à¤² à¤¸à¥‡à¤µà¤¾ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤”à¤° à¤¤à¥ˆà¤¯à¤¾à¤° à¤¹à¥ˆà¥¤",
 };
 
 
@@ -1075,25 +1313,25 @@ const GEMINI_MODELS_POOL = [
 function cleanErrorMessage(err: any): string {
   const raw = String(err?.message || err || "");
   if (raw.includes("503") || raw.toLowerCase().includes("high demand") || raw.toLowerCase().includes("unavailable")) {
-    return "AI मॉडल पर वर्तमान में अत्यधिक लोड है (503 High Demand)। कुछ सेकंड बाद पुनः प्रयास करें या इनपुट टेक्स्ट से तैयार ड्राफ्ट का उपयोग करें।";
+    return "AI à¤®à¥‰à¤¡à¤² à¤ªà¤° à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤®à¥‡à¤‚ à¤…à¤¤à¥à¤¯à¤§à¤¿à¤• à¤²à¥‹à¤¡ à¤¹à¥ˆ (503 High Demand)à¥¤ à¤•à¥à¤› à¤¸à¥‡à¤•à¤‚à¤¡ à¤¬à¤¾à¤¦ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚ à¤¯à¤¾ à¤‡à¤¨à¤ªà¥à¤Ÿ à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤¸à¥‡ à¤¤à¥ˆà¤¯à¤¾à¤° à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤•à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤°à¥‡à¤‚à¥¤";
   }
   if (raw.includes("429") || raw.toLowerCase().includes("resource_exhausted") || raw.toLowerCase().includes("quota")) {
-    return "दैनिक या प्रति मिनट AI लिमिट पार हो गई है (429 Rate Limit)। कृपया कुछ समय बाद पुनः प्रयास करें या स्थानीय स्मार्ट ड्राफ्ट का उपयोग करें।";
+    return "à¤¦à¥ˆà¤¨à¤¿à¤• à¤¯à¤¾ à¤ªà¥à¤°à¤¤à¤¿ à¤®à¤¿à¤¨à¤Ÿ AI à¤²à¤¿à¤®à¤¿à¤Ÿ à¤ªà¤¾à¤° à¤¹à¥‹ à¤—à¤ˆ à¤¹à¥ˆ (429 Rate Limit)à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤•à¥à¤› à¤¸à¤®à¤¯ à¤¬à¤¾à¤¦ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚ à¤¯à¤¾ à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¥à¤®à¤¾à¤°à¥à¤Ÿ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤•à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤°à¥‡à¤‚à¥¤";
   }
   if (raw.includes("403") || raw.toLowerCase().includes("denied access") || raw.toLowerCase().includes("permission_denied")) {
-    return "AI कोटा या एक्सेस सीमा लागू है। आपका संरचित संपादकीय इंजन पूरी तरह सक्रिय है।";
+    return "AI à¤•à¥‹à¤Ÿà¤¾ à¤¯à¤¾ à¤à¤•à¥à¤¸à¥‡à¤¸ à¤¸à¥€à¤®à¤¾ à¤²à¤¾à¤—à¥‚ à¤¹à¥ˆà¥¤ à¤†à¤ªà¤•à¤¾ à¤¸à¤‚à¤°à¤šà¤¿à¤¤ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤‡à¤‚à¤œà¤¨ à¤ªà¥‚à¤°à¥€ à¤¤à¤°à¤¹ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¹à¥ˆà¥¤";
   }
-  return raw || "सर्वर त्रुटि हुई";
+  return raw || "à¤¸à¤°à¥à¤µà¤° à¤¤à¥à¤°à¥à¤Ÿà¤¿ à¤¹à¥à¤ˆ";
 }
 
 function getCategoryFallbackImage(category: string = 'general'): string {
   const cat = (category || '').toLowerCase();
-  if (cat.includes('crime') || cat.includes('अपराध')) return 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80';
-  if (cat.includes('politics') || cat.includes('राजनीति')) return 'https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=800&q=80';
-  if (cat.includes('sports') || cat.includes('खेल')) return 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80';
-  if (cat.includes('tech') || cat.includes('तकनीक')) return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80';
-  if (cat.includes('business') || cat.includes('व्यापार')) return 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80';
-  if (cat.includes('weather') || cat.includes('मौसम')) return 'https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80';
+  if (cat.includes('crime') || cat.includes('à¤…à¤ªà¤°à¤¾à¤§')) return 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80';
+  if (cat.includes('politics') || cat.includes('à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿')) return 'https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=800&q=80';
+  if (cat.includes('sports') || cat.includes('à¤–à¥‡à¤²')) return 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80';
+  if (cat.includes('tech') || cat.includes('à¤¤à¤•à¤¨à¥€à¤•')) return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80';
+  if (cat.includes('business') || cat.includes('à¤µà¥à¤¯à¤¾à¤ªà¤¾à¤°')) return 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80';
+  if (cat.includes('weather') || cat.includes('à¤®à¥Œà¤¸à¤®')) return 'https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80';
   return 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80';
 }
 
@@ -1135,7 +1373,7 @@ app.get("/api/cloud-status", (req, res) => {
 app.post("/api/admin/set-ai-keys", requireMasterAdminMiddleware, async (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही AI कुंजियाँ सेट कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ AI à¤•à¥à¤‚à¤œà¤¿à¤¯à¤¾à¤ à¤¸à¥‡à¤Ÿ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const { openaiKey, geminiKey, customDomain } = req.body;
     if (openaiKey !== undefined) {
@@ -1167,14 +1405,14 @@ app.post("/api/admin/set-ai-keys", requireMasterAdminMiddleware, async (req, res
       effectiveOpenaiKey.trim().length > 5
     );
 
-    let testMessage = "क्लाउड सेटिंग्स सुरक्षित हो गईं!";
+    let testMessage = "à¤•à¥à¤²à¤¾à¤‰à¤¡ à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸ à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¹à¥‹ à¤—à¤ˆà¤‚!";
     if (openaiKey && openaiValid) {
       try {
         const testClient = new OpenAI({ apiKey: effectiveOpenaiKey!.trim() });
         await testClient.models.list();
-        testMessage = "✅ ChatGPT (OpenAI) API Key सफलतापूर्वक कनेक्ट व सत्यापित हो गई!";
+        testMessage = "âœ… ChatGPT (OpenAI) API Key à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤•à¤¨à¥‡à¤•à¥à¤Ÿ à¤µ à¤¸à¤¤à¥à¤¯à¤¾à¤ªà¤¿à¤¤ à¤¹à¥‹ à¤—à¤ˆ!";
       } catch (testErr: any) {
-        testMessage = `की सेव हो गई, किन्तु OpenAI टेस्ट चेतावनी: ${testErr?.message || "कृपया की की जांच करें"}`;
+        testMessage = `à¤•à¥€ à¤¸à¥‡à¤µ à¤¹à¥‹ à¤—à¤ˆ, à¤•à¤¿à¤¨à¥à¤¤à¥ OpenAI à¤Ÿà¥‡à¤¸à¥à¤Ÿ à¤šà¥‡à¤¤à¤¾à¤µà¤¨à¥€: ${testErr?.message || "à¤•à¥ƒà¤ªà¤¯à¤¾ à¤•à¥€ à¤•à¥€ à¤œà¤¾à¤‚à¤š à¤•à¤°à¥‡à¤‚"}`;
       }
     }
 
@@ -1388,11 +1626,11 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
       const desc = String((tx as any)?.description || '');
       const uKey = String((tx as any)?.userEmail || (tx as any)?.userId || '').toLowerCase().trim();
       if (!uKey) continue;
-      if (txId.startsWith('tx-welcome-graphic-') || desc.includes('प्रथम सफल ग्राफिक डाउनलोड')) {
+      if (txId.startsWith('tx-welcome-graphic-') || desc.includes('à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡')) {
         welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), graphicClaimed: true };
         if (wallets[uKey]) wallets[uKey].graphicClaimed = true;
       }
-      if (txId.startsWith('tx-welcome-video-') || desc.includes('प्रथम सफल वीडियो डाउनलोड')) {
+      if (txId.startsWith('tx-welcome-video-') || desc.includes('à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡')) {
         welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), videoClaimed: true };
         if (wallets[uKey]) wallets[uKey].videoClaimed = true;
       }
@@ -1424,10 +1662,10 @@ function loadRewardsDatabase(): ServerRewardsDatabase {
         const desc = String((tx as any)?.description || '');
         const uKey = String((tx as any)?.userEmail || (tx as any)?.userId || '').toLowerCase().trim();
         if (!uKey) continue;
-        if (txId.startsWith('tx-welcome-graphic-') || desc.includes('प्रथम सफल ग्राफिक डाउनलोड')) {
+        if (txId.startsWith('tx-welcome-graphic-') || desc.includes('à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡')) {
           welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), graphicClaimed: true };
         }
-        if (txId.startsWith('tx-welcome-video-') || desc.includes('प्रथम सफल वीडियो डाउनलोड')) {
+        if (txId.startsWith('tx-welcome-video-') || desc.includes('à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡')) {
           welcomeRewards[uKey] = { ...(welcomeRewards[uKey] || {}), videoClaimed: true };
         }
       }
@@ -1585,153 +1823,153 @@ function getInitialRichNewsPosts(): StoredNewsPost[] {
   return [
     {
       id: "live-post-1",
-      title: "भारत ने लॉन्च किया नया AI सुपरकंप्यूटिंग नेटवर्क, वैश्विक स्तर पर बनी नई पहचान",
-      summary: "विज्ञान एवं प्रौद्योगिकी मंत्रालय द्वारा आज देश के अत्याधुनिक AI सुपरकंप्यूटिंग क्लस्टर का अनावरण किया गया। यह तकनीक मौसम पूर्वानुमान और स्वास्थ्य क्षेत्र में क्रांति लाएगी।",
-      sourceChannel: "दैनिक भास्कर (Dainik Bhaskar)",
+      title: "à¤­à¤¾à¤°à¤¤ à¤¨à¥‡ à¤²à¥‰à¤¨à¥à¤š à¤•à¤¿à¤¯à¤¾ à¤¨à¤¯à¤¾ AI à¤¸à¥à¤ªà¤°à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤¿à¤‚à¤— à¤¨à¥‡à¤Ÿà¤µà¤°à¥à¤•, à¤µà¥ˆà¤¶à¥à¤µà¤¿à¤• à¤¸à¥à¤¤à¤° à¤ªà¤° à¤¬à¤¨à¥€ à¤¨à¤ˆ à¤ªà¤¹à¤šà¤¾à¤¨",
+      summary: "à¤µà¤¿à¤œà¥à¤žà¤¾à¤¨ à¤à¤µà¤‚ à¤ªà¥à¤°à¥Œà¤¦à¥à¤¯à¥‹à¤—à¤¿à¤•à¥€ à¤®à¤‚à¤¤à¥à¤°à¤¾à¤²à¤¯ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤†à¤œ à¤¦à¥‡à¤¶ à¤•à¥‡ à¤…à¤¤à¥à¤¯à¤¾à¤§à¥à¤¨à¤¿à¤• AI à¤¸à¥à¤ªà¤°à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤¿à¤‚à¤— à¤•à¥à¤²à¤¸à¥à¤Ÿà¤° à¤•à¤¾ à¤…à¤¨à¤¾à¤µà¤°à¤£ à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤ à¤¯à¤¹ à¤¤à¤•à¤¨à¥€à¤• à¤®à¥Œà¤¸à¤® à¤ªà¥‚à¤°à¥à¤µà¤¾à¤¨à¥à¤®à¤¾à¤¨ à¤”à¤° à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯ à¤•à¥à¤·à¥‡à¤¤à¥à¤° à¤®à¥‡à¤‚ à¤•à¥à¤°à¤¾à¤‚à¤¤à¤¿ à¤²à¤¾à¤à¤—à¥€à¥¤",
+      sourceChannel: "à¤¦à¥ˆà¤¨à¤¿à¤• à¤­à¤¾à¤¸à¥à¤•à¤° (Dainik Bhaskar)",
       sourceUrl: "https://dainikbhaskar.com/tech/ai-supercomputing",
       category: "tech",
-      categoryName: "टेक्नोलॉजी",
-      publishedTime: "10 मिनट पहले",
+      categoryName: "à¤Ÿà¥‡à¤•à¥à¤¨à¥‹à¤²à¥‰à¤œà¥€",
+      publishedTime: "10 à¤®à¤¿à¤¨à¤Ÿ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop",
       breaking: true,
       isExclusive: true,
       timestamp: now - 10 * 60 * 1000,
-      fullContent: `विज्ञान एवं प्रौद्योगिकी मंत्रालय द्वारा आज देश के अत्याधुनिक AI सुपरकंप्यूटिंग क्लस्टर का भव्य अनावरण किया गया।\n\n📌 मुख्य विवरण एवं पृष्ठभूमि:\nइस नए क्लस्टर से देश के लाखों वैज्ञानिकों, छात्रों और स्टार्टअप्स को अभूतपूर्व कम्प्यूटिंग क्षमता मिलेगी। यह मौसम पूर्वानुमान, चिकित्सा अनुसंधान और अंतरिक्ष अन्वेषण में डेटा एनालिसिस को 10 गुना तेज कर देगा।\n\n🎤 आधिकारिक बयान:\nकेंद्रीय विज्ञान मंत्री ने कहा: "भारत अब केवल तकनीक का उपभोक्ता नहीं, बल्कि वैश्विक स्तर पर AI समाधानों का शीर्ष निर्माता बन रहा है।"\n\n📊 मुख्य बिंदु:\n• 100 पेटाफ्लॉप्स से अधिक की कम्प्यूटेशनल स्पीड\n• देश के सभी प्रमुख IITs और अनुसंधान संस्थानों से सीधा जुड़ाव\n• 100% हरित ऊर्जा से संचालित डाटा सेंटर`
+      fullContent: `à¤µà¤¿à¤œà¥à¤žà¤¾à¤¨ à¤à¤µà¤‚ à¤ªà¥à¤°à¥Œà¤¦à¥à¤¯à¥‹à¤—à¤¿à¤•à¥€ à¤®à¤‚à¤¤à¥à¤°à¤¾à¤²à¤¯ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤†à¤œ à¤¦à¥‡à¤¶ à¤•à¥‡ à¤…à¤¤à¥à¤¯à¤¾à¤§à¥à¤¨à¤¿à¤• AI à¤¸à¥à¤ªà¤°à¤•à¤‚à¤ªà¥à¤¯à¥‚à¤Ÿà¤¿à¤‚à¤— à¤•à¥à¤²à¤¸à¥à¤Ÿà¤° à¤•à¤¾ à¤­à¤µà¥à¤¯ à¤…à¤¨à¤¾à¤µà¤°à¤£ à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤\n\nðŸ“Œ à¤®à¥à¤–à¥à¤¯ à¤µà¤¿à¤µà¤°à¤£ à¤à¤µà¤‚ à¤ªà¥ƒà¤·à¥à¤ à¤­à¥‚à¤®à¤¿:\nà¤‡à¤¸ à¤¨à¤ à¤•à¥à¤²à¤¸à¥à¤Ÿà¤° à¤¸à¥‡ à¤¦à¥‡à¤¶ à¤•à¥‡ à¤²à¤¾à¤–à¥‹à¤‚ à¤µà¥ˆà¤œà¥à¤žà¤¾à¤¨à¤¿à¤•à¥‹à¤‚, à¤›à¤¾à¤¤à¥à¤°à¥‹à¤‚ à¤”à¤° à¤¸à¥à¤Ÿà¤¾à¤°à¥à¤Ÿà¤…à¤ªà¥à¤¸ à¤•à¥‹ à¤…à¤­à¥‚à¤¤à¤ªà¥‚à¤°à¥à¤µ à¤•à¤®à¥à¤ªà¥à¤¯à¥‚à¤Ÿà¤¿à¤‚à¤— à¤•à¥à¤·à¤®à¤¤à¤¾ à¤®à¤¿à¤²à¥‡à¤—à¥€à¥¤ à¤¯à¤¹ à¤®à¥Œà¤¸à¤® à¤ªà¥‚à¤°à¥à¤µà¤¾à¤¨à¥à¤®à¤¾à¤¨, à¤šà¤¿à¤•à¤¿à¤¤à¥à¤¸à¤¾ à¤…à¤¨à¥à¤¸à¤‚à¤§à¤¾à¤¨ à¤”à¤° à¤…à¤‚à¤¤à¤°à¤¿à¤•à¥à¤· à¤…à¤¨à¥à¤µà¥‡à¤·à¤£ à¤®à¥‡à¤‚ à¤¡à¥‡à¤Ÿà¤¾ à¤à¤¨à¤¾à¤²à¤¿à¤¸à¤¿à¤¸ à¤•à¥‹ 10 à¤—à¥à¤¨à¤¾ à¤¤à¥‡à¤œ à¤•à¤° à¤¦à¥‡à¤—à¤¾à¥¤\n\nðŸŽ¤ à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¬à¤¯à¤¾à¤¨:\nà¤•à¥‡à¤‚à¤¦à¥à¤°à¥€à¤¯ à¤µà¤¿à¤œà¥à¤žà¤¾à¤¨ à¤®à¤‚à¤¤à¥à¤°à¥€ à¤¨à¥‡ à¤•à¤¹à¤¾: "à¤­à¤¾à¤°à¤¤ à¤…à¤¬ à¤•à¥‡à¤µà¤² à¤¤à¤•à¤¨à¥€à¤• à¤•à¤¾ à¤‰à¤ªà¤­à¥‹à¤•à¥à¤¤à¤¾ à¤¨à¤¹à¥€à¤‚, à¤¬à¤²à¥à¤•à¤¿ à¤µà¥ˆà¤¶à¥à¤µà¤¿à¤• à¤¸à¥à¤¤à¤° à¤ªà¤° AI à¤¸à¤®à¤¾à¤§à¤¾à¤¨à¥‹à¤‚ à¤•à¤¾ à¤¶à¥€à¤°à¥à¤· à¤¨à¤¿à¤°à¥à¤®à¤¾à¤¤à¤¾ à¤¬à¤¨ à¤°à¤¹à¤¾ à¤¹à¥ˆà¥¤"\n\nðŸ“Š à¤®à¥à¤–à¥à¤¯ à¤¬à¤¿à¤‚à¤¦à¥:\nâ€¢ 100 à¤ªà¥‡à¤Ÿà¤¾à¤«à¥à¤²à¥‰à¤ªà¥à¤¸ à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤•à¥€ à¤•à¤®à¥à¤ªà¥à¤¯à¥‚à¤Ÿà¥‡à¤¶à¤¨à¤² à¤¸à¥à¤ªà¥€à¤¡\nâ€¢ à¤¦à¥‡à¤¶ à¤•à¥‡ à¤¸à¤­à¥€ à¤ªà¥à¤°à¤®à¥à¤– IITs à¤”à¤° à¤…à¤¨à¥à¤¸à¤‚à¤§à¤¾à¤¨ à¤¸à¤‚à¤¸à¥à¤¥à¤¾à¤¨à¥‹à¤‚ à¤¸à¥‡ à¤¸à¥€à¤§à¤¾ à¤œà¥à¤¡à¤¼à¤¾à¤µ\nâ€¢ 100% à¤¹à¤°à¤¿à¤¤ à¤Šà¤°à¥à¤œà¤¾ à¤¸à¥‡ à¤¸à¤‚à¤šà¤¾à¤²à¤¿à¤¤ à¤¡à¤¾à¤Ÿà¤¾ à¤¸à¥‡à¤‚à¤Ÿà¤°`
     },
     {
       id: "live-post-2",
-      title: "संसद में डिजिटल मीडिया और AI न्यूज़ प्रसारण पर ऐतिहासिक विधेयक पारित",
-      summary: "सूचना एवं प्रसारण मंत्रालय ने डिजिटल न्यूज़ पब्लिशर्स और एआई आधारित कंटेंट जनरेशन के लिए मानक तय करने हेतु ऐतिहासिक बिल पारित किया। डीपफेक पर कड़े दंड का प्रावधान।",
-      sourceChannel: "आज तक (Aaj Tak)",
+      title: "à¤¸à¤‚à¤¸à¤¦ à¤®à¥‡à¤‚ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤”à¤° AI à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤ªà¥à¤°à¤¸à¤¾à¤°à¤£ à¤ªà¤° à¤à¤¤à¤¿à¤¹à¤¾à¤¸à¤¿à¤• à¤µà¤¿à¤§à¥‡à¤¯à¤• à¤ªà¤¾à¤°à¤¿à¤¤",
+      summary: "à¤¸à¥‚à¤šà¤¨à¤¾ à¤à¤µà¤‚ à¤ªà¥à¤°à¤¸à¤¾à¤°à¤£ à¤®à¤‚à¤¤à¥à¤°à¤¾à¤²à¤¯ à¤¨à¥‡ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤ªà¤¬à¥à¤²à¤¿à¤¶à¤°à¥à¤¸ à¤”à¤° à¤à¤†à¤ˆ à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤•à¤‚à¤Ÿà¥‡à¤‚à¤Ÿ à¤œà¤¨à¤°à¥‡à¤¶à¤¨ à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¤• à¤¤à¤¯ à¤•à¤°à¤¨à¥‡ à¤¹à¥‡à¤¤à¥ à¤à¤¤à¤¿à¤¹à¤¾à¤¸à¤¿à¤• à¤¬à¤¿à¤² à¤ªà¤¾à¤°à¤¿à¤¤ à¤•à¤¿à¤¯à¤¾à¥¤ à¤¡à¥€à¤ªà¤«à¥‡à¤• à¤ªà¤° à¤•à¤¡à¤¼à¥‡ à¤¦à¤‚à¤¡ à¤•à¤¾ à¤ªà¥à¤°à¤¾à¤µà¤§à¤¾à¤¨à¥¤",
+      sourceChannel: "à¤†à¤œ à¤¤à¤• (Aaj Tak)",
       sourceUrl: "https://aajtak.in/national/digital-media-ai-bill",
       category: "politics",
-      categoryName: "राजनीति",
-      publishedTime: "25 मिनट पहले",
+      categoryName: "à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿",
+      publishedTime: "25 à¤®à¤¿à¤¨à¤Ÿ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
       breaking: true,
       isExclusive: false,
       timestamp: now - 25 * 60 * 1000,
-      fullContent: `संसद के दोनों सदनों में डिजिटल मीडिया और एआई कंटेंट के नियमन हेतु नया कानून ध्वनिमत से पारित किया गया।\n\n📌 मुख्य बातें:\n1. स्वतंत्र पत्रकारों और यूट्यूब न्यूज़ चैनलों के लिए स्व-प्रमाणन प्रणाली।\n2. एआई जनरेटेड तस्वीरों और डीपफेक वीडियो पर वाटरमार्क अनिवार्य।\n3. तथ्यहीन व भ्रामक खबरों पर त्वरित कार्रवाई हेतु डिजिटल ओम्बड्समैन की नियुक्ति।`
+      fullContent: `à¤¸à¤‚à¤¸à¤¦ à¤•à¥‡ à¤¦à¥‹à¤¨à¥‹à¤‚ à¤¸à¤¦à¤¨à¥‹à¤‚ à¤®à¥‡à¤‚ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤”à¤° à¤à¤†à¤ˆ à¤•à¤‚à¤Ÿà¥‡à¤‚à¤Ÿ à¤•à¥‡ à¤¨à¤¿à¤¯à¤®à¤¨ à¤¹à¥‡à¤¤à¥ à¤¨à¤¯à¤¾ à¤•à¤¾à¤¨à¥‚à¤¨ à¤§à¥à¤µà¤¨à¤¿à¤®à¤¤ à¤¸à¥‡ à¤ªà¤¾à¤°à¤¿à¤¤ à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤\n\nðŸ“Œ à¤®à¥à¤–à¥à¤¯ à¤¬à¤¾à¤¤à¥‡à¤‚:\n1. à¤¸à¥à¤µà¤¤à¤‚à¤¤à¥à¤° à¤ªà¤¤à¥à¤°à¤•à¤¾à¤°à¥‹à¤‚ à¤”à¤° à¤¯à¥‚à¤Ÿà¥à¤¯à¥‚à¤¬ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤šà¥ˆà¤¨à¤²à¥‹à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤¸à¥à¤µ-à¤ªà¥à¤°à¤®à¤¾à¤£à¤¨ à¤ªà¥à¤°à¤£à¤¾à¤²à¥€à¥¤\n2. à¤à¤†à¤ˆ à¤œà¤¨à¤°à¥‡à¤Ÿà¥‡à¤¡ à¤¤à¤¸à¥à¤µà¥€à¤°à¥‹à¤‚ à¤”à¤° à¤¡à¥€à¤ªà¤«à¥‡à¤• à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤ªà¤° à¤µà¤¾à¤Ÿà¤°à¤®à¤¾à¤°à¥à¤• à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯à¥¤\n3. à¤¤à¤¥à¥à¤¯à¤¹à¥€à¤¨ à¤µ à¤­à¥à¤°à¤¾à¤®à¤• à¤–à¤¬à¤°à¥‹à¤‚ à¤ªà¤° à¤¤à¥à¤µà¤°à¤¿à¤¤ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤¹à¥‡à¤¤à¥ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤“à¤®à¥à¤¬à¤¡à¥à¤¸à¤®à¥ˆà¤¨ à¤•à¥€ à¤¨à¤¿à¤¯à¥à¤•à¥à¤¤à¤¿à¥¤`
     },
     {
       id: "live-post-3",
-      title: "एशिया कप क्रिकेट: भारत ने रोमांचक मुकाबले में पाकिस्तान को 5 विकेट से हराया",
-      summary: "भारतीय टीम ने शानदार खेल का प्रदर्शन करते हुए अंतिम ओवर में जीत दर्ज की। सलामी बल्लेबाज ने 85 रनों की नाबाद पारी खेली, गेंदबाजों ने डेथ ओवर्स में कसी हुई गेंदबाजी की।",
-      sourceChannel: "NDTV इंडिया",
+      title: "à¤à¤¶à¤¿à¤¯à¤¾ à¤•à¤ª à¤•à¥à¤°à¤¿à¤•à¥‡à¤Ÿ: à¤­à¤¾à¤°à¤¤ à¤¨à¥‡ à¤°à¥‹à¤®à¤¾à¤‚à¤šà¤• à¤®à¥à¤•à¤¾à¤¬à¤²à¥‡ à¤®à¥‡à¤‚ à¤ªà¤¾à¤•à¤¿à¤¸à¥à¤¤à¤¾à¤¨ à¤•à¥‹ 5 à¤µà¤¿à¤•à¥‡à¤Ÿ à¤¸à¥‡ à¤¹à¤°à¤¾à¤¯à¤¾",
+      summary: "à¤­à¤¾à¤°à¤¤à¥€à¤¯ à¤Ÿà¥€à¤® à¤¨à¥‡ à¤¶à¤¾à¤¨à¤¦à¤¾à¤° à¤–à¥‡à¤² à¤•à¤¾ à¤ªà¥à¤°à¤¦à¤°à¥à¤¶à¤¨ à¤•à¤°à¤¤à¥‡ à¤¹à¥à¤ à¤…à¤‚à¤¤à¤¿à¤® à¤“à¤µà¤° à¤®à¥‡à¤‚ à¤œà¥€à¤¤ à¤¦à¤°à¥à¤œ à¤•à¥€à¥¤ à¤¸à¤²à¤¾à¤®à¥€ à¤¬à¤²à¥à¤²à¥‡à¤¬à¤¾à¤œ à¤¨à¥‡ 85 à¤°à¤¨à¥‹à¤‚ à¤•à¥€ à¤¨à¤¾à¤¬à¤¾à¤¦ à¤ªà¤¾à¤°à¥€ à¤–à¥‡à¤²à¥€, à¤—à¥‡à¤‚à¤¦à¤¬à¤¾à¤œà¥‹à¤‚ à¤¨à¥‡ à¤¡à¥‡à¤¥ à¤“à¤µà¤°à¥à¤¸ à¤®à¥‡à¤‚ à¤•à¤¸à¥€ à¤¹à¥à¤ˆ à¤—à¥‡à¤‚à¤¦à¤¬à¤¾à¤œà¥€ à¤•à¥€à¥¤",
+      sourceChannel: "NDTV à¤‡à¤‚à¤¡à¤¿à¤¯à¤¾",
       sourceUrl: "https://ndtv.in/sports/asia-cup-victory",
       category: "sports",
-      categoryName: "खेल",
-      publishedTime: "45 मिनट पहले",
+      categoryName: "à¤–à¥‡à¤²",
+      publishedTime: "45 à¤®à¤¿à¤¨à¤Ÿ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=800&auto=format&fit=crop",
       breaking: true,
       isExclusive: true,
       timestamp: now - 45 * 60 * 1000,
-      fullContent: `अंतिम ओवर में चाहिए थे 12 रन, भारतीय बल्लेबाजों ने 2 गेंद शेष रहते जीत दिला दी। इस जीत के साथ भारतीय टीम अंक तालिका में शीर्ष पर पहुंच गई है।`
+      fullContent: `à¤…à¤‚à¤¤à¤¿à¤® à¤“à¤µà¤° à¤®à¥‡à¤‚ à¤šà¤¾à¤¹à¤¿à¤ à¤¥à¥‡ 12 à¤°à¤¨, à¤­à¤¾à¤°à¤¤à¥€à¤¯ à¤¬à¤²à¥à¤²à¥‡à¤¬à¤¾à¤œà¥‹à¤‚ à¤¨à¥‡ 2 à¤—à¥‡à¤‚à¤¦ à¤¶à¥‡à¤· à¤°à¤¹à¤¤à¥‡ à¤œà¥€à¤¤ à¤¦à¤¿à¤²à¤¾ à¤¦à¥€à¥¤ à¤‡à¤¸ à¤œà¥€à¤¤ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤­à¤¾à¤°à¤¤à¥€à¤¯ à¤Ÿà¥€à¤® à¤…à¤‚à¤• à¤¤à¤¾à¤²à¤¿à¤•à¤¾ à¤®à¥‡à¤‚ à¤¶à¥€à¤°à¥à¤· à¤ªà¤° à¤ªà¤¹à¥à¤‚à¤š à¤—à¤ˆ à¤¹à¥ˆà¥¤`
     },
     {
       id: "live-post-4",
-      title: "सेंसेक्स में 1100 अंकों का रिकॉर्ड उछाल, निफ्टी 25,500 के नए शिखर पर पहुंचा",
-      summary: "घरेलू शेयर बाजारों में विदेशी संस्थागत निवेशकों (FII) की वापसी से बाजार नई ऊंचाई पर पहुंचा। बैंकिंग, ऑटो और आईटी सेक्टर में भारी लिवाली देखने को मिली।",
-      sourceChannel: "मनीकंट्रोल (Moneycontrol)",
+      title: "à¤¸à¥‡à¤‚à¤¸à¥‡à¤•à¥à¤¸ à¤®à¥‡à¤‚ 1100 à¤…à¤‚à¤•à¥‹à¤‚ à¤•à¤¾ à¤°à¤¿à¤•à¥‰à¤°à¥à¤¡ à¤‰à¤›à¤¾à¤², à¤¨à¤¿à¤«à¥à¤Ÿà¥€ 25,500 à¤•à¥‡ à¤¨à¤ à¤¶à¤¿à¤–à¤° à¤ªà¤° à¤ªà¤¹à¥à¤‚à¤šà¤¾",
+      summary: "à¤˜à¤°à¥‡à¤²à¥‚ à¤¶à¥‡à¤¯à¤° à¤¬à¤¾à¤œà¤¾à¤°à¥‹à¤‚ à¤®à¥‡à¤‚ à¤µà¤¿à¤¦à¥‡à¤¶à¥€ à¤¸à¤‚à¤¸à¥à¤¥à¤¾à¤—à¤¤ à¤¨à¤¿à¤µà¥‡à¤¶à¤•à¥‹à¤‚ (FII) à¤•à¥€ à¤µà¤¾à¤ªà¤¸à¥€ à¤¸à¥‡ à¤¬à¤¾à¤œà¤¾à¤° à¤¨à¤ˆ à¤Šà¤‚à¤šà¤¾à¤ˆ à¤ªà¤° à¤ªà¤¹à¥à¤‚à¤šà¤¾à¥¤ à¤¬à¥ˆà¤‚à¤•à¤¿à¤‚à¤—, à¤‘à¤Ÿà¥‹ à¤”à¤° à¤†à¤ˆà¤Ÿà¥€ à¤¸à¥‡à¤•à¥à¤Ÿà¤° à¤®à¥‡à¤‚ à¤­à¤¾à¤°à¥€ à¤²à¤¿à¤µà¤¾à¤²à¥€ à¤¦à¥‡à¤–à¤¨à¥‡ à¤•à¥‹ à¤®à¤¿à¤²à¥€à¥¤",
+      sourceChannel: "à¤®à¤¨à¥€à¤•à¤‚à¤Ÿà¥à¤°à¥‹à¤² (Moneycontrol)",
       sourceUrl: "https://moneycontrol.com/markets/sensex-record",
       category: "business",
-      categoryName: "कारोबार",
-      publishedTime: "1 घंटा पहले",
+      categoryName: "à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤°",
+      publishedTime: "1 à¤˜à¤‚à¤Ÿà¤¾ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop",
       breaking: false,
       isExclusive: false,
       timestamp: now - 60 * 60 * 1000,
-      fullContent: `भारतीय शेयर बाजार ने आज नया इतिहास रचा। सेंसेक्स 1100 अंकों की तेजी के साथ बंद हुआ और निफ्टी ने पहली बार 25,500 का स्तर छुआ। विश्लेषकों का मानना है कि मजबूत आर्थिक आंकड़े बाजार को गति दे रहे हैं।`
+      fullContent: `à¤­à¤¾à¤°à¤¤à¥€à¤¯ à¤¶à¥‡à¤¯à¤° à¤¬à¤¾à¤œà¤¾à¤° à¤¨à¥‡ à¤†à¤œ à¤¨à¤¯à¤¾ à¤‡à¤¤à¤¿à¤¹à¤¾à¤¸ à¤°à¤šà¤¾à¥¤ à¤¸à¥‡à¤‚à¤¸à¥‡à¤•à¥à¤¸ 1100 à¤…à¤‚à¤•à¥‹à¤‚ à¤•à¥€ à¤¤à¥‡à¤œà¥€ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤¬à¤‚à¤¦ à¤¹à¥à¤† à¤”à¤° à¤¨à¤¿à¤«à¥à¤Ÿà¥€ à¤¨à¥‡ à¤ªà¤¹à¤²à¥€ à¤¬à¤¾à¤° 25,500 à¤•à¤¾ à¤¸à¥à¤¤à¤° à¤›à¥à¤†à¥¤ à¤µà¤¿à¤¶à¥à¤²à¥‡à¤·à¤•à¥‹à¤‚ à¤•à¤¾ à¤®à¤¾à¤¨à¤¨à¤¾ à¤¹à¥ˆ à¤•à¤¿ à¤®à¤œà¤¬à¥‚à¤¤ à¤†à¤°à¥à¤¥à¤¿à¤• à¤†à¤‚à¤•à¤¡à¤¼à¥‡ à¤¬à¤¾à¤œà¤¾à¤° à¤•à¥‹ à¤—à¤¤à¤¿ à¤¦à¥‡ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚à¥¤`
     },
     {
       id: "live-post-5",
-      title: "इसरो ने गगनयान मिशन के दूसरे क्रू-एस्केप सिस्टम का सफल परीक्षण किया",
-      summary: "भारतीय अंतरिक्ष अनुसंधान संगठन (ISRO) ने श्रीहरिकोटा से मानव अंतरिक्ष उड़ान गगनयान के लिए अत्याधुनिक सेफ्टी मॉड्यूल का सफल परीक्षण पूरा किया।",
-      sourceChannel: "ABP न्यूज़",
+      title: "à¤‡à¤¸à¤°à¥‹ à¤¨à¥‡ à¤—à¤—à¤¨à¤¯à¤¾à¤¨ à¤®à¤¿à¤¶à¤¨ à¤•à¥‡ à¤¦à¥‚à¤¸à¤°à¥‡ à¤•à¥à¤°à¥‚-à¤à¤¸à¥à¤•à¥‡à¤ª à¤¸à¤¿à¤¸à¥à¤Ÿà¤® à¤•à¤¾ à¤¸à¤«à¤² à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤•à¤¿à¤¯à¤¾",
+      summary: "à¤­à¤¾à¤°à¤¤à¥€à¤¯ à¤…à¤‚à¤¤à¤°à¤¿à¤•à¥à¤· à¤…à¤¨à¥à¤¸à¤‚à¤§à¤¾à¤¨ à¤¸à¤‚à¤—à¤ à¤¨ (ISRO) à¤¨à¥‡ à¤¶à¥à¤°à¥€à¤¹à¤°à¤¿à¤•à¥‹à¤Ÿà¤¾ à¤¸à¥‡ à¤®à¤¾à¤¨à¤µ à¤…à¤‚à¤¤à¤°à¤¿à¤•à¥à¤· à¤‰à¤¡à¤¼à¤¾à¤¨ à¤—à¤—à¤¨à¤¯à¤¾à¤¨ à¤•à¥‡ à¤²à¤¿à¤ à¤…à¤¤à¥à¤¯à¤¾à¤§à¥à¤¨à¤¿à¤• à¤¸à¥‡à¤«à¥à¤Ÿà¥€ à¤®à¥‰à¤¡à¥à¤¯à¥‚à¤² à¤•à¤¾ à¤¸à¤«à¤² à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤ªà¥‚à¤°à¤¾ à¤•à¤¿à¤¯à¤¾à¥¤",
+      sourceChannel: "ABP à¤¨à¥à¤¯à¥‚à¤œà¤¼",
       sourceUrl: "https://abplive.com/science/gaganyaan-test",
       category: "tech",
-      categoryName: "टेक्नोलॉजी",
-      publishedTime: "2 घंटे पहले",
+      categoryName: "à¤Ÿà¥‡à¤•à¥à¤¨à¥‹à¤²à¥‰à¤œà¥€",
+      publishedTime: "2 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1517976487507-5b3b11329582?w=800&auto=format&fit=crop",
       breaking: true,
       isExclusive: false,
       timestamp: now - 120 * 60 * 1000,
-      fullContent: `इसरो ने अंतरिक्ष यात्रियों की सुरक्षा सुनिश्चित करने वाले क्रू मॉड्यूल का परीक्षण सफलतापूर्वक पूरा कर लिया है। आगामी वर्ष के अंत तक मानव मिशन की योजना है।`
+      fullContent: `à¤‡à¤¸à¤°à¥‹ à¤¨à¥‡ à¤…à¤‚à¤¤à¤°à¤¿à¤•à¥à¤· à¤¯à¤¾à¤¤à¥à¤°à¤¿à¤¯à¥‹à¤‚ à¤•à¥€ à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤¸à¥à¤¨à¤¿à¤¶à¥à¤šà¤¿à¤¤ à¤•à¤°à¤¨à¥‡ à¤µà¤¾à¤²à¥‡ à¤•à¥à¤°à¥‚ à¤®à¥‰à¤¡à¥à¤¯à¥‚à¤² à¤•à¤¾ à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤ªà¥‚à¤°à¤¾ à¤•à¤° à¤²à¤¿à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤†à¤—à¤¾à¤®à¥€ à¤µà¤°à¥à¤· à¤•à¥‡ à¤…à¤‚à¤¤ à¤¤à¤• à¤®à¤¾à¤¨à¤µ à¤®à¤¿à¤¶à¤¨ à¤•à¥€ à¤¯à¥‹à¤œà¤¨à¤¾ à¤¹à¥ˆà¥¤`
     },
     {
       id: "live-post-6",
-      title: "मौसम अलर्ट: उत्तर भारत में भारी बारिश और ओलावृष्टि की चेतावनी जारी",
-      summary: "मौसम विभाग (IMD) ने अगले 48 घंटों में दिल्ली, हरियाणा, पंजाब और पश्चिमी यूपी के कई जिलों में तेज आंधी और बारिश के लिए ऑरेंज अलर्ट जारी किया है।",
-      sourceChannel: "दैनिक जागरण (Dainik Jagran)",
+      title: "à¤®à¥Œà¤¸à¤® à¤…à¤²à¤°à¥à¤Ÿ: à¤‰à¤¤à¥à¤¤à¤° à¤­à¤¾à¤°à¤¤ à¤®à¥‡à¤‚ à¤­à¤¾à¤°à¥€ à¤¬à¤¾à¤°à¤¿à¤¶ à¤”à¤° à¤“à¤²à¤¾à¤µà¥ƒà¤·à¥à¤Ÿà¤¿ à¤•à¥€ à¤šà¥‡à¤¤à¤¾à¤µà¤¨à¥€ à¤œà¤¾à¤°à¥€",
+      summary: "à¤®à¥Œà¤¸à¤® à¤µà¤¿à¤­à¤¾à¤— (IMD) à¤¨à¥‡ à¤…à¤—à¤²à¥‡ 48 à¤˜à¤‚à¤Ÿà¥‹à¤‚ à¤®à¥‡à¤‚ à¤¦à¤¿à¤²à¥à¤²à¥€, à¤¹à¤°à¤¿à¤¯à¤¾à¤£à¤¾, à¤ªà¤‚à¤œà¤¾à¤¬ à¤”à¤° à¤ªà¤¶à¥à¤šà¤¿à¤®à¥€ à¤¯à¥‚à¤ªà¥€ à¤•à¥‡ à¤•à¤ˆ à¤œà¤¿à¤²à¥‹à¤‚ à¤®à¥‡à¤‚ à¤¤à¥‡à¤œ à¤†à¤‚à¤§à¥€ à¤”à¤° à¤¬à¤¾à¤°à¤¿à¤¶ à¤•à¥‡ à¤²à¤¿à¤ à¤‘à¤°à¥‡à¤‚à¤œ à¤…à¤²à¤°à¥à¤Ÿ à¤œà¤¾à¤°à¥€ à¤•à¤¿à¤¯à¤¾ à¤¹à¥ˆà¥¤",
+      sourceChannel: "à¤¦à¥ˆà¤¨à¤¿à¤• à¤œà¤¾à¤—à¤°à¤£ (Dainik Jagran)",
       sourceUrl: "https://jagran.com/weather/heavy-rain-alert",
       category: "state",
-      categoryName: "राज्य / स्थानीय",
-      publishedTime: "2.5 घंटे पहले",
+      categoryName: "à¤°à¤¾à¤œà¥à¤¯ / à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯",
+      publishedTime: "2.5 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=800&auto=format&fit=crop",
       breaking: true,
       isExclusive: false,
       timestamp: now - 150 * 60 * 1000,
-      fullContent: `मौसम विभाग ने पश्चिमी विक्षोभ के सक्रिय होने के कारण उत्तर भारत के कई राज्यों में तेज हवाओं के साथ बारिश और ओलावृष्टि की संभावना जताई है। किसानों को कटी फसल सुरक्षित स्थानों पर रखने की सलाह दी गई है।`
+      fullContent: `à¤®à¥Œà¤¸à¤® à¤µà¤¿à¤­à¤¾à¤— à¤¨à¥‡ à¤ªà¤¶à¥à¤šà¤¿à¤®à¥€ à¤µà¤¿à¤•à¥à¤·à¥‹à¤­ à¤•à¥‡ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¹à¥‹à¤¨à¥‡ à¤•à¥‡ à¤•à¤¾à¤°à¤£ à¤‰à¤¤à¥à¤¤à¤° à¤­à¤¾à¤°à¤¤ à¤•à¥‡ à¤•à¤ˆ à¤°à¤¾à¤œà¥à¤¯à¥‹à¤‚ à¤®à¥‡à¤‚ à¤¤à¥‡à¤œ à¤¹à¤µà¤¾à¤“à¤‚ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤¬à¤¾à¤°à¤¿à¤¶ à¤”à¤° à¤“à¤²à¤¾à¤µà¥ƒà¤·à¥à¤Ÿà¤¿ à¤•à¥€ à¤¸à¤‚à¤­à¤¾à¤µà¤¨à¤¾ à¤œà¤¤à¤¾à¤ˆ à¤¹à¥ˆà¥¤ à¤•à¤¿à¤¸à¤¾à¤¨à¥‹à¤‚ à¤•à¥‹ à¤•à¤Ÿà¥€ à¤«à¤¸à¤² à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¸à¥à¤¥à¤¾à¤¨à¥‹à¤‚ à¤ªà¤° à¤°à¤–à¤¨à¥‡ à¤•à¥€ à¤¸à¤²à¤¾à¤¹ à¤¦à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤`
     },
     {
       id: "live-post-7",
-      title: "राष्ट्रीय राजमार्गों पर अब लागू होगा सेटेलाइट आधारित टोल कलेक्शन सिस्टम",
-      summary: "सड़क परिवहन मंत्रालय ने फास्टैग के बाद अब जीपीएस और सैटेलाइट आधारित टोल प्रणाली को देश के प्रमुख एक्सप्रेसवे पर पायलट प्रोजेक्ट के तौर पर शुरू करने की घोषणा की है।",
-      sourceChannel: "ज़ी न्यूज़ (Zee News)",
+      title: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤°à¤¾à¤œà¤®à¤¾à¤°à¥à¤—à¥‹à¤‚ à¤ªà¤° à¤…à¤¬ à¤²à¤¾à¤—à¥‚ à¤¹à¥‹à¤—à¤¾ à¤¸à¥‡à¤Ÿà¥‡à¤²à¤¾à¤‡à¤Ÿ à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤Ÿà¥‹à¤² à¤•à¤²à¥‡à¤•à¥à¤¶à¤¨ à¤¸à¤¿à¤¸à¥à¤Ÿà¤®",
+      summary: "à¤¸à¤¡à¤¼à¤• à¤ªà¤°à¤¿à¤µà¤¹à¤¨ à¤®à¤‚à¤¤à¥à¤°à¤¾à¤²à¤¯ à¤¨à¥‡ à¤«à¤¾à¤¸à¥à¤Ÿà¥ˆà¤— à¤•à¥‡ à¤¬à¤¾à¤¦ à¤…à¤¬ à¤œà¥€à¤ªà¥€à¤à¤¸ à¤”à¤° à¤¸à¥ˆà¤Ÿà¥‡à¤²à¤¾à¤‡à¤Ÿ à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤Ÿà¥‹à¤² à¤ªà¥à¤°à¤£à¤¾à¤²à¥€ à¤•à¥‹ à¤¦à¥‡à¤¶ à¤•à¥‡ à¤ªà¥à¤°à¤®à¥à¤– à¤à¤•à¥à¤¸à¤ªà¥à¤°à¥‡à¤¸à¤µà¥‡ à¤ªà¤° à¤ªà¤¾à¤¯à¤²à¤Ÿ à¤ªà¥à¤°à¥‹à¤œà¥‡à¤•à¥à¤Ÿ à¤•à¥‡ à¤¤à¥Œà¤° à¤ªà¤° à¤¶à¥à¤°à¥‚ à¤•à¤°à¤¨à¥‡ à¤•à¥€ à¤˜à¥‹à¤·à¤£à¤¾ à¤•à¥€ à¤¹à¥ˆà¥¤",
+      sourceChannel: "à¤œà¤¼à¥€ à¤¨à¥à¤¯à¥‚à¤œà¤¼ (Zee News)",
       sourceUrl: "https://zeenews.india.com/automobiles/satellite-toll",
       category: "politics",
-      categoryName: "राजनीति",
-      publishedTime: "3 घंटे पहले",
+      categoryName: "à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿",
+      publishedTime: "3 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1545459720-aac8509eb02c?w=800&auto=format&fit=crop",
       breaking: false,
       isExclusive: false,
       timestamp: now - 180 * 60 * 1000,
-      fullContent: `नई प्रणाली के तहत वाहनों में लगे ओबीयू (ऑन-बोर्ड यूनिट) के जरिए तय की गई दूरी के आधार पर स्वतः टोल कट जाएगा। इससे टोल प्लाजा पर लगने वाला समय शून्य हो जाएगा।`
+      fullContent: `à¤¨à¤ˆ à¤ªà¥à¤°à¤£à¤¾à¤²à¥€ à¤•à¥‡ à¤¤à¤¹à¤¤ à¤µà¤¾à¤¹à¤¨à¥‹à¤‚ à¤®à¥‡à¤‚ à¤²à¤—à¥‡ à¤“à¤¬à¥€à¤¯à¥‚ (à¤‘à¤¨-à¤¬à¥‹à¤°à¥à¤¡ à¤¯à¥‚à¤¨à¤¿à¤Ÿ) à¤•à¥‡ à¤œà¤°à¤¿à¤ à¤¤à¤¯ à¤•à¥€ à¤—à¤ˆ à¤¦à¥‚à¤°à¥€ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤¸à¥à¤µà¤¤à¤ƒ à¤Ÿà¥‹à¤² à¤•à¤Ÿ à¤œà¤¾à¤à¤—à¤¾à¥¤ à¤‡à¤¸à¤¸à¥‡ à¤Ÿà¥‹à¤² à¤ªà¥à¤²à¤¾à¤œà¤¾ à¤ªà¤° à¤²à¤—à¤¨à¥‡ à¤µà¤¾à¤²à¤¾ à¤¸à¤®à¤¯ à¤¶à¥‚à¤¨à¥à¤¯ à¤¹à¥‹ à¤œà¤¾à¤à¤—à¤¾à¥¤`
     },
     {
       id: "live-post-8",
-      title: "सोने की कीमतों में भारी गिरावट, चांदी 2000 रुपये प्रति किलो सस्ती हुई",
-      summary: "वैश्विक बाजारों में मजबूती के बाद घरेलू सर्राफा बाजार में सोने और चांदी की कीमतों में बड़ी गिरावट दर्ज की गई। त्योहारी सीजन से पहले खरीदारों के चेहरे खिले।",
-      sourceChannel: "दैनिक जागरण (Dainik Jagran)",
+      title: "à¤¸à¥‹à¤¨à¥‡ à¤•à¥€ à¤•à¥€à¤®à¤¤à¥‹à¤‚ à¤®à¥‡à¤‚ à¤­à¤¾à¤°à¥€ à¤—à¤¿à¤°à¤¾à¤µà¤Ÿ, à¤šà¤¾à¤‚à¤¦à¥€ 2000 à¤°à¥à¤ªà¤¯à¥‡ à¤ªà¥à¤°à¤¤à¤¿ à¤•à¤¿à¤²à¥‹ à¤¸à¤¸à¥à¤¤à¥€ à¤¹à¥à¤ˆ",
+      summary: "à¤µà¥ˆà¤¶à¥à¤µà¤¿à¤• à¤¬à¤¾à¤œà¤¾à¤°à¥‹à¤‚ à¤®à¥‡à¤‚ à¤®à¤œà¤¬à¥‚à¤¤à¥€ à¤•à¥‡ à¤¬à¤¾à¤¦ à¤˜à¤°à¥‡à¤²à¥‚ à¤¸à¤°à¥à¤°à¤¾à¤«à¤¾ à¤¬à¤¾à¤œà¤¾à¤° à¤®à¥‡à¤‚ à¤¸à¥‹à¤¨à¥‡ à¤”à¤° à¤šà¤¾à¤‚à¤¦à¥€ à¤•à¥€ à¤•à¥€à¤®à¤¤à¥‹à¤‚ à¤®à¥‡à¤‚ à¤¬à¤¡à¤¼à¥€ à¤—à¤¿à¤°à¤¾à¤µà¤Ÿ à¤¦à¤°à¥à¤œ à¤•à¥€ à¤—à¤ˆà¥¤ à¤¤à¥à¤¯à¥‹à¤¹à¤¾à¤°à¥€ à¤¸à¥€à¤œà¤¨ à¤¸à¥‡ à¤ªà¤¹à¤²à¥‡ à¤–à¤°à¥€à¤¦à¤¾à¤°à¥‹à¤‚ à¤•à¥‡ à¤šà¥‡à¤¹à¤°à¥‡ à¤–à¤¿à¤²à¥‡à¥¤",
+      sourceChannel: "à¤¦à¥ˆà¤¨à¤¿à¤• à¤œà¤¾à¤—à¤°à¤£ (Dainik Jagran)",
       sourceUrl: "https://jagran.com/business/gold-silver-prices",
       category: "business",
-      categoryName: "कारोबार",
-      publishedTime: "3.5 घंटे पहले",
+      categoryName: "à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤°",
+      publishedTime: "3.5 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1610375461246-83df859d849d?w=800&auto=format&fit=crop",
       breaking: false,
       isExclusive: false,
       timestamp: now - 210 * 60 * 1000,
-      fullContent: `24 कैरेट सोने की कीमत प्रति 10 ग्राम में 750 रुपये की कमी आई, वहीं चांदी 2000 रुपये सस्ती होकर 84,000 रुपये प्रति किलोग्राम के स्तर पर आ गई है।`
+      fullContent: `24 à¤•à¥ˆà¤°à¥‡à¤Ÿ à¤¸à¥‹à¤¨à¥‡ à¤•à¥€ à¤•à¥€à¤®à¤¤ à¤ªà¥à¤°à¤¤à¤¿ 10 à¤—à¥à¤°à¤¾à¤® à¤®à¥‡à¤‚ 750 à¤°à¥à¤ªà¤¯à¥‡ à¤•à¥€ à¤•à¤®à¥€ à¤†à¤ˆ, à¤µà¤¹à¥€à¤‚ à¤šà¤¾à¤‚à¤¦à¥€ 2000 à¤°à¥à¤ªà¤¯à¥‡ à¤¸à¤¸à¥à¤¤à¥€ à¤¹à¥‹à¤•à¤° 84,000 à¤°à¥à¤ªà¤¯à¥‡ à¤ªà¥à¤°à¤¤à¤¿ à¤•à¤¿à¤²à¥‹à¤—à¥à¤°à¤¾à¤® à¤•à¥‡ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤† à¤—à¤ˆ à¤¹à¥ˆà¥¤`
     },
     {
       id: "live-post-9",
-      title: "रेलवे का बड़ा ऐलान: 50 नए रूटों पर दौड़ेंगी स्लीपर वंदे भारत ट्रेनें",
-      summary: "लंबी दूरी के यात्रियों के लिए विश्वस्तरीय सुविधाओं से लैस स्लीपर वंदे भारत एक्सप्रेस ट्रेनों का परिचालन जल्द शुरू होगा। तेज रफ्तार और सुरक्षित यात्रा का अनुभव।",
-      sourceChannel: "हिंदुस्तान (Live Hindustan)",
+      title: "à¤°à¥‡à¤²à¤µà¥‡ à¤•à¤¾ à¤¬à¤¡à¤¼à¤¾ à¤à¤²à¤¾à¤¨: 50 à¤¨à¤ à¤°à¥‚à¤Ÿà¥‹à¤‚ à¤ªà¤° à¤¦à¥Œà¤¡à¤¼à¥‡à¤‚à¤—à¥€ à¤¸à¥à¤²à¥€à¤ªà¤° à¤µà¤‚à¤¦à¥‡ à¤­à¤¾à¤°à¤¤ à¤Ÿà¥à¤°à¥‡à¤¨à¥‡à¤‚",
+      summary: "à¤²à¤‚à¤¬à¥€ à¤¦à¥‚à¤°à¥€ à¤•à¥‡ à¤¯à¤¾à¤¤à¥à¤°à¤¿à¤¯à¥‹à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤µà¤¿à¤¶à¥à¤µà¤¸à¥à¤¤à¤°à¥€à¤¯ à¤¸à¥à¤µà¤¿à¤§à¤¾à¤“à¤‚ à¤¸à¥‡ à¤²à¥ˆà¤¸ à¤¸à¥à¤²à¥€à¤ªà¤° à¤µà¤‚à¤¦à¥‡ à¤­à¤¾à¤°à¤¤ à¤à¤•à¥à¤¸à¤ªà¥à¤°à¥‡à¤¸ à¤Ÿà¥à¤°à¥‡à¤¨à¥‹à¤‚ à¤•à¤¾ à¤ªà¤°à¤¿à¤šà¤¾à¤²à¤¨ à¤œà¤²à¥à¤¦ à¤¶à¥à¤°à¥‚ à¤¹à¥‹à¤—à¤¾à¥¤ à¤¤à¥‡à¤œ à¤°à¤«à¥à¤¤à¤¾à¤° à¤”à¤° à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¯à¤¾à¤¤à¥à¤°à¤¾ à¤•à¤¾ à¤…à¤¨à¥à¤­à¤µà¥¤",
+      sourceChannel: "à¤¹à¤¿à¤‚à¤¦à¥à¤¸à¥à¤¤à¤¾à¤¨ (Live Hindustan)",
       sourceUrl: "https://livehindustan.com/national/vande-bharat-sleeper",
       category: "state",
-      categoryName: "राज्य / स्थानीय",
-      publishedTime: "4 घंटे पहले",
+      categoryName: "à¤°à¤¾à¤œà¥à¤¯ / à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯",
+      publishedTime: "4 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=800&auto=format&fit=crop",
       breaking: false,
       isExclusive: false,
       timestamp: now - 240 * 60 * 1000,
-      fullContent: `रेल मंत्रालय ने 50 नए रूटों को अंतिम रूप दे दिया है। नई स्लीपर ट्रेनों में अत्याधुनिक एयर सस्पेंशन, बायो-वैक्यूम टॉयलेट्स और कवच सुरक्षा प्रणाली शामिल हैं।`
+      fullContent: `à¤°à¥‡à¤² à¤®à¤‚à¤¤à¥à¤°à¤¾à¤²à¤¯ à¤¨à¥‡ 50 à¤¨à¤ à¤°à¥‚à¤Ÿà¥‹à¤‚ à¤•à¥‹ à¤…à¤‚à¤¤à¤¿à¤® à¤°à¥‚à¤ª à¤¦à¥‡ à¤¦à¤¿à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¨à¤ˆ à¤¸à¥à¤²à¥€à¤ªà¤° à¤Ÿà¥à¤°à¥‡à¤¨à¥‹à¤‚ à¤®à¥‡à¤‚ à¤…à¤¤à¥à¤¯à¤¾à¤§à¥à¤¨à¤¿à¤• à¤à¤¯à¤° à¤¸à¤¸à¥à¤ªà¥‡à¤‚à¤¶à¤¨, à¤¬à¤¾à¤¯à¥‹-à¤µà¥ˆà¤•à¥à¤¯à¥‚à¤® à¤Ÿà¥‰à¤¯à¤²à¥‡à¤Ÿà¥à¤¸ à¤”à¤° à¤•à¤µà¤š à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤ªà¥à¤°à¤£à¤¾à¤²à¥€ à¤¶à¤¾à¤®à¤¿à¤² à¤¹à¥ˆà¤‚à¥¤`
     },
     {
       id: "live-post-10",
-      title: "साइबर पुलिस की बड़ी कार्रवाई: 500 करोड़ के ऑनलाइन गेमिंग सिंडिकेट का भंडाफोड़",
-      summary: "विशेष टास्क फोर्स ने फर्जी डिजिटल पेमेंट गेटवे और अवैध गेमिंग ऐप के जरिए करोड़ों की ठगी करने वाले अंतरराज्यीय गिरोह के 8 सदस्यों को दबोचा।",
-      sourceChannel: "पत्रिका (Patrika)",
+      title: "à¤¸à¤¾à¤‡à¤¬à¤° à¤ªà¥à¤²à¤¿à¤¸ à¤•à¥€ à¤¬à¤¡à¤¼à¥€ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ: 500 à¤•à¤°à¥‹à¤¡à¤¼ à¤•à¥‡ à¤‘à¤¨à¤²à¤¾à¤‡à¤¨ à¤—à¥‡à¤®à¤¿à¤‚à¤— à¤¸à¤¿à¤‚à¤¡à¤¿à¤•à¥‡à¤Ÿ à¤•à¤¾ à¤­à¤‚à¤¡à¤¾à¤«à¥‹à¤¡à¤¼",
+      summary: "à¤µà¤¿à¤¶à¥‡à¤· à¤Ÿà¤¾à¤¸à¥à¤• à¤«à¥‹à¤°à¥à¤¸ à¤¨à¥‡ à¤«à¤°à¥à¤œà¥€ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤ªà¥‡à¤®à¥‡à¤‚à¤Ÿ à¤—à¥‡à¤Ÿà¤µà¥‡ à¤”à¤° à¤…à¤µà¥ˆà¤§ à¤—à¥‡à¤®à¤¿à¤‚à¤— à¤à¤ª à¤•à¥‡ à¤œà¤°à¤¿à¤ à¤•à¤°à¥‹à¤¡à¤¼à¥‹à¤‚ à¤•à¥€ à¤ à¤—à¥€ à¤•à¤°à¤¨à¥‡ à¤µà¤¾à¤²à¥‡ à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤œà¥à¤¯à¥€à¤¯ à¤—à¤¿à¤°à¥‹à¤¹ à¤•à¥‡ 8 à¤¸à¤¦à¤¸à¥à¤¯à¥‹à¤‚ à¤•à¥‹ à¤¦à¤¬à¥‹à¤šà¤¾à¥¤",
+      sourceChannel: "à¤ªà¤¤à¥à¤°à¤¿à¤•à¤¾ (Patrika)",
       sourceUrl: "https://patrika.com/crime/cyber-crime-busted",
       category: "crime",
-      categoryName: "क्राइम / अपराध",
-      publishedTime: "5 घंटे पहले",
+      categoryName: "à¤•à¥à¤°à¤¾à¤‡à¤® / à¤…à¤ªà¤°à¤¾à¤§",
+      publishedTime: "5 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡",
       imageUrl: "https://images.unsplash.com/photo-1563986768609-322da13575f3?w=800&auto=format&fit=crop",
       breaking: true,
       isExclusive: true,
       timestamp: now - 300 * 60 * 1000,
-      fullContent: `पुलिस ने आरोपियों के पास से 25 लैपटॉप, 60 स्मार्टफोन और 100 से ज्यादा फ्रीज बैंक खातों की जानकारी बरामद की है।`
+      fullContent: `à¤ªà¥à¤²à¤¿à¤¸ à¤¨à¥‡ à¤†à¤°à¥‹à¤ªà¤¿à¤¯à¥‹à¤‚ à¤•à¥‡ à¤ªà¤¾à¤¸ à¤¸à¥‡ 25 à¤²à¥ˆà¤ªà¤Ÿà¥‰à¤ª, 60 à¤¸à¥à¤®à¤¾à¤°à¥à¤Ÿà¤«à¥‹à¤¨ à¤”à¤° 100 à¤¸à¥‡ à¤œà¥à¤¯à¤¾à¤¦à¤¾ à¤«à¥à¤°à¥€à¤œ à¤¬à¥ˆà¤‚à¤• à¤–à¤¾à¤¤à¥‹à¤‚ à¤•à¥€ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤¬à¤°à¤¾à¤®à¤¦ à¤•à¥€ à¤¹à¥ˆà¥¤`
     }
   ];
 }
@@ -2089,8 +2327,8 @@ function auditAndRepairRssNewsRecords(): { totalScanned: number; repairedCount: 
 
 function splitHindiSentences(text: string): string[] {
   return (text || "")
-    .split(/[।\n]+|\.\s+/)
-    .map((s) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, "").trim())
+    .split(/[à¥¤\n]+|\.\s+/)
+    .map((s) => cleanHeadlineText(s).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim())
     .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
 }
 
@@ -2102,7 +2340,7 @@ function getOrEnsureApprovedEditorial(post: StoredNewsPost): any {
   }
 
   // Derive 5 distinct balanced headlines deterministically per editorial standards
-  const rawTitle = cleanHeadlineText(post.title || "मुख्य समाचार");
+  const rawTitle = cleanHeadlineText(post.title || "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°");
   const fullContentStr = post.fullContent || post.summary || rawTitle;
   const sentences = splitHindiSentences(fullContentStr);
   const detectedLocation = cleanLocationField(post.location || post.district || "");
@@ -2110,7 +2348,7 @@ function getOrEnsureApprovedEditorial(post: StoredNewsPost): any {
 
   const rawSummary = (post.summary || fullContentStr || rawTitle).trim();
   const captionDetailed = `${rawTitle}\n\n${rawSummary}\n\n#BreakingNews #HindiNews #AINewsMaker`;
-  const captionBullets = `• ${rawTitle}।\n• ${rawSummary.slice(0, 120)}।\n\n#BreakingNews #HindiNews #AINewsMaker`;
+  const captionBullets = `â€¢ ${rawTitle}à¥¤\nâ€¢ ${rawSummary.slice(0, 120)}à¥¤\n\n#BreakingNews #HindiNews #AINewsMaker`;
   const captionShort = `${rawTitle}\n\n#BreakingNews #AINewsMaker`;
 
   const record = {
@@ -2123,7 +2361,7 @@ function getOrEnsureApprovedEditorial(post: StoredNewsPost): any {
     captionShort,
     tags: ["#BreakingNews", "#HindiNews", "#AINewsMaker"],
     location: detectedLocation,
-    category: post.categoryName || post.category || "देश",
+    category: post.categoryName || post.category || "à¤¦à¥‡à¤¶",
     imageUrl: post.imageUrl || "",
     additionalPhotos: Array.isArray(post.additionalPhotos) ? post.additionalPhotos : [],
     approvedAt: post.timestamp || Date.now(),
@@ -2140,15 +2378,15 @@ function getOrEnsureApprovedEditorial(post: StoredNewsPost): any {
 function formatRelativeTime(timestamp: number): string {
   const diffMs = Date.now() - timestamp;
   const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
-  if (diffMinutes < 60) return `${diffMinutes} मिनट पहले`;
+  if (diffMinutes < 60) return `${diffMinutes} à¤®à¤¿à¤¨à¤Ÿ à¤ªà¤¹à¤²à¥‡`;
   const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours} घंटे पहले`;
+  if (diffHours < 24) return `${diffHours} à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡`;
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} दिन पहले`;
+  return `${diffDays} à¤¦à¤¿à¤¨ à¤ªà¤¹à¤²à¥‡`;
 }
 
 // Live RSS XML Parser (RSS 2.0 & Atom feed parser)
-async function parseRssFeedUrl(url: string, channelName: string, category: string = 'देश'): Promise<StoredNewsPost[]> {
+async function parseRssFeedUrl(url: string, channelName: string, category: string = 'à¤¦à¥‡à¤¶'): Promise<StoredNewsPost[]> {
   try {
     const response = await fetch(url, {
       headers: {
@@ -2211,7 +2449,7 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
         sourceChannel: channelName || 'RSS News',
         sourceUrl: sourceUrl || url,
         category: 'breaking',
-        categoryName: category || 'देश',
+        categoryName: category || 'à¤¦à¥‡à¤¶',
         publishedTime: formatRelativeTime(timestamp),
         imageUrl,
         breaking: true,
@@ -2424,9 +2662,9 @@ app.get("/api/news-posts", async (req, res) => {
       ? p.approvedHeadlines
       : (p.title ? [p.title] : []);
 
-    const rawTitle = decodeHtmlEntities(p.title || (headlines[0] || "समाचार"));
+    const rawTitle = decodeHtmlEntities(p.title || (headlines[0] || "à¤¸à¤®à¤¾à¤šà¤¾à¤°"));
     const rawSummary = decodeHtmlEntities((ed?.captionDetailed || p.summary || p.fullContent || rawTitle).trim());
-    const defaultBullets = `• ${rawTitle}।\n• ${rawSummary.slice(0, 140)}।\n\n#BreakingNews #HindiNews #AINewsMaker`;
+    const defaultBullets = `â€¢ ${rawTitle}à¥¤\nâ€¢ ${rawSummary.slice(0, 140)}à¥¤\n\n#BreakingNews #HindiNews #AINewsMaker`;
     const defaultShort = `${rawTitle}\n\n#BreakingNews #AINewsMaker`;
 
     const capDetailed = decodeHtmlEntities(ed?.captionDetailed || p.captionDetailed || p.approvedCaptionDetailed || rawSummary);
@@ -2475,11 +2713,11 @@ app.post("/api/news-posts", requireAdminMiddleware, (req, res) => {
         id: payload.id || `post-${Date.now()}`,
         title: payload.title,
         summary: payload.summary || "",
-        sourceChannel: payload.sourceChannel || "न्यूज़ रूम",
+        sourceChannel: payload.sourceChannel || "à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤°à¥‚à¤®",
         sourceUrl: payload.sourceUrl || "",
         category: payload.category || "breaking",
-        categoryName: payload.categoryName || "ब्रेकिंग न्यूज़",
-        publishedTime: payload.publishedTime || "अभी-अभी",
+        categoryName: payload.categoryName || "à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼",
+        publishedTime: payload.publishedTime || "à¤…à¤­à¥€-à¤…à¤­à¥€",
         imageUrl: payload.imageUrl || "",
         breaking: Boolean(payload.breaking),
         isExclusive: Boolean(payload.isExclusive),
@@ -2529,18 +2767,18 @@ app.post("/api/admin/add-news", requireAdminMiddleware, (req, res) => {
     const finalFullNews = (fullNews || fullContent || finalSummary || finalHeadline).trim();
 
     if (!finalHeadline || !finalSummary) {
-      return res.status(400).json({ success: false, error: "हेडलाइन और लघु विवरण (Short Description) आवश्यक हैं" });
+      return res.status(400).json({ success: false, error: "à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤”à¤° à¤²à¤˜à¥ à¤µà¤¿à¤µà¤°à¤£ (Short Description) à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¤‚" });
     }
 
     const newPost: StoredNewsPost = {
       id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title: finalHeadline,
       summary: finalSummary,
-      sourceChannel: sourceChannel || "एडमिन (Manual)",
+      sourceChannel: sourceChannel || "à¤à¤¡à¤®à¤¿à¤¨ (Manual)",
       sourceUrl: "",
       category: "breaking",
-      categoryName: "मुख्य समाचार",
-      publishedTime: newsDate || publishedTime || "अभी-अभी",
+      categoryName: "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
+      publishedTime: newsDate || publishedTime || "à¤…à¤­à¥€-à¤…à¤­à¥€",
       imageUrl: finalPhoto || getCategoryFallbackImage("general"),
       additionalPhotos: Array.isArray(additionalPhotos) ? additionalPhotos : [],
       breaking: true,
@@ -2556,7 +2794,7 @@ app.post("/api/admin/add-news", requireAdminMiddleware, (req, res) => {
     const updated = [newPost, ...existing];
     saveNewsDatabase(updated);
 
-    return res.json({ success: true, post: newPost, posts: updated, message: "मैन्युअल समाचार सफलतापूर्वक जोड़ा गया!" });
+    return res.json({ success: true, post: newPost, posts: updated, message: "à¤®à¥ˆà¤¨à¥à¤¯à¥à¤…à¤² à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤œà¥‹à¤¡à¤¼à¤¾ à¤—à¤¯à¤¾!" });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -2660,17 +2898,17 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
 
     if (!found) {
       const postData = req.body || {};
-      approvedTitle = postData.title || postData.headline || "समाचार";
+      approvedTitle = postData.title || postData.headline || "à¤¸à¤®à¤¾à¤šà¤¾à¤°";
       const explicitBonus = postData.isBonus === true;
       const newApprovedPost: StoredNewsPost = {
         id,
         title: approvedTitle,
         summary: postData.summary || postData.shortDescription || "",
-        sourceChannel: postData.sourceChannel || "एआई न्यूज़ मेकर",
+        sourceChannel: postData.sourceChannel || "à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤°",
         sourceUrl: postData.sourceUrl || "",
         category: postData.category || "breaking",
-        categoryName: postData.categoryName || "मुख्य समाचार",
-        publishedTime: postData.publishedTime || "अभी-अभी",
+        categoryName: postData.categoryName || "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
+        publishedTime: postData.publishedTime || "à¤…à¤­à¥€-à¤…à¤­à¥€",
         imageUrl: postData.imageUrl || postData.thumbnailPhoto || getCategoryFallbackImage("general"),
         additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : [],
         breaking: postData.breaking !== undefined ? postData.breaking : true,
@@ -2690,7 +2928,7 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     broadcastNewsPublishedNotification(id, approvedTitle);
     const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
-    return res.json({ success: true, message: "खबर स्वीकृत हो गई", id, posts: existing });
+    return res.json({ success: true, message: "à¤–à¤¬à¤° à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤¹à¥‹ à¤—à¤ˆ", id, posts: existing });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -2747,7 +2985,7 @@ app.post("/api/admin/reject-news/:id", requireAdminMiddleware, (req, res) => {
     } catch {}
     const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "REJECT_NEWS", id);
-    return res.json({ success: true, message: "खबर अस्वीकृत हो गई", id });
+    return res.json({ success: true, message: "à¤–à¤¬à¤° à¤…à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤¹à¥‹ à¤—à¤ˆ", id });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -2783,7 +3021,7 @@ app.get("/api/editorial/approved/:id", (req, res) => {
     const db = loadApprovedEditorialDatabase();
     const record = db[id];
     const hasFillerPhrase = (txt: string) =>
-      /(?:शासन स्तर पर|प्रशासनिक व विभागीय स्तर पर जरूरी कदम|मामले में नया घटनाक्रम सामने आया|विशेष डेस्क|विशेष डैश|प्रशासनिक स्तर पर आवश्यक संज्ञान)/u.test(txt || "");
+      /(?:à¤¶à¤¾à¤¸à¤¨ à¤¸à¥à¤¤à¤° à¤ªà¤°|à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤µ à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤œà¤°à¥‚à¤°à¥€ à¤•à¤¦à¤®|à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¨à¤¯à¤¾ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤¯à¤¾|à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•|à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥ˆà¤¶|à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤¸à¥à¤¤à¤° à¤ªà¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¸à¤‚à¤œà¥à¤žà¤¾à¤¨)/u.test(txt || "");
     if (
       record &&
       (record.isPrePublished === true || record.aiGenerated === true) &&
@@ -2815,7 +3053,7 @@ app.post("/api/editorial/approved/:id", (req, res) => {
     const updated = {
       ...existing,
       newsId: id,
-      title: body.title || existing.title || "समाचार",
+      title: body.title || existing.title || "à¤¸à¤®à¤¾à¤šà¤¾à¤°",
       headlines: Array.isArray(body.headlines) ? body.headlines.slice(0, 10) : (existing.headlines || []),
       headlineOptions: Array.isArray(body.headlines) ? body.headlines.slice(0, 10) : (existing.headlineOptions || []),
       captionDetailed: body.captionDetailed || existing.captionDetailed || "",
@@ -2922,13 +3160,13 @@ app.post("/api/editorial/approved/:id", (req, res) => {
         const explicitBonus = body.isBonus === true;
         const newApprovedPost: StoredNewsPost = {
           id,
-          title: updated.title || body.title || "समाचार",
+          title: updated.title || body.title || "à¤¸à¤®à¤¾à¤šà¤¾à¤°",
           summary: updated.captionDetailed || body.summary || "",
-          sourceChannel: body.sourceChannel || body.channel || "आरएसएस / वेब",
+          sourceChannel: body.sourceChannel || body.channel || "à¤†à¤°à¤à¤¸à¤à¤¸ / à¤µà¥‡à¤¬",
           sourceUrl: body.sourceUrl || body.url || "",
           category: updated.category || body.category || "breaking",
-          categoryName: body.categoryName || "मुख्य समाचार",
-          publishedTime: body.publishedTime || "अभी-अभी",
+          categoryName: body.categoryName || "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
+          publishedTime: body.publishedTime || "à¤…à¤­à¥€-à¤…à¤­à¥€",
           imageUrl: updated.imageUrl || body.imageUrl || body.image || getCategoryFallbackImage("general"),
           additionalPhotos: updated.additionalPhotos || [],
           manualThumbnailUrl: updated.manualThumbnailUrl || body.manualThumbnailUrl || "",
@@ -2963,8 +3201,8 @@ app.post("/api/editorial/approved/:id", (req, res) => {
     return res.json({
       success: true,
       message: isPrePublished
-        ? "संपादकीय हेडलाइन व प्री-पब्लिश सामग्री सफलतापूर्वक सुरक्षित की गई"
-        : "संपादकीय हेडलाइन व ड्राफ्ट सुरक्षित किए गए",
+        ? "à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤µ à¤ªà¥à¤°à¥€-à¤ªà¤¬à¥à¤²à¤¿à¤¶ à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤•à¥€ à¤—à¤ˆ"
+        : "à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤µ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤•à¤¿à¤ à¤—à¤",
       data: updated
     });
   } catch (err: any) {
@@ -3028,7 +3266,7 @@ app.post("/api/editorial/reject/:id", requireAdminMiddleware, (req, res) => {
       sourceUrl: targetSourceUrl,
     });
 
-    return res.json({ success: true, message: "खबर सफलतापूर्वक अस्वीकृत (Rejected) कर दी गई है", id });
+    return res.json({ success: true, message: "à¤–à¤¬à¤° à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤…à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ (Rejected) à¤•à¤° à¤¦à¥€ à¤—à¤ˆ à¤¹à¥ˆ", id });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -3186,7 +3424,7 @@ app.post("/api/validate-callout-access", async (req, res) => {
       return res.json({
         success: true,
         allowed: false,
-        reason: "बेसिक और एडवांस प्लान में केवल एडमिन द्वारा निर्धारित डिफ़ॉल्ट कॉलआउट का उपयोग किया जा सकता है।",
+        reason: "à¤¬à¥‡à¤¸à¤¿à¤• à¤”à¤° à¤à¤¡à¤µà¤¾à¤‚à¤¸ à¤ªà¥à¤²à¤¾à¤¨ à¤®à¥‡à¤‚ à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¨à¤¿à¤°à¥à¤§à¤¾à¤°à¤¿à¤¤ à¤¡à¤¿à¤«à¤¼à¥‰à¤²à¥à¤Ÿ à¤•à¥‰à¤²à¤†à¤‰à¤Ÿ à¤•à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆà¥¤",
       });
     }
 
@@ -3218,14 +3456,14 @@ app.delete("/api/drafts/:id", (req, res) => {
 app.post("/api/admin/news-posts/:id/bonus", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही बोनस न्यूज़ कॉन्फ़िगर कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤¬à¥‹à¤¨à¤¸ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤•à¥‰à¤¨à¥à¤«à¤¼à¤¿à¤—à¤° à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     const { isBonus, rewardCoins } = req.body;
     let posts = loadNewsDatabase();
     const idx = posts.findIndex(p => p.id === id);
     if (idx === -1) {
-      return res.status(404).json({ error: "समाचार नहीं मिला" });
+      return res.status(404).json({ error: "à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     posts[idx] = {
       ...posts[idx],
@@ -3244,7 +3482,7 @@ app.post("/api/rewards/download-event", (req, res) => {
   try {
     const { userId, userEmail, rewardCoins } = req.body;
     const newsItemId = (req.body.newsItemId || req.body.postId || "").toString().trim();
-    const newsTitle = (req.body.newsTitle || req.body.postTitle || "बोनस समाचार").toString().trim();
+    const newsTitle = (req.body.newsTitle || req.body.postTitle || "à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤°").toString().trim();
     const cleanEmail = (userEmail || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
 
@@ -3259,7 +3497,7 @@ app.post("/api/rewards/download-event", (req, res) => {
       userId: cleanUserId,
       userEmail: cleanEmail,
       newsItemId,
-      newsTitle: newsTitle || "बोनस समाचार",
+      newsTitle: newsTitle || "à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
       rewardCoins: Number(rewardCoins) || 5,
       downloadedAt: Date.now(),
     };
@@ -3346,18 +3584,18 @@ app.post("/api/rewards/upload-screenshot", async (req, res) => {
   try {
     const { imageBase64 } = req.body;
     if (!imageBase64 || typeof imageBase64 !== "string") {
-      return res.status(400).json({ error: "स्क्रीनशॉट इमेज आवश्यक है" });
+      return res.status(400).json({ error: "à¤¸à¥à¤•à¥à¤°à¥€à¤¨à¤¶à¥‰à¤Ÿ à¤‡à¤®à¥‡à¤œ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     }
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
     const buf = Buffer.from(cleanBase64, "base64");
 
     if (buf.length > 10 * 1024 * 1024) {
-      return res.status(413).json({ error: "स्क्रीनशॉट का आकार 10MB से अधिक नहीं हो सकता।" });
+      return res.status(413).json({ error: "à¤¸à¥à¤•à¥à¤°à¥€à¤¨à¤¶à¥‰à¤Ÿ à¤•à¤¾ à¤†à¤•à¤¾à¤° 10MB à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¤¾à¥¤" });
     }
 
     const magic = isValidImageMagicBytes(buf);
     if (!magic.valid) {
-      return res.status(400).json({ error: "अमान्य फ़ाइल: केवल वास्तविक PNG, JPEG, GIF या WebP छवियाँ ही स्वीकार्य हैं।" });
+      return res.status(400).json({ error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤«à¤¼à¤¾à¤‡à¤²: à¤•à¥‡à¤µà¤² à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• PNG, JPEG, GIF à¤¯à¤¾ WebP à¤›à¤µà¤¿à¤¯à¤¾à¤ à¤¹à¥€ à¤¸à¥à¤µà¥€à¤•à¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const ext = magic.format || "jpg";
@@ -3403,7 +3641,7 @@ app.post("/api/rewards/claim", (req, res) => {
       screenshotUrl,
     } = req.body;
     const newsItemId = (req.body.newsItemId || req.body.postId || "").toString().trim();
-    const newsTitle = (req.body.newsTitle || req.body.postTitle || "बोनस समाचार").toString().trim();
+    const newsTitle = (req.body.newsTitle || req.body.postTitle || "à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤°").toString().trim();
 
     const cleanEmail = (userEmail || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || cleanEmail || "").toString().trim();
@@ -3414,7 +3652,7 @@ app.post("/api/rewards/claim", (req, res) => {
     const screenshotUrls = rawUrls.slice(0, 3);
 
     if (!newsItemId || screenshotUrls.length === 0 || (!cleanEmail && !cleanUserId)) {
-      return res.status(400).json({ error: "समाचार, कम से कम 1 स्क्रीनशॉट (अधिकतम 3) और यूज़र पहचान आवश्यक हैं।" });
+      return res.status(400).json({ error: "à¤¸à¤®à¤¾à¤šà¤¾à¤°, à¤•à¤® à¤¸à¥‡ à¤•à¤® 1 à¤¸à¥à¤•à¥à¤°à¥€à¤¨à¤¶à¥‰à¤Ÿ (à¤…à¤§à¤¿à¤•à¤¤à¤® 3) à¤”à¤° à¤¯à¥‚à¤œà¤¼à¤° à¤ªà¤¹à¤šà¤¾à¤¨ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const rDb = loadRewardsDatabase();
@@ -3430,8 +3668,8 @@ app.post("/api/rewards/claim", (req, res) => {
     if (existingActiveClaim) {
       return res.status(409).json({
         error: existingActiveClaim.status === "approved"
-          ? "इस बोनस समाचार के लिए रिवॉर्ड पहले ही स्वीकृत किया जा चुका है।"
-          : "इस बोनस समाचार के लिए आपका क्लेम पहले से समीक्षा में (Pending) है।"
+          ? "à¤‡à¤¸ à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‡ à¤²à¤¿à¤ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤"
+          : "à¤‡à¤¸ à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‡ à¤²à¤¿à¤ à¤†à¤ªà¤•à¤¾ à¤•à¥à¤²à¥‡à¤® à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¸à¤®à¥€à¤•à¥à¤·à¤¾ à¤®à¥‡à¤‚ (Pending) à¤¹à¥ˆà¥¤"
       });
     }
 
@@ -3442,12 +3680,12 @@ app.post("/api/rewards/claim", (req, res) => {
       claimId,
       userId: cleanUserId,
       userEmail: cleanEmail,
-      userName: userName || username || "यूज़र",
+      userName: userName || username || "à¤¯à¥‚à¤œà¤¼à¤°",
       username: username || userName || cleanEmail.split("@")[0],
       newsItemId,
       postId: newsItemId,
-      newsTitle: newsTitle || "बोनस समाचार",
-      postTitle: newsTitle || "बोनस समाचार",
+      newsTitle: newsTitle || "à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
+      postTitle: newsTitle || "à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
       rewardCoins: coinsToClaim,
       graphicDownloadedAt: Number(graphicDownloadedAt) || Date.now(),
       screenshotUrl: screenshotUrls[0] || "",
@@ -3478,7 +3716,7 @@ app.post("/api/rewards/claim", (req, res) => {
 app.get("/api/admin/rewards/claims", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही क्लेम देख सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤•à¥à¤²à¥‡à¤® à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const rDb = loadRewardsDatabase();
     const totalClaims = rDb.claims.length;
@@ -3526,7 +3764,7 @@ app.get("/api/admin/rewards/claims", (req, res) => {
 app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही क्लेम स्वीकृत कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤•à¥à¤²à¥‡à¤® à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     const adminEmail = (req.body?.adminEmail || req.headers["x-user-email"] || "admin.ainewsmaker@gmail.com").toString();
@@ -3534,10 +3772,10 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
     const rDb = loadRewardsDatabase();
     const claim = rDb.claims.find(c => c.claimId === id || (c as any).id === id);
     if (!claim) {
-      return res.status(404).json({ error: "क्लेम नहीं मिला" });
+      return res.status(404).json({ error: "à¤•à¥à¤²à¥‡à¤® à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     if (claim.status === "approved") {
-      return res.json({ success: true, claim: { ...claim, id: claim.claimId }, message: "यह क्लेम पहले से स्वीकृत है" });
+      return res.json({ success: true, claim: { ...claim, id: claim.claimId }, message: "à¤¯à¤¹ à¤•à¥à¤²à¥‡à¤® à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤¹à¥ˆ" });
     }
 
     const wasPending = claim.status === "pending";
@@ -3563,7 +3801,7 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
       claimId: claim.claimId,
       newsItemId: claim.newsItemId,
       newsTitle: claim.newsTitle,
-      description: `बोनस रिवॉर्ड स्वीकृत: ${claim.newsTitle || 'बोनस समाचार'}`,
+      description: `à¤¬à¥‹à¤¨à¤¸ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤: ${claim.newsTitle || 'à¤¬à¥‹à¤¨à¤¸ à¤¸à¤®à¤¾à¤šà¤¾à¤°'}`,
       transactionType: "credit",
       type: "credit",
       coinAmount: coins,
@@ -3587,7 +3825,7 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
       success: true,
       claim,
       wallet: rDb.wallets[walletKey],
-      message: `क्लेम स्वीकृत: ${coins} रिवॉर्ड कॉइन्स उपयोगकर्ता के वॉलेट में क्रेडिट कर दिए गए हैं।`,
+      message: `à¤•à¥à¤²à¥‡à¤® à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤: ${coins} à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤•à¥‡ à¤µà¥‰à¤²à¥‡à¤Ÿ à¤®à¥‡à¤‚ à¤•à¥à¤°à¥‡à¤¡à¤¿à¤Ÿ à¤•à¤° à¤¦à¤¿à¤ à¤—à¤ à¤¹à¥ˆà¤‚à¥¤`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -3598,7 +3836,7 @@ app.post("/api/admin/rewards/claims/:id/approve", (req, res) => {
 app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही क्लेम अस्वीकृत कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤•à¥à¤²à¥‡à¤® à¤…à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     const { reason } = req.body;
@@ -3607,7 +3845,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     const rDb = loadRewardsDatabase();
     const claim = rDb.claims.find(c => c.claimId === id || (c as any).id === id);
     if (!claim) {
-      return res.status(404).json({ error: "क्लेम नहीं मिला" });
+      return res.status(404).json({ error: "à¤•à¥à¤²à¥‡à¤® à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
 
     const wasPending = claim.status === "pending";
@@ -3619,7 +3857,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
     }
 
     claim.status = "rejected";
-    claim.rejectionReason = (reason || "सोशल मीडिया पोस्ट का स्क्रीनशॉट सत्यापित नहीं हो सका।").trim();
+    claim.rejectionReason = (reason || "à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤ªà¥‹à¤¸à¥à¤Ÿ à¤•à¤¾ à¤¸à¥à¤•à¥à¤°à¥€à¤¨à¤¶à¥‰à¤Ÿ à¤¸à¤¤à¥à¤¯à¤¾à¤ªà¤¿à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¾à¥¤").trim();
     claim.reviewedBy = adminEmail;
     claim.reviewedAt = Date.now();
 
@@ -3629,7 +3867,7 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
       success: true,
       claim,
       wallet: rDb.wallets[walletKey],
-      message: "क्लेम अस्वीकृत कर दिया गया है।",
+      message: "à¤•à¥à¤²à¥‡à¤® à¤…à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤",
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -3640,13 +3878,13 @@ app.post("/api/admin/rewards/claims/:id/reject", (req, res) => {
 app.delete("/api/admin/rewards/claims/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही क्लेम हटा सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤•à¥à¤²à¥‡à¤® à¤¹à¤Ÿà¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     const rDb = loadRewardsDatabase();
     const index = rDb.claims.findIndex((c) => c.claimId === id || (c as any).id === id);
     if (index === -1) {
-      return res.status(404).json({ error: "क्लेम नहीं मिला" });
+      return res.status(404).json({ error: "à¤•à¥à¤²à¥‡à¤® à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     const claim = rDb.claims[index];
     if (claim.status === "pending") {
@@ -3658,7 +3896,7 @@ app.delete("/api/admin/rewards/claims/:id", requireAdminMiddleware, (req, res) =
     }
     rDb.claims.splice(index, 1);
     saveRewardsDatabase(rDb);
-    return res.json({ success: true, message: "बोनस क्लेम सफलतापूर्वक हटा दिया गया।" });
+    return res.json({ success: true, message: "à¤¬à¥‹à¤¨à¤¸ à¤•à¥à¤²à¥‡à¤® à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¹à¤Ÿà¤¾ à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -3935,7 +4173,7 @@ app.get("/api/analytics/feed-summary", (req, res) => {
             if (g.hasDownloaded) {
               recentDownloads.push({
                 graphicId: gId,
-                headline: g.title || g.newsId || "समाचार ग्राफिक",
+                headline: g.title || g.newsId || "à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤—à¥à¤°à¤¾à¤«à¤¿à¤•",
                 userName: uRec.userName || userKey.split("@")[0],
                 userEmail: uRec.userEmail || userKey,
                 membershipPlan: uRec.membershipPlan || "BASIC",
@@ -3980,7 +4218,7 @@ app.get("/api/analytics/feed-summary", (req, res) => {
 app.get("/api/admin/analytics/summary", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन एनालिटिक्स देख सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤à¤¨à¤¾à¤²à¤¿à¤Ÿà¤¿à¤•à¥à¤¸ à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const aDb = loadAnalyticsDatabase();
     if (!aDb.userGraphics) aDb.userGraphics = {};
@@ -4098,7 +4336,7 @@ app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
   try {
     const authUser = (req as any).user;
     if (!authUser || !authUser.email) {
-      return res.status(401).json({ error: "प्रमाणीकरण आवश्यक है" });
+      return res.status(401).json({ error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     }
 
     const requestingEmail = authUser.email.toLowerCase().trim();
@@ -4110,13 +4348,13 @@ app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
       if (isAdmin) {
         userOrEmail = clientEmail;
       } else {
-        return res.status(403).json({ error: "अनधिकृत: आप केवल अपने चैनल का लोगो अपडेट कर सकते हैं।" });
+        return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤šà¥ˆà¤¨à¤² à¤•à¤¾ à¤²à¥‹à¤—à¥‹ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
       }
     }
 
     const rawData = req.body?.dataUrl || req.body?.imageBase64 || req.body?.fileData || req.body?.logoData || "";
     if (!rawData || typeof rawData !== "string") {
-      return res.status(400).json({ error: "लोगो इमेज डेटा आवश्यक है" });
+      return res.status(400).json({ error: "à¤²à¥‹à¤—à¥‹ à¤‡à¤®à¥‡à¤œ à¤¡à¥‡à¤Ÿà¤¾ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     }
 
     const cleanBase64 = rawData.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
@@ -4124,13 +4362,13 @@ app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
 
     // File upload security: 10MB size limit
     if (buf.length > 10 * 1024 * 1024) {
-      return res.status(413).json({ error: "फ़ाइल का आकार 10MB से अधिक नहीं हो सकता।" });
+      return res.status(413).json({ error: "à¤«à¤¼à¤¾à¤‡à¤² à¤•à¤¾ à¤†à¤•à¤¾à¤° 10MB à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¤¾à¥¤" });
     }
 
     // File upload security: Magic bytes verification (PNG, JPEG, GIF, WebP)
     const magic = isValidImageMagicBytes(buf);
     if (!magic.valid) {
-      return res.status(400).json({ error: "अवैध छवि: केवल प्रामाणिक PNG, JPEG, GIF या WebP फ़ाइलें स्वीकार्य हैं" });
+      return res.status(400).json({ error: "à¤…à¤µà¥ˆà¤§ à¤›à¤µà¤¿: à¤•à¥‡à¤µà¤² à¤ªà¥à¤°à¤¾à¤®à¤¾à¤£à¤¿à¤• PNG, JPEG, GIF à¤¯à¤¾ WebP à¤«à¤¼à¤¾à¤‡à¤²à¥‡à¤‚ à¤¸à¥à¤µà¥€à¤•à¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¤‚" });
     }
     let isGif = magic.format === "gif" || (req.body?.logoType === "gif") || (Boolean(req.body?.fileName && req.body.fileName.toLowerCase().endsWith(".gif")));
     let ext = isGif ? "gif" : (magic.format || "png");
@@ -4185,7 +4423,7 @@ app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
           username: userOrEmail.split("@")[0],
           fullName: userOrEmail.split("@")[0],
           role: "reporter",
-          channelNameHi: "ब्रेकिंग न्यूज़",
+          channelNameHi: "à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼",
           channelNameEn: "Breaking News",
           createdAt: Date.now(),
         } as any;
@@ -4269,7 +4507,7 @@ app.post("/api/wallet/claim-welcome-reward", requireAuthMiddleware, (req, res) =
     }
 
     if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते के लिए रिवॉर्ड क्लेम कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤–à¤¾à¤¤à¥‡ à¤•à¥‡ à¤²à¤¿à¤ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤•à¥à¤²à¥‡à¤® à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     if (!cleanEmail && !cleanUserId) {
@@ -4301,8 +4539,8 @@ app.post("/api/wallet/claim-welcome-reward", requireAuthMiddleware, (req, res) =
         rewardCoins: 0,
         wallet: rDb.wallets[walletKey],
         message: rewardType === "graphic"
-          ? "प्रथम ग्राफिक डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
-          : "प्रथम वीडियो डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है。"
+          ? "à¤ªà¥à¤°à¤¥à¤® à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¤¾ 500 à¤•à¥‰à¤‡à¤¨ à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤"
+          : "à¤ªà¥à¤°à¤¥à¤® à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¤¾ 500 à¤•à¥‰à¤‡à¤¨ à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆã€‚"
       });
     }
 
@@ -4324,8 +4562,8 @@ app.post("/api/wallet/claim-welcome-reward", requireAuthMiddleware, (req, res) =
       userId: cleanUserId,
       userEmail: cleanEmail,
       description: rewardType === "graphic"
-        ? "वेलकम रिवॉर्ड: प्रथम सफल ग्राफिक डाउनलोड (500 कॉइन)"
-        : "वेलकम रिवॉर्ड: प्रथम सफल वीडियो डाउनलोड (500 कॉइन)",
+        ? "à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡: à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ (500 à¤•à¥‰à¤‡à¤¨)"
+        : "à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡: à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ (500 à¤•à¥‰à¤‡à¤¨)",
       transactionType: "credit",
       type: "credit",
       coinAmount: rewardCoins,
@@ -4346,7 +4584,7 @@ app.post("/api/wallet/claim-welcome-reward", requireAuthMiddleware, (req, res) =
       rewardCoins,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
-      message: `बधाई! प्रथम ${rewardType === "graphic" ? "ग्राफिक" : "वीडियो"} डाउनलोड पर 500 वेलकम कॉइन्स आपके वॉलेट में जुड़ गए हैं!`
+      message: `à¤¬à¤§à¤¾à¤ˆ! à¤ªà¥à¤°à¤¥à¤® ${rewardType === "graphic" ? "à¤—à¥à¤°à¤¾à¤«à¤¿à¤•" : "à¤µà¥€à¤¡à¤¿à¤¯à¥‹"} à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤ªà¤° 500 à¤µà¥‡à¤²à¤•à¤® à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤†à¤ªà¤•à¥‡ à¤µà¥‰à¤²à¥‡à¤Ÿ à¤®à¥‡à¤‚ à¤œà¥à¤¡à¤¼ à¤—à¤ à¤¹à¥ˆà¤‚!`
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -4390,8 +4628,8 @@ app.post("/api/rewards/first-time-export", (req, res) => {
         rewardCoins: 0,
         wallet: rDb.wallets[walletKey],
         message: effectiveRewardType === "graphic"
-          ? "प्रथम ग्राफिक डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है।"
-          : "प्रथम वीडियो डाउनलोड का 500 कॉइन वेलकम रिवॉर्ड पहले ही प्राप्त हो चुका है。"
+          ? "à¤ªà¥à¤°à¤¥à¤® à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¤¾ 500 à¤•à¥‰à¤‡à¤¨ à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤"
+          : "à¤ªà¥à¤°à¤¥à¤® à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¤¾ 500 à¤•à¥‰à¤‡à¤¨ à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆã€‚"
       });
     }
 
@@ -4412,8 +4650,8 @@ app.post("/api/rewards/first-time-export", (req, res) => {
       userId: cleanUserId,
       userEmail: cleanEmail,
       description: effectiveRewardType === "graphic"
-        ? "वेलकम रिवॉर्ड: प्रथम सफल ग्राफिक डाउनलोड (500 कॉइन)"
-        : "वेलकम रिवॉर्ड: प्रथम सफल वीडियो डाउनलोड (500 कॉइन)",
+        ? "à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡: à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ (500 à¤•à¥‰à¤‡à¤¨)"
+        : "à¤µà¥‡à¤²à¤•à¤® à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡: à¤ªà¥à¤°à¤¥à¤® à¤¸à¤«à¤² à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ (500 à¤•à¥‰à¤‡à¤¨)",
       transactionType: "credit",
       type: "credit",
       coinAmount: rewardCoins,
@@ -4434,7 +4672,7 @@ app.post("/api/rewards/first-time-export", (req, res) => {
       rewardCoins,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
-      message: `बधाई! प्रथम ${effectiveRewardType === "graphic" ? "ग्राफिक" : "वीडियो"} डाउनलोड पर 500 वेलकम कॉइन्स आपके वॉलेट में जुड़ गए हैं!`
+      message: `à¤¬à¤§à¤¾à¤ˆ! à¤ªà¥à¤°à¤¥à¤® ${effectiveRewardType === "graphic" ? "à¤—à¥à¤°à¤¾à¤«à¤¿à¤•" : "à¤µà¥€à¤¡à¤¿à¤¯à¥‹"} à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤ªà¤° 500 à¤µà¥‡à¤²à¤•à¤® à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤†à¤ªà¤•à¥‡ à¤µà¥‰à¤²à¥‡à¤Ÿ à¤®à¥‡à¤‚ à¤œà¥à¤¡à¤¼ à¤—à¤ à¤¹à¥ˆà¤‚!`
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -4452,7 +4690,7 @@ app.get("/api/user/sub-users", requireAuthMiddleware, (req, res) => {
     }
 
     if (rawEmail !== authUser?.email?.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ success: false, error: "अनधिकृत (403 Forbidden): आप केवल अपने सब-यूज़र देख सकते हैं।" });
+      return res.status(403).json({ success: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const allProfiles = loadProfilesDatabase();
@@ -4478,7 +4716,7 @@ app.get("/api/user/sub-users", requireAuthMiddleware, (req, res) => {
     if (allowedLimit <= 0 && !isAdmin) {
       return res.status(403).json({
         success: false,
-        error: "अनधिकृत (403 Forbidden): सब-यूज़र प्रबंधन केवल VIP Dashboard और Pro VIP Dashboard उपयोगकर्ताओं के लिए उपलब्ध है।"
+        error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤¸à¤¬-à¤¯à¥‚à¤œà¤¼à¤° à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¨ à¤•à¥‡à¤µà¤² VIP Dashboard à¤”à¤° Pro VIP Dashboard à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾à¤“à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤"
       });
     }
 
@@ -4514,11 +4752,11 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
     }
 
     if (cleanPrimary !== authUser?.email?.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ success: false, error: "अनधिकृत (403 Forbidden): आप केवल अपने खाते के तहत सब-यूज़र जोड़ सकते हैं।" });
+      return res.status(403).json({ success: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤–à¤¾à¤¤à¥‡ à¤•à¥‡ à¤¤à¤¹à¤¤ à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤œà¥‹à¤¡à¤¼ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     if (cleanPrimary === cleanSub) {
-      return res.status(400).json({ success: false, error: "आप स्वयं के ईमेल को सब-यूज़र के रूप में नहीं जोड़ सकते।" });
+      return res.status(400).json({ success: false, error: "à¤†à¤ª à¤¸à¥à¤µà¤¯à¤‚ à¤•à¥‡ à¤ˆà¤®à¥‡à¤² à¤•à¥‹ à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤•à¥‡ à¤°à¥‚à¤ª à¤®à¥‡à¤‚ à¤¨à¤¹à¥€à¤‚ à¤œà¥‹à¤¡à¤¼ à¤¸à¤•à¤¤à¥‡à¥¤" });
     }
 
     const allProfiles = loadProfilesDatabase();
@@ -4542,14 +4780,14 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
     if (allowedLimit <= 0 && !isAdmin) {
       return res.status(403).json({
         success: false,
-        error: "अनधिकृत (403 Forbidden): सब-यूज़र प्रबंधन केवल VIP Dashboard और Pro VIP Dashboard उपयोगकर्ताओं के लिए उपलब्ध है।"
+        error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤¸à¤¬-à¤¯à¥‚à¤œà¤¼à¤° à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¨ à¤•à¥‡à¤µà¤² VIP Dashboard à¤”à¤° Pro VIP Dashboard à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾à¤“à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤"
       });
     }
 
     if (allowedLimit <= 0) {
       return res.status(403).json({
         success: false,
-        error: "आपके वर्तमान प्लान में सब-यूज़र की अनुमति नहीं है। सब-यूज़र जोड़ने के लिए Pro (1 सब-यूज़र) या VIP Desk (3 सब-यूज़र) प्लान में अपग्रेड करें।"
+        error: "à¤†à¤ªà¤•à¥‡ à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤ªà¥à¤²à¤¾à¤¨ à¤®à¥‡à¤‚ à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤•à¥€ à¤…à¤¨à¥à¤®à¤¤à¤¿ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤œà¥‹à¤¡à¤¼à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ Pro (1 à¤¸à¤¬-à¤¯à¥‚à¥›à¤°) à¤¯à¤¾ VIP Desk (3 à¤¸à¤¬-à¤¯à¥‚à¥›à¤°) à¤ªà¥à¤²à¤¾à¤¨ à¤®à¥‡à¤‚ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤"
       });
     }
 
@@ -4559,7 +4797,7 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
     if (userSubs.length >= allowedLimit) {
       return res.status(400).json({
         success: false,
-        error: `आपके प्लान के अनुसार अधिकतम ${allowedLimit} सब-यूज़र ही जोड़े जा सकते हैं।`
+        error: `à¤†à¤ªà¤•à¥‡ à¤ªà¥à¤²à¤¾à¤¨ à¤•à¥‡ à¤…à¤¨à¥à¤¸à¤¾à¤° à¤…à¤§à¤¿à¤•à¤¤à¤® ${allowedLimit} à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤¹à¥€ à¤œà¥‹à¤¡à¤¼à¥‡ à¤œà¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤`
       });
     }
 
@@ -4567,7 +4805,7 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
     if (existingMatch) {
       return res.status(400).json({
         success: false,
-        error: "यह ईमेल पहले से सब-यूज़र सूची में जुड़ा हुआ है।"
+        error: "à¤¯à¤¹ à¤ˆà¤®à¥‡à¤² à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤¸à¥‚à¤šà¥€ à¤®à¥‡à¤‚ à¤œà¥à¤¡à¤¼à¤¾ à¤¹à¥à¤† à¤¹à¥ˆà¥¤"
       });
     }
 
@@ -4586,7 +4824,7 @@ app.post("/api/user/sub-users/invite", requireAuthMiddleware, (req, res) => {
     return res.json({
       success: true,
       subUser: newSub,
-      message: `सब-यूज़र (${cleanSub}) सफलतापूर्वक जोड़ा गया!`
+      message: `à¤¸à¤¬-à¤¯à¥‚à¥›à¤° (${cleanSub}) à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤œà¥‹à¤¡à¤¼à¤¾ à¤—à¤¯à¤¾!`
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -4601,14 +4839,14 @@ app.delete("/api/user/sub-users/:id", requireAuthMiddleware, (req, res) => {
     let allSubs = loadSubUsersDatabase();
     const idx = allSubs.findIndex((s) => s.id === subId);
     if (idx === -1) {
-      return res.status(404).json({ success: false, error: "सब-यूज़र रिकॉर्ड नहीं मिला।" });
+      return res.status(404).json({ success: false, error: "à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤°à¤¿à¤•à¥‰à¤°à¥à¤¡ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤" });
     }
 
     const sub = allSubs[idx];
     const isOwner = sub.primaryEmail.toLowerCase().trim() === authUser?.email?.toLowerCase().trim() ||
                     sub.subUserEmail.toLowerCase().trim() === authUser?.email?.toLowerCase().trim();
     if (!isOwner && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ success: false, error: "अनधिकृत (403 Forbidden): आप केवल अपने सब-यूज़र को हटा सकते हैं।" });
+      return res.status(403).json({ success: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤•à¥‹ à¤¹à¤Ÿà¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     allSubs.splice(idx, 1);
@@ -4616,7 +4854,7 @@ app.delete("/api/user/sub-users/:id", requireAuthMiddleware, (req, res) => {
 
     return res.json({
       success: true,
-      message: "सब-यूज़र सफलतापूर्वक हटा दिया गया।"
+      message: "à¤¸à¤¬-à¤¯à¥‚à¥›à¤° à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¹à¤Ÿà¤¾ à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤"
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -4652,7 +4890,7 @@ app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
     }
 
     if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते से सामग्री अनलॉक कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤–à¤¾à¤¤à¥‡ à¤¸à¥‡ à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤…à¤¨à¤²à¥‰à¤• à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const cleanItemId = (itemId || "").toString().trim();
@@ -4684,7 +4922,7 @@ app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
         success: true,
         alreadyUnlocked: true,
         wallet: rDb.wallets[walletKey],
-        message: "यह सामग्री पहले से अनलॉक है।"
+        message: "à¤¯à¤¹ à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤…à¤¨à¤²à¥‰à¤• à¤¹à¥ˆà¥¤"
       });
     }
 
@@ -4693,7 +4931,7 @@ app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
     if (currentBalance < requiredCoins) {
       return res.status(400).json({
         success: false,
-        error: `अपर्याप्त कॉइन बैलेंस! अनलॉक करने के लिए ${requiredCoins} कॉइन्स आवश्यक हैं, जबकि आपके पास ${currentBalance} कॉइन्स उपलब्ध हैं।`,
+        error: `à¤…à¤ªà¤°à¥à¤¯à¤¾à¤ªà¥à¤¤ à¤•à¥‰à¤‡à¤¨ à¤¬à¥ˆà¤²à¥‡à¤‚à¤¸! à¤…à¤¨à¤²à¥‰à¤• à¤•à¤°à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ ${requiredCoins} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¤‚, à¤œà¤¬à¤•à¤¿ à¤†à¤ªà¤•à¥‡ à¤ªà¤¾à¤¸ ${currentBalance} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤`,
         required: requiredCoins,
         available: currentBalance,
       });
@@ -4712,7 +4950,7 @@ app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
       userEmail: cleanEmail,
       newsItemId: cleanItemId,
       newsTitle: chosenTitle,
-      description: `सामग्री अनलॉक (${itemType === 'video' ? 'वीडियो' : 'समाचार ग्राफिक'}): ${chosenTitle} (-${requiredCoins} कॉइन्स)`,
+      description: `à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤…à¤¨à¤²à¥‰à¤• (${itemType === 'video' ? 'à¤µà¥€à¤¡à¤¿à¤¯à¥‹' : 'à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤—à¥à¤°à¤¾à¤«à¤¿à¤•'}): ${chosenTitle} (-${requiredCoins} à¤•à¥‰à¤‡à¤¨à¥à¤¸)`,
       transactionType: "debit",
       type: "debit",
       coinAmount: -requiredCoins,
@@ -4731,7 +4969,7 @@ app.post("/api/wallet/unlock-item", requireAuthMiddleware, (req, res) => {
       unlocked: true,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
-      message: `सामग्री सफलतापूर्वक अनलॉक हो गई! ${requiredCoins} कॉइन्स काटे गए।`
+      message: `à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤…à¤¨à¤²à¥‰à¤• à¤¹à¥‹ à¤—à¤ˆ! ${requiredCoins} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤•à¤¾à¤Ÿà¥‡ à¤—à¤à¥¤`
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -4743,7 +4981,7 @@ app.get("/api/wallet/unlocked-items", requireAuthMiddleware, (req, res) => {
   try {
     const authUser = (req as any).user;
     if (!authUser || !authUser.email) {
-      return res.status(401).json({ error: "प्रमाणीकरण आवश्यक है" });
+      return res.status(401).json({ error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     }
     const requestingEmail = authUser.email.toLowerCase().trim();
     const isAdmin = isAuthorizedAdmin(req);
@@ -4756,7 +4994,7 @@ app.get("/api/wallet/unlocked-items", requireAuthMiddleware, (req, res) => {
       if (isAdmin) {
         walletKey = queryEmail || queryUserId;
       } else {
-        return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते के अनलॉक आइटम देख सकते हैं।" });
+        return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤–à¤¾à¤¤à¥‡ à¤•à¥‡ à¤…à¤¨à¤²à¥‰à¤• à¤†à¤‡à¤Ÿà¤® à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
       }
     }
     const rDb = loadRewardsDatabase();
@@ -4778,7 +5016,7 @@ app.get("/api/wallet/unlocked-items", requireAuthMiddleware, (req, res) => {
 app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/edit-coins", "/api/admin/wallet/credit-coins"], requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन समायोजित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤•à¥‰à¤‡à¤¨ à¤¸à¤®à¤¾à¤¯à¥‹à¤œà¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { email, userId, amount, coins, note, reason, adjustmentType = 'add' } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
@@ -4786,10 +5024,10 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/edit-coins", "/ap
     const coinAmount = Number(amount !== undefined ? amount : coins);
 
     if (!cleanEmail && !cleanUserId) {
-      return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी आवश्यक है" });
+      return res.status(400).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤ˆà¤®à¥‡à¤² à¤¯à¤¾ à¤†à¤ˆà¤¡à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     }
     if (!Number.isFinite(coinAmount) || coinAmount < 0) {
-      return res.status(400).json({ error: "कॉइन की संख्या एक वैध धनात्मक संख्या होनी चाहिए" });
+      return res.status(400).json({ error: "à¤•à¥‰à¤‡à¤¨ à¤•à¥€ à¤¸à¤‚à¤–à¥à¤¯à¤¾ à¤à¤• à¤µà¥ˆà¤§ à¤§à¤¨à¤¾à¤¤à¥à¤®à¤• à¤¸à¤‚à¤–à¥à¤¯à¤¾ à¤¹à¥‹à¤¨à¥€ à¤šà¤¾à¤¹à¤¿à¤" });
     }
 
     const rDb = loadRewardsDatabase();
@@ -4826,13 +5064,13 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/edit-coins", "/ap
       "admin"
     ).toString().toLowerCase().trim();
     const txId = `tx-admin-adj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const txReason = note || reason || `एडमिन समायोजन (${mode}): ${diff >= 0 ? '+' : ''}${diff} कॉइन्स`;
+    const txReason = note || reason || `à¤à¤¡à¤®à¤¿à¤¨ à¤¸à¤®à¤¾à¤¯à¥‹à¤œà¤¨ (${mode}): ${diff >= 0 ? '+' : ''}${diff} à¤•à¥‰à¤‡à¤¨à¥à¤¸`;
     const tx: ServerWalletTransaction = {
       id: txId,
       transactionId: txId,
       userId: cleanUserId,
       userEmail: cleanEmail,
-      description: `एडमिन ${mode}: ${diff >= 0 ? '+' : ''}${diff} कॉइन्स (${txReason})`,
+      description: `à¤à¤¡à¤®à¤¿à¤¨ ${mode}: ${diff >= 0 ? '+' : ''}${diff} à¤•à¥‰à¤‡à¤¨à¥à¤¸ (${txReason})`,
       transactionType: diff >= 0 ? "credit" : "debit",
       type: diff >= 0 ? "credit" : "debit",
       coinAmount: Math.abs(diff),
@@ -4853,7 +5091,7 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/edit-coins", "/ap
       coinBalance: newBalance,
       difference: diff,
       adjustmentType: mode,
-      message: `सफलतापूर्वक कॉइन समायोजित किए गए! पूर्व बैलेंस: ${prevBalance}, नया बैलेंस: ${newBalance}`,
+      message: `à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤•à¥‰à¤‡à¤¨ à¤¸à¤®à¤¾à¤¯à¥‹à¤œà¤¿à¤¤ à¤•à¤¿à¤ à¤—à¤! à¤ªà¥‚à¤°à¥à¤µ à¤¬à¥ˆà¤²à¥‡à¤‚à¤¸: ${prevBalance}, à¤¨à¤¯à¤¾ à¤¬à¥ˆà¤²à¥‡à¤‚à¤¸: ${newBalance}`,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
     });
@@ -4866,7 +5104,7 @@ app.post(["/api/admin/wallet/adjust-coins", "/api/admin/wallet/edit-coins", "/ap
 app.get("/api/admin/wallet/transactions", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक ही ट्रांजेक्शन देख सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤Ÿà¥à¤°à¤¾à¤‚à¤œà¥‡à¤•à¥à¤¶à¤¨ à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const targetEmail = (req.query.email || "").toString().toLowerCase().trim();
     const targetUserId = (req.query.userId || "").toString().trim();
@@ -4891,14 +5129,14 @@ app.get("/api/admin/wallet/transactions", requireAdminMiddleware, (req, res) => 
 app.post("/api/admin/news-posts/:id/coin-value", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन वैल्यू सेट कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤•à¥‰à¤‡à¤¨ à¤µà¥ˆà¤²à¥à¤¯à¥‚ à¤¸à¥‡à¤Ÿ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     const { coinValue, coinCost, restrictedPlans } = req.body || {};
     let posts = loadNewsDatabase();
     const idx = posts.findIndex(p => p.id === id);
     if (idx === -1) {
-      return res.status(404).json({ error: "समाचार नहीं मिला" });
+      return res.status(404).json({ error: "à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     const rawVal = coinValue !== undefined ? coinValue : coinCost;
     const parsedCoinValue = Number(rawVal);
@@ -4922,14 +5160,14 @@ app.post("/api/admin/news-posts/:id/coin-value", (req, res) => {
 app.post("/api/admin/videos/:id/coin-value", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक (Admin) ही कॉइन वैल्यू सेट कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¹à¥€ à¤•à¥‰à¤‡à¤¨ à¤µà¥ˆà¤²à¥à¤¯à¥‚ à¤¸à¥‡à¤Ÿ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     const { coinValue, coinCost, restrictedPlans } = req.body || {};
     let videos = loadVideosDatabase();
     const idx = videos.findIndex(v => v.id === id);
     if (idx === -1) {
-      return res.status(404).json({ error: "वीडियो नहीं मिला" });
+      return res.status(404).json({ error: "à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     const rawVal = coinValue !== undefined ? coinValue : coinCost;
     const parsedCoinValue = Number(rawVal);
@@ -4963,15 +5201,15 @@ interface StoredChannel {
 }
 
 const DEFAULT_SEED_CHANNELS: StoredChannel[] = [
-  { id: "res_aajtak", channelName: "आज तक (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-  { id: "res_abp", channelName: "एबीपी न्यूज़ (ABP News)", websiteUrl: "abplive.com", username: "abpnews", logoUrl: "https://static.abplive.com/frontend/images/ABP_Hindi.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-  { id: "res_ndtv", channelName: "एनडीटीवी इंडिया (NDTV India)", websiteUrl: "ndtv.in", username: "ndtv", logoUrl: "https://drop.ndtv.com/homepage/images/ndtvlogo.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-  { id: "res_zeenews", channelName: "ज़ी न्यूज़ (Zee News)", websiteUrl: "zeenews.india.com", username: "zeenews", logoUrl: "https://english.cdn.zeenews.com/static/apprun/dna/icons/dna-logo.svg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-  { id: "res_indiatv", channelName: "इंडिया टीवी (India TV)", websiteUrl: "indiatvnews.com", username: "indiatv", logoUrl: "https://resize.indiatvnews.com/en/resize/newbucket/1200_-/2020/03/indiatv-logo-1584955685.jpg", reason: "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-  { id: "res_republic", channelName: "रिपब्लिक भारत (Republic Bharat)", websiteUrl: "republicbharat.com", username: "republicbharat", logoUrl: "https://www.republicbharat.com/assets/images/bharat-logo.svg", reason: "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-  { id: "res_news18", channelName: "न्यूज़18 इंडिया (News18 India)", websiteUrl: "news18.com", username: "news18", logoUrl: "https://images.news18.com/static_netstorage/images/news18_logo_hindi.svg", reason: "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 },
-  { id: "res_bhaskar", channelName: "दैनिक भास्कर (Dainik Bhaskar)", websiteUrl: "dainikbhaskar.com", username: "dainikbhaskar", logoUrl: "https://www.bhaskar.com/assets/images/db-logo-hindi.svg", reason: "राष्ट्रीय समाचार पत्र व मीडिया समूह", createdAt: 1700000000000 },
-  { id: "res_amarujala", channelName: "अमर उजाला (Amar Ujala)", websiteUrl: "amarujala.com", username: "amarujala", logoUrl: "https://www.amarujala.com/assets/images/amarujala.svg", reason: "राष्ट्रीय समाचार पत्र - अनधिकृत उपयोग प्रतिबंधित", createdAt: 1700000000000 }
+  { id: "res_aajtak", channelName: "à¤†à¤œ à¤¤à¤• (Aaj Tak)", websiteUrl: "aajtak.in", username: "aajtak", logoUrl: "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤šà¥ˆà¤¨à¤² - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 },
+  { id: "res_abp", channelName: "à¤à¤¬à¥€à¤ªà¥€ à¤¨à¥à¤¯à¥‚à¤œà¤¼ (ABP News)", websiteUrl: "abplive.com", username: "abpnews", logoUrl: "https://static.abplive.com/frontend/images/ABP_Hindi.svg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤šà¥ˆà¤¨à¤² - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 },
+  { id: "res_ndtv", channelName: "à¤à¤¨à¤¡à¥€à¤Ÿà¥€à¤µà¥€ à¤‡à¤‚à¤¡à¤¿à¤¯à¤¾ (NDTV India)", websiteUrl: "ndtv.in", username: "ndtv", logoUrl: "https://drop.ndtv.com/homepage/images/ndtvlogo.svg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤šà¥ˆà¤¨à¤² - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 },
+  { id: "res_zeenews", channelName: "à¤œà¤¼à¥€ à¤¨à¥à¤¯à¥‚à¤œà¤¼ (Zee News)", websiteUrl: "zeenews.india.com", username: "zeenews", logoUrl: "https://english.cdn.zeenews.com/static/apprun/dna/icons/dna-logo.svg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤šà¥ˆà¤¨à¤² - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 },
+  { id: "res_indiatv", channelName: "à¤‡à¤‚à¤¡à¤¿à¤¯à¤¾ à¤Ÿà¥€à¤µà¥€ (India TV)", websiteUrl: "indiatvnews.com", username: "indiatv", logoUrl: "https://resize.indiatvnews.com/en/resize/newbucket/1200_-/2020/03/indiatv-logo-1584955685.jpg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤šà¥ˆà¤¨à¤² - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 },
+  { id: "res_republic", channelName: "à¤°à¤¿à¤ªà¤¬à¥à¤²à¤¿à¤• à¤­à¤¾à¤°à¤¤ (Republic Bharat)", websiteUrl: "republicbharat.com", username: "republicbharat", logoUrl: "https://www.republicbharat.com/assets/images/bharat-logo.svg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¨à¥‡à¤Ÿà¤µà¤°à¥à¤• - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 },
+  { id: "res_news18", channelName: "à¤¨à¥à¤¯à¥‚à¤œà¤¼18 à¤‡à¤‚à¤¡à¤¿à¤¯à¤¾ (News18 India)", websiteUrl: "news18.com", username: "news18", logoUrl: "https://images.news18.com/static_netstorage/images/news18_logo_hindi.svg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¨à¥‡à¤Ÿà¤µà¤°à¥à¤• - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 },
+  { id: "res_bhaskar", channelName: "à¤¦à¥ˆà¤¨à¤¿à¤• à¤­à¤¾à¤¸à¥à¤•à¤° (Dainik Bhaskar)", websiteUrl: "dainikbhaskar.com", username: "dainikbhaskar", logoUrl: "https://www.bhaskar.com/assets/images/db-logo-hindi.svg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤ªà¤¤à¥à¤° à¤µ à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤¸à¤®à¥‚à¤¹", createdAt: 1700000000000 },
+  { id: "res_amarujala", channelName: "à¤…à¤®à¤° à¤‰à¤œà¤¾à¤²à¤¾ (Amar Ujala)", websiteUrl: "amarujala.com", username: "amarujala", logoUrl: "https://www.amarujala.com/assets/images/amarujala.svg", reason: "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤ªà¤¤à¥à¤° - à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤", createdAt: 1700000000000 }
 ];
 
 function loadChannelsDatabase(): StoredChannel[] {
@@ -5041,12 +5279,12 @@ app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (
     const payload = req.body;
     const rawName = (payload.channelName || payload.name || "").trim();
     if (!rawName) {
-      return res.status(400).json({ error: "चैनल / पोर्टल का नाम अनिवार्य है" });
+      return res.status(400).json({ error: "à¤šà¥ˆà¤¨à¤² / à¤ªà¥‹à¤°à¥à¤Ÿà¤² à¤•à¤¾ à¤¨à¤¾à¤® à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆ" });
     }
     const channels = loadChannelsDatabase();
     const normName = rawName.toLowerCase();
     if (channels.some((c) => (c.channelName || "").trim().toLowerCase() === normName)) {
-      return res.status(409).json({ error: "यह चैनल / पोर्टल पहले से मौजूद है" });
+      return res.status(409).json({ error: "à¤¯à¤¹ à¤šà¥ˆà¤¨à¤² / à¤ªà¥‹à¤°à¥à¤Ÿà¤² à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤®à¥Œà¤œà¥‚à¤¦ à¤¹à¥ˆ" });
     }
     const cleanUser = payload.username
       ? String(payload.username).toLowerCase().replace(/[^a-z0-9_]/g, "")
@@ -5057,7 +5295,7 @@ app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (
       websiteUrl: String(payload.websiteUrl || "").trim(),
       username: cleanUser || `chan_${Date.now().toString(36)}`,
       logoUrl: String(payload.logoUrl || ""),
-      reason: String(payload.reason || "आधिकारिक समाचार चैनल / पोर्टल"),
+      reason: String(payload.reason || "à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤šà¥ˆà¤¨à¤² / à¤ªà¥‹à¤°à¥à¤Ÿà¤²"),
       createdAt: Date.now(),
     };
     channels.unshift(newChan);
@@ -5080,7 +5318,7 @@ app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channe
       saveChannelsDatabase(channels);
       return res.json({ success: true, channel: channels[idx], channels });
     }
-    return res.status(404).json({ error: "चैनल नहीं मिला" });
+    return res.status(404).json({ error: "à¤šà¥ˆà¤¨à¤² à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -5099,7 +5337,7 @@ app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, 
       saveChannelsDatabase(channels);
       return res.json({ success: true, channel: channels[idx], channels });
     }
-    return res.status(404).json({ error: "चैनल नहीं मिला" });
+    return res.status(404).json({ error: "à¤šà¥ˆà¤¨à¤² à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -5438,9 +5676,9 @@ function broadcastNewsPublishedNotification(newsId: string, title: string) {
     if (!notifs.some(n => n.id === notifId)) {
       notifs.unshift({
         id: notifId,
-        title: '📰 नई समाचार स्वीकृत व प्रकाशित',
-        message: (title && title !== 'समाचार' ? title : 'नया समाचार मुख्य होम फ़ीड में प्रकाशित कर दिया गया है।'),
-        time: 'अभी',
+        title: 'ðŸ“° à¤¨à¤ˆ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤µ à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤',
+        message: (title && title !== 'à¤¸à¤®à¤¾à¤šà¤¾à¤°' ? title : 'à¤¨à¤¯à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤®à¥à¤–à¥à¤¯ à¤¹à¥‹à¤® à¤«à¤¼à¥€à¤¡ à¤®à¥‡à¤‚ à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤ à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤'),
+        time: 'à¤…à¤­à¥€',
         timestamp: Date.now(),
         unread: true,
         type: 'news',
@@ -5462,9 +5700,9 @@ function broadcastVideoPublishedNotification(videoId: string, title: string) {
     if (!notifs.some(n => n.id === notifId)) {
       notifs.unshift({
         id: notifId,
-        title: '🎬 नया वीडियो व रील्स जारी',
-        message: (title || 'नया वीडियो वीडियो एंड रील्स सेक्शन में जारी हो गया है।'),
-        time: 'अभी',
+        title: 'ðŸŽ¬ à¤¨à¤¯à¤¾ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤µ à¤°à¥€à¤²à¥à¤¸ à¤œà¤¾à¤°à¥€',
+        message: (title || 'à¤¨à¤¯à¤¾ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤à¤‚à¤¡ à¤°à¥€à¤²à¥à¤¸ à¤¸à¥‡à¤•à¥à¤¶à¤¨ à¤®à¥‡à¤‚ à¤œà¤¾à¤°à¥€ à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤'),
+        time: 'à¤…à¤­à¥€',
         timestamp: Date.now(),
         unread: true,
         type: 'video',
@@ -5529,7 +5767,7 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
           return {
             allowed: false,
             status: 403,
-            error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।",
+            error: "à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤¡à¥‡à¤¸à¥à¤• à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚à¥¤",
             blocked: true
           };
         }
@@ -5548,7 +5786,7 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
       return {
         allowed: false,
         status: 403,
-        error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।",
+        error: "à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤¡à¥‡à¤¸à¥à¤• à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚à¥¤",
         blocked: true
       };
     }
@@ -5571,7 +5809,7 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
     return {
       allowed: false,
       status: 403,
-      error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।",
+      error: "à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤¡à¥‡à¤¸à¥à¤• à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚à¥¤",
       blocked: true
     };
   }
@@ -5582,7 +5820,7 @@ function checkUserAccess(userEmailOrUid?: string): { allowed: boolean; status?: 
       return {
         allowed: false,
         status: 403,
-        error: "आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। कृपया आगे उपयोग के लिए प्लान अपग्रेड करें।",
+        error: "à¤†à¤ªà¤•à¤¾ 7-à¤¦à¤¿à¤µà¤¸à¥€à¤¯ à¤«à¥à¤°à¥€ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤†à¤—à¥‡ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¥‡ à¤²à¤¿à¤ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤",
         trialExpired: true
       };
     }
@@ -5740,8 +5978,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     updatedRecord = {
       ...existing,
       email: emailRaw || existing.email,
-      name: userPayload.name || userPayload.fullName || existing.name || 'यूज़र',
-      fullName: userPayload.fullName || userPayload.name || existing.fullName || existing.name || 'यूज़र',
+      name: userPayload.name || userPayload.fullName || existing.name || 'à¤¯à¥‚à¤œà¤¼à¤°',
+      fullName: userPayload.fullName || userPayload.name || existing.fullName || existing.name || 'à¤¯à¥‚à¤œà¤¼à¤°',
       username: safeUsername,
       channelName: userPayload.channelName || userPayload.channelNameHi || existing.channelName || '',
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || existing.channelNameHi || existing.channelName || '',
@@ -5796,8 +6034,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
     updatedRecord = {
       userId: deterministicUserId,
       email: emailRaw,
-      name: userPayload.name || userPayload.fullName || 'यूज़र',
-      fullName: userPayload.fullName || userPayload.name || 'यूज़र',
+      name: userPayload.name || userPayload.fullName || 'à¤¯à¥‚à¤œà¤¼à¤°',
+      fullName: userPayload.fullName || userPayload.name || 'à¤¯à¥‚à¤œà¤¼à¤°',
       username: safeUsername,
       channelName: userPayload.channelName || userPayload.channelNameHi || '',
       channelNameHi: userPayload.channelNameHi || userPayload.channelName || '',
@@ -6025,7 +6263,7 @@ function reconcileAllUsers() {
         userMap.set(email, {
           userId: p.userId || p.uid || `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           email: p.email || k,
-          name: p.fullName || p.username || 'यूज़र',
+          name: p.fullName || p.username || 'à¤¯à¥‚à¤œà¤¼à¤°',
           fullName: p.fullName || '',
           username: p.username || cleanGenerateUsername(undefined, p.fullName),
           channelName: p.channelNameHi || '',
@@ -6068,14 +6306,14 @@ function reconcileAllUsers() {
     userMap.set(subAdminEmail, {
       userId: existingSub?.userId || 'user-1791697518060',
       email: subAdminEmail,
-      name: subProf?.fullName || existingSub?.fullName || 'जोनल एडमिन (Admin)',
-      fullName: subProf?.fullName || existingSub?.fullName || 'जोनल एडमिन (Admin)',
+      name: subProf?.fullName || existingSub?.fullName || 'à¤œà¥‹à¤¨à¤² à¤à¤¡à¤®à¤¿à¤¨ (Admin)',
+      fullName: subProf?.fullName || existingSub?.fullName || 'à¤œà¥‹à¤¨à¤² à¤à¤¡à¤®à¤¿à¤¨ (Admin)',
       username: subProf?.username || existingSub?.username || 'admin.ainewsmaker',
       role: 'admin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: subProf?.channelNameHi || existingSub?.channelName || 'एआई न्यूज़ मेकर',
-      channelNameHi: subProf?.channelNameHi || existingSub?.channelNameHi || 'एआई न्यूज़ मेकर',
+      channelName: subProf?.channelNameHi || existingSub?.channelName || 'à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤°',
+      channelNameHi: subProf?.channelNameHi || existingSub?.channelNameHi || 'à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤°',
       channelNameEn: subProf?.channelNameEn || existingSub?.channelNameEn || 'AI News Maker',
       channelLogoUrl: subProf?.channelLogoUrl || existingSub?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
       channelLogoPngUrl: subProf?.channelLogoPngUrl || existingSub?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
@@ -6083,7 +6321,7 @@ function reconcileAllUsers() {
       channelLogoType: subProf?.channelLogoType || existingSub?.channelLogoType || 'png',
       mobile: subProf?.mobileNumber || existingSub?.mobile || '9669802408',
       mobileNumber: subProf?.mobileNumber || existingSub?.mobileNumber || '9669802408',
-      district: subProf?.district || existingSub?.district || 'हेडक्वार्टर सेंट्रल डेस्क',
+      district: subProf?.district || existingSub?.district || 'à¤¹à¥‡à¤¡à¤•à¥à¤µà¤¾à¤°à¥à¤Ÿà¤° à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•',
       websiteUrl: subProf?.websiteUrl || existingSub?.websiteUrl || 'ainewsmaker.online',
       isBlocked: false,
       isProfileLocked: false,
@@ -6102,14 +6340,14 @@ function reconcileAllUsers() {
     userMap.set(adminEmail, {
       userId: existingAdmin?.userId || 'usr_627265616b69',
       email: adminEmail,
-      name: adminProf?.fullName || existingAdmin?.fullName || 'मुख्य संपादक',
-      fullName: adminProf?.fullName || existingAdmin?.fullName || 'मुख्य संपादक',
+      name: adminProf?.fullName || existingAdmin?.fullName || 'à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•',
+      fullName: adminProf?.fullName || existingAdmin?.fullName || 'à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•',
       username: adminProf?.username || existingAdmin?.username || 'breakingnewswala',
       role: 'superadmin',
       tier: 'ultra',
       planName: 'VIP DESK',
-      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || 'ब्रेकिंग न्यूज़ वाला',
-      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || 'ब्रेकिंग न्यूज़ वाला',
+      channelName: adminProf?.channelNameHi || existingAdmin?.channelName || 'à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤µà¤¾à¤²à¤¾',
+      channelNameHi: adminProf?.channelNameHi || existingAdmin?.channelNameHi || 'à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤µà¤¾à¤²à¤¾',
       channelNameEn: adminProf?.channelNameEn || existingAdmin?.channelNameEn || 'BREAKING NEWS WALA',
       channelLogoUrl: adminProf?.channelLogoUrl || existingAdmin?.channelLogoUrl || '/assets/breaking_news_wala_logo.png',
       channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || '/assets/breaking_news_wala_logo.png',
@@ -6117,7 +6355,7 @@ function reconcileAllUsers() {
       channelLogoType: adminProf?.channelLogoType || existingAdmin?.channelLogoType || 'png',
       mobile: adminProf?.mobileNumber || existingAdmin?.mobile || '9669802408',
       mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || '9669802408',
-      district: adminProf?.district || existingAdmin?.district || 'सेंट्रल डेस्क / भोपाल',
+      district: adminProf?.district || existingAdmin?.district || 'à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤• / à¤­à¥‹à¤ªà¤¾à¤²',
       websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || 'breakingnewswala.com',
       isBlocked: false,
       isProfileLocked: false,
@@ -6144,8 +6382,8 @@ function reconcileAllUsers() {
         role: 'reporter',
         tier: 'basic',
         planName: 'BASIC',
-        channelName: p3?.channelNameHi || 'अनमोल संदेश',
-        channelNameHi: p3?.channelNameHi || 'अनमोल संदेश',
+        channelName: p3?.channelNameHi || 'à¤…à¤¨à¤®à¥‹à¤² à¤¸à¤‚à¤¦à¥‡à¤¶',
+        channelNameHi: p3?.channelNameHi || 'à¤…à¤¨à¤®à¥‹à¤² à¤¸à¤‚à¤¦à¥‡à¤¶',
         channelNameEn: p3?.channelNameEn || 'Anmol Sandesh',
         channelLogoUrl: p3?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
         channelLogoPngUrl: p3?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
@@ -6153,7 +6391,7 @@ function reconcileAllUsers() {
         channelLogoType: 'png',
         mobile: p3?.mobileNumber || '9425000998',
         mobileNumber: p3?.mobileNumber || '9425000998',
-        district: p3?.district || 'सेंट्रल डेस्क',
+        district: p3?.district || 'à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•',
         websiteUrl: p3?.websiteUrl || 'anmolsandesh.com',
         isBlocked: false,
         isProfileLocked: false,
@@ -6260,9 +6498,9 @@ function runTrialExpirationAndNotificationCheck() {
       if (!existingIds.has(userWarnId)) {
         newNotifs.push({
           id: userWarnId,
-          title: "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
-          message: `नमस्ते ${u.name || 'उपयोगकर्ता'}, आपका 7-दिवसीय फ्री ट्रायल कल (${expiryDateStr}) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।`,
-          time: "अभी",
+          title: "âš ï¸ 24 à¤˜à¤‚à¤Ÿà¥‡ à¤®à¥‡à¤‚ à¤«à¥à¤°à¥€ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤°à¤¹à¤¾ à¤¹à¥ˆ",
+          message: `à¤¨à¤®à¤¸à¥à¤¤à¥‡ ${u.name || 'à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾'}, à¤†à¤ªà¤•à¤¾ 7-à¤¦à¤¿à¤µà¤¸à¥€à¤¯ à¤«à¥à¤°à¥€ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤•à¤² (${expiryDateStr}) à¤•à¥‹ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤œà¤¾à¤à¤—à¤¾à¥¤ à¤¨à¤¿à¤°à¥à¤¬à¤¾à¤§ à¤¸à¥‡à¤µà¤¾à¤“à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤…à¤ªà¤¨à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤`,
+          time: "à¤…à¤­à¥€",
           timestamp: now,
           unread: true,
           type: "plan",
@@ -6275,9 +6513,9 @@ function runTrialExpirationAndNotificationCheck() {
       if (!existingIds.has(adminWarnId)) {
         newNotifs.push({
           id: adminWarnId,
-          title: `🔔 ट्रायल चेतावनी: ${u.name || u.email}`,
-          message: `उपयोगकर्ता '${u.name || ''}' (${u.email}) का 7-दिवसीय फ्री ट्रायल 24 घंटे में समाप्त होने वाला है। समाप्ति समय: ${expiryDateStr}।`,
-          time: "अभी",
+          title: `ðŸ”” à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤šà¥‡à¤¤à¤¾à¤µà¤¨à¥€: ${u.name || u.email}`,
+          message: `à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ '${u.name || ''}' (${u.email}) à¤•à¤¾ 7-à¤¦à¤¿à¤µà¤¸à¥€à¤¯ à¤«à¥à¤°à¥€ à¤Ÿà¥à¤°à¤¾à¤¯à¤² 24 à¤˜à¤‚à¤Ÿà¥‡ à¤®à¥‡à¤‚ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹à¤¨à¥‡ à¤µà¤¾à¤²à¤¾ à¤¹à¥ˆà¥¤ à¤¸à¤®à¤¾à¤ªà¥à¤¤à¤¿ à¤¸à¤®à¤¯: ${expiryDateStr}à¥¤`,
+          time: "à¤…à¤­à¥€",
           timestamp: now,
           unread: true,
           type: "admin",
@@ -6299,9 +6537,9 @@ function runTrialExpirationAndNotificationCheck() {
       if (!existingIds.has(userExpId)) {
         newNotifs.push({
           id: userExpId,
-          title: "🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है",
-          message: `नमस्ते ${u.name || 'उपयोगकर्ता'}, आपका 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है। ग्राफिक डाउनलोड व एआई टूल्स लॉक कर दिए गए हैं। जारी रखने के लिए प्लान चुनें।`,
-          time: "अभी",
+          title: "ðŸ”’ 7-à¤¦à¤¿à¤µà¤¸à¥€à¤¯ à¤«à¥à¤°à¥€ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆ",
+          message: `à¤¨à¤®à¤¸à¥à¤¤à¥‡ ${u.name || 'à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾'}, à¤†à¤ªà¤•à¤¾ 7-à¤¦à¤¿à¤µà¤¸à¥€à¤¯ à¤«à¥à¤°à¥€ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤ à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤µ à¤à¤†à¤ˆ à¤Ÿà¥‚à¤²à¥à¤¸ à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤ à¤—à¤ à¤¹à¥ˆà¤‚à¥¤ à¤œà¤¾à¤°à¥€ à¤°à¤–à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ à¤ªà¥à¤²à¤¾à¤¨ à¤šà¥à¤¨à¥‡à¤‚à¥¤`,
+          time: "à¤…à¤­à¥€",
           timestamp: now,
           unread: true,
           type: "plan",
@@ -6314,9 +6552,9 @@ function runTrialExpirationAndNotificationCheck() {
       if (!existingIds.has(adminExpId)) {
         newNotifs.push({
           id: adminExpId,
-          title: `🚫 ट्रायल समाप्त: ${u.name || u.email}`,
-          message: `उपयोगकर्ता '${u.name || ''}' (${u.email}) का 7-दिवसीय फ्री ट्रायल समाप्त हो चुका है और प्लान-प्रतिबंधित सुविधाएं लॉक कर दी गई हैं।`,
-          time: "अभी",
+          title: `ðŸš« à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤¸à¤®à¤¾à¤ªà¥à¤¤: ${u.name || u.email}`,
+          message: `à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ '${u.name || ''}' (${u.email}) à¤•à¤¾ 7-à¤¦à¤¿à¤µà¤¸à¥€à¤¯ à¤«à¥à¤°à¥€ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆ à¤”à¤° à¤ªà¥à¤²à¤¾à¤¨-à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¸à¥à¤µà¤¿à¤§à¤¾à¤à¤‚ à¤²à¥‰à¤• à¤•à¤° à¤¦à¥€ à¤—à¤ˆ à¤¹à¥ˆà¤‚à¥¤`,
+          time: "à¤…à¤­à¥€",
           timestamp: now,
           unread: true,
           type: "admin",
@@ -6558,11 +6796,11 @@ app.get("/api/videos", (_req, res) => {
 app.post("/api/admin/videos/upload", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो प्रबंधित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const videoData = req.body;
     if (!videoData || !videoData.title || !videoData.videoUrl) {
-      return res.status(400).json({ error: "वीडियो और शीर्षक दोनों अनिवार्य हैं।" });
+      return res.status(400).json({ error: "à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤”à¤° à¤¶à¥€à¤°à¥à¤·à¤• à¤¦à¥‹à¤¨à¥‹à¤‚ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const newVideo: StoredVideoItem = {
       id: videoData.id || `vid-admin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -6571,11 +6809,11 @@ app.post("/api/admin/videos/upload", requireAdminMiddleware, (req, res) => {
       aspectRatio: videoData.aspectRatio || "4:5",
       createdAt: videoData.createdAt || Date.now(),
       duration: videoData.duration || "01:30",
-      channel: videoData.channel || "एडमिन वायरल डेस्क",
-      views: videoData.views || "1K देखा गया",
+      channel: videoData.channel || "à¤à¤¡à¤®à¤¿à¤¨ à¤µà¤¾à¤¯à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•",
+      views: videoData.views || "1K à¤¦à¥‡à¤–à¤¾ à¤—à¤¯à¤¾",
       videoUrl: videoData.videoUrl,
       thumbnailUrl: videoData.thumbnailUrl || "https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=800&auto=format&fit=crop",
-      category: videoData.category || "वायरल",
+      category: videoData.category || "à¤µà¤¾à¤¯à¤°à¤²",
       isBonus: Boolean(videoData.isBonus),
       rewardCoins: videoData.rewardCoins ? Number(videoData.rewardCoins) : (videoData.isBonus ? 50 : undefined),
       coinValue: videoData.coinValue ? Number(videoData.coinValue) : undefined,
@@ -6636,14 +6874,14 @@ app.post("/api/admin/videos/upload", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/videos/:id", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही वीडियो प्रबंधित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const videoId = req.params.id;
     const updates = req.body;
     const currentVideos = loadVideosDatabase();
     const idx = currentVideos.findIndex((v) => v.id === videoId);
     if (idx === -1) {
-      return res.status(404).json({ error: "वीडियो नहीं मिला।" });
+      return res.status(404).json({ error: "à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤" });
     }
     currentVideos[idx] = {
       ...currentVideos[idx],
@@ -6783,7 +7021,7 @@ app.post("/api/admin/music-library/upload", requireAdminMiddleware, (req, res) =
     const { id, name, title, category, url, duration, isCopyrightSafe, targetModes, allowedTiers } = req.body;
     const trackName = String(name || title || "").trim();
     if (!trackName || !url) {
-      return res.status(400).json({ error: "ऑडियो फाइल और ट्रैक नाम दोनों अनिवार्य हैं।" });
+      return res.status(400).json({ error: "à¤‘à¤¡à¤¿à¤¯à¥‹ à¤«à¤¾à¤‡à¤² à¤”à¤° à¤Ÿà¥à¤°à¥ˆà¤• à¤¨à¤¾à¤® à¤¦à¥‹à¤¨à¥‹à¤‚ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     let normalizedMode: 'quick' | 'studio' | 'both' = 'both';
@@ -6828,7 +7066,7 @@ app.put("/api/admin/music-library/:id", requireAdminMiddleware, (req, res) => {
     const tracks = loadMusicLibrary();
     const idx = tracks.findIndex((t) => t.id === trackId);
     if (idx < 0) {
-      return res.status(404).json({ error: "म्यूज़िक ट्रैक नहीं मिला" });
+      return res.status(404).json({ error: "à¤®à¥à¤¯à¥‚à¤œà¤¼à¤¿à¤• à¤Ÿà¥à¤°à¥ˆà¤• à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     const trackName = String(name || title || "").trim();
     if (trackName) tracks[idx].name = trackName;
@@ -6862,7 +7100,7 @@ app.delete("/api/admin/music-library/:id", requireAdminMiddleware, (req, res) =>
     const tracks = loadMusicLibrary();
     const filtered = tracks.filter((t) => t.id !== trackId);
     saveMusicLibrary(filtered);
-    return res.json({ success: true, message: "म्यूज़िक ट्रैक सफलतापूर्वक हटाया गया", total: filtered.length });
+    return res.json({ success: true, message: "à¤®à¥à¤¯à¥‚à¤œà¤¼à¤¿à¤• à¤Ÿà¥à¤°à¥ˆà¤• à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¹à¤Ÿà¤¾à¤¯à¤¾ à¤—à¤¯à¤¾", total: filtered.length });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -6874,7 +7112,7 @@ app.get("/api/check-username", (req, res) => {
     const rawUsername = (req.query.username || "").toString().trim().replace(/^@/, "");
     const email = (req.query.email || "").toString().trim().toLowerCase();
     if (!rawUsername) {
-      return res.status(400).json({ available: false, error: "यूज़रनेम दर्ज करना अनिवार्य है।" });
+      return res.status(400).json({ available: false, error: "à¤¯à¥‚à¤œà¤¼à¤°à¤¨à¥‡à¤® à¤¦à¤°à¥à¤œ à¤•à¤°à¤¨à¤¾ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
     const lower = rawUsername.toLowerCase();
     
@@ -6887,7 +7125,7 @@ app.get("/api/check-username", (req, res) => {
       if ((lower.includes("breaking") || lower.includes("breakingnewswala")) && email === "breakingnewswala.com@gmail.com") {
         return res.json({ available: true, reservedForYou: true });
       }
-      return res.json({ available: false, error: "यह यूज़रनेम सुपर एडमिन के लिए आरक्षित है।" });
+      return res.json({ available: false, error: "à¤¯à¤¹ à¤¯à¥‚à¤œà¤¼à¤°à¤¨à¥‡à¤® à¤¸à¥à¤ªà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤•à¥‡ à¤²à¤¿à¤ à¤†à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¹à¥ˆà¥¤" });
     }
     
     const users = loadUsersMasterDatabase();
@@ -6900,7 +7138,7 @@ app.get("/api/check-username", (req, res) => {
       if (email && match.email && match.email.toLowerCase().trim() === email) {
         return res.json({ available: true, isCurrentUser: true });
       }
-      return res.json({ available: false, error: "यह यूज़रनेम पहले से किसी अन्य सदस्य द्वारा पंजीकृत है।" });
+      return res.json({ available: false, error: "à¤¯à¤¹ à¤¯à¥‚à¤œà¤¼à¤°à¤¨à¥‡à¤® à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤•à¤¿à¤¸à¥€ à¤…à¤¨à¥à¤¯ à¤¸à¤¦à¤¸à¥à¤¯ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¤‚à¤œà¥€à¤•à¥ƒà¤¤ à¤¹à¥ˆà¥¤" });
     }
     return res.json({ available: true });
   } catch (err: any) {
@@ -6912,10 +7150,10 @@ app.get("/api/check-username", (req, res) => {
 app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) => {
   try {
     if (req.path.includes("/admin/") && !isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ success: false, error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही यूज़र्स प्रबंधन देख सकते हैं।" });
+      return res.status(403).json({ success: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤¯à¥‚à¤œà¤¼à¤°à¥à¤¸ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¨ à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ success: false, error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र सूची देख सकते हैं।" });
+      return res.status(403).json({ success: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤¯à¥‚à¤œà¤¼à¤° à¤¸à¥‚à¤šà¥€ à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const now = Date.now();
@@ -6945,7 +7183,7 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
 app.get("/api/admin/users/:userId/profile", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही प्रोफाइल देख सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤ªà¥à¤°à¥‹à¤«à¤¾à¤‡à¤² à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { userId } = req.params;
     const cleanId = (userId || "").toString().trim().toLowerCase();
@@ -6958,7 +7196,7 @@ app.get("/api/admin/users/:userId/profile", requireAdminMiddleware, (req, res) =
     );
     const p = allProfiles[cleanId] || (u?.email ? allProfiles[u.email.toLowerCase()] : null) || {};
     if (!u && !p.userId && !p.email) {
-      return res.status(404).json({ error: "उपयोगकर्ता नहीं मिला" });
+      return res.status(404).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     return res.json({
       success: true,
@@ -6997,7 +7235,7 @@ app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, 
     const isMaster = isAuthorizedMasterAdmin(req);
     const isAdmin = isAuthorizedAdmin(req);
     if (!isAdmin) {
-      return res.status(403).json({ error: "अनधिकृत: केवल व्यवस्थापक ही प्रोफाइल संपादित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤ªà¥à¤°à¥‹à¤«à¤¾à¤‡à¤² à¤¸à¤‚à¤ªà¤¾à¤¦à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { userId } = req.params;
     const cleanId = (userId || "").toString().trim().toLowerCase();
@@ -7010,7 +7248,7 @@ app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, 
       (x.username && x.username.toLowerCase() === cleanId)
     );
     if (uIdx === -1) {
-      return res.status(404).json({ error: "उपयोगकर्ता नहीं मिला" });
+      return res.status(404).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     const targetUser = allUsers[uIdx];
     const isTargetMaster = isProtectedAdminAccount(targetUser.email) || targetUser.role === 'superadmin';
@@ -7018,7 +7256,7 @@ app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, 
 
     // Role safety check: only Master Admin can edit Master Admin or Admin accounts
     if ((isTargetMaster || isTargetAdmin) && !isMaster) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन ही एडमिन खातों को संपादित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¹à¥€ à¤à¤¡à¤®à¤¿à¤¨ à¤–à¤¾à¤¤à¥‹à¤‚ à¤•à¥‹ à¤¸à¤‚à¤ªà¤¾à¤¦à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
 
     // Update authorized profile fields (NEVER touch tier, planName, coins, wallet, payments, hasActivePaidPlan)
@@ -7114,7 +7352,7 @@ app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, 
 
     return res.json({
       success: true,
-      message: "यूज़र प्रोफाइल सफलतापूर्वक अपडेट कर दी गई",
+      message: "à¤¯à¥‚à¤œà¤¼à¤° à¤ªà¥à¤°à¥‹à¤«à¤¾à¤‡à¤² à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¤° à¤¦à¥€ à¤—à¤ˆ",
       user: targetUser,
       profile: updatedProf,
     });
@@ -7131,7 +7369,7 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
   try {
     const profile = { ...req.body };
     if (!profile || (!profile.email && !profile.userId)) {
-      return res.status(400).json({ error: "ईमेल या आईडी अनिवार्य है" });
+      return res.status(400).json({ error: "à¤ˆà¤®à¥‡à¤² à¤¯à¤¾ à¤†à¤ˆà¤¡à¥€ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆ" });
     }
 
     // Persist password credential if provided
@@ -7163,7 +7401,7 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
       const accessCheck = checkUserAccess(targetEmail || targetUid);
       if (accessCheck.blocked) {
         return res.status(403).json({
-          error: "यह खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है।",
+          error: "à¤¯à¤¹ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤",
           blocked: true
         });
       }
@@ -7387,7 +7625,7 @@ app.get("/api/notifications/vapid-key", (req, res) => {
 app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
   try {
     const { title, message, newsId, postId, category, imageUrl, linkTab, targetUserEmail } = req.body;
-    if (!title) return res.status(400).json({ error: "शीर्षक आवश्यक है" });
+    if (!title) return res.status(400).json({ error: "à¤¶à¥€à¤°à¥à¤·à¤• à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     const newNotif: StoredNotification = {
       id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       title,
@@ -7510,9 +7748,9 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
           id: eventId,
           rawId: p.id,
           category: 'rss',
-          categoryLabel: 'नई RSS Feed खबरें',
-          title: p.title || 'नई RSS Feed खबर',
-          message: p.summary ? p.summary.slice(0, 160) : 'आरएसएस फ़ीड से प्राप्त नया समाचार',
+          categoryLabel: 'à¤¨à¤ˆ RSS Feed à¤–à¤¬à¤°à¥‡à¤‚',
+          title: p.title || 'à¤¨à¤ˆ RSS Feed à¤–à¤¬à¤°',
+          message: p.summary ? p.summary.slice(0, 160) : 'à¤†à¤°à¤à¤¸à¤à¤¸ à¤«à¤¼à¥€à¤¡ à¤¸à¥‡ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤¨à¤¯à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°',
           timestamp: timeVal || Date.now(),
           time: new Date(timeVal || Date.now()).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
           unread: !readIds.has(eventId),
@@ -7538,15 +7776,15 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
         id: eventId,
         rawId: s.id,
         category: 'support',
-        categoryLabel: 'सपोर्ट इनबॉक्स केसेस',
-        title: `सपोर्ट टिकट: ${s.subject || s.reportReason || s.category || 'सहायता अनुरोध'}`,
+        categoryLabel: 'à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤‡à¤¨à¤¬à¥‰à¤•à¥à¤¸ à¤•à¥‡à¤¸à¥‡à¤¸',
+        title: `à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤Ÿà¤¿à¤•à¤Ÿ: ${s.subject || s.reportReason || s.category || 'à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§'}`,
         message: s.message ? s.message.slice(0, 160) : (s.userEmail || ''),
         timestamp: timeVal,
         time: new Date(timeVal).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
         unread: !readIds.has(eventId) && s.status !== 'resolved',
         status: s.status || 'open',
         meta: {
-          userName: s.userName || s.name || 'संपादक/यूज़र',
+          userName: s.userName || s.name || 'à¤¸à¤‚à¤ªà¤¾à¤¦à¤•/à¤¯à¥‚à¤œà¤¼à¤°',
           userEmail: s.userEmail || s.email,
           userMobile: s.userMobile || s.mobile || s.phone || '',
           userId: s.userId,
@@ -7567,9 +7805,9 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
         id: eventId,
         rawId: l.id,
         category: 'logo',
-        categoryLabel: 'लोगो चेंज रिक्वेस्ट',
-        title: `लोगो अनुरोध: ${l.channelName || l.userEmail}`,
-        message: l.adminNotes || `लोगो परिवर्तन स्थिति: ${l.status === 'approved' ? 'स्वीकृत' : l.status === 'rejected' ? 'अस्वीकृत' : 'लंबित'}`,
+        categoryLabel: 'à¤²à¥‹à¤—à¥‹ à¤šà¥‡à¤‚à¤œ à¤°à¤¿à¤•à¥à¤µà¥‡à¤¸à¥à¤Ÿ',
+        title: `à¤²à¥‹à¤—à¥‹ à¤…à¤¨à¥à¤°à¥‹à¤§: ${l.channelName || l.userEmail}`,
+        message: l.adminNotes || `à¤²à¥‹à¤—à¥‹ à¤ªà¤°à¤¿à¤µà¤°à¥à¤¤à¤¨ à¤¸à¥à¤¥à¤¿à¤¤à¤¿: ${l.status === 'approved' ? 'à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤' : l.status === 'rejected' ? 'à¤…à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤' : 'à¤²à¤‚à¤¬à¤¿à¤¤'}`,
         timestamp: timeVal,
         time: new Date(timeVal).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
         unread: !readIds.has(eventId) && l.status === 'pending',
@@ -7597,9 +7835,9 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
         id: eventId,
         rawId: r.id || eventId,
         category: 'requests',
-        categoryLabel: 'अन्य यूज़र रिक्वेस्ट',
-        title: `लिमिट विस्तार अनुरोध: ${r.email || r.userId}`,
-        message: r.reason || `प्लान: ${r.tier || 'Standard'}, वर्तमान सीमा: ${r.currentLimit || 0}`,
+        categoryLabel: 'à¤…à¤¨à¥à¤¯ à¤¯à¥‚à¤œà¤¼à¤° à¤°à¤¿à¤•à¥à¤µà¥‡à¤¸à¥à¤Ÿ',
+        title: `à¤²à¤¿à¤®à¤¿à¤Ÿ à¤µà¤¿à¤¸à¥à¤¤à¤¾à¤° à¤…à¤¨à¥à¤°à¥‹à¤§: ${r.email || r.userId}`,
+        message: r.reason || `à¤ªà¥à¤²à¤¾à¤¨: ${r.tier || 'Standard'}, à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤¸à¥€à¤®à¤¾: ${r.currentLimit || 0}`,
         timestamp: timeVal,
         time: new Date(timeVal).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
         unread: !readIds.has(eventId) && r.status !== 'approved' && r.status !== 'rejected',
@@ -7628,8 +7866,8 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
           id: eventId,
           rawId: n.id,
           category: 'system',
-          categoryLabel: 'सिस्टम व ट्रायल अलर्ट',
-          title: n.title || 'सिस्टम अलर्ट',
+          categoryLabel: 'à¤¸à¤¿à¤¸à¥à¤Ÿà¤® à¤µ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤…à¤²à¤°à¥à¤Ÿ',
+          title: n.title || 'à¤¸à¤¿à¤¸à¥à¤Ÿà¤® à¤…à¤²à¤°à¥à¤Ÿ',
           message: n.message || '',
           timestamp: timeVal,
           time: new Date(timeVal).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit' }),
@@ -7648,11 +7886,11 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
 
     const counts = {
       all: 0,
-      rss: { total: rssItems.length, unread: rssItems.filter(i => i.unread).length, label: 'नई RSS Feed खबरें' },
-      support: { total: supportItems.length, unread: supportItems.filter(i => i.unread).length, label: 'सपोर्ट इनबॉक्स केसेस' },
-      logo: { total: logoItems.length, unread: logoItems.filter(i => i.unread).length, label: 'लोगो चेंज रिक्वेस्ट' },
-      requests: { total: reqItems.length, unread: reqItems.filter(i => i.unread).length, label: 'अन्य यूज़र रिक्वेस्ट' },
-      system: { total: systemItems.length, unread: systemItems.filter(i => i.unread).length, label: 'सिस्टम व ट्रायल अलर्ट' },
+      rss: { total: rssItems.length, unread: rssItems.filter(i => i.unread).length, label: 'à¤¨à¤ˆ RSS Feed à¤–à¤¬à¤°à¥‡à¤‚' },
+      support: { total: supportItems.length, unread: supportItems.filter(i => i.unread).length, label: 'à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤‡à¤¨à¤¬à¥‰à¤•à¥à¤¸ à¤•à¥‡à¤¸à¥‡à¤¸' },
+      logo: { total: logoItems.length, unread: logoItems.filter(i => i.unread).length, label: 'à¤²à¥‹à¤—à¥‹ à¤šà¥‡à¤‚à¤œ à¤°à¤¿à¤•à¥à¤µà¥‡à¤¸à¥à¤Ÿ' },
+      requests: { total: reqItems.length, unread: reqItems.filter(i => i.unread).length, label: 'à¤…à¤¨à¥à¤¯ à¤¯à¥‚à¤œà¤¼à¤° à¤°à¤¿à¤•à¥à¤µà¥‡à¤¸à¥à¤Ÿ' },
+      system: { total: systemItems.length, unread: systemItems.filter(i => i.unread).length, label: 'à¤¸à¤¿à¤¸à¥à¤Ÿà¤® à¤µ à¤Ÿà¥à¤°à¤¾à¤¯à¤² à¤…à¤²à¤°à¥à¤Ÿ' },
     };
 
     const totalUnread = counts.rss.unread + counts.support.unread + counts.logo.unread + counts.requests.unread + counts.system.unread;
@@ -7682,7 +7920,7 @@ app.post("/api/admin/support/update-status", requireAdminMiddleware, (req, res) 
     const userRes = resolveUserTierAndRole(req);
     const { id, type, status, adminNotes } = req.body || {};
     if (!id || !status) {
-      return res.status(400).json({ error: "अनुरोध आईडी और स्टेटस दोनों अनिवार्य हैं।" });
+      return res.status(400).json({ error: "à¤…à¤¨à¥à¤°à¥‹à¤§ à¤†à¤ˆà¤¡à¥€ à¤”à¤° à¤¸à¥à¤Ÿà¥‡à¤Ÿà¤¸ à¤¦à¥‹à¤¨à¥‹à¤‚ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     if (type === 'logo') {
@@ -7704,7 +7942,7 @@ app.post("/api/admin/support/update-status", requireAdminMiddleware, (req, res) 
         saveSupportRequestsDatabase(supports);
       }
     }
-    return res.json({ success: true, message: `अनुरोध स्थिति '${status}' के रूप में अपडेट की गई` });
+    return res.json({ success: true, message: `à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¸à¥à¤¥à¤¿à¤¤à¤¿ '${status}' à¤•à¥‡ à¤°à¥‚à¤ª à¤®à¥‡à¤‚ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¥€ à¤—à¤ˆ` });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -7715,7 +7953,7 @@ app.post("/api/admin/news/publish-rss", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
     const { id } = req.body || {};
-    if (!id) return res.status(400).json({ error: "न्यूज आईडी अनिवार्य है।" });
+    if (!id) return res.status(400).json({ error: "à¤¨à¥à¤¯à¥‚à¤œ à¤†à¤ˆà¤¡à¥€ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     const news = loadNewsDatabase();
     const idx = news.findIndex(p => p.id === id);
     if (idx >= 0) {
@@ -7727,9 +7965,9 @@ app.post("/api/admin/news/publish-rss", requireAdminMiddleware, (req, res) => {
       const readIds = loadAdminReadNotificationIds();
       readIds.add(`admin_rss_${id}`);
       saveAdminReadNotificationIds(readIds);
-      return res.json({ success: true, message: "आरएसएस खबर सफलतापूर्वक प्रकाशित की गई!", post: news[idx] });
+      return res.json({ success: true, message: "à¤†à¤°à¤à¤¸à¤à¤¸ à¤–à¤¬à¤° à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤ à¤•à¥€ à¤—à¤ˆ!", post: news[idx] });
     }
-    return res.status(404).json({ error: "खबर नहीं मिली।" });
+    return res.status(404).json({ error: "à¤–à¤¬à¤° à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¥€à¥¤" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -7766,7 +8004,7 @@ app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res
     }
 
     saveAdminReadNotificationIds(readIds);
-    return res.json({ success: true, totalRead: readIds.size, message: "सभी नोटिफिकेशन पढ़े गए मार्क कर दिए गए।" });
+    return res.json({ success: true, totalRead: readIds.size, message: "à¤¸à¤­à¥€ à¤¨à¥‹à¤Ÿà¤¿à¤«à¤¿à¤•à¥‡à¤¶à¤¨ à¤ªà¤¢à¤¼à¥‡ à¤—à¤ à¤®à¤¾à¤°à¥à¤• à¤•à¤° à¤¦à¤¿à¤ à¤—à¤à¥¤" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -7792,7 +8030,7 @@ function generateRssFeedXml(posts: StoredNewsPost[], baseUrl = "https://www.aine
   const itemsXml = posts.map((post) => {
     const pubDate = post.timestamp ? new Date(post.timestamp).toUTCString() : new Date().toUTCString();
     const link = post.sourceUrl && post.sourceUrl.startsWith("http") ? post.sourceUrl : `${cleanSiteUrl}/#home`;
-    const safeCategory = (post.categoryName || post.category || "ताज़ा समाचार").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safeCategory = (post.categoryName || post.category || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const safeChannel = (post.sourceChannel || "AI News Maker").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const enclosureTag = post.imageUrl ? `\n      <enclosure url="${post.imageUrl.replace(/&/g, "&amp;")}" length="0" type="image/jpeg" />` : "";
 
@@ -7810,11 +8048,11 @@ function generateRssFeedXml(posts: StoredNewsPost[], baseUrl = "https://www.aine
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
-    <title>AI News Maker - Live News Feed (लाइव समाचार)</title>
+    <title>AI News Maker - Live News Feed (à¤²à¤¾à¤‡à¤µ à¤¸à¤®à¤¾à¤šà¤¾à¤°)</title>
     <link>${cleanSiteUrl}/</link>
-    <description>AI News Maker - रियल-टाइम ब्रेकिंग न्यूज़, वीडियो और ग्राफिक्स लाइव RSS फ़ीड</description>
+    <description>AI News Maker - à¤°à¤¿à¤¯à¤²-à¤Ÿà¤¾à¤‡à¤® à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼, à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤”à¤° à¤—à¥à¤°à¤¾à¤«à¤¿à¤•à¥à¤¸ à¤²à¤¾à¤‡à¤µ RSS à¤«à¤¼à¥€à¤¡</description>
     <language>hi</language>
-    <copyright>© ${new Date().getFullYear()} AI News Maker</copyright>
+    <copyright>Â© ${new Date().getFullYear()} AI News Maker</copyright>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
     <atom:link href="${cleanSiteUrl}/rss.xml" rel="self" type="application/rss+xml" />
 ${itemsXml}
@@ -7988,7 +8226,7 @@ function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online"): str
         seenUrls.add(articleUrl);
 
         const pubIso = p.timestamp ? new Date(p.timestamp).toISOString() : new Date().toISOString();
-        const safeTitle = (p.title || p.approvedHeadline || "ताज़ा समाचार")
+        const safeTitle = (p.title || p.approvedHeadline || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°")
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;")
@@ -8132,10 +8370,10 @@ interface AdminRssSourceRecord {
 const DEFAULT_PRODUCTION_RSS_SOURCES: AdminRssSourceRecord[] = [
   {
     id: "src_1794071001048_maoy",
-    name: "नई दुनिया",
+    name: "à¤¨à¤ˆ à¤¦à¥à¤¨à¤¿à¤¯à¤¾",
     url: "https://www.naidunia.com/madhya-pradesh",
     type: "rss",
-    category: "📍 मध्यप्रदेश",
+    category: "ðŸ“ à¤®à¤§à¥à¤¯à¤ªà¥à¤°à¤¦à¥‡à¤¶",
     isActive: true,
     createdAt: 1794071001048,
   },
@@ -8190,28 +8428,28 @@ function recordDeletedRssSourceId(id: string): void {
 function resolveCategoryKeyFromName(rawCategory: string, sourceUrl = ""): string {
   const c = String(rawCategory || "").toLowerCase();
   const u = String(sourceUrl || "").toLowerCase();
-  if (c.includes("मनोरंजन") || c.includes("entertainment") || c.includes("bollywood") || c.includes("बॉलीवुड") || u.includes("/entertainment") || u.includes("/bollywood")) {
+  if (c.includes("à¤®à¤¨à¥‹à¤°à¤‚à¤œà¤¨") || c.includes("entertainment") || c.includes("bollywood") || c.includes("à¤¬à¥‰à¤²à¥€à¤µà¥à¤¡") || u.includes("/entertainment") || u.includes("/bollywood")) {
     return "entertainment";
   }
-  if (c.includes("मध्यप्रदेश") || c.includes("मध्य प्रदेश") || c.includes("राज्य") || c.includes("state") || c.includes("छत्तीसगढ़") || u.includes("/madhya-pradesh") || u.includes("/chhattisgarh")) {
+  if (c.includes("à¤®à¤§à¥à¤¯à¤ªà¥à¤°à¤¦à¥‡à¤¶") || c.includes("à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶") || c.includes("à¤°à¤¾à¤œà¥à¤¯") || c.includes("state") || c.includes("à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼") || u.includes("/madhya-pradesh") || u.includes("/chhattisgarh")) {
     return "state";
   }
-  if (c.includes("राजनीति") || c.includes("politics") || c.includes("चुनाव")) {
+  if (c.includes("à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿") || c.includes("politics") || c.includes("à¤šà¥à¤¨à¤¾à¤µ")) {
     return "politics";
   }
-  if (c.includes("व्यापार") || c.includes("बिजनेस") || c.includes("business") || c.includes("कारोबार")) {
+  if (c.includes("à¤µà¥à¤¯à¤¾à¤ªà¤¾à¤°") || c.includes("à¤¬à¤¿à¤œà¤¨à¥‡à¤¸") || c.includes("business") || c.includes("à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤°")) {
     return "business";
   }
-  if (c.includes("खेल") || c.includes("क्रिकेट") || c.includes("sports") || c.includes("cricket") || u.includes("/sports")) {
+  if (c.includes("à¤–à¥‡à¤²") || c.includes("à¤•à¥à¤°à¤¿à¤•à¥‡à¤Ÿ") || c.includes("sports") || c.includes("cricket") || u.includes("/sports")) {
     return "sports";
   }
-  if (c.includes("अपराध") || c.includes("क्राइम") || c.includes("crime") || u.includes("/crime")) {
+  if (c.includes("à¤…à¤ªà¤°à¤¾à¤§") || c.includes("à¤•à¥à¤°à¤¾à¤‡à¤®") || c.includes("crime") || u.includes("/crime")) {
     return "crime";
   }
-  if (c.includes("टेक") || c.includes("तकनीक") || c.includes("tech") || c.includes("technology")) {
+  if (c.includes("à¤Ÿà¥‡à¤•") || c.includes("à¤¤à¤•à¤¨à¥€à¤•") || c.includes("tech") || c.includes("technology")) {
     return "tech";
   }
-  if (c.includes("देश") || c.includes("राष्ट्रीय") || c.includes("national") || c.includes("india") || u.includes("/national") || u.includes("/india")) {
+  if (c.includes("à¤¦à¥‡à¤¶") || c.includes("à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯") || c.includes("national") || c.includes("india") || u.includes("/national") || u.includes("/india")) {
     return "national";
   }
   return "national";
@@ -8447,28 +8685,28 @@ async function extractBestNewsImage(
 
 // Clean and craft professional factual Hindi headline adhering strictly to user guidelines:
 // Factual, clear, concise, neutral, professional.
-// Avoid clickbaits ("जानिए", "देखिए", "Breaking News:", "Exclusive", "बड़ा खुलासा", "सन्न रह जाएंगे").
-// Remove unnecessary honorifics (श्री, माननीय, जी) if making headline unnecessarily long.
+// Avoid clickbaits ("à¤œà¤¾à¤¨à¤¿à¤", "à¤¦à¥‡à¤–à¤¿à¤", "Breaking News:", "Exclusive", "à¤¬à¤¡à¤¼à¤¾ à¤–à¥à¤²à¤¾à¤¸à¤¾", "à¤¸à¤¨à¥à¤¨ à¤°à¤¹ à¤œà¤¾à¤à¤‚à¤—à¥‡").
+// Remove unnecessary honorifics (à¤¶à¥à¤°à¥€, à¤®à¤¾à¤¨à¤¨à¥€à¤¯, à¤œà¥€) if making headline unnecessarily long.
 function cleanAndCraftHindiHeadline(rawHeadline: string, articleText: string): { title: string; summary: string; location: string } {
   let title = rawHeadline || "";
 
   // 1. Remove clickbait / hype markers
   title = title
-    .replace(/^(breaking\s*news\s*[:\-–—]|ब्रेकिंग\s*न्यूज़\s*[:\-–—]|एक्सक्लूसिव\s*[:\-–—]|exclusive\s*[:\-–—]|बड़ी\s*खबर\s*[:\-–—])/i, "")
-    .replace(/(?:^|\s)(जानिए|देखिए|सुनिए|सन्न\s*रह\s*जाएंगे|हैरान\s*हो\s*जाएंगे|बड़ा\s*खुलासा|चौंकाने\s*वाला|वायरल\s*सच)\s*[:\-–—]?\s*/gu, " ")
-    .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ")
-    .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
-    .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
-    .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/^(breaking\s*news\s*[:\-â€“â€”]|à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—\s*à¤¨à¥à¤¯à¥‚à¤œà¤¼\s*[:\-â€“â€”]|à¤à¤•à¥à¤¸à¤•à¥à¤²à¥‚à¤¸à¤¿à¤µ\s*[:\-â€“â€”]|exclusive\s*[:\-â€“â€”]|à¤¬à¤¡à¤¼à¥€\s*à¤–à¤¬à¤°\s*[:\-â€“â€”])/i, "")
+    .replace(/(?:^|\s)(à¤œà¤¾à¤¨à¤¿à¤|à¤¦à¥‡à¤–à¤¿à¤|à¤¸à¥à¤¨à¤¿à¤|à¤¸à¤¨à¥à¤¨\s*à¤°à¤¹\s*à¤œà¤¾à¤à¤‚à¤—à¥‡|à¤¹à¥ˆà¤°à¤¾à¤¨\s*à¤¹à¥‹\s*à¤œà¤¾à¤à¤‚à¤—à¥‡|à¤¬à¤¡à¤¼à¤¾\s*à¤–à¥à¤²à¤¾à¤¸à¤¾|à¤šà¥Œà¤‚à¤•à¤¾à¤¨à¥‡\s*à¤µà¤¾à¤²à¤¾|à¤µà¤¾à¤¯à¤°à¤²\s*à¤¸à¤š)\s*[:\-â€“â€”]?\s*/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])(à¤®à¤¾à¤¨à¤¨à¥€à¤¯|à¤¸à¤®à¥à¤®à¤¾à¤¨à¤¨à¥€à¤¯|à¤¸à¤®à¥à¤®à¤¾à¤¨à¥€à¤¯|à¤†à¤¦à¤°à¤£à¥€à¤¯|à¤¶à¥à¤°à¥€à¤®à¤¾à¤¨|à¤¶à¥à¤°à¥€à¤®à¤¤à¥€|à¤¸à¥à¤¶à¥à¤°à¥€)\s+/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])à¤¶à¥à¤°à¥€\s+(?=[\p{L}])/gu, " ")
+    .replace(/\s+à¤®à¤¹à¥‹à¤¦à¤¯(?=[,\s.!?à¥¤\n]|$)/gu, "")
+    .replace(/\s+à¤œà¥€(?=[,\s.!?à¥¤\n]|$)/gu, "")
     .replace(/\.{2,}/g, "")
     .replace(/\s+/g, " ")
     .trim();
 
   // 2. Identify location
   const locationList = [
-    "शहडोल", "रीवा", "सीधी", "सतना", "भोपाल", "इंदौर", "जबलपुर", "ग्वालियर", "उज्जैन",
-    "सागर", "छतरपुर", "दमोह", "कटनी", "मंडला", "डिंडोरी", "अनूपपुर", "उमरिया", "सिंगरौली",
-    "दिल्ली", "नई दिल्ली", "मध्य प्रदेश", "उत्तर प्रदेश", "बिहार", "राजस्थान", "मुंबई"
+    "à¤¶à¤¹à¤¡à¥‹à¤²", "à¤°à¥€à¤µà¤¾", "à¤¸à¥€à¤§à¥€", "à¤¸à¤¤à¤¨à¤¾", "à¤­à¥‹à¤ªà¤¾à¤²", "à¤‡à¤‚à¤¦à¥Œà¤°", "à¤œà¤¬à¤²à¤ªà¥à¤°", "à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°", "à¤‰à¤œà¥à¤œà¥ˆà¤¨",
+    "à¤¸à¤¾à¤—à¤°", "à¤›à¤¤à¤°à¤ªà¥à¤°", "à¤¦à¤®à¥‹à¤¹", "à¤•à¤Ÿà¤¨à¥€", "à¤®à¤‚à¤¡à¤²à¤¾", "à¤¡à¤¿à¤‚à¤¡à¥‹à¤°à¥€", "à¤…à¤¨à¥‚à¤ªà¤ªà¥à¤°", "à¤‰à¤®à¤°à¤¿à¤¯à¤¾", "à¤¸à¤¿à¤‚à¤—à¤°à¥Œà¤²à¥€",
+    "à¤¦à¤¿à¤²à¥à¤²à¥€", "à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€", "à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶", "à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶", "à¤¬à¤¿à¤¹à¤¾à¤°", "à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨", "à¤®à¥à¤‚à¤¬à¤ˆ"
   ];
   let detectedLocation = "";
   for (const loc of locationList) {
@@ -8511,25 +8749,25 @@ async function processRssItemWithAiEditorial(
       title: fallback.title,
       summary: fallback.summary,
       location: fallback.location,
-      categoryName: sourceCategory || "देश",
+      categoryName: sourceCategory || "à¤¦à¥‡à¤¶",
     };
   }
 
   try {
     const aiPromise = executeGeminiWithKeyPool(async (ai) => {
-      const prompt = `आप एक वरिष्ठ, निष्पक्ष और तथ्यपरक हिंदी समाचार संपादक हैं।
-नीचे दी गई खबर के विवरण और शीर्षक का विश्लेषण करें और एक तथ्यपरक, स्पष्ट, संक्षिप्त और निष्पक्ष हिंदी हेडलाइन (Headline) व 2 वाक्यों का संक्षिप्त सार (Summary) तैयार करें।
+      const prompt = `à¤†à¤ª à¤à¤• à¤µà¤°à¤¿à¤·à¥à¤ , à¤¨à¤¿à¤·à¥à¤ªà¤•à¥à¤· à¤”à¤° à¤¤à¤¥à¥à¤¯à¤ªà¤°à¤• à¤¹à¤¿à¤‚à¤¦à¥€ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¸à¤‚à¤ªà¤¾à¤¦à¤• à¤¹à¥ˆà¤‚à¥¤
+à¤¨à¥€à¤šà¥‡ à¤¦à¥€ à¤—à¤ˆ à¤–à¤¬à¤° à¤•à¥‡ à¤µà¤¿à¤µà¤°à¤£ à¤”à¤° à¤¶à¥€à¤°à¥à¤·à¤• à¤•à¤¾ à¤µà¤¿à¤¶à¥à¤²à¥‡à¤·à¤£ à¤•à¤°à¥‡à¤‚ à¤”à¤° à¤à¤• à¤¤à¤¥à¥à¤¯à¤ªà¤°à¤•, à¤¸à¥à¤ªà¤·à¥à¤Ÿ, à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤”à¤° à¤¨à¤¿à¤·à¥à¤ªà¤•à¥à¤· à¤¹à¤¿à¤‚à¤¦à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ (Headline) à¤µ 2 à¤µà¤¾à¤•à¥à¤¯à¥‹à¤‚ à¤•à¤¾ à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤¸à¤¾à¤° (Summary) à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¥‡à¤‚à¥¤
 
-नियम:
-1. केवल तथ्यात्मक (factual), स्पष्ट (clear) और न्यूट्रल (neutral) भाषा का प्रयोग करें।
-2. "जानिए", "देखिए", "Breaking News:", "Exclusive", "बड़ा खुलासा" जैसे क्लिकबेट शब्दों का प्रयोग कतई न करें।
-3. अनावश्यक आदरसूचक शब्द (श्री, माननीय, जी) न लगाएं।
-4. हेडलाइन अधिकतम 12 से 14 शब्दों की हो (ताकि 4:5 ग्राफिक कार्ड में 2-3 लाइनों में सही दिखे)।
-5. आउटपुट केवल वैध JSON में दें:
-{"headline": "तथ्यात्मक हेडलाइन", "summary": "संक्षिप्त विवरण", "location": "जिले/शहर का नाम"}`;
+à¤¨à¤¿à¤¯à¤®:
+1. à¤•à¥‡à¤µà¤² à¤¤à¤¥à¥à¤¯à¤¾à¤¤à¥à¤®à¤• (factual), à¤¸à¥à¤ªà¤·à¥à¤Ÿ (clear) à¤”à¤° à¤¨à¥à¤¯à¥‚à¤Ÿà¥à¤°à¤² (neutral) à¤­à¤¾à¤·à¤¾ à¤•à¤¾ à¤ªà¥à¤°à¤¯à¥‹à¤— à¤•à¤°à¥‡à¤‚à¥¤
+2. "à¤œà¤¾à¤¨à¤¿à¤", "à¤¦à¥‡à¤–à¤¿à¤", "Breaking News:", "Exclusive", "à¤¬à¤¡à¤¼à¤¾ à¤–à¥à¤²à¤¾à¤¸à¤¾" à¤œà¥ˆà¤¸à¥‡ à¤•à¥à¤²à¤¿à¤•à¤¬à¥‡à¤Ÿ à¤¶à¤¬à¥à¤¦à¥‹à¤‚ à¤•à¤¾ à¤ªà¥à¤°à¤¯à¥‹à¤— à¤•à¤¤à¤ˆ à¤¨ à¤•à¤°à¥‡à¤‚à¥¤
+3. à¤…à¤¨à¤¾à¤µà¤¶à¥à¤¯à¤• à¤†à¤¦à¤°à¤¸à¥‚à¤šà¤• à¤¶à¤¬à¥à¤¦ (à¤¶à¥à¤°à¥€, à¤®à¤¾à¤¨à¤¨à¥€à¤¯, à¤œà¥€) à¤¨ à¤²à¤—à¤¾à¤à¤‚à¥¤
+4. à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤…à¤§à¤¿à¤•à¤¤à¤® 12 à¤¸à¥‡ 14 à¤¶à¤¬à¥à¤¦à¥‹à¤‚ à¤•à¥€ à¤¹à¥‹ (à¤¤à¤¾à¤•à¤¿ 4:5 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤•à¤¾à¤°à¥à¤¡ à¤®à¥‡à¤‚ 2-3 à¤²à¤¾à¤‡à¤¨à¥‹à¤‚ à¤®à¥‡à¤‚ à¤¸à¤¹à¥€ à¤¦à¤¿à¤–à¥‡)à¥¤
+5. à¤†à¤‰à¤Ÿà¤ªà¥à¤Ÿ à¤•à¥‡à¤µà¤² à¤µà¥ˆà¤§ JSON à¤®à¥‡à¤‚ à¤¦à¥‡à¤‚:
+{"headline": "à¤¤à¤¥à¥à¤¯à¤¾à¤¤à¥à¤®à¤• à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨", "summary": "à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤µà¤¿à¤µà¤°à¤£", "location": "à¤œà¤¿à¤²à¥‡/à¤¶à¤¹à¤° à¤•à¤¾ à¤¨à¤¾à¤®"}`;
 
       const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 1), {
-        contents: `${prompt}\n\nमूल शीर्षक: ${rawTitle}\nमूल विवरण: ${rawDesc.slice(0, 500)}`,
+        contents: `${prompt}\n\nà¤®à¥‚à¤² à¤¶à¥€à¤°à¥à¤·à¤•: ${rawTitle}\nà¤®à¥‚à¤² à¤µà¤¿à¤µà¤°à¤£: ${rawDesc.slice(0, 500)}`,
         config: { temperature: 0.2 },
       });
 
@@ -8549,7 +8787,7 @@ async function processRssItemWithAiEditorial(
         title: parsed.headline.trim(),
         summary: parsed.summary?.trim() || fallback.summary,
         location: parsed.location?.trim() || fallback.location,
-        categoryName: sourceCategory || "देश",
+        categoryName: sourceCategory || "à¤¦à¥‡à¤¶",
       };
     }
   } catch (err: any) {
@@ -8563,7 +8801,7 @@ async function processRssItemWithAiEditorial(
     title: fallback.title,
     summary: fallback.summary,
     location: fallback.location,
-    categoryName: sourceCategory || "देश",
+    categoryName: sourceCategory || "à¤¦à¥‡à¤¶",
   };
 
 }
@@ -8579,12 +8817,12 @@ function decodeHtmlEntities(str: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, " ")
-    .replace(/&ndash;/g, "–")
-    .replace(/&mdash;/g, "—")
-    .replace(/&lsquo;/g, "‘")
-    .replace(/&rsquo;/g, "’")
-    .replace(/&ldquo;/g, "“")
-    .replace(/&rdquo;/g, "”")
+    .replace(/&ndash;/g, "â€“")
+    .replace(/&mdash;/g, "â€”")
+    .replace(/&lsquo;/g, "â€˜")
+    .replace(/&rsquo;/g, "â€™")
+    .replace(/&ldquo;/g, "â€œ")
+    .replace(/&rdquo;/g, "â€")
     .replace(/&hellip;/g, "...")
     .replace(/&#x([0-9a-fA-F]{1,6});/gi, (_match, hexStr) => {
       try {
@@ -8668,7 +8906,7 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
       // 2. Article-Aware AI Editorial Headline & Summary Generation
       const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
 
-      const catName = editorial.categoryName || source.category || "देश";
+      const catName = editorial.categoryName || source.category || "à¤¦à¥‡à¤¶";
       const catKey = resolveCategoryKeyFromName(catName, link || source.url);
 
       const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
@@ -8690,12 +8928,12 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
         categoryName: catName,
         publishedTime: formatRelativeTime(timestamp),
         imageUrl,
-        breaking: editorial.title.includes("बड़ा") || editorial.title.includes("फैसला") || editorial.title.includes("कार्रवाई"),
+        breaking: editorial.title.includes("à¤¬à¤¡à¤¼à¤¾") || editorial.title.includes("à¤«à¥ˆà¤¸à¤²à¤¾") || editorial.title.includes("à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ"),
         isExclusive: false,
         isBonus: false,
         rewardCoins: 0,
         timestamp,
-        fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
+        fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nà¤¸à¥à¤°à¥‹à¤¤à¤ƒ ${source.name} (${link})` : editorial.title,
         location: editorial.location || "",
         ingestionStatus: "PARSED",
         approvalStatus: "PENDING_APPROVAL",
@@ -8820,7 +9058,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
     // 2. Article-Aware AI Editorial Headline & Summary
     const editorial = await processRssItemWithAiEditorial(rawTitle, fullArticleText, source.category, source.url);
 
-    const catName = editorial.categoryName || source.category || "देश";
+    const catName = editorial.categoryName || source.category || "à¤¦à¥‡à¤¶";
     const catKey = resolveCategoryKeyFromName(catName, source.url);
 
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
@@ -8839,13 +9077,13 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
 
       category: catKey,
       categoryName: catName,
-      publishedTime: "अभी-अभी",
+      publishedTime: "à¤…à¤­à¥€-à¤…à¤­à¥€",
       imageUrl,
       breaking: false,
       isExclusive: false,
       timestamp: Date.now(),
-      fullContent: `${editorial.title}\n\n${editorial.summary}\n\nवेब लिंक स्रोतः ${source.url}`,
-      location: editorial.location || "वेब डेस्क",
+      fullContent: `${editorial.title}\n\n${editorial.summary}\n\nà¤µà¥‡à¤¬ à¤²à¤¿à¤‚à¤• à¤¸à¥à¤°à¥‹à¤¤à¤ƒ ${source.url}`,
+      location: editorial.location || "à¤µà¥‡à¤¬ à¤¡à¥‡à¤¸à¥à¤•",
       ingestionStatus: "PARSED",
       approvalStatus: "PENDING_APPROVAL",
       publicationStatus: "UNPUBLISHED",
@@ -8870,10 +9108,10 @@ function verifyIsAdminUser(req: any): boolean {
 
 // 1. GET all admin RSS/Web sources
 function formatHindiDate(timestamp?: number | string | null): string {
-  if (!timestamp) return 'पूर्व में जोड़ा गया (Legacy)';
+  if (!timestamp) return 'à¤ªà¥‚à¤°à¥à¤µ à¤®à¥‡à¤‚ à¤œà¥‹à¤¡à¤¼à¤¾ à¤—à¤¯à¤¾ (Legacy)';
   const date = new Date(typeof timestamp === 'string' ? (isNaN(Number(timestamp)) ? timestamp : Number(timestamp)) : timestamp);
-  if (isNaN(date.getTime()) || date.getFullYear() < 2024) return 'पूर्व में जोड़ा गया (Legacy)';
-  const monthsHindi = ['जनवरी', 'फ़रवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'];
+  if (isNaN(date.getTime()) || date.getFullYear() < 2024) return 'à¤ªà¥‚à¤°à¥à¤µ à¤®à¥‡à¤‚ à¤œà¥‹à¤¡à¤¼à¤¾ à¤—à¤¯à¤¾ (Legacy)';
+  const monthsHindi = ['à¤œà¤¨à¤µà¤°à¥€', 'à¤«à¤¼à¤°à¤µà¤°à¥€', 'à¤®à¤¾à¤°à¥à¤š', 'à¤…à¤ªà¥à¤°à¥ˆà¤²', 'à¤®à¤ˆ', 'à¤œà¥‚à¤¨', 'à¤œà¥à¤²à¤¾à¤ˆ', 'à¤…à¤—à¤¸à¥à¤¤', 'à¤¸à¤¿à¤¤à¤‚à¤¬à¤°', 'à¤…à¤•à¥à¤Ÿà¥‚à¤¬à¤°', 'à¤¨à¤µà¤‚à¤¬à¤°', 'à¤¦à¤¿à¤¸à¤‚à¤¬à¤°'];
   return `${date.getDate()} ${monthsHindi[date.getMonth()]} ${date.getFullYear()}`;
 }
 
@@ -8889,7 +9127,7 @@ app.get("/api/admin/rss-sources", requireAdminMiddleware, (_req, res) => {
 app.post("/api/admin/rss-sources", requireAdminMiddleware, (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
-      return res.status(403).json({ error: "अनधिकृत: RSS फ़ीड्स और वेब लिंक्स केवल एडमिन द्वारा प्रबंधित किए जा सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: RSS à¤«à¤¼à¥€à¤¡à¥à¤¸ à¤”à¤° à¤µà¥‡à¤¬ à¤²à¤¿à¤‚à¤•à¥à¤¸ à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤¿à¤ à¤œà¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const payload = req.body;
     const existingSources = loadRssSourcesDatabase();
@@ -8906,7 +9144,7 @@ app.post("/api/admin/rss-sources", requireAdminMiddleware, (req, res) => {
         name: (payload.name || (payload.type === 'web' ? 'Web Link' : 'RSS Source')).trim(),
         url: payload.url.trim(),
         type: payload.type === "web" ? "web" : "rss",
-        category: payload.category || "देश",
+        category: payload.category || "à¤¦à¥‡à¤¶",
         isActive: payload.isActive !== false,
         createdAt: payload.createdAt || now,
         addedAt: payload.addedAt || payload.createdAt || now,
@@ -8962,7 +9200,7 @@ app.post("/api/admin/rss-sources", requireAdminMiddleware, (req, res) => {
 app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
-      return res.status(403).json({ error: "अनधिकृत: RSS फ़ीड्स हटाना केवल एडमिन के लिए अनुमत है।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: RSS à¤«à¤¼à¥€à¤¡à¥à¤¸ à¤¹à¤Ÿà¤¾à¤¨à¤¾ à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤•à¥‡ à¤²à¤¿à¤ à¤…à¤¨à¥à¤®à¤¤ à¤¹à¥ˆà¥¤" });
     }
     const { id } = req.params;
     if (!id) return res.status(400).json({ error: "Source ID is required" });
@@ -9121,27 +9359,27 @@ function escapeXmlChars(unsafe: string): string {
 app.post("/api/convert-web-to-rss", async (req, res) => {
   try {
     const rawUrl = (req.body?.url || "").trim();
-    const category = (req.body?.category || "देश").trim();
+    const category = (req.body?.category || "à¤¦à¥‡à¤¶").trim();
 
     if (!rawUrl) {
-      return res.status(400).json({ error: "कृपया मान्य वेबसाइट या श्रेणी URL दर्ज करें।" });
+      return res.status(400).json({ error: "à¤•à¥ƒà¤ªà¤¯à¤¾ à¤®à¤¾à¤¨à¥à¤¯ à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ à¤¯à¤¾ à¤¶à¥à¤°à¥‡à¤£à¥€ URL à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤" });
     }
 
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(rawUrl);
     } catch {
-      return res.status(400).json({ error: "अमान्य URL प्रारूप। कृपया पूर्ण URL दर्ज करें (जैसे: https://example.com/news)" });
+      return res.status(400).json({ error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ URL à¤ªà¥à¤°à¤¾à¤°à¥‚à¤ªà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥‚à¤°à¥à¤£ URL à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚ (à¤œà¥ˆà¤¸à¥‡: https://example.com/news)" });
     }
 
     if (isPrivateOrInternalUrl(rawUrl)) {
-      return res.status(403).json({ error: "सुरक्षा प्रतिबंध: स्थानीय, निजी या आंतरिक नेटवर्क पते अनुमत नहीं हैं।" });
+      return res.status(403).json({ error: "à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§: à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯, à¤¨à¤¿à¤œà¥€ à¤¯à¤¾ à¤†à¤‚à¤¤à¤°à¤¿à¤• à¤¨à¥‡à¤Ÿà¤µà¤°à¥à¤• à¤ªà¤¤à¥‡ à¤…à¤¨à¥à¤®à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     // Reject individual article URLs
     if (isIndividualArticleUrl(rawUrl)) {
       return res.status(400).json({
-        error: "यह लिंक एक व्यक्तिगत लेख (Individual Article) का प्रतीत होता है। कृपया किसी समाचार चैनल का मुख्य होमपेज (Homepage) या श्रेणी/लिस्टिंग पेज (Category/Listing Page) दर्ज करें।"
+        error: "à¤¯à¤¹ à¤²à¤¿à¤‚à¤• à¤à¤• à¤µà¥à¤¯à¤•à¥à¤¤à¤¿à¤—à¤¤ à¤²à¥‡à¤– (Individual Article) à¤•à¤¾ à¤ªà¥à¤°à¤¤à¥€à¤¤ à¤¹à¥‹à¤¤à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤•à¤¿à¤¸à¥€ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤šà¥ˆà¤¨à¤² à¤•à¤¾ à¤®à¥à¤–à¥à¤¯ à¤¹à¥‹à¤®à¤ªà¥‡à¤œ (Homepage) à¤¯à¤¾ à¤¶à¥à¤°à¥‡à¤£à¥€/à¤²à¤¿à¤¸à¥à¤Ÿà¤¿à¤‚à¤— à¤ªà¥‡à¤œ (Category/Listing Page) à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤"
       });
     }
 
@@ -9155,7 +9393,7 @@ app.post("/api/convert-web-to-rss", async (req, res) => {
 
     if (!response.ok) {
       return res.status(400).json({
-        error: `वेबसाइट से कनेक्ट करने में त्रुटि (HTTP ${response.status})। कृपया URL जांचें या बाद में पुनः प्रयास करें।`
+        error: `à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ à¤¸à¥‡ à¤•à¤¨à¥‡à¤•à¥à¤Ÿ à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¤à¥à¤°à¥à¤Ÿà¤¿ (HTTP ${response.status})à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ URL à¤œà¤¾à¤‚à¤šà¥‡à¤‚ à¤¯à¤¾ à¤¬à¤¾à¤¦ à¤®à¥‡à¤‚ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤`
       });
     }
 
@@ -9173,7 +9411,7 @@ app.post("/api/convert-web-to-rss", async (req, res) => {
             success: true,
             feedUrl: resolvedFeedUrl,
             isNativeFeed: true,
-            message: "इस वेबसाइट पर पहले से ही आधिकारिक RSS 2.0 फ़ीड उपलब्ध है।"
+            message: "à¤‡à¤¸ à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ à¤ªà¤° à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¹à¥€ à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• RSS 2.0 à¤«à¤¼à¥€à¤¡ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤"
           });
         }
       }
@@ -9316,7 +9554,7 @@ app.post("/api/convert-web-to-rss", async (req, res) => {
 
     if (items.length < 2) {
       return res.status(400).json({
-        error: "इस वेबपेज से कोई समाचार सूची (Article Listings) नहीं मिल सकी। कृपया मान्य होमपेज या श्रेणी पेज का उपयोग करें।"
+        error: "à¤‡à¤¸ à¤µà¥‡à¤¬à¤ªà¥‡à¤œ à¤¸à¥‡ à¤•à¥‹à¤ˆ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¸à¥‚à¤šà¥€ (Article Listings) à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤² à¤¸à¤•à¥€à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥‹à¤®à¤ªà¥‡à¤œ à¤¯à¤¾ à¤¶à¥à¤°à¥‡à¤£à¥€ à¤ªà¥‡à¤œ à¤•à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤°à¥‡à¤‚à¥¤"
       });
     }
 
@@ -9610,7 +9848,7 @@ setTimeout(executeRssSynchronization, 15000);
 app.post("/api/admin/rss-sync", requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
-      return res.status(403).json({ success: false, error: "अनधिकृत: केवल एडमिन लाइव RSS सिंक चला सकते हैं।" });
+      return res.status(403).json({ success: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤²à¤¾à¤‡à¤µ RSS à¤¸à¤¿à¤‚à¤• à¤šà¤²à¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const result = await executeRssSynchronization();
     return res.json({
@@ -9751,7 +9989,7 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
 app.post("/api/admin/web-scrape", requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
-      return res.status(403).json({ success: false, error: "अनधिकृत: केवल एडमिन लाइव वेब स्क्रैप चला सकते हैं।" });
+      return res.status(403).json({ success: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤²à¤¾à¤‡à¤µ à¤µà¥‡à¤¬ à¤¸à¥à¤•à¥à¤°à¥ˆà¤ª à¤šà¤²à¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const result = await executeWebScrapeSynchronization();
     return res.json({
@@ -10101,7 +10339,7 @@ app.post("/api/whatsapp/link/generate-code", requireAuthMiddleware, async (req: 
     const authUser = req.user;
     const userEmail = (authUser?.email || "").toLowerCase().trim();
     const userId = (authUser?.userId || userEmail).toString().trim();
-    if (!userEmail) return res.status(400).json({ success: false, error: "ईमेल पता आवश्यक है।" });
+    if (!userEmail) return res.status(400).json({ success: false, error: "à¤ˆà¤®à¥‡à¤² à¤ªà¤¤à¤¾ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤" });
 
     // Rate limit: 60s resend cooldown
     const lastTime = recentLinkCodeRequests.get(userEmail);
@@ -10110,7 +10348,7 @@ app.post("/api/whatsapp/link/generate-code", requireAuthMiddleware, async (req: 
       const waitSec = Math.ceil((60000 - (now - lastTime)) / 1000);
       return res.status(429).json({
         success: false,
-        error: `कृपया ${waitSec} सेकंड प्रतीक्षा करें और पुनः प्रयास करें।`,
+        error: `à¤•à¥ƒà¤ªà¤¯à¤¾ ${waitSec} à¤¸à¥‡à¤•à¤‚à¤¡ à¤ªà¥à¤°à¤¤à¥€à¤•à¥à¤·à¤¾ à¤•à¤°à¥‡à¤‚ à¤”à¤° à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤`,
         cooldownRemainingSeconds: waitSec,
       });
     }
@@ -10147,11 +10385,11 @@ app.post("/api/whatsapp/link/generate-code", requireAuthMiddleware, async (req: 
       expiresInSeconds: 600,
       expiresAt,
       officialWhatsAppNumber: officialNumber,
-      message: "6-अंकों का लिंकिंग कोड जनरेट किया गया। यह 10 मिनट के लिए मान्य है।",
+      message: "6-à¤…à¤‚à¤•à¥‹à¤‚ à¤•à¤¾ à¤²à¤¿à¤‚à¤•à¤¿à¤‚à¤— à¤•à¥‹à¤¡ à¤œà¤¨à¤°à¥‡à¤Ÿ à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤ à¤¯à¤¹ 10 à¤®à¤¿à¤¨à¤Ÿ à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥ˆà¥¤",
     });
   } catch (err: any) {
     console.error("[WhatsApp:LinkCode] Error generating code:", err);
-    return res.status(500).json({ success: false, error: "लिंकिंग कोड जनरेट करने में विफलता आई।" });
+    return res.status(500).json({ success: false, error: "à¤²à¤¿à¤‚à¤•à¤¿à¤‚à¤— à¤•à¥‹à¤¡ à¤œà¤¨à¤°à¥‡à¤Ÿ à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤µà¤¿à¤«à¤²à¤¤à¤¾ à¤†à¤ˆà¥¤" });
   }
 });
 
@@ -10159,7 +10397,7 @@ app.get("/api/whatsapp/link/status", requireAuthMiddleware, async (req: any, res
   try {
     const authUser = req.user;
     const userEmail = (authUser?.email || "").toLowerCase().trim();
-    if (!userEmail) return res.status(400).json({ success: false, error: "ईमेल पता आवश्यक है।" });
+    if (!userEmail) return res.status(400).json({ success: false, error: "à¤ˆà¤®à¥‡à¤² à¤ªà¤¤à¤¾ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤" });
 
     let userDoc: any = null;
     if (centralDb && centralDb.useFirestore) {
@@ -10191,7 +10429,7 @@ app.get("/api/whatsapp/link/status", requireAuthMiddleware, async (req: any, res
     });
   } catch (err: any) {
     console.error("[WhatsApp:LinkStatus] Error fetching status:", err);
-    return res.status(500).json({ success: false, error: "स्टेटस प्राप्त करने में समस्या आई।" });
+    return res.status(500).json({ success: false, error: "à¤¸à¥à¤Ÿà¥‡à¤Ÿà¤¸ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¸à¤®à¤¸à¥à¤¯à¤¾ à¤†à¤ˆà¥¤" });
   }
 });
 
@@ -10199,7 +10437,7 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req: any, re
   try {
     const authUser = req.user;
     const userEmail = (authUser?.email || "").toLowerCase().trim();
-    if (!userEmail) return res.status(400).json({ success: false, error: "ईमेल पता आवश्यक है।" });
+    if (!userEmail) return res.status(400).json({ success: false, error: "à¤ˆà¤®à¥‡à¤² à¤ªà¤¤à¤¾ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤" });
 
     // Look up the phone being unlinked so we can release it in whatsapp_phone_registry (Task C & Task 3)
     let unlinkingPhone = "";
@@ -10256,11 +10494,11 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req: any, re
 
     return res.json({
       success: true,
-      message: "WhatsApp अकाउंट सफलतापूर्वक अनलिंक कर दिया गया है।",
+      message: "WhatsApp à¤…à¤•à¤¾à¤‰à¤‚à¤Ÿ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤…à¤¨à¤²à¤¿à¤‚à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤",
     });
   } catch (err: any) {
     console.error("[WhatsApp:Unlink] Error unlinking account:", err);
-    return res.status(500).json({ success: false, error: "अकाउंट अनलिंक करने में समस्या आई।" });
+    return res.status(500).json({ success: false, error: "à¤…à¤•à¤¾à¤‰à¤‚à¤Ÿ à¤…à¤¨à¤²à¤¿à¤‚à¤• à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¸à¤®à¤¸à¥à¤¯à¤¾ à¤†à¤ˆà¥¤" });
   }
 });
 
@@ -10385,7 +10623,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       (reqEmail.includes("breakingnewswala") || reqEmail.includes("admin"));
 
     if ((cleanId === 'admin' || isMasterAdminEmail || isSubAdminEmail) && !isAdmin) {
-      return res.status(403).json({ error: "अनधिकृत: एडमिन प्रोफाइल केवल अधिकृत मास्टर एडमिन द्वारा ही संशोधित की जा सकती है" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤à¤¡à¤®à¤¿à¤¨ à¤ªà¥à¤°à¥‹à¤«à¤¾à¤‡à¤² à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¹à¥€ à¤¸à¤‚à¤¶à¥‹à¤§à¤¿à¤¤ à¤•à¥€ à¤œà¤¾ à¤¸à¤•à¤¤à¥€ à¤¹à¥ˆ" });
     }
 
     const existing: any = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles['breakingnewswala.com@gmail.com'] || allProfiles['usr_627265616b69'] : isSubAdminEmail ? allProfiles['admin.ainewsmaker@gmail.com'] || allProfiles['user-1791697518060'] : null) || {};
@@ -10395,7 +10633,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
 
     const isTargetBlocked = Boolean(existing.isBlocked) || checkUserAccess(cleanId).blocked || (profile.email && checkUserAccess(profile.email).blocked);
     if (isTargetBlocked && !isAdmin) {
-      return res.status(403).json({ success: false, error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है।", blocked: true });
+      return res.status(403).json({ success: false, error: "à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤", blocked: true });
     }
 
     // Username and Mobile locking:
@@ -10428,7 +10666,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         if (!isSameUser) {
           const otherUname = (p.username || "").toLowerCase().trim().replace(/^@/, '');
           if (otherUname && otherUname === normUsername) {
-            return res.status(409).json({ success: false, error: "यह यूज़रनेम पहले से किसी अन्य यूज़र द्वारा उपयोग में है।" });
+            return res.status(409).json({ success: false, error: "à¤¯à¤¹ à¤¯à¥‚à¥›à¤°à¤¨à¥‡à¤® à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤•à¤¿à¤¸à¥€ à¤…à¤¨à¥à¤¯ à¤¯à¥‚à¥›à¤° à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤®à¥‡à¤‚ à¤¹à¥ˆà¥¤" });
           }
         }
       }
@@ -10451,7 +10689,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         if (!isSameUser) {
           const otherMob = (p.mobileNumber || p.mobile || "").toString().replace(/\D/g, '').slice(-10);
           if (otherMob.length === 10 && otherMob === normMobile) {
-            return res.status(409).json({ success: false, error: "यह मोबाइल नंबर पहले से पंजीकृत है।" });
+            return res.status(409).json({ success: false, error: "à¤¯à¤¹ à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¨à¤‚à¤¬à¤° à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤ªà¤‚à¤œà¥€à¤•à¥ƒà¤¤ à¤¹à¥ˆà¥¤" });
           }
         }
       }
@@ -10482,7 +10720,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const isProfileComplete = Boolean(
       (profile.isProfileComplete !== undefined ? profile.isProfileComplete : existing.isProfileComplete) &&
       finalChannelHi &&
-      finalChannelHi !== "सेटअप अधूरा (Incomplete)" &&
+      finalChannelHi !== "à¤¸à¥‡à¤Ÿà¤…à¤ª à¤…à¤§à¥‚à¤°à¤¾ (Incomplete)" &&
       (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
     );
 
@@ -10519,6 +10757,14 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const safeIsLocked = isAdmin
       ? (profile.isLocked !== undefined ? Boolean(profile.isLocked) : Boolean(existing.isLocked))
       : (isProfileComplete ? true : false);
+
+    // Entitlement Check for Custom Footer: Only Pro and VIP users (or admins) can set custom footer
+    const effectiveTier = (safeTier || existing.tier || 'basic').toLowerCase();
+    const isProOrVipUser = effectiveTier === 'pro' || effectiveTier === 'professional' || effectiveTier === 'vip' || effectiveTier === 'ultra' || isMasterAdminEmail || isSubAdminEmail;
+
+    if (profile.customFooterPng && !isProOrVipUser) {
+      return res.status(403).json({ error: "à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥‚à¤Ÿà¤° à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤•à¥‡à¤µà¤² Pro à¤”à¤° VIP Desk à¤ªà¥à¤²à¤¾à¤¨ à¤¯à¥‚à¤œà¤¼à¤°à¥à¤¸ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤…à¤ªà¤¨à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤" });
+    }
 
     const updated: StoredUserProfile = {
       ...existing,
@@ -10573,7 +10819,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       socialIcons: profile.socialIcons || existing.socialIcons,
       socialLinks: profile.socialLinks ? { ...(existing.socialLinks || {}), ...profile.socialLinks } : existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== undefined ? profile.customHeaderPng : existing.customHeaderPng,
-      customFooterPng: profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng,
+      customFooterPng: isProOrVipUser
+        ? (profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng)
+        : undefined,
       updatedAt: Date.now(),
     };
 
@@ -10594,7 +10842,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       allProfiles['usr_627265616b69'] = { ...updated, userId: 'usr_627265616b69', uid: 'usr_627265616b69' };
       try {
         saveAdminBranding({
-          channelNameHi: updated.channelNameHi || "ब्रेकिंग न्यूज़ वाला",
+          channelNameHi: updated.channelNameHi || "à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¥› à¤µà¤¾à¤²à¤¾",
           channelNameEn: updated.channelNameEn || "BREAKING NEWS WALA",
           channelLogoUrl: updated.channelLogoUrl || "",
           websiteUrl: updated.websiteUrl || "",
@@ -10773,7 +11021,7 @@ app.get("/api/admin/branding", requireAdminMiddleware, (_req, res) => {
 app.post("/api/admin/branding", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही ब्रांडिंग प्रबंधित कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤¬à¥à¤°à¤¾à¤‚à¤¡à¤¿à¤‚à¤— à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const payload = req.body;
     const existing = loadAdminBranding();
@@ -10850,7 +11098,7 @@ app.get("/api/custom-frames", (req, res) => {
 app.post("/api/custom-frames", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही कस्टम फ्रेम्स जोड़ सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥à¤°à¥‡à¤®à¥à¤¸ à¤œà¥‹à¤¡à¤¼ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const payload = req.body;
     if (!payload || (!payload.assetUrl && !payload.headerUrl && !payload.footerUrl)) {
@@ -10859,7 +11107,7 @@ app.post("/api/custom-frames", requireMasterAdminMiddleware, (req, res) => {
     const newFrame: StoredCustomFrame = {
       id: payload.id || `cf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       userId: (payload.userId || 'general').toLowerCase().trim(),
-      name: (payload.name || 'कस्टम फ्रेम').trim(),
+      name: (payload.name || 'à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥à¤°à¥‡à¤®').trim(),
       assetUrl: payload.assetUrl || payload.headerUrl || payload.footerUrl || '',
       headerUrl: payload.headerUrl,
       footerUrl: payload.footerUrl,
@@ -10879,7 +11127,7 @@ app.post("/api/custom-frames", requireMasterAdminMiddleware, (req, res) => {
 app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही कस्टम फ्रेम्स हटा सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥à¤°à¥‡à¤®à¥à¤¸ à¤¹à¤Ÿà¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const { id } = req.params;
     let all = loadCustomFramesDatabase();
@@ -10929,10 +11177,10 @@ function getDefaultAssetLibraries(): any[] {
     },
     {
       id: "callout_bully_forward_story",
-      name: "पूरी खबर विवरण कॉलआउट (Full Story Callout)",
+      name: "à¤ªà¥‚à¤°à¥€ à¤–à¤¬à¤° à¤µà¤¿à¤µà¤°à¤£ à¤•à¥‰à¤²à¤†à¤‰à¤Ÿ (Full Story Callout)",
       category: "general",
       type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>à¤ªà¥‚à¤°à¥€ à¤–à¤¬à¤° à¤µà¤¿à¤µà¤°à¤£ à¤¨à¥€à¤šà¥‡ à¤¡à¤¿à¤¸à¥à¤•à¥à¤°à¤¿à¤ªà¥à¤¶à¤¨ à¤®à¥‡à¤‚ à¤ªà¤¢à¤¼à¥‡à¤‚</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
       enabled: true,
       createdAt: 1793880000000,
       updatedAt: 1793880000000,
@@ -11629,7 +11877,8 @@ app.get("/api/dynamic-frames", async (req, res) => {
       ? frames
       : frames.filter(
           (f) =>
-            (f.publicationStatus === "published" || f.approvalStatus === "APPROVED") &&
+            f.publicationStatus === "published" &&
+            f.approvalStatus === "APPROVED" &&
             !f.isTestFrame &&
             f.designCategory !== "TEST_FRAMES" &&
             !f.isSampleTestTemplate &&
@@ -11699,6 +11948,7 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
       Boolean(frame.isTestFrame) ||
       frame.designCategory === "TEST_FRAMES" ||
       frame.publicationStatus !== "published" ||
+      frame.approvalStatus !== "APPROVED" ||
       Boolean(frame.isSampleTestTemplate) ||
       Boolean(frame.isSample) ||
       frame.name === "11111" ||
@@ -11708,7 +11958,7 @@ app.get("/api/dynamic-frames/:id", async (req, res) => {
       frame.designCategory === "Sample Frames";
 
     if (isTestFrame && !isMaster) {
-      return res.status(403).json({ error: "Access denied: Only Master Admin can view test frames." });
+      return res.status(403).json({ error: "Access denied: Only Master Admin can view unapproved or test frames." });
     }
 
     return res.json({ success: true, frame });
@@ -11735,6 +11985,25 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
     const approvalStatus = payload.approvalStatus || (isTestFrame ? "PENDING_TEST" : "APPROVED");
     const publicationStatus = isTestFrame ? "draft" : (payload.publicationStatus || "published");
     const designCategory = payload.designCategory || (isTestFrame ? "TEST_FRAMES" : (payload.aspectRatio === "9:16" ? "Story Frames" : "Regular Frames"));
+
+    // Validate Banned Footer Color
+    const bannedColor = payload.footerConfig?.bannedFooterColor || payload.bannedFooterColor;
+    const footerBg = payload.footerConfig?.footerBgColor || payload.footerBgColor;
+    const footerText = payload.footerConfig?.footerTextColor || payload.footerTextColor;
+
+    if (bannedColor) {
+      const cleanBanned = String(bannedColor).trim().toLowerCase();
+      if (footerBg && cleanBanned === String(footerBg).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `à¤«à¥‚à¤Ÿà¤° à¤¬à¥ˆà¤•à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡ à¤•à¤²à¤° '${footerBg}' à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ (Banned) à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¦à¥‚à¤¸à¤°à¤¾ à¤°à¤‚à¤— à¤šà¥à¤¨à¥‡à¤‚à¥¤`
+        });
+      }
+      if (footerText && cleanBanned === String(footerText).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `à¤«à¥‚à¤Ÿà¤° à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤•à¤²à¤° '${footerText}' à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ (Banned) à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¦à¥‚à¤¸à¤°à¤¾ à¤°à¤‚à¤— à¤šà¥à¤¨à¥‡à¤‚à¥¤`
+        });
+      }
+    }
 
     const newFrame = {
       ...payload,
@@ -11778,6 +12047,8 @@ app.post("/api/dynamic-frames", requireMasterAdminMiddleware, async (req, res) =
         footerTextColor: payload.footerConfig?.footerTextColor || "#000000",
         footerWidthPct: typeof payload.footerConfig?.footerWidthPct === 'number' ? Math.max(70, Math.min(100, payload.footerConfig.footerWidthPct)) : 100,
         footerAlignment: payload.footerConfig?.footerAlignment || 'center',
+        bannedFooterColor: payload.footerConfig?.bannedFooterColor || payload.bannedFooterColor || '',
+        primaryFooterColor: payload.footerConfig?.primaryFooterColor || payload.primaryFooterColor || '#FACC15',
       },
       watermarkConfig: payload.watermarkConfig || { enabled: false },
       fullStoryCalloutConfig: payload.fullStoryCalloutConfig || { enabled: false },
@@ -11840,28 +12111,60 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
 
     const updatedFrame = deepMergeFrameConfig(existing, payload);
 
-    if (payload.designCategory === 'TEST_FRAMES' || payload.isTestFrame === true) {
-      updatedFrame.isTestFrame = true;
-      updatedFrame.designCategory = 'TEST_FRAMES';
-      if (!payload.approvalStatus) {
-        updatedFrame.approvalStatus = updatedFrame.approvalStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_TEST';
+    // 1. Category Assignment: updating category updates category ONLY
+    if (payload.designCategory !== undefined) {
+      updatedFrame.designCategory = payload.designCategory;
+      if (payload.designCategory === 'TEST_FRAMES') {
+        updatedFrame.isTestFrame = true;
+      } else if (payload.isTestFrame !== undefined) {
+        updatedFrame.isTestFrame = Boolean(payload.isTestFrame);
       }
-      updatedFrame.publicationStatus = 'draft';
-    } else if (
-      (payload.designCategory && payload.designCategory !== 'TEST_FRAMES') ||
-      payload.approvalStatus === 'APPROVED' ||
-      payload.isTestFrame === false
-    ) {
-      updatedFrame.isTestFrame = false;
-      if (payload.designCategory && payload.designCategory !== 'TEST_FRAMES') {
-        updatedFrame.designCategory = payload.designCategory;
-      }
-      if (payload.approvalStatus) {
+    } else if (payload.isTestFrame !== undefined) {
+      updatedFrame.isTestFrame = Boolean(payload.isTestFrame);
+    }
+
+    // 2. Approval Status: only updated if explicitly provided by Master Admin
+    if (payload.approvalStatus !== undefined) {
+      const allowedApprovals = ['PENDING_TEST', 'APPROVED', 'REJECTED'];
+      if (allowedApprovals.includes(payload.approvalStatus)) {
         updatedFrame.approvalStatus = payload.approvalStatus;
-      } else if (updatedFrame.approvalStatus !== 'REJECTED') {
-        updatedFrame.approvalStatus = 'APPROVED';
       }
-      updatedFrame.publicationStatus = 'published';
+    } else if (!updatedFrame.approvalStatus) {
+      updatedFrame.approvalStatus = updatedFrame.isTestFrame ? 'PENDING_TEST' : 'APPROVED';
+    }
+
+    // 3. Publication Status: only updated if explicitly provided by Master Admin
+    if (payload.publicationStatus !== undefined) {
+      const allowedPub = ['draft', 'published', 'archived'];
+      if (allowedPub.includes(payload.publicationStatus)) {
+        updatedFrame.publicationStatus = payload.publicationStatus;
+      }
+    } else if (!updatedFrame.publicationStatus) {
+      updatedFrame.publicationStatus = updatedFrame.isTestFrame ? 'draft' : 'published';
+    }
+
+    // 4. Validate Banned Footer Color
+    const bannedColor = (
+      payload.footerConfig?.bannedFooterColor ||
+      payload.bannedFooterColor ||
+      existing?.footerConfig?.bannedFooterColor ||
+      existing?.bannedFooterColor
+    );
+    const footerBg = payload.footerConfig?.footerBgColor || payload.footerBgColor || updatedFrame.footerConfig?.footerBgColor;
+    const footerText = payload.footerConfig?.footerTextColor || payload.footerTextColor || updatedFrame.footerConfig?.footerTextColor;
+
+    if (bannedColor) {
+      const cleanBanned = String(bannedColor).trim().toLowerCase();
+      if (footerBg && cleanBanned === String(footerBg).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `à¤«à¥‚à¤Ÿà¤° à¤¬à¥ˆà¤•à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡ à¤•à¤²à¤° '${footerBg}' à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ (Banned) à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¦à¥‚à¤¸à¤°à¤¾ à¤°à¤‚à¤— à¤šà¥à¤¨à¥‡à¤‚à¥¤`
+        });
+      }
+      if (footerText && cleanBanned === String(footerText).trim().toLowerCase()) {
+        return res.status(400).json({
+          error: `à¤«à¥‚à¤Ÿà¤° à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤•à¤²à¤° '${footerText}' à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ (Banned) à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¦à¥‚à¤¸à¤°à¤¾ à¤°à¤‚à¤— à¤šà¥à¤¨à¥‡à¤‚à¥¤`
+        });
+      }
     }
 
     // Save single frame document
@@ -11878,7 +12181,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, 
   try {
     const { id } = req.params;
     if (id === 'graphic_001') {
-      return res.status(400).json({ error: "सुरक्षित डिफ़ॉल्ट फ्रेम 'Regular Clean News Frame' को हटाया नहीं जा सकता।" });
+      return res.status(400).json({ error: "à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¡à¤¿à¤«à¤¼à¥‰à¤²à¥à¤Ÿ à¤«à¥à¤°à¥‡à¤® 'Regular Clean News Frame' à¤•à¥‹ à¤¹à¤Ÿà¤¾à¤¯à¤¾ à¤¨à¤¹à¥€à¤‚ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾à¥¤" });
     }
 
     // Durable Firestore and local tombstone recording + document deletion
@@ -11943,7 +12246,7 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
           it.category === 'location_badge' ||
           it.type === 'location' ||
           it.type === 'badge' ||
-          (it.name && /badge|बैज|location|लोकेशन|pin|पिंन/i.test(it.name))
+          (it.name && /badge|à¤¬à¥ˆà¤œ|location|à¤²à¥‹à¤•à¥‡à¤¶à¤¨|pin|à¤ªà¤¿à¤‚à¤¨/i.test(it.name))
         );
       } else if (q === 'callout_png' || q === 'callout' || q === 'story_callout' || q === 'full_story' || q === 'description_callout') {
         items = items.filter((it: any) =>
@@ -11953,7 +12256,7 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
           it.type === 'story_callout' ||
           it.type === 'full_story' ||
           it.type === 'description_callout' ||
-          (it.name && /callout|कॉलआउट|विवरण|डिस्क्रिप्शन|story|bully|forward/i.test(it.name))
+          (it.name && /callout|à¤•à¥‰à¤²à¤†à¤‰à¤Ÿ|à¤µà¤¿à¤µà¤°à¤£|à¤¡à¤¿à¤¸à¥à¤•à¥à¤°à¤¿à¤ªà¥à¤¶à¤¨|story|bully|forward/i.test(it.name))
         );
       } else if (q === 'suvichar_background' || q === 'suvichar') {
         items = items.filter((it: any) =>
@@ -11966,7 +12269,7 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
           it.type === 'custom_footer' ||
           it.category === 'custom_footer' ||
           it.type === 'footer' ||
-          (it.name && /footer|फ़ुटर|फुटर/i.test(it.name))
+          (it.name && /footer|à¤«à¤¼à¥à¤Ÿà¤°|à¤«à¥à¤Ÿà¤°/i.test(it.name))
         );
       } else {
         items = items.filter((it: any) => it.type === q || it.category === q);
@@ -12062,6 +12365,15 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
     if (!name || !type || (!url && type !== 'custom_footer')) {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer'), and URL (or footerConfig for custom_footer) are required." });
     }
+
+    // Master Admin Only for Custom Footer operations
+    const isCustomFooter = type === 'custom_footer' || category === 'custom_footer' || footerConfig !== undefined;
+    if (isCustomFooter && !isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({
+        error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥‚à¤Ÿà¤° à¤²à¤¾à¤‡à¤¬à¥à¤°à¥‡à¤°à¥€ à¤®à¥‡à¤‚ à¤¨à¤ˆ à¤¸à¤‚à¤ªà¤¤à¥à¤¤à¤¿ à¤œà¥‹à¤¡à¤¼ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤"
+      });
+    }
+
     const newItem = {
       id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: String(name).trim(),
@@ -12088,15 +12400,33 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
 app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, enabled, url, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    const { name, type, category, enabled, url, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
       return res.status(404).json({ error: "Asset item not found." });
     }
+
+    const target = items[idx];
+    // Master Admin Only for Custom Footer operations (editing, converting to, or modifying custom footer)
+    const isCustomFooter =
+      target.type === 'custom_footer' ||
+      target.category === 'custom_footer' ||
+      target.footerConfig !== undefined ||
+      type === 'custom_footer' ||
+      category === 'custom_footer' ||
+      footerConfig !== undefined;
+
+    if (isCustomFooter && !isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({
+        error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥‚à¤Ÿà¤° à¤²à¤¾à¤‡à¤¬à¥à¤°à¥‡à¤°à¥€ à¤•à¥‹ à¤¸à¤‚à¤¶à¥‹à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤"
+      });
+    }
+
     const updated = {
       ...items[idx],
       ...(name !== undefined ? { name: String(name).trim() } : {}),
+      ...(type !== undefined ? { type } : {}),
       ...(category !== undefined ? { category } : {}),
       ...(enabled !== undefined ? { enabled: Boolean(enabled) } : {}),
       ...(url !== undefined ? { url } : {}),
@@ -12122,6 +12452,15 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
     if (!target) {
       return res.status(404).json({ error: "Asset item not found." });
     }
+
+    // Master Admin Only for Custom Footer operations
+    const isCustomFooter = target.type === 'custom_footer' || target.category === 'custom_footer' || target.footerConfig !== undefined;
+    if (isCustomFooter && !isAuthorizedMasterAdmin(req)) {
+      return res.status(403).json({
+        error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ (403 Forbidden): à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥‚à¤Ÿà¤° à¤²à¤¾à¤‡à¤¬à¥à¤°à¥‡à¤°à¥€ à¤¸à¥‡ à¤¸à¤‚à¤ªà¤¤à¥à¤¤à¤¿ à¤¹à¤Ÿà¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤"
+      });
+    }
+
     // Check if in use by published dynamic frames
     const frames = loadDynamicFramesDatabase();
     const inUse = frames.some(
@@ -12135,7 +12474,7 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
     );
     if (inUse) {
       return res.status(400).json({
-        error: "यह एसेट वर्तमान में एक या अधिक पब्लिश फ्रेम्स द्वारा उपयोग में है। पहले संबंधित फ्रेम अपडेट करें।",
+        error: "à¤¯à¤¹ à¤à¤¸à¥‡à¤Ÿ à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤®à¥‡à¤‚ à¤à¤• à¤¯à¤¾ à¤…à¤§à¤¿à¤• à¤ªà¤¬à¥à¤²à¤¿à¤¶ à¤«à¥à¤°à¥‡à¤®à¥à¤¸ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤®à¥‡à¤‚ à¤¹à¥ˆà¥¤ à¤ªà¤¹à¤²à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤«à¥à¤°à¥‡à¤® à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¤°à¥‡à¤‚à¥¤",
       });
     }
     const filtered = items.filter((it) => it.id !== id);
@@ -12150,7 +12489,7 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
         throw new Error(`Durable Firestore asset_libraries sync failed: ${dbRes?.error || dbRes?.statusCode || 'Unknown error'}`);
       }
     }
-    return res.json({ success: true, message: "एसेट सफलतापूर्वक हटाया गया।" });
+    return res.json({ success: true, message: "à¤à¤¸à¥‡à¤Ÿ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¹à¤Ÿà¤¾à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -12284,7 +12623,7 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
       headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : isSquare ? { x: 6, y: 62, width: 88, height: 28 } : { x: 7, y: 63, width: 86, height: 27 },
       recommendedPhotoSlots: [
         {
-          name: "मुख्य समाचार फोटो",
+          name: "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤«à¥‹à¤Ÿà¥‹",
           slotType: "normal",
           rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : isSquare ? { x: 0, y: 0, width: 100, height: 60 } : { x: 0, y: 0, width: 100, height: 61.33 },
         },
@@ -12469,7 +12808,7 @@ app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
         authorized: false,
         upgradeRequired: true,
         requiredPlan,
-        error: `यह फ्रेम ${requiredPlan} प्लान के लिए उपलब्ध है। इस डिजाइन का उपयोग करने के लिए अपना प्लान अपग्रेड करें।`,
+        error: `à¤¯à¤¹ à¤«à¥à¤°à¥‡à¤® ${requiredPlan} à¤ªà¥à¤²à¤¾à¤¨ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤ à¤‡à¤¸ à¤¡à¤¿à¤œà¤¾à¤‡à¤¨ à¤•à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤°à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ à¤…à¤ªà¤¨à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤`,
       });
     }
 
@@ -12497,14 +12836,14 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       if (!candidateToken) {
         return res.status(401).json({
           success: false,
-          error: "प्रमाणीकरण विफल: Google लॉगिन के लिए वैध Firebase ID टोकन आवश्यक है।",
+          error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤µà¤¿à¤«à¤²: Google à¤²à¥‰à¤—à¤¿à¤¨ à¤•à¥‡ à¤²à¤¿à¤ à¤µà¥ˆà¤§ Firebase ID à¤Ÿà¥‹à¤•à¤¨ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤",
         });
       }
 
       if (!firebaseAdminAuth) {
         return res.status(503).json({
           success: false,
-          error: "प्रमाणीकरण सेवा अस्थायी रूप से अनुपलब्ध है।",
+          error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤¸à¥‡à¤µà¤¾ à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤…à¤¨à¥à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤",
         });
       }
 
@@ -12514,14 +12853,14 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       } catch (tokenErr: any) {
         return res.status(401).json({
           success: false,
-          error: "अवैध या समाप्त टोकन। कृपया पुनः लॉगिन करें।",
+          error: "à¤…à¤µà¥ˆà¤§ à¤¯à¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤Ÿà¥‹à¤•à¤¨à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤²à¥‰à¤—à¤¿à¤¨ à¤•à¤°à¥‡à¤‚à¥¤",
         });
       }
 
       if (!decoded || !decoded.email) {
         return res.status(401).json({
           success: false,
-          error: "प्रमाणीकरण टोकन में वैध ईमेल नहीं मिला।",
+          error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤Ÿà¥‹à¤•à¤¨ à¤®à¥‡à¤‚ à¤µà¥ˆà¤§ à¤ˆà¤®à¥‡à¤² à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤",
         });
       }
 
@@ -12532,7 +12871,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       if (cleanId && cleanId !== verifiedEmail) {
         return res.status(401).json({
           success: false,
-          error: "टोकन पहचानकर्ता मेल नहीं खाता।",
+          error: "à¤Ÿà¥‹à¤•à¤¨ à¤ªà¤¹à¤šà¤¾à¤¨à¤•à¤°à¥à¤¤à¤¾ à¤®à¥‡à¤² à¤¨à¤¹à¥€à¤‚ à¤–à¤¾à¤¤à¤¾à¥¤",
         });
       }
 
@@ -12559,7 +12898,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           return res.status(403).json({
             success: false,
             isBlocked: true,
-            error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
+            error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤•à¥‡ à¤²à¤¿à¤ à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚à¥¤",
             user: existing || { email: verifiedEmail, isBlocked: true },
           });
         }
@@ -12577,7 +12916,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
             existing &&
             existing.isProfileComplete &&
             existing.channelNameHi &&
-            existing.channelNameHi !== "सेटअप अधूरा (Incomplete)" &&
+            existing.channelNameHi !== "à¤¸à¥‡à¤Ÿà¤…à¤ª à¤…à¤§à¥‚à¤°à¤¾ (Incomplete)" &&
             hasRealLogo &&
             existingPhoneDigits.length === 10 &&
             isWhatsappVerified
@@ -12602,13 +12941,13 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           uid: verifiedUid,
           email: verifiedEmail,
           username: safeUsername,
-          fullName: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
-          name: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "मुख्य संपादक" : (isSubAdmin ? "जोनल एडमिन (Admin)" : "यूज़र")),
+          fullName: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•" : (isSubAdmin ? "à¤œà¥‹à¤¨à¤² à¤à¤¡à¤®à¤¿à¤¨ (Admin)" : "à¤¯à¥‚à¤œà¤¼à¤°")),
+          name: profileData?.name || profileData?.fullName || decoded.name || existing?.fullName || (isSuper ? "à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•" : (isSubAdmin ? "à¤œà¥‹à¤¨à¤² à¤à¤¡à¤®à¤¿à¤¨ (Admin)" : "à¤¯à¥‚à¤œà¤¼à¤°")),
           role: isSuper ? "superadmin" : (isSubAdmin ? "admin" : (registeredUser?.role || existing?.role || "user")),
           tier: isSuper ? "ultra" : (isSubAdmin ? "ultra" : (registeredUser?.tier || existing?.tier || "basic")),
           planName: isSuper ? "VIP DESK" : (isSubAdmin ? "VIP DESK" : (existing?.planName || "BASIC")),
-          channelName: isSuper ? "ब्रेकिंग न्यूज़ वाला" : (isSubAdmin ? "एआई न्यूज़ मेकर" : (isProfileComplete ? (existing?.channelNameHi || existing?.channelName || "") : (profileData?.channelName || ""))),
-          channelNameHi: isSuper ? "ब्रेकिंग न्यूज़ वाला" : (isSubAdmin ? "एआई न्यूज़ मेकर" : (isProfileComplete ? (existing?.channelNameHi || "") : (profileData?.channelNameHi || ""))),
+          channelName: isSuper ? "à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤µà¤¾à¤²à¤¾" : (isSubAdmin ? "à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤°" : (isProfileComplete ? (existing?.channelNameHi || existing?.channelName || "") : (profileData?.channelName || ""))),
+          channelNameHi: isSuper ? "à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤µà¤¾à¤²à¤¾" : (isSubAdmin ? "à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤°" : (isProfileComplete ? (existing?.channelNameHi || "") : (profileData?.channelNameHi || ""))),
           channelNameEn: isSuper ? "BREAKING NEWS WALA" : (isSubAdmin ? "AI News Maker" : (isProfileComplete ? (existing?.channelNameEn || "") : (profileData?.channelNameEn || ""))),
           channelLogoUrl: isSuper ? "/assets/breaking_news_wala_logo.png" : (isSubAdmin ? "/assets/ai_news_maker_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
           channelLogoPngUrl: isSuper ? "/assets/breaking_news_wala_logo.png" : (isSubAdmin ? "/assets/ai_news_maker_logo.png" : (isProfileComplete ? (existing?.channelLogoPngUrl || existing?.channelLogoUrl || "") : "")),
@@ -12616,7 +12955,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           channelLogoType: existing?.channelLogoType || "png",
           mobile: isSuper || isSubAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
           mobileNumber: isSuper || isSubAdmin ? "9669802408" : (existing?.mobileNumber || profileData?.mobile || ""),
-          district: isSuper ? "सेंट्रल डेस्क / भोपाल" : (isSubAdmin ? "हेडक्वार्टर सेंट्रल डेस्क" : (existing?.district || "")),
+          district: isSuper ? "à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤• / à¤­à¥‹à¤ªà¤¾à¤²" : (isSubAdmin ? "à¤¹à¥‡à¤¡à¤•à¥à¤µà¤¾à¤°à¥à¤Ÿà¤° à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•" : (existing?.district || "")),
           websiteUrl: isSuper ? "breakingnewswala.com" : (isSubAdmin ? "ainewsmaker.online" : (isProfileComplete ? (existing?.websiteUrl || "") : (profileData?.websiteUrl || ""))),
           isProfileLocked: isSuper || isSubAdmin ? false : Boolean(isProfileComplete && existing?.isProfileLocked),
           isProfileComplete: isSuper || isSubAdmin ? true : isProfileComplete,
@@ -12646,7 +12985,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
     // 2. Direct Credentials
     if (!cleanId || !password) {
-      return res.status(400).json({ error: "कृपया यूज़रनेम/ईमेल और पासवर्ड दर्ज करें" });
+      return res.status(400).json({ error: "à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¯à¥‚à¤œà¤¼à¤°à¤¨à¥‡à¤®/à¤ˆà¤®à¥‡à¤² à¤”à¤° à¤ªà¤¾à¤¸à¤µà¤°à¥à¤¡ à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚" });
     }
 
     const creds = loadCredentialsDatabase();
@@ -12665,7 +13004,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       return res.status(403).json({
         success: false,
         isBlocked: true,
-        error: "अनधिकृत: आपका खाता व्यवस्थापक द्वारा ब्लॉक किया गया है। सहायता के लिए सपोर्ट से संपर्क करें।",
+        error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤•à¥‡ à¤²à¤¿à¤ à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚à¥¤",
         user: match || { email: targetEmail, isBlocked: true },
       });
     }
@@ -12686,7 +13025,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
     }
 
     if (!isPasswordValid) {
-      return res.status(401).json({ error: "अमान्य यूज़रनेम या पासवर्ड" });
+      return res.status(401).json({ error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤¯à¥‚à¤œà¤¼à¤°à¤¨à¥‡à¤® à¤¯à¤¾ à¤ªà¤¾à¤¸à¤µà¤°à¥à¤¡" });
     }
 
     if (needsRehash && credEntry) {
@@ -12700,8 +13039,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 
     const user = match || {
       username: credEntry?.username || cleanId,
-      fullName: targetEmail.includes("admin") ? "सुपर एडमिन (Super Admin)" : "यूज़र",
-      name: targetEmail.includes("admin") ? "सुपर एडमिन (Super Admin)" : "यूज़र",
+      fullName: targetEmail.includes("admin") ? "à¤¸à¥à¤ªà¤° à¤à¤¡à¤®à¤¿à¤¨ (Super Admin)" : "à¤¯à¥‚à¤œà¤¼à¤°",
+      name: targetEmail.includes("admin") ? "à¤¸à¥à¤ªà¤° à¤à¤¡à¤®à¤¿à¤¨ (Super Admin)" : "à¤¯à¥‚à¤œà¤¼à¤°",
       role: targetEmail.includes("admin") ? "superadmin" : "user",
       email: targetEmail,
       userId: `user_${Date.now()}`,
@@ -12724,11 +13063,11 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
 app.get("/api/auth/me", (req, res) => {
   const user = getAuthenticatedUser(req);
   if (!user) {
-    return res.status(401).json({ authenticated: false, error: "अनधिकृत: मान्य सत्र टोकन नहीं मिला" });
+    return res.status(401).json({ authenticated: false, error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤®à¤¾à¤¨à¥à¤¯ à¤¸à¤¤à¥à¤° à¤Ÿà¥‹à¤•à¤¨ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
   }
   const accessCheck = checkUserAccess(user.email);
   if (user.isBlocked || accessCheck.blocked) {
-    return res.status(403).json({ authenticated: true, isBlocked: true, error: "खाता व्यवस्थापक द्वारा ब्लॉक किया गया है।", user });
+    return res.status(403).json({ authenticated: true, isBlocked: true, error: "à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤", user });
   }
   return res.json({
     authenticated: true,
@@ -12839,11 +13178,11 @@ app.post("/api/support/requests", async (req, res) => {
       const base64Data = data.attachmentDataUrl.replace(/^data:image\/\w+;base64,/, "");
       const buf = Buffer.from(base64Data, "base64");
       if (buf.length > 10 * 1024 * 1024) {
-        return res.status(413).json({ error: "संलग्नक का आकार 10MB से अधिक नहीं हो सकता।" });
+        return res.status(413).json({ error: "à¤¸à¤‚à¤²à¤—à¥à¤¨à¤• à¤•à¤¾ à¤†à¤•à¤¾à¤° 10MB à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¤¾à¥¤" });
       }
       const magic = isValidImageMagicBytes(buf);
       if (!magic.valid) {
-        return res.status(400).json({ error: "अमान्य संलग्नक: केवल वास्तविक PNG, JPEG, GIF या WebP छवियाँ स्वीकार्य हैं।" });
+        return res.status(400).json({ error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤¸à¤‚à¤²à¤—à¥à¤¨à¤•: à¤•à¥‡à¤µà¤² à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• PNG, JPEG, GIF à¤¯à¤¾ WebP à¤›à¤µà¤¿à¤¯à¤¾à¤ à¤¸à¥à¤µà¥€à¤•à¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤" });
       }
       const ext = magic.format || "png";
       const filename = `support_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
@@ -12866,7 +13205,7 @@ app.post("/api/support/requests", async (req, res) => {
     const newRequest: StoredSupportRequest = {
       id: data.id || `inq_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
       userId: data.userId || "",
-      userName: data.userName || "अनाम यूज़र",
+      userName: data.userName || "à¤…à¤¨à¤¾à¤® à¤¯à¥‚à¤œà¤¼à¤°",
       userEmail: (data.userEmail || "").replace(/\s+/g, "").toLowerCase().trim(),
       userMobile: data.userMobile || "",
       message: data.message || "",
@@ -12896,7 +13235,7 @@ app.post("/api/support/requests", async (req, res) => {
 app.patch("/api/support/requests/:id", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही सपोर्ट अनुरोध का उत्तर दे सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤•à¤¾ à¤‰à¤¤à¥à¤¤à¤° à¤¦à¥‡ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const { id } = req.params;
     const { status, adminResponse } = req.body;
@@ -12921,7 +13260,7 @@ app.patch("/api/support/requests/:id", (req, res) => {
 app.delete("/api/support/requests/:id", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही सपोर्ट अनुरोध हटा सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¹à¤Ÿà¤¾ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const { id } = req.params;
     let all = loadSupportRequestsDatabase();
@@ -12977,7 +13316,7 @@ function saveRawNewsDatabase(items: StoredRawNews[]): boolean {
 
 app.get("/api/admin/raw-news", (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤°à¥‰ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
   }
   const all = loadRawNewsDatabase();
   return res.json({ success: true, rawNews: all });
@@ -12986,11 +13325,11 @@ app.get("/api/admin/raw-news", (req, res) => {
 app.post("/api/admin/raw-news", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤°à¥‰ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const payload = req.body;
     if (!payload || (!payload.headline && !payload.rawText)) {
-      return res.status(400).json({ error: "कम से कम रॉ न्यूज़ टेक्स्ट या हेडलाइन आवश्यक है" });
+      return res.status(400).json({ error: "à¤•à¤® à¤¸à¥‡ à¤•à¤® à¤°à¥‰ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤¯à¤¾ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     }
 
     const id = payload.id || `raw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -13006,13 +13345,13 @@ app.post("/api/admin/raw-news", (req, res) => {
       rawText: payload.rawText || "",
       headline: (payload.headline || payload.rawText || "").slice(0, 150),
       description: payload.description || payload.summary || "",
-      location: payload.location || "सेंट्रल डेस्क",
+      location: payload.location || "à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•",
       sourceUrl: payload.sourceUrl || "",
       imageUrl: payload.imageUrl || "",
       additionalImageUrl: payload.additionalImageUrl || "",
       additionalPhotos: additionalPhotosList,
       status,
-      author: payload.author || "एडमिन",
+      author: payload.author || "à¤à¤¡à¤®à¤¿à¤¨",
       createdAt: payload.createdAt || now,
       updatedAt: now,
     };
@@ -13027,11 +13366,11 @@ app.post("/api/admin/raw-news", (req, res) => {
         id: `post-${rawItem.id}`,
         title: rawItem.headline,
         summary: rawItem.description || rawItem.rawText || "",
-        sourceChannel: rawItem.author || "एडमिन (Raw News)",
+        sourceChannel: rawItem.author || "à¤à¤¡à¤®à¤¿à¤¨ (Raw News)",
         sourceUrl: rawItem.sourceUrl || "",
         category: "breaking",
-        categoryName: "मुख्य समाचार",
-        publishedTime: "अभी-अभी",
+        categoryName: "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
+        publishedTime: "à¤…à¤­à¥€-à¤…à¤­à¥€",
         imageUrl: rawItem.imageUrl || getCategoryFallbackImage("general"),
         additionalPhotos: additionalPhotosList,
         breaking: true,
@@ -13057,14 +13396,14 @@ app.post("/api/admin/raw-news", (req, res) => {
 app.put("/api/admin/raw-news/:id", (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤°à¥‰ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     const updates = req.body;
     const all = loadRawNewsDatabase();
     const idx = all.findIndex((r) => r.id === id);
     if (idx === -1) {
-      return res.status(404).json({ error: "रॉ न्यूज़ नहीं मिली" });
+      return res.status(404).json({ error: "à¤°à¥‰ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¥€" });
     }
     const updatedItem: StoredRawNews = {
       ...all[idx],
@@ -13080,11 +13419,11 @@ app.put("/api/admin/raw-news/:id", (req, res) => {
         id: `post-${updatedItem.id}`,
         title: updatedItem.headline,
         summary: updatedItem.description || updatedItem.rawText || "",
-        sourceChannel: updatedItem.author || "एडमिन (Raw News)",
+        sourceChannel: updatedItem.author || "à¤à¤¡à¤®à¤¿à¤¨ (Raw News)",
         sourceUrl: updatedItem.sourceUrl || "",
         category: "breaking",
-        categoryName: "मुख्य समाचार",
-        publishedTime: "अभी-अभी",
+        categoryName: "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
+        publishedTime: "à¤…à¤­à¥€-à¤…à¤­à¥€",
         imageUrl: updatedItem.imageUrl || getCategoryFallbackImage("general"),
         additionalPhotos: Array.isArray(updatedItem.additionalPhotos) && updatedItem.additionalPhotos.length > 0
           ? updatedItem.additionalPhotos
@@ -13112,7 +13451,7 @@ app.put("/api/admin/raw-news/:id", (req, res) => {
 app.delete("/api/admin/raw-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही रॉ न्यूज़ प्रबंधित कर सकते हैं" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤°à¥‰ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤ªà¥à¤°à¤¬à¤‚à¤§à¤¿à¤¤ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚" });
     }
     const { id } = req.params;
     let all = loadRawNewsDatabase();
@@ -13210,10 +13549,10 @@ app.post("/api/logo-change-requests", (req, res) => {
     } = req.body;
 
     if (!userEmail || !userEmail.trim()) {
-      return res.status(400).json({ error: "उपयोगकर्ता ईमेल अनिवार्य है।" });
+      return res.status(400).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤ˆà¤®à¥‡à¤² à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
     if (!reason || !reason.trim()) {
-      return res.status(400).json({ error: "लोगो बदलने का कारण अनिवार्य है।" });
+      return res.status(400).json({ error: "à¤²à¥‹à¤—à¥‹ à¤¬à¤¦à¤²à¤¨à¥‡ à¤•à¤¾ à¤•à¤¾à¤°à¤£ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
 
     const cleanEmail = userEmail.trim().toLowerCase();
@@ -13225,7 +13564,7 @@ app.post("/api/logo-change-requests", (req, res) => {
     );
     if (existingPending) {
       return res.status(409).json({
-        error: `आपका ${requestType === 'gif' ? 'GIF' : 'लोगो'} बदलने का अनुरोध पहले से एडमिन के पास लंबित है।`,
+        error: `à¤†à¤ªà¤•à¤¾ ${requestType === 'gif' ? 'GIF' : 'à¤²à¥‹à¤—à¥‹'} à¤¬à¤¦à¤²à¤¨à¥‡ à¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤à¤¡à¤®à¤¿à¤¨ à¤•à¥‡ à¤ªà¤¾à¤¸ à¤²à¤‚à¤¬à¤¿à¤¤ à¤¹à¥ˆà¥¤`,
         request: existingPending,
       });
     }
@@ -13256,7 +13595,7 @@ app.post("/api/logo-change-requests", (req, res) => {
       userEmail: cleanEmail,
       userName: userName || cleanEmail.split("@")[0],
       username: username || cleanEmail.split("@")[0],
-      channelName: channelName || "मेरा न्यूज़ चैनल",
+      channelName: channelName || "à¤®à¥‡à¤°à¤¾ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤šà¥ˆà¤¨à¤²",
       currentLogoUrl: currentLogoUrl || "",
       newLogoUrl: finalNewLogoUrl || "",
       reason: reason.trim(),
@@ -13283,7 +13622,7 @@ app.post("/api/logo-change-requests/:id/approve", (req, res) => {
     const reqIndex = allRequests.findIndex((r) => r.id === id);
 
     if (reqIndex === -1) {
-      return res.status(404).json({ error: "अनुरोध नहीं मिला।" });
+      return res.status(404).json({ error: "à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤" });
     }
 
     const targetReq = allRequests[reqIndex];
@@ -13330,7 +13669,7 @@ app.post("/api/logo-change-requests/:id/approve", (req, res) => {
     return res.json({
       success: true,
       request: targetReq,
-      message: `यूज़र ${targetReq.userEmail} का ${targetReq.requestType === 'gif' ? 'GIF' : 'लोगो'} अनुरोध स्वीकृत हो गया।`,
+      message: `à¤¯à¥‚à¤œà¤¼à¤° ${targetReq.userEmail} à¤•à¤¾ ${targetReq.requestType === 'gif' ? 'GIF' : 'à¤²à¥‹à¤—à¥‹'} à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤¹à¥‹ à¤—à¤¯à¤¾à¥¤`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -13346,7 +13685,7 @@ app.post("/api/logo-change-requests/:id/reject", (req, res) => {
     const reqIndex = allRequests.findIndex((r) => r.id === id);
 
     if (reqIndex === -1) {
-      return res.status(404).json({ error: "अनुरोध नहीं मिला।" });
+      return res.status(404).json({ error: "à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤" });
     }
 
     const targetReq = allRequests[reqIndex];
@@ -13357,7 +13696,7 @@ app.post("/api/logo-change-requests/:id/reject", (req, res) => {
     return res.json({
       success: true,
       request: targetReq,
-      message: `यूज़र ${targetReq.userEmail} का अनुरोध अस्वीकृत कर दिया गया।`,
+      message: `à¤¯à¥‚à¤œà¤¼à¤° ${targetReq.userEmail} à¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤…à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -13373,7 +13712,7 @@ app.post("/api/admin/videos/upload-file", requireAdminMiddleware, async (req, re
   try {
     const { videoData, filename = "video.mp4" } = req.body;
     if (!videoData || typeof videoData !== "string") {
-      return res.status(400).json({ error: "वीडियो डेटा अनिवार्य है।" });
+      return res.status(400).json({ error: "à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¡à¥‡à¤Ÿà¤¾ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
 
     // Determine extension
@@ -13420,19 +13759,19 @@ app.post("/api/admin/videos/upload-thumbnail", requireAdminMiddleware, async (re
   try {
     const { imageData } = req.body;
     if (!imageData || typeof imageData !== "string") {
-      return res.status(400).json({ error: "थंबनेल इमेज डेटा अनिवार्य है।" });
+      return res.status(400).json({ error: "à¤¥à¤‚à¤¬à¤¨à¥‡à¤² à¤‡à¤®à¥‡à¤œ à¤¡à¥‡à¤Ÿà¤¾ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
 
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
     if (buffer.length > 10 * 1024 * 1024) {
-      return res.status(413).json({ error: "थंबनेल का आकार 10MB से अधिक नहीं हो सकता।" });
+      return res.status(413).json({ error: "à¤¥à¤‚à¤¬à¤¨à¥‡à¤² à¤•à¤¾ à¤†à¤•à¤¾à¤° 10MB à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¤¾à¥¤" });
     }
 
     const magic = isValidImageMagicBytes(buffer);
     if (!magic.valid) {
-      return res.status(400).json({ error: "अमान्य फ़ाइल: केवल वास्तविक PNG, JPEG, GIF या WebP छवियाँ स्वीकार्य हैं।" });
+      return res.status(400).json({ error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤«à¤¼à¤¾à¤‡à¤²: à¤•à¥‡à¤µà¤² à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• PNG, JPEG, GIF à¤¯à¤¾ WebP à¤›à¤µà¤¿à¤¯à¤¾à¤ à¤¸à¥à¤µà¥€à¤•à¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const ext = magic.format || "jpg";
@@ -13468,7 +13807,7 @@ app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
   try {
     const authUser = (req as any).user;
     if (!authUser || !authUser.email) {
-      return res.status(401).json({ success: false, error: "प्रमाणीकरण आवश्यक है।" });
+      return res.status(401).json({ success: false, error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤" });
     }
 
     const cleanEmail = authUser.email.toLowerCase().trim();
@@ -13485,7 +13824,7 @@ app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
     if (!isVipDash) {
       return res.status(403).json({
         success: false,
-        error: "कस्टम फ़ॉन्ट अपलोड करने की सुविधा केवल VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।",
+        error: "à¤•à¤¸à¥à¤Ÿà¤® à¤«à¤¼à¥‰à¤¨à¥à¤Ÿ à¤…à¤ªà¤²à¥‹à¤¡ à¤•à¤°à¤¨à¥‡ à¤•à¥€ à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤•à¥‡à¤µà¤² VIP-Dash à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾à¤“à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤",
         requiredTier: "vip_dash",
         currentTier: userTier,
       });
@@ -13493,7 +13832,7 @@ app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
 
     const { fontName, fontDataUrl, filename } = req.body;
     if (!fontDataUrl || typeof fontDataUrl !== "string") {
-      return res.status(400).json({ success: false, error: "फ़ॉन्ट डेटा आवश्यक है।" });
+      return res.status(400).json({ success: false, error: "à¤«à¤¼à¥‰à¤¨à¥à¤Ÿ à¤¡à¥‡à¤Ÿà¤¾ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤" });
     }
 
     const cleanFontName = (fontName || "CustomFont").replace(/[^a-zA-Z0-9_\-\s\u0900-\u097F]/g, "").trim();
@@ -13504,7 +13843,7 @@ app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
     if (!allowedExts.includes(ext)) {
       return res.status(400).json({
         success: false,
-        error: "अमान्य फ़ॉन्ट प्रारूप। केवल .ttf, .otf, .woff या .woff2 फ़ाइलें समर्थित हैं।",
+        error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤«à¤¼à¥‰à¤¨à¥à¤Ÿ à¤ªà¥à¤°à¤¾à¤°à¥‚à¤ªà¥¤ à¤•à¥‡à¤µà¤² .ttf, .otf, .woff à¤¯à¤¾ .woff2 à¤«à¤¼à¤¾à¤‡à¤²à¥‡à¤‚ à¤¸à¤®à¤°à¥à¤¥à¤¿à¤¤ à¤¹à¥ˆà¤‚à¥¤",
       });
     }
 
@@ -13512,7 +13851,7 @@ app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
     const fontBuffer = Buffer.from(base64Data, "base64");
 
     if (fontBuffer.length > 15 * 1024 * 1024) {
-      return res.status(400).json({ success: false, error: "फ़ॉन्ट फ़ाइल का आकार 15MB से अधिक नहीं होना चाहिए।" });
+      return res.status(400).json({ success: false, error: "à¤«à¤¼à¥‰à¤¨à¥à¤Ÿ à¤«à¤¼à¤¾à¤‡à¤² à¤•à¤¾ à¤†à¤•à¤¾à¤° 15MB à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤à¥¤" });
     }
 
     const safeBaseName = `font_${Date.now()}_${cleanFontName.replace(/\s+/g, "_")}${ext}`;
@@ -13546,7 +13885,7 @@ app.post("/api/upload-font", requireAuthMiddleware, async (req, res) => {
     });
   } catch (err: any) {
     console.error("Font upload error:", err);
-    return res.status(500).json({ success: false, error: err?.message || "फ़ॉन्ट अपलोड करने में विफल" });
+    return res.status(500).json({ success: false, error: err?.message || "à¤«à¤¼à¥‰à¤¨à¥à¤Ÿ à¤…à¤ªà¤²à¥‹à¤¡ à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤µà¤¿à¤«à¤²" });
   }
 });
 
@@ -13583,18 +13922,18 @@ app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
     const isMaster = isAuthorizedMasterAdmin(req);
     const isAdmin = isAuthorizedAdmin(req);
     if (!isAdmin && !isMaster) {
-      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को ब्लॉक कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤¯à¤¾ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¹à¥€ à¤¯à¥‚à¤œà¤¼à¤°à¥à¤¸ à¤•à¥‹ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const { userId, userEmail, blockedBy, reason } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
-      return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी अनिवार्य है" });
+      return res.status(400).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤ˆà¤®à¥‡à¤² à¤¯à¤¾ à¤†à¤ˆà¤¡à¥€ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆ" });
     }
     if (isProtectedAdminAccount(identifier) || identifier === 'breakingnewswala.com@gmail.com' || identifier === 'admin@breakingnewswala.com') {
-      return res.status(403).json({ error: "सुरक्षित मास्टर एडमिन खाते को ब्लॉक नहीं किया जा सकता" });
+      return res.status(403).json({ error: "à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤–à¤¾à¤¤à¥‡ à¤•à¥‹ à¤¬à¥à¤²à¥‰à¤• à¤¨à¤¹à¥€à¤‚ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾" });
     }
     if (callerEmail && identifier === callerEmail) {
-      return res.status(403).json({ error: "एडमिन अपने स्वयं के खाते को ब्लॉक नहीं कर सकता" });
+      return res.status(403).json({ error: "à¤à¤¡à¤®à¤¿à¤¨ à¤…à¤ªà¤¨à¥‡ à¤¸à¥à¤µà¤¯à¤‚ à¤•à¥‡ à¤–à¤¾à¤¤à¥‡ à¤•à¥‹ à¤¬à¥à¤²à¥‰à¤• à¤¨à¤¹à¥€à¤‚ à¤•à¤° à¤¸à¤•à¤¤à¤¾" });
     }
 
     const users = loadUsersMasterDatabase();
@@ -13605,17 +13944,17 @@ app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
     );
 
     if (idx === -1) {
-      return res.status(404).json({ error: "उपयोगकर्ता नहीं मिला" });
+      return res.status(404).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
 
     if (isProtectedAdminAccount(users[idx].email) || users[idx].role === 'superadmin') {
-      return res.status(403).json({ error: "सुपर एडमिन खाते को ब्लॉक नहीं किया जा सकता" });
+      return res.status(403).json({ error: "à¤¸à¥à¤ªà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤–à¤¾à¤¤à¥‡ à¤•à¥‹ à¤¬à¥à¤²à¥‰à¤• à¤¨à¤¹à¥€à¤‚ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾" });
     }
     if (!isMaster && (users[idx].role === 'admin' || isProtectedAdminAccount(users[idx].email))) {
-      return res.status(403).json({ error: "एडमिन किसी अन्य एडमिन खाते को ब्लॉक नहीं कर सकता" });
+      return res.status(403).json({ error: "à¤à¤¡à¤®à¤¿à¤¨ à¤•à¤¿à¤¸à¥€ à¤…à¤¨à¥à¤¯ à¤à¤¡à¤®à¤¿à¤¨ à¤–à¤¾à¤¤à¥‡ à¤•à¥‹ à¤¬à¥à¤²à¥‰à¤• à¤¨à¤¹à¥€à¤‚ à¤•à¤° à¤¸à¤•à¤¤à¤¾" });
     }
 
-    const blockedReasonText = reason || "व्यवस्थापक नीति उल्लंघन अथवा अनधिकृत गतिविधि के कारण आपका खाता ब्लॉक किया गया है।";
+    const blockedReasonText = reason || "à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¨à¥€à¤¤à¤¿ à¤‰à¤²à¥à¤²à¤‚à¤˜à¤¨ à¤…à¤¥à¤µà¤¾ à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤ à¤—à¤¤à¤¿à¤µà¤¿à¤§à¤¿ à¤•à¥‡ à¤•à¤¾à¤°à¤£ à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤";
     users[idx].isBlocked = true;
     users[idx].blockedAt = Date.now();
     users[idx].blockedBy = blockedBy || callerEmail || 'Admin';
@@ -13648,7 +13987,7 @@ app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
       }
     } catch {}
 
-    return res.json({ success: true, message: "उपयोगकर्ता को ब्लॉक कर दिया गया है", user: users[idx] });
+    return res.json({ success: true, message: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤•à¥‹ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆ", user: users[idx] });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -13661,12 +14000,12 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     const isMaster = isAuthorizedMasterAdmin(req);
     const isAdmin = isAuthorizedAdmin(req);
     if (!isAdmin && !isMaster) {
-      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को अनब्लॉक कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤¯à¤¾ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¹à¥€ à¤¯à¥‚à¤œà¤¼à¤°à¥à¤¸ à¤•à¥‹ à¤…à¤¨à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const { userId, userEmail, unblockedBy } = req.body;
     const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
-      return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी अनिवार्य है" });
+      return res.status(400).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤ˆà¤®à¥‡à¤² à¤¯à¤¾ à¤†à¤ˆà¤¡à¥€ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆ" });
     }
 
     const users = loadUsersMasterDatabase();
@@ -13677,7 +14016,7 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     );
 
     if (idx === -1) {
-      return res.status(404).json({ error: "उपयोगकर्ता नहीं मिला" });
+      return res.status(404).json({ error: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
 
     users[idx].isBlocked = false;
@@ -13710,7 +14049,7 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
       }
     } catch {}
 
-    return res.json({ success: true, message: "उपयोगकर्ता को अनब्लॉक कर दिया गया है", user: users[idx] });
+    return res.json({ success: true, message: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤•à¥‹ à¤…à¤¨à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆ", user: users[idx] });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -13723,7 +14062,7 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
     const isMaster = isAuthorizedMasterAdmin(req);
     const isAdmin = isAuthorizedAdmin(req);
     if (!isAdmin && !isMaster) {
-      return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को डिलीट कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤à¤¡à¤®à¤¿à¤¨ à¤¯à¤¾ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¹à¥€ à¤¯à¥‚à¤œà¤¼à¤°à¥à¤¸ à¤•à¥‹ à¤¡à¤¿à¤²à¥€à¤Ÿ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const paramId = (req.params as any)?.id;
@@ -13733,12 +14072,12 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
 
     // 1. Role Protection: Master Admin accounts can NEVER be deleted
     if (isProtectedAdminAccount(identifier) || identifier === 'breakingnewswala.com@gmail.com' || identifier === 'admin@breakingnewswala.com') {
-      return res.status(403).json({ error: "सुरक्षित मास्टर एडमिन खाते को डिलीट नहीं किया जा सकता" });
+      return res.status(403).json({ error: "à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤–à¤¾à¤¤à¥‡ à¤•à¥‹ à¤¡à¤¿à¤²à¥€à¤Ÿ à¤¨à¤¹à¥€à¤‚ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾" });
     }
 
     // 2. Role Protection: Caller cannot delete themselves
     if (callerEmail && (identifier === callerEmail || targetEmail?.toLowerCase().trim() === callerEmail || targetUserId?.toLowerCase().trim() === callerEmail)) {
-      return res.status(403).json({ error: "एडमिन अपने स्वयं के खाते को डिलीट नहीं कर सकता" });
+      return res.status(403).json({ error: "à¤à¤¡à¤®à¤¿à¤¨ à¤…à¤ªà¤¨à¥‡ à¤¸à¥à¤µà¤¯à¤‚ à¤•à¥‡ à¤–à¤¾à¤¤à¥‡ à¤•à¥‹ à¤¡à¤¿à¤²à¥€à¤Ÿ à¤¨à¤¹à¥€à¤‚ à¤•à¤° à¤¸à¤•à¤¤à¤¾" });
     }
 
     let users = loadUsersMasterDatabase();
@@ -13750,7 +14089,7 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
     // 3. Role Protection: Regular Admin cannot delete another Admin or Super Admin
     if (!isMaster) {
       if (targetUser && (isProtectedAdminAccount(targetUser.email) || targetUser.role === 'superadmin' || targetUser.role === 'admin')) {
-        return res.status(403).json({ error: "एडमिन किसी अन्य एडमिन या सुपर एडमिन खाते को डिलीट नहीं कर सकता" });
+        return res.status(403).json({ error: "à¤à¤¡à¤®à¤¿à¤¨ à¤•à¤¿à¤¸à¥€ à¤…à¤¨à¥à¤¯ à¤à¤¡à¤®à¤¿à¤¨ à¤¯à¤¾ à¤¸à¥à¤ªà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤–à¤¾à¤¤à¥‡ à¤•à¥‹ à¤¡à¤¿à¤²à¥€à¤Ÿ à¤¨à¤¹à¥€à¤‚ à¤•à¤° à¤¸à¤•à¤¤à¤¾" });
       }
     }
 
@@ -13970,7 +14309,7 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
 
     return res.json({
       success: true,
-      message: "उपयोगकर्ता और उससे जुड़े सभी डेटाबेस, वॉलेट, क्रेडेंशियल्स और प्रोफ़ाइल रिकॉर्ड्स स्थायी रूप से हटा दिए गए हैं।"
+      message: "à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾ à¤”à¤° à¤‰à¤¸à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥‡ à¤¸à¤­à¥€ à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸, à¤µà¥‰à¤²à¥‡à¤Ÿ, à¤•à¥à¤°à¥‡à¤¡à¥‡à¤‚à¤¶à¤¿à¤¯à¤²à¥à¤¸ à¤”à¤° à¤ªà¥à¤°à¥‹à¤«à¤¼à¤¾à¤‡à¤² à¤°à¤¿à¤•à¥‰à¤°à¥à¤¡à¥à¤¸ à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤¹à¤Ÿà¤¾ à¤¦à¤¿à¤ à¤—à¤ à¤¹à¥ˆà¤‚à¥¤"
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -13981,7 +14320,7 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
   try {
     const isMaster = isAuthorizedAdmin(req);
     if (!isMaster) {
-      return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही यूज़र सेटिंग्स अपडेट कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ à¤¯à¥‚à¤œà¤¼à¤° à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const { userId, updates: rawUpdates } = req.body;
     const updates = (rawUpdates && typeof rawUpdates === 'object') ? rawUpdates : (req.body ? { ...req.body } : {});
@@ -13991,7 +14330,7 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
     }
 
     if (isUserTombstoned(identifier) || (updates?.email && isUserTombstoned(updates.email)) || (updates?.userId && isUserTombstoned(updates.userId))) {
-      return res.status(400).json({ error: "यह खाता स्थायी रूप से हटाया जा चुका है और दोबारा सक्रिय नहीं किया जा सकता।" });
+      return res.status(400).json({ error: "à¤¯à¤¹ à¤–à¤¾à¤¤à¤¾ à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤¹à¤Ÿà¤¾à¤¯à¤¾ à¤œà¤¾ à¤šà¥à¤•à¤¾ à¤¹à¥ˆ à¤”à¤° à¤¦à¥‹à¤¬à¤¾à¤°à¤¾ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¨à¤¹à¥€à¤‚ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾à¥¤" });
     }
     const users = loadUsersMasterDatabase();
     const idx = users.findIndex(u =>
@@ -14236,7 +14575,7 @@ app.post("/api/twilio/send-otp", authRateLimiter, async (req, res) => {
     if (!mobile) return res.status(400).json({ success: false, error: "Mobile number is required" });
     const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
     if (cleanNum.length !== 10) {
-      return res.status(400).json({ success: false, error: "कृपया 10 अंकों का मान्य मोबाइल नंबर दर्ज करें।" });
+      return res.status(400).json({ success: false, error: "à¤•à¥ƒà¤ªà¤¯à¤¾ 10 à¤…à¤‚à¤•à¥‹à¤‚ à¤•à¤¾ à¤®à¤¾à¤¨à¥à¤¯ à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¨à¤‚à¤¬à¤° à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤" });
     }
     const otp = crypto.randomInt(100000, 999999).toString();
     otpStore.set(cleanNum, { otp, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0 });
@@ -14248,7 +14587,7 @@ app.post("/api/twilio/send-otp", authRateLimiter, async (req, res) => {
         const params = new URLSearchParams();
         params.append("To", fullTo);
         params.append("From", twilioFromNumber || "+15017122661");
-        params.append("Body", `आपका AI News Maker ऐप OTP है: ${otp}। यह 5 मिनट के लिए मान्य है। कृपया इसे किसी के साथ साझा न करें।`);
+        params.append("Body", `à¤†à¤ªà¤•à¤¾ AI News Maker à¤à¤ª OTP à¤¹à¥ˆ: ${otp}à¥¤ à¤¯à¤¹ 5 à¤®à¤¿à¤¨à¤Ÿ à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤‡à¤¸à¥‡ à¤•à¤¿à¤¸à¥€ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤¸à¤¾à¤à¤¾ à¤¨ à¤•à¤°à¥‡à¤‚à¥¤`);
 
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`;
         const authHeader = getTwilioAuthHeader();
@@ -14268,7 +14607,7 @@ app.post("/api/twilio/send-otp", authRateLimiter, async (req, res) => {
 
     return res.json({
       success: true,
-      message: `OTP +91${cleanNum} पर सुरक्षित रूप से भेज दिया गया है`,
+      message: `OTP +91${cleanNum} à¤ªà¤° à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤°à¥‚à¤ª à¤¸à¥‡ à¤­à¥‡à¤œ à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆ`,
       expiresInSeconds: 300,
     });
   } catch (err: any) {
@@ -14283,25 +14622,25 @@ app.post("/api/twilio/verify-otp", authRateLimiter, (req, res) => {
     const cleanNum = String(mobile).replace(/[^0-9]/g, "").slice(-10);
     const record = otpStore.get(cleanNum);
     if (!record) {
-      return res.json({ success: false, valid: false, message: "OTP समाप्त हो चुका है या अनुरोध नहीं मिला" });
+      return res.json({ success: false, valid: false, message: "OTP à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆ à¤¯à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
     if (Date.now() > record.expiresAt) {
       otpStore.delete(cleanNum);
-      return res.json({ success: false, valid: false, message: "OTP की वैधता समाप्त हो गई है" });
+      return res.json({ success: false, valid: false, message: "OTP à¤•à¥€ à¤µà¥ˆà¤§à¤¤à¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤—à¤ˆ à¤¹à¥ˆ" });
     }
 
     record.attempts = (record.attempts || 0) + 1;
     if (record.attempts > 5) {
       otpStore.delete(cleanNum);
-      return res.status(429).json({ success: false, valid: false, message: "अत्यधिक असफल प्रयास। OTP निरस्त कर दिया गया है, कृपया नया OTP प्राप्त करें।" });
+      return res.status(429).json({ success: false, valid: false, message: "à¤…à¤¤à¥à¤¯à¤§à¤¿à¤• à¤…à¤¸à¤«à¤² à¤ªà¥à¤°à¤¯à¤¾à¤¸à¥¤ OTP à¤¨à¤¿à¤°à¤¸à¥à¤¤ à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆ, à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¨à¤¯à¤¾ OTP à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤•à¤°à¥‡à¤‚à¥¤" });
     }
 
     const inputOtp = String(otp).trim();
     if (record.otp === inputOtp) {
       otpStore.delete(cleanNum);
-      return res.json({ success: true, valid: true, message: "OTP सफलतापूर्वक सत्यापित!" });
+      return res.json({ success: true, valid: true, message: "OTP à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¸à¤¤à¥à¤¯à¤¾à¤ªà¤¿à¤¤!" });
     }
-    return res.json({ success: false, valid: false, message: "अमान्य OTP दर्ज किया गया" });
+    return res.json({ success: false, valid: false, message: "à¤…à¤®à¤¾à¤¨à¥à¤¯ OTP à¤¦à¤°à¥à¤œ à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾" });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -14346,37 +14685,32 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
 
     // SSRF Validation: block loopback, RFC1918 private IPs, cloud metadata, non-http(s) protocols
     const urlValidation = isSafePublicUrl(imageUrl);
-    if (!urlValidation.safe) {
-      return res.status(403).json({ error: "प्रतिबंधित लिंक (SSRF Protection): " + (urlValidation.error || "अमान्य URL") });
+    if (!urlValidation.safe || !urlValidation.parsedUrl) {
+      return res.status(403).json({ error: "à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤²à¤¿à¤‚à¤• (SSRF Protection): " + (urlValidation.error || "à¤…à¤®à¤¾à¤¨à¥à¤¯ URL") });
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const response = await fetch(imageUrl, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-      },
-    }).finally(() => clearTimeout(timeoutId));
-
-    if (!response.ok) {
-      return res.status(response.status).send(`Failed to fetch image: ${response.statusText}`);
+    // Execute safe fetch with Socket IP Pinning & Manual Redirect Tracking (Max 3 redirects)
+    let fetchRes: PinnedImageResult;
+    try {
+      fetchRes = await fetchPinnedImage(imageUrl, 0, 3);
+    } catch (fetchErr: any) {
+      const status = typeof fetchErr?.status === 'number' ? fetchErr.status : 500;
+      const message = fetchErr?.message || "Error proxying image";
+      if (status === 403) {
+        return res.status(403).json({ error: "à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤²à¤¿à¤‚à¤• (SSRF / DNS Pinning Protection): " + message });
+      }
+      return res.status(status).send(message);
     }
 
-    const contentType = response.headers.get("content-type") || "";
-    // Only allow legitimate image types, reject text/html, application/json, scripts
-    if (!contentType.toLowerCase().startsWith("image/")) {
-      return res.status(415).send("Invalid content type: only images are allowed.");
-    }
+    const { contentType, buffer } = fetchRes;
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Limit maximum image size to 10MB to prevent memory exhaustion
-    if (buffer.length > 10 * 1024 * 1024) {
-      return res.status(413).send("Image size exceeds 10MB limit.");
+    // Verify image integrity with magic bytes
+    const isSvg = contentType.includes("svg") || buffer.slice(0, 100).toString("utf8").includes("<svg");
+    if (!isSvg) {
+      const mb = isValidImageMagicBytes(buffer);
+      if (!mb.valid) {
+        return res.status(415).send("Invalid image format or corrupted image payload.");
+      }
     }
 
     res.setHeader("Content-Type", contentType);
@@ -14384,9 +14718,6 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     return res.send(buffer);
   } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return res.status(504).send("Image fetch timed out.");
-    }
     return res.status(500).send("Error proxying image");
   }
 });
@@ -14418,7 +14749,7 @@ function getOpenAIClient(): OpenAI {
   const apiKey = dynamicOpenAiKey || process.env.OPENAI_API_KEY || "";
   if (!apiKey || apiKey.trim() === "" || apiKey === "MY_OPENAI_API_KEY") {
     throw new Error(
-      "OPENAI_API_KEY सेट नहीं है। कृपया 'क्लाउड व API सेटिंग्स' (या .env) में जाकर 'OPENAI_API_KEY' दर्ज करें, अथवा 'Gemini AI' विकल्प चुनें।"
+      "OPENAI_API_KEY à¤¸à¥‡à¤Ÿ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ 'à¤•à¥à¤²à¤¾à¤‰à¤¡ à¤µ API à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸' (à¤¯à¤¾ .env) à¤®à¥‡à¤‚ à¤œà¤¾à¤•à¤° 'OPENAI_API_KEY' à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚, à¤…à¤¥à¤µà¤¾ 'Gemini AI' à¤µà¤¿à¤•à¤²à¥à¤ª à¤šà¥à¤¨à¥‡à¤‚à¥¤"
     );
   }
   if (!openaiClient || openaiClient.apiKey !== apiKey.trim()) {
@@ -14443,42 +14774,42 @@ const TEMPLATE_CONFIG_REGISTRY: Record<string, TemplateConfig> = {
   graphic_001: {
     id: "graphic_001",
     template_id: "graphic_001",
-    name: "Graphic 1 (बेसिक 4:5)",
+    name: "Graphic 1 (à¤¬à¥‡à¤¸à¤¿à¤• 4:5)",
     headline_max_lines: 3,
     headline_line_count: 3,
-    headline_area: "3-Line Headline Area (बॉटम व्हाइट पॉलीगॉन)",
+    headline_area: "3-Line Headline Area (à¤¬à¥‰à¤Ÿà¤® à¤µà¥à¤¹à¤¾à¤‡à¤Ÿ à¤ªà¥‰à¤²à¥€à¤—à¥‰à¤¨)",
     aspect_ratio: "4:5",
-    description: "शीर्ष 53% फोटो, बॉटम 47% पॉलीगॉन में 3-लाइन हेडलाइन",
+    description: "à¤¶à¥€à¤°à¥à¤· 53% à¤«à¥‹à¤Ÿà¥‹, à¤¬à¥‰à¤Ÿà¤® 47% à¤ªà¥‰à¤²à¥€à¤—à¥‰à¤¨ à¤®à¥‡à¤‚ 3-à¤²à¤¾à¤‡à¤¨ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨",
   },
   graphic_002: {
     id: "graphic_002",
     template_id: "graphic_002",
-    name: "Graphic 2 (एडवांस 4:5)",
+    name: "Graphic 2 (à¤à¤¡à¤µà¤¾à¤‚à¤¸ 4:5)",
     headline_max_lines: 3,
     headline_line_count: 3,
-    headline_area: "3-Line Headline Area (ऑरेंज बॉर्डर फ्रेम)",
+    headline_area: "3-Line Headline Area (à¤‘à¤°à¥‡à¤‚à¤œ à¤¬à¥‰à¤°à¥à¤¡à¤° à¤«à¥à¤°à¥‡à¤®)",
     aspect_ratio: "4:5",
-    description: "ऑरेंज बॉर्डर, 3-लाइन हेडलाइन एरिया",
+    description: "à¤‘à¤°à¥‡à¤‚à¤œ à¤¬à¥‰à¤°à¥à¤¡à¤°, 3-à¤²à¤¾à¤‡à¤¨ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤à¤°à¤¿à¤¯à¤¾",
   },
   graphic_003: {
     id: "graphic_003",
     template_id: "graphic_003",
-    name: "Graphic 3 (प्रो 4:5 - 2 लाइन)",
+    name: "Graphic 3 (à¤ªà¥à¤°à¥‹ 4:5 - 2 à¤²à¤¾à¤‡à¤¨)",
     headline_max_lines: 2,
     headline_line_count: 2,
-    headline_area: "2-Line Headline Area (प्रो मिनिमल)",
+    headline_area: "2-Line Headline Area (à¤ªà¥à¤°à¥‹ à¤®à¤¿à¤¨à¤¿à¤®à¤²)",
     aspect_ratio: "4:5",
-    description: "2-लाइन हेडलाइन क्षमता, प्रो मिनिमल स्टाइल",
+    description: "2-à¤²à¤¾à¤‡à¤¨ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥à¤·à¤®à¤¤à¤¾, à¤ªà¥à¤°à¥‹ à¤®à¤¿à¤¨à¤¿à¤®à¤² à¤¸à¥à¤Ÿà¤¾à¤‡à¤²",
   },
   graphic_004: {
     id: "graphic_004",
     template_id: "graphic_004",
-    name: "Graphic 4 (वीआईपी डेस्क 4:5 - 2 लाइन)",
+    name: "Graphic 4 (à¤µà¥€à¤†à¤ˆà¤ªà¥€ à¤¡à¥‡à¤¸à¥à¤• 4:5 - 2 à¤²à¤¾à¤‡à¤¨)",
     headline_max_lines: 2,
     headline_line_count: 2,
-    headline_area: "2-Line Headline Area (वीआईपी कॉम्पैक्ट)",
+    headline_area: "2-Line Headline Area (à¤µà¥€à¤†à¤ˆà¤ªà¥€ à¤•à¥‰à¤®à¥à¤ªà¥ˆà¤•à¥à¤Ÿ)",
     aspect_ratio: "4:5",
-    description: "2-लाइन हेडलाइन क्षमता, वीआईपी कॉम्पैक्ट लेआउट",
+    description: "2-à¤²à¤¾à¤‡à¤¨ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥à¤·à¤®à¤¤à¤¾, à¤µà¥€à¤†à¤ˆà¤ªà¥€ à¤•à¥‰à¤®à¥à¤ªà¥ˆà¤•à¥à¤Ÿ à¤²à¥‡à¤†à¤‰à¤Ÿ",
   },
   "jacket-default": {
     id: "jacket-default",
@@ -14932,7 +15263,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "billing",
       isRetryable: true,
       cooldownMs: 15 * 60 * 1000, // 15 mins cooldown
-      userFacingError: "क्रेडिट समाप्त (402 Payment Required / Depleted Credits)",
+      userFacingError: "à¤•à¥à¤°à¥‡à¤¡à¤¿à¤Ÿ à¤¸à¤®à¤¾à¤ªà¥à¤¤ (402 Payment Required / Depleted Credits)",
       healthStatus: "quota_exceeded",
       shouldDisableKey: false,
     };
@@ -14951,7 +15282,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "quota",
       isRetryable: true,
       cooldownMs: 60 * 1000, // 60 seconds rate limit cooldown
-      userFacingError: "दैनिक कोटा समाप्त (429 Quota Exhausted)",
+      userFacingError: "à¤¦à¥ˆà¤¨à¤¿à¤• à¤•à¥‹à¤Ÿà¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ (429 Quota Exhausted)",
       healthStatus: "quota_exceeded",
       shouldDisableKey: false,
     };
@@ -14974,7 +15305,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "invalid",
       isRetryable: true,
       cooldownMs: 60 * 60 * 1000, // 1 hour cooldown / disabled
-      userFacingError: "अमान्य API Key (Confirmed Invalid Authentication Credential)",
+      userFacingError: "à¤…à¤®à¤¾à¤¨à¥à¤¯ API Key (Confirmed Invalid Authentication Credential)",
       healthStatus: "invalid",
       shouldDisableKey: true,
     };
@@ -14998,7 +15329,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "bad_request",
       isRetryable: false,
       cooldownMs: 0, // No cooldown for the key itself
-      userFacingError: "अमान्य अनुरोध या असमर्थित मॉडल (400/404 Unsupported Model)",
+      userFacingError: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¯à¤¾ à¤…à¤¸à¤®à¤°à¥à¤¥à¤¿à¤¤ à¤®à¥‰à¤¡à¤² (400/404 Unsupported Model)",
       healthStatus: "healthy",
       shouldDisableKey: false,
     };
@@ -15022,7 +15353,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "server",
       isRetryable: true,
       cooldownMs: 0, // Transient server load, do not penalize the key
-      userFacingError: "सर्वर लोड या अस्थायी त्रुटि (503 / Service Unavailable)",
+      userFacingError: "à¤¸à¤°à¥à¤µà¤° à¤²à¥‹à¤¡ à¤¯à¤¾ à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤¤à¥à¤°à¥à¤Ÿà¤¿ (503 / Service Unavailable)",
       healthStatus: "healthy",
       shouldDisableKey: false,
     };
@@ -15040,7 +15371,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "network",
       isRetryable: true,
       cooldownMs: 0, // Transient network glitch, do not penalize the key
-      userFacingError: "नेटवर्क टाइमआउट (Network Timeout)",
+      userFacingError: "à¤¨à¥‡à¤Ÿà¤µà¤°à¥à¤• à¤Ÿà¤¾à¤‡à¤®à¤†à¤‰à¤Ÿ (Network Timeout)",
       healthStatus: "healthy",
       shouldDisableKey: false,
     };
@@ -15231,7 +15562,7 @@ function loadApiKeysVault(): ApiKeysVault {
         {
           id: "free_env_primary",
           key: envKey,
-          label: "सिस्टम जेमिनी की (Primary System Key)",
+          label: "à¤¸à¤¿à¤¸à¥à¤Ÿà¤® à¤œà¥‡à¤®à¤¿à¤¨à¥€ à¤•à¥€ (Primary System Key)",
           addedAt: Date.now(),
           status: "active",
           cooldownUntil: 0,
@@ -15520,7 +15851,7 @@ function mapAiPoolErrorToUserResponse(err: any): {
     return {
       status: 504,
       errorCode: "NETWORK_ERROR",
-      error: "समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।",
+      error: "à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤•à¤°à¤¨à¥‡ à¤¯à¤¾ AI à¤¸à¥‡à¤µà¤¾ à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¸à¤®à¤¸à¥à¤¯à¤¾ à¤†à¤ˆ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤",
     };
   }
 
@@ -15539,7 +15870,7 @@ function mapAiPoolErrorToUserResponse(err: any): {
     return {
       status: 503,
       errorCode: "API_KEY_ERROR",
-      error: "AI सेवा की API Key में समस्या है। कृपया एडमिन से संपर्क करें।",
+      error: "AI à¤¸à¥‡à¤µà¤¾ à¤•à¥€ API Key à¤®à¥‡à¤‚ à¤¸à¤®à¤¸à¥à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤à¤¡à¤®à¤¿à¤¨ à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚à¥¤",
     };
   }
 
@@ -15555,7 +15886,7 @@ function mapAiPoolErrorToUserResponse(err: any): {
       return {
         status: 429,
         errorCode: "RATE_LIMIT_EXCEEDED",
-        error: "AI सेवा पर अभी अधिक अनुरोध हैं। कृपया कुछ समय बाद पुनः प्रयास करें।",
+        error: "AI à¤¸à¥‡à¤µà¤¾ à¤ªà¤° à¤…à¤­à¥€ à¤…à¤§à¤¿à¤• à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¹à¥ˆà¤‚à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤•à¥à¤› à¤¸à¤®à¤¯ à¤¬à¤¾à¤¦ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤",
       };
     }
   }
@@ -15572,7 +15903,7 @@ function mapAiPoolErrorToUserResponse(err: any): {
     return {
       status: 429,
       errorCode: "DAILY_QUOTA_EXCEEDED",
-      error: "आज AI Headline Generation की API दैनिक सीमा पूरी हो चुकी है। कृपया बाद में पुनः प्रयास करें।",
+      error: "à¤†à¤œ AI Headline Generation à¤•à¥€ API à¤¦à¥ˆà¤¨à¤¿à¤• à¤¸à¥€à¤®à¤¾ à¤ªà¥‚à¤°à¥€ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¬à¤¾à¤¦ à¤®à¥‡à¤‚ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤",
     };
   }
 
@@ -15581,7 +15912,7 @@ function mapAiPoolErrorToUserResponse(err: any): {
     return {
       status: 503,
       errorCode: "ALL_API_KEYS_UNAVAILABLE",
-      error: "AI सेवा फिलहाल उपलब्ध नहीं है। API Pool की सभी उपलब्ध Keys की सीमा पूरी हो चुकी है या वे अस्थायी रूप से अनुपलब्ध हैं।",
+      error: "AI à¤¸à¥‡à¤µà¤¾ à¤«à¤¿à¤²à¤¹à¤¾à¤² à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ API Pool à¤•à¥€ à¤¸à¤­à¥€ à¤‰à¤ªà¤²à¤¬à¥à¤§ Keys à¤•à¥€ à¤¸à¥€à¤®à¤¾ à¤ªà¥‚à¤°à¥€ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆ à¤¯à¤¾ à¤µà¥‡ à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤…à¤¨à¥à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤",
     };
   }
 
@@ -15589,14 +15920,14 @@ function mapAiPoolErrorToUserResponse(err: any): {
   return {
     status: 503,
     errorCode: "AI_SERVICE_UNAVAILABLE",
-    error: "AI सेवा फिलहाल उपलब्ध नहीं है। API Pool की सभी उपलब्ध Keys की सीमा पूरी हो चुकी है या वे अस्थायी रूप से अनुपलब्ध हैं।",
+    error: "AI à¤¸à¥‡à¤µà¤¾ à¤«à¤¿à¤²à¤¹à¤¾à¤² à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ API Pool à¤•à¥€ à¤¸à¤­à¥€ à¤‰à¤ªà¤²à¤¬à¥à¤§ Keys à¤•à¥€ à¤¸à¥€à¤®à¤¾ à¤ªà¥‚à¤°à¥€ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆ à¤¯à¤¾ à¤µà¥‡ à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤…à¤¨à¥à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤",
   };
 }
 
 // Admin API Keys Manager Endpoints
 app.get("/api/admin/api-keys", async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API कीज़ देख सकते हैं।" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ API à¤•à¥€à¤œà¤¼ à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
   }
   const vault = await getOrLoadApiKeysVault(true);
   const now = Date.now();
@@ -15614,7 +15945,7 @@ app.get("/api/admin/api-keys", async (req, res) => {
     lastLatencyMs: k.lastLatencyMs || null,
     lastHealthStatus: k.lastHealthStatus || (k.status === "active" ? "healthy" : "error"),
     lastError: k.lastError || null,
-    provider: k.provider || "Google Gemini (गूगल जेमिनी)",
+    provider: k.provider || "Google Gemini (à¤—à¥‚à¤—à¤² à¤œà¥‡à¤®à¤¿à¤¨à¥€)",
     model: k.model || "gemini-3-flash-preview",
   }));
 
@@ -15627,14 +15958,14 @@ app.get("/api/admin/api-keys", async (req, res) => {
     paidKey: {
       configured: paidConfigured,
       maskedKey: maskedPaidKey,
-      label: vault.paidKey?.label || "समर्पित पेड VIP API Key",
+      label: vault.paidKey?.label || "à¤¸à¤®à¤°à¥à¤ªà¤¿à¤¤ à¤ªà¥‡à¤¡ VIP API Key",
       status: vault.paidKey?.status || "inactive",
       updatedAt: vault.paidKey?.updatedAt || null,
       lastTestedAt: vault.paidKey?.lastTestedAt || null,
       lastLatencyMs: vault.paidKey?.lastLatencyMs || null,
       lastHealthStatus: vault.paidKey?.lastHealthStatus || (paidConfigured ? "healthy" : "inactive"),
       lastError: vault.paidKey?.lastError || null,
-      provider: vault.paidKey?.provider || "Google Gemini (गूगल जेमिनी)",
+      provider: vault.paidKey?.provider || "Google Gemini (à¤—à¥‚à¤—à¤² à¤œà¥‡à¤®à¤¿à¤¨à¥€)",
       model: vault.paidKey?.model || "gemini-3-flash-preview",
     },
     vipRoutingEnabled: vault.vipRoutingEnabled,
@@ -15649,16 +15980,16 @@ app.get("/api/admin/api-keys", async (req, res) => {
 
 app.post("/api/admin/api-keys/free", async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤" });
   }
   const { apiKey, label } = req.body;
   if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 15) {
-    return res.status(400).json({ error: "अमान्य API Key। कृपया मान्य Google Gemini API Key दर्ज करें।" });
+    return res.status(400).json({ error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ API Keyà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤®à¤¾à¤¨à¥à¤¯ Google Gemini API Key à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤" });
   }
   const cleanKey = apiKey.trim();
   const vault = await getOrLoadApiKeysVault(true);
   if (vault.freeKeys.some((k) => k.key === cleanKey)) {
-    return res.status(400).json({ error: "यह API Key पहले से ही फ्री पूल में मौजूद है।" });
+    return res.status(400).json({ error: "à¤¯à¤¹ API Key à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¹à¥€ à¤«à¥à¤°à¥€ à¤ªà¥‚à¤² à¤®à¥‡à¤‚ à¤®à¥Œà¤œà¥‚à¤¦ à¤¹à¥ˆà¥¤" });
   }
 
   // Quick connectivity test across supported fallback models
@@ -15688,7 +16019,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
       lastTestErr = testErr;
       const classified = classifyApiKeyError(testErr);
       if (classified.type === "invalid") {
-        return res.status(400).json({ error: `अमान्य API Key: ${classified.userFacingError}` });
+        return res.status(400).json({ error: `à¤…à¤®à¤¾à¤¨à¥à¤¯ API Key: ${classified.userFacingError}` });
       }
     }
   }
@@ -15724,7 +16055,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
     vault.freeKeys = vault.freeKeys.filter((k) => k.id !== newKeyItem.id);
     cachedApiKeysVault = vault;
     return res.status(500).json({
-      error: `फायरस्टोर डेटाबेस में API Key सुरक्षित नहीं हो सकी: ${saveResult.error || "डेटाबेस त्रुटि"}। कृपया पुनः प्रयास करें।`,
+      error: `à¤«à¤¾à¤¯à¤°à¤¸à¥à¤Ÿà¥‹à¤° à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤®à¥‡à¤‚ API Key à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¥€: ${saveResult.error || "à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤¤à¥à¤°à¥à¤Ÿà¤¿"}à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤`,
     });
   }
 
@@ -15733,7 +16064,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
 
   return res.json({
     success: true,
-    message: "✅ नई फ्री Gemini API Key सफलतापूर्वक फ्री पूल में जोड़ दी गई!",
+    message: "âœ… à¤¨à¤ˆ à¤«à¥à¤°à¥€ Gemini API Key à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤«à¥à¤°à¥€ à¤ªà¥‚à¤² à¤®à¥‡à¤‚ à¤œà¥‹à¤¡à¤¼ à¤¦à¥€ à¤—à¤ˆ!",
     key: {
       id: newKeyItem.id,
       label: newKeyItem.label,
@@ -15746,7 +16077,7 @@ app.post("/api/admin/api-keys/free", async (req, res) => {
 
 app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤" });
   }
   const { id } = req.params;
   const vault = await getOrLoadApiKeysVault(true);
@@ -15754,24 +16085,24 @@ app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (
   const previousKeys = [...vault.freeKeys];
   vault.freeKeys = vault.freeKeys.filter((k) => k.id !== id);
   if (vault.freeKeys.length === initialLen) {
-    return res.status(404).json({ error: "API Key नहीं मिली" });
+    return res.status(404).json({ error: "API Key à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¥€" });
   }
   const saveResult = await saveApiKeysVault(vault);
   if (!saveResult.success) {
     vault.freeKeys = previousKeys;
     cachedApiKeysVault = vault;
-    return res.status(500).json({ error: `डेटाबेस से API Key हटाने में त्रुटि: ${saveResult.error || "डेटाबेस त्रुटि"}` });
+    return res.status(500).json({ error: `à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤¸à¥‡ API Key à¤¹à¤Ÿà¤¾à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${saveResult.error || "à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤¤à¥à¤°à¥à¤Ÿà¤¿"}` });
   }
 
   const adminEmail = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail, "DELETE_FREE_API_KEY", id);
 
-  return res.json({ success: true, message: "फ्री API Key सफलतापूर्वक हटा दी गई।" });
+  return res.json({ success: true, message: "à¤«à¥à¤°à¥€ API Key à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¹à¤Ÿà¤¾ à¤¦à¥€ à¤—à¤ˆà¥¤" });
 });
 
 app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤" });
   }
   const { apiKey, label, vipRoutingEnabled } = req.body;
   const vault = await getOrLoadApiKeysVault(true);
@@ -15795,7 +16126,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
 
   const saveResult = await saveApiKeysVault(vault);
   if (!saveResult.success) {
-    return res.status(500).json({ error: `डेटाबेस में पेड VIP Key सुरक्षित नहीं हो सकी: ${saveResult.error || "डेटाबेस त्रुटि"}` });
+    return res.status(500).json({ error: `à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤®à¥‡à¤‚ à¤ªà¥‡à¤¡ VIP Key à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¥€: ${saveResult.error || "à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤¤à¥à¤°à¥à¤Ÿà¤¿"}` });
   }
 
   const adminEmail = extractAdminEmail(req) || "admin";
@@ -15806,7 +16137,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
 
   return res.json({
     success: true,
-    message: "✅ पेड VIP API Key सेटिंग्स सफलतापूर्वक सुरक्षित हो गईं!",
+    message: "âœ… à¤ªà¥‡à¤¡ VIP API Key à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¹à¥‹ à¤—à¤ˆà¤‚!",
     vipRoutingEnabled: vault.vipRoutingEnabled,
     paidKeyConfigured: Boolean(vault.paidKey?.key),
   });
@@ -15814,28 +16145,28 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
 
 app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤" });
   }
   const vault = await getOrLoadApiKeysVault(true);
   vault.paidKey = null;
   const saveResult = await saveApiKeysVault(vault);
   if (!saveResult.success) {
-    return res.status(500).json({ error: `डेटाबेस से पेड VIP Key हटाने में त्रुटि: ${saveResult.error || "डेटाबेस त्रुटि"}` });
+    return res.status(500).json({ error: `à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤¸à¥‡ à¤ªà¥‡à¤¡ VIP Key à¤¹à¤Ÿà¤¾à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${saveResult.error || "à¤¡à¥‡à¤Ÿà¤¾à¤¬à¥‡à¤¸ à¤¤à¥à¤°à¥à¤Ÿà¤¿"}` });
   }
 
   const adminEmail = extractAdminEmail(req) || "admin";
   logAdminAudit(adminEmail, "DELETE_PAID_API_KEY", "paid_key");
 
-  return res.json({ success: true, message: "पेड VIP API Key हटा दी गई।" });
+  return res.json({ success: true, message: "à¤ªà¥‡à¤¡ VIP API Key à¤¹à¤Ÿà¤¾ à¤¦à¥€ à¤—à¤ˆà¥¤" });
 });
 
 app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤" });
   }
   const { apiKey } = req.body;
   if (!apiKey || typeof apiKey !== "string" || apiKey.trim().length < 15) {
-    return res.status(400).json({ error: "जांच के लिए मान्य API Key दर्ज करें" });
+    return res.status(400).json({ error: "à¤œà¤¾à¤‚à¤š à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¥à¤¯ API Key à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚" });
   }
   const start = Date.now();
   try {
@@ -15850,7 +16181,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
     const latency = Date.now() - start;
     return res.json({
       success: true,
-      message: `✅ API Key सक्रिय है! रिस्पॉन्स समय: ${latency}ms`,
+      message: `âœ… API Key à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¹à¥ˆ! à¤°à¤¿à¤¸à¥à¤ªà¥‰à¤¨à¥à¤¸ à¤¸à¤®à¤¯: ${latency}ms`,
       latencyMs: latency,
       text: result.text || "OK",
     });
@@ -15858,7 +16189,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
     const classified = classifyApiKeyError(err);
     return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
-      error: `कनेक्शन त्रुटि: ${classified.userFacingError}`,
+      error: `à¤•à¤¨à¥‡à¤•à¥à¤¶à¤¨ à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${classified.userFacingError}`,
       classification: classified.type,
     });
   }
@@ -15866,7 +16197,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
 
 app.post("/api/admin/api-keys/test-id", async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
-    return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API स्वास्थ्य परीक्षण कर सकते हैं।" });
+    return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤…à¤§à¤¿à¤•à¥ƒà¤¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¹à¥€ API à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯ à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
   }
   const { keyId, type } = req.body || {};
   const vault = await getOrLoadApiKeysVault(true);
@@ -15875,14 +16206,14 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
 
   if (type === "paid") {
     if (!vault.paidKey?.key) {
-      return res.status(404).json({ error: "कोई पेड VIP API Key कॉन्फ़िगर नहीं है।" });
+      return res.status(404).json({ error: "à¤•à¥‹à¤ˆ à¤ªà¥‡à¤¡ VIP API Key à¤•à¥‰à¤¨à¥à¤«à¤¼à¤¿à¤—à¤° à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤" });
     }
     targetKeyStr = vault.paidKey.key.trim();
     targetRef = vault.paidKey;
   } else {
     const found = vault.freeKeys.find((k) => k.id === keyId);
     if (!found) {
-      return res.status(404).json({ error: "API Key नहीं मिली।" });
+      return res.status(404).json({ error: "API Key à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¥€à¥¤" });
     }
     targetKeyStr = found.key.trim();
     targetRef = found;
@@ -15906,7 +16237,7 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
         );
         const testCall = testAi.models.generateContent({
           model: testModel,
-          contents: 'आप एक संपादकीय परीक्षक हैं। इस टेस्ट अनुरोध पर वैध JSON में उत्तर दें: {"status": "ok", "newsReady": true}',
+          contents: 'à¤†à¤ª à¤à¤• à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤ªà¤°à¥€à¤•à¥à¤·à¤• à¤¹à¥ˆà¤‚à¥¤ à¤‡à¤¸ à¤Ÿà¥‡à¤¸à¥à¤Ÿ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤ªà¤° à¤µà¥ˆà¤§ JSON à¤®à¥‡à¤‚ à¤‰à¤¤à¥à¤¤à¤° à¤¦à¥‡à¤‚: {"status": "ok", "newsReady": true}',
           config: {
             responseMimeType: "application/json",
           },
@@ -15941,8 +16272,8 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
 
     return res.json({
       success: true,
-      message: `✅ API Key पूर्णतः सक्रिय व कार्यरत है! जेमिनी मॉडल (${successfulModel}) से सफल कनेक्शन (${latency}ms)`,
-      provider: "Google Gemini (गूगल जेमिनी)",
+      message: `âœ… API Key à¤ªà¥‚à¤°à¥à¤£à¤¤à¤ƒ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤µ à¤•à¤¾à¤°à¥à¤¯à¤°à¤¤ à¤¹à¥ˆ! à¤œà¥‡à¤®à¤¿à¤¨à¥€ à¤®à¥‰à¤¡à¤² (${successfulModel}) à¤¸à¥‡ à¤¸à¤«à¤² à¤•à¤¨à¥‡à¤•à¥à¤¶à¤¨ (${latency}ms)`,
+      provider: "Google Gemini (à¤—à¥‚à¤—à¤² à¤œà¥‡à¤®à¤¿à¤¨à¥€)",
       model: successfulModel,
       latencyMs: latency,
       healthStatus: "healthy",
@@ -15968,8 +16299,8 @@ app.post("/api/admin/api-keys/test-id", async (req, res) => {
 
     return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
       success: false,
-      error: `स्वास्थ्य परीक्षण त्रुटि: ${classified.userFacingError}`,
-      provider: "Google Gemini (गूगल जेमिनी)",
+      error: `à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯ à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${classified.userFacingError}`,
+      provider: "Google Gemini (à¤—à¥‚à¤—à¤² à¤œà¥‡à¤®à¤¿à¤¨à¥€)",
       model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
       latencyMs: latency,
       healthStatus: targetRef.lastHealthStatus,
@@ -16018,7 +16349,7 @@ const apiMonitoringHistory: ApiMonitoringHistoryState = {
   lastSuccessfulTest: null,
   lastFailedTest: null,
   failureDurationMs: 0,
-  recoveryStatus: "सभी सेवाएँ सामान्य व सक्रिय",
+  recoveryStatus: "à¤¸à¤­à¥€ à¤¸à¥‡à¤µà¤¾à¤à¤ à¤¸à¤¾à¤®à¤¾à¤¨à¥à¤¯ à¤µ à¤¸à¤•à¥à¤°à¤¿à¤¯",
 };
 
 const API_ALERTS_LOG_FILE = path.join(process.cwd(), "api_alerts_log.json");
@@ -16065,27 +16396,27 @@ async function sendApiAlertNotification(
   const verifiedWhatsappNumber = process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE || "9669802408";
 
   const emailSubject = type === "TEST"
-    ? "AI NEWS MAKER — API तकनीकी त्रुटि अलर्ट (सिमुलेशन टेस्ट)"
+    ? "AI NEWS MAKER â€” API à¤¤à¤•à¤¨à¥€à¤•à¥€ à¤¤à¥à¤°à¥à¤Ÿà¤¿ à¤…à¤²à¤°à¥à¤Ÿ (à¤¸à¤¿à¤®à¥à¤²à¥‡à¤¶à¤¨ à¤Ÿà¥‡à¤¸à¥à¤Ÿ)"
     : type === "RECOVERY"
-    ? `AI NEWS MAKER — API सेवा पुनर्बहाली (Recovery): ${details.apiName}`
-    : `AI NEWS MAKER — API तकनीकी त्रुटि अलर्ट: ${details.apiName}`;
+    ? `AI NEWS MAKER â€” API à¤¸à¥‡à¤µà¤¾ à¤ªà¥à¤¨à¤°à¥à¤¬à¤¹à¤¾à¤²à¥€ (Recovery): ${details.apiName}`
+    : `AI NEWS MAKER â€” API à¤¤à¤•à¤¨à¥€à¤•à¥€ à¤¤à¥à¤°à¥à¤Ÿà¤¿ à¤…à¤²à¤°à¥à¤Ÿ: ${details.apiName}`;
 
   const emailBody = `
 ============================================================
 ${emailSubject}
 ============================================================
-समय: ${new Date(timestamp).toLocaleString("hi-IN", { timeZone: "Asia/Kolkata" })}
-API का नाम: ${details.apiName}
+à¤¸à¤®à¤¯: ${new Date(timestamp).toLocaleString("hi-IN", { timeZone: "Asia/Kolkata" })}
+API à¤•à¤¾ à¤¨à¤¾à¤®: ${details.apiName}
 API Provider: ${details.provider}
-वर्तमान स्थिति (Status): ${details.status}
+à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤¸à¥à¤¥à¤¿à¤¤à¤¿ (Status): ${details.status}
 HTTP Code: ${details.httpCode || "N/A"}
 Response Time / Latency: ${details.latencyMs || 0}ms
-त्रुटि विवरण (Error): ${details.errorMessage || "कोई त्रुटि नहीं"}
-समस्या पहली बार कब आई: ${details.firstFailureTime ? new Date(details.firstFailureTime).toLocaleTimeString("hi-IN") : "N/A"}
-पिछली सफल जाँच: ${details.lastSuccessTime ? new Date(details.lastSuccessTime).toLocaleTimeString("hi-IN") : "N/A"}
-सूचना का प्रकार: ${type}
+à¤¤à¥à¤°à¥à¤Ÿà¤¿ à¤µà¤¿à¤µà¤°à¤£ (Error): ${details.errorMessage || "à¤•à¥‹à¤ˆ à¤¤à¥à¤°à¥à¤Ÿà¤¿ à¤¨à¤¹à¥€à¤‚"}
+à¤¸à¤®à¤¸à¥à¤¯à¤¾ à¤ªà¤¹à¤²à¥€ à¤¬à¤¾à¤° à¤•à¤¬ à¤†à¤ˆ: ${details.firstFailureTime ? new Date(details.firstFailureTime).toLocaleTimeString("hi-IN") : "N/A"}
+à¤ªà¤¿à¤›à¤²à¥€ à¤¸à¤«à¤² à¤œà¤¾à¤à¤š: ${details.lastSuccessTime ? new Date(details.lastSuccessTime).toLocaleTimeString("hi-IN") : "N/A"}
+à¤¸à¥‚à¤šà¤¨à¤¾ à¤•à¤¾ à¤ªà¥à¤°à¤•à¤¾à¤°: ${type}
 ============================================================
-AI News Maker • स्वचालित API स्वास्थ्य निगरानी तंत्र
+AI News Maker â€¢ à¤¸à¥à¤µà¤šà¤¾à¤²à¤¿à¤¤ API à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯ à¤¨à¤¿à¤—à¤°à¤¾à¤¨à¥€ à¤¤à¤‚à¤¤à¥à¤°
 `.trim();
 
   let emailSent = false;
@@ -16130,13 +16461,13 @@ AI News Maker • स्वचालित API स्वास्थ्य न�
     const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
     if (waToken && waPhoneId && verifiedWhatsappNumber) {
       try {
-        const waMsg = `🚨 *${emailSubject}*\n\n` +
-          `• *API:* ${details.apiName} (${details.provider})\n` +
-          `• *Status:* ${details.status}\n` +
-          `• *Latency:* ${details.latencyMs || 0}ms (HTTP ${details.httpCode || 200})\n` +
-          `• *Error:* ${details.errorMessage || "N/A"}\n` +
-          `• *Time:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}\n\n` +
-          `_AI News Maker 자동 알림_`;
+        const waMsg = `ðŸš¨ *${emailSubject}*\n\n` +
+          `â€¢ *API:* ${details.apiName} (${details.provider})\n` +
+          `â€¢ *Status:* ${details.status}\n` +
+          `â€¢ *Latency:* ${details.latencyMs || 0}ms (HTTP ${details.httpCode || 200})\n` +
+          `â€¢ *Error:* ${details.errorMessage || "N/A"}\n` +
+          `â€¢ *Time:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}\n\n` +
+          `_AI News Maker ìžë™ ì•Œë¦¼_`;
 
         const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
           method: "POST",
@@ -16212,7 +16543,7 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
     const hasAnyKey = (vault.freeKeys && vault.freeKeys.length > 0) || Boolean(vault.paidKey?.key) || Boolean(process.env.GEMINI_API_KEY);
     if (!hasAnyKey) {
       geminiItem.status = "Not Configured";
-      geminiItem.errorMessage = "कोई Google Gemini API Key कॉन्फ़िगर नहीं है";
+      geminiItem.errorMessage = "à¤•à¥‹à¤ˆ Google Gemini API Key à¤•à¥‰à¤¨à¥à¤«à¤¼à¤¿à¤—à¤° à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ";
       geminiItem.httpCode = 404;
     } else {
       const activeKey = vault.paidKey?.key || vault.freeKeys[0]?.key || process.env.GEMINI_API_KEY || "";
@@ -16263,7 +16594,7 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
   const cfSecret = process.env.CASHFREE_SECRET_KEY || "";
   if (!cfAppId && !cfSecret) {
     cfItem.status = "Not Configured";
-    cfItem.errorMessage = "Cashfree App ID व Secret Key कॉन्फ़िगर नहीं है (QR व मैन्युअल भुगतान सक्रिय)";
+    cfItem.errorMessage = "Cashfree App ID à¤µ Secret Key à¤•à¥‰à¤¨à¥à¤«à¤¼à¤¿à¤—à¤° à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ (QR à¤µ à¤®à¥ˆà¤¨à¥à¤¯à¥à¤…à¤² à¤­à¥à¤—à¤¤à¤¾à¤¨ à¤¸à¤•à¥à¤°à¤¿à¤¯)";
     cfItem.httpCode = 404;
   } else {
     try {
@@ -16279,12 +16610,12 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
       cfItem.httpCode = cfRes.status;
       if (cfRes.status === 401 || cfRes.status === 403) {
         cfItem.status = "Authentication Error";
-        cfItem.errorMessage = "अमान्य Cashfree क्रेडेंशियल्स";
+        cfItem.errorMessage = "à¤…à¤®à¤¾à¤¨à¥à¤¯ Cashfree à¤•à¥à¤°à¥‡à¤¡à¥‡à¤‚à¤¶à¤¿à¤¯à¤²à¥à¤¸";
         apiConsecutiveFailures["cashfree_gateway"] = (apiConsecutiveFailures["cashfree_gateway"] || 0) + 1;
         if (!apiFirstFailureTime["cashfree_gateway"]) apiFirstFailureTime["cashfree_gateway"] = now;
       } else if (!cfRes.ok && cfRes.status !== 404) {
         cfItem.status = "Unhealthy";
-        cfItem.errorMessage = `Cashfree API त्रुटि (HTTP ${cfRes.status})`;
+        cfItem.errorMessage = `Cashfree API à¤¤à¥à¤°à¥à¤Ÿà¤¿ (HTTP ${cfRes.status})`;
         apiConsecutiveFailures["cashfree_gateway"] = (apiConsecutiveFailures["cashfree_gateway"] || 0) + 1;
         if (!apiFirstFailureTime["cashfree_gateway"]) apiFirstFailureTime["cashfree_gateway"] = now;
       } else {
@@ -16296,7 +16627,7 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
     } catch (cfErr: any) {
       cfItem.latencyMs = Date.now() - cfStart;
       cfItem.status = cfErr.name === "TimeoutError" ? "Timeout" : "Unhealthy";
-      cfItem.errorMessage = cfErr.message || "Cashfree सर्वर से संपर्क नहीं हो सका";
+      cfItem.errorMessage = cfErr.message || "Cashfree à¤¸à¤°à¥à¤µà¤° à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¾";
       apiConsecutiveFailures["cashfree_gateway"] = (apiConsecutiveFailures["cashfree_gateway"] || 0) + 1;
       if (!apiFirstFailureTime["cashfree_gateway"]) apiFirstFailureTime["cashfree_gateway"] = now;
     }
@@ -16332,13 +16663,13 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
       delete apiFirstFailureTime["weather_api"];
     } else {
       wItem.status = "Degraded";
-      wItem.errorMessage = `मौसम सेवा से धीमा रिस्पॉन्स (HTTP ${wRes.status})`;
+      wItem.errorMessage = `à¤®à¥Œà¤¸à¤® à¤¸à¥‡à¤µà¤¾ à¤¸à¥‡ à¤§à¥€à¤®à¤¾ à¤°à¤¿à¤¸à¥à¤ªà¥‰à¤¨à¥à¤¸ (HTTP ${wRes.status})`;
       apiConsecutiveFailures["weather_api"] = (apiConsecutiveFailures["weather_api"] || 0) + 1;
     }
   } catch (wErr: any) {
     wItem.latencyMs = Date.now() - wStart;
     wItem.status = "Degraded";
-    wItem.errorMessage = "स्थानीय मौसम डेटा Fallback सक्रिय है";
+    wItem.errorMessage = "à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤®à¥Œà¤¸à¤® à¤¡à¥‡à¤Ÿà¤¾ Fallback à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¹à¥ˆ";
     apiConsecutiveFailures["weather_api"] = (apiConsecutiveFailures["weather_api"] || 0) + 1;
   }
   wItem.consecutiveFailures = apiConsecutiveFailures["weather_api"] || 0;
@@ -16362,7 +16693,7 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
   const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
   if (!waToken || !waPhoneId) {
     waItem.status = "Not Configured";
-    waItem.errorMessage = "WhatsApp Token व Phone ID कॉन्फ़िगर नहीं है";
+    waItem.errorMessage = "WhatsApp Token à¤µ Phone ID à¤•à¥‰à¤¨à¥à¤«à¤¼à¤¿à¤—à¤° à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ";
     waItem.httpCode = 404;
   } else {
     try {
@@ -16379,19 +16710,19 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
         delete apiFirstFailureTime["whatsapp_api"];
       } else if (waRes.status === 401 || waRes.status === 403) {
         waItem.status = "Authentication Error";
-        waItem.errorMessage = "WhatsApp Token अमान्य या समाप्त (Expired) हो गया है";
+        waItem.errorMessage = "WhatsApp Token à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤¯à¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ (Expired) à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆ";
         apiConsecutiveFailures["whatsapp_api"] = (apiConsecutiveFailures["whatsapp_api"] || 0) + 1;
         if (!apiFirstFailureTime["whatsapp_api"]) apiFirstFailureTime["whatsapp_api"] = now;
       } else {
         waItem.status = "Unhealthy";
-        waItem.errorMessage = `WhatsApp API त्रुटि (HTTP ${waRes.status})`;
+        waItem.errorMessage = `WhatsApp API à¤¤à¥à¤°à¥à¤Ÿà¤¿ (HTTP ${waRes.status})`;
         apiConsecutiveFailures["whatsapp_api"] = (apiConsecutiveFailures["whatsapp_api"] || 0) + 1;
         if (!apiFirstFailureTime["whatsapp_api"]) apiFirstFailureTime["whatsapp_api"] = now;
       }
     } catch (waErr: any) {
       waItem.latencyMs = Date.now() - waStart;
       waItem.status = waErr.name === "TimeoutError" ? "Timeout" : "Unhealthy";
-      waItem.errorMessage = waErr.message || "WhatsApp सर्वर से संपर्क नहीं हो सका";
+      waItem.errorMessage = waErr.message || "WhatsApp à¤¸à¤°à¥à¤µà¤° à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¾";
       apiConsecutiveFailures["whatsapp_api"] = (apiConsecutiveFailures["whatsapp_api"] || 0) + 1;
       if (!apiFirstFailureTime["whatsapp_api"]) apiFirstFailureTime["whatsapp_api"] = now;
     }
@@ -16421,7 +16752,7 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
     apiLastSuccessfulCheck["database_firestore"] = now;
   } catch {
     dbItem.status = "Degraded";
-    dbItem.errorMessage = "स्थानीय JSON कैश मोड सक्रिय";
+    dbItem.errorMessage = "à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ JSON à¤•à¥ˆà¤¶ à¤®à¥‹à¤¡ à¤¸à¤•à¥à¤°à¤¿à¤¯";
   }
   results.push(dbItem);
 
@@ -16484,13 +16815,13 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
   const hasUnhealthy = results.some((r) => r.status === "Unhealthy" || r.status === "Authentication Error");
   if (!hasUnhealthy) {
     apiMonitoringHistory.lastSuccessfulTest = now;
-    apiMonitoringHistory.recoveryStatus = "सभी आवश्यक API सेवाएँ सामान्य व सक्रिय हैं";
+    apiMonitoringHistory.recoveryStatus = "à¤¸à¤­à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• API à¤¸à¥‡à¤µà¤¾à¤à¤ à¤¸à¤¾à¤®à¤¾à¤¨à¥à¤¯ à¤µ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¹à¥ˆà¤‚";
     apiMonitoringHistory.failureDurationMs = 0;
   } else {
     apiMonitoringHistory.lastFailedTest = now;
     const oldestFail = Math.min(...Object.values(apiFirstFailureTime).filter(Boolean));
     apiMonitoringHistory.failureDurationMs = oldestFail ? now - oldestFail : 0;
-    apiMonitoringHistory.recoveryStatus = "कुछ API सेवाओं में विफलता दर्ज की गई है - व्यवस्थापक अलर्ट भेजा गया";
+    apiMonitoringHistory.recoveryStatus = "à¤•à¥à¤› API à¤¸à¥‡à¤µà¤¾à¤“à¤‚ à¤®à¥‡à¤‚ à¤µà¤¿à¤«à¤²à¤¤à¤¾ à¤¦à¤°à¥à¤œ à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆ - à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤…à¤²à¤°à¥à¤Ÿ à¤­à¥‡à¤œà¤¾ à¤—à¤¯à¤¾";
   }
 
   return results;
@@ -16543,13 +16874,13 @@ app.get("/api/admin/api-health/status", requireAdminMiddleware, async (_req, res
   }
 });
 
-// POST /api/admin/api-health/test-all - Manual Full Health Test ("सभी API की जाँच करें")
+// POST /api/admin/api-health/test-all - Manual Full Health Test ("à¤¸à¤­à¥€ API à¤•à¥€ à¤œà¤¾à¤à¤š à¤•à¤°à¥‡à¤‚")
 app.post("/api/admin/api-health/test-all", requireAdminMiddleware, async (_req, res) => {
   try {
     const results = await runAllApiHealthChecks();
     return res.json({
       success: true,
-      message: "सभी सक्रिय API सेवाओं का स्वास्थ्य परीक्षण सफलतापूर्वक संपन्न हुआ",
+      message: "à¤¸à¤­à¥€ à¤¸à¤•à¥à¤°à¤¿à¤¯ API à¤¸à¥‡à¤µà¤¾à¤“à¤‚ à¤•à¤¾ à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯ à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¸à¤‚à¤ªà¤¨à¥à¤¨ à¤¹à¥à¤†",
       schedulerEnabled: apiHealthSchedulerEnabled,
       monitoringHistory: apiMonitoringHistory,
       apis: results,
@@ -16569,8 +16900,8 @@ app.post("/api/admin/api-health/scheduler/toggle", requireAdminMiddleware, (req,
       success: true,
       schedulerEnabled: apiHealthSchedulerEnabled,
       message: apiHealthSchedulerEnabled
-        ? "हर 15 मिनट में स्वतः API जाँच सक्रिय कर दी गई है।"
-        : "स्वतः API जाँच अस्थायी रूप से निष्क्रिय कर दी गई है।",
+        ? "à¤¹à¤° 15 à¤®à¤¿à¤¨à¤Ÿ à¤®à¥‡à¤‚ à¤¸à¥à¤µà¤¤à¤ƒ API à¤œà¤¾à¤à¤š à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤•à¤° à¤¦à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤"
+        : "à¤¸à¥à¤µà¤¤à¤ƒ API à¤œà¤¾à¤à¤š à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤¨à¤¿à¤·à¥à¤•à¥à¤°à¤¿à¤¯ à¤•à¤° à¤¦à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤",
       monitoringHistory: apiMonitoringHistory,
     });
   } catch (err: any) {
@@ -16582,17 +16913,17 @@ app.post("/api/admin/api-health/scheduler/toggle", requireAdminMiddleware, (req,
 app.post("/api/admin/api-health/test-alert", requireAdminMiddleware, async (_req, res) => {
   try {
     const dispatchResult = await sendApiAlertNotification("TEST", {
-      apiName: "सिमुलेशन टेस्ट (Simulation Test)",
+      apiName: "à¤¸à¤¿à¤®à¥à¤²à¥‡à¤¶à¤¨ à¤Ÿà¥‡à¤¸à¥à¤Ÿ (Simulation Test)",
       provider: "AI News Maker Diagnostics",
       status: "Healthy",
       httpCode: 200,
       latencyMs: 120,
-      errorMessage: "यह व्यवस्थापक द्वारा भेजा गया परीक्षण अलर्ट (Test Alert) है। सभी सेवाएँ सामान्य हैं।",
+      errorMessage: "à¤¯à¤¹ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤­à¥‡à¤œà¤¾ à¤—à¤¯à¤¾ à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤…à¤²à¤°à¥à¤Ÿ (Test Alert) à¤¹à¥ˆà¥¤ à¤¸à¤­à¥€ à¤¸à¥‡à¤µà¤¾à¤à¤ à¤¸à¤¾à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥ˆà¤‚à¥¤",
       isTest: true,
     });
     return res.json({
       success: true,
-      message: "परीक्षण अलर्ट (Test Alert) सफलतापूर्वक ईमेल व व्हाट्सएप पर भेजा गया",
+      message: "à¤ªà¤°à¥€à¤•à¥à¤·à¤£ à¤…à¤²à¤°à¥à¤Ÿ (Test Alert) à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤ˆà¤®à¥‡à¤² à¤µ à¤µà¥à¤¹à¤¾à¤Ÿà¥à¤¸à¤à¤ª à¤ªà¤° à¤­à¥‡à¤œà¤¾ à¤—à¤¯à¤¾",
       dispatch: dispatchResult,
     });
   } catch (err: any) {
@@ -16670,8 +17001,8 @@ function cleanHtmlEntities(str: string): string {
 function stripNewsSiteBranding(title: string): string {
   if (!title) return "";
   return title
-    .replace(/\s*[-–—|]\s*(?:Dainik\s*Bhaskar|दैनिक\s*भास्कर|Amar\s*Ujala|अमर\s*उजाला|NDTV\s*Khabar|NDTV\s*India|NDTV|Aaj\s*Tak|आज\s*तक|News18|Patrika|पत्रिका|Navbharat\s*Times|नवभारत\s*टाइम्स|Hindustan|Live\s*Hindustan|BBC\s*News\s*हिंदी|BBC|ABP\s*News|Zee\s*News|Republic\s*Bharat|Oneindia|Jagran|दैनिक\s*जागरण|विकिपीडिया|Wikipedia)[^|–—\-]*$/iu, "")
-    .replace(/\s*[-–—|]\s*(?:Latest\s*News|Breaking\s*News|Hindi\s*News|ताज़ा\s*खबर).*$/iu, "")
+    .replace(/\s*[-â€“â€”|]\s*(?:Dainik\s*Bhaskar|à¤¦à¥ˆà¤¨à¤¿à¤•\s*à¤­à¤¾à¤¸à¥à¤•à¤°|Amar\s*Ujala|à¤…à¤®à¤°\s*à¤‰à¤œà¤¾à¤²à¤¾|NDTV\s*Khabar|NDTV\s*India|NDTV|Aaj\s*Tak|à¤†à¤œ\s*à¤¤à¤•|News18|Patrika|à¤ªà¤¤à¥à¤°à¤¿à¤•à¤¾|Navbharat\s*Times|à¤¨à¤µà¤­à¤¾à¤°à¤¤\s*à¤Ÿà¤¾à¤‡à¤®à¥à¤¸|Hindustan|Live\s*Hindustan|BBC\s*News\s*à¤¹à¤¿à¤‚à¤¦à¥€|BBC|ABP\s*News|Zee\s*News|Republic\s*Bharat|Oneindia|Jagran|à¤¦à¥ˆà¤¨à¤¿à¤•\s*à¤œà¤¾à¤—à¤°à¤£|à¤µà¤¿à¤•à¤¿à¤ªà¥€à¤¡à¤¿à¤¯à¤¾|Wikipedia)[^|â€“â€”\-]*$/iu, "")
+    .replace(/\s*[-â€“â€”|]\s*(?:Latest\s*News|Breaking\s*News|Hindi\s*News|à¤¤à¤¾à¤œà¤¼à¤¾\s*à¤–à¤¬à¤°).*$/iu, "")
     .trim();
 }
 
@@ -16753,13 +17084,13 @@ function parseArticleHtml(html: string, pageUrl: string): {
 
   if (rawDesc) {
     rawDesc = rawDesc
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
+      .replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
       .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°)\s*\d*[\.:\-â€“â€”]*|à¤¤à¤¸à¥à¤µà¥€à¤°\s*\d*[\.:\-â€“â€”]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         " "
       )
       .replace(
-        /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+        /(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤¦à¤¿à¤²à¥à¤²à¥€|à¤­à¥‹à¤ªà¤¾à¤²|à¤‡à¤‚à¤¦à¥Œà¤°|à¤°à¤¾à¤¯à¤ªà¥à¤°|à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°|à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°|à¤²à¤–à¤¨à¤Š|à¤ªà¤Ÿà¤¨à¤¾|à¤œà¤¯à¤ªà¥à¤°|à¤®à¥à¤‚à¤¬à¤ˆ|à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼|à¤°à¤¾à¤‚à¤šà¥€|à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤°à¥€à¤µà¤¾|à¤¸à¤¤à¤¨à¤¾|à¤¸à¤¾à¤—à¤°|à¤‰à¤œà¥à¤œà¥ˆà¤¨)?\s*\d+\s*(?:à¤˜à¤‚à¤Ÿà¥‡|à¤®à¤¿à¤¨à¤Ÿ|à¤¦à¤¿à¤¨|à¤¸à¥‡à¤•à¤‚à¤¡|à¤¸à¤ªà¥à¤¤à¤¾à¤¹|à¤®à¤¾à¤¹|à¤®à¤¹à¥€à¤¨à¥‡)\s*à¤ªà¤¹à¤²à¥‡\s*/gu,
         " "
       )
       .replace(/\s+/g, " ")
@@ -16782,13 +17113,13 @@ function parseArticleHtml(html: string, pageUrl: string): {
             }
             if (!rawDesc && item.description) {
               rawDesc = cleanHtmlEntities(String(item.description))
-                .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
+                .replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
                 .replace(
-                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                  /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°)\s*\d*[\.:\-â€“â€”]*|à¤¤à¤¸à¥à¤µà¥€à¤°\s*\d*[\.:\-â€“â€”]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
                   " "
                 )
                 .replace(
-                  /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+                  /(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤¦à¤¿à¤²à¥à¤²à¥€|à¤­à¥‹à¤ªà¤¾à¤²|à¤‡à¤‚à¤¦à¥Œà¤°|à¤°à¤¾à¤¯à¤ªà¥à¤°|à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°|à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°|à¤²à¤–à¤¨à¤Š|à¤ªà¤Ÿà¤¨à¤¾|à¤œà¤¯à¤ªà¥à¤°|à¤®à¥à¤‚à¤¬à¤ˆ|à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼|à¤°à¤¾à¤‚à¤šà¥€|à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤°à¥€à¤µà¤¾|à¤¸à¤¤à¤¨à¤¾|à¤¸à¤¾à¤—à¤°|à¤‰à¤œà¥à¤œà¥ˆà¤¨)?\s*\d+\s*(?:à¤˜à¤‚à¤Ÿà¥‡|à¤®à¤¿à¤¨à¤Ÿ|à¤¦à¤¿à¤¨|à¤¸à¥‡à¤•à¤‚à¤¡|à¤¸à¤ªà¥à¤¤à¤¾à¤¹|à¤®à¤¾à¤¹|à¤®à¤¹à¥€à¤¨à¥‡)\s*à¤ªà¤¹à¤²à¥‡\s*/gu,
                   " "
                 )
                 .replace(/\s+/g, " ")
@@ -16797,11 +17128,11 @@ function parseArticleHtml(html: string, pageUrl: string): {
             if (item.articleBody) {
               const bodyStr = cleanHtmlEntities(String(item.articleBody))
                 .replace(
-                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                  /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°)\s*\d*[\.:\-â€“â€”]*|à¤¤à¤¸à¥à¤µà¥€à¤°\s*\d*[\.:\-â€“â€”]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
                   " "
                 )
                 .replace(
-                  /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+                  /(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤¦à¤¿à¤²à¥à¤²à¥€|à¤­à¥‹à¤ªà¤¾à¤²|à¤‡à¤‚à¤¦à¥Œà¤°|à¤°à¤¾à¤¯à¤ªà¥à¤°|à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°|à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°|à¤²à¤–à¤¨à¤Š|à¤ªà¤Ÿà¤¨à¤¾|à¤œà¤¯à¤ªà¥à¤°|à¤®à¥à¤‚à¤¬à¤ˆ|à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼|à¤°à¤¾à¤‚à¤šà¥€|à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤°à¥€à¤µà¤¾|à¤¸à¤¤à¤¨à¤¾|à¤¸à¤¾à¤—à¤°|à¤‰à¤œà¥à¤œà¥ˆà¤¨)?\s*\d+\s*(?:à¤˜à¤‚à¤Ÿà¥‡|à¤®à¤¿à¤¨à¤Ÿ|à¤¦à¤¿à¤¨|à¤¸à¥‡à¤•à¤‚à¤¡|à¤¸à¤ªà¥à¤¤à¤¾à¤¹|à¤®à¤¾à¤¹|à¤®à¤¹à¥€à¤¨à¥‡)\s*à¤ªà¤¹à¤²à¥‡\s*/gu,
                   " "
                 )
                 .replace(/\s+/g, " ")
@@ -16850,17 +17181,17 @@ function parseArticleHtml(html: string, pageUrl: string): {
   for (const pMatch of pMatches) {
     let pClean = cleanHtmlEntities(pMatch[1].replace(/<[^>]+>/g, " ")).trim();
     pClean = pClean
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
-      .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
+      .replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
+      .replace(/(?:à¤²à¥‹à¤¡ à¤¹à¥‹ à¤°à¤¹à¤¾ à¤¹à¥ˆ[\s\.]*)+/gi, "")
       .replace(/(?:loading[\s\.]*)+/gi, "")
       .replace(/(?:please wait[\s\.]*)+/gi, "")
-      .replace(/^(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो|भाषा|आईएएनएस|पीटीआई|वार्ता)[,\s]*[^\n।]+[।\n]?/gi, "")
+      .replace(/^(?:à¤¨à¤ˆà¤¦à¥à¤¨à¤¿à¤¯à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¨à¤¿à¤§à¤¿|à¤¦à¥ˆà¤¨à¤¿à¤• à¤­à¤¾à¤¸à¥à¤•à¤°|à¤…à¤®à¤° à¤‰à¤œà¤¾à¤²à¤¾|à¤ªà¤¤à¥à¤°à¤¿à¤•à¤¾|à¤¨à¤µà¤­à¤¾à¤°à¤¤ à¤Ÿà¤¾à¤‡à¤®à¥à¤¸|à¤¹à¤¿à¤‚à¤¦à¥à¤¸à¥à¤¤à¤¾à¤¨ à¤¬à¥à¤¯à¥‚à¤°à¥‹|à¤µà¤¿à¤¶à¥‡à¤· à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾|à¤¬à¥à¤¯à¥‚à¤°à¥‹|à¤­à¤¾à¤·à¤¾|à¤†à¤ˆà¤à¤à¤¨à¤à¤¸|à¤ªà¥€à¤Ÿà¥€à¤†à¤ˆ|à¤µà¤¾à¤°à¥à¤¤à¤¾)[,\s]*[^\nà¥¤]+[à¥¤\n]?/gi, "")
       .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°)\s*\d*[\.:\-â€“â€”]*|à¤¤à¤¸à¥à¤µà¥€à¤°\s*\d*[\.:\-â€“â€”]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|à¤«à¥‹à¤Ÿà¥‹ à¤¸à¤¾à¤­à¤¾à¤°[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         " "
       )
       .replace(
-        /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+        /(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤¦à¤¿à¤²à¥à¤²à¥€|à¤­à¥‹à¤ªà¤¾à¤²|à¤‡à¤‚à¤¦à¥Œà¤°|à¤°à¤¾à¤¯à¤ªà¥à¤°|à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°|à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°|à¤²à¤–à¤¨à¤Š|à¤ªà¤Ÿà¤¨à¤¾|à¤œà¤¯à¤ªà¥à¤°|à¤®à¥à¤‚à¤¬à¤ˆ|à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼|à¤°à¤¾à¤‚à¤šà¥€|à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤°à¥€à¤µà¤¾|à¤¸à¤¤à¤¨à¤¾|à¤¸à¤¾à¤—à¤°|à¤‰à¤œà¥à¤œà¥ˆà¤¨)?\s*\d+\s*(?:à¤˜à¤‚à¤Ÿà¥‡|à¤®à¤¿à¤¨à¤Ÿ|à¤¦à¤¿à¤¨|à¤¸à¥‡à¤•à¤‚à¤¡|à¤¸à¤ªà¥à¤¤à¤¾à¤¹|à¤®à¤¾à¤¹|à¤®à¤¹à¥€à¤¨à¥‡)\s*à¤ªà¤¹à¤²à¥‡\s*/gu,
         " "
       )
       .replace(/\s+/g, " ")
@@ -16868,7 +17199,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
 
     if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
       if (
-        !/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|\bIST\b|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़|^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]+/i.test(pClean)
+        !/cookie|subscribe|newsletter|advertisement|à¦¬à¦¿à¦œà§à¦žà¦¾à¦ªà¦¨|à¤µà¤¿à¤œà¥à¤žà¤¾à¤ªà¤¨|à¤•à¥‰à¤ªà¥€à¤°à¤¾à¤‡à¤Ÿ|rights reserved|Updated\s+\d+:\d+|\bIST\b|à¤¹à¥‹à¤®à¤µà¥€à¤¡à¤¿à¤¯à¥‹|à¤ˆ-à¤ªà¥‡à¤ªà¤°|à¤µà¥‡à¤¬ à¤¸à¥à¤Ÿà¥‹à¤°à¥€à¤œ|à¤Ÿà¥‰à¤ª à¤¨à¥à¤¯à¥‚à¥›|^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]+/i.test(pClean)
       ) {
         extractedParagraphs.push(pClean);
         if (extractedParagraphs.join("\n\n").length >= 5500) break;
@@ -16939,7 +17270,7 @@ function parseArticleHtml(html: string, pageUrl: string): {
   const publishedDate = pubDateMatch && pubDateMatch[1] ? pubDateMatch[1].trim() : undefined;
 
   const isPlaceholderOrErrorPage =
-    /example\s+domain|for\s+use\s+in\s+illustrative\s+examples|404\s+not\s+found|page\s+not\s+found|पेज\s+नहीं\s+मिला|यह\s+पेज\s+उपलब्ध\s+नहीं/i.test(
+    /example\s+domain|for\s+use\s+in\s+illustrative\s+examples|404\s+not\s+found|page\s+not\s+found|à¤ªà¥‡à¤œ\s+à¤¨à¤¹à¥€à¤‚\s+à¤®à¤¿à¤²à¤¾|à¤¯à¤¹\s+à¤ªà¥‡à¤œ\s+à¤‰à¤ªà¤²à¤¬à¥à¤§\s+à¤¨à¤¹à¥€à¤‚/i.test(
       `${rawTitle} ${rawDesc} ${bodyContent.slice(0, 400)} ${pageUrl}`
     ) || /(?:^|\.)example\.(?:com|org|net)$/i.test((() => { try { return new URL(pageUrl).hostname; } catch { return ""; } })());
 
@@ -16984,60 +17315,60 @@ export function extractFactsFromUrlString(rawUrl: string): {
 
     // Map common Indian districts and cities
     const locationKeywords: Record<string, string> = {
-      bhopal: "भोपाल",
-      indore: "इंदौर",
-      rewa: "रीवा",
-      sidhi: "सीधी",
-      jabalpur: "जबलपुर",
-      gwalior: "ग्वालियर",
-      ujjain: "उज्जैन",
-      shahdol: "शहडोल",
-      anuppur: "अनूपपुर",
-      umaria: "उमरिया",
-      singrauli: "सिंगरौली",
-      satna: "सतना",
-      sagar: "सागर",
-      chhatarpur: "छतरपुर",
-      damoh: "दमोह",
-      panna: "पन्ना",
-      bhind: "भिंड",
-      morena: "मुरैना",
-      sheopur: "श्योपुर",
-      shivpuri: "शिवपुरी",
-      guna: "गुना",
-      ashoknagar: "अशोकनगर",
-      vidisha: "विदिशा",
-      sehore: "सीहोर",
-      raisen: "रायसेन",
-      rajgarh: "राजगढ़",
-      hoshangabad: "नर्मदापुरम",
-      narmadapuram: "नर्मदापुरम",
-      harda: "हरदा",
-      betul: "बैतूल",
-      dewas: "देवास",
-      shajapur: "शाजापुर",
-      ratlam: "रतलाम",
-      mandsaur: "मंदसौर",
-      neemuch: "नीमच",
-      dhar: "धार",
-      jhabua: "झाबुआ",
-      alirajpur: "अलीराजपुर",
-      khargone: "खरगोन",
-      barwani: "बड़वानी",
-      khandwa: "खंडवा",
-      burhanpur: "बुरहानपुर",
-      katni: "कटनी",
-      dindori: "डिंडौरी",
-      mandla: "मंडला",
-      balaghat: "बालाघाट",
-      seoni: "सिवनी",
-      chhindwara: "छिंदवाड़ा",
-      narsinghpur: "नरसिंहपुर",
-      delhi: "नई दिल्ली",
-      raipur: "रायपुर",
-      lucknow: "लखनऊ",
-      patna: "पटना",
-      jaipur: "जयपुर",
+      bhopal: "à¤­à¥‹à¤ªà¤¾à¤²",
+      indore: "à¤‡à¤‚à¤¦à¥Œà¤°",
+      rewa: "à¤°à¥€à¤µà¤¾",
+      sidhi: "à¤¸à¥€à¤§à¥€",
+      jabalpur: "à¤œà¤¬à¤²à¤ªà¥à¤°",
+      gwalior: "à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°",
+      ujjain: "à¤‰à¤œà¥à¤œà¥ˆà¤¨",
+      shahdol: "à¤¶à¤¹à¤¡à¥‹à¤²",
+      anuppur: "à¤…à¤¨à¥‚à¤ªà¤ªà¥à¤°",
+      umaria: "à¤‰à¤®à¤°à¤¿à¤¯à¤¾",
+      singrauli: "à¤¸à¤¿à¤‚à¤—à¤°à¥Œà¤²à¥€",
+      satna: "à¤¸à¤¤à¤¨à¤¾",
+      sagar: "à¤¸à¤¾à¤—à¤°",
+      chhatarpur: "à¤›à¤¤à¤°à¤ªà¥à¤°",
+      damoh: "à¤¦à¤®à¥‹à¤¹",
+      panna: "à¤ªà¤¨à¥à¤¨à¤¾",
+      bhind: "à¤­à¤¿à¤‚à¤¡",
+      morena: "à¤®à¥à¤°à¥ˆà¤¨à¤¾",
+      sheopur: "à¤¶à¥à¤¯à¥‹à¤ªà¥à¤°",
+      shivpuri: "à¤¶à¤¿à¤µà¤ªà¥à¤°à¥€",
+      guna: "à¤—à¥à¤¨à¤¾",
+      ashoknagar: "à¤…à¤¶à¥‹à¤•à¤¨à¤—à¤°",
+      vidisha: "à¤µà¤¿à¤¦à¤¿à¤¶à¤¾",
+      sehore: "à¤¸à¥€à¤¹à¥‹à¤°",
+      raisen: "à¤°à¤¾à¤¯à¤¸à¥‡à¤¨",
+      rajgarh: "à¤°à¤¾à¤œà¤—à¤¢à¤¼",
+      hoshangabad: "à¤¨à¤°à¥à¤®à¤¦à¤¾à¤ªà¥à¤°à¤®",
+      narmadapuram: "à¤¨à¤°à¥à¤®à¤¦à¤¾à¤ªà¥à¤°à¤®",
+      harda: "à¤¹à¤°à¤¦à¤¾",
+      betul: "à¤¬à¥ˆà¤¤à¥‚à¤²",
+      dewas: "à¤¦à¥‡à¤µà¤¾à¤¸",
+      shajapur: "à¤¶à¤¾à¤œà¤¾à¤ªà¥à¤°",
+      ratlam: "à¤°à¤¤à¤²à¤¾à¤®",
+      mandsaur: "à¤®à¤‚à¤¦à¤¸à¥Œà¤°",
+      neemuch: "à¤¨à¥€à¤®à¤š",
+      dhar: "à¤§à¤¾à¤°",
+      jhabua: "à¤à¤¾à¤¬à¥à¤†",
+      alirajpur: "à¤…à¤²à¥€à¤°à¤¾à¤œà¤ªà¥à¤°",
+      khargone: "à¤–à¤°à¤—à¥‹à¤¨",
+      barwani: "à¤¬à¤¡à¤¼à¤µà¤¾à¤¨à¥€",
+      khandwa: "à¤–à¤‚à¤¡à¤µà¤¾",
+      burhanpur: "à¤¬à¥à¤°à¤¹à¤¾à¤¨à¤ªà¥à¤°",
+      katni: "à¤•à¤Ÿà¤¨à¥€",
+      dindori: "à¤¡à¤¿à¤‚à¤¡à¥Œà¤°à¥€",
+      mandla: "à¤®à¤‚à¤¡à¤²à¤¾",
+      balaghat: "à¤¬à¤¾à¤²à¤¾à¤˜à¤¾à¤Ÿ",
+      seoni: "à¤¸à¤¿à¤µà¤¨à¥€",
+      chhindwara: "à¤›à¤¿à¤‚à¤¦à¤µà¤¾à¤¡à¤¼à¤¾",
+      narsinghpur: "à¤¨à¤°à¤¸à¤¿à¤‚à¤¹à¤ªà¥à¤°",
+      delhi: "à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€",
+      raipur: "à¤°à¤¾à¤¯à¤ªà¥à¤°",
+      lucknow: "à¤²à¤–à¤¨à¤Š",
+      patna: "à¤ªà¤Ÿà¤¨à¤¾",
+      jaipur: "à¤œà¤¯à¤ªà¥à¤°",
     };
 
     let locationHint: string | undefined = undefined;
@@ -17061,15 +17392,15 @@ export function extractFactsFromUrlString(rawUrl: string): {
 
       // Identify category hint
       if (/crime|police|murder|arrest|fraud|fir|loot|chori|hatya|thana|scam/i.test(decoded)) {
-        categoryHint = "अपराध";
+        categoryHint = "à¤…à¤ªà¤°à¤¾à¤§";
       } else if (/accident|hadsa|takkar|injured|death|maut|ghayal/i.test(decoded)) {
-        categoryHint = "हादसा";
+        categoryHint = "à¤¹à¤¾à¤¦à¤¸à¤¾";
       } else if (/politics|chunav|election|cm|bjp|congress|mantri|sarkar|yojana/i.test(decoded)) {
-        categoryHint = "राजनीति";
+        categoryHint = "à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿";
       } else if (/weather|rain|barish|mosam|mausam|alert/i.test(decoded)) {
-        categoryHint = "मौसम";
+        categoryHint = "à¤®à¥Œà¤¸à¤®";
       } else if (/vikas|prashasan|collector|order|circular/i.test(decoded)) {
-        categoryHint = "प्रशासन";
+        categoryHint = "à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨";
       }
 
       if (decoded.includes("-") || decoded.includes("_") || decoded.length > 15) {
@@ -17089,7 +17420,7 @@ export function extractFactsFromUrlString(rawUrl: string): {
     }
 
     const titleHint =
-      meaningfulWords.length > 0 ? meaningfulWords.join(" ") : `${domain} समाचार अपडेट`;
+      meaningfulWords.length > 0 ? meaningfulWords.join(" ") : `${domain} à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤…à¤ªà¤¡à¥‡à¤Ÿ`;
 
     return {
       domain,
@@ -17102,7 +17433,7 @@ export function extractFactsFromUrlString(rawUrl: string): {
     return {
       domain: rawUrl,
       slugWords: [],
-      titleHint: "ताज़ा समाचार अपडेट",
+      titleHint: "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤…à¤ªà¤¡à¥‡à¤Ÿ",
     };
   }
 }
@@ -17165,10 +17496,10 @@ async function fetchViaReaderProxy(targetUrl: string): Promise<ExtractedArticleR
       .replace(/\[([^\]]+)\]\(.*?\)/g, "$1")
       .replace(/[*#_`>~]/g, "")
       .replace(
-        /(?:प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)(?:\s*\d+[\.\)]?)?[:\s\-–—]*|कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें)/gi,
+        /(?:à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°)(?:\s*\d+[\.\)]?)?[:\s\-â€“â€”]*|à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚)/gi,
         " "
       )
-      .replace(/(?:[\u0900-\u097F]+\s*)?\d+\s*(?:घंटे|मिनट|दिन|सप्ताह|माह|महीने|सेकंड)\s*पहले/gu, " ")
+      .replace(/(?:[\u0900-\u097F]+\s*)?\d+\s*(?:à¤˜à¤‚à¤Ÿà¥‡|à¤®à¤¿à¤¨à¤Ÿ|à¤¦à¤¿à¤¨|à¤¸à¤ªà¥à¤¤à¤¾à¤¹|à¤®à¤¾à¤¹|à¤®à¤¹à¥€à¤¨à¥‡|à¤¸à¥‡à¤•à¤‚à¤¡)\s*à¤ªà¤¹à¤²à¥‡/gu, " ")
       .replace(/\s+/g, " ")
       .trim();
 
@@ -17176,7 +17507,7 @@ async function fetchViaReaderProxy(targetUrl: string): Promise<ExtractedArticleR
       !title ||
       title.length < 12 ||
       cleanedContent.length < 150 ||
-      /example\s+domain|illustrative\s+examples|404\s+not\s+found|page\s+not\s+found|पेज\s+नहीं\s+मिला|access\s+denied/i.test(
+      /example\s+domain|illustrative\s+examples|404\s+not\s+found|page\s+not\s+found|à¤ªà¥‡à¤œ\s+à¤¨à¤¹à¥€à¤‚\s+à¤®à¤¿à¤²à¤¾|access\s+denied/i.test(
         `${title} ${cleanedContent.slice(0, 500)} ${targetUrl}`
       );
 
@@ -17505,204 +17836,204 @@ export interface DistrictStateEntry {
 
 export const DISTRICT_STATE_LIST: DistrictStateEntry[] = [
   // Madhya Pradesh
-  { district: 'शहडोल', state: 'मध्य प्रदेश', aliases: ['shahdol', 'शहडोल'] },
-  { district: 'अनूपपुर', state: 'मध्य प्रदेश', aliases: ['anuppur', 'अनूपपुर'] },
-  { district: 'उमरिया', state: 'मध्य प्रदेश', aliases: ['umaria', 'उमरिया'] },
-  { district: 'सीधी', state: 'मध्य प्रदेश', aliases: ['sidhi', 'सीधी'] },
-  { district: 'सिंगरौली', state: 'मध्य प्रदेश', aliases: ['singrauli', 'सिंगरौली'] },
-  { district: 'रीवा', state: 'मध्य प्रदेश', aliases: ['rewa', 'रीवा'] },
-  { district: 'सतना', state: 'मध्य प्रदेश', aliases: ['satna', 'सतना'] },
-  { district: 'भोपाल', state: 'मध्य प्रदेश', aliases: ['bhopal', 'भोपाल'] },
-  { district: 'इंदौर', state: 'मध्य प्रदेश', aliases: ['indore', 'इंदौर'] },
-  { district: 'जबलपुर', state: 'मध्य प्रदेश', aliases: ['jabalpur', 'जबलपुर'] },
-  { district: 'ग्वालियर', state: 'मध्य प्रदेश', aliases: ['gwalior', 'ग्वालियर'] },
-  { district: 'उज्जैन', state: 'मध्य प्रदेश', aliases: ['ujjain', 'उज्जैन'] },
-  { district: 'सागर', state: 'मध्य प्रदेश', aliases: ['sagar', 'सागर'] },
-  { district: 'छतरपुर', state: 'मध्य प्रदेश', aliases: ['chhatarpur', 'छतरपुर'] },
-  { district: 'दमोह', state: 'मध्य प्रदेश', aliases: ['damoh', 'दमोह'] },
-  { district: 'पन्ना', state: 'मध्य प्रदेश', aliases: ['panna', 'पन्ना'] },
-  { district: 'टीकमगढ़', state: 'मध्य प्रदेश', aliases: ['tikamgarh', 'टीकमगढ़'] },
-  { district: 'निवाड़ी', state: 'मध्य प्रदेश', aliases: ['niwari', 'निवाड़ी'] },
-  { district: 'कटनी', state: 'मध्य प्रदेश', aliases: ['katni', 'कटनी'] },
-  { district: 'मंडला', state: 'मध्य प्रदेश', aliases: ['mandla', 'मंडला'] },
-  { district: 'डिंडोरी', state: 'मध्य प्रदेश', aliases: ['dindori', 'डिंडोरी'] },
-  { district: 'छिंदवाड़ा', state: 'मध्य प्रदेश', aliases: ['chhindwara', 'छिंदवाड़ा'] },
-  { district: 'सिवनी', state: 'मध्य प्रदेश', aliases: ['seoni', 'सिवनी'] },
-  { district: 'बालाघाट', state: 'मध्य प्रदेश', aliases: ['balaghat', 'बालाघाट'] },
-  { district: 'बैतूल', state: 'मध्य प्रदेश', aliases: ['betul', 'बैतूल'] },
-  { district: 'हरदा', state: 'मध्य प्रदेश', aliases: ['harda', 'हरदा'] },
-  { district: 'होशंगाबाद', state: 'मध्य प्रदेश', aliases: ['hoshangabad', 'नर्मदापुरम', 'narmadapuram'] },
-  { district: 'रायसेन', state: 'मध्य प्रदेश', aliases: ['raisen', 'रायसेन'] },
-  { district: 'विदिशा', state: 'मध्य प्रदेश', aliases: ['vidisha', 'विदिशा'] },
-  { district: 'सीहोर', state: 'मध्य प्रदेश', aliases: ['sehore', 'सीहोर'] },
-  { district: 'राजगढ़', state: 'मध्य प्रदेश', aliases: ['rajgarh', 'राजगढ़'] },
-  { district: 'शाजापुर', state: 'मध्य प्रदेश', aliases: ['shajapur', 'शाजापुर'] },
-  { district: 'आगर मालवा', state: 'मध्य प्रदेश', aliases: ['agar', 'आगर'] },
-  { district: 'देवास', state: 'मध्य प्रदेश', aliases: ['dewas', 'देवास'] },
-  { district: 'रतलाम', state: 'मध्य प्रदेश', aliases: ['ratlam', 'रतलाम'] },
-  { district: 'मंदसौर', state: 'मध्य प्रदेश', aliases: ['mandsaur', 'मंदसौर'] },
-  { district: 'नीमच', state: 'मध्य प्रदेश', aliases: ['neemuch', 'नीमच'] },
-  { district: 'धार', state: 'मध्य प्रदेश', aliases: ['dhar', 'धार'] },
-  { district: 'झाबुआ', state: 'मध्य प्रदेश', aliases: ['jhabua', 'झाबुआ'] },
-  { district: 'अलीराजपुर', state: 'मध्य प्रदेश', aliases: ['alirajpur', 'अलीराजपुर'] },
-  { district: 'बड़वानी', state: 'मध्य प्रदेश', aliases: ['barwani', 'बड़वानी'] },
-  { district: 'खरगोन', state: 'मध्य प्रदेश', aliases: ['khargone', 'खरगोन'] },
-  { district: 'खंडवा', state: 'मध्य प्रदेश', aliases: ['khandwa', 'खंडवा'] },
-  { district: 'बुरहानपुर', state: 'मध्य प्रदेश', aliases: ['burhanpur', 'बुरहानपुर'] },
-  { district: 'भिंड', state: 'मध्य प्रदेश', aliases: ['bhind', 'भिंड'] },
-  { district: 'मुरैना', state: 'मध्य प्रदेश', aliases: ['morena', 'मुरैना'] },
-  { district: 'श्योपुर', state: 'मध्य प्रदेश', aliases: ['sheopur', 'श्योपुर'] },
-  { district: 'शिवपुरी', state: 'मध्य प्रदेश', aliases: ['shivpuri', 'शिवपुरी'] },
-  { district: 'गुना', state: 'मध्य प्रदेश', aliases: ['guna', 'गुना'] },
-  { district: 'अशोकनगर', state: 'मध्य प्रदेश', aliases: ['ashoknagar', 'अशोकनगर'] },
-  { district: 'मैहर', state: 'मध्य प्रदेश', aliases: ['maihar', 'मैहर'] },
+  { district: 'à¤¶à¤¹à¤¡à¥‹à¤²', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['shahdol', 'à¤¶à¤¹à¤¡à¥‹à¤²'] },
+  { district: 'à¤…à¤¨à¥‚à¤ªà¤ªà¥à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['anuppur', 'à¤…à¤¨à¥‚à¤ªà¤ªà¥à¤°'] },
+  { district: 'à¤‰à¤®à¤°à¤¿à¤¯à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['umaria', 'à¤‰à¤®à¤°à¤¿à¤¯à¤¾'] },
+  { district: 'à¤¸à¥€à¤§à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['sidhi', 'à¤¸à¥€à¤§à¥€'] },
+  { district: 'à¤¸à¤¿à¤‚à¤—à¤°à¥Œà¤²à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['singrauli', 'à¤¸à¤¿à¤‚à¤—à¤°à¥Œà¤²à¥€'] },
+  { district: 'à¤°à¥€à¤µà¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['rewa', 'à¤°à¥€à¤µà¤¾'] },
+  { district: 'à¤¸à¤¤à¤¨à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['satna', 'à¤¸à¤¤à¤¨à¤¾'] },
+  { district: 'à¤­à¥‹à¤ªà¤¾à¤²', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['bhopal', 'à¤­à¥‹à¤ªà¤¾à¤²'] },
+  { district: 'à¤‡à¤‚à¤¦à¥Œà¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['indore', 'à¤‡à¤‚à¤¦à¥Œà¤°'] },
+  { district: 'à¤œà¤¬à¤²à¤ªà¥à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['jabalpur', 'à¤œà¤¬à¤²à¤ªà¥à¤°'] },
+  { district: 'à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['gwalior', 'à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°'] },
+  { district: 'à¤‰à¤œà¥à¤œà¥ˆà¤¨', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['ujjain', 'à¤‰à¤œà¥à¤œà¥ˆà¤¨'] },
+  { district: 'à¤¸à¤¾à¤—à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['sagar', 'à¤¸à¤¾à¤—à¤°'] },
+  { district: 'à¤›à¤¤à¤°à¤ªà¥à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['chhatarpur', 'à¤›à¤¤à¤°à¤ªà¥à¤°'] },
+  { district: 'à¤¦à¤®à¥‹à¤¹', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['damoh', 'à¤¦à¤®à¥‹à¤¹'] },
+  { district: 'à¤ªà¤¨à¥à¤¨à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['panna', 'à¤ªà¤¨à¥à¤¨à¤¾'] },
+  { district: 'à¤Ÿà¥€à¤•à¤®à¤—à¤¢à¤¼', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['tikamgarh', 'à¤Ÿà¥€à¤•à¤®à¤—à¤¢à¤¼'] },
+  { district: 'à¤¨à¤¿à¤µà¤¾à¤¡à¤¼à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['niwari', 'à¤¨à¤¿à¤µà¤¾à¤¡à¤¼à¥€'] },
+  { district: 'à¤•à¤Ÿà¤¨à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['katni', 'à¤•à¤Ÿà¤¨à¥€'] },
+  { district: 'à¤®à¤‚à¤¡à¤²à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['mandla', 'à¤®à¤‚à¤¡à¤²à¤¾'] },
+  { district: 'à¤¡à¤¿à¤‚à¤¡à¥‹à¤°à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['dindori', 'à¤¡à¤¿à¤‚à¤¡à¥‹à¤°à¥€'] },
+  { district: 'à¤›à¤¿à¤‚à¤¦à¤µà¤¾à¤¡à¤¼à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['chhindwara', 'à¤›à¤¿à¤‚à¤¦à¤µà¤¾à¤¡à¤¼à¤¾'] },
+  { district: 'à¤¸à¤¿à¤µà¤¨à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['seoni', 'à¤¸à¤¿à¤µà¤¨à¥€'] },
+  { district: 'à¤¬à¤¾à¤²à¤¾à¤˜à¤¾à¤Ÿ', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['balaghat', 'à¤¬à¤¾à¤²à¤¾à¤˜à¤¾à¤Ÿ'] },
+  { district: 'à¤¬à¥ˆà¤¤à¥‚à¤²', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['betul', 'à¤¬à¥ˆà¤¤à¥‚à¤²'] },
+  { district: 'à¤¹à¤°à¤¦à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['harda', 'à¤¹à¤°à¤¦à¤¾'] },
+  { district: 'à¤¹à¥‹à¤¶à¤‚à¤—à¤¾à¤¬à¤¾à¤¦', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['hoshangabad', 'à¤¨à¤°à¥à¤®à¤¦à¤¾à¤ªà¥à¤°à¤®', 'narmadapuram'] },
+  { district: 'à¤°à¤¾à¤¯à¤¸à¥‡à¤¨', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['raisen', 'à¤°à¤¾à¤¯à¤¸à¥‡à¤¨'] },
+  { district: 'à¤µà¤¿à¤¦à¤¿à¤¶à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['vidisha', 'à¤µà¤¿à¤¦à¤¿à¤¶à¤¾'] },
+  { district: 'à¤¸à¥€à¤¹à¥‹à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['sehore', 'à¤¸à¥€à¤¹à¥‹à¤°'] },
+  { district: 'à¤°à¤¾à¤œà¤—à¤¢à¤¼', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['rajgarh', 'à¤°à¤¾à¤œà¤—à¤¢à¤¼'] },
+  { district: 'à¤¶à¤¾à¤œà¤¾à¤ªà¥à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['shajapur', 'à¤¶à¤¾à¤œà¤¾à¤ªà¥à¤°'] },
+  { district: 'à¤†à¤—à¤° à¤®à¤¾à¤²à¤µà¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['agar', 'à¤†à¤—à¤°'] },
+  { district: 'à¤¦à¥‡à¤µà¤¾à¤¸', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['dewas', 'à¤¦à¥‡à¤µà¤¾à¤¸'] },
+  { district: 'à¤°à¤¤à¤²à¤¾à¤®', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['ratlam', 'à¤°à¤¤à¤²à¤¾à¤®'] },
+  { district: 'à¤®à¤‚à¤¦à¤¸à¥Œà¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['mandsaur', 'à¤®à¤‚à¤¦à¤¸à¥Œà¤°'] },
+  { district: 'à¤¨à¥€à¤®à¤š', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['neemuch', 'à¤¨à¥€à¤®à¤š'] },
+  { district: 'à¤§à¤¾à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['dhar', 'à¤§à¤¾à¤°'] },
+  { district: 'à¤à¤¾à¤¬à¥à¤†', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['jhabua', 'à¤à¤¾à¤¬à¥à¤†'] },
+  { district: 'à¤…à¤²à¥€à¤°à¤¾à¤œà¤ªà¥à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['alirajpur', 'à¤…à¤²à¥€à¤°à¤¾à¤œà¤ªà¥à¤°'] },
+  { district: 'à¤¬à¤¡à¤¼à¤µà¤¾à¤¨à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['barwani', 'à¤¬à¤¡à¤¼à¤µà¤¾à¤¨à¥€'] },
+  { district: 'à¤–à¤°à¤—à¥‹à¤¨', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['khargone', 'à¤–à¤°à¤—à¥‹à¤¨'] },
+  { district: 'à¤–à¤‚à¤¡à¤µà¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['khandwa', 'à¤–à¤‚à¤¡à¤µà¤¾'] },
+  { district: 'à¤¬à¥à¤°à¤¹à¤¾à¤¨à¤ªà¥à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['burhanpur', 'à¤¬à¥à¤°à¤¹à¤¾à¤¨à¤ªà¥à¤°'] },
+  { district: 'à¤­à¤¿à¤‚à¤¡', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['bhind', 'à¤­à¤¿à¤‚à¤¡'] },
+  { district: 'à¤®à¥à¤°à¥ˆà¤¨à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['morena', 'à¤®à¥à¤°à¥ˆà¤¨à¤¾'] },
+  { district: 'à¤¶à¥à¤¯à¥‹à¤ªà¥à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['sheopur', 'à¤¶à¥à¤¯à¥‹à¤ªà¥à¤°'] },
+  { district: 'à¤¶à¤¿à¤µà¤ªà¥à¤°à¥€', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['shivpuri', 'à¤¶à¤¿à¤µà¤ªà¥à¤°à¥€'] },
+  { district: 'à¤—à¥à¤¨à¤¾', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['guna', 'à¤—à¥à¤¨à¤¾'] },
+  { district: 'à¤…à¤¶à¥‹à¤•à¤¨à¤—à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['ashoknagar', 'à¤…à¤¶à¥‹à¤•à¤¨à¤—à¤°'] },
+  { district: 'à¤®à¥ˆà¤¹à¤°', state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['maihar', 'à¤®à¥ˆà¤¹à¤°'] },
 
   // Uttar Pradesh
-  { district: 'झांसी', state: 'उत्तर प्रदेश', aliases: ['jhansi', 'झांसी'] },
-  { district: 'लखनऊ', state: 'उत्तर प्रदेश', aliases: ['lucknow', 'लखनऊ'] },
-  { district: 'वाराणसी', state: 'उत्तर प्रदेश', aliases: ['varanasi', 'banaras', 'वाराणसी', 'बनारस', 'काशी'] },
-  { district: 'कानपुर', state: 'उत्तर प्रदेश', aliases: ['kanpur', 'कानपुर'] },
-  { district: 'प्रयागराज', state: 'उत्तर प्रदेश', aliases: ['prayagraj', 'allahabad', 'प्रयागराज', 'इलाहाबाद'] },
-  { district: 'गोरखपुर', state: 'उत्तर प्रदेश', aliases: ['gorakhpur', 'गोरखपुर'] },
-  { district: 'आगरा', state: 'उत्तर प्रदेश', aliases: ['agra', 'आगरा'] },
-  { district: 'मथुरा', state: 'उत्तर प्रदेश', aliases: ['mathura', 'मथुरा'] },
-  { district: 'मेरठ', state: 'उत्तर प्रदेश', aliases: ['meerut', 'मेरठ'] },
-  { district: 'बरेली', state: 'उत्तर प्रदेश', aliases: ['bareilly', 'बरेली'] },
-  { district: 'अलीगढ़', state: 'उत्तर प्रदेश', aliases: ['aligarh', 'अलीगढ़'] },
-  { district: 'मुरादाबाद', state: 'उत्तर प्रदेश', aliases: ['moradabad', 'मुरादाबाद'] },
-  { district: 'अयोध्या', state: 'उत्तर प्रदेश', aliases: ['ayodhya', 'faizabad', 'अयोध्या', 'फैजाबाद'] },
-  { district: 'सहारनपुर', state: 'उत्तर प्रदेश', aliases: ['saharanpur', 'सहारनपुर'] },
-  { district: 'नोएडा', state: 'उत्तर प्रदेश', aliases: ['noida', 'नोएडा', 'गौतमबुद्ध नगर'] },
-  { district: 'गाजियाबाद', state: 'उत्तर प्रदेश', aliases: ['ghaziabad', 'गाजियाबाद'] },
-  { district: 'मिर्जापुर', state: 'उत्तर प्रदेश', aliases: ['mirzapur', 'मिर्जापुर'] },
-  { district: 'बांदा', state: 'उत्तर प्रदेश', aliases: ['banda', 'बांदा'] },
-  { district: 'चित्रकूट', state: 'उत्तर प्रदेश', aliases: ['chitrakoot', 'चित्रकूट'] },
-  { district: 'महोबा', state: 'उत्तर प्रदेश', aliases: ['mahoba', 'महोबा'] },
-  { district: 'हमीरपुर', state: 'उत्तर प्रदेश', aliases: ['hamirpur', 'हमीरपुर'] },
-  { district: 'जालौन', state: 'उत्तर प्रदेश', aliases: ['jalaun', 'orai', 'उरई', 'जालौन'] },
-  { district: 'ललितपुर', state: 'उत्तर प्रदेश', aliases: ['lalitpur', 'ललितपुर'] },
-  { district: 'बस्ती', state: 'उत्तर प्रदेश', aliases: ['basti', 'बस्ती'] },
-  { district: 'गोंडा', state: 'उत्तर प्रदेश', aliases: ['gonda', 'गोंडा'] },
-  { district: 'बहराइच', state: 'उत्तर प्रदेश', aliases: ['bahraich', 'बहराइच'] },
-  { district: 'देवरिया', state: 'उत्तर प्रदेश', aliases: ['deoria', 'देवरिया'] },
-  { district: 'बलिया', state: 'उत्तर प्रदेश', aliases: ['ballia', 'बलिया'] },
-  { district: 'आजमगढ़', state: 'उत्तर प्रदेश', aliases: ['azamgarh', 'आजमगढ़'] },
-  { district: 'जौनपुर', state: 'उत्तर प्रदेश', aliases: ['jaunpur', 'जौनपुर'] },
-  { district: 'गाजीपुर', state: 'उत्तर प्रदेश', aliases: ['ghazipur', 'गाजीपुर'] },
-  { district: 'सोनभद्र', state: 'उत्तर प्रदेश', aliases: ['sonbhadra', 'सोनभद्र'] },
-  { district: 'प्रतापगढ़', state: 'उत्तर प्रदेश', aliases: ['pratapgarh', 'प्रतापगढ़'] },
-  { district: 'फतेहपुर', state: 'उत्तर प्रदेश', aliases: ['fatehpur', 'फतेहपुर'] },
-  { district: 'उन्नाव', state: 'उत्तर प्रदेश', aliases: ['unnao', 'उन्नाव'] },
-  { district: 'रायबरेली', state: 'उत्तर प्रदेश', aliases: ['raebareli', 'रायबरेली'] },
-  { district: 'अमेठी', state: 'उत्तर प्रदेश', aliases: ['amethi', 'अमेठी'] },
-  { district: 'सुल्तानपुर', state: 'उत्तर प्रदेश', aliases: ['sultanpur', 'सुल्तानपुर'] },
-  { district: 'सीतापुर', state: 'उत्तर प्रदेश', aliases: ['sitapur', 'सीतापुर'] },
-  { district: 'हरदोई', state: 'उत्तर प्रदेश', aliases: ['hardoi', 'हरदोई'] },
-  { district: 'लखीमपुर खीरी', state: 'उत्तर प्रदेश', aliases: ['lakhimpur', 'लखीमपुर'] },
-  { district: 'शाहजहांपुर', state: 'उत्तर प्रदेश', aliases: ['shahjahanpur', 'शाहजहांपुर'] },
-  { district: 'बुलंदशहर', state: 'उत्तर प्रदेश', aliases: ['bulandshahr', 'बुलंदशहर'] },
-  { district: 'हापुड़', state: 'उत्तर प्रदेश', aliases: ['hapur', 'हापुड़'] },
-  { district: 'मुजफ्फरनगर', state: 'उत्तर प्रदेश', aliases: ['muzaffarnagar', 'मुजफ्फरनगर'] },
-  { district: 'इटावा', state: 'उत्तर प्रदेश', aliases: ['etawah', 'इटावा'] },
-  { district: 'कन्नौज', state: 'उत्तर प्रदेश', aliases: ['kannauj', 'कन्नौज'] },
+  { district: 'à¤à¤¾à¤‚à¤¸à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['jhansi', 'à¤à¤¾à¤‚à¤¸à¥€'] },
+  { district: 'à¤²à¤–à¤¨à¤Š', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['lucknow', 'à¤²à¤–à¤¨à¤Š'] },
+  { district: 'à¤µà¤¾à¤°à¤¾à¤£à¤¸à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['varanasi', 'banaras', 'à¤µà¤¾à¤°à¤¾à¤£à¤¸à¥€', 'à¤¬à¤¨à¤¾à¤°à¤¸', 'à¤•à¤¾à¤¶à¥€'] },
+  { district: 'à¤•à¤¾à¤¨à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['kanpur', 'à¤•à¤¾à¤¨à¤ªà¥à¤°'] },
+  { district: 'à¤ªà¥à¤°à¤¯à¤¾à¤—à¤°à¤¾à¤œ', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['prayagraj', 'allahabad', 'à¤ªà¥à¤°à¤¯à¤¾à¤—à¤°à¤¾à¤œ', 'à¤‡à¤²à¤¾à¤¹à¤¾à¤¬à¤¾à¤¦'] },
+  { district: 'à¤—à¥‹à¤°à¤–à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['gorakhpur', 'à¤—à¥‹à¤°à¤–à¤ªà¥à¤°'] },
+  { district: 'à¤†à¤—à¤°à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['agra', 'à¤†à¤—à¤°à¤¾'] },
+  { district: 'à¤®à¤¥à¥à¤°à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['mathura', 'à¤®à¤¥à¥à¤°à¤¾'] },
+  { district: 'à¤®à¥‡à¤°à¤ ', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['meerut', 'à¤®à¥‡à¤°à¤ '] },
+  { district: 'à¤¬à¤°à¥‡à¤²à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['bareilly', 'à¤¬à¤°à¥‡à¤²à¥€'] },
+  { district: 'à¤…à¤²à¥€à¤—à¤¢à¤¼', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['aligarh', 'à¤…à¤²à¥€à¤—à¤¢à¤¼'] },
+  { district: 'à¤®à¥à¤°à¤¾à¤¦à¤¾à¤¬à¤¾à¤¦', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['moradabad', 'à¤®à¥à¤°à¤¾à¤¦à¤¾à¤¬à¤¾à¤¦'] },
+  { district: 'à¤…à¤¯à¥‹à¤§à¥à¤¯à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['ayodhya', 'faizabad', 'à¤…à¤¯à¥‹à¤§à¥à¤¯à¤¾', 'à¤«à¥ˆà¤œà¤¾à¤¬à¤¾à¤¦'] },
+  { district: 'à¤¸à¤¹à¤¾à¤°à¤¨à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['saharanpur', 'à¤¸à¤¹à¤¾à¤°à¤¨à¤ªà¥à¤°'] },
+  { district: 'à¤¨à¥‹à¤à¤¡à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['noida', 'à¤¨à¥‹à¤à¤¡à¤¾', 'à¤—à¥Œà¤¤à¤®à¤¬à¥à¤¦à¥à¤§ à¤¨à¤—à¤°'] },
+  { district: 'à¤—à¤¾à¤œà¤¿à¤¯à¤¾à¤¬à¤¾à¤¦', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['ghaziabad', 'à¤—à¤¾à¤œà¤¿à¤¯à¤¾à¤¬à¤¾à¤¦'] },
+  { district: 'à¤®à¤¿à¤°à¥à¤œà¤¾à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['mirzapur', 'à¤®à¤¿à¤°à¥à¤œà¤¾à¤ªà¥à¤°'] },
+  { district: 'à¤¬à¤¾à¤‚à¤¦à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['banda', 'à¤¬à¤¾à¤‚à¤¦à¤¾'] },
+  { district: 'à¤šà¤¿à¤¤à¥à¤°à¤•à¥‚à¤Ÿ', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['chitrakoot', 'à¤šà¤¿à¤¤à¥à¤°à¤•à¥‚à¤Ÿ'] },
+  { district: 'à¤®à¤¹à¥‹à¤¬à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['mahoba', 'à¤®à¤¹à¥‹à¤¬à¤¾'] },
+  { district: 'à¤¹à¤®à¥€à¤°à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['hamirpur', 'à¤¹à¤®à¥€à¤°à¤ªà¥à¤°'] },
+  { district: 'à¤œà¤¾à¤²à¥Œà¤¨', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['jalaun', 'orai', 'à¤‰à¤°à¤ˆ', 'à¤œà¤¾à¤²à¥Œà¤¨'] },
+  { district: 'à¤²à¤²à¤¿à¤¤à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['lalitpur', 'à¤²à¤²à¤¿à¤¤à¤ªà¥à¤°'] },
+  { district: 'à¤¬à¤¸à¥à¤¤à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['basti', 'à¤¬à¤¸à¥à¤¤à¥€'] },
+  { district: 'à¤—à¥‹à¤‚à¤¡à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['gonda', 'à¤—à¥‹à¤‚à¤¡à¤¾'] },
+  { district: 'à¤¬à¤¹à¤°à¤¾à¤‡à¤š', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['bahraich', 'à¤¬à¤¹à¤°à¤¾à¤‡à¤š'] },
+  { district: 'à¤¦à¥‡à¤µà¤°à¤¿à¤¯à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['deoria', 'à¤¦à¥‡à¤µà¤°à¤¿à¤¯à¤¾'] },
+  { district: 'à¤¬à¤²à¤¿à¤¯à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['ballia', 'à¤¬à¤²à¤¿à¤¯à¤¾'] },
+  { district: 'à¤†à¤œà¤®à¤—à¤¢à¤¼', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['azamgarh', 'à¤†à¤œà¤®à¤—à¤¢à¤¼'] },
+  { district: 'à¤œà¥Œà¤¨à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['jaunpur', 'à¤œà¥Œà¤¨à¤ªà¥à¤°'] },
+  { district: 'à¤—à¤¾à¤œà¥€à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['ghazipur', 'à¤—à¤¾à¤œà¥€à¤ªà¥à¤°'] },
+  { district: 'à¤¸à¥‹à¤¨à¤­à¤¦à¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['sonbhadra', 'à¤¸à¥‹à¤¨à¤­à¤¦à¥à¤°'] },
+  { district: 'à¤ªà¥à¤°à¤¤à¤¾à¤ªà¤—à¤¢à¤¼', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['pratapgarh', 'à¤ªà¥à¤°à¤¤à¤¾à¤ªà¤—à¤¢à¤¼'] },
+  { district: 'à¤«à¤¤à¥‡à¤¹à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['fatehpur', 'à¤«à¤¤à¥‡à¤¹à¤ªà¥à¤°'] },
+  { district: 'à¤‰à¤¨à¥à¤¨à¤¾à¤µ', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['unnao', 'à¤‰à¤¨à¥à¤¨à¤¾à¤µ'] },
+  { district: 'à¤°à¤¾à¤¯à¤¬à¤°à¥‡à¤²à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['raebareli', 'à¤°à¤¾à¤¯à¤¬à¤°à¥‡à¤²à¥€'] },
+  { district: 'à¤…à¤®à¥‡à¤ à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['amethi', 'à¤…à¤®à¥‡à¤ à¥€'] },
+  { district: 'à¤¸à¥à¤²à¥à¤¤à¤¾à¤¨à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['sultanpur', 'à¤¸à¥à¤²à¥à¤¤à¤¾à¤¨à¤ªà¥à¤°'] },
+  { district: 'à¤¸à¥€à¤¤à¤¾à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['sitapur', 'à¤¸à¥€à¤¤à¤¾à¤ªà¥à¤°'] },
+  { district: 'à¤¹à¤°à¤¦à¥‹à¤ˆ', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['hardoi', 'à¤¹à¤°à¤¦à¥‹à¤ˆ'] },
+  { district: 'à¤²à¤–à¥€à¤®à¤ªà¥à¤° à¤–à¥€à¤°à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['lakhimpur', 'à¤²à¤–à¥€à¤®à¤ªà¥à¤°'] },
+  { district: 'à¤¶à¤¾à¤¹à¤œà¤¹à¤¾à¤‚à¤ªà¥à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['shahjahanpur', 'à¤¶à¤¾à¤¹à¤œà¤¹à¤¾à¤‚à¤ªà¥à¤°'] },
+  { district: 'à¤¬à¥à¤²à¤‚à¤¦à¤¶à¤¹à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['bulandshahr', 'à¤¬à¥à¤²à¤‚à¤¦à¤¶à¤¹à¤°'] },
+  { district: 'à¤¹à¤¾à¤ªà¥à¤¡à¤¼', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['hapur', 'à¤¹à¤¾à¤ªà¥à¤¡à¤¼'] },
+  { district: 'à¤®à¥à¤œà¤«à¥à¤«à¤°à¤¨à¤—à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['muzaffarnagar', 'à¤®à¥à¤œà¤«à¥à¤«à¤°à¤¨à¤—à¤°'] },
+  { district: 'à¤‡à¤Ÿà¤¾à¤µà¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['etawah', 'à¤‡à¤Ÿà¤¾à¤µà¤¾'] },
+  { district: 'à¤•à¤¨à¥à¤¨à¥Œà¤œ', state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['kannauj', 'à¤•à¤¨à¥à¤¨à¥Œà¤œ'] },
 
   // Uttarakhand
-  { district: 'नैनीताल', state: 'उत्तराखंड', aliases: ['nainital', 'नैनीताल'] },
-  { district: 'देहरादून', state: 'उत्तराखंड', aliases: ['dehradun', 'देहरादून'] },
-  { district: 'हरिद्वार', state: 'उत्तराखंड', aliases: ['haridwar', 'हरिद्वार'] },
-  { district: 'अल्मोड़ा', state: 'उत्तराखंड', aliases: ['almora', 'अल्मोड़ा'] },
-  { district: 'ऊधमसिंह नगर', state: 'उत्तराखंड', aliases: ['udhamsingh', 'रुद्रपुर'] },
-  { district: 'पौड़ी गढ़वाल', state: 'उत्तराखंड', aliases: ['pauri', 'पौड़ी'] },
-  { district: 'टिहरी', state: 'उत्तराखंड', aliases: ['tehri', 'टिहरी'] },
-  { district: 'चमोली', state: 'उत्तराखंड', aliases: ['chamoli', 'चमोली'] },
-  { district: 'उत्तरकाशी', state: 'उत्तराखंड', aliases: ['uttarkashi', 'उत्तरकाशी'] },
-  { district: 'पिथौरागढ़', state: 'उत्तराखंड', aliases: ['pithoragarh', 'पिथौरागढ़'] },
+  { district: 'à¤¨à¥ˆà¤¨à¥€à¤¤à¤¾à¤²', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['nainital', 'à¤¨à¥ˆà¤¨à¥€à¤¤à¤¾à¤²'] },
+  { district: 'à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['dehradun', 'à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨'] },
+  { district: 'à¤¹à¤°à¤¿à¤¦à¥à¤µà¤¾à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['haridwar', 'à¤¹à¤°à¤¿à¤¦à¥à¤µà¤¾à¤°'] },
+  { district: 'à¤…à¤²à¥à¤®à¥‹à¤¡à¤¼à¤¾', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['almora', 'à¤…à¤²à¥à¤®à¥‹à¤¡à¤¼à¤¾'] },
+  { district: 'à¤Šà¤§à¤®à¤¸à¤¿à¤‚à¤¹ à¤¨à¤—à¤°', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['udhamsingh', 'à¤°à¥à¤¦à¥à¤°à¤ªà¥à¤°'] },
+  { district: 'à¤ªà¥Œà¤¡à¤¼à¥€ à¤—à¤¢à¤¼à¤µà¤¾à¤²', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['pauri', 'à¤ªà¥Œà¤¡à¤¼à¥€'] },
+  { district: 'à¤Ÿà¤¿à¤¹à¤°à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['tehri', 'à¤Ÿà¤¿à¤¹à¤°à¥€'] },
+  { district: 'à¤šà¤®à¥‹à¤²à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['chamoli', 'à¤šà¤®à¥‹à¤²à¥€'] },
+  { district: 'à¤‰à¤¤à¥à¤¤à¤°à¤•à¤¾à¤¶à¥€', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['uttarkashi', 'à¤‰à¤¤à¥à¤¤à¤°à¤•à¤¾à¤¶à¥€'] },
+  { district: 'à¤ªà¤¿à¤¥à¥Œà¤°à¤¾à¤—à¤¢à¤¼', state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['pithoragarh', 'à¤ªà¤¿à¤¥à¥Œà¤°à¤¾à¤—à¤¢à¤¼'] },
 
   // Bihar
-  { district: 'पटना', state: 'बिहार', aliases: ['patna', 'पटना'] },
-  { district: 'गया', state: 'बिहार', aliases: ['gaya', 'गया'] },
-  { district: 'मुजफ्फरपुर', state: 'बिहार', aliases: ['muzaffarpur', 'मुजफ्फरपुर'] },
-  { district: 'भागलपुर', state: 'बिहार', aliases: ['bhagalpur', 'भागलपुर'] },
-  { district: 'दरभंगा', state: 'बिहार', aliases: ['darbhanga', 'दरभंगा'] },
-  { district: 'पूर्णिया', state: 'बिहार', aliases: ['purnia', 'पूर्णिया'] },
-  { district: 'सहरसा', state: 'बिहार', aliases: ['saharsa', 'सहरसा'] },
-  { district: 'बेगूसराय', state: 'बिहार', aliases: ['begusarai', 'बेगूसराय'] },
-  { district: 'छपरा', state: 'बिहार', aliases: ['chapra', 'saran', 'सारण', 'छपरा'] },
-  { district: 'सीवान', state: 'बिहार', aliases: ['siwan', 'सीवान'] },
-  { district: 'गोपालगंज', state: 'बिहार', aliases: ['gopalganj', 'गोपालगंज'] },
-  { district: 'मोतिहारी', state: 'बिहार', aliases: ['motihari', 'मोतिहारी', 'चंपारण'] },
-  { district: 'समस्तीपुर', state: 'बिहार', aliases: ['samastipur', 'समस्तीपुर'] },
-  { district: 'नालंदा', state: 'बिहार', aliases: ['nalanda', 'biharsharif', 'नालंदा', 'बिहारशरीफ'] },
-  { district: 'आरा', state: 'बिहार', aliases: ['arrah', 'bhojpur', 'भोजपुर', 'आरा'] },
-  { district: 'बक्सर', state: 'बिहार', aliases: ['buxar', 'बक्सर'] },
-  { district: 'सासाराम', state: 'बिहार', aliases: ['sasaram', 'rohtas', 'रोहतास', 'सासाराम'] },
+  { district: 'à¤ªà¤Ÿà¤¨à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['patna', 'à¤ªà¤Ÿà¤¨à¤¾'] },
+  { district: 'à¤—à¤¯à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['gaya', 'à¤—à¤¯à¤¾'] },
+  { district: 'à¤®à¥à¤œà¤«à¥à¤«à¤°à¤ªà¥à¤°', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['muzaffarpur', 'à¤®à¥à¤œà¤«à¥à¤«à¤°à¤ªà¥à¤°'] },
+  { district: 'à¤­à¤¾à¤—à¤²à¤ªà¥à¤°', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['bhagalpur', 'à¤­à¤¾à¤—à¤²à¤ªà¥à¤°'] },
+  { district: 'à¤¦à¤°à¤­à¤‚à¤—à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['darbhanga', 'à¤¦à¤°à¤­à¤‚à¤—à¤¾'] },
+  { district: 'à¤ªà¥‚à¤°à¥à¤£à¤¿à¤¯à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['purnia', 'à¤ªà¥‚à¤°à¥à¤£à¤¿à¤¯à¤¾'] },
+  { district: 'à¤¸à¤¹à¤°à¤¸à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['saharsa', 'à¤¸à¤¹à¤°à¤¸à¤¾'] },
+  { district: 'à¤¬à¥‡à¤—à¥‚à¤¸à¤°à¤¾à¤¯', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['begusarai', 'à¤¬à¥‡à¤—à¥‚à¤¸à¤°à¤¾à¤¯'] },
+  { district: 'à¤›à¤ªà¤°à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['chapra', 'saran', 'à¤¸à¤¾à¤°à¤£', 'à¤›à¤ªà¤°à¤¾'] },
+  { district: 'à¤¸à¥€à¤µà¤¾à¤¨', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['siwan', 'à¤¸à¥€à¤µà¤¾à¤¨'] },
+  { district: 'à¤—à¥‹à¤ªà¤¾à¤²à¤—à¤‚à¤œ', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['gopalganj', 'à¤—à¥‹à¤ªà¤¾à¤²à¤—à¤‚à¤œ'] },
+  { district: 'à¤®à¥‹à¤¤à¤¿à¤¹à¤¾à¤°à¥€', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['motihari', 'à¤®à¥‹à¤¤à¤¿à¤¹à¤¾à¤°à¥€', 'à¤šà¤‚à¤ªà¤¾à¤°à¤£'] },
+  { district: 'à¤¸à¤®à¤¸à¥à¤¤à¥€à¤ªà¥à¤°', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['samastipur', 'à¤¸à¤®à¤¸à¥à¤¤à¥€à¤ªà¥à¤°'] },
+  { district: 'à¤¨à¤¾à¤²à¤‚à¤¦à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['nalanda', 'biharsharif', 'à¤¨à¤¾à¤²à¤‚à¤¦à¤¾', 'à¤¬à¤¿à¤¹à¤¾à¤°à¤¶à¤°à¥€à¤«'] },
+  { district: 'à¤†à¤°à¤¾', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['arrah', 'bhojpur', 'à¤­à¥‹à¤œà¤ªà¥à¤°', 'à¤†à¤°à¤¾'] },
+  { district: 'à¤¬à¤•à¥à¤¸à¤°', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['buxar', 'à¤¬à¤•à¥à¤¸à¤°'] },
+  { district: 'à¤¸à¤¾à¤¸à¤¾à¤°à¤¾à¤®', state: 'à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['sasaram', 'rohtas', 'à¤°à¥‹à¤¹à¤¤à¤¾à¤¸', 'à¤¸à¤¾à¤¸à¤¾à¤°à¤¾à¤®'] },
 
   // Rajasthan
-  { district: 'जयपुर', state: 'राजस्थान', aliases: ['jaipur', 'जयपुर'] },
-  { district: 'जोधपुर', state: 'राजस्थान', aliases: ['jodhpur', 'जोधपुर'] },
-  { district: 'उदयपुर', state: 'राजस्थान', aliases: ['udaipur', 'उदयपुर'] },
-  { district: 'कोटा', state: 'राजस्थान', aliases: ['kota', 'कोटा'] },
-  { district: 'अजमेर', state: 'राजस्थान', aliases: ['ajmer', 'अजमेर'] },
-  { district: 'बीकानेर', state: 'राजस्थान', aliases: ['bikaner', 'बीकानेर'] },
-  { district: 'भरतपुर', state: 'राजस्थान', aliases: ['bharatpur', 'भरतपुर'] },
-  { district: 'भीलवाड़ा', state: 'राजस्थान', aliases: ['bhilwara', 'भीलवाड़ा'] },
-  { district: 'अलवर', state: 'राजस्थान', aliases: ['alwar', 'अलवर'] },
-  { district: 'सीकर', state: 'राजस्थान', aliases: ['sikar', 'सीकर'] },
-  { district: 'पाली', state: 'राजस्थान', aliases: ['pali', 'पाली'] },
-  { district: 'बाड़मेर', state: 'राजस्थान', aliases: ['barmer', 'बाड़मेर'] },
-  { district: 'जैसलमेर', state: 'राजस्थान', aliases: ['jaisalmer', 'जैसलमेर'] },
-  { district: 'नागौर', state: 'राजस्थान', aliases: ['nagaur', 'नागौर'] },
-  { district: 'चूरू', state: 'राजस्थान', aliases: ['churu', 'चूरू'] },
-  { district: 'झुंझुनूं', state: 'राजस्थान', aliases: ['jhunjhunu', 'झुंझुनूं'] },
-  { district: 'चित्तौड़गढ़', state: 'राजस्थान', aliases: ['chittorgarh', 'चित्तौड़गढ़'] },
-  { district: 'श्रीगंगानगर', state: 'राजस्थान', aliases: ['ganganagar', 'श्रीगंगानगर'] },
+  { district: 'à¤œà¤¯à¤ªà¥à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['jaipur', 'à¤œà¤¯à¤ªà¥à¤°'] },
+  { district: 'à¤œà¥‹à¤§à¤ªà¥à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['jodhpur', 'à¤œà¥‹à¤§à¤ªà¥à¤°'] },
+  { district: 'à¤‰à¤¦à¤¯à¤ªà¥à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['udaipur', 'à¤‰à¤¦à¤¯à¤ªà¥à¤°'] },
+  { district: 'à¤•à¥‹à¤Ÿà¤¾', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['kota', 'à¤•à¥‹à¤Ÿà¤¾'] },
+  { district: 'à¤…à¤œà¤®à¥‡à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['ajmer', 'à¤…à¤œà¤®à¥‡à¤°'] },
+  { district: 'à¤¬à¥€à¤•à¤¾à¤¨à¥‡à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['bikaner', 'à¤¬à¥€à¤•à¤¾à¤¨à¥‡à¤°'] },
+  { district: 'à¤­à¤°à¤¤à¤ªà¥à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['bharatpur', 'à¤­à¤°à¤¤à¤ªà¥à¤°'] },
+  { district: 'à¤­à¥€à¤²à¤µà¤¾à¤¡à¤¼à¤¾', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['bhilwara', 'à¤­à¥€à¤²à¤µà¤¾à¤¡à¤¼à¤¾'] },
+  { district: 'à¤…à¤²à¤µà¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['alwar', 'à¤…à¤²à¤µà¤°'] },
+  { district: 'à¤¸à¥€à¤•à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['sikar', 'à¤¸à¥€à¤•à¤°'] },
+  { district: 'à¤ªà¤¾à¤²à¥€', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['pali', 'à¤ªà¤¾à¤²à¥€'] },
+  { district: 'à¤¬à¤¾à¤¡à¤¼à¤®à¥‡à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['barmer', 'à¤¬à¤¾à¤¡à¤¼à¤®à¥‡à¤°'] },
+  { district: 'à¤œà¥ˆà¤¸à¤²à¤®à¥‡à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['jaisalmer', 'à¤œà¥ˆà¤¸à¤²à¤®à¥‡à¤°'] },
+  { district: 'à¤¨à¤¾à¤—à¥Œà¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['nagaur', 'à¤¨à¤¾à¤—à¥Œà¤°'] },
+  { district: 'à¤šà¥‚à¤°à¥‚', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['churu', 'à¤šà¥‚à¤°à¥‚'] },
+  { district: 'à¤à¥à¤‚à¤à¥à¤¨à¥‚à¤‚', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['jhunjhunu', 'à¤à¥à¤‚à¤à¥à¤¨à¥‚à¤‚'] },
+  { district: 'à¤šà¤¿à¤¤à¥à¤¤à¥Œà¤¡à¤¼à¤—à¤¢à¤¼', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['chittorgarh', 'à¤šà¤¿à¤¤à¥à¤¤à¥Œà¤¡à¤¼à¤—à¤¢à¤¼'] },
+  { district: 'à¤¶à¥à¤°à¥€à¤—à¤‚à¤—à¤¾à¤¨à¤—à¤°', state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['ganganagar', 'à¤¶à¥à¤°à¥€à¤—à¤‚à¤—à¤¾à¤¨à¤—à¤°'] },
 
   // Chhattisgarh
-  { district: 'रायपुर', state: 'छत्तीसगढ़', aliases: ['raipur', 'रायपुर'] },
-  { district: 'बिलासपुर', state: 'छत्तीसगढ़', aliases: ['bilaspur', 'बिलासपुर'] },
-  { district: 'दुर्ग', state: 'छत्तीसगढ़', aliases: ['durg', 'bhilai', 'दुर्ग', 'भिलाई'] },
-  { district: 'कोरबा', state: 'छत्तीसगढ़', aliases: ['korba', 'कोरबा'] },
-  { district: 'रायगढ़', state: 'छत्तीसगढ़', aliases: ['raigarh', 'रायगढ़'] },
-  { district: 'राजनांदगांव', state: 'छत्तीसगढ़', aliases: ['rajnandgaon', 'राजनांदगांव'] },
-  { district: 'जगदलपुर', state: 'छत्तीसगढ़', aliases: ['jagdalpur', 'bastar', 'बस्तर', 'जगदलपुर'] },
-  { district: 'अंबिकापुर', state: 'छत्तीसगढ़', aliases: ['ambikapur', 'surguja', 'सरगुजा', 'अंबिकापुर'] },
+  { district: 'à¤°à¤¾à¤¯à¤ªà¥à¤°', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['raipur', 'à¤°à¤¾à¤¯à¤ªà¥à¤°'] },
+  { district: 'à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['bilaspur', 'à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°'] },
+  { district: 'à¤¦à¥à¤°à¥à¤—', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['durg', 'bhilai', 'à¤¦à¥à¤°à¥à¤—', 'à¤­à¤¿à¤²à¤¾à¤ˆ'] },
+  { district: 'à¤•à¥‹à¤°à¤¬à¤¾', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['korba', 'à¤•à¥‹à¤°à¤¬à¤¾'] },
+  { district: 'à¤°à¤¾à¤¯à¤—à¤¢à¤¼', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['raigarh', 'à¤°à¤¾à¤¯à¤—à¤¢à¤¼'] },
+  { district: 'à¤°à¤¾à¤œà¤¨à¤¾à¤‚à¤¦à¤—à¤¾à¤‚à¤µ', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['rajnandgaon', 'à¤°à¤¾à¤œà¤¨à¤¾à¤‚à¤¦à¤—à¤¾à¤‚à¤µ'] },
+  { district: 'à¤œà¤—à¤¦à¤²à¤ªà¥à¤°', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['jagdalpur', 'bastar', 'à¤¬à¤¸à¥à¤¤à¤°', 'à¤œà¤—à¤¦à¤²à¤ªà¥à¤°'] },
+  { district: 'à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°', state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['ambikapur', 'surguja', 'à¤¸à¤°à¤—à¥à¤œà¤¾', 'à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°'] },
 
   // Maharashtra
-  { district: 'मुंबई', state: 'महाराष्ट्र', aliases: ['mumbai', 'bombay', 'मुंबई'] },
-  { district: 'पुणे', state: 'महाराष्ट्र', aliases: ['pune', 'पुणे'] },
-  { district: 'नागपुर', state: 'महाराष्ट्र', aliases: ['nagpur', 'नागपुर'] },
-  { district: 'नासिक', state: 'महाराष्ट्र', aliases: ['nashik', 'नासिक'] },
-  { district: 'ठाणे', state: 'महाराष्ट्र', aliases: ['thane', 'ठाणे'] },
-  { district: 'छत्रपति संभाजीनगर', state: 'महाराष्ट्र', aliases: ['aurangabad', 'sambhajinagar', 'औरंगाबाद'] },
-  { district: 'कोल्हापुर', state: 'महाराष्ट्र', aliases: ['kolhapur', 'कोल्हापुर'] },
+  { district: 'à¤®à¥à¤‚à¤¬à¤ˆ', state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['mumbai', 'bombay', 'à¤®à¥à¤‚à¤¬à¤ˆ'] },
+  { district: 'à¤ªà¥à¤£à¥‡', state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['pune', 'à¤ªà¥à¤£à¥‡'] },
+  { district: 'à¤¨à¤¾à¤—à¤ªà¥à¤°', state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['nagpur', 'à¤¨à¤¾à¤—à¤ªà¥à¤°'] },
+  { district: 'à¤¨à¤¾à¤¸à¤¿à¤•', state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['nashik', 'à¤¨à¤¾à¤¸à¤¿à¤•'] },
+  { district: 'à¤ à¤¾à¤£à¥‡', state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['thane', 'à¤ à¤¾à¤£à¥‡'] },
+  { district: 'à¤›à¤¤à¥à¤°à¤ªà¤¤à¤¿ à¤¸à¤‚à¤­à¤¾à¤œà¥€à¤¨à¤—à¤°', state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['aurangabad', 'sambhajinagar', 'à¤”à¤°à¤‚à¤—à¤¾à¤¬à¤¾à¤¦'] },
+  { district: 'à¤•à¥‹à¤²à¥à¤¹à¤¾à¤ªà¥à¤°', state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['kolhapur', 'à¤•à¥‹à¤²à¥à¤¹à¤¾à¤ªà¥à¤°'] },
 
   // Jharkhand
-  { district: 'रांची', state: 'झारखंड', aliases: ['ranchi', 'रांची'] },
-  { district: 'जमशेदपुर', state: 'झारखंड', aliases: ['jamshedpur', 'tatanagar', 'जमशेदपुर'] },
-  { district: 'धनबाद', state: 'झारखंड', aliases: ['dhanbad', 'धनबाद'] },
-  { district: 'बोकारो', state: 'झारखंड', aliases: ['bokaro', 'बोकारो'] },
-  { district: 'देवघर', state: 'झारखंड', aliases: ['deoghar', 'देवघर'] },
+  { district: 'à¤°à¤¾à¤‚à¤šà¥€', state: 'à¤à¤¾à¤°à¤–à¤‚à¤¡', aliases: ['ranchi', 'à¤°à¤¾à¤‚à¤šà¥€'] },
+  { district: 'à¤œà¤®à¤¶à¥‡à¤¦à¤ªà¥à¤°', state: 'à¤à¤¾à¤°à¤–à¤‚à¤¡', aliases: ['jamshedpur', 'tatanagar', 'à¤œà¤®à¤¶à¥‡à¤¦à¤ªà¥à¤°'] },
+  { district: 'à¤§à¤¨à¤¬à¤¾à¤¦', state: 'à¤à¤¾à¤°à¤–à¤‚à¤¡', aliases: ['dhanbad', 'à¤§à¤¨à¤¬à¤¾à¤¦'] },
+  { district: 'à¤¬à¥‹à¤•à¤¾à¤°à¥‹', state: 'à¤à¤¾à¤°à¤–à¤‚à¤¡', aliases: ['bokaro', 'à¤¬à¥‹à¤•à¤¾à¤°à¥‹'] },
+  { district: 'à¤¦à¥‡à¤µà¤˜à¤°', state: 'à¤à¤¾à¤°à¤–à¤‚à¤¡', aliases: ['deoghar', 'à¤¦à¥‡à¤µà¤˜à¤°'] },
 
   // Gujarat
-  { district: 'अहमदाबाद', state: 'गुजरात', aliases: ['ahmedabad', 'अहमदाबाद'] },
-  { district: 'सूरत', state: 'गुजरात', aliases: ['surat', 'सूरत'] },
-  { district: 'वडोदरा', state: 'गुजरात', aliases: ['vadodara', 'baroda', 'वडोदरा'] },
-  { district: 'राजकोट', state: 'गुजरात', aliases: ['rajkot', 'राजकोट'] },
+  { district: 'à¤…à¤¹à¤®à¤¦à¤¾à¤¬à¤¾à¤¦', state: 'à¤—à¥à¤œà¤°à¤¾à¤¤', aliases: ['ahmedabad', 'à¤…à¤¹à¤®à¤¦à¤¾à¤¬à¤¾à¤¦'] },
+  { district: 'à¤¸à¥‚à¤°à¤¤', state: 'à¤—à¥à¤œà¤°à¤¾à¤¤', aliases: ['surat', 'à¤¸à¥‚à¤°à¤¤'] },
+  { district: 'à¤µà¤¡à¥‹à¤¦à¤°à¤¾', state: 'à¤—à¥à¤œà¤°à¤¾à¤¤', aliases: ['vadodara', 'baroda', 'à¤µà¤¡à¥‹à¤¦à¤°à¤¾'] },
+  { district: 'à¤°à¤¾à¤œà¤•à¥‹à¤Ÿ', state: 'à¤—à¥à¤œà¤°à¤¾à¤¤', aliases: ['rajkot', 'à¤°à¤¾à¤œà¤•à¥‹à¤Ÿ'] },
 
   // West Bengal
-  { district: 'कोलकाता', state: 'पश्चिम बंगाल', aliases: ['kolkata', 'calcutta', 'कोलकाता', 'कलकत्ता'] },
-  { district: 'हावड़ा', state: 'पश्चिम बंगाल', aliases: ['howrah', 'हावड़ा'] },
-  { district: 'सिलीगुड़ी', state: 'पश्चिम बंगाल', aliases: ['siliguri', 'सिलीगुड़ी'] },
-  { district: 'आसनसोल', state: 'पश्चिम बंगाल', aliases: ['asansol', 'आसनसोल'] },
-  { district: 'दुर्गापुर', state: 'पश्चिम बंगाल', aliases: ['durgapur', 'दुर्गापुर'] },
+  { district: 'à¤•à¥‹à¤²à¤•à¤¾à¤¤à¤¾', state: 'à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', aliases: ['kolkata', 'calcutta', 'à¤•à¥‹à¤²à¤•à¤¾à¤¤à¤¾', 'à¤•à¤²à¤•à¤¤à¥à¤¤à¤¾'] },
+  { district: 'à¤¹à¤¾à¤µà¤¡à¤¼à¤¾', state: 'à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', aliases: ['howrah', 'à¤¹à¤¾à¤µà¤¡à¤¼à¤¾'] },
+  { district: 'à¤¸à¤¿à¤²à¥€à¤—à¥à¤¡à¤¼à¥€', state: 'à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', aliases: ['siliguri', 'à¤¸à¤¿à¤²à¥€à¤—à¥à¤¡à¤¼à¥€'] },
+  { district: 'à¤†à¤¸à¤¨à¤¸à¥‹à¤²', state: 'à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', aliases: ['asansol', 'à¤†à¤¸à¤¨à¤¸à¥‹à¤²'] },
+  { district: 'à¤¦à¥à¤°à¥à¤—à¤¾à¤ªà¥à¤°', state: 'à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', aliases: ['durgapur', 'à¤¦à¥à¤°à¥à¤—à¤¾à¤ªà¥à¤°'] },
 
   // Haryana / Punjab / Delhi
-  { district: 'चंडीगढ़', state: 'पंजाब/हरियाणा', aliases: ['chandigarh', 'चंडीगढ़'] },
-  { district: 'गुरुग्राम', state: 'हरियाणा', aliases: ['gurugram', 'gurgaon', 'गुरुग्राम', 'गुड़गांव'] },
-  { district: 'अमृतसर', state: 'पंजाब', aliases: ['amritsar', 'अमृतसर'] },
-  { district: 'लुधियाना', state: 'पंजाब', aliases: ['ludhiana', 'लुधियाना'] },
-  { district: 'नई दिल्ली', state: 'दिल्ली', aliases: ['new delhi', 'new-delhi', 'नई दिल्ली'] },
-  { district: 'दिल्ली', state: 'दिल्ली', aliases: ['delhi', 'दिल्ली'] },
+  { district: 'à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼', state: 'à¤ªà¤‚à¤œà¤¾à¤¬/à¤¹à¤°à¤¿à¤¯à¤¾à¤£à¤¾', aliases: ['chandigarh', 'à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼'] },
+  { district: 'à¤—à¥à¤°à¥à¤—à¥à¤°à¤¾à¤®', state: 'à¤¹à¤°à¤¿à¤¯à¤¾à¤£à¤¾', aliases: ['gurugram', 'gurgaon', 'à¤—à¥à¤°à¥à¤—à¥à¤°à¤¾à¤®', 'à¤—à¥à¤¡à¤¼à¤—à¤¾à¤‚à¤µ'] },
+  { district: 'à¤…à¤®à¥ƒà¤¤à¤¸à¤°', state: 'à¤ªà¤‚à¤œà¤¾à¤¬', aliases: ['amritsar', 'à¤…à¤®à¥ƒà¤¤à¤¸à¤°'] },
+  { district: 'à¤²à¥à¤§à¤¿à¤¯à¤¾à¤¨à¤¾', state: 'à¤ªà¤‚à¤œà¤¾à¤¬', aliases: ['ludhiana', 'à¤²à¥à¤§à¤¿à¤¯à¤¾à¤¨à¤¾'] },
+  { district: 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€', state: 'à¤¦à¤¿à¤²à¥à¤²à¥€', aliases: ['new delhi', 'new-delhi', 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€'] },
+  { district: 'à¤¦à¤¿à¤²à¥à¤²à¥€', state: 'à¤¦à¤¿à¤²à¥à¤²à¥€', aliases: ['delhi', 'à¤¦à¤¿à¤²à¥à¤²à¥€'] },
 ];
 
 export function formatDistrictWithState(loc: string): string {
@@ -17710,13 +18041,13 @@ export function formatDistrictWithState(loc: string): string {
   const trimmed = loc.trim();
   if (
     !trimmed ||
-    trimmed === 'विशेष कवरेज' ||
-    trimmed === 'विशेष डेस्क' ||
-    trimmed === 'विशेष डैश' ||
-    trimmed === 'विशेष संवाददाता' ||
-    trimmed === 'सेंट्रल डेस्क' ||
-    trimmed === 'न्यूज़ डेस्क' ||
-    trimmed === 'ब्यूरो डेस्क'
+    trimmed === 'à¤µà¤¿à¤¶à¥‡à¤· à¤•à¤µà¤°à¥‡à¤œ' ||
+    trimmed === 'à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•' ||
+    trimmed === 'à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥ˆà¤¶' ||
+    trimmed === 'à¤µà¤¿à¤¶à¥‡à¤· à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾' ||
+    trimmed === 'à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•' ||
+    trimmed === 'à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¡à¥‡à¤¸à¥à¤•' ||
+    trimmed === 'à¤¬à¥à¤¯à¥‚à¤°à¥‹ à¤¡à¥‡à¤¸à¥à¤•'
   ) {
     return '';
   }
@@ -17727,8 +18058,8 @@ export function formatDistrictWithState(loc: string): string {
   }
 
   for (const item of DISTRICT_STATE_LIST) {
-    if (item.district === 'दिल्ली' || item.district === 'नई दिल्ली') {
-      if (trimmed === item.district) return 'नई दिल्ली';
+    if (item.district === 'à¤¦à¤¿à¤²à¥à¤²à¥€' || item.district === 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€') {
+      if (trimmed === item.district) return 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€';
       continue;
     }
     if (
@@ -17760,41 +18091,41 @@ export function matchDistrictAlias(text: string, alias: string): boolean {
   }
   // If alias is Devanagari
   const aliasLower = alias.toLowerCase();
-  if (alias === 'गया' || aliasLower === 'gaya') {
-    return /(?:(?:जिले|जिला|शहर|थाना|क्षेत्र|धाम|एयरपोर्ट|स्टेशन)\s+गया|गया\s*(?:जिले|जिला|शहर|थाना|क्षेत्र|धाम|एयरपोर्ट|स्टेशन|का|की|के|में|से)|बोधगया|बोध\s*गया|गया,\s*बिहार|गया\s*\(\s*बिहार\s*\)|\bgaya\s+(?:district|city|airport)\b)/iu.test(text);
+  if (alias === 'à¤—à¤¯à¤¾' || aliasLower === 'gaya') {
+    return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤¥à¤¾à¤¨à¤¾|à¤•à¥à¤·à¥‡à¤¤à¥à¤°|à¤§à¤¾à¤®|à¤à¤¯à¤°à¤ªà¥‹à¤°à¥à¤Ÿ|à¤¸à¥à¤Ÿà¥‡à¤¶à¤¨)\s+à¤—à¤¯à¤¾|à¤—à¤¯à¤¾\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤¥à¤¾à¤¨à¤¾|à¤•à¥à¤·à¥‡à¤¤à¥à¤°|à¤§à¤¾à¤®|à¤à¤¯à¤°à¤ªà¥‹à¤°à¥à¤Ÿ|à¤¸à¥à¤Ÿà¥‡à¤¶à¤¨|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤¬à¥‹à¤§à¤—à¤¯à¤¾|à¤¬à¥‹à¤§\s*à¤—à¤¯à¤¾|à¤—à¤¯à¤¾,\s*à¤¬à¤¿à¤¹à¤¾à¤°|à¤—à¤¯à¤¾\s*\(\s*à¤¬à¤¿à¤¹à¤¾à¤°\s*\)|\bgaya\s+(?:district|city|airport)\b)/iu.test(text);
   }
-  if (alias === 'गुना' || aliasLower === 'guna') {
-    if (/\d+\s*गुना|चार\s*गुना|दो\s*गुना|तीन\s*गुना|दस\s*गुना|दोगुना|तीनगुना|कई\s*गुना/u.test(text)) {
-      return /(?:(?:जिले|जिला|शहर)\s+गुना|गुना\s*(?:जिले|जिला|शहर|का|की|के|में|से)|गुना,\s*मप्र|गुना,\s*मध्य प्रदेश|\bguna\s+(?:district|city)\b)/iu.test(text);
+  if (alias === 'à¤—à¥à¤¨à¤¾' || aliasLower === 'guna') {
+    if (/\d+\s*à¤—à¥à¤¨à¤¾|à¤šà¤¾à¤°\s*à¤—à¥à¤¨à¤¾|à¤¦à¥‹\s*à¤—à¥à¤¨à¤¾|à¤¤à¥€à¤¨\s*à¤—à¥à¤¨à¤¾|à¤¦à¤¸\s*à¤—à¥à¤¨à¤¾|à¤¦à¥‹à¤—à¥à¤¨à¤¾|à¤¤à¥€à¤¨à¤—à¥à¤¨à¤¾|à¤•à¤ˆ\s*à¤—à¥à¤¨à¤¾/u.test(text)) {
+      return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°)\s+à¤—à¥à¤¨à¤¾|à¤—à¥à¤¨à¤¾\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤—à¥à¤¨à¤¾,\s*à¤®à¤ªà¥à¤°|à¤—à¥à¤¨à¤¾,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bguna\s+(?:district|city)\b)/iu.test(text);
     }
-    return /(?:(?:जिले|जिला|शहर)\s+गुना|गुना\s*(?:जिले|जिला|शहर|का|की|के|में|से)|गुना,\s*मप्र|गुना,\s*मध्य प्रदेश|\bguna\s+(?:district|city)\b)/iu.test(text);
+    return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°)\s+à¤—à¥à¤¨à¤¾|à¤—à¥à¤¨à¤¾\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤—à¥à¤¨à¤¾,\s*à¤®à¤ªà¥à¤°|à¤—à¥à¤¨à¤¾,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bguna\s+(?:district|city)\b)/iu.test(text);
   }
-  if (alias === 'धार' || aliasLower === 'dhar') {
-    if (/(?:तेज|पानी की|हवा की|रक्त की|तीखी)\s+धार|धारदार/u.test(text)) {
-      return /(?:(?:जिले|जिला|शहर)\s+धार|धार\s*(?:जिले|जिला|शहर|का|की|के|में|से)|धार,\s*मप्र|धार,\s*मध्य प्रदेश|\bdhar\s+(?:district|city)\b)/iu.test(text);
+  if (alias === 'à¤§à¤¾à¤°' || aliasLower === 'dhar') {
+    if (/(?:à¤¤à¥‡à¤œ|à¤ªà¤¾à¤¨à¥€ à¤•à¥€|à¤¹à¤µà¤¾ à¤•à¥€|à¤°à¤•à¥à¤¤ à¤•à¥€|à¤¤à¥€à¤–à¥€)\s+à¤§à¤¾à¤°|à¤§à¤¾à¤°à¤¦à¤¾à¤°/u.test(text)) {
+      return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°)\s+à¤§à¤¾à¤°|à¤§à¤¾à¤°\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤§à¤¾à¤°,\s*à¤®à¤ªà¥à¤°|à¤§à¤¾à¤°,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bdhar\s+(?:district|city)\b)/iu.test(text);
     }
-    return /(?:(?:जिले|जिला|शहर)\s+धार|धार\s*(?:जिले|जिला|शहर|का|की|के|में|से)|धार,\s*मप्र|धार,\s*मध्य प्रदेश|\bdhar\s+(?:district|city)\b)/iu.test(text);
+    return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°)\s+à¤§à¤¾à¤°|à¤§à¤¾à¤°\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤§à¤¾à¤°,\s*à¤®à¤ªà¥à¤°|à¤§à¤¾à¤°,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bdhar\s+(?:district|city)\b)/iu.test(text);
   }
-  if (alias === 'पन्ना' || aliasLower === 'panna') {
-    if (/(?:पन्ने|पन्नों|किताब का पन्ना|पृष्ठ)\b/u.test(text)) {
-      return /(?:(?:जिले|जिला|शहर|हीरा खदान|टाइगर रिजर्व)\s+पन्ना|पन्ना\s*(?:जिले|जिला|शहर|हीरा खदान|टाइगर रिजर्व|का|की|के|में|से)|पन्ना,\s*मप्र|पन्ना,\s*मध्य प्रदेश|\bpanna\s+(?:district|city)\b)/iu.test(text);
+  if (alias === 'à¤ªà¤¨à¥à¤¨à¤¾' || aliasLower === 'panna') {
+    if (/(?:à¤ªà¤¨à¥à¤¨à¥‡|à¤ªà¤¨à¥à¤¨à¥‹à¤‚|à¤•à¤¿à¤¤à¤¾à¤¬ à¤•à¤¾ à¤ªà¤¨à¥à¤¨à¤¾|à¤ªà¥ƒà¤·à¥à¤ )\b/u.test(text)) {
+      return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤¹à¥€à¤°à¤¾ à¤–à¤¦à¤¾à¤¨|à¤Ÿà¤¾à¤‡à¤—à¤° à¤°à¤¿à¤œà¤°à¥à¤µ)\s+à¤ªà¤¨à¥à¤¨à¤¾|à¤ªà¤¨à¥à¤¨à¤¾\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤¹à¥€à¤°à¤¾ à¤–à¤¦à¤¾à¤¨|à¤Ÿà¤¾à¤‡à¤—à¤° à¤°à¤¿à¤œà¤°à¥à¤µ|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤ªà¤¨à¥à¤¨à¤¾,\s*à¤®à¤ªà¥à¤°|à¤ªà¤¨à¥à¤¨à¤¾,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bpanna\s+(?:district|city)\b)/iu.test(text);
     }
-    return /(?:(?:जिले|जिला|शहर|हीरा खदान|टाइगर रिजर्व)\s+पन्ना|पन्ना\s*(?:जिले|जिला|शहर|हीरा खदान|टाइगर रिजर्व|का|की|के|में|से)|पन्ना,\s*मप्र|पन्ना,\s*मध्य प्रदेश|\bpanna\s+(?:district|city)\b)/iu.test(text);
+    return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤¹à¥€à¤°à¤¾ à¤–à¤¦à¤¾à¤¨|à¤Ÿà¤¾à¤‡à¤—à¤° à¤°à¤¿à¤œà¤°à¥à¤µ)\s+à¤ªà¤¨à¥à¤¨à¤¾|à¤ªà¤¨à¥à¤¨à¤¾\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤¹à¥€à¤°à¤¾ à¤–à¤¦à¤¾à¤¨|à¤Ÿà¤¾à¤‡à¤—à¤° à¤°à¤¿à¤œà¤°à¥à¤µ|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤ªà¤¨à¥à¤¨à¤¾,\s*à¤®à¤ªà¥à¤°|à¤ªà¤¨à¥à¤¨à¤¾,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bpanna\s+(?:district|city)\b)/iu.test(text);
   }
-  if (alias === 'सीधी' || aliasLower === 'sidhi') {
-    if (/(?:सीधी बात|सीधी रेखा|सीधे|सीधी तौर पर|सीधा)\b/u.test(text)) {
-      return /(?:(?:जिले|जिला|शहर|पेशाब कांड)\s+सीधी|सीधी\s*(?:जिले|जिला|शहर|का|की|के|में|से)|सीधी,\s*मप्र|सीधी,\s*मध्य प्रदेश|\bsidhi\s+(?:district|city)\b)/iu.test(text);
+  if (alias === 'à¤¸à¥€à¤§à¥€' || aliasLower === 'sidhi') {
+    if (/(?:à¤¸à¥€à¤§à¥€ à¤¬à¤¾à¤¤|à¤¸à¥€à¤§à¥€ à¤°à¥‡à¤–à¤¾|à¤¸à¥€à¤§à¥‡|à¤¸à¥€à¤§à¥€ à¤¤à¥Œà¤° à¤ªà¤°|à¤¸à¥€à¤§à¤¾)\b/u.test(text)) {
+      return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤ªà¥‡à¤¶à¤¾à¤¬ à¤•à¤¾à¤‚à¤¡)\s+à¤¸à¥€à¤§à¥€|à¤¸à¥€à¤§à¥€\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤¸à¥€à¤§à¥€,\s*à¤®à¤ªà¥à¤°|à¤¸à¥€à¤§à¥€,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bsidhi\s+(?:district|city)\b)/iu.test(text);
     }
-    return /(?:(?:जिले|जिला|शहर)\s+सीधी|सीधी\s*(?:जिले|जिला|शहर|का|की|के|में|से)|सीधी,\s*मप्र|सीधी,\s*मध्य प्रदेश|\bsidhi\s+(?:district|city)\b)/iu.test(text);
+    return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°)\s+à¤¸à¥€à¤§à¥€|à¤¸à¥€à¤§à¥€\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤¸à¥€à¤§à¥€,\s*à¤®à¤ªà¥à¤°|à¤¸à¥€à¤§à¥€,\s*à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶|\bsidhi\s+(?:district|city)\b)/iu.test(text);
   }
-  if (alias === 'बस्ती' || aliasLower === 'basti') {
-    return /(?:(?:जिले|जिला|शहर|मंडल)\s+बस्ती|बस्ती\s*(?:जिले|जिला|शहर|मंडल|का|की|के|में|से)|बस्ती,\s*उत्तर प्रदेश|बस्ती\s*\(\s*उत्तर प्रदेश\s*\)|\bbasti\s+(?:district|city)\b)/iu.test(text);
+  if (alias === 'à¤¬à¤¸à¥à¤¤à¥€' || aliasLower === 'basti') {
+    return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤®à¤‚à¤¡à¤²)\s+à¤¬à¤¸à¥à¤¤à¥€|à¤¬à¤¸à¥à¤¤à¥€\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤®à¤‚à¤¡à¤²|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤¬à¤¸à¥à¤¤à¥€,\s*à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶|à¤¬à¤¸à¥à¤¤à¥€\s*\(\s*à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶\s*\)|\bbasti\s+(?:district|city)\b)/iu.test(text);
   }
-  if (alias === 'बांदा' || aliasLower === 'banda') {
-    return /(?:(?:जिले|जिला|शहर|जेल)\s+बांदा|बांदा\s*(?:जिले|जिला|शहर|जेल|का|की|के|में|से)|बांदा,\s*उत्तर प्रदेश|बांदा\s*\(\s*उत्तर प्रदेश\s*\)|\bbanda\s+(?:district|city)\b)/iu.test(text);
+  if (alias === 'à¤¬à¤¾à¤‚à¤¦à¤¾' || aliasLower === 'banda') {
+    return /(?:(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤œà¥‡à¤²)\s+à¤¬à¤¾à¤‚à¤¦à¤¾|à¤¬à¤¾à¤‚à¤¦à¤¾\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤œà¥‡à¤²|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|à¤¬à¤¾à¤‚à¤¦à¤¾,\s*à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶|à¤¬à¤¾à¤‚à¤¦à¤¾\s*\(\s*à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶\s*\)|\bbanda\s+(?:district|city)\b)/iu.test(text);
   }
-  if (alias === 'पुरी' || alias === 'पूरी' || aliasLower === 'puri') {
-    return /(?:जगन्नाथ\s*पुरी|पुरी\s*(?:जिले|जिला|शहर|मंदिर|धाम|बीच|स्टेशन|का|की|के|में|से)|(?:जिले|जिला|शहर)\s+पुरी|पुरी,\s*ओडिशा|\bpuri\s+(?:district|city|temple)\b)/iu.test(text);
+  if (alias === 'à¤ªà¥à¤°à¥€' || alias === 'à¤ªà¥‚à¤°à¥€' || aliasLower === 'puri') {
+    return /(?:à¤œà¤—à¤¨à¥à¤¨à¤¾à¤¥\s*à¤ªà¥à¤°à¥€|à¤ªà¥à¤°à¥€\s*(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°|à¤®à¤‚à¤¦à¤¿à¤°|à¤§à¤¾à¤®|à¤¬à¥€à¤š|à¤¸à¥à¤Ÿà¥‡à¤¶à¤¨|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤®à¥‡à¤‚|à¤¸à¥‡)|(?:à¤œà¤¿à¤²à¥‡|à¤œà¤¿à¤²à¤¾|à¤¶à¤¹à¤°)\s+à¤ªà¥à¤°à¥€|à¤ªà¥à¤°à¥€,\s*à¤“à¤¡à¤¿à¤¶à¤¾|\bpuri\s+(?:district|city|temple)\b)/iu.test(text);
   }
   const devReg = new RegExp(`(?:^|[^\\p{L}\\p{M}])${escapeRegExp(alias)}(?=[^\\p{L}\\p{M}]|$)`, 'u');
   return devReg.test(text);
@@ -17811,7 +18142,7 @@ function cleanCorpusForLocation(text: string): string {
 
 /**
  * Detects genuine event location from news facts, title, and URL.
- * Prioritizes district-level matches over generic states, and never defaults to "आगरा" due to "paragraphs" or generic text.
+ * Prioritizes district-level matches over generic states, and never defaults to "à¤†à¤—à¤°à¤¾" due to "paragraphs" or generic text.
  */
 export function detectDistrictAndState(
   title: string = '',
@@ -17824,14 +18155,14 @@ export function detectDistrictAndState(
   const cleanContent = cleanCorpusForLocation(content);
 
   // Check if news is clearly entertainment / Bollywood / lifestyle without a specific district event
-  const isNonLocationalTopic = /(?:बॉलीवुड|सिनेमा|फिल्म|अभिनेता|अभिनेत्री|सितारों|सेलेब्स|bollywood|cinema|movie|actor|actress|box office|वेब सीरीज|ओटीटी|ट्रेलर|गाना|हॉलीवुड)/iu.test(cleanTitle);
+  const isNonLocationalTopic = /(?:à¤¬à¥‰à¤²à¥€à¤µà¥à¤¡|à¤¸à¤¿à¤¨à¥‡à¤®à¤¾|à¤«à¤¿à¤²à¥à¤®|à¤…à¤­à¤¿à¤¨à¥‡à¤¤à¤¾|à¤…à¤­à¤¿à¤¨à¥‡à¤¤à¥à¤°à¥€|à¤¸à¤¿à¤¤à¤¾à¤°à¥‹à¤‚|à¤¸à¥‡à¤²à¥‡à¤¬à¥à¤¸|bollywood|cinema|movie|actor|actress|box office|à¤µà¥‡à¤¬ à¤¸à¥€à¤°à¥€à¤œ|à¤“à¤Ÿà¥€à¤Ÿà¥€|à¤Ÿà¥à¤°à¥‡à¤²à¤°|à¤—à¤¾à¤¨à¤¾|à¤¹à¥‰à¤²à¥€à¤µà¥à¤¡)/iu.test(cleanTitle);
   if (isNonLocationalTopic) {
     return '';
   }
 
   // 1. Check title first (highest editorial priority)
   for (const d of DISTRICT_STATE_LIST) {
-    if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+    if (d.district === 'à¤¦à¤¿à¤²à¥à¤²à¥€' || d.district === 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€') continue;
     for (const a of d.aliases) {
       if (matchDistrictAlias(cleanTitle, a)) {
         return `${d.district}, ${d.state}`;
@@ -17841,7 +18172,7 @@ export function detectDistrictAndState(
 
   // 2. Check description
   for (const d of DISTRICT_STATE_LIST) {
-    if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+    if (d.district === 'à¤¦à¤¿à¤²à¥à¤²à¥€' || d.district === 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€') continue;
     for (const a of d.aliases) {
       if (matchDistrictAlias(cleanDesc, a)) {
         return `${d.district}, ${d.state}`;
@@ -17851,7 +18182,7 @@ export function detectDistrictAndState(
 
   // 3. Check clean article content
   for (const d of DISTRICT_STATE_LIST) {
-    if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+    if (d.district === 'à¤¦à¤¿à¤²à¥à¤²à¥€' || d.district === 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€') continue;
     for (const a of d.aliases) {
       if (matchDistrictAlias(cleanContent, a)) {
         return `${d.district}, ${d.state}`;
@@ -17861,35 +18192,35 @@ export function detectDistrictAndState(
 
   // 4. International places
   const primaryText = `${cleanTitle} ${cleanDesc} ${url}`.toLowerCase();
-  if (/(?:वाशिंगटन|व्हाइट\s*हाउस|white\s*house|washington)/i.test(primaryText)) {
-    return 'वाशिंगटन';
+  if (/(?:à¤µà¤¾à¤¶à¤¿à¤‚à¤—à¤Ÿà¤¨|à¤µà¥à¤¹à¤¾à¤‡à¤Ÿ\s*à¤¹à¤¾à¤‰à¤¸|white\s*house|washington)/i.test(primaryText)) {
+    return 'à¤µà¤¾à¤¶à¤¿à¤‚à¤—à¤Ÿà¤¨';
   }
-  if (/(?:मास्को|moscow)/i.test(primaryText)) return 'मास्को';
-  if (/(?:लंदन|london)/i.test(primaryText)) return 'लंदन';
+  if (/(?:à¤®à¤¾à¤¸à¥à¤•à¥‹|moscow)/i.test(primaryText)) return 'à¤®à¤¾à¤¸à¥à¤•à¥‹';
+  if (/(?:à¤²à¤‚à¤¦à¤¨|london)/i.test(primaryText)) return 'à¤²à¤‚à¤¦à¤¨';
 
   // 5. Genuine Delhi (check primary text and clean content landmarks)
-  const delhiLandmarkRegex = /(?:संसद[\s\-]*भवन|राष्ट्रपति[\s\-]*भवन|सुप्रीम[\s\-]*कोर्ट|जंतर[\s\-]*मंतर|राजधानी[\s\-]*दिल्ली|इंडिया[\s\-]*गेट)/i;
+  const delhiLandmarkRegex = /(?:à¤¸à¤‚à¤¸à¤¦[\s\-]*à¤­à¤µà¤¨|à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¤ªà¤¤à¤¿[\s\-]*à¤­à¤µà¤¨|à¤¸à¥à¤ªà¥à¤°à¥€à¤®[\s\-]*à¤•à¥‹à¤°à¥à¤Ÿ|à¤œà¤‚à¤¤à¤°[\s\-]*à¤®à¤‚à¤¤à¤°|à¤°à¤¾à¤œà¤§à¤¾à¤¨à¥€[\s\-]*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤‡à¤‚à¤¡à¤¿à¤¯à¤¾[\s\-]*à¤—à¥‡à¤Ÿ)/i;
   if (delhiLandmarkRegex.test(primaryText) || (cleanContent && delhiLandmarkRegex.test(cleanContent))) {
-    return 'नई दिल्ली';
+    return 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€';
   }
-  if (/(?:नई\s*दिल्ली|new\s*delhi)/i.test(primaryText)) {
-    return 'नई दिल्ली';
+  if (/(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|new\s*delhi)/i.test(primaryText)) {
+    return 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€';
   }
 
   // 6. State-level match if state is explicitly referenced in title/desc
   const states = [
-    { state: 'मध्य प्रदेश', capital: 'भोपाल, मध्य प्रदेश', aliases: ['मध्य प्रदेश', 'madhya pradesh', 'mp'] },
-    { state: 'उत्तर प्रदेश', capital: 'लखनऊ, उत्तर प्रदेश', aliases: ['उत्तर प्रदेश', 'uttar pradesh', 'up'] },
-    { state: 'बिहार', capital: 'पटना, बिहार', aliases: ['बिहार', 'bihar'] },
-    { state: 'राजस्थान', capital: 'जयपुर, राजस्थान', aliases: ['राजस्थान', 'rajasthan'] },
-    { state: 'उत्तराखंड', capital: 'देहरादून, उत्तराखंड', aliases: ['उत्तराखंड', 'uttarakhand'] },
-    { state: 'छत्तीसगढ़', capital: 'रायपुर, छत्तीसगढ़', aliases: ['छत्तीसगढ़', 'chhattisgarh'] },
-    { state: 'महाराष्ट्र', capital: 'मुंबई, महाराष्ट्र', aliases: ['महाराष्ट्र', 'maharashtra'] },
-    { state: 'गुजरात', capital: 'गांधीनगर, गुजरात', aliases: ['गुजरात', 'gujarat'] },
-    { state: 'झारखंड', capital: 'रांची, झारखंड', aliases: ['झारखंड', 'jharkhand'] },
-    { state: 'पश्चिम बंगाल', capital: 'कोलकाता, पश्चिम बंगाल', aliases: ['पश्चिम बंगाल', 'west bengal', 'bengal'] },
-    { state: 'पंजाब', capital: 'चंडीगढ़', aliases: ['पंजाब', 'punjab'] },
-    { state: 'हरियाणा', capital: 'चंडीगढ़', aliases: ['हरियाणा', 'haryana'] },
+    { state: 'à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', capital: 'à¤­à¥‹à¤ªà¤¾à¤², à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', 'madhya pradesh', 'mp'] },
+    { state: 'à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', capital: 'à¤²à¤–à¤¨à¤Š, à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', aliases: ['à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', 'uttar pradesh', 'up'] },
+    { state: 'à¤¬à¤¿à¤¹à¤¾à¤°', capital: 'à¤ªà¤Ÿà¤¨à¤¾, à¤¬à¤¿à¤¹à¤¾à¤°', aliases: ['à¤¬à¤¿à¤¹à¤¾à¤°', 'bihar'] },
+    { state: 'à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', capital: 'à¤œà¤¯à¤ªà¥à¤°, à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', aliases: ['à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', 'rajasthan'] },
+    { state: 'à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', capital: 'à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨, à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', aliases: ['à¤‰à¤¤à¥à¤¤à¤°à¤¾à¤–à¤‚à¤¡', 'uttarakhand'] },
+    { state: 'à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', capital: 'à¤°à¤¾à¤¯à¤ªà¥à¤°, à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', aliases: ['à¤›à¤¤à¥à¤¤à¥€à¤¸à¤—à¤¢à¤¼', 'chhattisgarh'] },
+    { state: 'à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', capital: 'à¤®à¥à¤‚à¤¬à¤ˆ, à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', aliases: ['à¤®à¤¹à¤¾à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°', 'maharashtra'] },
+    { state: 'à¤—à¥à¤œà¤°à¤¾à¤¤', capital: 'à¤—à¤¾à¤‚à¤§à¥€à¤¨à¤—à¤°, à¤—à¥à¤œà¤°à¤¾à¤¤', aliases: ['à¤—à¥à¤œà¤°à¤¾à¤¤', 'gujarat'] },
+    { state: 'à¤à¤¾à¤°à¤–à¤‚à¤¡', capital: 'à¤°à¤¾à¤‚à¤šà¥€, à¤à¤¾à¤°à¤–à¤‚à¤¡', aliases: ['à¤à¤¾à¤°à¤–à¤‚à¤¡', 'jharkhand'] },
+    { state: 'à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', capital: 'à¤•à¥‹à¤²à¤•à¤¾à¤¤à¤¾, à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', aliases: ['à¤ªà¤¶à¥à¤šà¤¿à¤® à¤¬à¤‚à¤—à¤¾à¤²', 'west bengal', 'bengal'] },
+    { state: 'à¤ªà¤‚à¤œà¤¾à¤¬', capital: 'à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼', aliases: ['à¤ªà¤‚à¤œà¤¾à¤¬', 'punjab'] },
+    { state: 'à¤¹à¤°à¤¿à¤¯à¤¾à¤£à¤¾', capital: 'à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼', aliases: ['à¤¹à¤°à¤¿à¤¯à¤¾à¤£à¤¾', 'haryana'] },
   ];
 
   for (const st of states) {
@@ -17904,7 +18235,7 @@ export function detectDistrictAndState(
   if (url) {
     const urlLower = url.toLowerCase();
     for (const d of DISTRICT_STATE_LIST) {
-      if (d.district === 'दिल्ली' || d.district === 'नई दिल्ली') continue;
+      if (d.district === 'à¤¦à¤¿à¤²à¥à¤²à¥€' || d.district === 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€') continue;
       for (const a of d.aliases) {
         if (/^[a-z0-9\-]+$/i.test(a) && a.length >= 4) {
           const pathReg = new RegExp(`[/\\-_]${escapeRegExp(a)}[/\\-_.]`, 'i');
@@ -17921,96 +18252,96 @@ export function detectDistrictAndState(
 
 /**
  * Transforms any raw sentence or clause into a punchy, active journalistic Hindi headline title.
- * Eliminates declarative endings like "नहीं बनेंगे", "किए गए", "दी जाएगी", "हुआ", avoiding implied full stops.
- * GUARANTEED: Never truncates verb stems into dangling forms like "सामना करना पड़" or "रोकी जा".
+ * Eliminates declarative endings like "à¤¨à¤¹à¥€à¤‚ à¤¬à¤¨à¥‡à¤‚à¤—à¥‡", "à¤•à¤¿à¤ à¤—à¤", "à¤¦à¥€ à¤œà¤¾à¤à¤—à¥€", "à¤¹à¥à¤†", avoiding implied full stops.
+ * GUARANTEED: Never truncates verb stems into dangling forms like "à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼" or "à¤°à¥‹à¤•à¥€ à¤œà¤¾".
  */
 export function formatAsJournalisticHeadline(raw: string): string {
   if (!raw) return '';
   let h = cleanHeadlineText(raw);
 
   // 1. Strip conversational starter words that make it sound like spoken narrative
-  h = h.replace(/^(?:अब|वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|गौरतलब है कि|बता दें कि|दरअसल|इस दौरान|इसके तहत|सभी|मामले में|इधर)[,\s]*/gi, '');
+  h = h.replace(/^(?:à¤…à¤¬|à¤µà¤¹à¥€à¤‚|à¤‡à¤¸à¤•à¥‡ à¤…à¤²à¤¾à¤µà¤¾|à¤¸à¤¾à¤¥ à¤¹à¥€|à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤•à¥‡ à¤…à¤¨à¥à¤¸à¤¾à¤°|à¤¸à¥‚à¤¤à¥à¤°à¥‹à¤‚ à¤•à¥‡ à¤®à¥à¤¤à¤¾à¤¬à¤¿à¤•|à¤—à¥Œà¤°à¤¤à¤²à¤¬ à¤¹à¥ˆ à¤•à¤¿|à¤¬à¤¤à¤¾ à¤¦à¥‡à¤‚ à¤•à¤¿|à¤¦à¤°à¤…à¤¸à¤²|à¤‡à¤¸ à¤¦à¥Œà¤°à¤¾à¤¨|à¤‡à¤¸à¤•à¥‡ à¤¤à¤¹à¤¤|à¤¸à¤­à¥€|à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚|à¤‡à¤§à¤°)[,\s]*/gi, '');
 
   // 2. Strip leading English junk (without stripping numbers like 40 or 250)
-  h = h.replace(/^[A-Za-z\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '');
+  h = h.replace(/^[A-Za-z\s,.\-â€“â€”:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '');
 
-  // 3. Transform inline declarative phrases like "अब नहीं बनेंगे X" -> "X पर रोक"
-  h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे)\s+([^,:।\n]+)/gu, '$1 पर रोक');
-  h = h.replace(/(?:अब\s+)?नहीं\s*(?:होगा|होंगे)\s+([^,:।\n]+)/gu, '$1 पर पाबंदी');
+  // 3. Transform inline declarative phrases like "à¤…à¤¬ à¤¨à¤¹à¥€à¤‚ à¤¬à¤¨à¥‡à¤‚à¤—à¥‡ X" -> "X à¤ªà¤° à¤°à¥‹à¤•"
+  h = h.replace(/(?:à¤…à¤¬\s+)?à¤¨à¤¹à¥€à¤‚\s*(?:à¤¬à¤¨à¥‡à¤‚à¤—à¥‡|à¤¬à¤¨à¥‡à¤—à¤¾|à¤¬à¤¨ à¤¸à¤•à¥‡à¤‚à¤—à¥‡)\s+([^,:à¥¤\n]+)/gu, '$1 à¤ªà¤° à¤°à¥‹à¤•');
+  h = h.replace(/(?:à¤…à¤¬\s+)?à¤¨à¤¹à¥€à¤‚\s*(?:à¤¹à¥‹à¤—à¤¾|à¤¹à¥‹à¤‚à¤—à¥‡)\s+([^,:à¥¤\n]+)/gu, '$1 à¤ªà¤° à¤ªà¤¾à¤¬à¤‚à¤¦à¥€');
 
   // 4. Transform declarative closing verb phrases into journalistic headline nouns/action tags
   h = h
-    .replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे|होगा|होंगे)(?:\s*हैं|\s*है)?$/u, ' पर रोक')
-    .replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली|को\s*मंजूरी\s*दी\s*है)(?:\s*हैं|\s*है)?$/u, ' को मंजूरी')
-    .replace(/(?:का\s+)?(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' तय')
-    .replace(/(?:का\s+)?(?:निर्णय\s*लिया\s*गया|फैसला\s*लिया\s*गया)(?:\s*हैं|\s*है)?$/u, ' का निर्णय')
-    .replace(/(?:लागू\s*किए\s*गए\s*हैं|लागू\s*किया\s*गया|लागू\s*होगा)(?:\s*हैं|\s*है)?$/u, ' लागू')
-    .replace(/(?:\s*अतिरिक्त)?\s*(?:सहायता|छूट|राहत)\s*(?:दी\s*जाएगी|मिलेगी|का\s*प्रावधान)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
-    .replace(/(?:दी\s*जाएगी|छूट\s*मिलेगी|प्रावधान\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
-    .replace(/(?:\s*सीधा)?\s*(?:लाभ|फायदा)\s*(?:मिलेगा|होगा)(?:\s*हैं|\s*है)?$/u, ' को सीधा फायदा')
-    .replace(/(?:पूरे\s*किए|रन\s*बनाए)(?:\s*हैं|\s*है)?$/u, ' ठोके')
-    .replace(/(?:शतक|अर्धशतक)\s*(?:लगाया|जड़ा|बनाया)(?:\s*हैं|\s*है)?$/u, ' जड़ा')
-    .replace(/(?:बनाए\s*जा\s*सकेंगे|बनाए\s*जाएंगे)(?:\s*हैं|\s*है)?$/u, ' को हरी झंडी')
-    .replace(/(?:गिरफ्तार\s*किया\s*गया|गिरफ्तार\s*किया)(?:\s*हैं|\s*है)?$/u, ' गिरफ्तार')
-    .replace(/(?:बरामद\s*की\s*गई|बरामद\s*किए\s*गए|बरामद\s*हुए)(?:\s*हैं|\s*है)?$/u, ' बरामद')
-    .replace(/(?:\s*की)?\s*(?:मौत\s*हो\s*गई|जान\s*गंवाई|दम\s*तोड़\s*दिया)(?:\s*हैं|\s*है)?$/u, ' की मौत')
-    .replace(/(?:घायल\s*हो\s*गए|घायल\s*हुए)(?:\s*हैं|\s*है)?$/u, ' घायल')
-    .replace(/(?:आदेश\s*दिए\s*गए|आदेश\s*जारी\s*किए)(?:\s*हैं|\s*है)?$/u, ' आदेश दिए गए')
-    .replace(/(?:निधन\s*हो\s*गया)(?:\s*हैं|\s*है)?$/u, ' का निधन')
-    .replace(/(?:जांच\s*शुरू\s*कर\s*दी\s*गई|जांच\s*के\s*निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, ' की जांच शुरू')
-    .replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, ' का ऐलान')
-    .replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, ' के नए नियम')
-    .replace(/(?:के\s+सख्त\s+)+/gu, 'के सख्त ');
+    .replace(/(?:à¤…à¤¬\s+)?à¤¨à¤¹à¥€à¤‚\s*(?:à¤¬à¤¨à¥‡à¤‚à¤—à¥‡|à¤¬à¤¨à¥‡à¤—à¤¾|à¤¬à¤¨ à¤¸à¤•à¥‡à¤‚à¤—à¥‡|à¤¹à¥‹à¤—à¤¾|à¤¹à¥‹à¤‚à¤—à¥‡)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤ªà¤° à¤°à¥‹à¤•')
+    .replace(/(?:à¤•à¥€\s*à¤…à¤¨à¥à¤®à¤¤à¤¿\s*à¤¹à¥‹à¤—à¥€|à¤…à¤¨à¥à¤®à¤¤à¤¿\s*à¤¦à¥€\s*à¤—à¤ˆ|à¤…à¤¨à¥à¤®à¤¤à¤¿\s*à¤¹à¥‹à¤—à¥€|à¤®à¤‚à¤œà¥‚à¤°à¥€\s*à¤¦à¥€\s*à¤—à¤ˆ|à¤®à¤‚à¤œà¥‚à¤°\s*à¤•à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾|à¤®à¤‚à¤œà¥‚à¤°à¥€\s*à¤®à¤¿à¤²à¥€|à¤•à¥‹\s*à¤®à¤‚à¤œà¥‚à¤°à¥€\s*à¤¦à¥€\s*à¤¹à¥ˆ)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¥‹ à¤®à¤‚à¤œà¥‚à¤°à¥€')
+    .replace(/(?:à¤•à¤¾\s+)?(?:à¤¤à¤¯\s*à¤•à¥€\s*à¤—à¤ˆ\s*à¤¹à¥ˆ|à¤¤à¤¯\s*à¤•à¤¿à¤\s*à¤—à¤|à¤¤à¤¯\s*à¤•à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤¤à¤¯')
+    .replace(/(?:à¤•à¤¾\s+)?(?:à¤¨à¤¿à¤°à¥à¤£à¤¯\s*à¤²à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾|à¤«à¥ˆà¤¸à¤²à¤¾\s*à¤²à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¤¾ à¤¨à¤¿à¤°à¥à¤£à¤¯')
+    .replace(/(?:à¤²à¤¾à¤—à¥‚\s*à¤•à¤¿à¤\s*à¤—à¤\s*à¤¹à¥ˆà¤‚|à¤²à¤¾à¤—à¥‚\s*à¤•à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾|à¤²à¤¾à¤—à¥‚\s*à¤¹à¥‹à¤—à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤²à¤¾à¤—à¥‚')
+    .replace(/(?:\s*à¤…à¤¤à¤¿à¤°à¤¿à¤•à¥à¤¤)?\s*(?:à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾|à¤›à¥‚à¤Ÿ|à¤°à¤¾à¤¹à¤¤)\s*(?:à¤¦à¥€\s*à¤œà¤¾à¤à¤—à¥€|à¤®à¤¿à¤²à¥‡à¤—à¥€|à¤•à¤¾\s*à¤ªà¥à¤°à¤¾à¤µà¤§à¤¾à¤¨)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¤¾ à¤à¤²à¤¾à¤¨')
+    .replace(/(?:à¤¦à¥€\s*à¤œà¤¾à¤à¤—à¥€|à¤›à¥‚à¤Ÿ\s*à¤®à¤¿à¤²à¥‡à¤—à¥€|à¤ªà¥à¤°à¤¾à¤µà¤§à¤¾à¤¨\s*à¤•à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¤¾ à¤à¤²à¤¾à¤¨')
+    .replace(/(?:\s*à¤¸à¥€à¤§à¤¾)?\s*(?:à¤²à¤¾à¤­|à¤«à¤¾à¤¯à¤¦à¤¾)\s*(?:à¤®à¤¿à¤²à¥‡à¤—à¤¾|à¤¹à¥‹à¤—à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¥‹ à¤¸à¥€à¤§à¤¾ à¤«à¤¾à¤¯à¤¦à¤¾')
+    .replace(/(?:à¤ªà¥‚à¤°à¥‡\s*à¤•à¤¿à¤|à¤°à¤¨\s*à¤¬à¤¨à¤¾à¤)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤ à¥‹à¤•à¥‡')
+    .replace(/(?:à¤¶à¤¤à¤•|à¤…à¤°à¥à¤§à¤¶à¤¤à¤•)\s*(?:à¤²à¤—à¤¾à¤¯à¤¾|à¤œà¤¡à¤¼à¤¾|à¤¬à¤¨à¤¾à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤œà¤¡à¤¼à¤¾')
+    .replace(/(?:à¤¬à¤¨à¤¾à¤\s*à¤œà¤¾\s*à¤¸à¤•à¥‡à¤‚à¤—à¥‡|à¤¬à¤¨à¤¾à¤\s*à¤œà¤¾à¤à¤‚à¤—à¥‡)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¥‹ à¤¹à¤°à¥€ à¤à¤‚à¤¡à¥€')
+    .replace(/(?:à¤—à¤¿à¤°à¤«à¥à¤¤à¤¾à¤°\s*à¤•à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾|à¤—à¤¿à¤°à¤«à¥à¤¤à¤¾à¤°\s*à¤•à¤¿à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤—à¤¿à¤°à¤«à¥à¤¤à¤¾à¤°')
+    .replace(/(?:à¤¬à¤°à¤¾à¤®à¤¦\s*à¤•à¥€\s*à¤—à¤ˆ|à¤¬à¤°à¤¾à¤®à¤¦\s*à¤•à¤¿à¤\s*à¤—à¤|à¤¬à¤°à¤¾à¤®à¤¦\s*à¤¹à¥à¤)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤¬à¤°à¤¾à¤®à¤¦')
+    .replace(/(?:\s*à¤•à¥€)?\s*(?:à¤®à¥Œà¤¤\s*à¤¹à¥‹\s*à¤—à¤ˆ|à¤œà¤¾à¤¨\s*à¤—à¤‚à¤µà¤¾à¤ˆ|à¤¦à¤®\s*à¤¤à¥‹à¤¡à¤¼\s*à¤¦à¤¿à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¥€ à¤®à¥Œà¤¤')
+    .replace(/(?:à¤˜à¤¾à¤¯à¤²\s*à¤¹à¥‹\s*à¤—à¤|à¤˜à¤¾à¤¯à¤²\s*à¤¹à¥à¤)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤˜à¤¾à¤¯à¤²')
+    .replace(/(?:à¤†à¤¦à¥‡à¤¶\s*à¤¦à¤¿à¤\s*à¤—à¤|à¤†à¤¦à¥‡à¤¶\s*à¤œà¤¾à¤°à¥€\s*à¤•à¤¿à¤)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤†à¤¦à¥‡à¤¶ à¤¦à¤¿à¤ à¤—à¤')
+    .replace(/(?:à¤¨à¤¿à¤§à¤¨\s*à¤¹à¥‹\s*à¤—à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¤¾ à¤¨à¤¿à¤§à¤¨')
+    .replace(/(?:à¤œà¤¾à¤‚à¤š\s*à¤¶à¥à¤°à¥‚\s*à¤•à¤°\s*à¤¦à¥€\s*à¤—à¤ˆ|à¤œà¤¾à¤‚à¤š\s*à¤•à¥‡\s*à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶\s*à¤¦à¤¿à¤)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¥€ à¤œà¤¾à¤‚à¤š à¤¶à¥à¤°à¥‚')
+    .replace(/(?:à¤˜à¥‹à¤·à¤£à¤¾\s*à¤•à¥€\s*à¤—à¤ˆ|à¤à¤²à¤¾à¤¨\s*à¤•à¤¿à¤¯à¤¾\s*à¤—à¤¯à¤¾|à¤à¤²à¤¾à¤¨\s*à¤•à¤¿à¤¯à¤¾)(?:\s*à¤¹à¥ˆà¤‚|\s*à¤¹à¥ˆ)?$/u, ' à¤•à¤¾ à¤à¤²à¤¾à¤¨')
+    .replace(/(?:à¤•à¥‡\s*à¤¤à¤¹à¤¤\s*à¤¹à¥‹à¤—à¤¾|à¤•à¥‡\s*à¤¤à¤¹à¤¤\s*à¤¹à¥‹à¤‚à¤—à¥‡)$/u, ' à¤•à¥‡ à¤¨à¤ à¤¨à¤¿à¤¯à¤®')
+    .replace(/(?:à¤•à¥‡\s+à¤¸à¤–à¥à¤¤\s+)+/gu, 'à¤•à¥‡ à¤¸à¤–à¥à¤¤ ');
 
-  if (!h.includes('का मामला')) {
-    h = h.replace(/(?:सामने\s*आया\s*है|सामने\s*आई\s*है|सामने\s*आए\s*हैं)$/u, ' का मामला');
+  if (!h.includes('à¤•à¤¾ à¤®à¤¾à¤®à¤²à¤¾')) {
+    h = h.replace(/(?:à¤¸à¤¾à¤®à¤¨à¥‡\s*à¤†à¤¯à¤¾\s*à¤¹à¥ˆ|à¤¸à¤¾à¤®à¤¨à¥‡\s*à¤†à¤ˆ\s*à¤¹à¥ˆ|à¤¸à¤¾à¤®à¤¨à¥‡\s*à¤†à¤\s*à¤¹à¥ˆà¤‚)$/u, ' à¤•à¤¾ à¤®à¤¾à¤®à¤²à¤¾');
   }
-  if (!h.includes('आरोप')) {
-    h = h.replace(/(?:आरोप\s*लगाए\s*हैं|आरोप\s*लगाया\s*है|आरोप\s*लगाया)$/u, ' के आरोप');
+  if (!h.includes('à¤†à¤°à¥‹à¤ª')) {
+    h = h.replace(/(?:à¤†à¤°à¥‹à¤ª\s*à¤²à¤—à¤¾à¤\s*à¤¹à¥ˆà¤‚|à¤†à¤°à¥‹à¤ª\s*à¤²à¤—à¤¾à¤¯à¤¾\s*à¤¹à¥ˆ|à¤†à¤°à¥‹à¤ª\s*à¤²à¤—à¤¾à¤¯à¤¾)$/u, ' à¤•à¥‡ à¤†à¤°à¥‹à¤ª');
   }
-  h = h.replace(/(?:साझा\s*किए\s*हैं|साझा\s*किया)$/u, ' की जानकारी दी');
+  h = h.replace(/(?:à¤¸à¤¾à¤à¤¾\s*à¤•à¤¿à¤\s*à¤¹à¥ˆà¤‚|à¤¸à¤¾à¤à¤¾\s*à¤•à¤¿à¤¯à¤¾)$/u, ' à¤•à¥€ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤¦à¥€');
 
   // 5. INTELLIGENT REPAIR OF HANGING/TRUNCATED AUXILIARY VERBS (NEVER LEAVE DANGLING VERB STEMS)
-  // Fix "सामना करना पड़ रहा है" -> "सामना करना पड़ा" (NOT truncated to "सामना करना पड़")
-  h = h.replace(/(?:का\s+)?सामना\s*करना\s*पड़(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रहा\s*था|\s*रही\s*थी)?$/u, ' का सामना करना पड़ा');
-  h = h.replace(/(?:^|\s)पड़(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रहा\s*था|\s*रही\s*थी)?$/u, ' पड़ा');
-  h = h.replace(/का सामना करना पड़ा का सामना करना पड़ा/g, 'का सामना करना पड़ा');
+  // Fix "à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼ à¤°à¤¹à¤¾ à¤¹à¥ˆ" -> "à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼à¤¾" (NOT truncated to "à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼")
+  h = h.replace(/(?:à¤•à¤¾\s+)?à¤¸à¤¾à¤®à¤¨à¤¾\s*à¤•à¤°à¤¨à¤¾\s*à¤ªà¤¡à¤¼(?:\s*à¤°à¤¹à¤¾\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥€\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥‡\s*à¤¹à¥ˆà¤‚|\s*à¤°à¤¹à¤¾\s*à¤¥à¤¾|\s*à¤°à¤¹à¥€\s*à¤¥à¥€)?$/u, ' à¤•à¤¾ à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼à¤¾');
+  h = h.replace(/(?:^|\s)à¤ªà¤¡à¤¼(?:\s*à¤°à¤¹à¤¾\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥€\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥‡\s*à¤¹à¥ˆà¤‚|\s*à¤°à¤¹à¤¾\s*à¤¥à¤¾|\s*à¤°à¤¹à¥€\s*à¤¥à¥€)?$/u, ' à¤ªà¤¡à¤¼à¤¾');
+  h = h.replace(/à¤•à¤¾ à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼à¤¾ à¤•à¤¾ à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼à¤¾/g, 'à¤•à¤¾ à¤¸à¤¾à¤®à¤¨à¤¾ à¤•à¤°à¤¨à¤¾ à¤ªà¤¡à¤¼à¤¾');
 
-  // Fix "रोकी जा रही थी / रोकी जा" -> "रोकी गई"
-  h = h.replace(/(?:रोकी|रोका|रोके)\s*जा(?:\s*रहा\s*है|\s*रही\s*है|\s*रहे\s*हैं|\s*रही\s*थी|\s*रहा\s*था)?$/u, ' रोकी गई');
+  // Fix "à¤°à¥‹à¤•à¥€ à¤œà¤¾ à¤°à¤¹à¥€ à¤¥à¥€ / à¤°à¥‹à¤•à¥€ à¤œà¤¾" -> "à¤°à¥‹à¤•à¥€ à¤—à¤ˆ"
+  h = h.replace(/(?:à¤°à¥‹à¤•à¥€|à¤°à¥‹à¤•à¤¾|à¤°à¥‹à¤•à¥‡)\s*à¤œà¤¾(?:\s*à¤°à¤¹à¤¾\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥€\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥‡\s*à¤¹à¥ˆà¤‚|\s*à¤°à¤¹à¥€\s*à¤¥à¥€|\s*à¤°à¤¹à¤¾\s*à¤¥à¤¾)?$/u, ' à¤°à¥‹à¤•à¥€ à¤—à¤ˆ');
 
-  // Fix "किए जा रहे हैं / किए जा" -> "किए गए"
-  h = h.replace(/(?:किए|किया)\s*जा(?:\s*रहे\s*हैं|\s*रहा\s*है|\s*रहे\s*थे)?$/u, ' किए गए');
+  // Fix "à¤•à¤¿à¤ à¤œà¤¾ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚ / à¤•à¤¿à¤ à¤œà¤¾" -> "à¤•à¤¿à¤ à¤—à¤"
+  h = h.replace(/(?:à¤•à¤¿à¤|à¤•à¤¿à¤¯à¤¾)\s*à¤œà¤¾(?:\s*à¤°à¤¹à¥‡\s*à¤¹à¥ˆà¤‚|\s*à¤°à¤¹à¤¾\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥‡\s*à¤¥à¥‡)?$/u, ' à¤•à¤¿à¤ à¤—à¤');
 
-  // Fix "दी जा रही है / दी जा" -> "दी गई"
-  h = h.replace(/(?:दी|दिया)\s*जा(?:\s*रही\s*है|\s*रहा\s*है|\s*रही\s*थी)?$/u, ' दी गई');
+  // Fix "à¤¦à¥€ à¤œà¤¾ à¤°à¤¹à¥€ à¤¹à¥ˆ / à¤¦à¥€ à¤œà¤¾" -> "à¤¦à¥€ à¤—à¤ˆ"
+  h = h.replace(/(?:à¤¦à¥€|à¤¦à¤¿à¤¯à¤¾)\s*à¤œà¤¾(?:\s*à¤°à¤¹à¥€\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¤¾\s*à¤¹à¥ˆ|\s*à¤°à¤¹à¥€\s*à¤¥à¥€)?$/u, ' à¤¦à¥€ à¤—à¤ˆ');
 
-  // Fix "मांगी गई है / मांगी" -> "मांगी रिपोर्ट"
-  h = h.replace(/विस्तृत\s*रिपोर्ट\s*मांगी(?:\s*गई\s*है|\s*है)?$/u, 'विस्तृत रिपोर्ट मांगी');
+  // Fix "à¤®à¤¾à¤‚à¤—à¥€ à¤—à¤ˆ à¤¹à¥ˆ / à¤®à¤¾à¤‚à¤—à¥€" -> "à¤®à¤¾à¤‚à¤—à¥€ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ"
+  h = h.replace(/à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤\s*à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ\s*à¤®à¤¾à¤‚à¤—à¥€(?:\s*à¤—à¤ˆ\s*à¤¹à¥ˆ|\s*à¤¹à¥ˆ)?$/u, 'à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ à¤®à¤¾à¤‚à¤—à¥€');
 
-  // Fix hanging participles like "करते", "होते", "आते", "जाते"
-  h = h.replace(/\s+करते$/u, ' करने का मामला');
-  h = h.replace(/\s+होते$/u, ' होने पर विवाद');
-  h = h.replace(/\s+आते$/u, ' आने पर हंगामा');
-  h = h.replace(/\s+जाते$/u, ' जाने पर विवाद');
+  // Fix hanging participles like "à¤•à¤°à¤¤à¥‡", "à¤¹à¥‹à¤¤à¥‡", "à¤†à¤¤à¥‡", "à¤œà¤¾à¤¤à¥‡"
+  h = h.replace(/\s+à¤•à¤°à¤¤à¥‡$/u, ' à¤•à¤°à¤¨à¥‡ à¤•à¤¾ à¤®à¤¾à¤®à¤²à¤¾');
+  h = h.replace(/\s+à¤¹à¥‹à¤¤à¥‡$/u, ' à¤¹à¥‹à¤¨à¥‡ à¤ªà¤° à¤µà¤¿à¤µà¤¾à¤¦');
+  h = h.replace(/\s+à¤†à¤¤à¥‡$/u, ' à¤†à¤¨à¥‡ à¤ªà¤° à¤¹à¤‚à¤—à¤¾à¤®à¤¾');
+  h = h.replace(/\s+à¤œà¤¾à¤¤à¥‡$/u, ' à¤œà¤¾à¤¨à¥‡ à¤ªà¤° à¤µà¤¿à¤µà¤¾à¤¦');
 
   // 6. Fix trailing prepositions/connectives that leave an incomplete sentence fragment
-  h = h.replace(/\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|ग्रामीण|शहरी|एक|यह|वह)$/u, '');
+  h = h.replace(/\s+(?:à¤¨à¥‡|à¤•à¥‡|à¤•à¥€|à¤•à¤¾|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤”à¤°|à¤¯à¤¾|à¤à¤µà¤‚|à¤µ|à¤•à¤¿|à¤¹à¥‡à¤¤à¥|à¤²à¤¿à¤|à¤¸à¤¹à¤¿à¤¤|à¤¤à¤•|à¤¤à¤¹à¤¤|à¤¦à¥Œà¤°à¤¾à¤¨|à¤—à¥à¤°à¤¾à¤®à¥€à¤£|à¤¶à¤¹à¤°à¥€|à¤à¤•|à¤¯à¤¹|à¤µà¤¹)$/u, '');
 
-  // 7. Clean duplicate particles like "की की", "को को", "का का"
+  // 7. Clean duplicate particles like "à¤•à¥€ à¤•à¥€", "à¤•à¥‹ à¤•à¥‹", "à¤•à¤¾ à¤•à¤¾"
   h = h
-    .replace(/\b(का|के|की|को|में|पर|से|ने)\s+\1\b/gu, '$1')
+    .replace(/\b(à¤•à¤¾|à¤•à¥‡|à¤•à¥€|à¤•à¥‹|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤¨à¥‡)\s+\1\b/gu, '$1')
     .replace(/\s+/g, ' ');
 
   // 8. Strip surrounding quotes & final cleanup of trailing punctuation
-  h = h.replace(/^['"‘“]+|['"’”]+$/g, '').trim();
-  h = h.replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+  h = h.replace(/^['"â€˜â€œ]+|['"â€™â€]+$/g, '').trim();
+  h = h.replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
 
   return h;
 }
 
 export function calculateHeadlineSimilarityInternal(h1: string, h2: string): number {
-  const stopWords = new Set(['और', 'पर', 'में', 'से', 'को', 'का', 'की', 'के', 'ने', 'यह', 'वह', 'कि', 'भी', 'लिए', 'नए', 'नया', 'बड़ा', 'बड़ी', 'हुए', 'हुआ', 'है', 'हैं', 'था', 'थी', 'थे']);
+  const stopWords = new Set(['à¤”à¤°', 'à¤ªà¤°', 'à¤®à¥‡à¤‚', 'à¤¸à¥‡', 'à¤•à¥‹', 'à¤•à¤¾', 'à¤•à¥€', 'à¤•à¥‡', 'à¤¨à¥‡', 'à¤¯à¤¹', 'à¤µà¤¹', 'à¤•à¤¿', 'à¤­à¥€', 'à¤²à¤¿à¤', 'à¤¨à¤', 'à¤¨à¤¯à¤¾', 'à¤¬à¤¡à¤¼à¤¾', 'à¤¬à¤¡à¤¼à¥€', 'à¤¹à¥à¤', 'à¤¹à¥à¤†', 'à¤¹à¥ˆ', 'à¤¹à¥ˆà¤‚', 'à¤¥à¤¾', 'à¤¥à¥€', 'à¤¥à¥‡']);
   const words1 = new Set(h1.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
   const words2 = new Set(h2.toLowerCase().replace(/[^\u0900-\u097Fa-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2 && !stopWords.has(w)));
   if (words1.size === 0 || words2.size === 0) return 0;
@@ -18023,10 +18354,10 @@ export function calculateHeadlineSimilarityInternal(h1: string, h2: string): num
 export const calculateHeadlineSimilarity = calculateHeadlineSimilarityInternal;
 
 export const HEADLINE_TIER_RANGES = [
-  { option: 1, label: 'विकल्प 1' },
-  { option: 2, label: 'विकल्प 2' },
-  { option: 3, label: 'विकल्प 3' },
-  { option: 4, label: 'विकल्प 4' },
+  { option: 1, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 1' },
+  { option: 2, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 2' },
+  { option: 3, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 3' },
+  { option: 4, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 4' },
 ];
 
 /**
@@ -18045,14 +18376,14 @@ export function validateHeadlineOption(
   index: number = 0,
   expectedTier?: any
 ): HeadlineValidationResult {
-  const clean = cleanHeadlineText(headline).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+  const clean = cleanHeadlineText(headline).replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
   const visibleText = clean.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
   const charCount = visibleText.length;
   const words = visibleText.split(/\s+/).filter(Boolean);
   const wordCount = words.length;
 
   if (!clean) {
-    return { valid: false, reasons: ['हेडलाइन खाली नहीं हो सकती'], cleanText: '', charCount: 0, wordCount: 0 };
+    return { valid: false, reasons: ['à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤–à¤¾à¤²à¥€ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¥€'], cleanText: '', charCount: 0, wordCount: 0 };
   }
 
   return {
@@ -18077,7 +18408,7 @@ export function enrichHeadlineWithContext(
   location: string = '',
   targetMinChars: number = 50
 ): string {
-  let cleanH = cleanHeadlineText(headline).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+  let cleanH = cleanHeadlineText(headline).replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
   if (cleanH.replace(/\[\/?(?:yellow|highlight)\]/g, '').length >= targetMinChars) {
     return cleanH;
   }
@@ -18085,13 +18416,13 @@ export function enrichHeadlineWithContext(
   // Connect relevant fact sentence from the article without repeating words
   for (const f of facts) {
     if (cleanH.replace(/\[\/?(?:yellow|highlight)\]/g, '').length >= targetMinChars) break;
-    const cleanF = cleanHeadlineText(f).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+    const cleanF = cleanHeadlineText(f).replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
     if (!cleanF || cleanF.length < 12) continue;
     if (cleanH.includes(cleanF) || calculateHeadlineSimilarityInternal(cleanH, cleanF) >= 0.5) continue;
     cleanH = `${cleanH}, ${cleanF}`;
   }
 
-  return cleanHeadlineText(cleanH).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+  return cleanHeadlineText(cleanH).replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
 }
 
 /**
@@ -18108,21 +18439,21 @@ export function fitHeadlineToRange(
 ): string {
   if (!headline) return '';
   let h = sanitizePressNoteFlattery(cleanHeadlineText(headline), true)
-    .replace(/^(?:विकल्प\s*\d+[\s:\-–—]*|\d+[\s.\-–—]+|[•\-\*]\s*)/u, '')
-    .replace(/^(?:Breaking News|Live Updates?|Latest News|Big Breaking)[:\s\-–—]*/i, '')
-    .replace(/[।\.\,\!\?\:\-]+$/g, '')
+    .replace(/^(?:à¤µà¤¿à¤•à¤²à¥à¤ª\s*\d+[\s:\-â€“â€”]*|\d+[\s.\-â€“â€”]+|[â€¢\-\*]\s*)/u, '')
+    .replace(/^(?:Breaking News|Live Updates?|Latest News|Big Breaking)[:\s\-â€“â€”]*/i, '')
+    .replace(/[à¥¤\.\,\!\?\:\-]+$/g, '')
     .trim();
 
   const getCleanLen = (str: string) => str.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim().length;
   let currentLen = getCleanLen(h);
 
   if (currentLen > maxChars) {
-    const delimiters = [', ', ' और ', ' तथा ', ' एवं ', ' पर ', ' से ', ' में '];
+    const delimiters = [', ', ' à¤”à¤° ', ' à¤¤à¤¥à¤¾ ', ' à¤à¤µà¤‚ ', ' à¤ªà¤° ', ' à¤¸à¥‡ ', ' à¤®à¥‡à¤‚ '];
     let trimmed = '';
     for (const d of delimiters) {
       const idx = h.lastIndexOf(d, maxChars);
       if (idx >= minChars) {
-        const candidate = h.substring(0, idx).trim().replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+        const candidate = h.substring(0, idx).trim().replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
         if (getCleanLen(candidate) >= minChars && getCleanLen(candidate) <= maxChars) {
           trimmed = candidate;
           break;
@@ -18133,9 +18464,9 @@ export function fitHeadlineToRange(
     if (!trimmed) {
       const spaceIdx = h.lastIndexOf(' ', maxChars);
       if (spaceIdx >= minChars) {
-        trimmed = h.substring(0, spaceIdx).trim().replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+        trimmed = h.substring(0, spaceIdx).trim().replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
       } else {
-        trimmed = h.substring(0, maxChars).trim().replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+        trimmed = h.substring(0, maxChars).trim().replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
       }
     }
     h = trimmed;
@@ -18144,8 +18475,8 @@ export function fitHeadlineToRange(
 
   if (currentLen < minChars) {
     const rawSentences = (contextText || '')
-      .split(/[।\n]+|\.\s+/)
-      .map((s) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+      .split(/[à¥¤\n]+|\.\s+/)
+      .map((s) => cleanHeadlineText(s).replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim())
       .filter((s) => s.length > 5 && !h.includes(s));
 
     for (const s of rawSentences) {
@@ -18157,10 +18488,10 @@ export function fitHeadlineToRange(
       }
     }
 
-    // Never prepend baseTitle or append formulaic clichés
+    // Never prepend baseTitle or append formulaic clichÃ©s
   }
 
-  return cleanHeadlineText(h).replace(/[।\.\,\!\?\:\-]+$/g, '').trim();
+  return cleanHeadlineText(h).replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim();
 }
 
 /**
@@ -18177,16 +18508,16 @@ export function generate5JournalisticHeadlines(
 
 /**
  * Attachment 5: Flattery and honorifics sanitizer function
- * Strips formal and sycophantic titles ('माननीय', 'सम्माननीय', 'सम्मानीय', 'आदरणीय', 'श्रीमान', 'श्रीमती', 'सुश्री', 'परम पूज्य', 'पूज्य', 'श्री', 'महोदय', 'जी')
+ * Strips formal and sycophantic titles ('à¤®à¤¾à¤¨à¤¨à¥€à¤¯', 'à¤¸à¤®à¥à¤®à¤¾à¤¨à¤¨à¥€à¤¯', 'à¤¸à¤®à¥à¤®à¤¾à¤¨à¥€à¤¯', 'à¤†à¤¦à¤°à¤£à¥€à¤¯', 'à¤¶à¥à¤°à¥€à¤®à¤¾à¤¨', 'à¤¶à¥à¤°à¥€à¤®à¤¤à¥€', 'à¤¸à¥à¤¶à¥à¤°à¥€', 'à¤ªà¤°à¤® à¤ªà¥‚à¤œà¥à¤¯', 'à¤ªà¥‚à¤œà¥à¤¯', 'à¤¶à¥à¤°à¥€', 'à¤®à¤¹à¥‹à¤¦à¤¯', 'à¤œà¥€')
  */
 export function sanitizeFlattery(text: any): string {
   if (!text) return "";
   const s = typeof text === "string" ? text : String(text || "");
   return s
-    .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम पूज्य|पूज्य)\s+/gu, " ")
-    .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
-    .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
-    .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "")
+    .replace(/(?:^|[^\p{L}\p{M}])(à¤®à¤¾à¤¨à¤¨à¥€à¤¯|à¤¸à¤®à¥à¤®à¤¾à¤¨à¤¨à¥€à¤¯|à¤¸à¤®à¥à¤®à¤¾à¤¨à¥€à¤¯|à¤†à¤¦à¤°à¤£à¥€à¤¯|à¤¶à¥à¤°à¥€à¤®à¤¾à¤¨|à¤¶à¥à¤°à¥€à¤®à¤¤à¥€|à¤¸à¥à¤¶à¥à¤°à¥€|à¤ªà¤°à¤® à¤ªà¥‚à¤œà¥à¤¯|à¤ªà¥‚à¤œà¥à¤¯)\s+/gu, " ")
+    .replace(/(?:^|[^\p{L}\p{M}])à¤¶à¥à¤°à¥€\s+(?=[\p{L}])/gu, " ")
+    .replace(/\s+à¤®à¤¹à¥‹à¤¦à¤¯(?=[,\s.!?à¥¤\n]|$)/gu, "")
+    .replace(/\s+à¤œà¥€(?=[,\s.!?à¥¤\n]|$)/gu, "")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
@@ -18203,12 +18534,12 @@ export function stripAllUrlsAndHyperlinks(text: string): string {
   // HTML links <a ...>text</a> -> text
   s = s.replace(/<a\b[^>]*>(.*?)<\/a>/gi, "$1");
   // Raw URLs
-  s = s.replace(/https?:\/\/[^\s\)\],;।]+/gi, "");
-  s = s.replace(/ftp:\/\/[^\s\)\],;।]+/gi, "");
-  s = s.replace(/www\.[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.\/]+[^\s\)\],;।]?/gi, "");
-  s = s.replace(/\b[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)*\.(?:com|in|org|net|co|io|gov|edu|ai|app|live|news|tv|online|info|me)\b(?:\/[^\s\)\],;।]*)?/gi, "");
+  s = s.replace(/https?:\/\/[^\s\)\],;à¥¤]+/gi, "");
+  s = s.replace(/ftp:\/\/[^\s\)\],;à¥¤]+/gi, "");
+  s = s.replace(/www\.[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-.\/]+[^\s\)\],;à¥¤]?/gi, "");
+  s = s.replace(/\b[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)*\.(?:com|in|org|net|co|io|gov|edu|ai|app|live|news|tv|online|info|me)\b(?:\/[^\s\)\],;à¥¤]*)?/gi, "");
   // Web reading and click artifacts
-  s = s.replace(/(?:क्लिक\s*करें|वेबसाइट\s*पर\s*पढ़ें|लिंक\s*पर\s*जाएं|पूरी\s*खबर\s*पढ़ें|पूरी\s*खबर\s*देखें|स्रोत\s*लिंक|कॉपी\s*लिंक|शेयर\s*करें)[:\s\-–—]*/gi, "");
+  s = s.replace(/(?:à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ\s*à¤ªà¤°\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤²à¤¿à¤‚à¤•\s*à¤ªà¤°\s*à¤œà¤¾à¤à¤‚|à¤ªà¥‚à¤°à¥€\s*à¤–à¤¬à¤°\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤ªà¥‚à¤°à¥€\s*à¤–à¤¬à¤°\s*à¤¦à¥‡à¤–à¥‡à¤‚|à¤¸à¥à¤°à¥‹à¤¤\s*à¤²à¤¿à¤‚à¤•|à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚)[:\s\-â€“â€”]*/gi, "");
   s = s.replace(/[ \t]{2,}/g, " ");
   s = s.replace(/\n{3,}/g, "\n\n");
   return s.trim();
@@ -18217,7 +18548,7 @@ export function stripAllUrlsAndHyperlinks(text: string): string {
 /**
  * Ensures clean, factual Hindi caption in 2-3 paragraphs or bullet points with strict hashtag hierarchy:
  * - Detailed: Exactly 3 substantive paragraphs (incident -> context/eyewitness -> action/status)
- * - Bullets: Distinct bullet points starting with • 
+ * - Bullets: Distinct bullet points starting with â€¢ 
  * - Short: Exactly 2 substantive paragraphs
  * - Zero raw URLs, phone numbers, or flattery
  * - Exactly ONE blank line before hashtags
@@ -18246,9 +18577,9 @@ export function ensureHashtagHierarchy(
   rawBody = rawBody.replace(/\b\d{3,5}[-\s]\d{6,8}\b/g, "");
 
   // Strip English and Hindi field labels/headings (Title, Headline, Description, Content, etc.)
-  rawBody = rawBody.replace(/^(?:Title|Headline|Description|Content|News|Summary|शीर्षक|हेडलाइन|विवरण|सामग्री|कैप्शन|खबर|विस्तृत\s*कैप्शन|संक्षिप्त\s*कैप्शन|बुलेट\s*पॉइंट्स?)\s*[:\-–—.]*/gim, "");
-  rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
-  rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
+  rawBody = rawBody.replace(/^(?:Title|Headline|Description|Content|News|Summary|à¤¶à¥€à¤°à¥à¤·à¤•|à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨|à¤µà¤¿à¤µà¤°à¤£|à¤¸à¤¾à¤®à¤—à¥à¤°à¥€|à¤•à¥ˆà¤ªà¥à¤¶à¤¨|à¤–à¤¬à¤°|à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤\s*à¤•à¥ˆà¤ªà¥à¤¶à¤¨|à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤\s*à¤•à¥ˆà¤ªà¥à¤¶à¤¨|à¤¬à¥à¤²à¥‡à¤Ÿ\s*à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸?)\s*[:\-â€“â€”.]*/gim, "");
+  rawBody = rawBody.replace(/^(?:à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤«|Paragraph|à¤ªà¥ˆà¤°à¤¾)\s*\d+[\s:\-â€“â€”.]*/gim, "");
+  rawBody = rawBody.replace(/^(?:à¤®à¥à¤–à¥à¤¯ à¤¬à¤¿à¤‚à¤¦à¥|à¤µà¤¿à¤µà¤°à¤£|à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤®|à¤…à¤ªà¤¡à¥‡à¤Ÿ|Key Points|Bullet Points)[\s:\-â€“â€”.]*/gim, "");
 
   // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
   rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
@@ -18259,14 +18590,14 @@ export function ensureHashtagHierarchy(
 
   // Strip leading headline duplicate if caption accidentally starts with the headline
   if (headlineToStrip && headlineToStrip.trim()) {
-    const cleanH = cleanHeadlineText(headlineToStrip).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+    const cleanH = cleanHeadlineText(headlineToStrip).replace(/[à¥¤\.\,\!\?\:\-â€“â€”;;\s]+$/g, "").trim();
     if (cleanH.length >= 10) {
-      const firstLineMatch = rawBody.match(/^([^\n।]+)[।\n]?/u);
+      const firstLineMatch = rawBody.match(/^([^\nà¥¤]+)[à¥¤\n]?/u);
       if (firstLineMatch) {
-        const firstLine = cleanHeadlineText(firstLineMatch[1]).replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+        const firstLine = cleanHeadlineText(firstLineMatch[1]).replace(/[à¥¤\.\,\!\?\:\-â€“â€”;;\s]+$/g, "").trim();
         if (firstLine === cleanH || calculateHeadlineSimilarityInternal(firstLine, cleanH) >= 0.75) {
           rawBody = rawBody.slice(firstLineMatch[0].length).trim();
-          rawBody = rawBody.replace(/^[:\-–—.]+\s*/u, "").trim();
+          rawBody = rawBody.replace(/^[:\-â€“â€”.]+\s*/u, "").trim();
         }
       }
     }
@@ -18278,20 +18609,20 @@ export function ensureHashtagHierarchy(
     // Structured bullet-point news summary (Section 8B)
     const rawLines = rawBody
       .split(/\n+/)
-      .map((l) => l.replace(/^[•\-\*\d\.\s]+/, "").trim())
+      .map((l) => l.replace(/^[â€¢\-\*\d\.\s]+/, "").trim())
       .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
 
     let bulletLines = rawLines;
     if (bulletLines.length < 3) {
       const sentences = rawBody
-        .split(/[।\.\n]+/)
-        .map((s) => stripAllUrlsAndHyperlinks(s).replace(/^[•\-\*\d\.\s]+/, "").trim())
+        .split(/[à¥¤\.\n]+/)
+        .map((s) => stripAllUrlsAndHyperlinks(s).replace(/^[â€¢\-\*\d\.\s]+/, "").trim())
         .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
       bulletLines = sentences.slice(0, 5);
     }
     finalBodyText = bulletLines
       .slice(0, 5)
-      .map((b) => `• ${stripAllUrlsAndHyperlinks(b).replace(/[।\.\s]+$/, "")}।`)
+      .map((b) => `â€¢ ${stripAllUrlsAndHyperlinks(b).replace(/[à¥¤\.\s]+$/, "")}à¥¤`)
       .join("\n");
   } else if (mode === "short") {
     // Exactly 2 substantive paragraphs (Section 8C)
@@ -18304,13 +18635,13 @@ export function ensureHashtagHierarchy(
       finalBodyText = rawParagraphs.slice(0, 2).join("\n\n");
     } else {
       const sentences = rawBody
-        .split(/[।\n]+|\.\s+/)
+        .split(/[à¥¤\n]+|\.\s+/)
         .map((s) => stripAllUrlsAndHyperlinks(s).trim())
         .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
       if (sentences.length >= 2) {
         const mid = Math.ceil(sentences.length / 2);
-        const p1 = sentences.slice(0, mid).join("। ") + "।";
-        const p2 = sentences.slice(mid).join("। ") + "।";
+        const p1 = sentences.slice(0, mid).join("à¥¤ ") + "à¥¤";
+        const p2 = sentences.slice(mid).join("à¥¤ ") + "à¥¤";
         finalBodyText = `${p1}\n\n${p2}`;
       } else {
         finalBodyText = rawParagraphs[0] || rawBody;
@@ -18332,34 +18663,34 @@ export function ensureHashtagHierarchy(
       finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
     } else {
       const sentences = rawBody
-        .split(/[।\n]+|\.\s+/)
+        .split(/[à¥¤\n]+|\.\s+/)
         .map((s) => stripAllUrlsAndHyperlinks(s).trim())
         .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
 
       if (sentences.length >= 6) {
-        const p1 = sentences.slice(0, 2).join("। ") + "।";
-        const p2 = sentences.slice(2, 4).join("। ") + "।";
-        const p3 = sentences.slice(4).join("। ") + "।";
+        const p1 = sentences.slice(0, 2).join("à¥¤ ") + "à¥¤";
+        const p2 = sentences.slice(2, 4).join("à¥¤ ") + "à¥¤";
+        const p3 = sentences.slice(4).join("à¥¤ ") + "à¥¤";
         finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
       } else if (sentences.length >= 4) {
-        const p1 = sentences.slice(0, 2).join("। ") + "।";
-        const p2 = sentences.slice(2, 3).join("। ") + "।";
-        const p3 = sentences.slice(3).join("। ") + "।";
+        const p1 = sentences.slice(0, 2).join("à¥¤ ") + "à¥¤";
+        const p2 = sentences.slice(2, 3).join("à¥¤ ") + "à¥¤";
+        const p3 = sentences.slice(3).join("à¥¤ ") + "à¥¤";
         finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
       } else if (sentences.length >= 3) {
-        const p1 = sentences[0] + "।";
-        const p2 = sentences[1] + "।";
-        const p3 = sentences.slice(2).join("। ") + "।";
+        const p1 = sentences[0] + "à¥¤";
+        const p2 = sentences[1] + "à¥¤";
+        const p3 = sentences.slice(2).join("à¥¤ ") + "à¥¤";
         finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
       } else if (sentences.length === 2) {
-        const p1 = sentences[0] + "।";
-        const p2 = sentences[1] + "।";
-        const p3 = `${location ? `${location} क्षेत्र से जुड़े इस` : "इस"} घटनाक्रम पर संबंधित प्रशासन और पुलिस संज्ञान ले रही है। मामले में आगे की आवश्यक कार्रवाई और जांच जारी है।`;
+        const p1 = sentences[0] + "à¥¤";
+        const p2 = sentences[1] + "à¥¤";
+        const p3 = `${location ? `${location} à¤•à¥à¤·à¥‡à¤¤à¥à¤° à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥‡ à¤‡à¤¸` : "à¤‡à¤¸"} à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤ªà¤° à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤”à¤° à¤ªà¥à¤²à¤¿à¤¸ à¤¸à¤‚à¤œà¥à¤žà¤¾à¤¨ à¤²à¥‡ à¤°à¤¹à¥€ à¤¹à¥ˆà¥¤ à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤†à¤—à¥‡ à¤•à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤”à¤° à¤œà¤¾à¤‚à¤š à¤œà¤¾à¤°à¥€ à¤¹à¥ˆà¥¤`;
         finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
       } else {
-        const p1 = sentences[0] ? sentences[0] + "।" : (headlineToStrip || "ताज़ा समाचार की मुख्य जानकारी।");
-        const p2 = `${location ? `${location} में` : ""} सामने आए इस महत्वपूर्ण मामले को लेकर स्थानीय स्तर पर चर्चाएं तेज हैं और संबंधित विभाग स्थिति का जायजा ले रहा है।`;
-        const p3 = "मामले में जांच व आगे की आवश्यक कार्रवाई जारी है, जिससे जुड़ी विस्तृत अपडेट जल्द साझा की जाएगी।";
+        const p1 = sentences[0] ? sentences[0] + "à¥¤" : (headlineToStrip || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥€ à¤®à¥à¤–à¥à¤¯ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€à¥¤");
+        const p2 = `${location ? `${location} à¤®à¥‡à¤‚` : ""} à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤ à¤‡à¤¸ à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥‹ à¤²à¥‡à¤•à¤° à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤šà¤°à¥à¤šà¤¾à¤à¤‚ à¤¤à¥‡à¤œ à¤¹à¥ˆà¤‚ à¤”à¤° à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤µà¤¿à¤­à¤¾à¤— à¤¸à¥à¤¥à¤¿à¤¤à¤¿ à¤•à¤¾ à¤œà¤¾à¤¯à¤œà¤¾ à¤²à¥‡ à¤°à¤¹à¤¾ à¤¹à¥ˆà¥¤`;
+        const p3 = "à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤œà¤¾à¤‚à¤š à¤µ à¤†à¤—à¥‡ à¤•à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤œà¤¾à¤°à¥€ à¤¹à¥ˆ, à¤œà¤¿à¤¸à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥€ à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤œà¤²à¥à¤¦ à¤¸à¤¾à¤à¤¾ à¤•à¥€ à¤œà¤¾à¤à¤—à¥€à¥¤";
         finalBodyText = `${p1}\n\n${p2}\n\n${p3}`;
       }
     }
@@ -18380,9 +18711,9 @@ export function ensureHashtagHierarchy(
   const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : "";
 
   let locTag = "";
-  if (location && location !== "विशेष कवरेज") {
+  if (location && location !== "à¤µà¤¿à¤¶à¥‡à¤· à¤•à¤µà¤°à¥‡à¤œ") {
     const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "");
-    if (primaryCity && primaryCity.toLowerCase() !== "location" && primaryCity !== "स्थान") {
+    if (primaryCity && primaryCity.toLowerCase() !== "location" && primaryCity !== "à¤¸à¥à¤¥à¤¾à¤¨") {
       locTag = `#${primaryCity}News`;
     }
   }
@@ -18397,7 +18728,7 @@ export function ensureHashtagHierarchy(
       lower === "#breakingnewswala" ||
       lower === "#bnwtv" ||
       lower === "#breaking_news_wala" ||
-      lower === "#ब्रेकिंगन्यूजवाला" ||
+      lower === "#à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—à¤¨à¥à¤¯à¥‚à¤œà¤µà¤¾à¤²à¤¾" ||
       lower.startsWith("#http") ||
       lower.startsWith("#www") ||
       lower.startsWith("#url")
@@ -18428,7 +18759,7 @@ export function ensureHashtagHierarchy(
     userTag.toLowerCase() !== "#breakingnewswala" &&
     userTag.toLowerCase() !== "#bnwtv" &&
     userTag.toLowerCase() !== "#breaking_news_wala" &&
-    userTag.toLowerCase() !== "#ब्रेकिंगन्यूजवाला"
+    userTag.toLowerCase() !== "#à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—à¤¨à¥à¤¯à¥‚à¤œà¤µà¤¾à¤²à¤¾"
   ) {
     cleanFinalTags.push(userTag);
   }
@@ -18440,7 +18771,7 @@ export function ensureHashtagHierarchy(
       lower !== "#breakingnewswala" &&
       lower !== "#bnwtv" &&
       lower !== "#breaking_news_wala" &&
-      lower !== "#ब्रेकिंगन्यूजवाला"
+      lower !== "#à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—à¤¨à¥à¤¯à¥‚à¤œà¤µà¤¾à¤²à¤¾"
     ) {
       cleanFinalTags.push(t);
     }
@@ -18487,11 +18818,11 @@ function formatCaptionVariants(
   const cleanHeadline = cleanHeadlineText(headline || "").replace(/\[\/?yellow\]/g, "").trim();
   const rawBody = (factsText || cleanHeadline).trim();
   const sentences = rawBody
-    .split(/[।\n]+|\.\s+/)
+    .split(/[à¥¤\n]+|\.\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 5 && !/(?:कॉपी लिंक|शेयर करें|फाइल फोटो|विज्ञापन|दैनिक|भास्कर|अमर उजाला)/i.test(s));
+    .filter((s) => s.length > 5 && !/(?:à¤•à¥‰à¤ªà¥€ à¤²à¤¿à¤‚à¤•|à¤¶à¥‡à¤¯à¤° à¤•à¤°à¥‡à¤‚|à¤«à¤¾à¤‡à¤² à¤«à¥‹à¤Ÿà¥‹|à¤µà¤¿à¤œà¥à¤žà¤¾à¤ªà¤¨|à¤¦à¥ˆà¤¨à¤¿à¤•|à¤­à¤¾à¤¸à¥à¤•à¤°|à¤…à¤®à¤° à¤‰à¤œà¤¾à¤²à¤¾)/i.test(s));
 
-  const loc = location || "मध्य प्रदेश";
+  const loc = location || "à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶";
 
   // 1. Detailed: Exactly 3 substantive paragraphs
   let p1 = "";
@@ -18500,39 +18831,39 @@ function formatCaptionVariants(
 
   if (sentences.length >= 6) {
     const chunk = Math.ceil(sentences.length / 3);
-    p1 = sentences.slice(0, chunk).join("। ") + "।";
-    p2 = sentences.slice(chunk, chunk * 2).join("। ") + "।";
-    p3 = sentences.slice(chunk * 2).join("। ") + "।";
+    p1 = sentences.slice(0, chunk).join("à¥¤ ") + "à¥¤";
+    p2 = sentences.slice(chunk, chunk * 2).join("à¥¤ ") + "à¥¤";
+    p3 = sentences.slice(chunk * 2).join("à¥¤ ") + "à¥¤";
   } else if (sentences.length >= 3) {
-    p1 = sentences[0] + "।";
-    p2 = sentences[1] + "।";
-    p3 = sentences.slice(2).join("। ") + "।";
+    p1 = sentences[0] + "à¥¤";
+    p2 = sentences[1] + "à¥¤";
+    p3 = sentences.slice(2).join("à¥¤ ") + "à¥¤";
   } else if (sentences.length === 2) {
-    p1 = sentences[0] + "।";
-    p2 = sentences[1] + "।";
-    p3 = `${loc ? `${loc} क्षेत्र से जुड़े इस` : "इस"} पूरे घटनाक्रम पर संबंधित प्रशासन व पुलिस द्वारा आवश्यक कदम उठाए जा रहे हैं। स्थिति पर लगातार नजर रखी जा रही है।`;
+    p1 = sentences[0] + "à¥¤";
+    p2 = sentences[1] + "à¥¤";
+    p3 = `${loc ? `${loc} à¤•à¥à¤·à¥‡à¤¤à¥à¤° à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥‡ à¤‡à¤¸` : "à¤‡à¤¸"} à¤ªà¥‚à¤°à¥‡ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤ªà¤° à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤µ à¤ªà¥à¤²à¤¿à¤¸ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤†à¤µà¤¶à¥à¤¯à¤• à¤•à¤¦à¤® à¤‰à¤ à¤¾à¤ à¤œà¤¾ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚à¥¤ à¤¸à¥à¤¥à¤¿à¤¤à¤¿ à¤ªà¤° à¤²à¤—à¤¾à¤¤à¤¾à¤° à¤¨à¤œà¤° à¤°à¤–à¥€ à¤œà¤¾ à¤°à¤¹à¥€ à¤¹à¥ˆà¥¤`;
   } else {
-    p1 = sentences[0] ? sentences[0] + "।" : cleanHeadline;
-    p2 = `${loc ? `${loc} में` : ""} सामने आए इस मामले को लेकर स्थानीय स्तर पर चर्चाएं तेज हैं और संबंधित विभाग स्थिति का जायजा ले रहा है।`;
-    p3 = "मामले में आगे की आवश्यक कार्रवाई और जांच जारी है, जिससे जुड़ी विस्तृत अपडेट जल्द साझा की जाएगी।";
+    p1 = sentences[0] ? sentences[0] + "à¥¤" : cleanHeadline;
+    p2 = `${loc ? `${loc} à¤®à¥‡à¤‚` : ""} à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤ à¤‡à¤¸ à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥‹ à¤²à¥‡à¤•à¤° à¤¸à¥à¤¥à¤¾à¤¨à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤šà¤°à¥à¤šà¤¾à¤à¤‚ à¤¤à¥‡à¤œ à¤¹à¥ˆà¤‚ à¤”à¤° à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤µà¤¿à¤­à¤¾à¤— à¤¸à¥à¤¥à¤¿à¤¤à¤¿ à¤•à¤¾ à¤œà¤¾à¤¯à¤œà¤¾ à¤²à¥‡ à¤°à¤¹à¤¾ à¤¹à¥ˆà¥¤`;
+    p3 = "à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤†à¤—à¥‡ à¤•à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤”à¤° à¤œà¤¾à¤‚à¤š à¤œà¤¾à¤°à¥€ à¤¹à¥ˆ, à¤œà¤¿à¤¸à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥€ à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤œà¤²à¥à¤¦ à¤¸à¤¾à¤à¤¾ à¤•à¥€ à¤œà¤¾à¤à¤—à¥€à¥¤";
   }
   const captionDetailed = `${p1}\n\n${p2}\n\n${p3}`;
 
-  // 2. Bullet: Strictly 3 to 5 substantive bullets starting with • and ending with ।
+  // 2. Bullet: Strictly 3 to 5 substantive bullets starting with â€¢ and ending with à¥¤
   let bulletItems: string[] = [];
   if (sentences.length >= 3) {
-    bulletItems = sentences.slice(0, 5).map((b) => `• ${b.replace(/[।\.\s]+$/, "")}।`);
+    bulletItems = sentences.slice(0, 5).map((b) => `â€¢ ${b.replace(/[à¥¤\.\s]+$/, "")}à¥¤`);
   } else if (sentences.length === 2) {
     bulletItems = [
-      `• ${sentences[0].replace(/[।\.\s]+$/, "")}।`,
-      `• ${sentences[1].replace(/[।\.\s]+$/, "")}।`,
-      `• ${loc} में संबंधित विभाग द्वारा पूरे मामले की समीक्षा और आवश्यक कार्रवाई जारी है।`,
+      `â€¢ ${sentences[0].replace(/[à¥¤\.\s]+$/, "")}à¥¤`,
+      `â€¢ ${sentences[1].replace(/[à¥¤\.\s]+$/, "")}à¥¤`,
+      `â€¢ ${loc} à¤®à¥‡à¤‚ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤µà¤¿à¤­à¤¾à¤— à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥‚à¤°à¥‡ à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥€ à¤¸à¤®à¥€à¤•à¥à¤·à¤¾ à¤”à¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤œà¤¾à¤°à¥€ à¤¹à¥ˆà¥¤`,
     ];
   } else {
     bulletItems = [
-      `• ${cleanHeadline.replace(/[।\.\s]+$/, "")}।`,
-      `• ${loc} क्षेत्र में मामले की गंभीरता को देखते हुए संबंधित अधिकारी मौके पर सक्रिय हैं।`,
-      `• घटनाक्रम से जुड़े आगामी घटनाक्रम और जांच की विस्तृत रिपोर्ट प्रतीक्षित है।`,
+      `â€¢ ${cleanHeadline.replace(/[à¥¤\.\s]+$/, "")}à¥¤`,
+      `â€¢ ${loc} à¤•à¥à¤·à¥‡à¤¤à¥à¤° à¤®à¥‡à¤‚ à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥€ à¤—à¤‚à¤­à¥€à¤°à¤¤à¤¾ à¤•à¥‹ à¤¦à¥‡à¤–à¤¤à¥‡ à¤¹à¥à¤ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤…à¤§à¤¿à¤•à¤¾à¤°à¥€ à¤®à¥Œà¤•à¥‡ à¤ªà¤° à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¹à¥ˆà¤‚à¥¤`,
+      `â€¢ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥‡ à¤†à¤—à¤¾à¤®à¥€ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤”à¤° à¤œà¤¾à¤‚à¤š à¤•à¥€ à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ à¤ªà¥à¤°à¤¤à¥€à¤•à¥à¤·à¤¿à¤¤ à¤¹à¥ˆà¥¤`,
     ];
   }
   const captionBullets = bulletItems.join("\n");
@@ -18542,11 +18873,11 @@ function formatCaptionVariants(
   let sP2 = "";
   if (sentences.length >= 2) {
     const mid = Math.ceil(sentences.length / 2);
-    sP1 = sentences.slice(0, mid).join("। ") + "।";
-    sP2 = sentences.slice(mid).join("। ") + "।";
+    sP1 = sentences.slice(0, mid).join("à¥¤ ") + "à¥¤";
+    sP2 = sentences.slice(mid).join("à¥¤ ") + "à¥¤";
   } else {
-    sP1 = sentences[0] ? sentences[0] + "।" : cleanHeadline;
-    sP2 = `${loc} से जुड़े इस घटनाक्रम पर प्रशासनिक स्तर पर संज्ञान लिया गया है और आगे की आवश्यक प्रक्रिया जारी है।`;
+    sP1 = sentences[0] ? sentences[0] + "à¥¤" : cleanHeadline;
+    sP2 = `${loc} à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥‡ à¤‡à¤¸ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤ªà¤° à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤¸à¥à¤¤à¤° à¤ªà¤° à¤¸à¤‚à¤œà¥à¤žà¤¾à¤¨ à¤²à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆ à¤”à¤° à¤†à¤—à¥‡ à¤•à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• à¤ªà¥à¤°à¤•à¥à¤°à¤¿à¤¯à¤¾ à¤œà¤¾à¤°à¥€ à¤¹à¥ˆà¥¤`;
   }
   const captionShort = `${sP1}\n\n${sP2}`;
 
@@ -18569,20 +18900,20 @@ function sanitizeCaptionText(
 
   // 1. Remove scraping artifacts and interactive website buttons
   text = text.replace(
-    /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+    /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
     " "
   );
 
   // 2. Remove bylines
   text = text.replace(
-    /(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]?|दैनिक भास्कर[,\s]*[^\n।]+[।\n]?|अमर उजाला[,\s]*[^\n।]+[।\n]?|पत्रिका[,\s]*[^\n।]+[।\n]?)/gi,
+    /(?:à¤¨à¤ˆà¤¦à¥à¤¨à¤¿à¤¯à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¨à¤¿à¤§à¤¿[,\s]*[^\nà¥¤]+[à¥¤\n]?|à¤¦à¥ˆà¤¨à¤¿à¤• à¤­à¤¾à¤¸à¥à¤•à¤°[,\s]*[^\nà¥¤]+[à¥¤\n]?|à¤…à¤®à¤° à¤‰à¤œà¤¾à¤²à¤¾[,\s]*[^\nà¥¤]+[à¥¤\n]?|à¤ªà¤¤à¥à¤°à¤¿à¤•à¤¾[,\s]*[^\nà¥¤]+[à¥¤\n]?)/gi,
     " "
   );
 
   // 3. Remove raw English SEO descriptions at start or within (e.g. "The Madhya Pradesh government has formulated an Industrial Housing Policy...")
-  text = text.replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^(?:[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]+[.!?à¥¤]\s*)+(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]{12,}?[.!?à¥¤]\s*(?=[\u0900-\u097F])/u, "");
+  text = text.replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
 
   // 4. Split into paragraphs and filter
   const bodyWithoutHashtags = text.replace(/#[\w\u0900-\u097F]+/g, "").trim();
@@ -18594,10 +18925,10 @@ function sanitizeCaptionText(
   const cleanParagraphs: string[] = [];
 
   for (const para of paragraphs) {
-    if (para.includes("•")) {
+    if (para.includes("â€¢")) {
       const lines = para.split("\n").map((l) => l.trim()).filter(Boolean);
       const cleanLines = lines.filter((line) => {
-        return /[\u0900-\u097F]/.test(line) && !/^(कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(line);
+        return /[\u0900-\u097F]/.test(line) && !/^(à¤•à¥‰à¤ªà¥€ à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤² à¤«à¥‹à¤Ÿà¥‹|à¤¶à¥‡à¤¯à¤° à¤•à¤°à¥‡à¤‚)/i.test(line);
       });
       if (cleanLines.length > 0) {
         cleanParagraphs.push(cleanLines.join("\n"));
@@ -18606,18 +18937,18 @@ function sanitizeCaptionText(
     }
 
     const sentences = para
-      .split(/[।\n]+|\.\s+/)
+      .split(/[à¥¤\n]+|\.\s+/)
       .map((s) => s.trim())
       .filter((s) => {
         // Discard sentence if it has no Devanagari Hindi or is purely English SEO copy
         if (!/[\u0900-\u097F]/.test(s)) return false;
-        if (/^(?:कॉपी लिंक|फाइल फोटो|शेयर करें|क्लिक करें|डाउनलोड करें|यह भी पढ़ें)/i.test(s)) return false;
+        if (/^(?:à¤•à¥‰à¤ªà¥€ à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤² à¤«à¥‹à¤Ÿà¥‹|à¤¶à¥‡à¤¯à¤° à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤• à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¤°à¥‡à¤‚|à¤¯à¤¹ à¤­à¥€ à¤ªà¤¢à¤¼à¥‡à¤‚)/i.test(s)) return false;
         return s.length > 5;
       });
 
     if (sentences.length > 0) {
-      const rejoined = sentences.join("। ").replace(/\s+।/g, "।").trim();
-      cleanParagraphs.push(rejoined.endsWith("।") ? rejoined : `${rejoined}।`);
+      const rejoined = sentences.join("à¥¤ ").replace(/\s+à¥¤/g, "à¥¤").trim();
+      cleanParagraphs.push(rejoined.endsWith("à¥¤") ? rejoined : `${rejoined}à¥¤`);
     }
   }
 
@@ -18644,7 +18975,7 @@ export function createLocalNewsFallback(
   const isBoilerplate = (t: string) =>
     !t ||
     !isDevanagari(t) ||
-    /(?:वेबसाइट:|पर प्रकाशित समाचार|से संबंधित है|मुख्य संदर्भ)/u.test(t);
+    /(?:à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ:|à¤ªà¤° à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤ à¤¸à¤®à¤¾à¤šà¤¾à¤°|à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆ|à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­)/u.test(t);
 
   const isValidCandidate = (str: string) => {
     if (!str) return false;
@@ -18663,7 +18994,7 @@ export function createLocalNewsFallback(
   if (articleMeta?.title && isValidCandidate(articleMeta.title)) {
     extractedTitle = cleanHeadlineText(cleanHtmlEntities(articleMeta.title));
   } else {
-    const titleMatch = clean.match(/(?:^|\n)(?:Title|शीर्षक|हेडलाइन)\s*:\s*([^\n\r]+)/i);
+    const titleMatch = clean.match(/(?:^|\n)(?:Title|à¤¶à¥€à¤°à¥à¤·à¤•|à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨)\s*:\s*([^\n\r]+)/i);
     if (titleMatch && isValidCandidate(titleMatch[1])) {
       extractedTitle = cleanHeadlineText(titleMatch[1].trim());
     } else {
@@ -18682,7 +19013,7 @@ export function createLocalNewsFallback(
   if (articleMeta?.description && articleMeta.description.trim().length > 10 && !isBoilerplate(articleMeta.description)) {
     extractedDesc = sanitizePressNoteFlattery(cleanHtmlEntities(articleMeta.description));
   } else {
-    const descMatch = clean.match(/(?:^|\n)(?:Meta Description|Description|विवरण|सारांश)\s*:\s*([^\n\r]+)/i);
+    const descMatch = clean.match(/(?:^|\n)(?:Meta Description|Description|à¤µà¤¿à¤µà¤°à¤£|à¤¸à¤¾à¤°à¤¾à¤‚à¤¶)\s*:\s*([^\n\r]+)/i);
     if (descMatch && !isBoilerplate(descMatch[1])) {
       extractedDesc = sanitizePressNoteFlattery(descMatch[1].trim());
     }
@@ -18691,11 +19022,11 @@ export function createLocalNewsFallback(
   if (extractedDesc) {
     extractedDesc = extractedDesc
       .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         " "
       )
-      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "")
+      .replace(/^(?:[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&]+[.!?à¥¤]\s*)+(?=[\u0900-\u097F])/u, "")
+      .replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -18711,7 +19042,7 @@ export function createLocalNewsFallback(
   if (extractedContent) {
     extractedContent = extractedContent
       .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
         " "
       )
       .replace(/\s+/g, " ")
@@ -18722,14 +19053,14 @@ export function createLocalNewsFallback(
   if (!extractedTitle || !isValidCandidate(extractedTitle)) {
     const candidateSource = clean.length > 20 && isDevanagari(clean) ? clean : (extractedContent || extractedDesc || "");
     const firstHindiSentence = candidateSource
-      .split(/[।\n]+|(?<=[^\d])\.\s+/)
+      .split(/[à¥¤\n]+|(?<=[^\d])\.\s+/)
       .map((s) => cleanHeadlineText(s).trim())
       .find((s) => isValidCandidate(s));
     if (firstHindiSentence) {
       extractedTitle = formatAsJournalisticHeadline(firstHindiSentence);
     }
     if (!extractedTitle) {
-      extractedTitle = "ताज़ा समाचार महत्वपूर्ण अपडेट";
+      extractedTitle = "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤…à¤ªà¤¡à¥‡à¤Ÿ";
     }
   }
 
@@ -18742,14 +19073,14 @@ export function createLocalNewsFallback(
   let detectedLocation = detectDistrictAndState(extractedTitle, extractedDesc, extractedContent || clean, targetUrl);
   if (!detectedLocation) {
     const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
-    if (/(?:वाशिंगटन|व्हाइट[\s\-]*हाउस|white[\s\-]*house|washington)/i.test(fullCorpus)) {
-      detectedLocation = "वाशिंगटन";
-    } else if (/(?:मास्को|moscow)/i.test(fullCorpus)) {
-      detectedLocation = "मास्को";
-    } else if (/(?:लंदन|london)/i.test(fullCorpus)) {
-      detectedLocation = "लंदन";
-    } else if (/(?:संसद[\s\-]*भवन|राष्ट्रपति[\s\-]*भवन|सुप्रीम[\s\-]*कोर्ट|राजधानी[\s\-]*दिल्ली|जंतर[\s\-]*मंतर|नई[\s\-]*दिल्ली|इंडिया[\s\-]*गेट)/i.test(fullCorpus)) {
-      detectedLocation = "नई दिल्ली";
+    if (/(?:à¤µà¤¾à¤¶à¤¿à¤‚à¤—à¤Ÿà¤¨|à¤µà¥à¤¹à¤¾à¤‡à¤Ÿ[\s\-]*à¤¹à¤¾à¤‰à¤¸|white[\s\-]*house|washington)/i.test(fullCorpus)) {
+      detectedLocation = "à¤µà¤¾à¤¶à¤¿à¤‚à¤—à¤Ÿà¤¨";
+    } else if (/(?:à¤®à¤¾à¤¸à¥à¤•à¥‹|moscow)/i.test(fullCorpus)) {
+      detectedLocation = "à¤®à¤¾à¤¸à¥à¤•à¥‹";
+    } else if (/(?:à¤²à¤‚à¤¦à¤¨|london)/i.test(fullCorpus)) {
+      detectedLocation = "à¤²à¤‚à¤¦à¤¨";
+    } else if (/(?:à¤¸à¤‚à¤¸à¤¦[\s\-]*à¤­à¤µà¤¨|à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¤ªà¤¤à¤¿[\s\-]*à¤­à¤µà¤¨|à¤¸à¥à¤ªà¥à¤°à¥€à¤®[\s\-]*à¤•à¥‹à¤°à¥à¤Ÿ|à¤°à¤¾à¤œà¤§à¤¾à¤¨à¥€[\s\-]*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤œà¤‚à¤¤à¤°[\s\-]*à¤®à¤‚à¤¤à¤°|à¤¨à¤ˆ[\s\-]*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤‡à¤‚à¤¡à¤¿à¤¯à¤¾[\s\-]*à¤—à¥‡à¤Ÿ)/i.test(fullCorpus)) {
+      detectedLocation = "à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€";
     }
   }
 
@@ -18758,44 +19089,44 @@ export function createLocalNewsFallback(
   const fullCorpus = `${extractedTitle} ${extractedDesc} ${extractedContent} ${clean} ${targetUrl || ""}`;
 
   // 4. Detect Category
-  let category = "ताज़ा समाचार";
-  const categories: string[] = ["ताज़ा"];
-  if (/आईटी|टेक|ग्रीन कार्ड|वीजा|कंपनियों|टाटा|विप्रो|इंफोसिस|शेयर|बाजार|सेंसेक्स|अर्थव्यवस्था|बैंक|रुपया|डॉलर|कारोबार|tech|business/i.test(fullCorpus)) {
-    category = "कारोबार";
-    categories.push("बिजनेस", "वैश्विक बाजार");
-  } else if (/हादसा|दुर्घटना|टक्कर|पलटी|घायल|मौत|accident/i.test(fullCorpus)) {
-    category = "हादसा";
-    categories.push("हादसा", "सड़क सुरक्षा");
-  } else if (/अपराध|गिरफ्तार|पुलिस|हत्या|चोरी|रेड|धोखाधड़ी|crime/i.test(fullCorpus)) {
-    category = "अपराध";
-    categories.push("अपराध", "पुलिस कार्रवाई");
-  } else if (/राजनीति|चुनाव|कांग्रेस|बीजेपी|भाजपा|संसद|विधानसभा|politics/i.test(fullCorpus)) {
-    category = "राजनीति";
-    categories.push("राजनीति", "राष्ट्रीय");
-  } else if (/अंतरराष्ट्रीय|अमेरिका|ट्रम्प|रूस|युद्ध|international/i.test(fullCorpus)) {
-    category = "अंतरराष्ट्रीय";
-    categories.push("अंतरराष्ट्रीय", "वैश्विक अपडेट");
+  let category = "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°";
+  const categories: string[] = ["à¤¤à¤¾à¤œà¤¼à¤¾"];
+  if (/à¤†à¤ˆà¤Ÿà¥€|à¤Ÿà¥‡à¤•|à¤—à¥à¤°à¥€à¤¨ à¤•à¤¾à¤°à¥à¤¡|à¤µà¥€à¤œà¤¾|à¤•à¤‚à¤ªà¤¨à¤¿à¤¯à¥‹à¤‚|à¤Ÿà¤¾à¤Ÿà¤¾|à¤µà¤¿à¤ªà¥à¤°à¥‹|à¤‡à¤‚à¤«à¥‹à¤¸à¤¿à¤¸|à¤¶à¥‡à¤¯à¤°|à¤¬à¤¾à¤œà¤¾à¤°|à¤¸à¥‡à¤‚à¤¸à¥‡à¤•à¥à¤¸|à¤…à¤°à¥à¤¥à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾|à¤¬à¥ˆà¤‚à¤•|à¤°à¥à¤ªà¤¯à¤¾|à¤¡à¥‰à¤²à¤°|à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤°|tech|business/i.test(fullCorpus)) {
+    category = "à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤°";
+    categories.push("à¤¬à¤¿à¤œà¤¨à¥‡à¤¸", "à¤µà¥ˆà¤¶à¥à¤µà¤¿à¤• à¤¬à¤¾à¤œà¤¾à¤°");
+  } else if (/à¤¹à¤¾à¤¦à¤¸à¤¾|à¤¦à¥à¤°à¥à¤˜à¤Ÿà¤¨à¤¾|à¤Ÿà¤•à¥à¤•à¤°|à¤ªà¤²à¤Ÿà¥€|à¤˜à¤¾à¤¯à¤²|à¤®à¥Œà¤¤|accident/i.test(fullCorpus)) {
+    category = "à¤¹à¤¾à¤¦à¤¸à¤¾";
+    categories.push("à¤¹à¤¾à¤¦à¤¸à¤¾", "à¤¸à¤¡à¤¼à¤• à¤¸à¥à¤°à¤•à¥à¤·à¤¾");
+  } else if (/à¤…à¤ªà¤°à¤¾à¤§|à¤—à¤¿à¤°à¤«à¥à¤¤à¤¾à¤°|à¤ªà¥à¤²à¤¿à¤¸|à¤¹à¤¤à¥à¤¯à¤¾|à¤šà¥‹à¤°à¥€|à¤°à¥‡à¤¡|à¤§à¥‹à¤–à¤¾à¤§à¤¡à¤¼à¥€|crime/i.test(fullCorpus)) {
+    category = "à¤…à¤ªà¤°à¤¾à¤§";
+    categories.push("à¤…à¤ªà¤°à¤¾à¤§", "à¤ªà¥à¤²à¤¿à¤¸ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ");
+  } else if (/à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿|à¤šà¥à¤¨à¤¾à¤µ|à¤•à¤¾à¤‚à¤—à¥à¤°à¥‡à¤¸|à¤¬à¥€à¤œà¥‡à¤ªà¥€|à¤­à¤¾à¤œà¤ªà¤¾|à¤¸à¤‚à¤¸à¤¦|à¤µà¤¿à¤§à¤¾à¤¨à¤¸à¤­à¤¾|politics/i.test(fullCorpus)) {
+    category = "à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿";
+    categories.push("à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿", "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯");
+  } else if (/à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯|à¤…à¤®à¥‡à¤°à¤¿à¤•à¤¾|à¤Ÿà¥à¤°à¤®à¥à¤ª|à¤°à¥‚à¤¸|à¤¯à¥à¤¦à¥à¤§|international/i.test(fullCorpus)) {
+    category = "à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯";
+    categories.push("à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯", "à¤µà¥ˆà¤¶à¥à¤µà¤¿à¤• à¤…à¤ªà¤¡à¥‡à¤Ÿ");
   } else {
-    category = detectedLocation === "नई दिल्ली" ? "राष्ट्रीय" : "ताज़ा समाचार";
-    categories.push("ताज़ा समाचार");
+    category = detectedLocation === "à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€" ? "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯" : "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°";
+    categories.push("à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°");
   }
 
   category = cleanCategoryField(category);
 
   // 5. Build exactly 5 distinct headline options matching the 5 editorial angles:
-  // विकल्प 1: मुख्य घटनाक्रम (Clear, factual core event)
-  // विकल्प 2: सवाल उठाने वाला दृष्टिकोण (Factual inquiry on impact/accountability)
-  // विकल्प 3: उत्सुकता पैदा करने वाला दृष्टिकोण (Key development / rule change / unfolding fact)
-  // विकल्प 4: महत्वपूर्ण तथ्य या प्रभाव (Specific regulation / number / ban / official standard)
-  // विकल्प 5: दूसरा प्रासंगिक समाचार कोण (Broader administrative / citizen impact / policy)
-  const cleanBylineRegex = /(?:नईदुनिया|नवदुनिया|दैनिक\s*भास्कर|अमर\s*उजाला|पत्रिका|नवभारत\s*टाइम्स|हिंदुस्तान|विशेष\s*संवाददाता|ब्यूरो|द\s*सूत्र|हरिभूमि|दैनिक\s*जागरण|आज\s*तक|ज़ी\s*न्यूज़|एनडीटीवी|न्यूज़\s*18)\s*(?:प्रतिनिधि|संवाददाता|ब्यूरो|डेस्क|रिपोर्टर)?[,\s]*[^\n।:]*[:,\-–—]?/gi;
+  // à¤µà¤¿à¤•à¤²à¥à¤ª 1: à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® (Clear, factual core event)
+  // à¤µà¤¿à¤•à¤²à¥à¤ª 2: à¤¸à¤µà¤¾à¤² à¤‰à¤ à¤¾à¤¨à¥‡ à¤µà¤¾à¤²à¤¾ à¤¦à¥ƒà¤·à¥à¤Ÿà¤¿à¤•à¥‹à¤£ (Factual inquiry on impact/accountability)
+  // à¤µà¤¿à¤•à¤²à¥à¤ª 3: à¤‰à¤¤à¥à¤¸à¥à¤•à¤¤à¤¾ à¤ªà¥ˆà¤¦à¤¾ à¤•à¤°à¤¨à¥‡ à¤µà¤¾à¤²à¤¾ à¤¦à¥ƒà¤·à¥à¤Ÿà¤¿à¤•à¥‹à¤£ (Key development / rule change / unfolding fact)
+  // à¤µà¤¿à¤•à¤²à¥à¤ª 4: à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¤à¤¥à¥à¤¯ à¤¯à¤¾ à¤ªà¥à¤°à¤­à¤¾à¤µ (Specific regulation / number / ban / official standard)
+  // à¤µà¤¿à¤•à¤²à¥à¤ª 5: à¤¦à¥‚à¤¸à¤°à¤¾ à¤ªà¥à¤°à¤¾à¤¸à¤‚à¤—à¤¿à¤• à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‹à¤£ (Broader administrative / citizen impact / policy)
+  const cleanBylineRegex = /(?:à¤¨à¤ˆà¤¦à¥à¤¨à¤¿à¤¯à¤¾|à¤¨à¤µà¤¦à¥à¤¨à¤¿à¤¯à¤¾|à¤¦à¥ˆà¤¨à¤¿à¤•\s*à¤­à¤¾à¤¸à¥à¤•à¤°|à¤…à¤®à¤°\s*à¤‰à¤œà¤¾à¤²à¤¾|à¤ªà¤¤à¥à¤°à¤¿à¤•à¤¾|à¤¨à¤µà¤­à¤¾à¤°à¤¤\s*à¤Ÿà¤¾à¤‡à¤®à¥à¤¸|à¤¹à¤¿à¤‚à¤¦à¥à¤¸à¥à¤¤à¤¾à¤¨|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾|à¤¬à¥à¤¯à¥‚à¤°à¥‹|à¤¦\s*à¤¸à¥‚à¤¤à¥à¤°|à¤¹à¤°à¤¿à¤­à¥‚à¤®à¤¿|à¤¦à¥ˆà¤¨à¤¿à¤•\s*à¤œà¤¾à¤—à¤°à¤£|à¤†à¤œ\s*à¤¤à¤•|à¤œà¤¼à¥€\s*à¤¨à¥à¤¯à¥‚à¤œà¤¼|à¤à¤¨à¤¡à¥€à¤Ÿà¥€à¤µà¥€|à¤¨à¥à¤¯à¥‚à¤œà¤¼\s*18)\s*(?:à¤ªà¥à¤°à¤¤à¤¿à¤¨à¤¿à¤§à¤¿|à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾|à¤¬à¥à¤¯à¥‚à¤°à¥‹|à¤¡à¥‡à¤¸à¥à¤•|à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¤°)?[,\s]*[^\nà¥¤:]*[:,\-â€“â€”]?/gi;
   let baseTitle = cleanHeadlineText(extractedTitle);
   if (!isValidCandidate(baseTitle)) {
     const firstSent = clean
-      .split(/[।\n]+|(?<=[^\d])\.\s+/)
+      .split(/[à¥¤\n]+|(?<=[^\d])\.\s+/)
       .map((s) => cleanHeadlineText(s).trim())
       .find((s) => isValidCandidate(s));
-    baseTitle = firstSent ? formatAsJournalisticHeadline(firstSent) : "महत्वपूर्ण समाचार मुख्य अपडेट";
+    baseTitle = firstSent ? formatAsJournalisticHeadline(firstSent) : "à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤®à¥à¤–à¥à¤¯ à¤…à¤ªà¤¡à¥‡à¤Ÿ";
   }
 
   const cleanIsRealStory = clean.length > 15 && isDevanagari(clean);
@@ -18807,34 +19138,34 @@ export function createLocalNewsFallback(
     corpusToExtract = (extractedDesc || extractedContent) ? `${extractedDesc}\n\n${extractedContent}` : clean;
   }
   const rawFactsCorpus = corpusToExtract
-    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ")
-    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ")
-    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ")
+    .replace(/(?:^|\n|[\sà¥¤.\-â€“â€”])\s*(?:Title|à¤¶à¥€à¤°à¥à¤·à¤•|à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨|Headline)\s*:\s*[^\n\r]+/gi, " ")
+    .replace(/(?:^|\n|[\sà¥¤.\-â€“â€”])\s*(?:Meta Description|Description|à¤µà¤¿à¤µà¤°à¤£|à¤¸à¤¾à¤°à¤¾à¤‚à¤¶)\s*:\s*/gi, " ")
+    .replace(/(?:^|\n|[\sà¥¤.\-â€“â€”])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ")
     .replace(cleanBylineRegex, " ")
-    .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
-    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
-    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, "")
-    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
+    .replace(/(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
+    .replace(/^(?:[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]+[.!?à¥¤]\s*)+(?=[\u0900-\u097F])/u, "")
+    .replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]{12,}?[.!?à¥¤]\s*(?=[\u0900-\u097F])/u, "")
+    .replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
 
   const safeFacts = rawFactsCorpus
-    .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#")
+    .replace(/(à¤¡à¤¾à¥…|à¤¡à¥‰|à¤ªà¤‚|à¤ªà¥à¤°à¥‹|à¤¶à¥à¤°à¥€|à¤•à¥à¤°|à¤¸à¤‚|à¤²à¥‡|à¤•à¥ˆ|à¤à¤¡)\./g, "$1#DOT#")
     .replace(/\b([A-Za-z])\.(?=\s*[A-Za-z]\.)/g, "$1#DOT#");
   const articleSentences = safeFacts
-    .split(/[।\n]+|(?<=[^\d])\.\s+/)
+    .split(/[à¥¤\n]+|(?<=[^\d])\.\s+/)
     .map((s) =>
       s
         .replace(/#DOT#/g, ".")
-        .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
+        .replace(/(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤²\s*à¤«à¥‹à¤Ÿà¥‹[:\s]*|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
         .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "")
-        .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, "")
-        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "")
+        .replace(/^(?:[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]+[.!?à¥¤]\s*)+(?=[\u0900-\u097F])/u, "")
+        .replace(/^[A-Za-z0-9\s,.\-â€“â€”:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "")
         .trim()
     )
     .filter((s) => {
       if (s.length <= 15) return false;
-      if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
+      if (/^(à¤µà¤¿à¤œà¥à¤žà¤¾à¤ªà¤¨|à¤•à¥à¤²à¤¿à¤• à¤•à¤°à¥‡à¤‚|à¤¯à¤¹ à¤­à¥€ à¤ªà¤¢à¤¼à¥‡à¤‚|à¤•à¥‰à¤ªà¥€ à¤²à¤¿à¤‚à¤•|à¤«à¤¾à¤‡à¤² à¤«à¥‹à¤Ÿà¥‹|à¤¶à¥‡à¤¯à¤° à¤•à¤°à¥‡à¤‚)/i.test(s)) return false;
       if (!/[\u0900-\u097F]/.test(s)) return false;
-      if (/(?:वेबसाइट|प्रकाशित समाचार|से संबंधित)/u.test(s)) return false;
+      if (/(?:à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ|à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤ à¤¸à¤®à¤¾à¤šà¤¾à¤°|à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤)/u.test(s)) return false;
       const hindiCount = (s.match(/[\u0900-\u097F]/g) || []).length;
       const englishCount = (s.match(/[A-Za-z]/g) || []).length;
       if (hindiCount < 10 || englishCount > hindiCount) return false;
@@ -18842,15 +19173,15 @@ export function createLocalNewsFallback(
       return true;
     });
 
-  const titleParts = baseTitle.split(/[:|–—]+/).map((p) => p.trim()).filter((p) => p.length >= 8);
+  const titleParts = baseTitle.split(/[:|â€“â€”]+/).map((p) => p.trim()).filter((p) => p.length >= 8);
 
   // Helper to convert sentence to clean headline
   const turnSentenceToHeadline = (sentence: string, maxLength: number = 105): string => {
     let s = cleanHeadlineText(sentence)
-      .replace(/^(इसके तहत|इसके अनुसार|इनके तहत|प्राप्त जानकारी के अनुसार|सूत्रों के अनुसार|बता दें कि|गौरतलब है कि|वहीं|इधर|हालांकि|दरअसल|सभी)\s+/gi, "")
+      .replace(/^(à¤‡à¤¸à¤•à¥‡ à¤¤à¤¹à¤¤|à¤‡à¤¸à¤•à¥‡ à¤…à¤¨à¥à¤¸à¤¾à¤°|à¤‡à¤¨à¤•à¥‡ à¤¤à¤¹à¤¤|à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤•à¥‡ à¤…à¤¨à¥à¤¸à¤¾à¤°|à¤¸à¥‚à¤¤à¥à¤°à¥‹à¤‚ à¤•à¥‡ à¤…à¤¨à¥à¤¸à¤¾à¤°|à¤¬à¤¤à¤¾ à¤¦à¥‡à¤‚ à¤•à¤¿|à¤—à¥Œà¤°à¤¤à¤²à¤¬ à¤¹à¥ˆ à¤•à¤¿|à¤µà¤¹à¥€à¤‚|à¤‡à¤§à¤°|à¤¹à¤¾à¤²à¤¾à¤‚à¤•à¤¿|à¤¦à¤°à¤…à¤¸à¤²|à¤¸à¤­à¥€)\s+/gi, "")
       .trim();
     if (s.length > maxLength) {
-      const commaIdx = s.lastIndexOf(" और ", maxLength);
+      const commaIdx = s.lastIndexOf(" à¤”à¤° ", maxLength);
       const spaceIdx = s.lastIndexOf(" ", maxLength);
       const cutIdx = commaIdx > 35 ? commaIdx : (spaceIdx > 35 ? spaceIdx : maxLength);
       s = s.slice(0, cutIdx).trim();
@@ -18866,7 +19197,7 @@ export function createLocalNewsFallback(
   const highlightWords: string[] = [];
   for (const w of words) {
     const cleanW = w.replace(/[.,:;!?'"()]/g, "");
-    if (/\d+/.test(cleanW) || (cleanW.length >= 5 && !/के|की|का|में|पर|से|को|ने|है|और/.test(cleanW))) {
+    if (/\d+/.test(cleanW) || (cleanW.length >= 5 && !/à¤•à¥‡|à¤•à¥€|à¤•à¤¾|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤¨à¥‡|à¤¹à¥ˆ|à¤”à¤°/.test(cleanW))) {
       if (!highlightWords.includes(cleanW) && highlightWords.length < 3) {
         highlightWords.push(cleanW);
       }
@@ -18890,7 +19221,7 @@ export function createLocalNewsFallback(
   const combinedFacts = corpusToExtract;
   const captionVariants = formatCaptionVariants(headline, detectedLocation, combinedFacts, username);
 
-  const anchorScript = `नमस्कार, मैं एआई न्यूज़ से। इस समय की बड़ी खबर ${detectedLocation} से है। ${headline}। मामले में सभी संबंधित पक्षों की प्रतिक्रिया सामने आ रही है। आइए देखते हैं इस पूरे मामले पर हमारी विस्तृत रिपोर्ट।`;
+  const anchorScript = `à¤¨à¤®à¤¸à¥à¤•à¤¾à¤°, à¤®à¥ˆà¤‚ à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¸à¥‡à¥¤ à¤‡à¤¸ à¤¸à¤®à¤¯ à¤•à¥€ à¤¬à¤¡à¤¼à¥€ à¤–à¤¬à¤° ${detectedLocation} à¤¸à¥‡ à¤¹à¥ˆà¥¤ ${headline}à¥¤ à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¸à¤­à¥€ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¤•à¥à¤·à¥‹à¤‚ à¤•à¥€ à¤ªà¥à¤°à¤¤à¤¿à¤•à¥à¤°à¤¿à¤¯à¤¾ à¤¸à¤¾à¤®à¤¨à¥‡ à¤† à¤°à¤¹à¥€ à¤¹à¥ˆà¥¤ à¤†à¤‡à¤ à¤¦à¥‡à¤–à¤¤à¥‡ à¤¹à¥ˆà¤‚ à¤‡à¤¸ à¤ªà¥‚à¤°à¥‡ à¤®à¤¾à¤®à¤²à¥‡ à¤ªà¤° à¤¹à¤®à¤¾à¤°à¥€ à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¥¤`;
 
   const suggestedPhoto = articleMeta?.imageUrl
     ? articleMeta.imageUrl
@@ -18915,7 +19246,7 @@ export function createLocalNewsFallback(
     speakerTitle: "",
     pickedImages: articleMeta?.imageUrl ? { main: articleMeta.imageUrl } : undefined,
     isLocalFallback: true,
-    warning: "AI मॉडल पर अस्थायी लोड या कोटा सीमा के कारण आपकी लिंक सामग्री से त्वरित उच्च गुणवत्ता वाला ड्राफ्ट तैयार किया गया है।",
+    warning: "AI à¤®à¥‰à¤¡à¤² à¤ªà¤° à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤²à¥‹à¤¡ à¤¯à¤¾ à¤•à¥‹à¤Ÿà¤¾ à¤¸à¥€à¤®à¤¾ à¤•à¥‡ à¤•à¤¾à¤°à¤£ à¤†à¤ªà¤•à¥€ à¤²à¤¿à¤‚à¤• à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤¸à¥‡ à¤¤à¥à¤µà¤°à¤¿à¤¤ à¤‰à¤šà¥à¤š à¤—à¥à¤£à¤µà¤¤à¥à¤¤à¤¾ à¤µà¤¾à¤²à¤¾ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤",
   };
 }
 
@@ -19043,23 +19374,23 @@ app.post("/api/analyze-image", enforceUserAccessMiddleware, async (req, res) => 
     const targetArea = headline_area || tplConfig.headline_area;
 
     const promptText = `
-आप एक वरिष्ठ हिंदी समाचार संपादक हैं।
-यूज़र ने यह फोटो अपलोड की है और न्यूज़ कार्ड बनाना चाहता है।
+à¤†à¤ª à¤à¤• à¤µà¤°à¤¿à¤·à¥à¤  à¤¹à¤¿à¤‚à¤¦à¥€ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¸à¤‚à¤ªà¤¾à¤¦à¤• à¤¹à¥ˆà¤‚à¥¤
+à¤¯à¥‚à¤œà¤¼à¤° à¤¨à¥‡ à¤¯à¤¹ à¤«à¥‹à¤Ÿà¥‹ à¤…à¤ªà¤²à¥‹à¤¡ à¤•à¥€ à¤¹à¥ˆ à¤”à¤° à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤•à¤¾à¤°à¥à¤¡ à¤¬à¤¨à¤¾à¤¨à¤¾ à¤šà¤¾à¤¹à¤¤à¤¾ à¤¹à¥ˆà¥¤
 
-${userContext ? `यूज़र का निर्देश / संदर्भ: ${userContext}` : ""}
+${userContext ? `à¤¯à¥‚à¤œà¤¼à¤° à¤•à¤¾ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ / à¤¸à¤‚à¤¦à¤°à¥à¤­: ${userContext}` : ""}
 
-फोटो का विश्लेषण करें और निम्नलिखित JSON फॉर्मेट में उत्तर दें:
-1. "headline": एक बहुत ही आकर्षक और स्पष्ट हिंदी न्यूज़ हेडलाइन।
-2. "highlightWords": हेडलाइन के वे सबसे मुख्य 2 से 4 शब्द जिन्हें हाइलाइट किया जाना चाहिए।
-3. "formattedHeadline": हेडलाइन जिसमें हाइलाइट होने वाले शब्दों के आगे-पीछे [yellow] और [/yellow] टैग लगे हों।
-4. "location": घटना से संबंधित जिला या राज्य का नाम।
-5. "summary": सोशल मीडिया पोस्ट के लिए उपयुक्त और स्पष्ट समाचार विवरण।
-6. "category": एक शब्द की श्रेणी (जैसे "हादसा", "सरकार", "आंदोलन", "राजनीति", "अपराध", "प्रशासन")।
-7. "hasPerson": क्या फोटो में कोई मुख्य व्यक्ति का क्लोज़अप/पोर्ट्रेट है जिसे कटआउट में दिखाया जा सकता है? (true या false).
-8. "description": फोटो में क्या-क्या दिखाई दे रहा है इसका संक्षिप्त विवरण।
-9. "isAiGeneratedPhoto": क्या यह फोटो AI जनरेटेड या डिजिटल इलस्ट्रेशन प्रतीत होती है? (true या false).
-10. "speakerName": यदि यह किसी व्यक्ति का बयान/कोटेशन है तो उनका नाम, अन्यथा खाली स्ट्रिंग ("")।
-11. "speakerTitle": उनका पद या पदवी, अन्यथा खाली स्ट्रिंग ("")।
+à¤«à¥‹à¤Ÿà¥‹ à¤•à¤¾ à¤µà¤¿à¤¶à¥à¤²à¥‡à¤·à¤£ à¤•à¤°à¥‡à¤‚ à¤”à¤° à¤¨à¤¿à¤®à¥à¤¨à¤²à¤¿à¤–à¤¿à¤¤ JSON à¤«à¥‰à¤°à¥à¤®à¥‡à¤Ÿ à¤®à¥‡à¤‚ à¤‰à¤¤à¥à¤¤à¤° à¤¦à¥‡à¤‚:
+1. "headline": à¤à¤• à¤¬à¤¹à¥à¤¤ à¤¹à¥€ à¤†à¤•à¤°à¥à¤·à¤• à¤”à¤° à¤¸à¥à¤ªà¤·à¥à¤Ÿ à¤¹à¤¿à¤‚à¤¦à¥€ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥¤
+2. "highlightWords": à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥‡ à¤µà¥‡ à¤¸à¤¬à¤¸à¥‡ à¤®à¥à¤–à¥à¤¯ 2 à¤¸à¥‡ 4 à¤¶à¤¬à¥à¤¦ à¤œà¤¿à¤¨à¥à¤¹à¥‡à¤‚ à¤¹à¤¾à¤‡à¤²à¤¾à¤‡à¤Ÿ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤à¥¤
+3. "formattedHeadline": à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤œà¤¿à¤¸à¤®à¥‡à¤‚ à¤¹à¤¾à¤‡à¤²à¤¾à¤‡à¤Ÿ à¤¹à¥‹à¤¨à¥‡ à¤µà¤¾à¤²à¥‡ à¤¶à¤¬à¥à¤¦à¥‹à¤‚ à¤•à¥‡ à¤†à¤—à¥‡-à¤ªà¥€à¤›à¥‡ [yellow] à¤”à¤° [/yellow] à¤Ÿà¥ˆà¤— à¤²à¤—à¥‡ à¤¹à¥‹à¤‚à¥¤
+4. "location": à¤˜à¤Ÿà¤¨à¤¾ à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤œà¤¿à¤²à¤¾ à¤¯à¤¾ à¤°à¤¾à¤œà¥à¤¯ à¤•à¤¾ à¤¨à¤¾à¤®à¥¤
+5. "summary": à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤ªà¥‹à¤¸à¥à¤Ÿ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤¯à¥à¤•à¥à¤¤ à¤”à¤° à¤¸à¥à¤ªà¤·à¥à¤Ÿ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤µà¤¿à¤µà¤°à¤£à¥¤
+6. "category": à¤à¤• à¤¶à¤¬à¥à¤¦ à¤•à¥€ à¤¶à¥à¤°à¥‡à¤£à¥€ (à¤œà¥ˆà¤¸à¥‡ "à¤¹à¤¾à¤¦à¤¸à¤¾", "à¤¸à¤°à¤•à¤¾à¤°", "à¤†à¤‚à¤¦à¥‹à¤²à¤¨", "à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿", "à¤…à¤ªà¤°à¤¾à¤§", "à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨")à¥¤
+7. "hasPerson": à¤•à¥à¤¯à¤¾ à¤«à¥‹à¤Ÿà¥‹ à¤®à¥‡à¤‚ à¤•à¥‹à¤ˆ à¤®à¥à¤–à¥à¤¯ à¤µà¥à¤¯à¤•à¥à¤¤à¤¿ à¤•à¤¾ à¤•à¥à¤²à¥‹à¤œà¤¼à¤…à¤ª/à¤ªà¥‹à¤°à¥à¤Ÿà¥à¤°à¥‡à¤Ÿ à¤¹à¥ˆ à¤œà¤¿à¤¸à¥‡ à¤•à¤Ÿà¤†à¤‰à¤Ÿ à¤®à¥‡à¤‚ à¤¦à¤¿à¤–à¤¾à¤¯à¤¾ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆ? (true à¤¯à¤¾ false).
+8. "description": à¤«à¥‹à¤Ÿà¥‹ à¤®à¥‡à¤‚ à¤•à¥à¤¯à¤¾-à¤•à¥à¤¯à¤¾ à¤¦à¤¿à¤–à¤¾à¤ˆ à¤¦à¥‡ à¤°à¤¹à¤¾ à¤¹à¥ˆ à¤‡à¤¸à¤•à¤¾ à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤µà¤¿à¤µà¤°à¤£à¥¤
+9. "isAiGeneratedPhoto": à¤•à¥à¤¯à¤¾ à¤¯à¤¹ à¤«à¥‹à¤Ÿà¥‹ AI à¤œà¤¨à¤°à¥‡à¤Ÿà¥‡à¤¡ à¤¯à¤¾ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤‡à¤²à¤¸à¥à¤Ÿà¥à¤°à¥‡à¤¶à¤¨ à¤ªà¥à¤°à¤¤à¥€à¤¤ à¤¹à¥‹à¤¤à¥€ à¤¹à¥ˆ? (true à¤¯à¤¾ false).
+10. "speakerName": à¤¯à¤¦à¤¿ à¤¯à¤¹ à¤•à¤¿à¤¸à¥€ à¤µà¥à¤¯à¤•à¥à¤¤à¤¿ à¤•à¤¾ à¤¬à¤¯à¤¾à¤¨/à¤•à¥‹à¤Ÿà¥‡à¤¶à¤¨ à¤¹à¥ˆ à¤¤à¥‹ à¤‰à¤¨à¤•à¤¾ à¤¨à¤¾à¤®, à¤…à¤¨à¥à¤¯à¤¥à¤¾ à¤–à¤¾à¤²à¥€ à¤¸à¥à¤Ÿà¥à¤°à¤¿à¤‚à¤— ("")à¥¤
+11. "speakerTitle": à¤‰à¤¨à¤•à¤¾ à¤ªà¤¦ à¤¯à¤¾ à¤ªà¤¦à¤µà¥€, à¤…à¤¨à¥à¤¯à¤¥à¤¾ à¤–à¤¾à¤²à¥€ à¤¸à¥à¤Ÿà¥à¤°à¤¿à¤‚à¤— ("")à¥¤
 `;
 
     const contents = {
@@ -19144,28 +19475,28 @@ ${userContext ? `यूज़र का निर्देश / संदर्�
     const tplConfig = getTemplateConfig(effectiveTemplateId);
     const userContext = req.body.userContext || "";
     const fallbackHeadline = userContext
-      ? `${userContext.slice(0, 45).replace(/[।\.\,\!\?\:\-]+$/g, "")}: महत्वपूर्ण मामला, अग्रिम कार्रवाई जारी`
-      : "तस्वीर से महत्वपूर्ण घटनाक्रम: जांच व अग्रिम कार्रवाई जारी";
+      ? `${userContext.slice(0, 45).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "")}: à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤®à¤¾à¤®à¤²à¤¾, à¤…à¤—à¥à¤°à¤¿à¤® à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤œà¤¾à¤°à¥€`
+      : "à¤¤à¤¸à¥à¤µà¥€à¤° à¤¸à¥‡ à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤®: à¤œà¤¾à¤‚à¤š à¤µ à¤…à¤—à¥à¤°à¤¿à¤® à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤œà¤¾à¤°à¥€";
     const fallbackSummary = userContext
-      ? `${userContext}। मौके पर आवश्यक प्रशासनिक एवं सुरक्षा दिशा-निर्देश जारी किए गए हैं। #BreakingNews`
-      : "प्राप्त चित्र के आधार पर मौके का जायजा लिया जा रहा है। प्रशासनिक स्तर पर आवश्यक निर्देश दिए गए हैं। #BreakingNews";
+      ? `${userContext}à¥¤ à¤®à¥Œà¤•à¥‡ à¤ªà¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤à¤µà¤‚ à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤¦à¤¿à¤¶à¤¾-à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤œà¤¾à¤°à¥€ à¤•à¤¿à¤ à¤—à¤ à¤¹à¥ˆà¤‚à¥¤ #BreakingNews`
+      : "à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤šà¤¿à¤¤à¥à¤° à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤®à¥Œà¤•à¥‡ à¤•à¤¾ à¤œà¤¾à¤¯à¤œà¤¾ à¤²à¤¿à¤¯à¤¾ à¤œà¤¾ à¤°à¤¹à¤¾ à¤¹à¥ˆà¥¤ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤¸à¥à¤¤à¤° à¤ªà¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤¦à¤¿à¤ à¤—à¤ à¤¹à¥ˆà¤‚à¥¤ #BreakingNews";
 
     return res.json({
       success: true,
       data: {
         headline: fallbackHeadline,
         formattedHeadline: fallbackHeadline,
-        highlightWords: ["कार्रवाई", "जांच", "फैसला"],
+        highlightWords: ["à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ", "à¤œà¤¾à¤‚à¤š", "à¤«à¥ˆà¤¸à¤²à¤¾"],
         location: "",
         summary: fallbackSummary,
-        category: "अपराध व कानून",
+        category: "à¤…à¤ªà¤°à¤¾à¤§ à¤µ à¤•à¤¾à¤¨à¥‚à¤¨",
         hasPerson: true,
         isAiGeneratedPhoto: false,
         template_id: tplConfig.template_id,
         headline_max_lines: targetMaxLines,
         headline_area: req.body.headline_area || tplConfig.headline_area,
         headline_line_count: targetMaxLines,
-        quotaNotice: "AI मॉडल व्यस्त होने के कारण स्मार्ट विश्लेषण सक्रिय किया गया है।",
+        quotaNotice: "AI à¤®à¥‰à¤¡à¤² à¤µà¥à¤¯à¤¸à¥à¤¤ à¤¹à¥‹à¤¨à¥‡ à¤•à¥‡ à¤•à¤¾à¤°à¤£ à¤¸à¥à¤®à¤¾à¤°à¥à¤Ÿ à¤µà¤¿à¤¶à¥à¤²à¥‡à¤·à¤£ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤",
       },
     });
   }
@@ -19184,23 +19515,23 @@ export function fitHeadlineNaturally(
 ): string {
   if (!text) return "";
   let cleaned = sanitizePressNoteFlattery(cleanHeadlineText(text), true)
-    .replace(/^(?:विकल्प\s*\d+[\s:\-–—]*|\d+[\s.\-–—]+|[•\-\*]\s*)/u, "")
-    .replace(/^(?:Breaking News|Live Updates?|Latest News|Big Breaking)[:\s\-–—]*/i, "")
-    .replace(/^(?:मामले में बड़ा एक्शन|जनसरोकार और व्यवस्था पर सीधा असर|इलाके में मचा हड़कंप|पड़ताल में बड़ा खुलासा|जांच और कार्रवाई तेज)[:\s\-–—]*/u, "")
-    .replace(/^(?:[\u0900-\u097F]+(?:\s*,\s*[\u0900-\u097F]+)?)\s*[:\-–—]\s*/u, (match) => {
-      if (/^(?:विशेष|ब्रेकिंग|बड़ी खबर|बड़ा फैसला)/u.test(match)) return match;
+    .replace(/^(?:à¤µà¤¿à¤•à¤²à¥à¤ª\s*\d+[\s:\-â€“â€”]*|\d+[\s.\-â€“â€”]+|[â€¢\-\*]\s*)/u, "")
+    .replace(/^(?:Breaking News|Live Updates?|Latest News|Big Breaking)[:\s\-â€“â€”]*/i, "")
+    .replace(/^(?:à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¬à¤¡à¤¼à¤¾ à¤à¤•à¥à¤¶à¤¨|à¤œà¤¨à¤¸à¤°à¥‹à¤•à¤¾à¤° à¤”à¤° à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾ à¤ªà¤° à¤¸à¥€à¤§à¤¾ à¤…à¤¸à¤°|à¤‡à¤²à¤¾à¤•à¥‡ à¤®à¥‡à¤‚ à¤®à¤šà¤¾ à¤¹à¤¡à¤¼à¤•à¤‚à¤ª|à¤ªà¤¡à¤¼à¤¤à¤¾à¤² à¤®à¥‡à¤‚ à¤¬à¤¡à¤¼à¤¾ à¤–à¥à¤²à¤¾à¤¸à¤¾|à¤œà¤¾à¤‚à¤š à¤”à¤° à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤¤à¥‡à¤œ)[:\s\-â€“â€”]*/u, "")
+    .replace(/^(?:[\u0900-\u097F]+(?:\s*,\s*[\u0900-\u097F]+)?)\s*[:\-â€“â€”]\s*/u, (match) => {
+      if (/^(?:à¤µà¤¿à¤¶à¥‡à¤·|à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—|à¤¬à¤¡à¤¼à¥€ à¤–à¤¬à¤°|à¤¬à¤¡à¤¼à¤¾ à¤«à¥ˆà¤¸à¤²à¤¾)/u.test(match)) return match;
       return "";
     })
-    .replace(/[।\.\,\!\?\:\-]+$/g, "")
+    .replace(/[à¥¤\.\,\!\?\:\-]+$/g, "")
     .trim();
 
   if (cleaned.length >= minChars && cleaned.length <= maxChars) {
-    return formatAsJournalisticHeadline(cleaned).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+    return formatAsJournalisticHeadline(cleaned).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim();
   }
 
   if (cleaned.length > maxChars) {
     const sub = cleaned.slice(0, maxChars);
-    const lastDelim = Math.max(sub.lastIndexOf(","), sub.lastIndexOf(":"), sub.lastIndexOf("–"), sub.lastIndexOf("-"));
+    const lastDelim = Math.max(sub.lastIndexOf(","), sub.lastIndexOf(":"), sub.lastIndexOf("â€“"), sub.lastIndexOf("-"));
     const lastSpace = sub.lastIndexOf(" ");
     if (lastDelim >= minChars) {
       cleaned = sub.slice(0, lastDelim).trim();
@@ -19209,15 +19540,15 @@ export function fitHeadlineNaturally(
     } else {
       cleaned = sub.trim();
     }
-    cleaned = cleaned.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक)|\s+(?:पड़|जा|रहा|रहे|रही|करते|होते|आते|जाते))$/u, "").trim();
+    cleaned = cleaned.replace(/(?:\s+(?:à¤¨à¥‡|à¤•à¥‡|à¤•à¥€|à¤•à¤¾|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤”à¤°|à¤¯à¤¾|à¤à¤µà¤‚|à¤µ|à¤•à¤¿|à¤¹à¥‡à¤¤à¥|à¤²à¤¿à¤|à¤¸à¤¹à¤¿à¤¤|à¤¤à¤•|à¤¤à¤¹à¤¤|à¤¦à¥Œà¤°à¤¾à¤¨|à¤¯à¤¹|à¤µà¤¹|à¤à¤•)|\s+(?:à¤ªà¤¡à¤¼|à¤œà¤¾|à¤°à¤¹à¤¾|à¤°à¤¹à¥‡|à¤°à¤¹à¥€|à¤•à¤°à¤¤à¥‡|à¤¹à¥‹à¤¤à¥‡|à¤†à¤¤à¥‡|à¤œà¤¾à¤¤à¥‡))$/u, "").trim();
   }
 
   if (cleaned.length < minChars && factSentence) {
     const factsList = (Array.isArray(factSentence) ? factSentence : [factSentence]).filter(Boolean);
     for (const f of factsList) {
       if (cleaned.length >= minChars) break;
-      const cleanF = sanitizePressNoteFlattery(cleanHeadlineText(f), true).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
-      if (!cleanF || cleanF.length < 8 || cleaned.includes(cleanF) || /(?:वेबसाइट|प्रकाशित समाचार|से संबंधित)/u.test(cleanF)) continue;
+      const cleanF = sanitizePressNoteFlattery(cleanHeadlineText(f), true).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim();
+      if (!cleanF || cleanF.length < 8 || cleaned.includes(cleanF) || /(?:à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ|à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤ à¤¸à¤®à¤¾à¤šà¤¾à¤°|à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤)/u.test(cleanF)) continue;
       const remainingChars = maxChars - cleaned.length - 2;
       if (remainingChars >= 10) {
         let fPart = cleanF;
@@ -19226,7 +19557,7 @@ export function fitHeadlineNaturally(
           const spaceIdx = cut.lastIndexOf(" ");
           fPart = spaceIdx > 8 ? cut.slice(0, spaceIdx).trim() : cut.trim();
         }
-        fPart = fPart.replace(/(?:\s+(?:ने|के|की|का|में|पर|से|को|और|या|एवं|व|कि|हेतु|लिए|सहित|तक|तहत|दौरान|यह|वह|एक)|\s+(?:पड़|जा|रहा|रहे|रही|करते|होते|आते|जाते))$/u, "").trim();
+        fPart = fPart.replace(/(?:\s+(?:à¤¨à¥‡|à¤•à¥‡|à¤•à¥€|à¤•à¤¾|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤”à¤°|à¤¯à¤¾|à¤à¤µà¤‚|à¤µ|à¤•à¤¿|à¤¹à¥‡à¤¤à¥|à¤²à¤¿à¤|à¤¸à¤¹à¤¿à¤¤|à¤¤à¤•|à¤¤à¤¹à¤¤|à¤¦à¥Œà¤°à¤¾à¤¨|à¤¯à¤¹|à¤µà¤¹|à¤à¤•)|\s+(?:à¤ªà¤¡à¤¼|à¤œà¤¾|à¤°à¤¹à¤¾|à¤°à¤¹à¥‡|à¤°à¤¹à¥€|à¤•à¤°à¤¤à¥‡|à¤¹à¥‹à¤¤à¥‡|à¤†à¤¤à¥‡|à¤œà¤¾à¤¤à¥‡))$/u, "").trim();
         if (fPart.length >= 6) {
           cleaned = `${cleaned}, ${fPart}`;
         }
@@ -19234,7 +19565,7 @@ export function fitHeadlineNaturally(
     }
   }
 
-  return formatAsJournalisticHeadline(cleaned).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+  return formatAsJournalisticHeadline(cleaned).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim();
 }
 
 /**
@@ -19244,7 +19575,7 @@ function ensureWordCount(text: string, minWords: number, maxWords: number, fille
   return fitHeadlineNaturally(text, 50, 100, fillerFact);
 }
 
-export const BYLINE_REGEX = /(?:नईदुनिया|नवदुनिया|दैनिक\s*भास्कर|अमर\s*उजाला|पत्रिका|नवभारत\s*टाइम्स|हिंदुस्तान|विशेष\s*संवाददाता|ब्यूरो|द\s*सूत्र|हरिभूमि|दैनिक\s*जागरण|आज\s*तक|ज़ी\s*न्यूज़|एनडीटीवी|न्यूज़\s*18)\s*(?:प्रतिनिधि|संवाददाता|ब्यूरो|डेस्क|रिपोर्टर)?[,\s]*[^\n।:]*[:,\-–—]?/gi;
+export const BYLINE_REGEX = /(?:à¤¨à¤ˆà¤¦à¥à¤¨à¤¿à¤¯à¤¾|à¤¨à¤µà¤¦à¥à¤¨à¤¿à¤¯à¤¾|à¤¦à¥ˆà¤¨à¤¿à¤•\s*à¤­à¤¾à¤¸à¥à¤•à¤°|à¤…à¤®à¤°\s*à¤‰à¤œà¤¾à¤²à¤¾|à¤ªà¤¤à¥à¤°à¤¿à¤•à¤¾|à¤¨à¤µà¤­à¤¾à¤°à¤¤\s*à¤Ÿà¤¾à¤‡à¤®à¥à¤¸|à¤¹à¤¿à¤‚à¤¦à¥à¤¸à¥à¤¤à¤¾à¤¨|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾|à¤¬à¥à¤¯à¥‚à¤°à¥‹|à¤¦\s*à¤¸à¥‚à¤¤à¥à¤°|à¤¹à¤°à¤¿à¤­à¥‚à¤®à¤¿|à¤¦à¥ˆà¤¨à¤¿à¤•\s*à¤œà¤¾à¤—à¤°à¤£|à¤†à¤œ\s*à¤¤à¤•|à¤œà¤¼à¥€\s*à¤¨à¥à¤¯à¥‚à¤œà¤¼|à¤à¤¨à¤¡à¥€à¤Ÿà¥€à¤µà¥€|à¤¨à¥à¤¯à¥‚à¤œà¤¼\s*18)\s*(?:à¤ªà¥à¤°à¤¤à¤¿à¤¨à¤¿à¤§à¤¿|à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾|à¤¬à¥à¤¯à¥‚à¤°à¥‹|à¤¡à¥‡à¤¸à¥à¤•|à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¤°)?[,\s]*[^\nà¥¤:]*[:,\-â€“â€”]?/gi;
 
 export function stripNewspaperBylines(text: string): string {
   if (!text) return "";
@@ -19254,48 +19585,48 @@ export function stripNewspaperBylines(text: string): string {
 function sanitizeHeadlineClean(text: string): string {
   if (!text) return "";
   let res = stripNewspaperBylines(sanitizePressNoteFlattery(cleanHeadlineText(text), true))
-    .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
+    .replace(/[à¥¤\.\,\!\?\:\-â€“â€”;;\s]+$/g, "")
     .trim();
 
   // Remove any leading/inline image caption or relative time artifacts or leading postpositions
   res = res
-    .replace(/^(?:प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—\s]*)+/gu, "")
-    .replace(/(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu, " ")
-    .replace(/^(?:में|पर|से|को|का|की|के|ने|और|तथा|व)\s+/u, "")
+    .replace(/^(?:à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°)\s*\d*[\.:\-â€“â€”\s]*)+/gu, "")
+    .replace(/(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤¦à¤¿à¤²à¥à¤²à¥€|à¤­à¥‹à¤ªà¤¾à¤²|à¤‡à¤‚à¤¦à¥Œà¤°|à¤°à¤¾à¤¯à¤ªà¥à¤°|à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°|à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°|à¤²à¤–à¤¨à¤Š|à¤ªà¤Ÿà¤¨à¤¾|à¤œà¤¯à¤ªà¥à¤°|à¤®à¥à¤‚à¤¬à¤ˆ|à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼|à¤°à¤¾à¤‚à¤šà¥€|à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤°à¥€à¤µà¤¾|à¤¸à¤¤à¤¨à¤¾|à¤¸à¤¾à¤—à¤°|à¤‰à¤œà¥à¤œà¥ˆà¤¨)?\s*\d+\s*(?:à¤˜à¤‚à¤Ÿà¥‡|à¤®à¤¿à¤¨à¤Ÿ|à¤¦à¤¿à¤¨|à¤¸à¥‡à¤•à¤‚à¤¡|à¤¸à¤ªà¥à¤¤à¤¾à¤¹|à¤®à¤¾à¤¹|à¤®à¤¹à¥€à¤¨à¥‡)\s*à¤ªà¤¹à¤²à¥‡\s*/gu, " ")
+    .replace(/^(?:à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤¨à¥‡|à¤”à¤°|à¤¤à¤¥à¤¾|à¤µ)\s+/u, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 
   // Repair known dangling verbal completions
-  res = res.replace(/(?:की\s+)?(?:दे\s+रहा|दे\s+रहे|दे\s+रही)$/u, "की धमकी का मामला");
-  res = res.replace(/\s+(?:कर\s+रहा|कर\s+रहे|कर\s+रही)$/u, " का मामला");
-  res = res.replace(/\s+(?:हो\s+रहा|हो\s+रहे|हो\s+रही)$/u, " की स्थिति");
-  res = res.replace(/(?:यातायात पुलिस ने\s*)?लोगों\s+की\s+सुरक्षा\s+के$/u, "यातायात व सुरक्षा के पुख्ता इंतजाम");
-  res = res.replace(/के\s+खिलाफ\s+एफआईआर$/u, "के खिलाफ एफआईआर दर्ज");
-  res = res.replace(/जांच\s+शुरू$/u, "जांच शुरू की");
+  res = res.replace(/(?:à¤•à¥€\s+)?(?:à¤¦à¥‡\s+à¤°à¤¹à¤¾|à¤¦à¥‡\s+à¤°à¤¹à¥‡|à¤¦à¥‡\s+à¤°à¤¹à¥€)$/u, "à¤•à¥€ à¤§à¤®à¤•à¥€ à¤•à¤¾ à¤®à¤¾à¤®à¤²à¤¾");
+  res = res.replace(/\s+(?:à¤•à¤°\s+à¤°à¤¹à¤¾|à¤•à¤°\s+à¤°à¤¹à¥‡|à¤•à¤°\s+à¤°à¤¹à¥€)$/u, " à¤•à¤¾ à¤®à¤¾à¤®à¤²à¤¾");
+  res = res.replace(/\s+(?:à¤¹à¥‹\s+à¤°à¤¹à¤¾|à¤¹à¥‹\s+à¤°à¤¹à¥‡|à¤¹à¥‹\s+à¤°à¤¹à¥€)$/u, " à¤•à¥€ à¤¸à¥à¤¥à¤¿à¤¤à¤¿");
+  res = res.replace(/(?:à¤¯à¤¾à¤¤à¤¾à¤¯à¤¾à¤¤ à¤ªà¥à¤²à¤¿à¤¸ à¤¨à¥‡\s*)?à¤²à¥‹à¤—à¥‹à¤‚\s+à¤•à¥€\s+à¤¸à¥à¤°à¤•à¥à¤·à¤¾\s+à¤•à¥‡$/u, "à¤¯à¤¾à¤¤à¤¾à¤¯à¤¾à¤¤ à¤µ à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤•à¥‡ à¤ªà¥à¤–à¥à¤¤à¤¾ à¤‡à¤‚à¤¤à¤œà¤¾à¤®");
+  res = res.replace(/à¤•à¥‡\s+à¤–à¤¿à¤²à¤¾à¤«\s+à¤à¤«à¤†à¤ˆà¤†à¤°$/u, "à¤•à¥‡ à¤–à¤¿à¤²à¤¾à¤« à¤à¤«à¤†à¤ˆà¤†à¤° à¤¦à¤°à¥à¤œ");
+  res = res.replace(/à¤œà¤¾à¤‚à¤š\s+à¤¶à¥à¤°à¥‚$/u, "à¤œà¤¾à¤‚à¤š à¤¶à¥à¤°à¥‚ à¤•à¥€");
 
-  // Strip trailing incomplete clauses (e.g. "कोर्ट ने कहा", "सुप्रीम कोर्ट ने गुरुवार", "खाते से 5", "; 5 सवाल")
-  res = res.replace(/[;,\s]+\d+\s*सवाल$/u, "");
-  res = res.replace(/[,:\s]+(?:सुप्रीम\s+कोर्ट|हाई\s+कोर्ट|कोर्ट|अदालत|पुलिस|सरकार|प्रशासन|उन्होंने|याचिकाकर्ता)\s+ने\s+(?:गुरुवार|शुक्रवार|सोमवार|मंगलवार|बुधवार|शनिवार|रविवार|आज|कल|कहा|बताया|बोला|पूछा)(?:\s+को)?$/u, "");
-  res = res.replace(/\s+ने\s+(?:गुरुवार|शुक्रवार|सोमवार|मंगलवार|बुधवार|शनिवार|रविवार)(?:\s+को)?$/u, "");
-  res = res.replace(/\s+(?:से|में|पर|को|के|का|की)\s+\d+$/u, "");
+  // Strip trailing incomplete clauses (e.g. "à¤•à¥‹à¤°à¥à¤Ÿ à¤¨à¥‡ à¤•à¤¹à¤¾", "à¤¸à¥à¤ªà¥à¤°à¥€à¤® à¤•à¥‹à¤°à¥à¤Ÿ à¤¨à¥‡ à¤—à¥à¤°à¥à¤µà¤¾à¤°", "à¤–à¤¾à¤¤à¥‡ à¤¸à¥‡ 5", "; 5 à¤¸à¤µà¤¾à¤²")
+  res = res.replace(/[;,\s]+\d+\s*à¤¸à¤µà¤¾à¤²$/u, "");
+  res = res.replace(/[,:\s]+(?:à¤¸à¥à¤ªà¥à¤°à¥€à¤®\s+à¤•à¥‹à¤°à¥à¤Ÿ|à¤¹à¤¾à¤ˆ\s+à¤•à¥‹à¤°à¥à¤Ÿ|à¤•à¥‹à¤°à¥à¤Ÿ|à¤…à¤¦à¤¾à¤²à¤¤|à¤ªà¥à¤²à¤¿à¤¸|à¤¸à¤°à¤•à¤¾à¤°|à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨|à¤‰à¤¨à¥à¤¹à¥‹à¤‚à¤¨à¥‡|à¤¯à¤¾à¤šà¤¿à¤•à¤¾à¤•à¤°à¥à¤¤à¤¾)\s+à¤¨à¥‡\s+(?:à¤—à¥à¤°à¥à¤µà¤¾à¤°|à¤¶à¥à¤•à¥à¤°à¤µà¤¾à¤°|à¤¸à¥‹à¤®à¤µà¤¾à¤°|à¤®à¤‚à¤—à¤²à¤µà¤¾à¤°|à¤¬à¥à¤§à¤µà¤¾à¤°|à¤¶à¤¨à¤¿à¤µà¤¾à¤°|à¤°à¤µà¤¿à¤µà¤¾à¤°|à¤†à¤œ|à¤•à¤²|à¤•à¤¹à¤¾|à¤¬à¤¤à¤¾à¤¯à¤¾|à¤¬à¥‹à¤²à¤¾|à¤ªà¥‚à¤›à¤¾)(?:\s+à¤•à¥‹)?$/u, "");
+  res = res.replace(/\s+à¤¨à¥‡\s+(?:à¤—à¥à¤°à¥à¤µà¤¾à¤°|à¤¶à¥à¤•à¥à¤°à¤µà¤¾à¤°|à¤¸à¥‹à¤®à¤µà¤¾à¤°|à¤®à¤‚à¤—à¤²à¤µà¤¾à¤°|à¤¬à¥à¤§à¤µà¤¾à¤°|à¤¶à¤¨à¤¿à¤µà¤¾à¤°|à¤°à¤µà¤¿à¤µà¤¾à¤°)(?:\s+à¤•à¥‹)?$/u, "");
+  res = res.replace(/\s+(?:à¤¸à¥‡|à¤®à¥‡à¤‚|à¤ªà¤°|à¤•à¥‹|à¤•à¥‡|à¤•à¤¾|à¤•à¥€)\s+\d+$/u, "");
 
-  // Strip trailing connectors & prepositions in a loop (preserving feminine past-tense verb "की")
-  const verbKeptBeforeKi = /(?:शुरू|दर्ज|जारी|मांग|अपील|घोषणा|पुष्टि|कार्रवाई|समीक्षा|सुनवाई|निंदा|पूछताछ|छापेमारी|तलाश|पहल|कोशिश|बरामदगी|गिरफ्तारी|तैनाती|बढ़ोतरी|कटौती|फायरिंग|ठगी|धोखाधड़ी|लूट|चोरी|हत्या|आत्महत्या|शिकायत|याचिका)\s+की$/u;
-  const danglingPostpositions = /(?:\s+(?:ने|के|का|को|में|पर|से|कि|हेतु|तहत|दौरान|और|या|एवं|व|के\s+बीच|के\s+लिए|के\s+तहत|के\s+जरिए|के\s+बाद|द्वारा\s+आवश्यक|की\s+ओर|के\s+साथ|ने\s+कहा|ने\s+बताया))$/u;
+  // Strip trailing connectors & prepositions in a loop (preserving feminine past-tense verb "à¤•à¥€")
+  const verbKeptBeforeKi = /(?:à¤¶à¥à¤°à¥‚|à¤¦à¤°à¥à¤œ|à¤œà¤¾à¤°à¥€|à¤®à¤¾à¤‚à¤—|à¤…à¤ªà¥€à¤²|à¤˜à¥‹à¤·à¤£à¤¾|à¤ªà¥à¤·à¥à¤Ÿà¤¿|à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ|à¤¸à¤®à¥€à¤•à¥à¤·à¤¾|à¤¸à¥à¤¨à¤µà¤¾à¤ˆ|à¤¨à¤¿à¤‚à¤¦à¤¾|à¤ªà¥‚à¤›à¤¤à¤¾à¤›|à¤›à¤¾à¤ªà¥‡à¤®à¤¾à¤°à¥€|à¤¤à¤²à¤¾à¤¶|à¤ªà¤¹à¤²|à¤•à¥‹à¤¶à¤¿à¤¶|à¤¬à¤°à¤¾à¤®à¤¦à¤—à¥€|à¤—à¤¿à¤°à¤«à¥à¤¤à¤¾à¤°à¥€|à¤¤à¥ˆà¤¨à¤¾à¤¤à¥€|à¤¬à¤¢à¤¼à¥‹à¤¤à¤°à¥€|à¤•à¤Ÿà¥Œà¤¤à¥€|à¤«à¤¾à¤¯à¤°à¤¿à¤‚à¤—|à¤ à¤—à¥€|à¤§à¥‹à¤–à¤¾à¤§à¤¡à¤¼à¥€|à¤²à¥‚à¤Ÿ|à¤šà¥‹à¤°à¥€|à¤¹à¤¤à¥à¤¯à¤¾|à¤†à¤¤à¥à¤®à¤¹à¤¤à¥à¤¯à¤¾|à¤¶à¤¿à¤•à¤¾à¤¯à¤¤|à¤¯à¤¾à¤šà¤¿à¤•à¤¾)\s+à¤•à¥€$/u;
+  const danglingPostpositions = /(?:\s+(?:à¤¨à¥‡|à¤•à¥‡|à¤•à¤¾|à¤•à¥‹|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¤¿|à¤¹à¥‡à¤¤à¥|à¤¤à¤¹à¤¤|à¤¦à¥Œà¤°à¤¾à¤¨|à¤”à¤°|à¤¯à¤¾|à¤à¤µà¤‚|à¤µ|à¤•à¥‡\s+à¤¬à¥€à¤š|à¤•à¥‡\s+à¤²à¤¿à¤|à¤•à¥‡\s+à¤¤à¤¹à¤¤|à¤•à¥‡\s+à¤œà¤°à¤¿à¤|à¤•à¥‡\s+à¤¬à¤¾à¤¦|à¤¦à¥à¤µà¤¾à¤°à¤¾\s+à¤†à¤µà¤¶à¥à¤¯à¤•|à¤•à¥€\s+à¤“à¤°|à¤•à¥‡\s+à¤¸à¤¾à¤¥|à¤¨à¥‡\s+à¤•à¤¹à¤¾|à¤¨à¥‡\s+à¤¬à¤¤à¤¾à¤¯à¤¾))$/u;
   let prevLen = 0;
   while (res.length !== prevLen) {
     prevLen = res.length;
     res = res.replace(danglingPostpositions, "").trim();
-    if (/\s+की$/u.test(res) && !verbKeptBeforeKi.test(res)) {
-      res = res.replace(/\s+की$/u, "").trim();
+    if (/\s+à¤•à¥€$/u.test(res) && !verbKeptBeforeKi.test(res)) {
+      res = res.replace(/\s+à¤•à¥€$/u, "").trim();
     }
   }
-  return res.replace(/^(?:में|पर|से|को|का|की|के|ने|और|तथा|व)\s+/u, "").replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  return res.replace(/^(?:à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤•à¤¾|à¤•à¥€|à¤•à¥‡|à¤¨à¥‡|à¤”à¤°|à¤¤à¤¥à¤¾|à¤µ)\s+/u, "").replace(/[à¥¤\.\,\!\?\:\-â€“â€”;;\s]+$/g, "").trim();
 }
 
 /**
  * Generates up to 5 distinct headline options strictly from the provided article facts.
- * NEVER injects hardcoded unrelated news templates or generic administrative clichés.
+ * NEVER injects hardcoded unrelated news templates or generic administrative clichÃ©s.
  */
 export function generate5BalancedHeadlineOptions(
   primaryTitle: string,
@@ -19304,7 +19635,7 @@ export function generate5BalancedHeadlineOptions(
 ): string[] {
   const cleanBase = sanitizeHeadlineClean(primaryTitle || "");
   if (!cleanBase) return [];
-  const loc = location && location !== "विशेष कवरेज" ? location.trim() : "";
+  const loc = location && location !== "à¤µà¤¿à¤¶à¥‡à¤· à¤•à¤µà¤°à¥‡à¤œ" ? location.trim() : "";
 
   const uniqueOptions: string[] = [];
 
@@ -19319,20 +19650,20 @@ export function generate5BalancedHeadlineOptions(
     }
   };
 
-  // Option 1: सीधी मुख्य खबर (Direct primary event)
+  // Option 1: à¤¸à¥€à¤§à¥€ à¤®à¥à¤–à¥à¤¯ à¤–à¤¬à¤° (Direct primary event)
   addOptionIfDistinct(cleanBase);
 
   const validFacts = (factSentences || [])
     .map((s) => sanitizeHeadlineClean(s))
     .filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 200 && !BYLINE_REGEX.test(s));
 
-  // Option 2 & 3: तथ्य-केंद्रित व परिणाम-केंद्रित हेडलाइन (Key fact & impact from article)
+  // Option 2 & 3: à¤¤à¤¥à¥à¤¯-à¤•à¥‡à¤‚à¤¦à¥à¤°à¤¿à¤¤ à¤µ à¤ªà¤°à¤¿à¤£à¤¾à¤®-à¤•à¥‡à¤‚à¤¦à¥à¤°à¤¿à¤¤ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ (Key fact & impact from article)
   for (const fact of validFacts) {
     if (uniqueOptions.length >= 5) break;
     addOptionIfDistinct(fact);
   }
 
-  // Option 4: प्रमुख विवरण वाली हेडलाइन (Location or context framed headline)
+  // Option 4: à¤ªà¥à¤°à¤®à¥à¤– à¤µà¤¿à¤µà¤°à¤£ à¤µà¤¾à¤²à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ (Location or context framed headline)
   if (loc && uniqueOptions.length < 5) {
     const primaryLoc = loc.split(/[\/,]/)[0].trim();
     if (!cleanBase.includes(primaryLoc)) {
@@ -19340,9 +19671,9 @@ export function generate5BalancedHeadlineOptions(
     }
   }
 
-  // Option 5: प्रभावशाली समाचार हेडलाइन (Reframed complete headline)
+  // Option 5: à¤ªà¥à¤°à¤­à¤¾à¤µà¤¶à¤¾à¤²à¥€ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ (Reframed complete headline)
   if (uniqueOptions.length < 5) {
-    const shortBase = cleanBase.replace(/^(?:बड़ा फैसला|बड़ी खबर|ताज़ा खबर|विशेष):\s*/, '');
+    const shortBase = cleanBase.replace(/^(?:à¤¬à¤¡à¤¼à¤¾ à¤«à¥ˆà¤¸à¤²à¤¾|à¤¬à¤¡à¤¼à¥€ à¤–à¤¬à¤°|à¤¤à¤¾à¤œà¤¼à¤¾ à¤–à¤¬à¤°|à¤µà¤¿à¤¶à¥‡à¤·):\s*/, '');
     if (shortBase !== cleanBase) {
       addOptionIfDistinct(shortBase);
     }
@@ -19369,11 +19700,11 @@ export interface HeadlineTierRange {
 }
 
 export const HEADLINE_5_TIER_RANGES: HeadlineTierRange[] = [
-  { min: 80, max: 110, label: 'विकल्प 1' },
-  { min: 100, max: 130, label: 'विकल्प 2' },
-  { min: 125, max: 150, label: 'विकल्प 3' },
-  { min: 130, max: 160, label: 'विकल्प 4' },
-  { min: 150, max: 200, label: 'विकल्प 5' },
+  { min: 80, max: 110, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 1' },
+  { min: 100, max: 130, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 2' },
+  { min: 125, max: 150, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 3' },
+  { min: 130, max: 160, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 4' },
+  { min: 150, max: 200, label: 'à¤µà¤¿à¤•à¤²à¥à¤ª 5' },
 ];
 
 export const HEADLINE_MAX_CHARACTER_LIMIT = 200;
@@ -19399,8 +19730,8 @@ export function sanitizeHeadlineForLengthCounting(text: string): string {
   let s = text.replace(/\[\/?(?:yellow|highlight)\]/gi, '');
   s = s.replace(/<[^>]*>/g, '');
   s = s.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
-  s = s.replace(/["'“”‘’«»]/g, '');
-  s = s.replace(/[।\.\!\?\,\:\-]+$/g, '');
+  s = s.replace(/["'â€œâ€â€˜â€™Â«Â»]/g, '');
+  s = s.replace(/[à¥¤\.\!\?\,\:\-]+$/g, '');
   s = s.replace(/\s+/g, ' ').trim();
   return s;
 }
@@ -19434,12 +19765,12 @@ export function countHeadlineVisibleCharacters(
 
 /**
  * Validates a full set of 5 headline options against the mandatory editorial tiers:
- * Tier 1: 80–110 characters
- * Tier 2: 100–130 characters
- * Tier 3: 125–150 characters
- * Tier 4: 130–160 characters
- * Tier 5: 150–200 characters
- * Mandatory: No full stop (. or ।) at ending, no ellipsis (...), no dangling endings.
+ * Tier 1: 80â€“110 characters
+ * Tier 2: 100â€“130 characters
+ * Tier 3: 125â€“150 characters
+ * Tier 4: 130â€“160 characters
+ * Tier 5: 150â€“200 characters
+ * Mandatory: No full stop (. or à¥¤) at ending, no ellipsis (...), no dangling endings.
  */
 export function validateHeadlines5Tier(headlines: string[]): {
   valid: boolean;
@@ -19468,19 +19799,19 @@ export function validateHeadlines5Tier(headlines: string[]): {
 
     if (!text || charCount < tier.min) {
       valid = false;
-      reason = `विकल्प ${i + 1} की वर्ण संख्या (${charCount}) न्यूनतम सीमा (${tier.min}) से कम है।`;
+      reason = `à¤µà¤¿à¤•à¤²à¥à¤ª ${i + 1} à¤•à¥€ à¤µà¤°à¥à¤£ à¤¸à¤‚à¤–à¥à¤¯à¤¾ (${charCount}) à¤¨à¥à¤¯à¥‚à¤¨à¤¤à¤® à¤¸à¥€à¤®à¤¾ (${tier.min}) à¤¸à¥‡ à¤•à¤® à¤¹à¥ˆà¥¤`;
     } else if (charCount > tier.max) {
       valid = false;
-      reason = `विकल्प ${i + 1} की वर्ण संख्या (${charCount}) अधिकतम सीमा (${tier.max}) से अधिक है।`;
-    } else if (/[।\.]$/.test(trimmed)) {
+      reason = `à¤µà¤¿à¤•à¤²à¥à¤ª ${i + 1} à¤•à¥€ à¤µà¤°à¥à¤£ à¤¸à¤‚à¤–à¥à¤¯à¤¾ (${charCount}) à¤…à¤§à¤¿à¤•à¤¤à¤® à¤¸à¥€à¤®à¤¾ (${tier.max}) à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¹à¥ˆà¥¤`;
+    } else if (/[à¥¤\.]$/.test(trimmed)) {
       valid = false;
-      reason = 'हेडलाइन के अंत में पूर्णविराम (. या ।) नहीं होना चाहिए।';
+      reason = 'à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥‡ à¤…à¤‚à¤¤ à¤®à¥‡à¤‚ à¤ªà¥‚à¤°à¥à¤£à¤µà¤¿à¤°à¤¾à¤® (. à¤¯à¤¾ à¥¤) à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤à¥¤';
     } else if (/\.\.\.$/.test(trimmed)) {
       valid = false;
-      reason = 'हेडलाइन के अंत में इलिप्सिस (...) वर्जित है।';
-    } else if (/(?:\s+(?:ने|के|का|को|में|पर|से|कि|और|या|एवं|व|कहा\s+कि))$/u.test(trimmed)) {
+      reason = 'à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥‡ à¤…à¤‚à¤¤ à¤®à¥‡à¤‚ à¤‡à¤²à¤¿à¤ªà¥à¤¸à¤¿à¤¸ (...) à¤µà¤°à¥à¤œà¤¿à¤¤ à¤¹à¥ˆà¥¤';
+    } else if (/(?:\s+(?:à¤¨à¥‡|à¤•à¥‡|à¤•à¤¾|à¤•à¥‹|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¤¿|à¤”à¤°|à¤¯à¤¾|à¤à¤µà¤‚|à¤µ|à¤•à¤¹à¤¾\s+à¤•à¤¿))$/u.test(trimmed)) {
       valid = false;
-      reason = 'हेडलाइन का अंत अर्थपूर्ण वाक्य पर होना चाहिए, किसी अधूरे परसर्ग पर नहीं।';
+      reason = 'à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¤¾ à¤…à¤‚à¤¤ à¤…à¤°à¥à¤¥à¤ªà¥‚à¤°à¥à¤£ à¤µà¤¾à¤•à¥à¤¯ à¤ªà¤° à¤¹à¥‹à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤, à¤•à¤¿à¤¸à¥€ à¤…à¤§à¥‚à¤°à¥‡ à¤ªà¤°à¤¸à¤°à¥à¤— à¤ªà¤° à¤¨à¤¹à¥€à¤‚à¥¤';
     }
 
     if (!valid) invalidTiers.push(i + 1);
@@ -19516,7 +19847,7 @@ export function fitSingleHeadlineToTier(
   if (!text) return "";
   const effectiveMax = Math.min(maxLimit || 200, 200);
   let cleaned = sanitizeHeadlineClean(text);
-  cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
+  cleaned = cleaned.replace(/\s*[,à¥¤]?\s*(?:à¤œà¤¿à¤¸à¤¸à¥‡|à¤‡à¤¸à¤¸à¥‡)\s+à¤²à¥‹à¤—à¥‹à¤‚\s+à¤•à¥‹\s+à¤®à¤¦à¤¦\s+à¤®à¤¿à¤²à¥‡à¤—à¥€.*$/u, "");
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
   cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = sanitizeHeadlineClean(cleaned);
@@ -19530,7 +19861,7 @@ export function fitSingleHeadlineToTier(
 
   // Case 1: Exceeds target max -> check for clean clause boundary, then word boundary
   if (currentLen > effectiveMax) {
-    const delimiters = [", ", " - ", ": ", " — ", "; "];
+    const delimiters = [", ", " - ", ": ", " â€” ", "; "];
     for (const d of delimiters) {
       const idx = cleaned.lastIndexOf(d, effectiveMax);
       if (idx >= Math.min(minLimit, 55)) {
@@ -19556,7 +19887,7 @@ export function fitSingleHeadlineToTier(
   if (minLimit > 0 && currentLen < minLimit && factSentence) {
     const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence])
       .filter(Boolean)
-      .flatMap((f: any) => String(f).split(/[।\n]+/))
+      .flatMap((f: any) => String(f).split(/[à¥¤\n]+/))
       .flatMap((s: string) => s.split(/[,;:]\s+/))
       .map((s: string) => sanitizeHeadlineClean(s))
       .filter((s: string) => s.length >= 8);
@@ -19564,7 +19895,7 @@ export function fitSingleHeadlineToTier(
     for (const rawFact of candidates) {
       if (cleaned.includes(rawFact.slice(0, 14)) || calculateHeadlineSimilarity(cleaned, rawFact) >= 0.65) continue;
 
-      for (const sep of [", ", ": ", " — "]) {
+      for (const sep of [", ", ": ", " â€” "]) {
         const combined = sanitizeHeadlineClean(`${cleaned}${sep}${rawFact}`);
         const cLen = countHeadlineVisibleCharacters(combined);
         if (cLen >= minLimit && cLen <= effectiveMax) {
@@ -19606,11 +19937,11 @@ export function fitSingleHeadlineToTier(
 
 /**
  * Ensures 5 distinct headline options strictly conform to the 5 editorial tiers:
- * Option 1: 80–110 characters
- * Option 2: 100–130 characters
- * Option 3: 125–150 characters
- * Option 4: 130–160 characters
- * Option 5: 150–200 characters
+ * Option 1: 80â€“110 characters
+ * Option 2: 100â€“130 characters
+ * Option 3: 125â€“150 characters
+ * Option 4: 130â€“160 characters
+ * Option 5: 150â€“200 characters
  * Guaranteed no trailing periods, distinct journalistic angles, and factual adherence.
  */
 export function fitHeadlinesTo5TierRanges(
@@ -19643,7 +19974,7 @@ export function fitHeadlinesTo5TierRanges(
     : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || ''));
 
   const factsList = rawSources
-    .flatMap((f: string) => f.split(/[।\n\.\r]+/))
+    .flatMap((f: string) => f.split(/[à¥¤\n\.\r]+/))
     .map((s: string) => sanitizeHeadlineClean(s))
     .filter((s: string) => s.length >= 12);
 
@@ -19665,7 +19996,7 @@ export function fitHeadlinesTo5TierRanges(
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `विकल्प ${i + 1}` };
+    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `à¤µà¤¿à¤•à¤²à¥à¤ª ${i + 1}` };
     const cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || '';
     const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factsList);
     result.push(fitted);
@@ -19685,16 +20016,16 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
       type: Type.OBJECT,
       description: "Internal structured journalistic Fact Sheet extracted strictly from the full news article before writing headlines",
       properties: {
-        mainEvent: { type: Type.STRING, description: "Primary news event (मुख्य घटना)" },
-        mainSubject: { type: Type.STRING, description: "Central topic/subject (मुख्य विषय)" },
-        mainPersonOrOrg: { type: Type.STRING, description: "Primary person, court, or institution (मुख्य व्यक्ति या संस्था)" },
-        location: { type: Type.STRING, description: "City, district, or state (स्थान - शहर/जिला/राज्य)" },
-        date: { type: Type.STRING, description: "Date or timeframe if mentioned (दिनांक)" },
-        mainAction: { type: Type.STRING, description: "Key action, decision, or incident (मुख्य कार्रवाई या निर्णय)" },
-        importantFigures: { type: Type.STRING, description: "Verified numbers, amounts, or statistics in the article (महत्वपूर्ण संख्या या आँकड़े)" },
-        officialStatement: { type: Type.STRING, description: "Official statement, order, or court observation (आधिकारिक बयान या आदेश)" },
-        actualOutcome: { type: Type.STRING, description: "Real impact or consequence (वास्तविक परिणाम या प्रभाव)" },
-        importantContext: { type: Type.STRING, description: "Essential background context from the article (महत्वपूर्ण संदर्भ)" },
+        mainEvent: { type: Type.STRING, description: "Primary news event (à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾)" },
+        mainSubject: { type: Type.STRING, description: "Central topic/subject (à¤®à¥à¤–à¥à¤¯ à¤µà¤¿à¤·à¤¯)" },
+        mainPersonOrOrg: { type: Type.STRING, description: "Primary person, court, or institution (à¤®à¥à¤–à¥à¤¯ à¤µà¥à¤¯à¤•à¥à¤¤à¤¿ à¤¯à¤¾ à¤¸à¤‚à¤¸à¥à¤¥à¤¾)" },
+        location: { type: Type.STRING, description: "City, district, or state (à¤¸à¥à¤¥à¤¾à¤¨ - à¤¶à¤¹à¤°/à¤œà¤¿à¤²à¤¾/à¤°à¤¾à¤œà¥à¤¯)" },
+        date: { type: Type.STRING, description: "Date or timeframe if mentioned (à¤¦à¤¿à¤¨à¤¾à¤‚à¤•)" },
+        mainAction: { type: Type.STRING, description: "Key action, decision, or incident (à¤®à¥à¤–à¥à¤¯ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤¯à¤¾ à¤¨à¤¿à¤°à¥à¤£à¤¯)" },
+        importantFigures: { type: Type.STRING, description: "Verified numbers, amounts, or statistics in the article (à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¸à¤‚à¤–à¥à¤¯à¤¾ à¤¯à¤¾ à¤†à¤à¤•à¤¡à¤¼à¥‡)" },
+        officialStatement: { type: Type.STRING, description: "Official statement, order, or court observation (à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¬à¤¯à¤¾à¤¨ à¤¯à¤¾ à¤†à¤¦à¥‡à¤¶)" },
+        actualOutcome: { type: Type.STRING, description: "Real impact or consequence (à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤ªà¤°à¤¿à¤£à¤¾à¤® à¤¯à¤¾ à¤ªà¥à¤°à¤­à¤¾à¤µ)" },
+        importantContext: { type: Type.STRING, description: "Essential background context from the article (à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¸à¤‚à¤¦à¤°à¥à¤­)" },
       },
       required: [
         "mainEvent",
@@ -19725,7 +20056,7 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     },
     location: {
       type: Type.STRING,
-      description: "Clean city, district, or state without category keywords or URLs (never output 'विशेष डेस्क')",
+      description: "Clean city, district, or state without category keywords or URLs (never output 'à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•')",
     },
     summary: {
       type: Type.STRING,
@@ -19737,7 +20068,7 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     },
     captionBullets: {
       type: Type.STRING,
-      description: "Key facts in 3 to 5 clear bullet points, each starting with '• ' and ending with '।'. Concluding with hashtags ending with #AINewsMaker. Must not repeat the headline",
+      description: "Key facts in 3 to 5 clear bullet points, each starting with 'â€¢ ' and ending with 'à¥¤'. Concluding with hashtags ending with #AINewsMaker. Must not repeat the headline",
     },
     captionShort: {
       type: Type.STRING,
@@ -19745,7 +20076,7 @@ export const GEMINI_NEWS_RESPONSE_SCHEMA = {
     },
     category: {
       type: Type.STRING,
-      description: "News category (हादसा / प्रशासन / राजनीति / विकास / अपराध / कारोबार / न्यायालय / खेल / मनोरंजन)",
+      description: "News category (à¤¹à¤¾à¤¦à¤¸à¤¾ / à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ / à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿ / à¤µà¤¿à¤•à¤¾à¤¸ / à¤…à¤ªà¤°à¤¾à¤§ / à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤° / à¤¨à¥à¤¯à¤¾à¤¯à¤¾à¤²à¤¯ / à¤–à¥‡à¤² / à¤®à¤¨à¥‹à¤°à¤‚à¤œà¤¨)",
     },
     suggestedImagePrompt: { type: Type.STRING },
     isAiGeneratedPhoto: { type: Type.BOOLEAN },
@@ -19807,70 +20138,70 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     "ainewsmaker", "ai_news_maker", "breakingnewswala", "bnwtv"
   ].includes(cleanUser.toLowerCase());
   const userTagInstruction = cleanUser && !isGeneric
-    ? `पहला हैशटैग अनिवार्य रूप से: #${cleanUser}`
-    : `(यदि कोई निजी यूज़रनेम न हो तो सीधे प्रासंगिक समाचार हैशटैग से शुरू करें)`;
+    ? `à¤ªà¤¹à¤²à¤¾ à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤°à¥‚à¤ª à¤¸à¥‡: #${cleanUser}`
+    : `(à¤¯à¤¦à¤¿ à¤•à¥‹à¤ˆ à¤¨à¤¿à¤œà¥€ à¤¯à¥‚à¤œà¤¼à¤°à¤¨à¥‡à¤® à¤¨ à¤¹à¥‹ à¤¤à¥‹ à¤¸à¥€à¤§à¥‡ à¤ªà¥à¤°à¤¾à¤¸à¤‚à¤—à¤¿à¤• à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤¸à¥‡ à¤¶à¥à¤°à¥‚ à¤•à¤°à¥‡à¤‚)`;
 
-  const systemInstruction = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के वरिष्ठ संपादक (Professional Hindi News Editor) हैं।
-आपका कार्य पूरे उपलब्ध समाचार लेख को गहराई से पढ़कर, उसके वास्तविक तथ्यों और मुख्य घटनाक्रम के आधार पर 5 अनुमोदित शैलियों में 5 अलग-अलग, सटीक, संक्षिप्त और प्रभावशाली हिंदी हेडलाइंस (विकल्प 1: सीधी मुख्य खबर [80-110], विकल्प 2: तथ्य-केंद्रित हेडलाइन [100-130], विकल्प 3: परिणाम-केंद्रित हेडलाइन [125-150], विकल्प 4: प्रमुख विवरण वाली हेडलाइन [130-160], विकल्प 5: प्रभावशाली समाचार हेडलाइन [150-200]; अधिकतम सीमा 200 अक्षर) तथा 3 सोशल मीडिया कैप्शन तैयार करना है।
-कड़ा नियम: किसी भी हेडलाइन की लंबाई बढ़ाने के लिए अपनी ओर से कोई कृत्रिम प्रशासनिक वाक्य ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'विशेष डेस्क' आदि) बिल्कुल न जोड़ें। URL को कभी भी हेडलाइन या कैप्शन न बनाएं। केवल वैध JSON लौटाएं।`;
+  const systemInstruction = `à¤†à¤ª BREAKING NEWS WALA à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤®à¤¾à¤¨à¤•à¥‹à¤‚ à¤•à¥‡ à¤¤à¤¹à¤¤ à¤à¤• à¤ªà¥à¤°à¤®à¥à¤– à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤¹à¤¿à¤‚à¤¦à¥€ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¨à¥‡à¤Ÿà¤µà¤°à¥à¤• à¤•à¥‡ à¤µà¤°à¤¿à¤·à¥à¤  à¤¸à¤‚à¤ªà¤¾à¤¦à¤• (Professional Hindi News Editor) à¤¹à¥ˆà¤‚à¥¤
+à¤†à¤ªà¤•à¤¾ à¤•à¤¾à¤°à¥à¤¯ à¤ªà¥‚à¤°à¥‡ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤²à¥‡à¤– à¤•à¥‹ à¤—à¤¹à¤°à¤¾à¤ˆ à¤¸à¥‡ à¤ªà¤¢à¤¼à¤•à¤°, à¤‰à¤¸à¤•à¥‡ à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤¤à¤¥à¥à¤¯à¥‹à¤‚ à¤”à¤° à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° 5 à¤…à¤¨à¥à¤®à¥‹à¤¦à¤¿à¤¤ à¤¶à¥ˆà¤²à¤¿à¤¯à¥‹à¤‚ à¤®à¥‡à¤‚ 5 à¤…à¤²à¤—-à¤…à¤²à¤—, à¤¸à¤Ÿà¥€à¤•, à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤”à¤° à¤ªà¥à¤°à¤­à¤¾à¤µà¤¶à¤¾à¤²à¥€ à¤¹à¤¿à¤‚à¤¦à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤‚à¤¸ (à¤µà¤¿à¤•à¤²à¥à¤ª 1: à¤¸à¥€à¤§à¥€ à¤®à¥à¤–à¥à¤¯ à¤–à¤¬à¤° [80-110], à¤µà¤¿à¤•à¤²à¥à¤ª 2: à¤¤à¤¥à¥à¤¯-à¤•à¥‡à¤‚à¤¦à¥à¤°à¤¿à¤¤ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ [100-130], à¤µà¤¿à¤•à¤²à¥à¤ª 3: à¤ªà¤°à¤¿à¤£à¤¾à¤®-à¤•à¥‡à¤‚à¤¦à¥à¤°à¤¿à¤¤ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ [125-150], à¤µà¤¿à¤•à¤²à¥à¤ª 4: à¤ªà¥à¤°à¤®à¥à¤– à¤µà¤¿à¤µà¤°à¤£ à¤µà¤¾à¤²à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ [130-160], à¤µà¤¿à¤•à¤²à¥à¤ª 5: à¤ªà¥à¤°à¤­à¤¾à¤µà¤¶à¤¾à¤²à¥€ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ [150-200]; à¤…à¤§à¤¿à¤•à¤¤à¤® à¤¸à¥€à¤®à¤¾ 200 à¤…à¤•à¥à¤·à¤°) à¤¤à¤¥à¤¾ 3 à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¤¨à¤¾ à¤¹à¥ˆà¥¤
+à¤•à¤¡à¤¼à¤¾ à¤¨à¤¿à¤¯à¤®: à¤•à¤¿à¤¸à¥€ à¤­à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥€ à¤²à¤‚à¤¬à¤¾à¤ˆ à¤¬à¤¢à¤¼à¤¾à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ à¤…à¤ªà¤¨à¥€ à¤“à¤° à¤¸à¥‡ à¤•à¥‹à¤ˆ à¤•à¥ƒà¤¤à¥à¤°à¤¿à¤® à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤µà¤¾à¤•à¥à¤¯ ('à¤¶à¤¾à¤¸à¤¨ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤¦à¤¿à¤ à¤—à¤', 'à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¤•à¥à¤·à¥‹à¤‚ à¤•à¥‹ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤œà¤¾à¤°à¥€ à¤•à¤¿à¤ à¤—à¤', 'à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¨à¤¯à¤¾ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤¯à¤¾ à¤¹à¥ˆ', 'à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤µ à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤œà¤°à¥‚à¤°à¥€ à¤•à¤¦à¤® à¤‰à¤ à¤¾à¤ à¤œà¤¾ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚', 'à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•' à¤†à¤¦à¤¿) à¤¬à¤¿à¤²à¥à¤•à¥à¤² à¤¨ à¤œà¥‹à¤¡à¤¼à¥‡à¤‚à¥¤ URL à¤•à¥‹ à¤•à¤­à¥€ à¤­à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤¯à¤¾ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤¨ à¤¬à¤¨à¤¾à¤à¤‚à¥¤ à¤•à¥‡à¤µà¤² à¤µà¥ˆà¤§ JSON à¤²à¥Œà¤Ÿà¤¾à¤à¤‚à¥¤`;
 
   const effectiveSourceTitle = primaryHeadline || "";
   const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
 
-  const prompt = `आप BREAKING NEWS WALA संपादकीय मानकों के तहत एक वरिष्ठ हिंदी न्यूज़ एडिटर हैं।
-नीचे दिए गए पूर्ण समाचार लेख (Article) को ध्यानपूर्वक पढ़ें:
+  const prompt = `à¤†à¤ª BREAKING NEWS WALA à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤®à¤¾à¤¨à¤•à¥‹à¤‚ à¤•à¥‡ à¤¤à¤¹à¤¤ à¤à¤• à¤µà¤°à¤¿à¤·à¥à¤  à¤¹à¤¿à¤‚à¤¦à¥€ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤à¤¡à¤¿à¤Ÿà¤° à¤¹à¥ˆà¤‚à¥¤
+à¤¨à¥€à¤šà¥‡ à¤¦à¤¿à¤ à¤—à¤ à¤ªà¥‚à¤°à¥à¤£ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤²à¥‡à¤– (Article) à¤•à¥‹ à¤§à¥à¤¯à¤¾à¤¨à¤ªà¥‚à¤°à¥à¤µà¤• à¤ªà¤¢à¤¼à¥‡à¤‚:
 
-[समाचार सामग्री]:
+[à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¸à¤¾à¤®à¤—à¥à¤°à¥€]:
 """
-${effectiveSourceTitle ? `मूल शीर्षक संदर्भ: ${effectiveSourceTitle}\n\n` : ""}${effectiveBody ? effectiveBody.slice(0, 5500) : effectiveInput}
+${effectiveSourceTitle ? `à¤®à¥‚à¤² à¤¶à¥€à¤°à¥à¤·à¤• à¤¸à¤‚à¤¦à¤°à¥à¤­: ${effectiveSourceTitle}\n\n` : ""}${effectiveBody ? effectiveBody.slice(0, 5500) : effectiveInput}
 """
 
-${customPrompt ? `[यूज़र का अतिरिक्त संपादकीय निर्देश]:\n"""\n${customPrompt}\n"""\n` : ""}
-★ चरण 1: आंतरिक समाचार विश्लेषण (FACT SHEET EXTRACTION):
-हेडलाइन लिखने से पहले ` + "`factSheet`" + ` ऑब्जेक्ट में मुख्य घटना (mainEvent), मुख्य विषय (mainSubject), मुख्य व्यक्ति या संस्था (mainPersonOrOrg), स्थान (location), दिनांक (date), मुख्य कार्रवाई या निर्णय (mainAction), महत्वपूर्ण संख्या या आँकड़े (importantFigures), आधिकारिक बयान या आदेश (officialStatement), वास्तविक परिणाम (actualOutcome) और महत्वपूर्ण संदर्भ (importantContext) सटीक रूप से दर्ज करें।
+${customPrompt ? `[à¤¯à¥‚à¤œà¤¼à¤° à¤•à¤¾ à¤…à¤¤à¤¿à¤°à¤¿à¤•à¥à¤¤ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶]:\n"""\n${customPrompt}\n"""\n` : ""}
+â˜… à¤šà¤°à¤£ 1: à¤†à¤‚à¤¤à¤°à¤¿à¤• à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤µà¤¿à¤¶à¥à¤²à¥‡à¤·à¤£ (FACT SHEET EXTRACTION):
+à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤²à¤¿à¤–à¤¨à¥‡ à¤¸à¥‡ à¤ªà¤¹à¤²à¥‡ ` + "`factSheet`" + ` à¤‘à¤¬à¥à¤œà¥‡à¤•à¥à¤Ÿ à¤®à¥‡à¤‚ à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾ (mainEvent), à¤®à¥à¤–à¥à¤¯ à¤µà¤¿à¤·à¤¯ (mainSubject), à¤®à¥à¤–à¥à¤¯ à¤µà¥à¤¯à¤•à¥à¤¤à¤¿ à¤¯à¤¾ à¤¸à¤‚à¤¸à¥à¤¥à¤¾ (mainPersonOrOrg), à¤¸à¥à¤¥à¤¾à¤¨ (location), à¤¦à¤¿à¤¨à¤¾à¤‚à¤• (date), à¤®à¥à¤–à¥à¤¯ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤¯à¤¾ à¤¨à¤¿à¤°à¥à¤£à¤¯ (mainAction), à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¸à¤‚à¤–à¥à¤¯à¤¾ à¤¯à¤¾ à¤†à¤à¤•à¤¡à¤¼à¥‡ (importantFigures), à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¬à¤¯à¤¾à¤¨ à¤¯à¤¾ à¤†à¤¦à¥‡à¤¶ (officialStatement), à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤ªà¤°à¤¿à¤£à¤¾à¤® (actualOutcome) à¤”à¤° à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¸à¤‚à¤¦à¤°à¥à¤­ (importantContext) à¤¸à¤Ÿà¥€à¤• à¤°à¥‚à¤ª à¤¸à¥‡ à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤
 
-★ चरण 2: BREAKING NEWS WALA — 5 अनुमोदित संपादकीय शैलियों के हेडलाइन विकल्प (MAX 200 CHARACTERS):
-1. प्रत्येक हेडलाइन को एक नया, स्वतंत्र, पूर्ण और अर्थपूर्ण हिंदी वाक्य होना चाहिए (DO NOT COPY-PASTE OR SLICE ARTICLE BODY SENTENCES):
-   - आलेख के किसी वाक्य को बीच से काटकर या दो असंबद्ध वाक्यों को जोड़कर हेडलाइन कभी न बनाएं।
-   - प्रत्येक हेडलाइन का आरंभ, मध्य और अंत व्याकरण की दृष्टि से पूर्ण होना चाहिए। कोई भी हेडलाइन अधूरे वाक्यांश (जैसे 'से 5', 'कोर्ट ने कहा', 'सुप्रीम कोर्ट ने गुरुवार', 'एपीके फाइल लिंक') पर समाप्त नहीं होनी चाहिए।
-   - हेडलाइन में कभी भी 'प्रतीकात्मक चित्र', 'फाइल फोटो', 'नई दिल्ली3 घंटे पहले', '2 घंटे पहले', या '; 5 सवाल' जैसे वेब-स्क्रैपिंग अवशेष न आने दें।
-   - URL को कभी भी हेडलाइन के रूप में उपयोग न करें।
-   - निम्नलिखित कृत्रिम या मनगढ़ंत वाक्य स्वतः जोड़ना पूर्णतः प्रतिबंधित है (जब तक कि मूल खबर में वास्तव में वह तथ्य न हो):
-     * "शासन स्तर पर आवश्यक निर्देश दिए गए" / "शासन स्तर पर संबंधित तथ्यों को दिए गए आवश्यक निर्देश"
-     * "संबंधित पक्षों को निर्देश जारी किए गए"
-     * "मामले में नया घटनाक्रम सामने आया है"
-     * "पूरे मामले को लेकर कार्रवाई की जा रही है"
-     * "पूरे मामले को लेकर प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं"
-     * "इस घटना के बाद प्रशासन अलर्ट"
-     * "मामले को लेकर विभागीय स्तर पर समीक्षा"
-     * "विशेष डेस्क" / "विशेष डैश" (स्थान या हेडलाइन में कभी न लगाएं)
-2. 5 अनुमोदित संपादकीय शैलियाँ और अधिकतम 200 अक्षर की सीमा (5 APPROVED EDITORIAL STYLES):
-   सभी 5 विकल्प केवल और केवल उसी मूल खबर/घटना पर आधारित होने चाहिए, किंतु उनकी संपादकीय प्रस्तुति निम्न 5 शैलियों के अनुसार अलग होगी:
-   - विकल्प 1 [सीधी मुख्य खबर]: 80 से 110 अक्षर (मुख्य घटना का सीधा, स्पष्ट, निष्पक्ष और तेज़ समाचार शीर्षक)
-   - विकल्प 2 [तथ्य-केंद्रित हेडलाइन]: 100 से 130 अक्षर (मुख्य घटना के साथ प्रमुख तथ्य, संख्या, आंकड़ा या मुख्य निर्णय)
-   - विकल्प 3 [परिणाम-केंद्रित हेडलाइन]: 125 से 150 अक्षर (घटना के प्रभाव, परिणाम, असर या कार्रवाई को स्पष्ट करने वाला शीर्षक)
-   - विकल्प 4 [प्रमुख विवरण वाली हेडलाइन]: 130 से 160 अक्षर (घटना के महत्वपूर्ण संदर्भ, विवरण, आधिकारिक बयान या आदेश पर आधारित शीर्षक)
-   - विकल्प 5 [प्रभावशाली समाचार हेडलाइन]: 150 से 200 अक्षर (खबर का संतुलित, सारगर्भित और प्रभावशाली संपादकीय शीर्षक)
-   - कोई भी हेडलाइन किसी भी परिस्थिति में 200 अक्षर से अधिक नहीं होनी चाहिए।
-   - यदि मूल समाचार में जानकारी सीमित है, तो न्यूनतम अक्षर संख्या पूरी करने के लिए कभी भी कृत्रिम शब्द न जोड़ें—छोटी लेकिन सटीक हेडलाइन रखें।
-3. भाषा, निष्पक्षता और शुद्धता (LANGUAGE & HONORIFIC REMOVAL):
-   - सभी हेडलाइंस 100% शुद्ध देवनागरी हिंदी में हों। अंग्रेजी संक्षिप्त रूपों को हिंदी देवनागरी में लिखें (जैसे एपीके, यूपीआई, सुप्रीम कोर्ट, हाई कोर्ट, एफआईआर, सीबीआई, ईडी, जीएसटी, आरबीआई, बीसीसीआई, आईपीएल, एआई)।
-   - सम्मानसूचक या चाटुकारिता वाले शब्द ('श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'आदरणीय', 'महोदय', 'जी', 'सम्माननीय', 'सम्मानीय', 'पूज्य') पूरी तरह हटा दें, किंतु व्यक्ति का वास्तविक नाम और आधिकारिक पद (जैसे मुख्यमंत्री, प्रधानमंत्री, कलेक्टर, पुलिस अधीक्षक, न्यायाधीश) सुरक्षित रखें।
-   - किसी भी हेडलाइन के अंत में पूर्णविराम (। या .) या प्रश्नवाचक चिह्न न लगाएं। कोई इमोजी या हैशटैग हेडलाइन में न रखें।
-   - हेडलाइन का अंत अर्थपूर्ण और स्वाभाविक वाक्य पर समाप्त हो। 'की', 'के', 'में', 'पर', 'से', 'कि', 'और', 'या', 'हुए', 'गया', 'कहा कि' जैसे अधूरे शब्दों पर हेडलाइन कभी समाप्त न करें।
-   - 'मध्यप्रदेश' और 'उत्तरप्रदेश' को अनिवार्य रूप से एक शब्द (Single Word) में लिखें (उदा. मध्यप्रदेश, उत्तरप्रदेश)।
-4. तीन सोशल मीडिया कैप्शन और हैशटैग नियम (THREE CAPTIONS & HASHTAGS):
-   - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या 'पूरी खबर पढ़ें' न लिखें और न ही हेडलाइन को पहली पंक्ति में दोहराएं।
-   - विस्तृत कैप्शन (summary व captionDetailed): खबर के संपूर्ण तथ्यों और संदर्भ पर आधारित लगभग 3 विस्तृत पैराग्राफ।
-   - बुलेट कैप्शन (captionBullets): एक संक्षिप्त परिचयात्मक वाक्य, उसके बाद मुख्य तथ्यों पर आधारित 3 से 5 बुलेट पॉइंट्स (प्रत्येक पंक्ति '• ' से शुरू हो और '।' पर समाप्त हो)।
-   - संक्षिप्त कैप्शन (captionShort): मुख्य घटना और परिणाम का 1 से 3 संक्षिप्त वाक्यों में समाचार-केंद्रित विवरण।
-   - प्रत्येक कैप्शन के अंत में एक खाली लाइन के बाद 6-8 हैशटैग:
+â˜… à¤šà¤°à¤£ 2: BREAKING NEWS WALA â€” 5 à¤…à¤¨à¥à¤®à¥‹à¤¦à¤¿à¤¤ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¶à¥ˆà¤²à¤¿à¤¯à¥‹à¤‚ à¤•à¥‡ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤µà¤¿à¤•à¤²à¥à¤ª (MAX 200 CHARACTERS):
+1. à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥‹ à¤à¤• à¤¨à¤¯à¤¾, à¤¸à¥à¤µà¤¤à¤‚à¤¤à¥à¤°, à¤ªà¥‚à¤°à¥à¤£ à¤”à¤° à¤…à¤°à¥à¤¥à¤ªà¥‚à¤°à¥à¤£ à¤¹à¤¿à¤‚à¤¦à¥€ à¤µà¤¾à¤•à¥à¤¯ à¤¹à¥‹à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤ (DO NOT COPY-PASTE OR SLICE ARTICLE BODY SENTENCES):
+   - à¤†à¤²à¥‡à¤– à¤•à¥‡ à¤•à¤¿à¤¸à¥€ à¤µà¤¾à¤•à¥à¤¯ à¤•à¥‹ à¤¬à¥€à¤š à¤¸à¥‡ à¤•à¤¾à¤Ÿà¤•à¤° à¤¯à¤¾ à¤¦à¥‹ à¤…à¤¸à¤‚à¤¬à¤¦à¥à¤§ à¤µà¤¾à¤•à¥à¤¯à¥‹à¤‚ à¤•à¥‹ à¤œà¥‹à¤¡à¤¼à¤•à¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¤­à¥€ à¤¨ à¤¬à¤¨à¤¾à¤à¤‚à¥¤
+   - à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¤¾ à¤†à¤°à¤‚à¤­, à¤®à¤§à¥à¤¯ à¤”à¤° à¤…à¤‚à¤¤ à¤µà¥à¤¯à¤¾à¤•à¤°à¤£ à¤•à¥€ à¤¦à¥ƒà¤·à¥à¤Ÿà¤¿ à¤¸à¥‡ à¤ªà¥‚à¤°à¥à¤£ à¤¹à¥‹à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤à¥¤ à¤•à¥‹à¤ˆ à¤­à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤…à¤§à¥‚à¤°à¥‡ à¤µà¤¾à¤•à¥à¤¯à¤¾à¤‚à¤¶ (à¤œà¥ˆà¤¸à¥‡ 'à¤¸à¥‡ 5', 'à¤•à¥‹à¤°à¥à¤Ÿ à¤¨à¥‡ à¤•à¤¹à¤¾', 'à¤¸à¥à¤ªà¥à¤°à¥€à¤® à¤•à¥‹à¤°à¥à¤Ÿ à¤¨à¥‡ à¤—à¥à¤°à¥à¤µà¤¾à¤°', 'à¤à¤ªà¥€à¤•à¥‡ à¤«à¤¾à¤‡à¤² à¤²à¤¿à¤‚à¤•') à¤ªà¤° à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹à¤¨à¥€ à¤šà¤¾à¤¹à¤¿à¤à¥¤
+   - à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤®à¥‡à¤‚ à¤•à¤­à¥€ à¤­à¥€ 'à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤• à¤šà¤¿à¤¤à¥à¤°', 'à¤«à¤¾à¤‡à¤² à¤«à¥‹à¤Ÿà¥‹', 'à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€3 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡', '2 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡', à¤¯à¤¾ '; 5 à¤¸à¤µà¤¾à¤²' à¤œà¥ˆà¤¸à¥‡ à¤µà¥‡à¤¬-à¤¸à¥à¤•à¥à¤°à¥ˆà¤ªà¤¿à¤‚à¤— à¤…à¤µà¤¶à¥‡à¤· à¤¨ à¤†à¤¨à¥‡ à¤¦à¥‡à¤‚à¥¤
+   - URL à¤•à¥‹ à¤•à¤­à¥€ à¤­à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥‡ à¤°à¥‚à¤ª à¤®à¥‡à¤‚ à¤‰à¤ªà¤¯à¥‹à¤— à¤¨ à¤•à¤°à¥‡à¤‚à¥¤
+   - à¤¨à¤¿à¤®à¥à¤¨à¤²à¤¿à¤–à¤¿à¤¤ à¤•à¥ƒà¤¤à¥à¤°à¤¿à¤® à¤¯à¤¾ à¤®à¤¨à¤—à¤¢à¤¼à¤‚à¤¤ à¤µà¤¾à¤•à¥à¤¯ à¤¸à¥à¤µà¤¤à¤ƒ à¤œà¥‹à¤¡à¤¼à¤¨à¤¾ à¤ªà¥‚à¤°à¥à¤£à¤¤à¤ƒ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ à¤¹à¥ˆ (à¤œà¤¬ à¤¤à¤• à¤•à¤¿ à¤®à¥‚à¤² à¤–à¤¬à¤° à¤®à¥‡à¤‚ à¤µà¤¾à¤¸à¥à¤¤à¤µ à¤®à¥‡à¤‚ à¤µà¤¹ à¤¤à¤¥à¥à¤¯ à¤¨ à¤¹à¥‹):
+     * "à¤¶à¤¾à¤¸à¤¨ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤¦à¤¿à¤ à¤—à¤" / "à¤¶à¤¾à¤¸à¤¨ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤¤à¤¥à¥à¤¯à¥‹à¤‚ à¤•à¥‹ à¤¦à¤¿à¤ à¤—à¤ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶"
+     * "à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¤•à¥à¤·à¥‹à¤‚ à¤•à¥‹ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤œà¤¾à¤°à¥€ à¤•à¤¿à¤ à¤—à¤"
+     * "à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¨à¤¯à¤¾ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤¯à¤¾ à¤¹à¥ˆ"
+     * "à¤ªà¥‚à¤°à¥‡ à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥‹ à¤²à¥‡à¤•à¤° à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¥€ à¤œà¤¾ à¤°à¤¹à¥€ à¤¹à¥ˆ"
+     * "à¤ªà¥‚à¤°à¥‡ à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥‹ à¤²à¥‡à¤•à¤° à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤µ à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤œà¤°à¥‚à¤°à¥€ à¤•à¤¦à¤® à¤‰à¤ à¤¾à¤ à¤œà¤¾ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚"
+     * "à¤‡à¤¸ à¤˜à¤Ÿà¤¨à¤¾ à¤•à¥‡ à¤¬à¤¾à¤¦ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤…à¤²à¤°à¥à¤Ÿ"
+     * "à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥‹ à¤²à¥‡à¤•à¤° à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤¸à¤®à¥€à¤•à¥à¤·à¤¾"
+     * "à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•" / "à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥ˆà¤¶" (à¤¸à¥à¤¥à¤¾à¤¨ à¤¯à¤¾ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤®à¥‡à¤‚ à¤•à¤­à¥€ à¤¨ à¤²à¤—à¤¾à¤à¤‚)
+2. 5 à¤…à¤¨à¥à¤®à¥‹à¤¦à¤¿à¤¤ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¶à¥ˆà¤²à¤¿à¤¯à¤¾à¤ à¤”à¤° à¤…à¤§à¤¿à¤•à¤¤à¤® 200 à¤…à¤•à¥à¤·à¤° à¤•à¥€ à¤¸à¥€à¤®à¤¾ (5 APPROVED EDITORIAL STYLES):
+   à¤¸à¤­à¥€ 5 à¤µà¤¿à¤•à¤²à¥à¤ª à¤•à¥‡à¤µà¤² à¤”à¤° à¤•à¥‡à¤µà¤² à¤‰à¤¸à¥€ à¤®à¥‚à¤² à¤–à¤¬à¤°/à¤˜à¤Ÿà¤¨à¤¾ à¤ªà¤° à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤¹à¥‹à¤¨à¥‡ à¤šà¤¾à¤¹à¤¿à¤, à¤•à¤¿à¤‚à¤¤à¥ à¤‰à¤¨à¤•à¥€ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤ªà¥à¤°à¤¸à¥à¤¤à¥à¤¤à¤¿ à¤¨à¤¿à¤®à¥à¤¨ 5 à¤¶à¥ˆà¤²à¤¿à¤¯à¥‹à¤‚ à¤•à¥‡ à¤…à¤¨à¥à¤¸à¤¾à¤° à¤…à¤²à¤— à¤¹à¥‹à¤—à¥€:
+   - à¤µà¤¿à¤•à¤²à¥à¤ª 1 [à¤¸à¥€à¤§à¥€ à¤®à¥à¤–à¥à¤¯ à¤–à¤¬à¤°]: 80 à¤¸à¥‡ 110 à¤…à¤•à¥à¤·à¤° (à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾ à¤•à¤¾ à¤¸à¥€à¤§à¤¾, à¤¸à¥à¤ªà¤·à¥à¤Ÿ, à¤¨à¤¿à¤·à¥à¤ªà¤•à¥à¤· à¤”à¤° à¤¤à¥‡à¤œà¤¼ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¶à¥€à¤°à¥à¤·à¤•)
+   - à¤µà¤¿à¤•à¤²à¥à¤ª 2 [à¤¤à¤¥à¥à¤¯-à¤•à¥‡à¤‚à¤¦à¥à¤°à¤¿à¤¤ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨]: 100 à¤¸à¥‡ 130 à¤…à¤•à¥à¤·à¤° (à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾ à¤•à¥‡ à¤¸à¤¾à¤¥ à¤ªà¥à¤°à¤®à¥à¤– à¤¤à¤¥à¥à¤¯, à¤¸à¤‚à¤–à¥à¤¯à¤¾, à¤†à¤‚à¤•à¤¡à¤¼à¤¾ à¤¯à¤¾ à¤®à¥à¤–à¥à¤¯ à¤¨à¤¿à¤°à¥à¤£à¤¯)
+   - à¤µà¤¿à¤•à¤²à¥à¤ª 3 [à¤ªà¤°à¤¿à¤£à¤¾à¤®-à¤•à¥‡à¤‚à¤¦à¥à¤°à¤¿à¤¤ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨]: 125 à¤¸à¥‡ 150 à¤…à¤•à¥à¤·à¤° (à¤˜à¤Ÿà¤¨à¤¾ à¤•à¥‡ à¤ªà¥à¤°à¤­à¤¾à¤µ, à¤ªà¤°à¤¿à¤£à¤¾à¤®, à¤…à¤¸à¤° à¤¯à¤¾ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¥‹ à¤¸à¥à¤ªà¤·à¥à¤Ÿ à¤•à¤°à¤¨à¥‡ à¤µà¤¾à¤²à¤¾ à¤¶à¥€à¤°à¥à¤·à¤•)
+   - à¤µà¤¿à¤•à¤²à¥à¤ª 4 [à¤ªà¥à¤°à¤®à¥à¤– à¤µà¤¿à¤µà¤°à¤£ à¤µà¤¾à¤²à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨]: 130 à¤¸à¥‡ 160 à¤…à¤•à¥à¤·à¤° (à¤˜à¤Ÿà¤¨à¤¾ à¤•à¥‡ à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¸à¤‚à¤¦à¤°à¥à¤­, à¤µà¤¿à¤µà¤°à¤£, à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¬à¤¯à¤¾à¤¨ à¤¯à¤¾ à¤†à¤¦à¥‡à¤¶ à¤ªà¤° à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤¶à¥€à¤°à¥à¤·à¤•)
+   - à¤µà¤¿à¤•à¤²à¥à¤ª 5 [à¤ªà¥à¤°à¤­à¤¾à¤µà¤¶à¤¾à¤²à¥€ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨]: 150 à¤¸à¥‡ 200 à¤…à¤•à¥à¤·à¤° (à¤–à¤¬à¤° à¤•à¤¾ à¤¸à¤‚à¤¤à¥à¤²à¤¿à¤¤, à¤¸à¤¾à¤°à¤—à¤°à¥à¤­à¤¿à¤¤ à¤”à¤° à¤ªà¥à¤°à¤­à¤¾à¤µà¤¶à¤¾à¤²à¥€ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¶à¥€à¤°à¥à¤·à¤•)
+   - à¤•à¥‹à¤ˆ à¤­à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¤¿à¤¸à¥€ à¤­à¥€ à¤ªà¤°à¤¿à¤¸à¥à¤¥à¤¿à¤¤à¤¿ à¤®à¥‡à¤‚ 200 à¤…à¤•à¥à¤·à¤° à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹à¤¨à¥€ à¤šà¤¾à¤¹à¤¿à¤à¥¤
+   - à¤¯à¤¦à¤¿ à¤®à¥‚à¤² à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤®à¥‡à¤‚ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤¸à¥€à¤®à¤¿à¤¤ à¤¹à¥ˆ, à¤¤à¥‹ à¤¨à¥à¤¯à¥‚à¤¨à¤¤à¤® à¤…à¤•à¥à¤·à¤° à¤¸à¤‚à¤–à¥à¤¯à¤¾ à¤ªà¥‚à¤°à¥€ à¤•à¤°à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ à¤•à¤­à¥€ à¤­à¥€ à¤•à¥ƒà¤¤à¥à¤°à¤¿à¤® à¤¶à¤¬à¥à¤¦ à¤¨ à¤œà¥‹à¤¡à¤¼à¥‡à¤‚â€”à¤›à¥‹à¤Ÿà¥€ à¤²à¥‡à¤•à¤¿à¤¨ à¤¸à¤Ÿà¥€à¤• à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤°à¤–à¥‡à¤‚à¥¤
+3. à¤­à¤¾à¤·à¤¾, à¤¨à¤¿à¤·à¥à¤ªà¤•à¥à¤·à¤¤à¤¾ à¤”à¤° à¤¶à¥à¤¦à¥à¤§à¤¤à¤¾ (LANGUAGE & HONORIFIC REMOVAL):
+   - à¤¸à¤­à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤‚à¤¸ 100% à¤¶à¥à¤¦à¥à¤§ à¤¦à¥‡à¤µà¤¨à¤¾à¤—à¤°à¥€ à¤¹à¤¿à¤‚à¤¦à¥€ à¤®à¥‡à¤‚ à¤¹à¥‹à¤‚à¥¤ à¤…à¤‚à¤—à¥à¤°à¥‡à¤œà¥€ à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤°à¥‚à¤ªà¥‹à¤‚ à¤•à¥‹ à¤¹à¤¿à¤‚à¤¦à¥€ à¤¦à¥‡à¤µà¤¨à¤¾à¤—à¤°à¥€ à¤®à¥‡à¤‚ à¤²à¤¿à¤–à¥‡à¤‚ (à¤œà¥ˆà¤¸à¥‡ à¤à¤ªà¥€à¤•à¥‡, à¤¯à¥‚à¤ªà¥€à¤†à¤ˆ, à¤¸à¥à¤ªà¥à¤°à¥€à¤® à¤•à¥‹à¤°à¥à¤Ÿ, à¤¹à¤¾à¤ˆ à¤•à¥‹à¤°à¥à¤Ÿ, à¤à¤«à¤†à¤ˆà¤†à¤°, à¤¸à¥€à¤¬à¥€à¤†à¤ˆ, à¤ˆà¤¡à¥€, à¤œà¥€à¤à¤¸à¤Ÿà¥€, à¤†à¤°à¤¬à¥€à¤†à¤ˆ, à¤¬à¥€à¤¸à¥€à¤¸à¥€à¤†à¤ˆ, à¤†à¤ˆà¤ªà¥€à¤à¤², à¤à¤†à¤ˆ)à¥¤
+   - à¤¸à¤®à¥à¤®à¤¾à¤¨à¤¸à¥‚à¤šà¤• à¤¯à¤¾ à¤šà¤¾à¤Ÿà¥à¤•à¤¾à¤°à¤¿à¤¤à¤¾ à¤µà¤¾à¤²à¥‡ à¤¶à¤¬à¥à¤¦ ('à¤¶à¥à¤°à¥€', 'à¤¶à¥à¤°à¥€à¤®à¤¾à¤¨', 'à¤¶à¥à¤°à¥€à¤®à¤¤à¥€', 'à¤¸à¥à¤¶à¥à¤°à¥€', 'à¤®à¤¾à¤¨à¤¨à¥€à¤¯', 'à¤†à¤¦à¤°à¤£à¥€à¤¯', 'à¤®à¤¹à¥‹à¤¦à¤¯', 'à¤œà¥€', 'à¤¸à¤®à¥à¤®à¤¾à¤¨à¤¨à¥€à¤¯', 'à¤¸à¤®à¥à¤®à¤¾à¤¨à¥€à¤¯', 'à¤ªà¥‚à¤œà¥à¤¯') à¤ªà¥‚à¤°à¥€ à¤¤à¤°à¤¹ à¤¹à¤Ÿà¤¾ à¤¦à¥‡à¤‚, à¤•à¤¿à¤‚à¤¤à¥ à¤µà¥à¤¯à¤•à¥à¤¤à¤¿ à¤•à¤¾ à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤¨à¤¾à¤® à¤”à¤° à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤ªà¤¦ (à¤œà¥ˆà¤¸à¥‡ à¤®à¥à¤–à¥à¤¯à¤®à¤‚à¤¤à¥à¤°à¥€, à¤ªà¥à¤°à¤§à¤¾à¤¨à¤®à¤‚à¤¤à¥à¤°à¥€, à¤•à¤²à¥‡à¤•à¥à¤Ÿà¤°, à¤ªà¥à¤²à¤¿à¤¸ à¤…à¤§à¥€à¤•à¥à¤·à¤•, à¤¨à¥à¤¯à¤¾à¤¯à¤¾à¤§à¥€à¤¶) à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤°à¤–à¥‡à¤‚à¥¤
+   - à¤•à¤¿à¤¸à¥€ à¤­à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥‡ à¤…à¤‚à¤¤ à¤®à¥‡à¤‚ à¤ªà¥‚à¤°à¥à¤£à¤µà¤¿à¤°à¤¾à¤® (à¥¤ à¤¯à¤¾ .) à¤¯à¤¾ à¤ªà¥à¤°à¤¶à¥à¤¨à¤µà¤¾à¤šà¤• à¤šà¤¿à¤¹à¥à¤¨ à¤¨ à¤²à¤—à¤¾à¤à¤‚à¥¤ à¤•à¥‹à¤ˆ à¤‡à¤®à¥‹à¤œà¥€ à¤¯à¤¾ à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤®à¥‡à¤‚ à¤¨ à¤°à¤–à¥‡à¤‚à¥¤
+   - à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¤¾ à¤…à¤‚à¤¤ à¤…à¤°à¥à¤¥à¤ªà¥‚à¤°à¥à¤£ à¤”à¤° à¤¸à¥à¤µà¤¾à¤­à¤¾à¤µà¤¿à¤• à¤µà¤¾à¤•à¥à¤¯ à¤ªà¤° à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹à¥¤ 'à¤•à¥€', 'à¤•à¥‡', 'à¤®à¥‡à¤‚', 'à¤ªà¤°', 'à¤¸à¥‡', 'à¤•à¤¿', 'à¤”à¤°', 'à¤¯à¤¾', 'à¤¹à¥à¤', 'à¤—à¤¯à¤¾', 'à¤•à¤¹à¤¾ à¤•à¤¿' à¤œà¥ˆà¤¸à¥‡ à¤…à¤§à¥‚à¤°à¥‡ à¤¶à¤¬à¥à¤¦à¥‹à¤‚ à¤ªà¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¤­à¥€ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¨ à¤•à¤°à¥‡à¤‚à¥¤
+   - 'à¤®à¤§à¥à¤¯à¤ªà¥à¤°à¤¦à¥‡à¤¶' à¤”à¤° 'à¤‰à¤¤à¥à¤¤à¤°à¤ªà¥à¤°à¤¦à¥‡à¤¶' à¤•à¥‹ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤°à¥‚à¤ª à¤¸à¥‡ à¤à¤• à¤¶à¤¬à¥à¤¦ (Single Word) à¤®à¥‡à¤‚ à¤²à¤¿à¤–à¥‡à¤‚ (à¤‰à¤¦à¤¾. à¤®à¤§à¥à¤¯à¤ªà¥à¤°à¤¦à¥‡à¤¶, à¤‰à¤¤à¥à¤¤à¤°à¤ªà¥à¤°à¤¦à¥‡à¤¶)à¥¤
+4. à¤¤à¥€à¤¨ à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤”à¤° à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤¨à¤¿à¤¯à¤® (THREE CAPTIONS & HASHTAGS):
+   - à¤•à¤¿à¤¸à¥€ à¤­à¥€ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤®à¥‡à¤‚ à¤•à¥‹à¤ˆ à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ à¤²à¤¿à¤‚à¤•, URL à¤¯à¤¾ 'à¤ªà¥‚à¤°à¥€ à¤–à¤¬à¤° à¤ªà¤¢à¤¼à¥‡à¤‚' à¤¨ à¤²à¤¿à¤–à¥‡à¤‚ à¤”à¤° à¤¨ à¤¹à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥‹ à¤ªà¤¹à¤²à¥€ à¤ªà¤‚à¤•à¥à¤¤à¤¿ à¤®à¥‡à¤‚ à¤¦à¥‹à¤¹à¤°à¤¾à¤à¤‚à¥¤
+   - à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ (summary à¤µ captionDetailed): à¤–à¤¬à¤° à¤•à¥‡ à¤¸à¤‚à¤ªà¥‚à¤°à¥à¤£ à¤¤à¤¥à¥à¤¯à¥‹à¤‚ à¤”à¤° à¤¸à¤‚à¤¦à¤°à¥à¤­ à¤ªà¤° à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤²à¤—à¤­à¤— 3 à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤«à¥¤
+   - à¤¬à¥à¤²à¥‡à¤Ÿ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ (captionBullets): à¤à¤• à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤ªà¤°à¤¿à¤šà¤¯à¤¾à¤¤à¥à¤®à¤• à¤µà¤¾à¤•à¥à¤¯, à¤‰à¤¸à¤•à¥‡ à¤¬à¤¾à¤¦ à¤®à¥à¤–à¥à¤¯ à¤¤à¤¥à¥à¤¯à¥‹à¤‚ à¤ªà¤° à¤†à¤§à¤¾à¤°à¤¿à¤¤ 3 à¤¸à¥‡ 5 à¤¬à¥à¤²à¥‡à¤Ÿ à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸ (à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤ªà¤‚à¤•à¥à¤¤à¤¿ 'â€¢ ' à¤¸à¥‡ à¤¶à¥à¤°à¥‚ à¤¹à¥‹ à¤”à¤° 'à¥¤' à¤ªà¤° à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹)à¥¤
+   - à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ (captionShort): à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾ à¤”à¤° à¤ªà¤°à¤¿à¤£à¤¾à¤® à¤•à¤¾ 1 à¤¸à¥‡ 3 à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤µà¤¾à¤•à¥à¤¯à¥‹à¤‚ à¤®à¥‡à¤‚ à¤¸à¤®à¤¾à¤šà¤¾à¤°-à¤•à¥‡à¤‚à¤¦à¥à¤°à¤¿à¤¤ à¤µà¤¿à¤µà¤°à¤£à¥¤
+   - à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤•à¥‡ à¤…à¤‚à¤¤ à¤®à¥‡à¤‚ à¤à¤• à¤–à¤¾à¤²à¥€ à¤²à¤¾à¤‡à¤¨ à¤•à¥‡ à¤¬à¤¾à¤¦ 6-8 à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤—:
      * ${userTagInstruction}
-     * बीच में खबर से जुड़े 4-6 प्रासंगिक हैशटैग (स्थान, विषय, संस्था)
-     * #BNWTV और #breakingnewswala का उपयोग पूर्णतः वर्जित है (इन्हें कभी न लिखें)
-     * सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
+     * à¤¬à¥€à¤š à¤®à¥‡à¤‚ à¤–à¤¬à¤° à¤¸à¥‡ à¤œà¥à¤¡à¤¼à¥‡ 4-6 à¤ªà¥à¤°à¤¾à¤¸à¤‚à¤—à¤¿à¤• à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— (à¤¸à¥à¤¥à¤¾à¤¨, à¤µà¤¿à¤·à¤¯, à¤¸à¤‚à¤¸à¥à¤¥à¤¾)
+     * #BNWTV à¤”à¤° #breakingnewswala à¤•à¤¾ à¤‰à¤ªà¤¯à¥‹à¤— à¤ªà¥‚à¤°à¥à¤£à¤¤à¤ƒ à¤µà¤°à¥à¤œà¤¿à¤¤ à¤¹à¥ˆ (à¤‡à¤¨à¥à¤¹à¥‡à¤‚ à¤•à¤­à¥€ à¤¨ à¤²à¤¿à¤–à¥‡à¤‚)
+     * à¤¸à¤¬à¤¸à¥‡ à¤…à¤‚à¤¤à¤¿à¤® à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤°à¥‚à¤ª à¤¸à¥‡: #AINewsMaker
 
-केवल वैध JSON ऑब्जेक्ट लौटाएं।`;
+à¤•à¥‡à¤µà¤² à¤µà¥ˆà¤§ JSON à¤‘à¤¬à¥à¤œà¥‡à¤•à¥à¤Ÿ à¤²à¥Œà¤Ÿà¤¾à¤à¤‚à¥¤`;
 
   return { systemInstruction, prompt };
 }
@@ -19962,7 +20293,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
         return res.status(403).json({
           success: false,
-          error: "यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।",
+          error: "à¤¯à¤¹ à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤•à¥‡à¤µà¤² à¤ªà¤¾à¤¤à¥à¤° Pro à¤¯à¤¾ VIP-Dash à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾à¤“à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤",
           requiredTiers: ["pro", "vip_dash", "admin"],
           currentTier: userTier,
         });
@@ -19977,7 +20308,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     let parsedData: any = null;
     let matchedPostFromDb: StoredNewsPost | undefined = undefined;
 
-    // If requestedNewsId is provided (Home Screen News Card -> "खबर से ग्राफिक बनाएं"):
+    // If requestedNewsId is provided (Home Screen News Card -> "à¤–à¤¬à¤° à¤¸à¥‡ à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¬à¤¨à¤¾à¤à¤‚"):
     // Only use approved_editorial_database if an admin explicitly pre-published 5 clean headlines without filler;
     // otherwise load the news card's full article/URL/summary and run live AI generation!
     if (requestedNewsId) {
@@ -20002,7 +20333,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       const db = loadApprovedEditorialDatabase();
       const approvedRecord = db[requestedNewsId];
       const hasFillerPhrase = (txt: string) =>
-        /(?:शासन स्तर पर|प्रशासनिक व विभागीय स्तर पर जरूरी कदम|मामले में नया घटनाक्रम सामने आया|विशेष डेस्क|विशेष डैश|प्रशासनिक स्तर पर आवश्यक संज्ञान)/u.test(txt || "");
+        /(?:à¤¶à¤¾à¤¸à¤¨ à¤¸à¥à¤¤à¤° à¤ªà¤°|à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤µ à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤œà¤°à¥‚à¤°à¥€ à¤•à¤¦à¤®|à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¨à¤¯à¤¾ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤¯à¤¾|à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•|à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥ˆà¤¶|à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤¸à¥à¤¤à¤° à¤ªà¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¸à¤‚à¤œà¥à¤žà¤¾à¤¨)/u.test(txt || "");
 
       if (
         approvedRecord &&
@@ -20100,7 +20431,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           success: false,
           code: "FEATURE_NOT_AVAILABLE_FOR_PLAN",
           errorCode: "FEATURE_NOT_AVAILABLE_FOR_PLAN",
-          error: "यह सुविधा केवल Advanced, Pro और VIP प्लान के लिए उपलब्ध है। URL से AI हेडलाइन बनाने के लिए अपना प्लान अपग्रेड करें।",
+          error: "à¤¯à¤¹ à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤•à¥‡à¤µà¤² Advanced, Pro à¤”à¤° VIP à¤ªà¥à¤²à¤¾à¤¨ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤ URL à¤¸à¥‡ AI à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤¬à¤¨à¤¾à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ à¤…à¤ªà¤¨à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤",
           requiredTiers: ["advance", "pro", "vip"],
           currentTier: userTier,
         });
@@ -20117,7 +20448,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         success: false,
         code: "INVALID_ARTICLE",
         errorCode: "INVALID_ARTICLE",
-        error: "इस URL से समाचार की पर्याप्त जानकारी प्राप्त नहीं हो सकी। कृपया सही News Article URL दर्ज करें।",
+        error: "à¤‡à¤¸ URL à¤¸à¥‡ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥€ à¤ªà¤°à¥à¤¯à¤¾à¤ªà¥à¤¤ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¥€à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¸à¤¹à¥€ News Article URL à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤",
       });
     }
 
@@ -20197,7 +20528,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
                 success: false,
                 code: "NETWORK_ERROR",
                 errorCode: "NETWORK_ERROR",
-                error: "समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।",
+                error: "à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤•à¤°à¤¨à¥‡ à¤¯à¤¾ AI à¤¸à¥‡à¤µà¤¾ à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¸à¤®à¤¸à¥à¤¯à¤¾ à¤†à¤ˆ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤",
                 extraction_status: "failed",
                 reason: scrapedReason || "Network error",
                 submitted_url: rawLink,
@@ -20207,7 +20538,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
               success: false,
               code: "INVALID_ARTICLE",
               errorCode: "INVALID_ARTICLE",
-              error: "इस URL से समाचार की पर्याप्त जानकारी प्राप्त नहीं हो सकी। कृपया सही News Article URL दर्ज करें।",
+              error: "à¤‡à¤¸ URL à¤¸à¥‡ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥€ à¤ªà¤°à¥à¤¯à¤¾à¤ªà¥à¤¤ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤ªà¥à¤°à¤¾à¤ªà¥à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¥€à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¸à¤¹à¥€ News Article URL à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤",
               extraction_status: "failed",
               reason: scrapedReason || "Insufficient article content",
               submitted_url: rawLink,
@@ -20229,7 +20560,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           );
           if (!isMetaTitleHindi) {
             const firstHindiSent = effectiveInput
-              .split(/[।\n]+|(?<=[^\d])\.\s+/)
+              .split(/[à¥¤\n]+|(?<=[^\d])\.\s+/)
               .map((s: string) => cleanHeadlineText(s).trim())
               .find((s: string) => s.length >= 15 && /[\u0900-\u097F]/.test(s));
             if (firstHindiSent) {
@@ -20300,7 +20631,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       const raw = completion.choices[0]?.message?.content || "{}";
       const result = JSON.parse(raw);
       if (!result.headlineOptions || !Array.isArray(result.headlineOptions) || result.headlineOptions.length === 0) {
-        result.headlineOptions = [result.headline || "ताज़ा समाचार"];
+        result.headlineOptions = [result.headline || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°"];
       }
       return result;
     };
@@ -20356,7 +20687,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
         return res.status(403).json({
           success: false,
-          error: "यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।",
+          error: "à¤¯à¤¹ à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤•à¥‡à¤µà¤² à¤ªà¤¾à¤¤à¥à¤° Pro à¤¯à¤¾ VIP-Dash à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾à¤“à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤",
           requiredTiers: ["pro", "vip_dash", "admin"],
           currentTier: userTier,
         });
@@ -20365,7 +20696,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       if (modelAccessCfg.openai?.enabled === false) {
         return res.status(403).json({
           success: false,
-          error: "ChatGPT (OpenAI) सुविधा वर्तमान में व्यवस्थापक द्वारा निष्क्रिय की गई है।"
+          error: "ChatGPT (OpenAI) à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤®à¥‡à¤‚ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¨à¤¿à¤·à¥à¤•à¥à¤°à¤¿à¤¯ à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤"
         });
       }
 
@@ -20378,11 +20709,11 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         // Explicitly requested OpenAI MUST NOT silently fallback to Gemini!
         return res.status(502).json({
           success: false,
-          error: `ChatGPT (OpenAI) से ग्राफिक, हेडलाइन और कैप्शन तैयार करने में त्रुटि: ${openAiErr?.message || "सेवा अनुपलब्ध"}। कृपया जेमिनी एआई चुनें या पुनः प्रयास करें।`,
+          error: `ChatGPT (OpenAI) à¤¸à¥‡ à¤—à¥à¤°à¤¾à¤«à¤¿à¤•, à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤”à¤° à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¤¨à¥‡ à¤®à¥‡à¤‚ à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${openAiErr?.message || "à¤¸à¥‡à¤µà¤¾ à¤…à¤¨à¥à¤ªà¤²à¤¬à¥à¤§"}à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤œà¥‡à¤®à¤¿à¤¨à¥€ à¤à¤†à¤ˆ à¤šà¥à¤¨à¥‡à¤‚ à¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤`,
         });
       }
     } else {
-      // requestedAiProvider === "gemini" — STRICT API POOL ENFORCEMENT (No silent switch to OpenAI, No local fallback)
+      // requestedAiProvider === "gemini" â€” STRICT API POOL ENFORCEMENT (No silent switch to OpenAI, No local fallback)
       try {
         parsedData = await runGemini();
         actualProvider = "gemini";
@@ -20419,11 +20750,11 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       }
 
       parsedData.location = cleanLocationField(parsedData.location || "");
-      parsedData.category = cleanCategoryField(parsedData.category || "ताज़ा समाचार");
+      parsedData.category = cleanCategoryField(parsedData.category || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°");
 
       // Primary source headline is the central editorial reference
       const firstInputSentence = (effectiveInput || "")
-        .split(/[।\n]+|\.\s+/)
+        .split(/[à¥¤\n]+|\.\s+/)
         .map((s: string) => cleanHeadlineText(s).trim())
         .find((s: string) => s.length >= 15 && /[\u0900-\u097F]/.test(s)) || "";
 
@@ -20446,11 +20777,11 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       ].filter(Boolean).join('\n\n');
 
       const factSentences = factCorpus
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, "").trim())
+        .split(/[à¥¤\n]+|\.\s+/)
+        .map((s: string) => cleanHeadlineText(s).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim())
         .filter((s: string) => {
           if (s.length <= 12 || !/[\u0900-\u097F]/.test(s)) return false;
-          if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s)) return false;
+          if (/(?:à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ|à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤|à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤|à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­|domain|à¤µà¤¿à¤·à¤¯:)/u.test(s)) return false;
           return true;
         });
 
@@ -20463,10 +20794,10 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       const cleanOptions: string[] = [];
       const addOptionIfValid = (candidate: string) => {
         let s = sanitizePressNoteFlattery(cleanHeadlineText(String(candidate || "")))
-          .replace(/[।\.\,\!\?\:\-]+$/g, "")
+          .replace(/[à¥¤\.\,\!\?\:\-]+$/g, "")
           .trim();
         if (!s || s.length < 15) return;
-        if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|विषय:)/u.test(s)) return;
+        if (/(?:à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ|à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤|à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤|à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­|à¤µà¤¿à¤·à¤¯:)/u.test(s)) return;
         if (cleanOptions.includes(s)) return;
         const isDuplicate = cleanOptions.some(existing => calculateHeadlineSimilarityInternal(existing, s) >= 0.88);
         if (!isDuplicate) {
@@ -20485,7 +20816,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
 
       if (cleanOptions.length < 5) {
         const supp = generate5BalancedHeadlineOptions(
-          primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
+          primarySourceHeadline || parsedData.headline || "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
           factSentences,
           parsedData.location
         );
@@ -20498,7 +20829,7 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       parsedData.headlineOptions = fitHeadlinesTo5TierRanges(
         cleanOptions,
         factSentences,
-        primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
+        primarySourceHeadline || parsedData.headline || "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
         parsedData.location
       );
       if (Array.isArray(parsedData.headlineOptions)) {
@@ -20514,17 +20845,17 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       // Bounded retry if any tier exceeds 200 chars and we used Gemini/OpenAI
       if (!validationReport.valid && actualProvider !== "local" && parsedData.headlineOptions.length > 0) {
         try {
-          const retryPrompt = `निम्नलिखित समाचार हेडलाइंस में से कुछ विकल्प अपनी अधिकतम वर्ण-सीमा (200 अक्षर) का पालन नहीं कर रहे हैं:
-${validationReport.results.map((r: any) => `विकल्प ${r.tier} (${r.min}-${r.max} अक्षर, वर्तमान: ${r.charCount} अक्षर): "${r.text}" ${r.valid ? '[मान्य]' : `[त्रुटि: ${r.reason}]`}`).join('\n')}
+          const retryPrompt = `à¤¨à¤¿à¤®à¥à¤¨à¤²à¤¿à¤–à¤¿à¤¤ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤‚à¤¸ à¤®à¥‡à¤‚ à¤¸à¥‡ à¤•à¥à¤› à¤µà¤¿à¤•à¤²à¥à¤ª à¤…à¤ªà¤¨à¥€ à¤…à¤§à¤¿à¤•à¤¤à¤® à¤µà¤°à¥à¤£-à¤¸à¥€à¤®à¤¾ (200 à¤…à¤•à¥à¤·à¤°) à¤•à¤¾ à¤ªà¤¾à¤²à¤¨ à¤¨à¤¹à¥€à¤‚ à¤•à¤° à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚:
+${validationReport.results.map((r: any) => `à¤µà¤¿à¤•à¤²à¥à¤ª ${r.tier} (${r.min}-${r.max} à¤…à¤•à¥à¤·à¤°, à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨: ${r.charCount} à¤…à¤•à¥à¤·à¤°): "${r.text}" ${r.valid ? '[à¤®à¤¾à¤¨à¥à¤¯]' : `[à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${r.reason}]`}`).join('\n')}
 
-मूल समाचार तथ्य:
+à¤®à¥‚à¤² à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¤à¤¥à¥à¤¯:
 """
 ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0, 5).join('\n')}
 """
 
-कृपया उपरोक्त 5 हेडलाइन विकल्पों को संशोधित कर ठीक 5 विकल्पों का वैध JSON Object लौटाएं।
-प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 अक्षर) के भीतर होना चाहिए, बिना किसी कृत्रिम वाक्य के और बिना पूर्णविराम के:
-{"headlineOptions": ["विकल्प 1 (80-110)", "विकल्प 2 (100-130)", "विकल्प 3 (125-150)", "विकल्प 4 (130-160)", "विकल्प 5 (150-200)"]}`;
+à¤•à¥ƒà¤ªà¤¯à¤¾ à¤‰à¤ªà¤°à¥‹à¤•à¥à¤¤ 5 à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤µà¤¿à¤•à¤²à¥à¤ªà¥‹à¤‚ à¤•à¥‹ à¤¸à¤‚à¤¶à¥‹à¤§à¤¿à¤¤ à¤•à¤° à¤ à¥€à¤• 5 à¤µà¤¿à¤•à¤²à¥à¤ªà¥‹à¤‚ à¤•à¤¾ à¤µà¥ˆà¤§ JSON Object à¤²à¥Œà¤Ÿà¤¾à¤à¤‚à¥¤
+à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤µà¤¿à¤•à¤²à¥à¤ª à¤…à¤§à¤¿à¤•à¤¤à¤® 200 à¤…à¤•à¥à¤·à¤° à¤•à¥€ à¤¸à¥€à¤®à¤¾ (à¤µà¤¿à¤•à¤²à¥à¤ª 1: 80-110, à¤µà¤¿à¤•à¤²à¥à¤ª 2: 100-130, à¤µà¤¿à¤•à¤²à¥à¤ª 3: 125-150, à¤µà¤¿à¤•à¤²à¥à¤ª 4: 130-160, à¤µà¤¿à¤•à¤²à¥à¤ª 5: 150-200 à¤…à¤•à¥à¤·à¤°) à¤•à¥‡ à¤­à¥€à¤¤à¤° à¤¹à¥‹à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤, à¤¬à¤¿à¤¨à¤¾ à¤•à¤¿à¤¸à¥€ à¤•à¥ƒà¤¤à¥à¤°à¤¿à¤® à¤µà¤¾à¤•à¥à¤¯ à¤•à¥‡ à¤”à¤° à¤¬à¤¿à¤¨à¤¾ à¤ªà¥‚à¤°à¥à¤£à¤µà¤¿à¤°à¤¾à¤® à¤•à¥‡:
+{"headlineOptions": ["à¤µà¤¿à¤•à¤²à¥à¤ª 1 (80-110)", "à¤µà¤¿à¤•à¤²à¥à¤ª 2 (100-130)", "à¤µà¤¿à¤•à¤²à¥à¤ª 3 (125-150)", "à¤µà¤¿à¤•à¤²à¥à¤ª 4 (130-160)", "à¤µà¤¿à¤•à¤²à¥à¤ª 5 (150-200)"]}`;
 
           const retryAiResult = await executeGeminiWithKeyPool(async (ai) => {
             const resp = await generateWithFallbackAndRetry(
@@ -20554,7 +20885,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
             const reFitted = fitHeadlinesTo5TierRanges(
               retryAiResult.headlineOptions,
               factSentences,
-              primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
+              primarySourceHeadline || parsedData.headline || "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
               parsedData.location
             );
             const reValidation = validateHeadlines5Tier(reFitted);
@@ -20594,7 +20925,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
         const words = parsedData.headline.split(/\s+/).filter(Boolean);
         for (const w of words) {
           const cleanW = w.replace(/[.,:;!?'"()]/g, "");
-          if (/\d+/.test(cleanW) || (cleanW.length >= 4 && !/के|की|का|में|पर|से|को|ने|है|और|था|थे|थी/.test(cleanW))) {
+          if (/\d+/.test(cleanW) || (cleanW.length >= 4 && !/à¤•à¥‡|à¤•à¥€|à¤•à¤¾|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤¨à¥‡|à¤¹à¥ˆ|à¤”à¤°|à¤¥à¤¾|à¤¥à¥‡|à¤¥à¥€/.test(cleanW))) {
             if (!currentHlWords.includes(cleanW) && currentHlWords.length < 3) {
               currentHlWords.push(cleanW);
             }
@@ -20607,7 +20938,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
         if (isInvalidUrlHeadline(parsedData.formattedHeadline)) {
           parsedData.formattedHeadline = parsedData.headline;
         } else {
-          parsedData.formattedHeadline = cleanHeadlineText(parsedData.formattedHeadline).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+          parsedData.formattedHeadline = cleanHeadlineText(parsedData.formattedHeadline).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim();
         }
       } else {
         parsedData.formattedHeadline = parsedData.headline;
@@ -20629,7 +20960,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
         const factsForCaptions = parsedData.summary || fetchedArticleSnippet || rawInputText || "";
         const variants = formatCaptionVariants(
           parsedData.headline,
-          parsedData.location || "मध्य प्रदेश",
+          parsedData.location || "à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶",
           factsForCaptions,
           channelUsername
         );
@@ -20690,12 +21021,12 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
     }
 
     if (!parsedData) {
-      const fallbackTitle = cleanHeadlineText(effectiveArticleTitle || rawInputText.split(/[।\n.]/)[0] || "ताज़ा समाचार");
+      const fallbackTitle = cleanHeadlineText(effectiveArticleTitle || rawInputText.split(/[à¥¤\n.]/)[0] || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°");
       const fallbackFacts = (rawInputText || effectiveArticleDesc || fetchedArticleSnippet || fallbackTitle).trim();
-      const detectedLoc = cleanLocationField(categoryLocation || fallbackFacts.slice(0, 100) || "मध्य प्रदेश");
+      const detectedLoc = cleanLocationField(categoryLocation || fallbackFacts.slice(0, 100) || "à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶");
       const factSentences = fallbackFacts
-        .split(/[।\n]+|\.\s+/)
-        .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
+        .split(/[à¥¤\n]+|\.\s+/)
+        .map((s: string) => cleanHeadlineText(s).replace(/[à¥¤\.\,\!\?\:\-]+$/g, '').trim())
         .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
       const generatedOptions = fitHeadlinesTo5TierRanges([], factSentences, fallbackTitle, detectedLoc).slice(0, 5);
@@ -20706,7 +21037,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
       const hlWords: string[] = [];
       for (const w of words) {
         const cleanW = w.replace(/[.,:;!?'"()]/g, '');
-        if (/\d+/.test(cleanW) || (cleanW.length >= 4 && !/के|की|का|में|पर|से|को|ने|है|और|था|थे|थी/.test(cleanW))) {
+        if (/\d+/.test(cleanW) || (cleanW.length >= 4 && !/à¤•à¥‡|à¤•à¥€|à¤•à¤¾|à¤®à¥‡à¤‚|à¤ªà¤°|à¤¸à¥‡|à¤•à¥‹|à¤¨à¥‡|à¤¹à¥ˆ|à¤”à¤°|à¤¥à¤¾|à¤¥à¥‡|à¤¥à¥€/.test(cleanW))) {
           if (!hlWords.includes(cleanW) && hlWords.length < 3) {
             hlWords.push(cleanW);
           }
@@ -20721,7 +21052,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
         captionBullets: cleanCaptionParagraphs(variants.captionBullets, 'bullet', channelUsername, detectedLoc, topH),
         captionShort: cleanCaptionParagraphs(variants.captionShort, 'short', channelUsername, detectedLoc, topH),
         location: detectedLoc,
-        category: categoryHint || "ताज़ा समाचार",
+        category: categoryHint || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
         highlightWords: hlWords.slice(0, 3),
         formattedHeadline: hlWords.length > 0 && topH.includes(hlWords[0])
           ? topH.replace(new RegExp(`(${hlWords[0]})`, 'g'), '[yellow]$1[/yellow]')
@@ -20739,7 +21070,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
         success: false,
         code: "ALL_API_KEYS_UNAVAILABLE",
         errorCode: "ALL_API_KEYS_UNAVAILABLE",
-        error: "AI सेवा फिलहाल उपलब्ध नहीं है। API Pool की सभी उपलब्ध Keys की सीमा पूरी हो चुकी है या वे अस्थायी रूप से अनुपलब्ध हैं।",
+        error: "AI à¤¸à¥‡à¤µà¤¾ à¤«à¤¿à¤²à¤¹à¤¾à¤² à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ API Pool à¤•à¥€ à¤¸à¤­à¥€ à¤‰à¤ªà¤²à¤¬à¥à¤§ Keys à¤•à¥€ à¤¸à¥€à¤®à¤¾ à¤ªà¥‚à¤°à¥€ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆ à¤¯à¤¾ à¤µà¥‡ à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤…à¤¨à¥à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤",
       });
     }
 
@@ -20871,7 +21202,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     if (regenConfig.enabled === false) {
       return res.status(403).json({
         success: false,
-        error: "हेडलाइन पुनर्जनन (Regenerate Headlines) सुविधा वर्तमान में व्यवस्थापक द्वारा निष्क्रिय की गई है।"
+        error: "à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤ªà¥à¤¨à¤°à¥à¤œà¤¨à¤¨ (Regenerate Headlines) à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤®à¥‡à¤‚ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¨à¤¿à¤·à¥à¤•à¥à¤°à¤¿à¤¯ à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤"
       });
     }
 
@@ -20898,7 +21229,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       if (!isTierAllowedForOpenAI(userTier, userResolution.role)) {
         return res.status(403).json({
           success: false,
-          error: "यह सुविधा केवल पात्र Pro या VIP-Dash उपयोगकर्ताओं के लिए उपलब्ध है।",
+          error: "à¤¯à¤¹ à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤•à¥‡à¤µà¤² à¤ªà¤¾à¤¤à¥à¤° Pro à¤¯à¤¾ VIP-Dash à¤‰à¤ªà¤¯à¥‹à¤—à¤•à¤°à¥à¤¤à¤¾à¤“à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤",
           requiredTiers: ["pro", "vip_dash", "admin"],
           currentTier: userTier,
         });
@@ -20906,7 +21237,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       if (aiConfig.aiModelAccess?.openai?.enabled === false) {
         return res.status(403).json({
           success: false,
-          error: "ChatGPT (OpenAI) सुविधा वर्तमान में व्यवस्थापक द्वारा निष्क्रिय की गई है।"
+          error: "ChatGPT (OpenAI) à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤®à¥‡à¤‚ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¨à¤¿à¤·à¥à¤•à¥à¤°à¤¿à¤¯ à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤"
         });
       }
     }
@@ -20914,7 +21245,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     if (!isRegenerateAllowed(aiConfig, userTier)) {
       return res.status(403).json({
         success: false,
-        error: "हेडलाइन रीजनरेट (Regenerate Headlines) सुविधा वर्तमान में आपके प्लान/टियर के लिए उपलब्ध नहीं है।"
+        error: "à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤°à¥€à¤œà¤¨à¤°à¥‡à¤Ÿ (Regenerate Headlines) à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤®à¥‡à¤‚ à¤†à¤ªà¤•à¥‡ à¤ªà¥à¤²à¤¾à¤¨/à¤Ÿà¤¿à¤¯à¤° à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤"
       });
     }
 
@@ -20955,14 +21286,14 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           draftId: draftId || undefined,
           alreadyRegenerated: true,
           regenerationUsed: combinedSaved.length >= MAX_HEADLINES_PER_ARTICLE,
-          message: "इस ड्राफ्ट के लिए पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाए गए हैं।"
+          message: "à¤‡à¤¸ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤•à¥‡ à¤²à¤¿à¤ à¤ªà¥‚à¤°à¥à¤µ-à¤œà¤¨à¤°à¥‡à¤Ÿà¥‡à¤¡ 5 à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸ à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤²à¥Œà¤Ÿà¤¾à¤ à¤—à¤ à¤¹à¥ˆà¤‚à¥¤"
         });
       }
       if (rawPrev.length >= MAX_HEADLINES_PER_ARTICLE) {
         return res.status(409).json({
           success: false,
           alreadyUsed: true,
-          error: "अधिकतम 10 हेडलाइन्स उपलब्ध हैं। इस खबर के लिए 10 हेडलाइन की सीमा पूरी हो चुकी है।"
+          error: "à¤…à¤§à¤¿à¤•à¤¤à¤® 10 à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤ à¤‡à¤¸ à¤–à¤¬à¤° à¤•à¥‡ à¤²à¤¿à¤ 10 à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤•à¥€ à¤¸à¥€à¤®à¤¾ à¤ªà¥‚à¤°à¥€ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆà¥¤"
         });
       }
     }
@@ -20977,14 +21308,14 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
             coinsDeducted: 0,
             idempotent: true,
             joinedInFlight: true,
-            message: "समानांतर अनुरोध (Concurrent Request) के माध्यम से पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाई गईं।",
+            message: "à¤¸à¤®à¤¾à¤¨à¤¾à¤‚à¤¤à¤° à¤…à¤¨à¥à¤°à¥‹à¤§ (Concurrent Request) à¤•à¥‡ à¤®à¤¾à¤§à¥à¤¯à¤® à¤¸à¥‡ à¤ªà¥‚à¤°à¥à¤µ-à¤œà¤¨à¤°à¥‡à¤Ÿà¥‡à¤¡ 5 à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸ à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤²à¥Œà¤Ÿà¤¾à¤ˆ à¤—à¤ˆà¤‚à¥¤",
           });
         }
       } catch (inFlightErr: any) {
         return res.status(409).json({
           success: false,
           alreadyUsed: true,
-          error: "इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।",
+          error: "à¤‡à¤¸ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤ªà¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤ªà¥à¤¨à¤°à¥à¤œà¤¨à¤¨ à¤ªà¥à¤°à¤•à¥à¤°à¤¿à¤¯à¤¾ à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤œà¤¾à¤°à¥€ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤°à¤¤à¥€à¤•à¥à¤·à¤¾ à¤•à¤°à¥‡à¤‚à¥¤",
         });
       }
     }
@@ -21003,14 +21334,14 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           return res.status(409).json({
             success: false,
             alreadyUsed: true,
-            error: lockAcquisition.error || "अधिकतम 10 हेडलाइन्स उपलब्ध हैं।"
+            error: lockAcquisition.error || "à¤…à¤§à¤¿à¤•à¤¤à¤® 10 à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤"
           });
         }
         if (lockAcquisition.inFlight) {
           return res.status(409).json({
             success: false,
             inFlight: true,
-            error: lockAcquisition.error || "इस ड्राफ्ट पर हेडलाइन पुनर्जनन प्रक्रिया पहले से जारी है। कृपया प्रतीक्षा करें।"
+            error: lockAcquisition.error || "à¤‡à¤¸ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤ªà¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤ªà¥à¤¨à¤°à¥à¤œà¤¨à¤¨ à¤ªà¥à¤°à¤•à¥à¤°à¤¿à¤¯à¤¾ à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤œà¤¾à¤°à¥€ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤°à¤¤à¥€à¤•à¥à¤·à¤¾ à¤•à¤°à¥‡à¤‚à¥¤"
           });
         }
       } else if (lockAcquisition.idempotentReplay && Array.isArray(lockAcquisition.headlines)) {
@@ -21028,7 +21359,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
           draftId: draftId || undefined,
           alreadyRegenerated: true,
           regenerationUsed: combinedSaved.length >= MAX_HEADLINES_PER_ARTICLE,
-          message: "इस ड्राफ्ट के लिए पूर्व-जनरेटेड 5 हेडलाइन्स सुरक्षित लौटाए गए हैं।"
+          message: "à¤‡à¤¸ à¤¡à¥à¤°à¤¾à¤«à¥à¤Ÿ à¤•à¥‡ à¤²à¤¿à¤ à¤ªà¥‚à¤°à¥à¤µ-à¤œà¤¨à¤°à¥‡à¤Ÿà¥‡à¤¡ 5 à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸ à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ à¤²à¥Œà¤Ÿà¤¾à¤ à¤—à¤ à¤¹à¥ˆà¤‚à¥¤"
         });
       } else {
         lockId = lockAcquisition.lockId || "";
@@ -21042,7 +21373,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       return res.status(400).json({
         success: false,
         insufficientCoins: true,
-        error: `अपर्याप्त कॉइन बैलेंस! 5 नई हेडलाइन बनाने के लिए ${requiredCoins} कॉइन्स आवश्यक हैं, जबकि आपके पास केवल ${currentBalance} कॉइन्स उपलब्ध हैं।`,
+        error: `à¤…à¤ªà¤°à¥à¤¯à¤¾à¤ªà¥à¤¤ à¤•à¥‰à¤‡à¤¨ à¤¬à¥ˆà¤²à¥‡à¤‚à¤¸! 5 à¤¨à¤ˆ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤¬à¤¨à¤¾à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ ${requiredCoins} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¤‚, à¤œà¤¬à¤•à¤¿ à¤†à¤ªà¤•à¥‡ à¤ªà¤¾à¤¸ à¤•à¥‡à¤µà¤² ${currentBalance} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤`,
         requiredCoins,
         currentBalance,
       });
@@ -21057,7 +21388,7 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       draftRegenerationInFlight.set(draftId, p);
     }
 
-    const excludeTitles = rawPrev.map((h: string) => cleanHeadlineText(String(h || "")).replace(/[।\.\,\!\?\:\-]+$/g, "").trim()).filter(Boolean);
+    const excludeTitles = rawPrev.map((h: string) => cleanHeadlineText(String(h || "")).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim()).filter(Boolean);
 
     let sourceTitle = canonicalContext.title || req.body.title || req.body.sourceHeadline || "";
     let sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
@@ -21115,20 +21446,20 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
 
     // Fact sentences from the news story
     const articleSentences = (sourceText || sourceTitle)
-      .split(/[।\n]+|\.\s+/)
-      .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, "").trim())
+      .split(/[à¥¤\n]+|\.\s+/)
+      .map((s: string) => cleanHeadlineText(s).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim())
       .filter((s: string) => {
         if (s.length <= 15 || !/[\u0900-\u097F]/.test(s)) return false;
-        if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s)) return false;
+        if (/(?:à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ|à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤|à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤|à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­|domain|à¤µà¤¿à¤·à¤¯:)/u.test(s)) return false;
         return true;
       });
 
     const cleanOptions: string[] = [];
 
     const addOptionIfValid = (candidate: string) => {
-      let s = formatAsJournalisticHeadline(cleanHeadlineText(String(candidate || ""))).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
+      let s = formatAsJournalisticHeadline(cleanHeadlineText(String(candidate || ""))).replace(/[à¥¤\.\,\!\?\:\-]+$/g, "").trim();
       if (!s || s.length < 15) return;
-      if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|विषय:)/u.test(s)) return;
+      if (/(?:à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ|à¤ªà¥à¤°à¤•à¤¾à¤¶à¤¿à¤¤|à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤|à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤¦à¤°à¥à¤­|à¤µà¤¿à¤·à¤¯:)/u.test(s)) return;
       if (cleanOptions.includes(s)) return;
       // Strict exclusion of all previous headlines
       for (const excl of excludeTitles) {
@@ -21145,32 +21476,32 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     const regenInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
 Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME primary news event in pure Hindi Devanagari script:
 - All 5 options must be based strictly on the same central event and verified facts from the source news.
-- STRICT RULE: Never add generic administrative or filler statements ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'पूरे मामले को लेकर कार्रवाई की जा रही है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'इस घटना के बाद प्रशासन अलर्ट', 'मामले को लेकर विभागीय स्तर पर समीक्षा', 'विशेष डेस्क', 'विशेष डैश') merely to increase headline length.
+- STRICT RULE: Never add generic administrative or filler statements ('à¤¶à¤¾à¤¸à¤¨ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤†à¤µà¤¶à¥à¤¯à¤• à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤¦à¤¿à¤ à¤—à¤', 'à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¤•à¥à¤·à¥‹à¤‚ à¤•à¥‹ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤œà¤¾à¤°à¥€ à¤•à¤¿à¤ à¤—à¤', 'à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¨à¤¯à¤¾ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤¸à¤¾à¤®à¤¨à¥‡ à¤†à¤¯à¤¾ à¤¹à¥ˆ', 'à¤ªà¥‚à¤°à¥‡ à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥‹ à¤²à¥‡à¤•à¤° à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¥€ à¤œà¤¾ à¤°à¤¹à¥€ à¤¹à¥ˆ', 'à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤µ à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤œà¤°à¥‚à¤°à¥€ à¤•à¤¦à¤® à¤‰à¤ à¤¾à¤ à¤œà¤¾ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚', 'à¤‡à¤¸ à¤˜à¤Ÿà¤¨à¤¾ à¤•à¥‡ à¤¬à¤¾à¤¦ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤…à¤²à¤°à¥à¤Ÿ', 'à¤®à¤¾à¤®à¤²à¥‡ à¤•à¥‹ à¤²à¥‡à¤•à¤° à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤¸à¤®à¥€à¤•à¥à¤·à¤¾', 'à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•', 'à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥ˆà¤¶') merely to increase headline length.
 - MANDATORY 5-TIER CHARACTER LIMITS (Absolute Maximum: 200 characters):
-  * Option 1 (विकल्प 1): 80–110 characters
-  * Option 2 (विकल्प 2): 100–130 characters
-  * Option 3 (विकल्प 3): 125–150 characters
-  * Option 4 (विकल्प 4): 130–160 characters
-  * Option 5 (विकल्प 5): 150–200 characters
+  * Option 1 (à¤µà¤¿à¤•à¤²à¥à¤ª 1): 80â€“110 characters
+  * Option 2 (à¤µà¤¿à¤•à¤²à¥à¤ª 2): 100â€“130 characters
+  * Option 3 (à¤µà¤¿à¤•à¤²à¥à¤ª 3): 125â€“150 characters
+  * Option 4 (à¤µà¤¿à¤•à¤²à¥à¤ª 4): 130â€“160 characters
+  * Option 5 (à¤µà¤¿à¤•à¤²à¥à¤ª 5): 150â€“200 characters
 - No headline may exceed 200 characters under any circumstance. If the original news is short, keep a shorter accurate headline rather than adding filler.
-- No ending punctuation (. or । or ?). No tier labels or bracketed counts like '[85/100]'.
+- No ending punctuation (. or à¥¤ or ?). No tier labels or bracketed counts like '[85/100]'.
 - Pure Devanagari Hindi only (no Roman English characters).
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
-    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें।
-प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
-शीर्षक संदर्भ: ${sourceTitle}
-समाचार सामग्री/तथ्य: ${sourceText.slice(0, 3000)}
-${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
-${excludeTitles.length > 0 ? `पिछले 5 विकल्प (इन्हें बिल्कुल न दोहराएं, नए कोण बनाएं):\n${excludeTitles.map((t: string, idx: number) => `${idx + 1}. ${t}`).join('\n')}\n` : ""}
+    const regenPrompt = `à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¨à¤¿à¤®à¥à¤¨à¤²à¤¿à¤–à¤¿à¤¤ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‡ à¤²à¤¿à¤ à¤ à¥€à¤• 5 à¤¨à¤ à¤¸à¤‚à¤¤à¥à¤²à¤¿à¤¤ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤µà¤¿à¤•à¤²à¥à¤ª à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¥‡à¤‚à¥¤
+à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤µà¤¿à¤•à¤²à¥à¤ª à¤…à¤§à¤¿à¤•à¤¤à¤® 200 à¤…à¤•à¥à¤·à¤° à¤•à¥€ à¤¸à¥€à¤®à¤¾ à¤•à¥‡ à¤­à¥€à¤¤à¤° à¤¹à¥‹, à¤¬à¤¿à¤¨à¤¾ à¤•à¤¿à¤¸à¥€ à¤ªà¥‚à¤°à¥à¤£à¤µà¤¿à¤°à¤¾à¤® à¤•à¥‡, à¤¶à¥à¤¦à¥à¤§ à¤¹à¤¿à¤‚à¤¦à¥€ à¤¦à¥‡à¤µà¤¨à¤¾à¤—à¤°à¥€ à¤®à¥‡à¤‚, à¤”à¤° à¤•à¥‡à¤µà¤² à¤®à¥‚à¤² à¤–à¤¬à¤° à¤•à¥‡ à¤µà¤¾à¤¸à¥à¤¤à¤µà¤¿à¤• à¤¤à¤¥à¥à¤¯à¥‹à¤‚ à¤ªà¤° à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤¹à¥‹à¥¤
+à¤¶à¥€à¤°à¥à¤·à¤• à¤¸à¤‚à¤¦à¤°à¥à¤­: ${sourceTitle}
+à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¸à¤¾à¤®à¤—à¥à¤°à¥€/à¤¤à¤¥à¥à¤¯: ${sourceText.slice(0, 3000)}
+${sourceLoc ? `à¤¸à¥à¤¥à¤¾à¤¨: ${sourceLoc}\n` : ""}${customPrompt ? `à¤¯à¥‚à¤œà¤¼à¤° à¤•à¤¾ à¤µà¤¿à¤¶à¥‡à¤· à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶: ${customPrompt}\n` : ""}
+${excludeTitles.length > 0 ? `à¤ªà¤¿à¤›à¤²à¥‡ 5 à¤µà¤¿à¤•à¤²à¥à¤ª (à¤‡à¤¨à¥à¤¹à¥‡à¤‚ à¤¬à¤¿à¤²à¥à¤•à¥à¤² à¤¨ à¤¦à¥‹à¤¹à¤°à¤¾à¤à¤‚, à¤¨à¤ à¤•à¥‹à¤£ à¤¬à¤¨à¤¾à¤à¤‚):\n${excludeTitles.map((t: string, idx: number) => `${idx + 1}. ${t}`).join('\n')}\n` : ""}
 JSON Output Schema:
 {
   "headlineOptions": [
-    "विकल्प 1 (80-110 अक्षर)",
-    "विकल्प 2 (100-130 अक्षर)",
-    "विकल्प 3 (125-150 अक्षर)",
-    "विकल्प 4 (130-160 अक्षर)",
-    "विकल्प 5 (150-200 अक्षर)"
+    "à¤µà¤¿à¤•à¤²à¥à¤ª 1 (80-110 à¤…à¤•à¥à¤·à¤°)",
+    "à¤µà¤¿à¤•à¤²à¥à¤ª 2 (100-130 à¤…à¤•à¥à¤·à¤°)",
+    "à¤µà¤¿à¤•à¤²à¥à¤ª 3 (125-150 à¤…à¤•à¥à¤·à¤°)",
+    "à¤µà¤¿à¤•à¤²à¥à¤ª 4 (130-160 à¤…à¤•à¥à¤·à¤°)",
+    "à¤µà¤¿à¤•à¤²à¥à¤ª 5 (150-200 à¤…à¤•à¥à¤·à¤°)"
   ]
 }`;
 
@@ -21246,7 +21577,7 @@ JSON Output Schema:
         }
         return res.status(502).json({
           success: false,
-          error: `ChatGPT (OpenAI) से हेडलाइन पुनर्जनन में त्रुटि: ${openAiErr?.message || "सेवा अनुपलब्ध"}। कृपया जेमिनी एआई चुनें या पुनः प्रयास करें।`,
+          error: `ChatGPT (OpenAI) à¤¸à¥‡ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤ªà¥à¤¨à¤°à¥à¤œà¤¨à¤¨ à¤®à¥‡à¤‚ à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${openAiErr?.message || "à¤¸à¥‡à¤µà¤¾ à¤…à¤¨à¥à¤ªà¤²à¤¬à¥à¤§"}à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤œà¥‡à¤®à¤¿à¤¨à¥€ à¤à¤†à¤ˆ à¤šà¥à¤¨à¥‡à¤‚ à¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤`,
         });
       }
     } else {
@@ -21282,7 +21613,7 @@ JSON Output Schema:
         success: false,
         code: "ALL_API_KEYS_UNAVAILABLE",
         errorCode: "ALL_API_KEYS_UNAVAILABLE",
-        error: "AI सेवा फिलहाल उपलब्ध नहीं है। API Pool की सभी उपलब्ध Keys की सीमा पूरी हो चुकी है या वे अस्थायी रूप से अनुपलब्ध हैं।",
+        error: "AI à¤¸à¥‡à¤µà¤¾ à¤«à¤¿à¤²à¤¹à¤¾à¤² à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ API Pool à¤•à¥€ à¤¸à¤­à¥€ à¤‰à¤ªà¤²à¤¬à¥à¤§ Keys à¤•à¥€ à¤¸à¥€à¤®à¤¾ à¤ªà¥‚à¤°à¥€ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆ à¤¯à¤¾ à¤µà¥‡ à¤…à¤¸à¥à¤¥à¤¾à¤¯à¥€ à¤°à¥‚à¤ª à¤¸à¥‡ à¤…à¤¨à¥à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¤‚à¥¤",
       });
     }
 
@@ -21334,8 +21665,8 @@ JSON Output Schema:
         userId: userId || walletKey,
         userEmail: userEmail || walletKey,
         newsItemId: (draftId || req.body.newsId || req.body.canonicalContext?.newsId || "").toString(),
-        newsTitle: sourceTitle || "5 नई हेडलाइन्स",
-        description: `5 नई हेडलाइन्स जनरेशन (${userTier.toUpperCase()}): -${requiredCoins} कॉइन्स`,
+        newsTitle: sourceTitle || "5 à¤¨à¤ˆ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸",
+        description: `5 à¤¨à¤ˆ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸ à¤œà¤¨à¤°à¥‡à¤¶à¤¨ (${userTier.toUpperCase()}): -${requiredCoins} à¤•à¥‰à¤‡à¤¨à¥à¤¸`,
         transactionType: "debit",
         type: "debit",
         coins: requiredCoins,
@@ -21421,29 +21752,29 @@ JSON Output Schema:
 
 
 const CATEGORY_KEYWORDS_LIST = [
-  "राष्ट्रीय",
-  "अंतरराष्ट्रीय",
-  "विदेश",
-  "अपराध",
-  "क्राइम",
-  "सियासत",
-  "राजनीति",
-  "हादसा",
-  "प्रशासन",
-  "विकास",
-  "बिजनेस",
-  "कारोबार",
-  "टेक",
-  "विशेष कवरेज",
-  "विशेष डेस्क",
-  "विशेष डैश",
-  "विशेष संवाददाता",
-  "सेंट्रल डेस्क",
-  "न्यूज़ डेस्क",
-  "ब्यूरो डेस्क",
-  "ताज़ा ख़बर",
-  "ताज़ा समाचार",
-  "ताज़ा",
+  "à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯",
+  "à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯",
+  "à¤µà¤¿à¤¦à¥‡à¤¶",
+  "à¤…à¤ªà¤°à¤¾à¤§",
+  "à¤•à¥à¤°à¤¾à¤‡à¤®",
+  "à¤¸à¤¿à¤¯à¤¾à¤¸à¤¤",
+  "à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿",
+  "à¤¹à¤¾à¤¦à¤¸à¤¾",
+  "à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨",
+  "à¤µà¤¿à¤•à¤¾à¤¸",
+  "à¤¬à¤¿à¤œà¤¨à¥‡à¤¸",
+  "à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤°",
+  "à¤Ÿà¥‡à¤•",
+  "à¤µà¤¿à¤¶à¥‡à¤· à¤•à¤µà¤°à¥‡à¤œ",
+  "à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•",
+  "à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥ˆà¤¶",
+  "à¤µà¤¿à¤¶à¥‡à¤· à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾",
+  "à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•",
+  "à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¡à¥‡à¤¸à¥à¤•",
+  "à¤¬à¥à¤¯à¥‚à¤°à¥‹ à¤¡à¥‡à¤¸à¥à¤•",
+  "à¤¤à¤¾à¤œà¤¼à¤¾ à¤–à¤¼à¤¬à¤°",
+  "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°",
+  "à¤¤à¤¾à¤œà¤¼à¤¾",
 ];
 
 export function cleanHeadlineText(text: string): string {
@@ -21453,49 +21784,49 @@ export function cleanHeadlineText(text: string): string {
 
   // 1. Remove UI status / loading text
   cleaned = cleaned
-    .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
+    .replace(/(?:à¤²à¥‹à¤¡ à¤¹à¥‹ à¤°à¤¹à¤¾ à¤¹à¥ˆ[\s\.]*)+/gi, "")
     .replace(/(?:loading[\s\.]*)+/gi, "")
     .replace(/(?:please wait[\s\.]*)+/gi, "")
     .replace(/(?:generating[\s\.]*)+/gi, "")
     .replace(/(?:ai is processing[\s\.]*)+/gi, "");
 
-  // 2. Remove scraping artifacts, image caption prefixes ("प्रतीकात्मक चित्र 1."), and relative timestamps ("नई दिल्ली3 घंटे पहले")
+  // 2. Remove scraping artifacts, image caption prefixes ("à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤• à¤šà¤¿à¤¤à¥à¤° 1."), and relative timestamps ("à¤¨à¤ˆ à¤¦à¤¿à¤²à¥à¤²à¥€3 à¤˜à¤‚à¤Ÿà¥‡ à¤ªà¤¹à¤²à¥‡")
   cleaned = cleaned
-    .replace(/(?:प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)|फाइल\s*(?:फोटो|चित्र|तस्वीर)|सांकेतिक\s*(?:चित्र|फोटो|तस्वीर))\s*\d*[\s\.:,\-–—]*/gi, " ")
-    .replace(/(?:नई\s*दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|ग्वालियर|जबलपुर|उज्जैन|रीवा|सतना|सागर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून)?\s*\d+\s*(?:घंटे|मिनट|सेकंड|दिन|सप्ताह|माह|महीने|साल|वर्ष)\s*पहले[\s\.:,\-–—]*/gi, " ")
+    .replace(/(?:à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°)|à¤«à¤¾à¤‡à¤²\s*(?:à¤«à¥‹à¤Ÿà¥‹|à¤šà¤¿à¤¤à¥à¤°|à¤¤à¤¸à¥à¤µà¥€à¤°)|à¤¸à¤¾à¤‚à¤•à¥‡à¤¤à¤¿à¤•\s*(?:à¤šà¤¿à¤¤à¥à¤°|à¤«à¥‹à¤Ÿà¥‹|à¤¤à¤¸à¥à¤µà¥€à¤°))\s*\d*[\s\.:,\-â€“â€”]*/gi, " ")
+    .replace(/(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤­à¥‹à¤ªà¤¾à¤²|à¤‡à¤‚à¤¦à¥Œà¤°|à¤°à¤¾à¤¯à¤ªà¥à¤°|à¤¬à¤¿à¤²à¤¾à¤¸à¤ªà¥à¤°|à¤…à¤‚à¤¬à¤¿à¤•à¤¾à¤ªà¥à¤°|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤‰à¤œà¥à¤œà¥ˆà¤¨|à¤°à¥€à¤µà¤¾|à¤¸à¤¤à¤¨à¤¾|à¤¸à¤¾à¤—à¤°|à¤²à¤–à¤¨à¤Š|à¤ªà¤Ÿà¤¨à¤¾|à¤œà¤¯à¤ªà¥à¤°|à¤®à¥à¤‚à¤¬à¤ˆ|à¤šà¤‚à¤¡à¥€à¤—à¤¢à¤¼|à¤°à¤¾à¤‚à¤šà¥€|à¤¦à¥‡à¤¹à¤°à¤¾à¤¦à¥‚à¤¨)?\s*\d+\s*(?:à¤˜à¤‚à¤Ÿà¥‡|à¤®à¤¿à¤¨à¤Ÿ|à¤¸à¥‡à¤•à¤‚à¤¡|à¤¦à¤¿à¤¨|à¤¸à¤ªà¥à¤¤à¤¾à¤¹|à¤®à¤¾à¤¹|à¤®à¤¹à¥€à¤¨à¥‡|à¤¸à¤¾à¤²|à¤µà¤°à¥à¤·)\s*à¤ªà¤¹à¤²à¥‡[\s\.:,\-â€“â€”]*/gi, " ")
     .replace(/\b\d+\s*(?:hours?|mins?|minutes?|days?|weeks?)\s*ago\b/gi, " ")
     .replace(
-      /(?:कॉपी\s*लिंक|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|विज्ञापन|Advertisement|Sponsored|File\s*Photo[:\s]*|Symbolic\s*Photo[:\s]*|Image\s*Credit[:\s]*|Photo\s*Credit[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+      /(?:à¤•à¥‰à¤ªà¥€\s*à¤²à¤¿à¤‚à¤•|à¤¶à¥‡à¤¯à¤°\s*à¤•à¤°à¥‡à¤‚|à¤•à¥à¤²à¤¿à¤•\s*à¤•à¤°à¥‡à¤‚|à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡\s*à¤•à¤°à¥‡à¤‚|à¤¯à¤¹\s*à¤­à¥€\s*à¤ªà¤¢à¤¼à¥‡à¤‚|à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s*à¤–à¤¬à¤°à¥‡à¤‚|à¤µà¤¿à¤œà¥à¤žà¤¾à¤ªà¤¨|Advertisement|Sponsored|File\s*Photo[:\s]*|Symbolic\s*Photo[:\s]*|Image\s*Credit[:\s]*|Photo\s*Credit[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
       " "
     );
 
   // 3. Remove publisher, portal and city-news suffixes (e.g. "- Bhopal News", "- Indore News", "- MP News")
   cleaned = cleaned
     .replace(
-      /\s*[|\-–—:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat).*$/i,
+      /\s*[|\-â€“â€”:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|à¤†à¤œ à¤¤à¤•|BBC News à¤¹à¤¿à¤‚à¤¦à¥€|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat).*$/i,
       ""
     )
-    .replace(/\s*[|\-–—:]\s*[A-Za-z\s]{3,30}$/, "")
+    .replace(/\s*[|\-â€“â€”:]\s*[A-Za-z\s]{3,30}$/, "")
     .trim();
 
   // 4. Remove editorial fluff prefixes and option labels
   cleaned = cleaned
     .replace(
-      /^(?:विकल्प|ऑप्शन|Option|Angle)\s*\d+[\s:\-–—.]*\s*/i,
+      /^(?:à¤µà¤¿à¤•à¤²à¥à¤ª|à¤‘à¤ªà¥à¤¶à¤¨|Option|Angle)\s*\d+[\s:\-â€“â€”.]*\s*/i,
       ""
     )
-    .replace(/^\d+[\.:\)\-–—]+\s*(?=[\u0900-\u097F])/u, "")
+    .replace(/^\d+[\.:\)\-â€“â€”]+\s*(?=[\u0900-\u097F])/u, "")
     .replace(
-      /^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|प्रेस नोट|प्रेस विज्ञप्ति|यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*[:\-–—]?\s*/i,
+      /^(à¤¨à¥à¤¯à¥‚à¤œ à¤¬à¤¨à¤¾à¤“|à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤¬à¤¨à¤¾à¤“|à¤–à¤¬à¤° à¤¬à¤¨à¤¾à¤“|à¤ªà¥à¤°à¥‡à¤¸ à¤¨à¥‹à¤Ÿ|à¤ªà¥à¤°à¥‡à¤¸ à¤µà¤¿à¤œà¥à¤žà¤ªà¥à¤¤à¤¿|à¤¯à¤¹ à¤–à¤¬à¤° à¤¹à¥ˆ|à¤œà¤¾à¤¨à¤¿à¤|à¤¦à¥‡à¤–à¤¿à¤|Live\s*Updates?[:\s\-â€“â€”]*|Khabar\s*Updates?[:\s\-â€“â€”]*|Latest\s*News[:\s\-â€“â€”]*|Breaking\s*News[:\s\-â€“â€”]*|Exclusive[:\s\-â€“â€”]*|Big\s*Breaking[:\s\-â€“â€”]*|à¤²à¤¾à¤‡à¤µ\s*à¤…à¤ªà¤¡à¥‡à¤Ÿ[:\s\-â€“â€”]*|à¤–à¤¬à¤°\s*à¤…à¤ªà¤¡à¥‡à¤Ÿ[:\s\-â€“â€”]*|à¤²à¥‡à¤Ÿà¥‡à¤¸à¥à¤Ÿ\s*à¤¨à¥à¤¯à¥‚à¤œ[:\s\-â€“â€”]*|à¤²à¥‡à¤Ÿà¥‡à¤¸à¥à¤Ÿ\s*à¤…à¤ªà¤¡à¥‡à¤Ÿ[:\s\-â€“â€”]*|à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼[:\s\-â€“â€”]*|à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—\s*à¤¨à¥à¤¯à¥‚à¤œ[:\s\-â€“â€”]*|à¤¬à¤¿à¤—\s*à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—[:\s\-â€“â€”]*|à¤¤à¤¾à¤œà¤¾\s*à¤¸à¤®à¤¾à¤šà¤¾à¤°[:\s\-â€“â€”]*|à¤¬à¤¡à¤¼à¥€\s*à¤–à¤¬à¤°[:\s\-â€“â€”]*|à¤à¤•à¥à¤¸à¤•à¥à¤²à¥‚à¤¸à¤¿à¤µ[:\s\-â€“â€”]*)\s*[:\-â€“â€”]?\s*/i,
       ""
     )
-    .replace(/^[\s:\-–—,;।.]+/g, "")
+    .replace(/^[\s:\-â€“â€”,;à¥¤.]+/g, "")
     .trim();
 
   // 5. Remove prepended location or category label tags with colons/hyphens
   cleaned = cleaned
     .replace(
-      /^(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|नई\s*दिल्ली|भोपाल|इंदौर|रीवा|जबलपुर|ग्वालियर|लखनऊ|पटना|जयपुर|रायपुर|वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय|विदेश|अपराध|क्राइम|सियासत|राजनीति|हादसा|प्रशासन|विकास|बिजनेस|कारोबार|विशेष\s*कवरेज|विशेष\s*डेस्क|विशेष\s*डैश|ताज़ा\s*समाचार|ताज़ा\s*ख़बर)\s*[:\-–—]\s*/i,
+      /^(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€\s*[\/\-]\s*à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯|à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯\s*[\/\-]\s*à¤µà¤¾à¤¶à¤¿à¤‚à¤—à¤Ÿà¤¨|à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€|à¤­à¥‹à¤ªà¤¾à¤²|à¤‡à¤‚à¤¦à¥Œà¤°|à¤°à¥€à¤µà¤¾|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤²à¤–à¤¨à¤Š|à¤ªà¤Ÿà¤¨à¤¾|à¤œà¤¯à¤ªà¥à¤°|à¤°à¤¾à¤¯à¤ªà¥à¤°|à¤µà¤¾à¤¶à¤¿à¤‚à¤—à¤Ÿà¤¨|à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯|à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯|à¤µà¤¿à¤¦à¥‡à¤¶|à¤…à¤ªà¤°à¤¾à¤§|à¤•à¥à¤°à¤¾à¤‡à¤®|à¤¸à¤¿à¤¯à¤¾à¤¸à¤¤|à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿|à¤¹à¤¾à¤¦à¤¸à¤¾|à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨|à¤µà¤¿à¤•à¤¾à¤¸|à¤¬à¤¿à¤œà¤¨à¥‡à¤¸|à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤°|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤•à¤µà¤°à¥‡à¤œ|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¡à¥‡à¤¸à¥à¤•|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¡à¥ˆà¤¶|à¤¤à¤¾à¤œà¤¼à¤¾\s*à¤¸à¤®à¤¾à¤šà¤¾à¤°|à¤¤à¤¾à¤œà¤¼à¤¾\s*à¤–à¤¼à¤¬à¤°)\s*[:\-â€“â€”]\s*/i,
       ""
     )
     .trim();
@@ -21503,7 +21834,7 @@ export function cleanHeadlineText(text: string): string {
   // 6. Remove appended category/location tags at the end of headlines
   cleaned = cleaned
     .replace(
-      /\s*[\/\-–—:]\s*(?:नई\s*दिल्ली\s*[\/\-]\s*राष्ट्रीय|अंतरराष्ट्रीय\s*[\/\-]\s*वाशिंगटन|राष्ट्रीय|अंतरराष्ट्रीय|विशेष\s*डेस्क|विशेष\s*डैश)$/i,
+      /\s*[\/\-â€“â€”:]\s*(?:à¤¨à¤ˆ\s*à¤¦à¤¿à¤²à¥à¤²à¥€\s*[\/\-]\s*à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯|à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯\s*[\/\-]\s*à¤µà¤¾à¤¶à¤¿à¤‚à¤—à¤Ÿà¤¨|à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯|à¤…à¤‚à¤¤à¤°à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¡à¥‡à¤¸à¥à¤•|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¡à¥ˆà¤¶)$/i,
       ""
     )
     .trim();
@@ -21518,91 +21849,91 @@ export function cleanHeadlineText(text: string): string {
 
   // 8. Transliterate common abbreviations and acronyms into Devanagari Hindi
   const acronyms: [RegExp, string][] = [
-    [/\bAPK\b/gi, "एपीके"],
-    [/\bUPI\b/gi, "यूपीआई"],
-    [/\bOTP\b/gi, "ओटीपी"],
-    [/\bATM\b/gi, "एटीएम"],
-    [/\bSIM\b/gi, "सिम"],
-    [/\bKYC\b/gi, "केवाईसी"],
-    [/\bPDF\b/gi, "पीडीएफ"],
-    [/\bURL\b/gi, "यूआरएल"],
-    [/\bSMS\b/gi, "एसएमएस"],
-    [/\bPIL\b/gi, "पीआईएल"],
-    [/\bAI\b/gi, "एआई"],
-    [/\bPoK\b/gi, "पीओके"],
-    [/\bLOC\b/gi, "एलओसी"],
-    [/\bLAC\b/gi, "एलएसी"],
-    [/\bBSF\b/gi, "बीएसएफ"],
-    [/\bCRPF\b/gi, "सीआरपीएफ"],
-    [/\bCISF\b/gi, "सीआईएसएफ"],
-    [/\bDRDO\b/gi, "डीआरडीओ"],
-    [/\bCJI\b/gi, "सीजेआई"],
-    [/\bSIT\b/gi, "एसआईटी"],
-    [/\bATS\b/gi, "एटीएस"],
-    [/\bSTF\b/gi, "एसटीएफ"],
-    [/\bNCB\b/gi, "एनसीबी"],
-    [/\bCCTV\b/gi, "सीसीटीवी"],
-    [/\bDNA\b/gi, "डीएनए"],
-    [/\bEMI\b/gi, "ईएमआई"],
-    [/\bGDP\b/gi, "जीडीपी"],
-    [/\bDA\b/gi, "डीए"],
-    [/\bHRA\b/gi, "एचआरए"],
-    [/\bISRO\b/gi, "इसरो"],
-    [/\bNASA\b/gi, "नासा"],
-    [/\bFIR\b/gi, "एफआईआर"],
-    [/\bIT\b/gi, "आईटी"],
-    [/\bOPD\b/gi, "ओपीडी"],
-    [/\bVIP\b/gi, "वीआईपी"],
-    [/\bBJP\b/gi, "बीजेपी"],
-    [/\bPM\b/gi, "पीएम"],
-    [/\bCM\b/gi, "सीएम"],
-    [/\bDM\b/gi, "डीएम"],
-    [/\bSP\b/gi, "एसपी"],
-    [/\bSDM\b/gi, "एसडीएम"],
-    [/\bBHK\b/gi, "बीएचके"],
-    [/\bGST\b/gi, "जीएसटी"],
-    [/\bCBI\b/gi, "सीबीआई"],
-    [/\bED\b/gi, "ईडी"],
-    [/\bNIA\b/gi, "एनआईए"],
-    [/\bICU\b/gi, "आईसीयू"],
-    [/\bMP\b/gi, "एमपी"],
-    [/\bUP\b/gi, "यूपी"],
-    [/\bUSA\b/gi, "यूएसए"],
-    [/\bUK\b/gi, "यूके"],
-    [/\bCEO\b/gi, "सीईओ"],
-    [/\bBCCI\b/gi, "बीसीसीआई"],
-    [/\bICC\b/gi, "आईसीसी"],
-    [/\bIPL\b/gi, "आईपीएल"],
-    [/\bT20\b/gi, "टी20"],
-    [/\bODI\b/gi, "वनडे"],
-    [/\bWHO\b/gi, "डब्ल्यूएचओ"],
-    [/\bUN\b/gi, "यूएन"],
-    [/\bNATO\b/gi, "नाटो"],
-    [/\bRBI\b/gi, "आरबीआई"],
-    [/\bSBI\b/gi, "एसबीआई"],
-    [/\bLIC\b/gi, "एलआईसी"],
-    [/\bUPSC\b/gi, "यूपीएससी"],
-    [/\bSSC\b/gi, "एसएससी"],
-    [/\bCBSE\b/gi, "सीबीएसई"],
-    [/\bNEET\b/gi, "नीट"],
-    [/\bJEE\b/gi, "जेईई"],
-    [/\bIIT\b/gi, "आईआईटी"],
-    [/\bIIM\b/gi, "आईआईएम"],
-    [/\bEV\b/gi, "ईवी"],
-    [/\bOTT\b/gi, "ओटीटी"],
-    [/\bSupreme Court\b/gi, "सुप्रीम कोर्ट"],
-    [/\bHigh Court\b/gi, "हाई कोर्ट"],
-    [/\bCongress\b/gi, "कांग्रेस"],
-    [/\bWhatsApp\b/gi, "व्हाट्सएप"],
-    [/\bFacebook\b/gi, "फेसबुक"],
-    [/\bTwitter\b/gi, "ट्विटर"],
-    [/\bInstagram\b/gi, "इंस्टाग्राम"],
-    [/\bYouTube\b/gi, "यूट्यूब"],
-    [/\bGoogle\b/gi, "गूगल"],
-    [/\bTelegram\b/gi, "टेलीग्राम"],
-    [/\bApple\b/gi, "एप्पल"],
-    [/\bMicrosoft\b/gi, "माइक्रोसॉफ्ट"],
-    [/\bAndroid\b/gi, "एंड्रॉइड"],
+    [/\bAPK\b/gi, "à¤à¤ªà¥€à¤•à¥‡"],
+    [/\bUPI\b/gi, "à¤¯à¥‚à¤ªà¥€à¤†à¤ˆ"],
+    [/\bOTP\b/gi, "à¤“à¤Ÿà¥€à¤ªà¥€"],
+    [/\bATM\b/gi, "à¤à¤Ÿà¥€à¤à¤®"],
+    [/\bSIM\b/gi, "à¤¸à¤¿à¤®"],
+    [/\bKYC\b/gi, "à¤•à¥‡à¤µà¤¾à¤ˆà¤¸à¥€"],
+    [/\bPDF\b/gi, "à¤ªà¥€à¤¡à¥€à¤à¤«"],
+    [/\bURL\b/gi, "à¤¯à¥‚à¤†à¤°à¤à¤²"],
+    [/\bSMS\b/gi, "à¤à¤¸à¤à¤®à¤à¤¸"],
+    [/\bPIL\b/gi, "à¤ªà¥€à¤†à¤ˆà¤à¤²"],
+    [/\bAI\b/gi, "à¤à¤†à¤ˆ"],
+    [/\bPoK\b/gi, "à¤ªà¥€à¤“à¤•à¥‡"],
+    [/\bLOC\b/gi, "à¤à¤²à¤“à¤¸à¥€"],
+    [/\bLAC\b/gi, "à¤à¤²à¤à¤¸à¥€"],
+    [/\bBSF\b/gi, "à¤¬à¥€à¤à¤¸à¤à¤«"],
+    [/\bCRPF\b/gi, "à¤¸à¥€à¤†à¤°à¤ªà¥€à¤à¤«"],
+    [/\bCISF\b/gi, "à¤¸à¥€à¤†à¤ˆà¤à¤¸à¤à¤«"],
+    [/\bDRDO\b/gi, "à¤¡à¥€à¤†à¤°à¤¡à¥€à¤“"],
+    [/\bCJI\b/gi, "à¤¸à¥€à¤œà¥‡à¤†à¤ˆ"],
+    [/\bSIT\b/gi, "à¤à¤¸à¤†à¤ˆà¤Ÿà¥€"],
+    [/\bATS\b/gi, "à¤à¤Ÿà¥€à¤à¤¸"],
+    [/\bSTF\b/gi, "à¤à¤¸à¤Ÿà¥€à¤à¤«"],
+    [/\bNCB\b/gi, "à¤à¤¨à¤¸à¥€à¤¬à¥€"],
+    [/\bCCTV\b/gi, "à¤¸à¥€à¤¸à¥€à¤Ÿà¥€à¤µà¥€"],
+    [/\bDNA\b/gi, "à¤¡à¥€à¤à¤¨à¤"],
+    [/\bEMI\b/gi, "à¤ˆà¤à¤®à¤†à¤ˆ"],
+    [/\bGDP\b/gi, "à¤œà¥€à¤¡à¥€à¤ªà¥€"],
+    [/\bDA\b/gi, "à¤¡à¥€à¤"],
+    [/\bHRA\b/gi, "à¤à¤šà¤†à¤°à¤"],
+    [/\bISRO\b/gi, "à¤‡à¤¸à¤°à¥‹"],
+    [/\bNASA\b/gi, "à¤¨à¤¾à¤¸à¤¾"],
+    [/\bFIR\b/gi, "à¤à¤«à¤†à¤ˆà¤†à¤°"],
+    [/\bIT\b/gi, "à¤†à¤ˆà¤Ÿà¥€"],
+    [/\bOPD\b/gi, "à¤“à¤ªà¥€à¤¡à¥€"],
+    [/\bVIP\b/gi, "à¤µà¥€à¤†à¤ˆà¤ªà¥€"],
+    [/\bBJP\b/gi, "à¤¬à¥€à¤œà¥‡à¤ªà¥€"],
+    [/\bPM\b/gi, "à¤ªà¥€à¤à¤®"],
+    [/\bCM\b/gi, "à¤¸à¥€à¤à¤®"],
+    [/\bDM\b/gi, "à¤¡à¥€à¤à¤®"],
+    [/\bSP\b/gi, "à¤à¤¸à¤ªà¥€"],
+    [/\bSDM\b/gi, "à¤à¤¸à¤¡à¥€à¤à¤®"],
+    [/\bBHK\b/gi, "à¤¬à¥€à¤à¤šà¤•à¥‡"],
+    [/\bGST\b/gi, "à¤œà¥€à¤à¤¸à¤Ÿà¥€"],
+    [/\bCBI\b/gi, "à¤¸à¥€à¤¬à¥€à¤†à¤ˆ"],
+    [/\bED\b/gi, "à¤ˆà¤¡à¥€"],
+    [/\bNIA\b/gi, "à¤à¤¨à¤†à¤ˆà¤"],
+    [/\bICU\b/gi, "à¤†à¤ˆà¤¸à¥€à¤¯à¥‚"],
+    [/\bMP\b/gi, "à¤à¤®à¤ªà¥€"],
+    [/\bUP\b/gi, "à¤¯à¥‚à¤ªà¥€"],
+    [/\bUSA\b/gi, "à¤¯à¥‚à¤à¤¸à¤"],
+    [/\bUK\b/gi, "à¤¯à¥‚à¤•à¥‡"],
+    [/\bCEO\b/gi, "à¤¸à¥€à¤ˆà¤“"],
+    [/\bBCCI\b/gi, "à¤¬à¥€à¤¸à¥€à¤¸à¥€à¤†à¤ˆ"],
+    [/\bICC\b/gi, "à¤†à¤ˆà¤¸à¥€à¤¸à¥€"],
+    [/\bIPL\b/gi, "à¤†à¤ˆà¤ªà¥€à¤à¤²"],
+    [/\bT20\b/gi, "à¤Ÿà¥€20"],
+    [/\bODI\b/gi, "à¤µà¤¨à¤¡à¥‡"],
+    [/\bWHO\b/gi, "à¤¡à¤¬à¥à¤²à¥à¤¯à¥‚à¤à¤šà¤“"],
+    [/\bUN\b/gi, "à¤¯à¥‚à¤à¤¨"],
+    [/\bNATO\b/gi, "à¤¨à¤¾à¤Ÿà¥‹"],
+    [/\bRBI\b/gi, "à¤†à¤°à¤¬à¥€à¤†à¤ˆ"],
+    [/\bSBI\b/gi, "à¤à¤¸à¤¬à¥€à¤†à¤ˆ"],
+    [/\bLIC\b/gi, "à¤à¤²à¤†à¤ˆà¤¸à¥€"],
+    [/\bUPSC\b/gi, "à¤¯à¥‚à¤ªà¥€à¤à¤¸à¤¸à¥€"],
+    [/\bSSC\b/gi, "à¤à¤¸à¤à¤¸à¤¸à¥€"],
+    [/\bCBSE\b/gi, "à¤¸à¥€à¤¬à¥€à¤à¤¸à¤ˆ"],
+    [/\bNEET\b/gi, "à¤¨à¥€à¤Ÿ"],
+    [/\bJEE\b/gi, "à¤œà¥‡à¤ˆà¤ˆ"],
+    [/\bIIT\b/gi, "à¤†à¤ˆà¤†à¤ˆà¤Ÿà¥€"],
+    [/\bIIM\b/gi, "à¤†à¤ˆà¤†à¤ˆà¤à¤®"],
+    [/\bEV\b/gi, "à¤ˆà¤µà¥€"],
+    [/\bOTT\b/gi, "à¤“à¤Ÿà¥€à¤Ÿà¥€"],
+    [/\bSupreme Court\b/gi, "à¤¸à¥à¤ªà¥à¤°à¥€à¤® à¤•à¥‹à¤°à¥à¤Ÿ"],
+    [/\bHigh Court\b/gi, "à¤¹à¤¾à¤ˆ à¤•à¥‹à¤°à¥à¤Ÿ"],
+    [/\bCongress\b/gi, "à¤•à¤¾à¤‚à¤—à¥à¤°à¥‡à¤¸"],
+    [/\bWhatsApp\b/gi, "à¤µà¥à¤¹à¤¾à¤Ÿà¥à¤¸à¤à¤ª"],
+    [/\bFacebook\b/gi, "à¤«à¥‡à¤¸à¤¬à¥à¤•"],
+    [/\bTwitter\b/gi, "à¤Ÿà¥à¤µà¤¿à¤Ÿà¤°"],
+    [/\bInstagram\b/gi, "à¤‡à¤‚à¤¸à¥à¤Ÿà¤¾à¤—à¥à¤°à¤¾à¤®"],
+    [/\bYouTube\b/gi, "à¤¯à¥‚à¤Ÿà¥à¤¯à¥‚à¤¬"],
+    [/\bGoogle\b/gi, "à¤—à¥‚à¤—à¤²"],
+    [/\bTelegram\b/gi, "à¤Ÿà¥‡à¤²à¥€à¤—à¥à¤°à¤¾à¤®"],
+    [/\bApple\b/gi, "à¤à¤ªà¥à¤ªà¤²"],
+    [/\bMicrosoft\b/gi, "à¤®à¤¾à¤‡à¤•à¥à¤°à¥‹à¤¸à¥‰à¤«à¥à¤Ÿ"],
+    [/\bAndroid\b/gi, "à¤à¤‚à¤¡à¥à¤°à¥‰à¤‡à¤¡"],
   ];
   for (const [pattern, devanagari] of acronyms) {
     cleaned = cleaned.replace(pattern, devanagari);
@@ -21615,14 +21946,14 @@ export function cleanHeadlineText(text: string): string {
   cleaned = cleaned.replace(/\uE001/g, "[yellow]");
   cleaned = cleaned.replace(/\uE002/g, "[/yellow]");
 
-  // 10. Strip leading and trailing punctuation repeatedly (. or । or ! or ? or , or - or : or ;)
-  cleaned = cleaned.replace(/^[\s:\-–—,;।.]+/g, "").replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  // 10. Strip leading and trailing punctuation repeatedly (. or à¥¤ or ! or ? or , or - or : or ;)
+  cleaned = cleaned.replace(/^[\s:\-â€“â€”,;à¥¤.]+/g, "").replace(/[à¥¤\.\,\!\?\:\-â€“â€”;;\s]+$/g, "").trim();
 
   // 11. Clean spaces around highlight tags and punctuation
   cleaned = cleaned
     .replace(/\[(highlight|yellow)\]\s+/g, "[$1]")
     .replace(/\s+\[\/(highlight|yellow)\]/g, "[/$1]")
-    .replace(/\s+([,\.!\?:;।])/g, "$1");
+    .replace(/\s+([,\.!\?:;à¥¤])/g, "$1");
 
   // 12. Clean up multiple spaces and remove formal honorifics/flattery (Part 3)
   cleaned = sanitizePressNoteFlattery(cleaned, true);
@@ -21630,29 +21961,29 @@ export function cleanHeadlineText(text: string): string {
 
   // 13. Remove unnecessary trailing explanatory sentences, prohibited AI filler phrases (Part 1.3), & dangling clause endings
   cleaned = cleaned
-    .replace(/\s*[,।;:\-–—]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*शासन\s+स्तर\s+पर\s+(?:संबंधित|संक्षिप्त)?\s*(?:तथ्यों\s+को\s+)?(?:दिए\s+गए\s+)?(?:आवश्यक\s+)?निर्देश(?:\s+दिए\s+गए|\s+जारी\s+किए\s+गए)?.*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*संबंधित\s+पक्षों\s+को\s+निर्देश\s+जारी\s+किए\s+गए.*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*मामले\s+में\s+नया\s+घटनाक्रम\s+सामने\s+आया(?:\s+है)?.*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*(?:यह\s+)?पूरे\s+मामले\s+को\s+लेकर\s+(?:प्रशासनिक\s+व\s+विभागीय\s+स्तर\s+पर\s+जरूरी\s+कदम\s+उठाए\s+जा\s+रहे\s+हैं|कार्रवाई\s+की\s+जा\s+रही\s+है).*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+व\s+विभागीय\s+स्तर\s+पर\s+जरूरी\s+कदम\s+उठाए\s+जा\s+रहे\s+हैं.*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*इस\s+घटना\s+के\s+बाद\s+प्रशासन\s+अलर्ट.*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*मामले\s+को\s+लेकर\s+विभागीय\s+स्तर\s+पर\s+समीक्षा.*$/u, "")
-    .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+स्तर\s+पर\s+आवश्यक\s+संज्ञान\s+लिया\s+गया(?:\s+है)?.*$/u, "")
-    .replace(/\s*[,।;:\-–—\/]?\s*(?:विशेष\s*डेस्क|विशेष\s*डैश|विशेष\s*संवाददाता|सेंट्रल\s*डेस्क|न्यूज़\s*डेस्क|ब्यूरो\s*डेस्क)\s*/gu, " ")
-    .replace(/\s*[;,:।]\s*\d+\s*(?:सवाल|बड़ी\s*बातें|मुख्य\s*बातें|पॉइंट्स|बिंदु)$/u, "")
-    .replace(/\s*,\s*(?:सुप्रीम\s*कोर्ट|हाई\s*कोर्ट|कोर्ट|अदालत|पुलिस|प्रशासन|सरकार)\s+ने\s+(?:गुरुवार|शुक्रवार|शनिवार|रविवार|सोमवार|मंगलवार|बुधवार|आज|कल|कहा|बोला|बताया)$/u, "")
-    .replace(/\s+(?:के|का|को|में|से|पर|ने|और|तथा|एवं|या|कि|जो)\s*\d*$/u, "");
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*(?:à¤œà¤¿à¤¸à¤¸à¥‡|à¤‡à¤¸à¤¸à¥‡)\s+à¤²à¥‹à¤—à¥‹à¤‚\s+à¤•à¥‹\s+à¤®à¤¦à¤¦\s+à¤®à¤¿à¤²à¥‡à¤—à¥€.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*à¤¶à¤¾à¤¸à¤¨\s+à¤¸à¥à¤¤à¤°\s+à¤ªà¤°\s+(?:à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤|à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤)?\s*(?:à¤¤à¤¥à¥à¤¯à¥‹à¤‚\s+à¤•à¥‹\s+)?(?:à¤¦à¤¿à¤\s+à¤—à¤\s+)?(?:à¤†à¤µà¤¶à¥à¤¯à¤•\s+)?à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶(?:\s+à¤¦à¤¿à¤\s+à¤—à¤|\s+à¤œà¤¾à¤°à¥€\s+à¤•à¤¿à¤\s+à¤—à¤)?.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤\s+à¤ªà¤•à¥à¤·à¥‹à¤‚\s+à¤•à¥‹\s+à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶\s+à¤œà¤¾à¤°à¥€\s+à¤•à¤¿à¤\s+à¤—à¤.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*à¤®à¤¾à¤®à¤²à¥‡\s+à¤®à¥‡à¤‚\s+à¤¨à¤¯à¤¾\s+à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤®\s+à¤¸à¤¾à¤®à¤¨à¥‡\s+à¤†à¤¯à¤¾(?:\s+à¤¹à¥ˆ)?.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*(?:à¤¯à¤¹\s+)?à¤ªà¥‚à¤°à¥‡\s+à¤®à¤¾à¤®à¤²à¥‡\s+à¤•à¥‹\s+à¤²à¥‡à¤•à¤°\s+(?:à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤•\s+à¤µ\s+à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯\s+à¤¸à¥à¤¤à¤°\s+à¤ªà¤°\s+à¤œà¤°à¥‚à¤°à¥€\s+à¤•à¤¦à¤®\s+à¤‰à¤ à¤¾à¤\s+à¤œà¤¾\s+à¤°à¤¹à¥‡\s+à¤¹à¥ˆà¤‚|à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ\s+à¤•à¥€\s+à¤œà¤¾\s+à¤°à¤¹à¥€\s+à¤¹à¥ˆ).*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤•\s+à¤µ\s+à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯\s+à¤¸à¥à¤¤à¤°\s+à¤ªà¤°\s+à¤œà¤°à¥‚à¤°à¥€\s+à¤•à¤¦à¤®\s+à¤‰à¤ à¤¾à¤\s+à¤œà¤¾\s+à¤°à¤¹à¥‡\s+à¤¹à¥ˆà¤‚.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*à¤‡à¤¸\s+à¤˜à¤Ÿà¤¨à¤¾\s+à¤•à¥‡\s+à¤¬à¤¾à¤¦\s+à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨\s+à¤…à¤²à¤°à¥à¤Ÿ.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*à¤®à¤¾à¤®à¤²à¥‡\s+à¤•à¥‹\s+à¤²à¥‡à¤•à¤°\s+à¤µà¤¿à¤­à¤¾à¤—à¥€à¤¯\s+à¤¸à¥à¤¤à¤°\s+à¤ªà¤°\s+à¤¸à¤®à¥€à¤•à¥à¤·à¤¾.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”]?\s*à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤•\s+à¤¸à¥à¤¤à¤°\s+à¤ªà¤°\s+à¤†à¤µà¤¶à¥à¤¯à¤•\s+à¤¸à¤‚à¤œà¥à¤žà¤¾à¤¨\s+à¤²à¤¿à¤¯à¤¾\s+à¤—à¤¯à¤¾(?:\s+à¤¹à¥ˆ)?.*$/u, "")
+    .replace(/\s*[,à¥¤;:\-â€“â€”\/]?\s*(?:à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¡à¥‡à¤¸à¥à¤•|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¡à¥ˆà¤¶|à¤µà¤¿à¤¶à¥‡à¤·\s*à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾|à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤²\s*à¤¡à¥‡à¤¸à¥à¤•|à¤¨à¥à¤¯à¥‚à¤œà¤¼\s*à¤¡à¥‡à¤¸à¥à¤•|à¤¬à¥à¤¯à¥‚à¤°à¥‹\s*à¤¡à¥‡à¤¸à¥à¤•)\s*/gu, " ")
+    .replace(/\s*[;,:à¥¤]\s*\d+\s*(?:à¤¸à¤µà¤¾à¤²|à¤¬à¤¡à¤¼à¥€\s*à¤¬à¤¾à¤¤à¥‡à¤‚|à¤®à¥à¤–à¥à¤¯\s*à¤¬à¤¾à¤¤à¥‡à¤‚|à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸|à¤¬à¤¿à¤‚à¤¦à¥)$/u, "")
+    .replace(/\s*,\s*(?:à¤¸à¥à¤ªà¥à¤°à¥€à¤®\s*à¤•à¥‹à¤°à¥à¤Ÿ|à¤¹à¤¾à¤ˆ\s*à¤•à¥‹à¤°à¥à¤Ÿ|à¤•à¥‹à¤°à¥à¤Ÿ|à¤…à¤¦à¤¾à¤²à¤¤|à¤ªà¥à¤²à¤¿à¤¸|à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨|à¤¸à¤°à¤•à¤¾à¤°)\s+à¤¨à¥‡\s+(?:à¤—à¥à¤°à¥à¤µà¤¾à¤°|à¤¶à¥à¤•à¥à¤°à¤µà¤¾à¤°|à¤¶à¤¨à¤¿à¤µà¤¾à¤°|à¤°à¤µà¤¿à¤µà¤¾à¤°|à¤¸à¥‹à¤®à¤µà¤¾à¤°|à¤®à¤‚à¤—à¤²à¤µà¤¾à¤°|à¤¬à¥à¤§à¤µà¤¾à¤°|à¤†à¤œ|à¤•à¤²|à¤•à¤¹à¤¾|à¤¬à¥‹à¤²à¤¾|à¤¬à¤¤à¤¾à¤¯à¤¾)$/u, "")
+    .replace(/\s+(?:à¤•à¥‡|à¤•à¤¾|à¤•à¥‹|à¤®à¥‡à¤‚|à¤¸à¥‡|à¤ªà¤°|à¤¨à¥‡|à¤”à¤°|à¤¤à¤¥à¤¾|à¤à¤µà¤‚|à¤¯à¤¾|à¤•à¤¿|à¤œà¥‹)\s*\d*$/u, "");
 
   // 14. Enforce standard Hindi spelling for compound state names (Part 1 Section 5)
   cleaned = cleaned
-    .replace(/मध्यप्रदेश/g, "मध्य प्रदेश")
-    .replace(/उत्तरप्रदेश/g, "उत्तर प्रदेश")
-    .replace(/हिमाचलप्रदेश/g, "हिमाचल प्रदेश")
-    .replace(/आंध्रप्रदेश/g, "आंध्र प्रदेश");
+    .replace(/à¤®à¤§à¥à¤¯à¤ªà¥à¤°à¤¦à¥‡à¤¶/g, "à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶")
+    .replace(/à¤‰à¤¤à¥à¤¤à¤°à¤ªà¥à¤°à¤¦à¥‡à¤¶/g, "à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶")
+    .replace(/à¤¹à¤¿à¤®à¤¾à¤šà¤²à¤ªà¥à¤°à¤¦à¥‡à¤¶/g, "à¤¹à¤¿à¤®à¤¾à¤šà¤² à¤ªà¥à¤°à¤¦à¥‡à¤¶")
+    .replace(/à¤†à¤‚à¤§à¥à¤°à¤ªà¥à¤°à¤¦à¥‡à¤¶/g, "à¤†à¤‚à¤§à¥à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶");
 
-  // 15. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  // 15. Strict punctuation strip: No headline may end with a full stop (. or à¥¤) or punctuation
+  cleaned = cleaned.replace(/[à¥¤\.\,\!\?\:\-â€“â€”;;\s]+$/g, "").trim();
 
   return cleaned;
 }
@@ -21660,17 +21991,17 @@ export function cleanHeadlineText(text: string): string {
 function cleanLocationField(loc: string): string {
   if (!loc) return "";
   let cleaned = stripAllUrlsAndHyperlinks(String(loc))
-    .replace(/^(स्थान\s*[:\-–—]?|location\s*[:\-–—]?|ताजा\s*समाचार\s*स्थान\s*[:\-–—]?|ताज़ा\s*समाचार\s*स्थान\s*[:\-–—]?)/i, "")
+    .replace(/^(à¤¸à¥à¤¥à¤¾à¤¨\s*[:\-â€“â€”]?|location\s*[:\-â€“â€”]?|à¤¤à¤¾à¤œà¤¾\s*à¤¸à¤®à¤¾à¤šà¤¾à¤°\s*à¤¸à¥à¤¥à¤¾à¤¨\s*[:\-â€“â€”]?|à¤¤à¤¾à¤œà¤¼à¤¾\s*à¤¸à¤®à¤¾à¤šà¤¾à¤°\s*à¤¸à¥à¤¥à¤¾à¤¨\s*[:\-â€“â€”]?)/i, "")
     .trim();
 
   if (
-    cleaned === "विशेष कवरेज" ||
-    cleaned === "विशेष डेस्क" ||
-    cleaned === "विशेष डैश" ||
-    cleaned === "विशेष संवाददाता" ||
-    cleaned === "सेंट्रल डेस्क" ||
-    cleaned === "न्यूज़ डेस्क" ||
-    cleaned === "ब्यूरो डेस्क"
+    cleaned === "à¤µà¤¿à¤¶à¥‡à¤· à¤•à¤µà¤°à¥‡à¤œ" ||
+    cleaned === "à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥‡à¤¸à¥à¤•" ||
+    cleaned === "à¤µà¤¿à¤¶à¥‡à¤· à¤¡à¥ˆà¤¶" ||
+    cleaned === "à¤µà¤¿à¤¶à¥‡à¤· à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾" ||
+    cleaned === "à¤¸à¥‡à¤‚à¤Ÿà¥à¤°à¤² à¤¡à¥‡à¤¸à¥à¤•" ||
+    cleaned === "à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¡à¥‡à¤¸à¥à¤•" ||
+    cleaned === "à¤¬à¥à¤¯à¥‚à¤°à¥‹ à¤¡à¥‡à¤¸à¥à¤•"
   ) {
     return "";
   }
@@ -21680,10 +22011,10 @@ function cleanLocationField(loc: string): string {
 
   // Remove sentences/fluff
   if (cleaned.length > 50) {
-    cleaned = cleaned.split(/[,।\n]/)[0].trim();
+    cleaned = cleaned.split(/[,à¥¤\n]/)[0].trim();
   }
 
-  const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
+  const parts = cleaned.split(/[\/\-â€“â€”]+/).map((p) => p.trim()).filter(Boolean);
   const locationParts = parts.filter((p) => !CATEGORY_KEYWORDS_LIST.some((cat) => cat.toLowerCase() === p.toLowerCase()));
 
   if (locationParts.length > 0) {
@@ -21692,23 +22023,23 @@ function cleanLocationField(loc: string): string {
     cleaned = "";
   }
 
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+  cleaned = cleaned.replace(/[à¥¤\.\,\!\?\:\-â€“â€”\s]+$/g, "").trim();
   cleaned = cleaned.replace(/\s{2,}/g, " ");
   return formatDistrictWithState(cleaned);
 }
 
 function cleanCategoryField(cat: string): string {
-  if (!cat) return "ताज़ा समाचार";
+  if (!cat) return "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°";
   let cleaned = cat
-    .replace(/^(श्रेणी\s*[:\-–—]?|category\s*[:\-–—]?)/i, "")
+    .replace(/^(à¤¶à¥à¤°à¥‡à¤£à¥€\s*[:\-â€“â€”]?|category\s*[:\-â€“â€”]?)/i, "")
     .trim();
 
-  const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
+  const parts = cleaned.split(/[\/\-â€“â€”]+/).map((p) => p.trim()).filter(Boolean);
   const matched = parts.find((p) => CATEGORY_KEYWORDS_LIST.some((ck) => ck.toLowerCase() === p.toLowerCase()));
   if (matched) return matched;
 
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
-  return cleaned || "ताज़ा समाचार";
+  cleaned = cleaned.replace(/[à¥¤\.\,\!\?\:\-â€“â€”\s]+$/g, "").trim();
+  return cleaned || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°";
 }
 
 // MODULE 2: Fast Static Caption Formatter Endpoint (for offline/instant quick copy)
@@ -21726,8 +22057,8 @@ app.post("/api/format-static-caption", (req, res) => {
       'detailed'
     );
 
-    const locLine = cleanLoc ? `\n\nस्थान: ${cleanLoc}` : "";
-    const fullCaption = `${cleanH || "ताज़ा समाचार"}${locLine}\n\n${formattedSummary}`;
+    const locLine = cleanLoc ? `\n\nà¤¸à¥à¤¥à¤¾à¤¨: ${cleanLoc}` : "";
+    const fullCaption = `${cleanH || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°"}${locLine}\n\n${formattedSummary}`;
 
     const cleanUser = (channelUsername || username || "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
     const defaultTags = cleanUser
@@ -21751,16 +22082,16 @@ export function sanitizePressNoteFlattery(text: string, isHeadline: boolean = fa
   if (!text || typeof text !== "string") return text || "";
   let cleaned = text;
   // 1. Remove fluff prefixes
-  cleaned = cleaned.replace(/^(यह खबर है|जानिए|देखिए|Live\s*Updates?[:\s\-–—]*|Khabar\s*Updates?[:\s\-–—]*|Latest\s*News[:\s\-–—]*|Breaking\s*News[:\s\-–—]*|Exclusive[:\s\-–—]*|Big\s*Breaking[:\s\-–—]*|लाइव\s*अपडेट[:\s\-–—]*|खबर\s*अपडेट[:\s\-–—]*|लेटेस्ट\s*न्यूज[:\s\-–—]*|लेटेस्ट\s*अपडेट[:\s\-–—]*|ब्रेकिंग न्यूज़[:\s\-–—]*|ब्रेकिंग\s*न्यूज[:\s\-–—]*|बिग\s*ब्रेकिंग[:\s\-–—]*|ताजा\s*समाचार[:\s\-–—]*|बड़ी\s*खबर[:\s\-–—]*|एक्सक्लूसिव[:\s\-–—]*)\s*/i, "");
+  cleaned = cleaned.replace(/^(à¤¯à¤¹ à¤–à¤¬à¤° à¤¹à¥ˆ|à¤œà¤¾à¤¨à¤¿à¤|à¤¦à¥‡à¤–à¤¿à¤|Live\s*Updates?[:\s\-â€“â€”]*|Khabar\s*Updates?[:\s\-â€“â€”]*|Latest\s*News[:\s\-â€“â€”]*|Breaking\s*News[:\s\-â€“â€”]*|Exclusive[:\s\-â€“â€”]*|Big\s*Breaking[:\s\-â€“â€”]*|à¤²à¤¾à¤‡à¤µ\s*à¤…à¤ªà¤¡à¥‡à¤Ÿ[:\s\-â€“â€”]*|à¤–à¤¬à¤°\s*à¤…à¤ªà¤¡à¥‡à¤Ÿ[:\s\-â€“â€”]*|à¤²à¥‡à¤Ÿà¥‡à¤¸à¥à¤Ÿ\s*à¤¨à¥à¤¯à¥‚à¤œ[:\s\-â€“â€”]*|à¤²à¥‡à¤Ÿà¥‡à¤¸à¥à¤Ÿ\s*à¤…à¤ªà¤¡à¥‡à¤Ÿ[:\s\-â€“â€”]*|à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼[:\s\-â€“â€”]*|à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—\s*à¤¨à¥à¤¯à¥‚à¤œ[:\s\-â€“â€”]*|à¤¬à¤¿à¤—\s*à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—[:\s\-â€“â€”]*|à¤¤à¤¾à¤œà¤¾\s*à¤¸à¤®à¤¾à¤šà¤¾à¤°[:\s\-â€“â€”]*|à¤¬à¤¡à¤¼à¥€\s*à¤–à¤¬à¤°[:\s\-â€“â€”]*|à¤à¤•à¥à¤¸à¤•à¥à¤²à¥‚à¤¸à¤¿à¤µ[:\s\-â€“â€”]*)\s*/i, "");
 
   // 2. Canonical Attachment 5 sanitizeFlattery implementation
   cleaned = sanitizeFlattery(cleaned);
 
-  // 3. Remove unnecessary trailing explanatory filler sentences (e.g. "इससे लोगों को मदद मिलेगी")
-  cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
+  // 3. Remove unnecessary trailing explanatory filler sentences (e.g. "à¤‡à¤¸à¤¸à¥‡ à¤²à¥‹à¤—à¥‹à¤‚ à¤•à¥‹ à¤®à¤¦à¤¦ à¤®à¤¿à¤²à¥‡à¤—à¥€")
+  cleaned = cleaned.replace(/\s*[,à¥¤]?\s*(?:à¤œà¤¿à¤¸à¤¸à¥‡|à¤‡à¤¸à¤¸à¥‡)\s+à¤²à¥‹à¤—à¥‹à¤‚\s+à¤•à¥‹\s+à¤®à¤¦à¤¦\s+à¤®à¤¿à¤²à¥‡à¤—à¥€.*$/u, "");
 
   if (isHeadline) {
-    cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, "").trim();
+    cleaned = cleaned.replace(/[à¥¤\.\,\!\?\:\-â€“â€”\s]+$/g, "").trim();
   }
   return cleaned;
 }
@@ -21768,33 +22099,33 @@ export function sanitizePressNoteFlattery(text: string, isHeadline: boolean = fa
 // Fallback generator for E-Paper Press Note
 function createEpaperLocalFallback(rawInput: string, city: string = "", reporterName: string = ""): any {
   const sanitized = sanitizePressNoteFlattery(rawInput);
-  const detectedCity = city.trim() || (rawInput.match(/(निवाड़ी|इंदौर|भोपाल|ग्वालियर|जबलपुर|उज्जैन|रीवा|सतना|सागर|टीकमगढ़|दमोह|छतरपुर)/i)?.[1] || "निवाड़ी");
-  const firstSentence = sanitized.split(/[।\.\n]/)[0]?.trim() || "प्रशासनिक कार्रवाई से क्षेत्र में मचा हड़कंप";
+  const detectedCity = city.trim() || (rawInput.match(/(à¤¨à¤¿à¤µà¤¾à¤¡à¤¼à¥€|à¤‡à¤‚à¤¦à¥Œà¤°|à¤­à¥‹à¤ªà¤¾à¤²|à¤—à¥à¤µà¤¾à¤²à¤¿à¤¯à¤°|à¤œà¤¬à¤²à¤ªà¥à¤°|à¤‰à¤œà¥à¤œà¥ˆà¤¨|à¤°à¥€à¤µà¤¾|à¤¸à¤¤à¤¨à¤¾|à¤¸à¤¾à¤—à¤°|à¤Ÿà¥€à¤•à¤®à¤—à¤¢à¤¼|à¤¦à¤®à¥‹à¤¹|à¤›à¤¤à¤°à¤ªà¥à¤°)/i)?.[1] || "à¤¨à¤¿à¤µà¤¾à¤¡à¤¼à¥€");
+  const firstSentence = sanitized.split(/[à¥¤\.\n]/)[0]?.trim() || "à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤¸à¥‡ à¤•à¥à¤·à¥‡à¤¤à¥à¤° à¤®à¥‡à¤‚ à¤®à¤šà¤¾ à¤¹à¤¡à¤¼à¤•à¤‚à¤ª";
   const headline = firstSentence.length > 15 && firstSentence.length < 90
     ? firstSentence
-    : `${detectedCity}: मामले में प्रशासन का बड़ा एक्शन, जांच के आदेश`;
+    : `${detectedCity}: à¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤•à¤¾ à¤¬à¤¡à¤¼à¤¾ à¤à¤•à¥à¤¶à¤¨, à¤œà¤¾à¤‚à¤š à¤•à¥‡ à¤†à¤¦à¥‡à¤¶`;
 
   return {
     epaperCity: detectedCity,
-    epaperKicker: "विशेष रिपोर्ट / ग्राउंड ज़ीरो",
+    epaperKicker: "à¤µà¤¿à¤¶à¥‡à¤· à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ / à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡ à¤œà¤¼à¥€à¤°à¥‹",
     epaperHeadline: headline,
-    epaperSubHeadline: "अधिकारियों ने मौके पर पहुंचकर लिया जायजा, दोषियों पर कड़ी कार्रवाई की चेतावनी",
-    epaperByline: reporterName ? `${reporterName} / विशेष संवाददाता, ${detectedCity}` : `ब्यूरो रिपोर्ट / ${detectedCity}`,
-    epaperPromoTagline: "📢 अब आप भी भेजें अपनी खबर हम तक: 96698-02408",
-    epaperArticleBody: `${sanitized.slice(0, 500) || "जिले में प्रशासन ने बड़ी कार्रवाई करते हुए स्थिति को नियंत्रित किया। ग्रामीणों की शिकायतों के आधार पर वरिष्ठ अधिकारियों ने संयुक्त दल गठित कर मौके पर पहुंचकर जांच की।"}\n\nमामले में संलिप्त पाए गए लोगों के विरुद्ध वैधानिक धाराओं में प्रकरण दर्ज कर अग्रिम कार्रवाई प्रारंभ कर दी गई है।`,
-    epaperHighlightsTitle: "कार्रवाई के मुख्य बिंदु",
+    epaperSubHeadline: "à¤…à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤¯à¥‹à¤‚ à¤¨à¥‡ à¤®à¥Œà¤•à¥‡ à¤ªà¤° à¤ªà¤¹à¥à¤‚à¤šà¤•à¤° à¤²à¤¿à¤¯à¤¾ à¤œà¤¾à¤¯à¤œà¤¾, à¤¦à¥‹à¤·à¤¿à¤¯à¥‹à¤‚ à¤ªà¤° à¤•à¤¡à¤¼à¥€ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¥€ à¤šà¥‡à¤¤à¤¾à¤µà¤¨à¥€",
+    epaperByline: reporterName ? `${reporterName} / à¤µà¤¿à¤¶à¥‡à¤· à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾, ${detectedCity}` : `à¤¬à¥à¤¯à¥‚à¤°à¥‹ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ / ${detectedCity}`,
+    epaperPromoTagline: "ðŸ“¢ à¤…à¤¬ à¤†à¤ª à¤­à¥€ à¤­à¥‡à¤œà¥‡à¤‚ à¤…à¤ªà¤¨à¥€ à¤–à¤¬à¤° à¤¹à¤® à¤¤à¤•: 96698-02408",
+    epaperArticleBody: `${sanitized.slice(0, 500) || "à¤œà¤¿à¤²à¥‡ à¤®à¥‡à¤‚ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤¨à¥‡ à¤¬à¤¡à¤¼à¥€ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¤°à¤¤à¥‡ à¤¹à¥à¤ à¤¸à¥à¤¥à¤¿à¤¤à¤¿ à¤•à¥‹ à¤¨à¤¿à¤¯à¤‚à¤¤à¥à¤°à¤¿à¤¤ à¤•à¤¿à¤¯à¤¾à¥¤ à¤—à¥à¤°à¤¾à¤®à¥€à¤£à¥‹à¤‚ à¤•à¥€ à¤¶à¤¿à¤•à¤¾à¤¯à¤¤à¥‹à¤‚ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤µà¤°à¤¿à¤·à¥à¤  à¤…à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤¯à¥‹à¤‚ à¤¨à¥‡ à¤¸à¤‚à¤¯à¥à¤•à¥à¤¤ à¤¦à¤² à¤—à¤ à¤¿à¤¤ à¤•à¤° à¤®à¥Œà¤•à¥‡ à¤ªà¤° à¤ªà¤¹à¥à¤‚à¤šà¤•à¤° à¤œà¤¾à¤‚à¤š à¤•à¥€à¥¤"}\n\nà¤®à¤¾à¤®à¤²à¥‡ à¤®à¥‡à¤‚ à¤¸à¤‚à¤²à¤¿à¤ªà¥à¤¤ à¤ªà¤¾à¤ à¤—à¤ à¤²à¥‹à¤—à¥‹à¤‚ à¤•à¥‡ à¤µà¤¿à¤°à¥à¤¦à¥à¤§ à¤µà¥ˆà¤§à¤¾à¤¨à¤¿à¤• à¤§à¤¾à¤°à¤¾à¤“à¤‚ à¤®à¥‡à¤‚ à¤ªà¥à¤°à¤•à¤°à¤£ à¤¦à¤°à¥à¤œ à¤•à¤° à¤…à¤—à¥à¤°à¤¿à¤® à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤ªà¥à¤°à¤¾à¤°à¤‚à¤­ à¤•à¤° à¤¦à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤`,
+    epaperHighlightsTitle: "à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¥‡ à¤®à¥à¤–à¥à¤¯ à¤¬à¤¿à¤‚à¤¦à¥",
     epaperHighlights: [
-      "प्रशासनिक दल ने मौके पर पहुंचकर की त्वरित कार्रवाई",
-      "शिकायतों के आधार पर जांच दल गठित कर पंचनामा तैयार",
-      "दोषियों के खिलाफ सख्त वैधानिक धाराओं में प्रकरण दर्ज",
+      "à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤¦à¤² à¤¨à¥‡ à¤®à¥Œà¤•à¥‡ à¤ªà¤° à¤ªà¤¹à¥à¤‚à¤šà¤•à¤° à¤•à¥€ à¤¤à¥à¤µà¤°à¤¿à¤¤ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ",
+      "à¤¶à¤¿à¤•à¤¾à¤¯à¤¤à¥‹à¤‚ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤œà¤¾à¤‚à¤š à¤¦à¤² à¤—à¤ à¤¿à¤¤ à¤•à¤° à¤ªà¤‚à¤šà¤¨à¤¾à¤®à¤¾ à¤¤à¥ˆà¤¯à¤¾à¤°",
+      "à¤¦à¥‹à¤·à¤¿à¤¯à¥‹à¤‚ à¤•à¥‡ à¤–à¤¿à¤²à¤¾à¤« à¤¸à¤–à¥à¤¤ à¤µà¥ˆà¤§à¤¾à¤¨à¤¿à¤• à¤§à¤¾à¤°à¤¾à¤“à¤‚ à¤®à¥‡à¤‚ à¤ªà¥à¤°à¤•à¤°à¤£ à¤¦à¤°à¥à¤œ",
     ],
-    epaperQuoteText: "जनहित और निष्पक्ष कार्रवाई के लिए प्रशासन पूरी तरह मुस्तैद है। किसी भी स्तर पर लापरवाही बर्दाश्त नहीं होगी।",
-    epaperQuoteSpeaker: `${detectedCity} प्रशासनिक अधिकारी`,
-    epaperPhotoCaption: "घटनास्थल पर पहुंचकर जांच पड़ताल करती प्रशासनिक टीम।",
-    epaperPhotoCaption2: "दस्तावेजों की जांच करते अधिकारी।",
-    epaperPhotoCaption3: "मौके पर उपस्थित ग्रामीण व प्रत्यक्षदर्शी।",
-    summary: `${detectedCity} में बड़ी कार्रवाई की खबर। पूरी रिपोर्ट ई-पेपर एडिशन में पढ़ें।\n\n#AINews #Epaper #${detectedCity} #HindiNews`,
-    category: "प्रशासन",
+    epaperQuoteText: "à¤œà¤¨à¤¹à¤¿à¤¤ à¤”à¤° à¤¨à¤¿à¤·à¥à¤ªà¤•à¥à¤· à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¥‡ à¤²à¤¿à¤ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤ªà¥‚à¤°à¥€ à¤¤à¤°à¤¹ à¤®à¥à¤¸à¥à¤¤à¥ˆà¤¦ à¤¹à¥ˆà¥¤ à¤•à¤¿à¤¸à¥€ à¤­à¥€ à¤¸à¥à¤¤à¤° à¤ªà¤° à¤²à¤¾à¤ªà¤°à¤µà¤¾à¤¹à¥€ à¤¬à¤°à¥à¤¦à¤¾à¤¶à¥à¤¤ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹à¤—à¥€à¥¤",
+    epaperQuoteSpeaker: `${detectedCity} à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤…à¤§à¤¿à¤•à¤¾à¤°à¥€`,
+    epaperPhotoCaption: "à¤˜à¤Ÿà¤¨à¤¾à¤¸à¥à¤¥à¤² à¤ªà¤° à¤ªà¤¹à¥à¤‚à¤šà¤•à¤° à¤œà¤¾à¤‚à¤š à¤ªà¤¡à¤¼à¤¤à¤¾à¤² à¤•à¤°à¤¤à¥€ à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨à¤¿à¤• à¤Ÿà¥€à¤®à¥¤",
+    epaperPhotoCaption2: "à¤¦à¤¸à¥à¤¤à¤¾à¤µà¥‡à¤œà¥‹à¤‚ à¤•à¥€ à¤œà¤¾à¤‚à¤š à¤•à¤°à¤¤à¥‡ à¤…à¤§à¤¿à¤•à¤¾à¤°à¥€à¥¤",
+    epaperPhotoCaption3: "à¤®à¥Œà¤•à¥‡ à¤ªà¤° à¤‰à¤ªà¤¸à¥à¤¥à¤¿à¤¤ à¤—à¥à¤°à¤¾à¤®à¥€à¤£ à¤µ à¤ªà¥à¤°à¤¤à¥à¤¯à¤•à¥à¤·à¤¦à¤°à¥à¤¶à¥€à¥¤",
+    summary: `${detectedCity} à¤®à¥‡à¤‚ à¤¬à¤¡à¤¼à¥€ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤•à¥€ à¤–à¤¬à¤°à¥¤ à¤ªà¥‚à¤°à¥€ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ à¤ˆ-à¤ªà¥‡à¤ªà¤° à¤à¤¡à¤¿à¤¶à¤¨ à¤®à¥‡à¤‚ à¤ªà¤¢à¤¼à¥‡à¤‚à¥¤\n\n#AINews #Epaper #${detectedCity} #HindiNews`,
+    category: "à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨",
   };
 }
 
@@ -21812,7 +22143,7 @@ app.post("/api/process-epaper-pressnote", enforceUserAccessMiddleware, async (re
     } = req.body;
 
     if (!pressNoteText && !linkUrl) {
-      return res.status(400).json({ error: "कृपया प्रेस नोट का विवरण या लिंक प्रदान करें।" });
+      return res.status(400).json({ error: "à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤°à¥‡à¤¸ à¤¨à¥‹à¤Ÿ à¤•à¤¾ à¤µà¤¿à¤µà¤°à¤£ à¤¯à¤¾ à¤²à¤¿à¤‚à¤• à¤ªà¥à¤°à¤¦à¤¾à¤¨ à¤•à¤°à¥‡à¤‚à¥¤" });
     }
 
     let fetchedSnippet = "";
@@ -21861,35 +22192,35 @@ Text: ${bodySnippet.slice(0, 3500)}
 
     const rawInput = (pressNoteText + "\n\n" + fetchedSnippet).trim();
 
-    const systemPrompt = `आप एक ई-पेपर संपादक हैं।
-आपको नीचे एक कच्चा प्रेस नोट अथवा समाचार रिपोर्ट दी जा रही है।
-आपको इसे ई-पेपर (E-Paper) एडिशन की प्रमुख खबर के रूप में ढालना है।
+    const systemPrompt = `à¤†à¤ª à¤à¤• à¤ˆ-à¤ªà¥‡à¤ªà¤° à¤¸à¤‚à¤ªà¤¾à¤¦à¤• à¤¹à¥ˆà¤‚à¥¤
+à¤†à¤ªà¤•à¥‹ à¤¨à¥€à¤šà¥‡ à¤à¤• à¤•à¤šà¥à¤šà¤¾ à¤ªà¥à¤°à¥‡à¤¸ à¤¨à¥‹à¤Ÿ à¤…à¤¥à¤µà¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ à¤¦à¥€ à¤œà¤¾ à¤°à¤¹à¥€ à¤¹à¥ˆà¥¤
+à¤†à¤ªà¤•à¥‹ à¤‡à¤¸à¥‡ à¤ˆ-à¤ªà¥‡à¤ªà¤° (E-Paper) à¤à¤¡à¤¿à¤¶à¤¨ à¤•à¥€ à¤ªà¥à¤°à¤®à¥à¤– à¤–à¤¬à¤° à¤•à¥‡ à¤°à¥‚à¤ª à¤®à¥‡à¤‚ à¤¢à¤¾à¤²à¤¨à¤¾ à¤¹à¥ˆà¥¤
 
-यूज़र का कच्चा इनपुट (प्रेस नोट / रिपोर्ट):
+à¤¯à¥‚à¤œà¤¼à¤° à¤•à¤¾ à¤•à¤šà¥à¤šà¤¾ à¤‡à¤¨à¤ªà¥à¤Ÿ (à¤ªà¥à¤°à¥‡à¤¸ à¤¨à¥‹à¤Ÿ / à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ):
 "${rawInput}"
 
-${city ? `यूज़र द्वारा निर्दिष्ट शहर/जिला: "${city}"` : ""}
-${reporterName ? `यूज़र द्वारा निर्दिष्ट रिपोर्टर का नाम: "${reporterName}"` : ""}
+${city ? `à¤¯à¥‚à¤œà¤¼à¤° à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¨à¤¿à¤°à¥à¤¦à¤¿à¤·à¥à¤Ÿ à¤¶à¤¹à¤°/à¤œà¤¿à¤²à¤¾: "${city}"` : ""}
+${reporterName ? `à¤¯à¥‚à¤œà¤¼à¤° à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¨à¤¿à¤°à¥à¤¦à¤¿à¤·à¥à¤Ÿ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¤° à¤•à¤¾ à¤¨à¤¾à¤®: "${reporterName}"` : ""}
 
-संपादकीय निर्देश:
-1. **चाटुकारिता व औपचारिक शब्द हटाना**: प्रेस नोट में अधिकारियों या व्यक्तियों के नाम के आगे 'श्री', 'श्रीमान', 'श्रीमती', 'माननीय', 'सम्मानीय', 'आदरणीय', 'महोदय', 'जी' जैसे औपचारिक या चाटुकारिता वाले शब्द हटाकर खबर को निष्पक्ष व तथ्यपरक भाषा में बनाएं।
-2. **शहर/जिला (epaperCity)**: खबर जिस शहर/जिले की है उसका नाम। यदि यूज़र ने निर्दिष्ट किया है तो वही रखें, अन्यथा प्रेस नोट से पहचानें।
-3. **किकर (epaperKicker)**: 3 से 6 शब्दों का संदर्भ टैग।
-4. **मुख्य हेडलाइन (epaperHeadline)**: सारगर्भित व सटीक अखबार हेडलाइन।
-5. **उप-शीर्षक (epaperSubHeadline)**: संक्षिप्त उप-शीर्षक या मुख्य परिणाम सार।
-6. **बायलाइन (epaperByline)**: यदि रिपोर्टर का नाम है तो "${reporterName || 'विशेष संवाददाता'}", अन्यथा "विशेष संवाददाता / ब्यूरो रिपोर्ट"।
-7. **अखबार की स्टोरी बॉडी (epaperArticleBody)**: संक्षिप्त, सटीक और पूर्ण विवरण।
-8. **हाइलाइट्स / इनसेट बॉक्स (epaperHighlightsTitle व epaperHighlights)**:
-   - epaperHighlightsTitle: जैसे "मुख्य बिंदु"
-   - epaperHighlights: महत्वपूर्ण बुलेट पॉइंट्स।
-9. **फोटो कैप्शन्स**:
-   - epaperPhotoCaption: पहली मुख्य फोटो का 1 लाइन संक्षिप्त विवरण।
-   - epaperPhotoCaption2: दूसरी फोटो का 1 लाइन संक्षिप्त विवरण।
-   - epaperPhotoCaption3: तीसरी फोटो का 1 लाइन संक्षिप्त विवरण।
-10. **प्रोमोशनल संदेश (epaperPromoTagline)**: बायलाइन में दाईं ओर दिखने वाली पंक्ति।
-11. **नेता / अधिकारी का बयान कॉल-आउट (epaperQuoteText व epaperQuoteSpeaker)**: यदि प्रेस नोट में किसी का बयान हो, तो उसे यहाँ लिखें। epaperQuoteSpeaker में उनका नाम व पद लिखें।
-12. **सोशल मीडिया समरी (summary)**: सोशल मीडिया के लिए समाचार का विवरण।
-13. **श्रेणी (category)**: समाचार श्रेणी।
+à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶:
+1. **à¤šà¤¾à¤Ÿà¥à¤•à¤¾à¤°à¤¿à¤¤à¤¾ à¤µ à¤”à¤ªà¤šà¤¾à¤°à¤¿à¤• à¤¶à¤¬à¥à¤¦ à¤¹à¤Ÿà¤¾à¤¨à¤¾**: à¤ªà¥à¤°à¥‡à¤¸ à¤¨à¥‹à¤Ÿ à¤®à¥‡à¤‚ à¤…à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤¯à¥‹à¤‚ à¤¯à¤¾ à¤µà¥à¤¯à¤•à¥à¤¤à¤¿à¤¯à¥‹à¤‚ à¤•à¥‡ à¤¨à¤¾à¤® à¤•à¥‡ à¤†à¤—à¥‡ 'à¤¶à¥à¤°à¥€', 'à¤¶à¥à¤°à¥€à¤®à¤¾à¤¨', 'à¤¶à¥à¤°à¥€à¤®à¤¤à¥€', 'à¤®à¤¾à¤¨à¤¨à¥€à¤¯', 'à¤¸à¤®à¥à¤®à¤¾à¤¨à¥€à¤¯', 'à¤†à¤¦à¤°à¤£à¥€à¤¯', 'à¤®à¤¹à¥‹à¤¦à¤¯', 'à¤œà¥€' à¤œà¥ˆà¤¸à¥‡ à¤”à¤ªà¤šà¤¾à¤°à¤¿à¤• à¤¯à¤¾ à¤šà¤¾à¤Ÿà¥à¤•à¤¾à¤°à¤¿à¤¤à¤¾ à¤µà¤¾à¤²à¥‡ à¤¶à¤¬à¥à¤¦ à¤¹à¤Ÿà¤¾à¤•à¤° à¤–à¤¬à¤° à¤•à¥‹ à¤¨à¤¿à¤·à¥à¤ªà¤•à¥à¤· à¤µ à¤¤à¤¥à¥à¤¯à¤ªà¤°à¤• à¤­à¤¾à¤·à¤¾ à¤®à¥‡à¤‚ à¤¬à¤¨à¤¾à¤à¤‚à¥¤
+2. **à¤¶à¤¹à¤°/à¤œà¤¿à¤²à¤¾ (epaperCity)**: à¤–à¤¬à¤° à¤œà¤¿à¤¸ à¤¶à¤¹à¤°/à¤œà¤¿à¤²à¥‡ à¤•à¥€ à¤¹à¥ˆ à¤‰à¤¸à¤•à¤¾ à¤¨à¤¾à¤®à¥¤ à¤¯à¤¦à¤¿ à¤¯à¥‚à¤œà¤¼à¤° à¤¨à¥‡ à¤¨à¤¿à¤°à¥à¤¦à¤¿à¤·à¥à¤Ÿ à¤•à¤¿à¤¯à¤¾ à¤¹à¥ˆ à¤¤à¥‹ à¤µà¤¹à¥€ à¤°à¤–à¥‡à¤‚, à¤…à¤¨à¥à¤¯à¤¥à¤¾ à¤ªà¥à¤°à¥‡à¤¸ à¤¨à¥‹à¤Ÿ à¤¸à¥‡ à¤ªà¤¹à¤šà¤¾à¤¨à¥‡à¤‚à¥¤
+3. **à¤•à¤¿à¤•à¤° (epaperKicker)**: 3 à¤¸à¥‡ 6 à¤¶à¤¬à¥à¤¦à¥‹à¤‚ à¤•à¤¾ à¤¸à¤‚à¤¦à¤°à¥à¤­ à¤Ÿà¥ˆà¤—à¥¤
+4. **à¤®à¥à¤–à¥à¤¯ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ (epaperHeadline)**: à¤¸à¤¾à¤°à¤—à¤°à¥à¤­à¤¿à¤¤ à¤µ à¤¸à¤Ÿà¥€à¤• à¤…à¤–à¤¬à¤¾à¤° à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥¤
+5. **à¤‰à¤ª-à¤¶à¥€à¤°à¥à¤·à¤• (epaperSubHeadline)**: à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤‰à¤ª-à¤¶à¥€à¤°à¥à¤·à¤• à¤¯à¤¾ à¤®à¥à¤–à¥à¤¯ à¤ªà¤°à¤¿à¤£à¤¾à¤® à¤¸à¤¾à¤°à¥¤
+6. **à¤¬à¤¾à¤¯à¤²à¤¾à¤‡à¤¨ (epaperByline)**: à¤¯à¤¦à¤¿ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¤° à¤•à¤¾ à¤¨à¤¾à¤® à¤¹à¥ˆ à¤¤à¥‹ "${reporterName || 'à¤µà¤¿à¤¶à¥‡à¤· à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾'}", à¤…à¤¨à¥à¤¯à¤¥à¤¾ "à¤µà¤¿à¤¶à¥‡à¤· à¤¸à¤‚à¤µà¤¾à¤¦à¤¦à¤¾à¤¤à¤¾ / à¤¬à¥à¤¯à¥‚à¤°à¥‹ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ"à¥¤
+7. **à¤…à¤–à¤¬à¤¾à¤° à¤•à¥€ à¤¸à¥à¤Ÿà¥‹à¤°à¥€ à¤¬à¥‰à¤¡à¥€ (epaperArticleBody)**: à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤, à¤¸à¤Ÿà¥€à¤• à¤”à¤° à¤ªà¥‚à¤°à¥à¤£ à¤µà¤¿à¤µà¤°à¤£à¥¤
+8. **à¤¹à¤¾à¤‡à¤²à¤¾à¤‡à¤Ÿà¥à¤¸ / à¤‡à¤¨à¤¸à¥‡à¤Ÿ à¤¬à¥‰à¤•à¥à¤¸ (epaperHighlightsTitle à¤µ epaperHighlights)**:
+   - epaperHighlightsTitle: à¤œà¥ˆà¤¸à¥‡ "à¤®à¥à¤–à¥à¤¯ à¤¬à¤¿à¤‚à¤¦à¥"
+   - epaperHighlights: à¤®à¤¹à¤¤à¥à¤µà¤ªà¥‚à¤°à¥à¤£ à¤¬à¥à¤²à¥‡à¤Ÿ à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸à¥¤
+9. **à¤«à¥‹à¤Ÿà¥‹ à¤•à¥ˆà¤ªà¥à¤¶à¤¨à¥à¤¸**:
+   - epaperPhotoCaption: à¤ªà¤¹à¤²à¥€ à¤®à¥à¤–à¥à¤¯ à¤«à¥‹à¤Ÿà¥‹ à¤•à¤¾ 1 à¤²à¤¾à¤‡à¤¨ à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤µà¤¿à¤µà¤°à¤£à¥¤
+   - epaperPhotoCaption2: à¤¦à¥‚à¤¸à¤°à¥€ à¤«à¥‹à¤Ÿà¥‹ à¤•à¤¾ 1 à¤²à¤¾à¤‡à¤¨ à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤µà¤¿à¤µà¤°à¤£à¥¤
+   - epaperPhotoCaption3: à¤¤à¥€à¤¸à¤°à¥€ à¤«à¥‹à¤Ÿà¥‹ à¤•à¤¾ 1 à¤²à¤¾à¤‡à¤¨ à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤µà¤¿à¤µà¤°à¤£à¥¤
+10. **à¤ªà¥à¤°à¥‹à¤®à¥‹à¤¶à¤¨à¤² à¤¸à¤‚à¤¦à¥‡à¤¶ (epaperPromoTagline)**: à¤¬à¤¾à¤¯à¤²à¤¾à¤‡à¤¨ à¤®à¥‡à¤‚ à¤¦à¤¾à¤ˆà¤‚ à¤“à¤° à¤¦à¤¿à¤–à¤¨à¥‡ à¤µà¤¾à¤²à¥€ à¤ªà¤‚à¤•à¥à¤¤à¤¿à¥¤
+11. **à¤¨à¥‡à¤¤à¤¾ / à¤…à¤§à¤¿à¤•à¤¾à¤°à¥€ à¤•à¤¾ à¤¬à¤¯à¤¾à¤¨ à¤•à¥‰à¤²-à¤†à¤‰à¤Ÿ (epaperQuoteText à¤µ epaperQuoteSpeaker)**: à¤¯à¤¦à¤¿ à¤ªà¥à¤°à¥‡à¤¸ à¤¨à¥‹à¤Ÿ à¤®à¥‡à¤‚ à¤•à¤¿à¤¸à¥€ à¤•à¤¾ à¤¬à¤¯à¤¾à¤¨ à¤¹à¥‹, à¤¤à¥‹ à¤‰à¤¸à¥‡ à¤¯à¤¹à¤¾à¤ à¤²à¤¿à¤–à¥‡à¤‚à¥¤ epaperQuoteSpeaker à¤®à¥‡à¤‚ à¤‰à¤¨à¤•à¤¾ à¤¨à¤¾à¤® à¤µ à¤ªà¤¦ à¤²à¤¿à¤–à¥‡à¤‚à¥¤
+12. **à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤¸à¤®à¤°à¥€ (summary)**: à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤•à¥‡ à¤²à¤¿à¤ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¤¾ à¤µà¤¿à¤µà¤°à¤£à¥¤
+13. **à¤¶à¥à¤°à¥‡à¤£à¥€ (category)**: à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤¶à¥à¤°à¥‡à¤£à¥€à¥¤
 
 Strictly return a valid JSON object matching these exact keys:
 epaperCity, epaperKicker, epaperHeadline, epaperSubHeadline, epaperByline, epaperPromoTagline, epaperArticleBody, epaperHighlightsTitle, epaperHighlights, epaperQuoteText, epaperQuoteSpeaker, epaperPhotoCaption, epaperPhotoCaption2, epaperPhotoCaption3, summary, category`;
@@ -22006,16 +22337,16 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Protest / Dharna / Teachers / Recruitment / Strike / Rally
   if (
-    lower.includes("धरना") ||
-    lower.includes("प्रदर्शन") ||
-    lower.includes("आंदोलन") ||
-    lower.includes("अभ्यर्थी") ||
-    lower.includes("शिक्षक") ||
-    lower.includes("भर्ती") ||
-    lower.includes("मांग") ||
-    lower.includes("हड़ताल") ||
-    lower.includes("घेराव") ||
-    lower.includes("ज्ञापन") ||
+    lower.includes("à¤§à¤°à¤¨à¤¾") ||
+    lower.includes("à¤ªà¥à¤°à¤¦à¤°à¥à¤¶à¤¨") ||
+    lower.includes("à¤†à¤‚à¤¦à¥‹à¤²à¤¨") ||
+    lower.includes("à¤…à¤­à¥à¤¯à¤°à¥à¤¥à¥€") ||
+    lower.includes("à¤¶à¤¿à¤•à¥à¤·à¤•") ||
+    lower.includes("à¤­à¤°à¥à¤¤à¥€") ||
+    lower.includes("à¤®à¤¾à¤‚à¤—") ||
+    lower.includes("à¤¹à¤¡à¤¼à¤¤à¤¾à¤²") ||
+    lower.includes("à¤˜à¥‡à¤°à¤¾à¤µ") ||
+    lower.includes("à¤œà¥à¤žà¤¾à¤ªà¤¨") ||
     lower.includes("protest") ||
     lower.includes("rally") ||
     lower.includes("strike") ||
@@ -22026,17 +22357,17 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Accident / Crash / Road / Highway
   if (
-    lower.includes("हादसा") ||
-    lower.includes("दुर्घटना") ||
-    lower.includes("टक्कर") ||
-    lower.includes("पलटी") ||
-    lower.includes("बस") ||
-    lower.includes("ट्रक") ||
-    lower.includes("कार") ||
-    lower.includes("हाईवे") ||
-    lower.includes("सड़क") ||
-    lower.includes("घायल") ||
-    lower.includes("मौत") ||
+    lower.includes("à¤¹à¤¾à¤¦à¤¸à¤¾") ||
+    lower.includes("à¤¦à¥à¤°à¥à¤˜à¤Ÿà¤¨à¤¾") ||
+    lower.includes("à¤Ÿà¤•à¥à¤•à¤°") ||
+    lower.includes("à¤ªà¤²à¤Ÿà¥€") ||
+    lower.includes("à¤¬à¤¸") ||
+    lower.includes("à¤Ÿà¥à¤°à¤•") ||
+    lower.includes("à¤•à¤¾à¤°") ||
+    lower.includes("à¤¹à¤¾à¤ˆà¤µà¥‡") ||
+    lower.includes("à¤¸à¤¡à¤¼à¤•") ||
+    lower.includes("à¤˜à¤¾à¤¯à¤²") ||
+    lower.includes("à¤®à¥Œà¤¤") ||
     lower.includes("accident") ||
     lower.includes("crash") ||
     lower.includes("highway")
@@ -22046,19 +22377,19 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Politics / Leader / Government / Assembly / CM / Cabinet
   if (
-    lower.includes("मुख्यमंत्री") ||
-    lower.includes("शिवराज") ||
-    lower.includes("दिग्विजय") ||
-    lower.includes("मोहन यादव") ||
-    lower.includes("कमलनाथ") ||
-    lower.includes("मंत्री") ||
-    lower.includes("नेता") ||
-    lower.includes("विधानसभा") ||
-    lower.includes("प्रेस") ||
-    lower.includes("कांग्रेस") ||
-    lower.includes("भाजपा") ||
-    lower.includes("सरकार") ||
-    lower.includes("संसद") ||
+    lower.includes("à¤®à¥à¤–à¥à¤¯à¤®à¤‚à¤¤à¥à¤°à¥€") ||
+    lower.includes("à¤¶à¤¿à¤µà¤°à¤¾à¤œ") ||
+    lower.includes("à¤¦à¤¿à¤—à¥à¤µà¤¿à¤œà¤¯") ||
+    lower.includes("à¤®à¥‹à¤¹à¤¨ à¤¯à¤¾à¤¦à¤µ") ||
+    lower.includes("à¤•à¤®à¤²à¤¨à¤¾à¤¥") ||
+    lower.includes("à¤®à¤‚à¤¤à¥à¤°à¥€") ||
+    lower.includes("à¤¨à¥‡à¤¤à¤¾") ||
+    lower.includes("à¤µà¤¿à¤§à¤¾à¤¨à¤¸à¤­à¤¾") ||
+    lower.includes("à¤ªà¥à¤°à¥‡à¤¸") ||
+    lower.includes("à¤•à¤¾à¤‚à¤—à¥à¤°à¥‡à¤¸") ||
+    lower.includes("à¤­à¤¾à¤œà¤ªà¤¾") ||
+    lower.includes("à¤¸à¤°à¤•à¤¾à¤°") ||
+    lower.includes("à¤¸à¤‚à¤¸à¤¦") ||
     lower.includes("minister") ||
     lower.includes("assembly") ||
     lower.includes("politics")
@@ -22068,14 +22399,14 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Police / Court / Crime / Arrest
   if (
-    lower.includes("पुलिस") ||
-    lower.includes("कोर्ट") ||
-    lower.includes("अदालत") ||
-    lower.includes("गिरफ्तार") ||
-    lower.includes("क्राइम") ||
-    lower.includes("अपराध") ||
-    lower.includes("हत्या") ||
-    lower.includes("चोरी") ||
+    lower.includes("à¤ªà¥à¤²à¤¿à¤¸") ||
+    lower.includes("à¤•à¥‹à¤°à¥à¤Ÿ") ||
+    lower.includes("à¤…à¤¦à¤¾à¤²à¤¤") ||
+    lower.includes("à¤—à¤¿à¤°à¤«à¥à¤¤à¤¾à¤°") ||
+    lower.includes("à¤•à¥à¤°à¤¾à¤‡à¤®") ||
+    lower.includes("à¤…à¤ªà¤°à¤¾à¤§") ||
+    lower.includes("à¤¹à¤¤à¥à¤¯à¤¾") ||
+    lower.includes("à¤šà¥‹à¤°à¥€") ||
     lower.includes("police") ||
     lower.includes("court") ||
     lower.includes("crime")
@@ -22085,11 +22416,11 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Hospital / Medical
   if (
-    lower.includes("अस्पताल") ||
-    lower.includes("डॉक्टर") ||
-    lower.includes("मरीज") ||
-    lower.includes("स्वास्थ्य") ||
-    lower.includes("एम्बुलेंस") ||
+    lower.includes("à¤…à¤¸à¥à¤ªà¤¤à¤¾à¤²") ||
+    lower.includes("à¤¡à¥‰à¤•à¥à¤Ÿà¤°") ||
+    lower.includes("à¤®à¤°à¥€à¤œ") ||
+    lower.includes("à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯") ||
+    lower.includes("à¤à¤®à¥à¤¬à¥à¤²à¥‡à¤‚à¤¸") ||
     lower.includes("hospital") ||
     lower.includes("doctor")
   ) {
@@ -22098,11 +22429,11 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Weather / Monsoon / Rain
   if (
-    lower.includes("मौसम") ||
-    lower.includes("बारिश") ||
-    lower.includes("बाढ़") ||
-    lower.includes("तूफान") ||
-    lower.includes("आंधी") ||
+    lower.includes("à¤®à¥Œà¤¸à¤®") ||
+    lower.includes("à¤¬à¤¾à¤°à¤¿à¤¶") ||
+    lower.includes("à¤¬à¤¾à¤¢à¤¼") ||
+    lower.includes("à¤¤à¥‚à¤«à¤¾à¤¨") ||
+    lower.includes("à¤†à¤‚à¤§à¥€") ||
     lower.includes("rain") ||
     lower.includes("weather")
   ) {
@@ -22111,11 +22442,11 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Students / Exam / Education
   if (
-    lower.includes("छात्र") ||
-    lower.includes("परीक्षा") ||
-    lower.includes("स्कूल") ||
-    lower.includes("कॉलेज") ||
-    lower.includes("विद्यार्थी") ||
+    lower.includes("à¤›à¤¾à¤¤à¥à¤°") ||
+    lower.includes("à¤ªà¤°à¥€à¤•à¥à¤·à¤¾") ||
+    lower.includes("à¤¸à¥à¤•à¥‚à¤²") ||
+    lower.includes("à¤•à¥‰à¤²à¥‡à¤œ") ||
+    lower.includes("à¤µà¤¿à¤¦à¥à¤¯à¤¾à¤°à¥à¤¥à¥€") ||
     lower.includes("student") ||
     lower.includes("exam")
   ) {
@@ -22124,11 +22455,11 @@ function pickCuratedNewsPressPhoto(text: string, variation: number = 0): string 
 
   // Business / Economy / Gold
   if (
-    lower.includes("व्यापार") ||
-    lower.includes("सोना") ||
-    lower.includes("चांदी") ||
-    lower.includes("शेयर") ||
-    lower.includes("बाजार") ||
+    lower.includes("à¤µà¥à¤¯à¤¾à¤ªà¤¾à¤°") ||
+    lower.includes("à¤¸à¥‹à¤¨à¤¾") ||
+    lower.includes("à¤šà¤¾à¤‚à¤¦à¥€") ||
+    lower.includes("à¤¶à¥‡à¤¯à¤°") ||
+    lower.includes("à¤¬à¤¾à¤œà¤¾à¤°") ||
     lower.includes("gold") ||
     lower.includes("market")
   ) {
@@ -22227,7 +22558,7 @@ Return ONLY the English prompt string.`,
         }
       } catch (openAiImgErr: any) {
         console.error("OpenAI DALL-E 3 error:", openAiImgErr);
-        if (openAiImgErr?.message && openAiImgErr.message.includes("OPENAI_API_KEY सेट नहीं है")) {
+        if (openAiImgErr?.message && openAiImgErr.message.includes("OPENAI_API_KEY à¤¸à¥‡à¤Ÿ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ")) {
           return res.status(400).json({ error: openAiImgErr.message });
         }
         // If OpenAI image generation fails due to policy or limits, fall through to authentic curated photo
@@ -22315,7 +22646,7 @@ Return ONLY the English prompt string.`,
         promptUsed: imagePrompt,
         fallbackUsed: true,
         isAiGenerated: false,
-        notice: "AI इमेज कोटा पूरा होने के कारण समाचार विषय से संबंधित प्रामाणिक प्रेस फोटो तैयार की गई है।",
+        notice: "AI à¤‡à¤®à¥‡à¤œ à¤•à¥‹à¤Ÿà¤¾ à¤ªà¥‚à¤°à¤¾ à¤¹à¥‹à¤¨à¥‡ à¤•à¥‡ à¤•à¤¾à¤°à¤£ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤µà¤¿à¤·à¤¯ à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¥à¤°à¤¾à¤®à¤¾à¤£à¤¿à¤• à¤ªà¥à¤°à¥‡à¤¸ à¤«à¥‹à¤Ÿà¥‹ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤",
       });
     }
 
@@ -22337,7 +22668,7 @@ Return ONLY the English prompt string.`,
       promptUsed: req.body?.customPrompt || "Journalistic Press Photo",
       fallbackUsed: true,
       isAiGenerated: false,
-      notice: "दैनिक AI इमेज कोटा सीमा के कारण संबंधित प्रामाणिक प्रेस फोटो चयनित की गई है।",
+      notice: "à¤¦à¥ˆà¤¨à¤¿à¤• AI à¤‡à¤®à¥‡à¤œ à¤•à¥‹à¤Ÿà¤¾ à¤¸à¥€à¤®à¤¾ à¤•à¥‡ à¤•à¤¾à¤°à¤£ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¥à¤°à¤¾à¤®à¤¾à¤£à¤¿à¤• à¤ªà¥à¤°à¥‡à¤¸ à¤«à¥‹à¤Ÿà¥‹ à¤šà¤¯à¤¨à¤¿à¤¤ à¤•à¥€ à¤—à¤ˆ à¤¹à¥ˆà¥¤",
     });
   }
 });
@@ -22367,8 +22698,8 @@ app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) 
 
     const effectiveSummary = (existingSummary || summary || "").trim();
     const effectiveUsername = username || channelUsername || "";
-    const effectiveLocation = (location || "मध्य प्रदेश").trim();
-    const effectiveCategory = (category || "न्यूज़").trim();
+    const effectiveLocation = (location || "à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶").trim();
+    const effectiveCategory = (category || "à¤¨à¥à¤¯à¥‚à¤œà¤¼").trim();
     const effectiveMode = (captionLength === 'short' || style === 'short')
       ? 'short'
       : (captionLength === 'bullet' || style === 'bullet_points')
@@ -22377,44 +22708,44 @@ app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) 
 
     const cleanUser = effectiveUsername.replace(/^@/, "").replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "").trim();
     const isGenericUser = ["user", "username", "reporter", "admin", "superadmin", "null", "undefined"].includes(cleanUser.toLowerCase());
-    const userTagDirective = cleanUser && !isGenericUser ? `\n   - सबसे पहला हैशटैग अनिवार्य रूप से: #${cleanUser}` : "";
+    const userTagDirective = cleanUser && !isGenericUser ? `\n   - à¤¸à¤¬à¤¸à¥‡ à¤ªà¤¹à¤²à¤¾ à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤°à¥‚à¤ª à¤¸à¥‡: #${cleanUser}` : "";
 
     let modeGuidance = "";
     if (effectiveMode === 'short') {
-      modeGuidance = `1. समाचार को ठीक 2 संक्षिप्त एवं सारगर्भित पैराग्राफ में लिखें (Full 2 Short Paragraphs):
-   - पहला पैराग्राफ: घटना का मुख्य विवरण, समय, स्थान व मुख्य घटनाक्रम।
-   - दूसरा पैराग्राफ: वर्तमान स्थिति, प्रशासन/पुलिस की कार्रवाई या निष्कर्ष।`;
+      modeGuidance = `1. à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‹ à¤ à¥€à¤• 2 à¤¸à¤‚à¤•à¥à¤·à¤¿à¤ªà¥à¤¤ à¤à¤µà¤‚ à¤¸à¤¾à¤°à¤—à¤°à¥à¤­à¤¿à¤¤ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤« à¤®à¥‡à¤‚ à¤²à¤¿à¤–à¥‡à¤‚ (Full 2 Short Paragraphs):
+   - à¤ªà¤¹à¤²à¤¾ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤«: à¤˜à¤Ÿà¤¨à¤¾ à¤•à¤¾ à¤®à¥à¤–à¥à¤¯ à¤µà¤¿à¤µà¤°à¤£, à¤¸à¤®à¤¯, à¤¸à¥à¤¥à¤¾à¤¨ à¤µ à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤®à¥¤
+   - à¤¦à¥‚à¤¸à¤°à¤¾ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤«: à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤¸à¥à¤¥à¤¿à¤¤à¤¿, à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨/à¤ªà¥à¤²à¤¿à¤¸ à¤•à¥€ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ à¤¯à¤¾ à¤¨à¤¿à¤·à¥à¤•à¤°à¥à¤·à¥¤`;
     } else if (effectiveMode === 'bullet') {
-      modeGuidance = `1. समाचार को मुख्य बिंदुओं (Bullet Points) में तैयार करें:
-   - प्रत्येक पंक्ति '• ' से शुरू हो और ठीक एक स्पष्ट तथ्य या घटनाक्रम प्रस्तुत करे।
-   - कम से कम 3 और अधिकतम 5 बुलेट पॉइंट्स दें।`;
+      modeGuidance = `1. à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‹ à¤®à¥à¤–à¥à¤¯ à¤¬à¤¿à¤‚à¤¦à¥à¤“à¤‚ (Bullet Points) à¤®à¥‡à¤‚ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¥‡à¤‚:
+   - à¤ªà¥à¤°à¤¤à¥à¤¯à¥‡à¤• à¤ªà¤‚à¤•à¥à¤¤à¤¿ 'â€¢ ' à¤¸à¥‡ à¤¶à¥à¤°à¥‚ à¤¹à¥‹ à¤”à¤° à¤ à¥€à¤• à¤à¤• à¤¸à¥à¤ªà¤·à¥à¤Ÿ à¤¤à¤¥à¥à¤¯ à¤¯à¤¾ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤® à¤ªà¥à¤°à¤¸à¥à¤¤à¥à¤¤ à¤•à¤°à¥‡à¥¤
+   - à¤•à¤® à¤¸à¥‡ à¤•à¤® 3 à¤”à¤° à¤…à¤§à¤¿à¤•à¤¤à¤® 5 à¤¬à¥à¤²à¥‡à¤Ÿ à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸ à¤¦à¥‡à¤‚à¥¤`;
     } else {
-      modeGuidance = `1. समाचार को अनिवार्य रूप से ठीक 3 बड़े, समृद्ध और विस्तृत पैराग्राफ में लिखें (Full 3 Detailed Paragraphs):
-   - पहला पैराग्राफ: घटना का मुख्य विवरण, समय, स्थान व मुख्य घटनाक्रम।
-   - दूसरा पैराग्राफ: पृष्ठभूमि, कारण, प्रत्यक्षदर्शियों का कहना व जांच की बातें।
-   - तीसरा पैराग्राफ: पुलिस/प्रशासन की कार्रवाई, वर्तमान स्थिति और आगे की प्रक्रिया।`;
+      modeGuidance = `1. à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‹ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤°à¥‚à¤ª à¤¸à¥‡ à¤ à¥€à¤• 3 à¤¬à¤¡à¤¼à¥‡, à¤¸à¤®à¥ƒà¤¦à¥à¤§ à¤”à¤° à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤« à¤®à¥‡à¤‚ à¤²à¤¿à¤–à¥‡à¤‚ (Full 3 Detailed Paragraphs):
+   - à¤ªà¤¹à¤²à¤¾ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤«: à¤˜à¤Ÿà¤¨à¤¾ à¤•à¤¾ à¤®à¥à¤–à¥à¤¯ à¤µà¤¿à¤µà¤°à¤£, à¤¸à¤®à¤¯, à¤¸à¥à¤¥à¤¾à¤¨ à¤µ à¤®à¥à¤–à¥à¤¯ à¤˜à¤Ÿà¤¨à¤¾à¤•à¥à¤°à¤®à¥¤
+   - à¤¦à¥‚à¤¸à¤°à¤¾ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤«: à¤ªà¥ƒà¤·à¥à¤ à¤­à¥‚à¤®à¤¿, à¤•à¤¾à¤°à¤£, à¤ªà¥à¤°à¤¤à¥à¤¯à¤•à¥à¤·à¤¦à¤°à¥à¤¶à¤¿à¤¯à¥‹à¤‚ à¤•à¤¾ à¤•à¤¹à¤¨à¤¾ à¤µ à¤œà¤¾à¤‚à¤š à¤•à¥€ à¤¬à¤¾à¤¤à¥‡à¤‚à¥¤
+   - à¤¤à¥€à¤¸à¤°à¤¾ à¤ªà¥ˆà¤°à¤¾à¤—à¥à¤°à¤¾à¤«: à¤ªà¥à¤²à¤¿à¤¸/à¤ªà¥à¤°à¤¶à¤¾à¤¸à¤¨ à¤•à¥€ à¤•à¤¾à¤°à¥à¤°à¤µà¤¾à¤ˆ, à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤¸à¥à¤¥à¤¿à¤¤à¤¿ à¤”à¤° à¤†à¤—à¥‡ à¤•à¥€ à¤ªà¥à¤°à¤•à¥à¤°à¤¿à¤¯à¤¾à¥¤`;
     }
 
-    const systemInstruction = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ मुख्य संपादक हैं।`;
-    const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ मुख्य संपादक हैं।
-निम्नलिखित समाचार के लिए इंस्टाग्राम और फेसबुक पोस्ट का विस्तृत, प्रामाणिक और प्रभावशाली कैप्शन तैयार करें:
+    const systemInstruction = `à¤†à¤ª à¤­à¤¾à¤°à¤¤ à¤•à¥‡ à¤…à¤—à¥à¤°à¤£à¥€ à¤¹à¤¿à¤‚à¤¦à¥€ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤šà¥ˆà¤¨à¤² à¤•à¥‡ à¤µà¤°à¤¿à¤·à¥à¤  à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤ªà¤¾à¤¦à¤• à¤¹à¥ˆà¤‚à¥¤`;
+    const prompt = `à¤†à¤ª à¤­à¤¾à¤°à¤¤ à¤•à¥‡ à¤…à¤—à¥à¤°à¤£à¥€ à¤¹à¤¿à¤‚à¤¦à¥€ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤šà¥ˆà¤¨à¤² à¤•à¥‡ à¤µà¤°à¤¿à¤·à¥à¤  à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤ªà¤¾à¤¦à¤• à¤¹à¥ˆà¤‚à¥¤
+à¤¨à¤¿à¤®à¥à¤¨à¤²à¤¿à¤–à¤¿à¤¤ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¥‡ à¤²à¤¿à¤ à¤‡à¤‚à¤¸à¥à¤Ÿà¤¾à¤—à¥à¤°à¤¾à¤® à¤”à¤° à¤«à¥‡à¤¸à¤¬à¥à¤• à¤ªà¥‹à¤¸à¥à¤Ÿ à¤•à¤¾ à¤µà¤¿à¤¸à¥à¤¤à¥ƒà¤¤, à¤ªà¥à¤°à¤¾à¤®à¤¾à¤£à¤¿à¤• à¤”à¤° à¤ªà¥à¤°à¤­à¤¾à¤µà¤¶à¤¾à¤²à¥€ à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¥‡à¤‚:
 
-हेडलाइन: "${effectiveHeadline}"
-स्थान: "${effectiveLocation}"
-श्रेणी: "${effectiveCategory}"
-${effectiveSummary ? `मौजूदा संदर्भ/कच्चा विवरण: "${effectiveSummary}"` : ""}
-${customInstruction ? `यूज़र का विशेष निर्देश: "${customInstruction}"` : ""}
+à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨: "${effectiveHeadline}"
+à¤¸à¥à¤¥à¤¾à¤¨: "${effectiveLocation}"
+à¤¶à¥à¤°à¥‡à¤£à¥€: "${effectiveCategory}"
+${effectiveSummary ? `à¤®à¥Œà¤œà¥‚à¤¦à¤¾ à¤¸à¤‚à¤¦à¤°à¥à¤­/à¤•à¤šà¥à¤šà¤¾ à¤µà¤¿à¤µà¤°à¤£: "${effectiveSummary}"` : ""}
+${customInstruction ? `à¤¯à¥‚à¤œà¤¼à¤° à¤•à¤¾ à¤µà¤¿à¤¶à¥‡à¤· à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶: "${customInstruction}"` : ""}
 
-नियम (कड़ाई से पालन करें):
+à¤¨à¤¿à¤¯à¤® (à¤•à¤¡à¤¼à¤¾à¤ˆ à¤¸à¥‡ à¤ªà¤¾à¤²à¤¨ à¤•à¤°à¥‡à¤‚):
 ${modeGuidance}
-2. पाठकों को यह स्पष्ट अहसास होना चाहिए कि "पूरी खबर विवरण में" उपलब्ध है।
-3. खबर में कोई फालतू हेडिंग, टाइटल, फोन नंबर, सोशल मीडिया लिंक्स, वेबसाइट URL या "पूरी खबर पढ़ें" जैसे गैर-ज़रूरी शब्द न जोड़ें। किसी भी प्रकार का URL या वेब लिंक बिल्कुल न लिखें।
-4. ठीक एक खाली लाइन छोड़कर अंत में 6 से 8 प्रासंगिक हैशटैग लगाएं।
-5. हैशटैग क्रम (MUST):${userTagDirective}
-   - बीच में घटना/स्थान से संबंधित प्रासंगिक हैशटैग (#BreakingNews #HindiNews #LatestNews #${effectiveLocation.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "") || "News"})
-   - सबसे अंतिम हैशटैग अनिवार्य रूप से: #AINewsMaker
+2. à¤ªà¤¾à¤ à¤•à¥‹à¤‚ à¤•à¥‹ à¤¯à¤¹ à¤¸à¥à¤ªà¤·à¥à¤Ÿ à¤…à¤¹à¤¸à¤¾à¤¸ à¤¹à¥‹à¤¨à¤¾ à¤šà¤¾à¤¹à¤¿à¤ à¤•à¤¿ "à¤ªà¥‚à¤°à¥€ à¤–à¤¬à¤° à¤µà¤¿à¤µà¤°à¤£ à¤®à¥‡à¤‚" à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤
+3. à¤–à¤¬à¤° à¤®à¥‡à¤‚ à¤•à¥‹à¤ˆ à¤«à¤¾à¤²à¤¤à¥‚ à¤¹à¥‡à¤¡à¤¿à¤‚à¤—, à¤Ÿà¤¾à¤‡à¤Ÿà¤², à¤«à¥‹à¤¨ à¤¨à¤‚à¤¬à¤°, à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤²à¤¿à¤‚à¤•à¥à¤¸, à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ URL à¤¯à¤¾ "à¤ªà¥‚à¤°à¥€ à¤–à¤¬à¤° à¤ªà¤¢à¤¼à¥‡à¤‚" à¤œà¥ˆà¤¸à¥‡ à¤—à¥ˆà¤°-à¤œà¤¼à¤°à¥‚à¤°à¥€ à¤¶à¤¬à¥à¤¦ à¤¨ à¤œà¥‹à¤¡à¤¼à¥‡à¤‚à¥¤ à¤•à¤¿à¤¸à¥€ à¤­à¥€ à¤ªà¥à¤°à¤•à¤¾à¤° à¤•à¤¾ URL à¤¯à¤¾ à¤µà¥‡à¤¬ à¤²à¤¿à¤‚à¤• à¤¬à¤¿à¤²à¥à¤•à¥à¤² à¤¨ à¤²à¤¿à¤–à¥‡à¤‚à¥¤
+4. à¤ à¥€à¤• à¤à¤• à¤–à¤¾à¤²à¥€ à¤²à¤¾à¤‡à¤¨ à¤›à¥‹à¤¡à¤¼à¤•à¤° à¤…à¤‚à¤¤ à¤®à¥‡à¤‚ 6 à¤¸à¥‡ 8 à¤ªà¥à¤°à¤¾à¤¸à¤‚à¤—à¤¿à¤• à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤²à¤—à¤¾à¤à¤‚à¥¤
+5. à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤•à¥à¤°à¤® (MUST):${userTagDirective}
+   - à¤¬à¥€à¤š à¤®à¥‡à¤‚ à¤˜à¤Ÿà¤¨à¤¾/à¤¸à¥à¤¥à¤¾à¤¨ à¤¸à¥‡ à¤¸à¤‚à¤¬à¤‚à¤§à¤¿à¤¤ à¤ªà¥à¤°à¤¾à¤¸à¤‚à¤—à¤¿à¤• à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— (#BreakingNews #HindiNews #LatestNews #${effectiveLocation.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, "") || "News"})
+   - à¤¸à¤¬à¤¸à¥‡ à¤…à¤‚à¤¤à¤¿à¤® à¤¹à¥ˆà¤¶à¤Ÿà¥ˆà¤— à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤°à¥‚à¤ª à¤¸à¥‡: #AINewsMaker
 
-केवल तैयार कैप्शन का शुद्ध टेक्स्ट दें, कोई अतिरिक्त मार्कडाउन या कोटेशन नहीं।`;
+à¤•à¥‡à¤µà¤² à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤•à¤¾ à¤¶à¥à¤¦à¥à¤§ à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤¦à¥‡à¤‚, à¤•à¥‹à¤ˆ à¤…à¤¤à¤¿à¤°à¤¿à¤•à¥à¤¤ à¤®à¤¾à¤°à¥à¤•à¤¡à¤¾à¤‰à¤¨ à¤¯à¤¾ à¤•à¥‹à¤Ÿà¥‡à¤¶à¤¨ à¤¨à¤¹à¥€à¤‚à¥¤`;
 
     let caption = "";
 
@@ -22488,11 +22819,11 @@ ${modeGuidance}
 function createVideoHeadlineVariantsFallback(caption: string, title?: string): string[] {
   const text = (caption || title || "").trim();
   const sentences = text
-    .split(/[।!?\n\r]+/)
+    .split(/[à¥¤!?\n\r]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 5);
 
-  const cleanTitle = (title || sentences[0] || "मुख्य समाचार").trim();
+  const cleanTitle = (title || sentences[0] || "à¤®à¥à¤–à¥à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°").trim();
   const options = [cleanTitle];
   for (const s of sentences) {
     if (options.length >= 4) break;
@@ -22513,19 +22844,19 @@ export async function generateVideoHeadlinesInternal(
   const fallbackHeadlines = createVideoHeadlineVariantsFallback(caption, title);
   try {
     const parsed = await executeGeminiWithKeyPool(async (ai) => {
-      const prompt = `वीडियो संदर्भ (Caption) और शीर्षक के आधार पर 4 हिंदी हेडलाइन्स तैयार करें:
+      const prompt = `à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¸à¤‚à¤¦à¤°à¥à¤­ (Caption) à¤”à¤° à¤¶à¥€à¤°à¥à¤·à¤• à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° 4 à¤¹à¤¿à¤‚à¤¦à¥€ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨à¥à¤¸ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¥‡à¤‚:
 
-वीडियो शीर्षक: "${title}"
-वीडियो संदर्भ/कैप्शन: "${caption}"
-टारगेट रेशियो: ${ratio}
+à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¶à¥€à¤°à¥à¤·à¤•: "${title}"
+à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¸à¤‚à¤¦à¤°à¥à¤­/à¤•à¥ˆà¤ªà¥à¤¶à¤¨: "${caption}"
+à¤Ÿà¤¾à¤°à¤—à¥‡à¤Ÿ à¤°à¥‡à¤¶à¤¿à¤¯à¥‹: ${ratio}
 
-केवल नीचे दिए गए JSON फॉर्मेट में उत्तर दें:
+à¤•à¥‡à¤µà¤² à¤¨à¥€à¤šà¥‡ à¤¦à¤¿à¤ à¤—à¤ JSON à¤«à¥‰à¤°à¥à¤®à¥‡à¤Ÿ à¤®à¥‡à¤‚ à¤‰à¤¤à¥à¤¤à¤° à¤¦à¥‡à¤‚:
 {
   "headlines": [
-    "हेडलाइन 1",
-    "हेडलाइन 2",
-    "हेडलाइन 3",
-    "हेडलाइन 4"
+    "à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ 1",
+    "à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ 2",
+    "à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ 3",
+    "à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ 4"
   ]
 }`;
 
@@ -22565,10 +22896,10 @@ app.post("/api/generate-video-headlines", apiRateLimiter(20, 60000), requireAuth
     const cleanCaption = String(caption || "").trim();
     const cleanTitle = String(title || "").trim();
     if (!cleanCaption && !cleanTitle) {
-      return res.status(400).json({ success: false, error: "कैप्शन या शीर्षक अनिवार्य है।" });
+      return res.status(400).json({ success: false, error: "à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤¯à¤¾ à¤¶à¥€à¤°à¥à¤·à¤• à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
     if (cleanCaption.length > 2000 || cleanTitle.length > 500) {
-      return res.status(400).json({ success: false, error: "इनपुट टेक्स्ट की लंबाई अनुमत सीमा से अधिक है।" });
+      return res.status(400).json({ success: false, error: "à¤‡à¤¨à¤ªà¥à¤Ÿ à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤•à¥€ à¤²à¤‚à¤¬à¤¾à¤ˆ à¤…à¤¨à¥à¤®à¤¤ à¤¸à¥€à¤®à¤¾ à¤¸à¥‡ à¤…à¤§à¤¿à¤• à¤¹à¥ˆà¥¤" });
     }
 
     const isVip = isUserVipEligible(req);
@@ -22583,7 +22914,7 @@ app.post("/api/generate-video-headlines", apiRateLimiter(20, 60000), requireAuth
 app.post("/api/admin/generate-video-headlines", requireAdminMiddleware, async (req, res) => {
   const { caption = "", title = "", ratio = "9:16" } = req.body || {};
   if (!caption && !title) {
-    return res.status(400).json({ error: "कैप्शन या शीर्षक अनिवार्य है।" });
+    return res.status(400).json({ error: "à¤•à¥ˆà¤ªà¥à¤¶à¤¨ à¤¯à¤¾ à¤¶à¥€à¤°à¥à¤·à¤• à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
   }
   const fallbackHeadlines = createVideoHeadlineVariantsFallback(caption, title);
   return res.json({ success: true, headlines: fallbackHeadlines, source: "editorial" });
@@ -22614,13 +22945,13 @@ app.post("/api/generate-morning-jacket", enforceUserAccessMiddleware, async (req
     } = req.body;
 
     const defaultMorningTopics = [
-      "सकारात्मक सोच, आत्मविश्वास और निरंतर प्रयास पर अत्यंत प्रेरक विचार",
-      "सफलता का मूलमंत्र: कर्म, धैर्य और अनुशासन पर सुविचार",
-      "आज का अनमोल विचार: समय का सदुपयोग और जीवन का लक्ष्य",
-      "सुबह की सैर और स्वास्थ्य के 3 स्वर्णिम नियम",
-      "मानसिक शांति, विनम्रता और सकारात्मक ऊर्जा पर प्रेरक विचार",
-      "भागवत गीता का सार: कर्म करो, फल की चिंता मत करो",
-      "जीवन में कभी हार न मानने का दृढ़ संकल्प और प्रेरणा",
+      "à¤¸à¤•à¤¾à¤°à¤¾à¤¤à¥à¤®à¤• à¤¸à¥‹à¤š, à¤†à¤¤à¥à¤®à¤µà¤¿à¤¶à¥à¤µà¤¾à¤¸ à¤”à¤° à¤¨à¤¿à¤°à¤‚à¤¤à¤° à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤ªà¤° à¤…à¤¤à¥à¤¯à¤‚à¤¤ à¤ªà¥à¤°à¥‡à¤°à¤• à¤µà¤¿à¤šà¤¾à¤°",
+      "à¤¸à¤«à¤²à¤¤à¤¾ à¤•à¤¾ à¤®à¥‚à¤²à¤®à¤‚à¤¤à¥à¤°: à¤•à¤°à¥à¤®, à¤§à¥ˆà¤°à¥à¤¯ à¤”à¤° à¤…à¤¨à¥à¤¶à¤¾à¤¸à¤¨ à¤ªà¤° à¤¸à¥à¤µà¤¿à¤šà¤¾à¤°",
+      "à¤†à¤œ à¤•à¤¾ à¤…à¤¨à¤®à¥‹à¤² à¤µà¤¿à¤šà¤¾à¤°: à¤¸à¤®à¤¯ à¤•à¤¾ à¤¸à¤¦à¥à¤ªà¤¯à¥‹à¤— à¤”à¤° à¤œà¥€à¤µà¤¨ à¤•à¤¾ à¤²à¤•à¥à¤·à¥à¤¯",
+      "à¤¸à¥à¤¬à¤¹ à¤•à¥€ à¤¸à¥ˆà¤° à¤”à¤° à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯ à¤•à¥‡ 3 à¤¸à¥à¤µà¤°à¥à¤£à¤¿à¤® à¤¨à¤¿à¤¯à¤®",
+      "à¤®à¤¾à¤¨à¤¸à¤¿à¤• à¤¶à¤¾à¤‚à¤¤à¤¿, à¤µà¤¿à¤¨à¤®à¥à¤°à¤¤à¤¾ à¤”à¤° à¤¸à¤•à¤¾à¤°à¤¾à¤¤à¥à¤®à¤• à¤Šà¤°à¥à¤œà¤¾ à¤ªà¤° à¤ªà¥à¤°à¥‡à¤°à¤• à¤µà¤¿à¤šà¤¾à¤°",
+      "à¤­à¤¾à¤—à¤µà¤¤ à¤—à¥€à¤¤à¤¾ à¤•à¤¾ à¤¸à¤¾à¤°: à¤•à¤°à¥à¤® à¤•à¤°à¥‹, à¤«à¤² à¤•à¥€ à¤šà¤¿à¤‚à¤¤à¤¾ à¤®à¤¤ à¤•à¤°à¥‹",
+      "à¤œà¥€à¤µà¤¨ à¤®à¥‡à¤‚ à¤•à¤­à¥€ à¤¹à¤¾à¤° à¤¨ à¤®à¤¾à¤¨à¤¨à¥‡ à¤•à¤¾ à¤¦à¥ƒà¤¢à¤¼ à¤¸à¤‚à¤•à¤²à¥à¤ª à¤”à¤° à¤ªà¥à¤°à¥‡à¤°à¤£à¤¾",
     ];
 
     let activePrompt = (command || topicPrompt || refinementCommand || "").trim();
@@ -22634,9 +22965,9 @@ app.post("/api/generate-morning-jacket", enforceUserAccessMiddleware, async (req
     // Check if user is asking to change or replace the image
     const isImageChangeRequest =
       action === "change_image" ||
-      /इमेज\s*(बदलें|बदलो|change|हटाओ|गलत|दूसरी)/i.test(activePrompt) ||
-      /फोटो\s*(बदलें|बदलो|change|हटाओ|गलत|दूसरी)/i.test(activePrompt) ||
-      /बैकग्राउंड\s*(बदलें|बदलो|change|नया)/i.test(activePrompt);
+      /à¤‡à¤®à¥‡à¤œ\s*(à¤¬à¤¦à¤²à¥‡à¤‚|à¤¬à¤¦à¤²à¥‹|change|à¤¹à¤Ÿà¤¾à¤“|à¤—à¤²à¤¤|à¤¦à¥‚à¤¸à¤°à¥€)/i.test(activePrompt) ||
+      /à¤«à¥‹à¤Ÿà¥‹\s*(à¤¬à¤¦à¤²à¥‡à¤‚|à¤¬à¤¦à¤²à¥‹|change|à¤¹à¤Ÿà¤¾à¤“|à¤—à¤²à¤¤|à¤¦à¥‚à¤¸à¤°à¥€)/i.test(activePrompt) ||
+      /à¤¬à¥ˆà¤•à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡\s*(à¤¬à¤¦à¤²à¥‡à¤‚|à¤¬à¤¦à¤²à¥‹|change|à¤¨à¤¯à¤¾)/i.test(activePrompt);
 
     let contentData: any = null;
 
@@ -22645,25 +22976,25 @@ app.post("/api/generate-morning-jacket", enforceUserAccessMiddleware, async (req
       contentData = {
         headline: currentCard.headline,
         formattedHeadline: currentCard.formattedHeadline || currentCard.headline,
-        badgeText: currentCard.morningBadgeText || "🌅 आज का विचार",
+        badgeText: currentCard.morningBadgeText || "ðŸŒ… à¤†à¤œ à¤•à¤¾ à¤µà¤¿à¤šà¤¾à¤°",
         thoughtQuote: currentCard.morningThoughtQuote || currentCard.morningTakeaway || "",
         summary: currentCard.summary || "",
         imagePrompt: `Aesthetic cinematic morning background wallpaper depicting ${currentCard.headline}. Beautiful ambient morning sunrise sunlight, serene nature landscape or wellness atmosphere, soft warm colors, high realism. Absolutely NO text, NO typography, NO watermark, NO logo, clean image for poster background`,
       };
     } else {
       // Step 1: Prompt AI to generate structured Hindi Thought & Card details
-      const systemInstruction = `दिए गए विषय या निर्देश के आधार पर सुविचार / प्रेरक विचार कार्ड हेतु सामग्री तैयार करें:
+      const systemInstruction = `à¤¦à¤¿à¤ à¤—à¤ à¤µà¤¿à¤·à¤¯ à¤¯à¤¾ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤•à¥‡ à¤†à¤§à¤¾à¤° à¤ªà¤° à¤¸à¥à¤µà¤¿à¤šà¤¾à¤° / à¤ªà¥à¤°à¥‡à¤°à¤• à¤µà¤¿à¤šà¤¾à¤° à¤•à¤¾à¤°à¥à¤¡ à¤¹à¥‡à¤¤à¥ à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¥‡à¤‚:
 "${activePrompt}"
-${currentCard?.headline ? `पूर्व सामग्री / संदर्भ: "${currentCard.headline}"` : ""}
-${refinementCommand ? `सुधार/बदलाव निर्देश: "${refinementCommand}"` : ""}
+${currentCard?.headline ? `à¤ªà¥‚à¤°à¥à¤µ à¤¸à¤¾à¤®à¤—à¥à¤°à¥€ / à¤¸à¤‚à¤¦à¤°à¥à¤­: "${currentCard.headline}"` : ""}
+${refinementCommand ? `à¤¸à¥à¤§à¤¾à¤°/à¤¬à¤¦à¤²à¤¾à¤µ à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶: "${refinementCommand}"` : ""}
 
-JSON में निम्नलिखित फ़ील्ड्स तैयार करें:
-1. "headline": मुख्य विचार अथवा विषय का प्रेरक वाक्य।
-2. "formattedHeadline": मुख्य विचार।
-3. "badgeText": विषय के अनुकूल उपयुक्त बैज (जैसे "आज का विचार")।
-4. "thoughtQuote": 1 से 3 पंक्तियों का विचार या टेकअवे।
-5. "summary": सोशल मीडिया के लिए विवरण।
-6. "imagePrompt": विचार के अनुकूल एक प्राकृतिक बैकग्राउंड फोटो का अंग्रेजी प्रॉम्प्ट (English Prompt, no text, no letters, clean background).
+JSON à¤®à¥‡à¤‚ à¤¨à¤¿à¤®à¥à¤¨à¤²à¤¿à¤–à¤¿à¤¤ à¤«à¤¼à¥€à¤²à¥à¤¡à¥à¤¸ à¤¤à¥ˆà¤¯à¤¾à¤° à¤•à¤°à¥‡à¤‚:
+1. "headline": à¤®à¥à¤–à¥à¤¯ à¤µà¤¿à¤šà¤¾à¤° à¤…à¤¥à¤µà¤¾ à¤µà¤¿à¤·à¤¯ à¤•à¤¾ à¤ªà¥à¤°à¥‡à¤°à¤• à¤µà¤¾à¤•à¥à¤¯à¥¤
+2. "formattedHeadline": à¤®à¥à¤–à¥à¤¯ à¤µà¤¿à¤šà¤¾à¤°à¥¤
+3. "badgeText": à¤µà¤¿à¤·à¤¯ à¤•à¥‡ à¤…à¤¨à¥à¤•à¥‚à¤² à¤‰à¤ªà¤¯à¥à¤•à¥à¤¤ à¤¬à¥ˆà¤œ (à¤œà¥ˆà¤¸à¥‡ "à¤†à¤œ à¤•à¤¾ à¤µà¤¿à¤šà¤¾à¤°")à¥¤
+4. "thoughtQuote": 1 à¤¸à¥‡ 3 à¤ªà¤‚à¤•à¥à¤¤à¤¿à¤¯à¥‹à¤‚ à¤•à¤¾ à¤µà¤¿à¤šà¤¾à¤° à¤¯à¤¾ à¤Ÿà¥‡à¤•à¤…à¤µà¥‡à¥¤
+5. "summary": à¤¸à¥‹à¤¶à¤² à¤®à¥€à¤¡à¤¿à¤¯à¤¾ à¤•à¥‡ à¤²à¤¿à¤ à¤µà¤¿à¤µà¤°à¤£à¥¤
+6. "imagePrompt": à¤µà¤¿à¤šà¤¾à¤° à¤•à¥‡ à¤…à¤¨à¥à¤•à¥‚à¤² à¤à¤• à¤ªà¥à¤°à¤¾à¤•à¥ƒà¤¤à¤¿à¤• à¤¬à¥ˆà¤•à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡ à¤«à¥‹à¤Ÿà¥‹ à¤•à¤¾ à¤…à¤‚à¤—à¥à¤°à¥‡à¤œà¥€ à¤ªà¥à¤°à¥‰à¤®à¥à¤ªà¥à¤Ÿ (English Prompt, no text, no letters, clean background).
 
 Strictly return valid JSON object matching these keys.`;
 
@@ -22710,11 +23041,11 @@ Strictly return valid JSON object matching these keys.`;
       // High quality fallback if AI APIs fail
       if (!contentData || !contentData.headline) {
         contentData = {
-          headline: activePrompt.length > 8 ? activePrompt : "सकारात्मक सोच और निरंतर प्रयास ही हर सफलता की कुंजी है।",
-          formattedHeadline: activePrompt.length > 8 ? activePrompt : "सकारात्मक सोच और निरंतर प्रयास ही हर सफलता की कुंजी है।",
-          badgeText: "🌅 आज का विचार",
-          thoughtQuote: "हर सुबह एक नया अवसर लेकर आती है, खुद पर विश्वास रखें और आगे बढ़ें।",
-          summary: activePrompt || "आज का विचार",
+          headline: activePrompt.length > 8 ? activePrompt : "à¤¸à¤•à¤¾à¤°à¤¾à¤¤à¥à¤®à¤• à¤¸à¥‹à¤š à¤”à¤° à¤¨à¤¿à¤°à¤‚à¤¤à¤° à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤¹à¥€ à¤¹à¤° à¤¸à¤«à¤²à¤¤à¤¾ à¤•à¥€ à¤•à¥à¤‚à¤œà¥€ à¤¹à¥ˆà¥¤",
+          formattedHeadline: activePrompt.length > 8 ? activePrompt : "à¤¸à¤•à¤¾à¤°à¤¾à¤¤à¥à¤®à¤• à¤¸à¥‹à¤š à¤”à¤° à¤¨à¤¿à¤°à¤‚à¤¤à¤° à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤¹à¥€ à¤¹à¤° à¤¸à¤«à¤²à¤¤à¤¾ à¤•à¥€ à¤•à¥à¤‚à¤œà¥€ à¤¹à¥ˆà¥¤",
+          badgeText: "ðŸŒ… à¤†à¤œ à¤•à¤¾ à¤µà¤¿à¤šà¤¾à¤°",
+          thoughtQuote: "à¤¹à¤° à¤¸à¥à¤¬à¤¹ à¤à¤• à¤¨à¤¯à¤¾ à¤…à¤µà¤¸à¤° à¤²à¥‡à¤•à¤° à¤†à¤¤à¥€ à¤¹à¥ˆ, à¤–à¥à¤¦ à¤ªà¤° à¤µà¤¿à¤¶à¥à¤µà¤¾à¤¸ à¤°à¤–à¥‡à¤‚ à¤”à¤° à¤†à¤—à¥‡ à¤¬à¤¢à¤¼à¥‡à¤‚à¥¤",
+          summary: activePrompt || "à¤†à¤œ à¤•à¤¾ à¤µà¤¿à¤šà¤¾à¤°",
           imagePrompt: `Aesthetic golden morning sunrise landscape with peaceful mist and soft ambient sunlight, cinematic lighting, no text, no letters.`,
         };
       }
@@ -22847,7 +23178,7 @@ const FRAME_CATEGORIES = [
   "Package Frame",
   "Super Breaking Frame",
   "Text Breaking Frame",
-  "बयानबाज़ी फ्रेम",
+  "à¤¬à¤¯à¤¾à¤¨à¤¬à¤¾à¤œà¤¼à¥€ à¤«à¥à¤°à¥‡à¤®",
   "Special Frame",
   "Bonus Frame",
   "Custom Frame",
@@ -22915,7 +23246,7 @@ function getStoredTemplateConfigs(): Record<string, any> {
       coinPrice: 0,
       isActive: true,
       version: "v1.0",
-      headlineArea: "3-Line Headline Area (बॉटम व्हाईट पॉलीगॉन)",
+      headlineArea: "3-Line Headline Area (à¤¬à¥‰à¤Ÿà¤® à¤µà¥à¤¹à¤¾à¤ˆà¤Ÿ à¤ªà¥‰à¤²à¥€à¤—à¥‰à¤¨)",
       locationArea: "top_left_box",
       logoArea: "top_right_box",
     },
@@ -22927,7 +23258,7 @@ function getStoredTemplateConfigs(): Record<string, any> {
       coinPrice: 50,
       isActive: true,
       version: "v1.0",
-      headlineArea: "2-Line Headline Area (डार्क ब्लू स्ट्रिप)",
+      headlineArea: "2-Line Headline Area (à¤¡à¤¾à¤°à¥à¤• à¤¬à¥à¤²à¥‚ à¤¸à¥à¤Ÿà¥à¤°à¤¿à¤ª)",
       locationArea: "top_left_box",
       logoArea: "top_right_box",
     },
@@ -22969,7 +23300,7 @@ app.get("/api/template-configs", (_req, res) => {
 app.post("/api/admin/save-template-config", requireMasterAdminMiddleware, (req, res) => {
   try {
     if (!isAuthorizedMasterAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही टेम्पलेट्स कॉन्फ़िगरेशन सहेज सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤•à¥‡à¤µà¤² à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ (breakingnewswala.com@gmail.com) à¤¹à¥€ à¤Ÿà¥‡à¤®à¥à¤ªà¤²à¥‡à¤Ÿà¥à¤¸ à¤•à¥‰à¤¨à¥à¤«à¤¼à¤¿à¤—à¤°à¥‡à¤¶à¤¨ à¤¸à¤¹à¥‡à¤œ à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
     const {
       templateId,
@@ -23189,7 +23520,7 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
     }
 
     if (cleanEmail && authUser?.email && cleanEmail !== authUser.email.toLowerCase().trim() && !isAuthorizedAdmin(req)) {
-      return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते से फ्रेम अनलॉक कर सकते हैं।" });
+      return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤–à¤¾à¤¤à¥‡ à¤¸à¥‡ à¤«à¥à¤°à¥‡à¤® à¤…à¤¨à¤²à¥‰à¤• à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const cleanFrameId = (frameId || "").toString().trim();
@@ -23207,7 +23538,7 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
     const price = Number(frameConfig.coinPrice) || 0;
     if (price <= 0) {
       return res.status(400).json({
-        error: "इस फ्रेम पर कॉइन-आधारित अनलॉक सक्रिय नहीं है। यह फ़्रेम निःशुल्क या केवल पैकेज आधारित है।",
+        error: "à¤‡à¤¸ à¤«à¥à¤°à¥‡à¤® à¤ªà¤° à¤•à¥‰à¤‡à¤¨-à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤…à¤¨à¤²à¥‰à¤• à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ à¤¯à¤¹ à¤«à¤¼à¥à¤°à¥‡à¤® à¤¨à¤¿à¤ƒà¤¶à¥à¤²à¥à¤• à¤¯à¤¾ à¤•à¥‡à¤µà¤² à¤ªà¥ˆà¤•à¥‡à¤œ à¤†à¤§à¤¾à¤°à¤¿à¤¤ à¤¹à¥ˆà¥¤",
       });
     }
 
@@ -23236,7 +23567,7 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
         expiresAt: existingUnlock.expiresAt,
         dateStr: existingUnlock.dateStr,
         wallet: rDb.wallets[walletKey],
-        message: "यह फ्रेम आज (11:59 PM तक) पहले से अनलॉक है।",
+        message: "à¤¯à¤¹ à¤«à¥à¤°à¥‡à¤® à¤†à¤œ (11:59 PM à¤¤à¤•) à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤…à¤¨à¤²à¥‰à¤• à¤¹à¥ˆà¥¤",
       });
     }
 
@@ -23245,7 +23576,7 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
     if (currentBalance < price) {
       return res.status(400).json({
         success: false,
-        error: `अपर्याप्त कॉइन बैलेंस! फ्रेम अनलॉक करने के लिए ${price} कॉइन्स आवश्यक हैं, जबकि आपके पास केवल ${currentBalance} कॉइन्स हैं।`,
+        error: `à¤…à¤ªà¤°à¥à¤¯à¤¾à¤ªà¥à¤¤ à¤•à¥‰à¤‡à¤¨ à¤¬à¥ˆà¤²à¥‡à¤‚à¤¸! à¤«à¥à¤°à¥‡à¤® à¤…à¤¨à¤²à¥‰à¤• à¤•à¤°à¤¨à¥‡ à¤•à¥‡ à¤²à¤¿à¤ ${price} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¤‚, à¤œà¤¬à¤•à¤¿ à¤†à¤ªà¤•à¥‡ à¤ªà¤¾à¤¸ à¤•à¥‡à¤µà¤² ${currentBalance} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤¹à¥ˆà¤‚à¥¤`,
         required: price,
         available: currentBalance,
       });
@@ -23268,7 +23599,7 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
       userEmail: cleanEmail,
       newsItemId: cleanFrameId,
       newsTitle: chosenName,
-      description: `फ्रेम अनलॉक (आज 11:59 PM तक): ${chosenName} (-${price} कॉइन्स)`,
+      description: `à¤«à¥à¤°à¥‡à¤® à¤…à¤¨à¤²à¥‰à¤• (à¤†à¤œ 11:59 PM à¤¤à¤•): ${chosenName} (-${price} à¤•à¥‰à¤‡à¤¨à¥à¤¸)`,
       transactionType: "debit",
       type: "debit",
       coinAmount: -price,
@@ -23290,7 +23621,7 @@ app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
       dateStr,
       wallet: rDb.wallets[walletKey],
       transaction: tx,
-      message: `फ्रेम "${chosenName}" आज 11:59:59 PM (IST) तक सफलतापूर्वक अनलॉक हो गया! ${price} कॉइन्स काटे गए।`,
+      message: `à¤«à¥à¤°à¥‡à¤® "${chosenName}" à¤†à¤œ 11:59:59 PM (IST) à¤¤à¤• à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤…à¤¨à¤²à¥‰à¤• à¤¹à¥‹ à¤—à¤¯à¤¾! ${price} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤•à¤¾à¤Ÿà¥‡ à¤—à¤à¥¤`,
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -23302,7 +23633,7 @@ app.get("/api/wallet/frame-unlocks", requireAuthMiddleware, (req, res) => {
   try {
     const authUser = (req as any).user;
     if (!authUser || !authUser.email) {
-      return res.status(401).json({ error: "प्रमाणीकरण आवश्यक है" });
+      return res.status(401).json({ error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ" });
     }
     const requestingEmail = authUser.email.toLowerCase().trim();
     const isAdmin = isAuthorizedAdmin(req);
@@ -23313,7 +23644,7 @@ app.get("/api/wallet/frame-unlocks", requireAuthMiddleware, (req, res) => {
       if (isAdmin) {
         targetEmail = queryEmail;
       } else {
-        return res.status(403).json({ error: "अनधिकृत: आप केवल अपने खाते के फ्रेम अनलॉक देख सकते हैं।" });
+        return res.status(403).json({ error: "à¤…à¤¨à¤§à¤¿à¤•à¥ƒà¤¤: à¤†à¤ª à¤•à¥‡à¤µà¤² à¤…à¤ªà¤¨à¥‡ à¤–à¤¾à¤¤à¥‡ à¤•à¥‡ à¤«à¥à¤°à¥‡à¤® à¤…à¤¨à¤²à¥‰à¤• à¤¦à¥‡à¤– à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
       }
     }
 
@@ -23379,7 +23710,7 @@ app.post("/api/request-limit-increase", (req, res) => {
       return res.json({
         success: true,
         alreadyRequested: true,
-        message: "आपका लिमिट बढ़ाने का अनुरोध पहले से दर्ज है। व्यवस्थापक जल्द ही समीक्षा करेंगे।",
+        message: "à¤†à¤ªà¤•à¤¾ à¤²à¤¿à¤®à¤¿à¤Ÿ à¤¬à¤¢à¤¼à¤¾à¤¨à¥‡ à¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤¦à¤°à¥à¤œ à¤¹à¥ˆà¥¤ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• à¤œà¤²à¥à¤¦ à¤¹à¥€ à¤¸à¤®à¥€à¤•à¥à¤·à¤¾ à¤•à¤°à¥‡à¤‚à¤—à¥‡à¥¤",
       });
     }
 
@@ -23389,7 +23720,7 @@ app.post("/api/request-limit-increase", (req, res) => {
       userId: userId || cleanEmail,
       tier: tier || "basic",
       currentLimit: currentLimit || 10,
-      reason: reason || "दैनिक डाउनलोड सीमा समाप्त",
+      reason: reason || "à¤¦à¥ˆà¤¨à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤¸à¥€à¤®à¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤",
       dateStr,
       requestedAt: Date.now(),
       status: "pending",
@@ -23400,7 +23731,7 @@ app.post("/api/request-limit-increase", (req, res) => {
 
     return res.json({
       success: true,
-      message: "आपका दैनिक लिमिट बढ़ाने का अनुरोध सफलतापूर्वक एडमिन को भेज दिया गया है।",
+      message: "à¤†à¤ªà¤•à¤¾ à¤¦à¥ˆà¤¨à¤¿à¤• à¤²à¤¿à¤®à¤¿à¤Ÿ à¤¬à¤¢à¤¼à¤¾à¤¨à¥‡ à¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤à¤¡à¤®à¤¿à¤¨ à¤•à¥‹ à¤­à¥‡à¤œ à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤",
       request: newReq,
     });
   } catch (err: any) {
@@ -23419,22 +23750,22 @@ app.get("/api/admin/limit-increase-requests", requireAdminMiddleware, (_req, res
 const CATEGORIES_DB_FILE = path.join(process.cwd(), "categories_database.json");
 
 const DEFAULT_CATEGORIES_PRESET = [
-  { id: 'breaking', name: '⚡ ब्रेकिंग न्यूज़', isActive: true, order: 1 },
-  { id: 'politics', name: '🏛️ राजनीति व चुनाव', isActive: true, order: 2 },
-  { id: 'state', name: '📍 मध्य प्रदेश', isActive: true, order: 3 },
-  { id: 'national', name: '🇮🇳 देश / राष्ट्रीय', isActive: true, order: 4 },
-  { id: 'up', name: '📍 उत्तर प्रदेश', isActive: true, order: 5 },
-  { id: 'bihar', name: '📍 बिहार', isActive: true, order: 6 },
-  { id: 'rajasthan', name: '📍 राजस्थान', isActive: true, order: 7 },
-  { id: 'tech', name: '💻 टेक्नोलॉजी', isActive: true, order: 8 },
-  { id: 'business', name: '📈 कारोबार व व्यापार', isActive: true, order: 9 },
-  { id: 'sports', name: '🏏 खेल', isActive: true, order: 10 },
-  { id: 'entertainment', name: '🎬 मनोरंजन', isActive: true, order: 11 },
-  { id: 'crime', name: '🚨 क्राइम / अपराध', isActive: true, order: 12 },
-  { id: 'accident', name: '🚨 हादसा व दुर्घटना', isActive: true, order: 13 },
-  { id: 'agriculture', name: '🌾 खेती-किसानी', isActive: true, order: 14 },
-  { id: 'health', name: '🏥 स्वास्थ्य', isActive: true, order: 15 },
-  { id: 'special', name: '📑 विशेष रिपोर्ट', isActive: true, order: 16 },
+  { id: 'breaking', name: 'âš¡ à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼', isActive: true, order: 1 },
+  { id: 'politics', name: 'ðŸ›ï¸ à¤°à¤¾à¤œà¤¨à¥€à¤¤à¤¿ à¤µ à¤šà¥à¤¨à¤¾à¤µ', isActive: true, order: 2 },
+  { id: 'state', name: 'ðŸ“ à¤®à¤§à¥à¤¯ à¤ªà¥à¤°à¤¦à¥‡à¤¶', isActive: true, order: 3 },
+  { id: 'national', name: 'ðŸ‡®ðŸ‡³ à¤¦à¥‡à¤¶ / à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯', isActive: true, order: 4 },
+  { id: 'up', name: 'ðŸ“ à¤‰à¤¤à¥à¤¤à¤° à¤ªà¥à¤°à¤¦à¥‡à¤¶', isActive: true, order: 5 },
+  { id: 'bihar', name: 'ðŸ“ à¤¬à¤¿à¤¹à¤¾à¤°', isActive: true, order: 6 },
+  { id: 'rajasthan', name: 'ðŸ“ à¤°à¤¾à¤œà¤¸à¥à¤¥à¤¾à¤¨', isActive: true, order: 7 },
+  { id: 'tech', name: 'ðŸ’» à¤Ÿà¥‡à¤•à¥à¤¨à¥‹à¤²à¥‰à¤œà¥€', isActive: true, order: 8 },
+  { id: 'business', name: 'ðŸ“ˆ à¤•à¤¾à¤°à¥‹à¤¬à¤¾à¤° à¤µ à¤µà¥à¤¯à¤¾à¤ªà¤¾à¤°', isActive: true, order: 9 },
+  { id: 'sports', name: 'ðŸ à¤–à¥‡à¤²', isActive: true, order: 10 },
+  { id: 'entertainment', name: 'ðŸŽ¬ à¤®à¤¨à¥‹à¤°à¤‚à¤œà¤¨', isActive: true, order: 11 },
+  { id: 'crime', name: 'ðŸš¨ à¤•à¥à¤°à¤¾à¤‡à¤® / à¤…à¤ªà¤°à¤¾à¤§', isActive: true, order: 12 },
+  { id: 'accident', name: 'ðŸš¨ à¤¹à¤¾à¤¦à¤¸à¤¾ à¤µ à¤¦à¥à¤°à¥à¤˜à¤Ÿà¤¨à¤¾', isActive: true, order: 13 },
+  { id: 'agriculture', name: 'ðŸŒ¾ à¤–à¥‡à¤¤à¥€-à¤•à¤¿à¤¸à¤¾à¤¨à¥€', isActive: true, order: 14 },
+  { id: 'health', name: 'ðŸ¥ à¤¸à¥à¤µà¤¾à¤¸à¥à¤¥à¥à¤¯', isActive: true, order: 15 },
+  { id: 'special', name: 'ðŸ“‘ à¤µà¤¿à¤¶à¥‡à¤· à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿ', isActive: true, order: 16 },
 ];
 
 function loadCategoriesDatabase(): any[] {
@@ -23492,18 +23823,18 @@ app.post(["/api/categories", "/api/admin/categories"], (req, res) => {
     // Single category create mode
     const catName = (nameHi || name || nameEn || "").toString().trim();
     if (!catName) {
-      return res.status(400).json({ error: "श्रेणी का नाम अनिवार्य है" });
+      return res.status(400).json({ error: "à¤¶à¥à¤°à¥‡à¤£à¥€ à¤•à¤¾ à¤¨à¤¾à¤® à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆ" });
     }
     const cleanId = (id || catName).toLowerCase().replace(/[^a-z0-9_]/g, '') || `cat_${Date.now()}`;
     if (allCats.some(c => c.id === cleanId)) {
-      return res.status(409).json({ error: "यह श्रेणी पहले से मौजूद है" });
+      return res.status(409).json({ error: "à¤¯à¤¹ à¤¶à¥à¤°à¥‡à¤£à¥€ à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤®à¥Œà¤œà¥‚à¤¦ à¤¹à¥ˆ" });
     }
     const newCat = {
       id: cleanId,
       name: catName,
       nameHi: nameHi || catName,
       nameEn: nameEn || "",
-      icon: icon || "📁",
+      icon: icon || "ðŸ“",
       isActive: isActive !== false,
       order: allCats.length + 1,
       createdAt: Date.now(),
@@ -23528,7 +23859,7 @@ app.put(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
       saveCategoriesDatabase(allCats);
       return res.json({ success: true, category: allCats[idx], categories: allCats });
     }
-    return res.status(404).json({ error: "श्रेणी नहीं मिली" });
+    return res.status(404).json({ error: "à¤¶à¥à¤°à¥‡à¤£à¥€ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¥€" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -23546,7 +23877,7 @@ app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], (r
       saveCategoriesDatabase(allCats);
       return res.json({ success: true, category: allCats[idx], categories: allCats });
     }
-    return res.status(404).json({ error: "श्रेणी नहीं मिली" });
+    return res.status(404).json({ error: "à¤¶à¥à¤°à¥‡à¤£à¥€ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¥€" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -23572,18 +23903,18 @@ const DEFAULT_PLANS_CATALOG = [
   {
     id: 'basic',
     planKey: 'BASIC',
-    nameHi: 'बेसिक (BASIC)',
+    nameHi: 'à¤¬à¥‡à¤¸à¤¿à¤• (BASIC)',
     nameEn: 'BASIC',
     regularPriceNum: 2999,
-    regularPriceDisplay: '₹2,999',
-    priceDisplay: '₹999',
+    regularPriceDisplay: 'â‚¹2,999',
+    priceDisplay: 'â‚¹999',
     priceNum: 999,
     discountPercent: 67,
     durationDays: 30,
-    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
-    period: 'प्रति माह',
-    badge: 'लॉन्चिंग ऑफर 67% OFF',
-    tagline: 'बेसिक न्यूज़ ग्राफिक क्रिएटर (10 ग्राफिक प्रतिदिन)',
+    validityLabel: '30 à¤¦à¤¿à¤¨ (à¤²à¥‰à¤¨à¥à¤šà¤¿à¤‚à¤— à¤‘à¤«à¤°)',
+    period: 'à¤ªà¥à¤°à¤¤à¤¿ à¤®à¤¾à¤¹',
+    badge: 'à¤²à¥‰à¤¨à¥à¤šà¤¿à¤‚à¤— à¤‘à¤«à¤° 67% OFF',
+    tagline: 'à¤¬à¥‡à¤¸à¤¿à¤• à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤•à¥à¤°à¤¿à¤à¤Ÿà¤° (10 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¦à¤¿à¤¨)',
     hasWatermark: true,
     graphicExportResolution: '720p',
     maxGraphicsPerDay: 10,
@@ -23592,30 +23923,30 @@ const DEFAULT_PLANS_CATALOG = [
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '✅ 10 ग्राफिक प्रतिदिन डाउनलोड सीमा',
-      '✅ केवल Hind फॉन्ट उपयोग योग्य',
-      '✅ 1 फोटो अपलोड व रिप्लेसमेंट',
-      '✅ बेसिक न्यूज़ टेम्पलेट्स व स्टाइल्स',
-      '⚠️ डिफ़ॉल्ट सफेद फूटर व काला टेक्स्ट',
-      '⚠️ मास्टर ब्रांडिंग लॉक',
+      'âœ… 10 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¦à¤¿à¤¨ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤¸à¥€à¤®à¤¾',
+      'âœ… à¤•à¥‡à¤µà¤² Hind à¤«à¥‰à¤¨à¥à¤Ÿ à¤‰à¤ªà¤¯à¥‹à¤— à¤¯à¥‹à¤—à¥à¤¯',
+      'âœ… 1 à¤«à¥‹à¤Ÿà¥‹ à¤…à¤ªà¤²à¥‹à¤¡ à¤µ à¤°à¤¿à¤ªà¥à¤²à¥‡à¤¸à¤®à¥‡à¤‚à¤Ÿ',
+      'âœ… à¤¬à¥‡à¤¸à¤¿à¤• à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤Ÿà¥‡à¤®à¥à¤ªà¤²à¥‡à¤Ÿà¥à¤¸ à¤µ à¤¸à¥à¤Ÿà¤¾à¤‡à¤²à¥à¤¸',
+      'âš ï¸ à¤¡à¤¿à¤«à¤¼à¥‰à¤²à¥à¤Ÿ à¤¸à¤«à¥‡à¤¦ à¤«à¥‚à¤Ÿà¤° à¤µ à¤•à¤¾à¤²à¤¾ à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ',
+      'âš ï¸ à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤¬à¥à¤°à¤¾à¤‚à¤¡à¤¿à¤‚à¤— à¤²à¥‰à¤•',
     ],
   },
   {
     id: 'advanced',
     planKey: 'ADVANCE',
-    nameHi: 'एडवांस (ADVANCE)',
+    nameHi: 'à¤à¤¡à¤µà¤¾à¤‚à¤¸ (ADVANCE)',
     nameEn: 'ADVANCE',
     regularPriceNum: 4999,
-    regularPriceDisplay: '₹4,999',
-    priceDisplay: '₹2,499',
+    regularPriceDisplay: 'â‚¹4,999',
+    priceDisplay: 'â‚¹2,499',
     priceNum: 2499,
     discountPercent: 50,
     durationDays: 30,
-    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
-    period: 'प्रति माह',
-    badge: 'लॉन्चिंग ऑफर 50% OFF',
+    validityLabel: '30 à¤¦à¤¿à¤¨ (à¤²à¥‰à¤¨à¥à¤šà¤¿à¤‚à¤— à¤‘à¤«à¤°)',
+    period: 'à¤ªà¥à¤°à¤¤à¤¿ à¤®à¤¾à¤¹',
+    badge: 'à¤²à¥‰à¤¨à¥à¤šà¤¿à¤‚à¤— à¤‘à¤«à¤° 50% OFF',
     popular: true,
-    tagline: '25 ग्राफिक प्रतिदिन — 5 फॉन्ट, 2-फोटो लेआउट व AI सिम्बॉलिक वॉटरमार्क',
+    tagline: '25 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¦à¤¿à¤¨ â€” 5 à¤«à¥‰à¤¨à¥à¤Ÿ, 2-à¤«à¥‹à¤Ÿà¥‹ à¤²à¥‡à¤†à¤‰à¤Ÿ à¤µ AI à¤¸à¤¿à¤®à¥à¤¬à¥‰à¤²à¤¿à¤• à¤µà¥‰à¤Ÿà¤°à¤®à¤¾à¤°à¥à¤•',
     hasWatermark: false,
     graphicExportResolution: '1080p',
     maxGraphicsPerDay: 25,
@@ -23624,29 +23955,29 @@ const DEFAULT_PLANS_CATALOG = [
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '⚡ 25 ग्राफिक प्रतिदिन डाउनलोड सीमा',
-      '🔤 5 देवनागरी फॉन्ट (Hind, खंड, साहित्य, बालू, अनेक देवनागरी)',
-      '🎨 5 हाईलाइट कलर्स व 5 फूटर बैकग्राउंड कलर्स',
-      '🖼️ 1 व 2 फोटो लेआउट सपोर्ट',
-      '✨ AI / प्रतीकात्मक फोटो वॉटरमार्क सपोर्ट',
-      '🌐 फूटर वेबसाइट हाइड टॉगल (WhatsApp ऑन)',
+      'âš¡ 25 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¦à¤¿à¤¨ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤¸à¥€à¤®à¤¾',
+      'ðŸ”¤ 5 à¤¦à¥‡à¤µà¤¨à¤¾à¤—à¤°à¥€ à¤«à¥‰à¤¨à¥à¤Ÿ (Hind, à¤–à¤‚à¤¡, à¤¸à¤¾à¤¹à¤¿à¤¤à¥à¤¯, à¤¬à¤¾à¤²à¥‚, à¤…à¤¨à¥‡à¤• à¤¦à¥‡à¤µà¤¨à¤¾à¤—à¤°à¥€)',
+      'ðŸŽ¨ 5 à¤¹à¤¾à¤ˆà¤²à¤¾à¤‡à¤Ÿ à¤•à¤²à¤°à¥à¤¸ à¤µ 5 à¤«à¥‚à¤Ÿà¤° à¤¬à¥ˆà¤•à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡ à¤•à¤²à¤°à¥à¤¸',
+      'ðŸ–¼ï¸ 1 à¤µ 2 à¤«à¥‹à¤Ÿà¥‹ à¤²à¥‡à¤†à¤‰à¤Ÿ à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ',
+      'âœ¨ AI / à¤ªà¥à¤°à¤¤à¥€à¤•à¤¾à¤¤à¥à¤®à¤• à¤«à¥‹à¤Ÿà¥‹ à¤µà¥‰à¤Ÿà¤°à¤®à¤¾à¤°à¥à¤• à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ',
+      'ðŸŒ à¤«à¥‚à¤Ÿà¤° à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ à¤¹à¤¾à¤‡à¤¡ à¤Ÿà¥‰à¤—à¤² (WhatsApp à¤‘à¤¨)',
     ],
   },
   {
     id: 'professional',
     planKey: 'PRO',
-    nameHi: 'प्रो (PRO)',
+    nameHi: 'à¤ªà¥à¤°à¥‹ (PRO)',
     nameEn: 'PRO',
     regularPriceNum: 6999,
-    regularPriceDisplay: '₹6,999',
-    priceDisplay: '₹4,199',
+    regularPriceDisplay: 'â‚¹6,999',
+    priceDisplay: 'â‚¹4,199',
     priceNum: 4199,
     discountPercent: 40,
     durationDays: 30,
-    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
-    period: 'प्रति माह',
-    badge: 'लॉन्चिंग ऑफर 40% OFF',
-    tagline: '40 ग्राफिक प्रतिदिन — सभी मानक फॉन्ट, कस्टम वॉटरमार्क व इंटरनेट सर्च',
+    validityLabel: '30 à¤¦à¤¿à¤¨ (à¤²à¥‰à¤¨à¥à¤šà¤¿à¤‚à¤— à¤‘à¤«à¤°)',
+    period: 'à¤ªà¥à¤°à¤¤à¤¿ à¤®à¤¾à¤¹',
+    badge: 'à¤²à¥‰à¤¨à¥à¤šà¤¿à¤‚à¤— à¤‘à¤«à¤° 40% OFF',
+    tagline: '40 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¦à¤¿à¤¨ â€” à¤¸à¤­à¥€ à¤®à¤¾à¤¨à¤• à¤«à¥‰à¤¨à¥à¤Ÿ, à¤•à¤¸à¥à¤Ÿà¤® à¤µà¥‰à¤Ÿà¤°à¤®à¤¾à¤°à¥à¤• à¤µ à¤‡à¤‚à¤Ÿà¤°à¤¨à¥‡à¤Ÿ à¤¸à¤°à¥à¤š',
     hasWatermark: false,
     graphicExportResolution: '1080p',
     maxGraphicsPerDay: 40,
@@ -23655,30 +23986,30 @@ const DEFAULT_PLANS_CATALOG = [
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '⚡ 40 ग्राफिक प्रतिदिन डाउनलोड सीमा',
-      '🔤 सभी मानक फॉन्ट कलेक्शन व कलर हाईलाइट्स (प्राइमरी कलर सिलेक्शन)',
-      '🏷️ कस्टम टेक्स्ट वॉटरमार्क व AI सिम्बॉलिक वॉटरमार्क',
-      '🖼️ सभी मल्टी-फोटो ग्रिड लेआउट्स व इंटरनेट इमेज सर्च',
-      '🎨 सभी फूटर बैकग्राउंड व टेक्स्ट कलर्स',
-      '🌐 वेबसाइट व WhatsApp दोनों ऑन/ऑफ टॉगल',
-      '👑 कस्टम फ्रेम होने पर मास्टर ब्रांडिंग ऑफ टॉगल',
+      'âš¡ 40 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¦à¤¿à¤¨ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤¸à¥€à¤®à¤¾',
+      'ðŸ”¤ à¤¸à¤­à¥€ à¤®à¤¾à¤¨à¤• à¤«à¥‰à¤¨à¥à¤Ÿ à¤•à¤²à¥‡à¤•à¥à¤¶à¤¨ à¤µ à¤•à¤²à¤° à¤¹à¤¾à¤ˆà¤²à¤¾à¤‡à¤Ÿà¥à¤¸ (à¤ªà¥à¤°à¤¾à¤‡à¤®à¤°à¥€ à¤•à¤²à¤° à¤¸à¤¿à¤²à¥‡à¤•à¥à¤¶à¤¨)',
+      'ðŸ·ï¸ à¤•à¤¸à¥à¤Ÿà¤® à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤µà¥‰à¤Ÿà¤°à¤®à¤¾à¤°à¥à¤• à¤µ AI à¤¸à¤¿à¤®à¥à¤¬à¥‰à¤²à¤¿à¤• à¤µà¥‰à¤Ÿà¤°à¤®à¤¾à¤°à¥à¤•',
+      'ðŸ–¼ï¸ à¤¸à¤­à¥€ à¤®à¤²à¥à¤Ÿà¥€-à¤«à¥‹à¤Ÿà¥‹ à¤—à¥à¤°à¤¿à¤¡ à¤²à¥‡à¤†à¤‰à¤Ÿà¥à¤¸ à¤µ à¤‡à¤‚à¤Ÿà¤°à¤¨à¥‡à¤Ÿ à¤‡à¤®à¥‡à¤œ à¤¸à¤°à¥à¤š',
+      'ðŸŽ¨ à¤¸à¤­à¥€ à¤«à¥‚à¤Ÿà¤° à¤¬à¥ˆà¤•à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡ à¤µ à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤•à¤²à¤°à¥à¤¸',
+      'ðŸŒ à¤µà¥‡à¤¬à¤¸à¤¾à¤‡à¤Ÿ à¤µ WhatsApp à¤¦à¥‹à¤¨à¥‹à¤‚ à¤‘à¤¨/à¤‘à¤« à¤Ÿà¥‰à¤—à¤²',
+      'ðŸ‘‘ à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥à¤°à¥‡à¤® à¤¹à¥‹à¤¨à¥‡ à¤ªà¤° à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤¬à¥à¤°à¤¾à¤‚à¤¡à¤¿à¤‚à¤— à¤‘à¤« à¤Ÿà¥‰à¤—à¤²',
     ],
   },
   {
     id: 'ultra',
     planKey: 'VIP DESK',
-    nameHi: 'वीआईपी डेस्क (VIP DESK)',
+    nameHi: 'à¤µà¥€à¤†à¤ˆà¤ªà¥€ à¤¡à¥‡à¤¸à¥à¤• (VIP DESK)',
     nameEn: 'VIP DESK',
     regularPriceNum: 9999,
-    regularPriceDisplay: '₹9,999',
-    priceDisplay: '₹6,499',
+    regularPriceDisplay: 'â‚¹9,999',
+    priceDisplay: 'â‚¹6,499',
     priceNum: 6499,
     discountPercent: 35,
     durationDays: 30,
-    validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
-    period: 'प्रति माह',
-    badge: 'वीआईपी पावर 35% OFF',
-    tagline: '75 ग्राफिक प्रतिदिन — कस्टम फॉन्ट अपलोड, कस्टम कलर्स, WhatsApp नंबर ओवरराइड',
+    validityLabel: '30 à¤¦à¤¿à¤¨ (à¤²à¥‰à¤¨à¥à¤šà¤¿à¤‚à¤— à¤‘à¤«à¤°)',
+    period: 'à¤ªà¥à¤°à¤¤à¤¿ à¤®à¤¾à¤¹',
+    badge: 'à¤µà¥€à¤†à¤ˆà¤ªà¥€ à¤ªà¤¾à¤µà¤° 35% OFF',
+    tagline: '75 à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤ªà¥à¤°à¤¤à¤¿à¤¦à¤¿à¤¨ â€” à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥‰à¤¨à¥à¤Ÿ à¤…à¤ªà¤²à¥‹à¤¡, à¤•à¤¸à¥à¤Ÿà¤® à¤•à¤²à¤°à¥à¤¸, WhatsApp à¤¨à¤‚à¤¬à¤° à¤“à¤µà¤°à¤°à¤¾à¤‡à¤¡',
     hasWatermark: false,
     graphicExportResolution: '4K',
     maxGraphicsPerDay: 75,
@@ -23687,12 +24018,12 @@ const DEFAULT_PLANS_CATALOG = [
     hasVipDeskFrames: true,
     isActive: true,
     features: [
-      '👑 75 दैनिक ग्राफिक डाउनलोड सीमा (75 Downloads / Day)',
-      '🔤 सभी मानक फॉन्ट + कस्टम फॉन्ट (.ttf/.otf) अपलोड',
-      '🎨 कस्टम हाईलाइट कलर, फूटर कलर व टेक्स्ट कलर पिकर',
-      '📱 प्रति-ग्राफिक WhatsApp नंबर ओवरराइड इनपुट',
-      '🖼️ सभी फोटो लेआउट्स, इंटरनेट सर्च व कस्टम टेक्स्ट वॉटरमार्क',
-      '⭐ VIP DESK विशेष फ्रेम्स व कस्टम फ्रेम सपोर्ट',
+      'ðŸ‘‘ 75 à¤¦à¥ˆà¤¨à¤¿à¤• à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤¸à¥€à¤®à¤¾ (75 Downloads / Day)',
+      'ðŸ”¤ à¤¸à¤­à¥€ à¤®à¤¾à¤¨à¤• à¤«à¥‰à¤¨à¥à¤Ÿ + à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥‰à¤¨à¥à¤Ÿ (.ttf/.otf) à¤…à¤ªà¤²à¥‹à¤¡',
+      'ðŸŽ¨ à¤•à¤¸à¥à¤Ÿà¤® à¤¹à¤¾à¤ˆà¤²à¤¾à¤‡à¤Ÿ à¤•à¤²à¤°, à¤«à¥‚à¤Ÿà¤° à¤•à¤²à¤° à¤µ à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤•à¤²à¤° à¤ªà¤¿à¤•à¤°',
+      'ðŸ“± à¤ªà¥à¤°à¤¤à¤¿-à¤—à¥à¤°à¤¾à¤«à¤¿à¤• WhatsApp à¤¨à¤‚à¤¬à¤° à¤“à¤µà¤°à¤°à¤¾à¤‡à¤¡ à¤‡à¤¨à¤ªà¥à¤Ÿ',
+      'ðŸ–¼ï¸ à¤¸à¤­à¥€ à¤«à¥‹à¤Ÿà¥‹ à¤²à¥‡à¤†à¤‰à¤Ÿà¥à¤¸, à¤‡à¤‚à¤Ÿà¤°à¤¨à¥‡à¤Ÿ à¤¸à¤°à¥à¤š à¤µ à¤•à¤¸à¥à¤Ÿà¤® à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤µà¥‰à¤Ÿà¤°à¤®à¤¾à¤°à¥à¤•',
+      'â­ VIP DESK à¤µà¤¿à¤¶à¥‡à¤· à¤«à¥à¤°à¥‡à¤®à¥à¤¸ à¤µ à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥à¤°à¥‡à¤® à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ',
     ],
   },
 ];
@@ -23910,22 +24241,22 @@ app.post(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMaster
     } = req.body || {};
 
     if (!code || typeof code !== "string" || !code.trim()) {
-      return res.status(400).json({ error: "प्रोमो / कूपन कोड दर्ज करना अनिवार्य है।" });
+      return res.status(400).json({ error: "à¤ªà¥à¤°à¥‹à¤®à¥‹ / à¤•à¥‚à¤ªà¤¨ à¤•à¥‹à¤¡ à¤¦à¤°à¥à¤œ à¤•à¤°à¤¨à¤¾ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
 
     const cleanCode = String(code).trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
     if (!cleanCode) {
-      return res.status(400).json({ error: "अमान्य कूपन कोड। केवल अंग्रेजी अक्षर, अंक, - और _ अनुमत हैं।" });
+      return res.status(400).json({ error: "à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤•à¥‚à¤ªà¤¨ à¤•à¥‹à¤¡à¥¤ à¤•à¥‡à¤µà¤² à¤…à¤‚à¤—à¥à¤°à¥‡à¤œà¥€ à¤…à¤•à¥à¤·à¤°, à¤…à¤‚à¤•, - à¤”à¤° _ à¤…à¤¨à¥à¤®à¤¤ à¤¹à¥ˆà¤‚à¥¤" });
     }
 
     const rawVal = Number(discountValue !== undefined ? discountValue : discountAmount);
     if (isNaN(rawVal) || rawVal <= 0) {
-      return res.status(400).json({ error: "छूट मान (Discount Value) एक धनात्मक संख्या होनी चाहिए।" });
+      return res.status(400).json({ error: "à¤›à¥‚à¤Ÿ à¤®à¤¾à¤¨ (Discount Value) à¤à¤• à¤§à¤¨à¤¾à¤¤à¥à¤®à¤• à¤¸à¤‚à¤–à¥à¤¯à¤¾ à¤¹à¥‹à¤¨à¥€ à¤šà¤¾à¤¹à¤¿à¤à¥¤" });
     }
 
     const isPercent = discountType === "percentage";
     if (isPercent && (rawVal < 1 || rawVal > 100)) {
-      return res.status(400).json({ error: "प्रतिशत छूट 1% से 100% के बीच होनी चाहिए।" });
+      return res.status(400).json({ error: "à¤ªà¥à¤°à¤¤à¤¿à¤¶à¤¤ à¤›à¥‚à¤Ÿ 1% à¤¸à¥‡ 100% à¤•à¥‡ à¤¬à¥€à¤š à¤¹à¥‹à¤¨à¥€ à¤šà¤¾à¤¹à¤¿à¤à¥¤" });
     }
 
     const cleanMinPurchase = Math.max(0, Number(minPurchaseAmount) || 0);
@@ -23935,7 +24266,7 @@ app.post(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMaster
       const sTime = new Date(startDate).getTime();
       const eTime = new Date(expiryDate).getTime();
       if (!isNaN(sTime) && !isNaN(eTime) && eTime < sTime) {
-        return res.status(400).json({ error: "समाप्ति तिथि (Expiry Date) प्रारंभ तिथि से पहले नहीं हो सकती।" });
+        return res.status(400).json({ error: "à¤¸à¤®à¤¾à¤ªà¥à¤¤à¤¿ à¤¤à¤¿à¤¥à¤¿ (Expiry Date) à¤ªà¥à¤°à¤¾à¤°à¤‚à¤­ à¤¤à¤¿à¤¥à¤¿ à¤¸à¥‡ à¤ªà¤¹à¤²à¥‡ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¤à¥€à¥¤" });
       }
     }
 
@@ -23945,7 +24276,7 @@ app.post(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMaster
     // Check duplicate code across different coupon IDs
     const conflictIdx = coupons.findIndex((c: any) => c.code.toUpperCase() === cleanCode && (id ? c.id !== id : true));
     if (conflictIdx >= 0) {
-      return res.status(409).json({ error: `प्रोमो कोड '${cleanCode}' पहले से पंजीकृत है। कृपया अलग कोड चुनें।` });
+      return res.status(409).json({ error: `à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ '${cleanCode}' à¤ªà¤¹à¤²à¥‡ à¤¸à¥‡ à¤ªà¤‚à¤œà¥€à¤•à¥ƒà¤¤ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤…à¤²à¤— à¤•à¥‹à¤¡ à¤šà¥à¤¨à¥‡à¤‚à¥¤` });
     }
 
     const existingIdx = coupons.findIndex((c: any) => (id && c.id === id) || c.code.toUpperCase() === cleanCode);
@@ -23971,7 +24302,7 @@ app.post(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMaster
         updatedAt: now,
       };
       savePackageCouponsDatabase(coupons);
-      return res.json({ success: true, coupon: coupons[existingIdx], message: `प्रोमो कोड '${cleanCode}' सफलतापूर्वक अपडेट हुआ।` });
+      return res.json({ success: true, coupon: coupons[existingIdx], message: `à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ '${cleanCode}' à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤¹à¥à¤†à¥¤` });
     } else {
       const newCoupon = {
         id: id || `coupon_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
@@ -23996,7 +24327,7 @@ app.post(["/api/admin/package-coupons", "/api/admin/promo-codes"], requireMaster
       };
       coupons.unshift(newCoupon);
       savePackageCouponsDatabase(coupons);
-      return res.json({ success: true, coupon: newCoupon, message: `नया प्रोमो कोड '${cleanCode}' सफलतापूर्वक बनाया गया।` });
+      return res.json({ success: true, coupon: newCoupon, message: `à¤¨à¤¯à¤¾ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ '${cleanCode}' à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¬à¤¨à¤¾à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤` });
     }
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -24012,10 +24343,10 @@ app.delete(["/api/admin/package-coupons/:id", "/api/admin/promo-codes/:id"], req
     const initialLen = coupons.length;
     coupons = coupons.filter((c: any) => c.id !== id && c.code.toUpperCase() !== cleanId);
     if (coupons.length === initialLen) {
-      return res.status(404).json({ error: "प्रोमो कोड नहीं मिला।" });
+      return res.status(404).json({ error: "à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤" });
     }
     savePackageCouponsDatabase(coupons);
-    return res.json({ success: true, message: "प्रोमो कोड सफलतापूर्वक हटाया गया।" });
+    return res.json({ success: true, message: "à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¹à¤Ÿà¤¾à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -24026,32 +24357,32 @@ app.post(["/api/package-coupons/validate", "/api/promo-codes/validate"], (req, r
   try {
     const { code, planKey, planId, userEmail, orderAmount: reqOrderAmount } = req.body || {};
     if (!code) {
-      return res.status(400).json({ valid: false, error: "कृपया कूपन कोड दर्ज करें।" });
+      return res.status(400).json({ valid: false, error: "à¤•à¥ƒà¤ªà¤¯à¤¾ à¤•à¥‚à¤ªà¤¨ à¤•à¥‹à¤¡ à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚à¥¤" });
     }
     const cleanCode = String(code).trim().toUpperCase();
     const coupons = loadPackageCouponsDatabase();
     const coupon = coupons.find((c: any) => c.code.toUpperCase() === cleanCode);
 
     if (!coupon) {
-      return res.status(404).json({ valid: false, error: "यह प्रोमो कोड अमान्य है।" });
+      return res.status(404).json({ valid: false, error: "à¤¯à¤¹ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤…à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
     if (!coupon.isActive) {
-      return res.status(400).json({ valid: false, error: "यह प्रोमो कोड वर्तमान में निष्क्रिय है।" });
+      return res.status(400).json({ valid: false, error: "à¤¯à¤¹ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤µà¤°à¥à¤¤à¤®à¤¾à¤¨ à¤®à¥‡à¤‚ à¤¨à¤¿à¤·à¥à¤•à¥à¤°à¤¿à¤¯ à¤¹à¥ˆà¥¤" });
     }
     if (coupon.startDate) {
       const sTime = new Date(coupon.startDate).getTime();
       if (!isNaN(sTime) && Date.now() < sTime) {
-        return res.status(400).json({ valid: false, error: "यह प्रोमो कोड अभी सक्रिय नहीं हुआ है।" });
+        return res.status(400).json({ valid: false, error: "à¤¯à¤¹ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤…à¤­à¥€ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤¨à¤¹à¥€à¤‚ à¤¹à¥à¤† à¤¹à¥ˆà¥¤" });
       }
     }
     if (coupon.expiryDate) {
       const exp = new Date(coupon.expiryDate).getTime() + 24 * 60 * 60 * 1000 - 1;
       if (!isNaN(exp) && Date.now() > exp) {
-        return res.status(400).json({ valid: false, error: "यह प्रोमो कोड समाप्त (Expire) हो चुका है।" });
+        return res.status(400).json({ valid: false, error: "à¤¯à¤¹ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤¸à¤®à¤¾à¤ªà¥à¤¤ (Expire) à¤¹à¥‹ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤" });
       }
     }
     if (coupon.maxUsageLimit && (coupon.usageCount || 0) >= coupon.maxUsageLimit) {
-      return res.status(400).json({ valid: false, error: "यह प्रोमो कोड अपनी अधिकतम उपयोग सीमा तक पहुँच चुका है।" });
+      return res.status(400).json({ valid: false, error: "à¤¯à¤¹ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤…à¤ªà¤¨à¥€ à¤…à¤§à¤¿à¤•à¤¤à¤® à¤‰à¤ªà¤¯à¥‹à¤— à¤¸à¥€à¤®à¤¾ à¤¤à¤• à¤ªà¤¹à¥à¤à¤š à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤" });
     }
 
     const cleanEmail = (userEmail || "").trim().toLowerCase();
@@ -24059,7 +24390,7 @@ app.post(["/api/package-coupons/validate", "/api/promo-codes/validate"], (req, r
       const userUses = coupon.usedBy.filter((e: string) => e.toLowerCase() === cleanEmail).length;
       const limit = coupon.perUserLimit || 1;
       if (userUses >= limit) {
-        return res.status(400).json({ valid: false, error: `आप इस प्रोमो कोड का पहले ही ${limit} बार उपयोग कर चुके हैं।` });
+        return res.status(400).json({ valid: false, error: `à¤†à¤ª à¤‡à¤¸ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤•à¤¾ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ ${limit} à¤¬à¤¾à¤° à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤° à¤šà¥à¤•à¥‡ à¤¹à¥ˆà¤‚à¥¤` });
       }
     }
 
@@ -24070,7 +24401,7 @@ app.post(["/api/package-coupons/validate", "/api/promo-codes/validate"], (req, r
       if (!matches) {
         return res.status(400).json({
           valid: false,
-          error: `यह प्रोमो कोड केवल '${coupon.applicablePackage}' पैकेज के लिए मान्य है।`,
+          error: `à¤¯à¤¹ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤•à¥‡à¤µà¤² '${coupon.applicablePackage}' à¤ªà¥ˆà¤•à¥‡à¤œ à¤•à¥‡ à¤²à¤¿à¤ à¤®à¤¾à¤¨à¥à¤¯ à¤¹à¥ˆà¥¤`,
         });
       }
     }
@@ -24082,7 +24413,7 @@ app.post(["/api/package-coupons/validate", "/api/promo-codes/validate"], (req, r
     if (coupon.minPurchaseAmount && originalAmount < coupon.minPurchaseAmount) {
       return res.status(400).json({
         valid: false,
-        error: `इस प्रोमो कोड के लिए न्यूनतम खरीद राशि ₹${coupon.minPurchaseAmount} होनी चाहिए।`,
+        error: `à¤‡à¤¸ à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ à¤•à¥‡ à¤²à¤¿à¤ à¤¨à¥à¤¯à¥‚à¤¨à¤¤à¤® à¤–à¤°à¥€à¤¦ à¤°à¤¾à¤¶à¤¿ â‚¹${coupon.minPurchaseAmount} à¤¹à¥‹à¤¨à¥€ à¤šà¤¾à¤¹à¤¿à¤à¥¤`,
       });
     }
 
@@ -24113,7 +24444,7 @@ app.post(["/api/package-coupons/validate", "/api/promo-codes/validate"], (req, r
       originalAmount,
       discountAmount,
       finalPayableAmount,
-      message: `प्रोमो कोड '${coupon.code}' लागू हुआ! ₹${discountAmount} की छूट मिली।`,
+      message: `à¤ªà¥à¤°à¥‹à¤®à¥‹ à¤•à¥‹à¤¡ '${coupon.code}' à¤²à¤¾à¤—à¥‚ à¤¹à¥à¤†! â‚¹${discountAmount} à¤•à¥€ à¤›à¥‚à¤Ÿ à¤®à¤¿à¤²à¥€à¥¤`,
     });
   } catch (err: any) {
     return res.status(500).json({ valid: false, error: cleanErrorMessage(err) });
@@ -24158,7 +24489,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     const { planId, planKey, amount, customerEmail, customerPhone, customerName, returnUrl, couponCode } = req.body || {};
 
     if (!planId) {
-      return res.status(400).json({ error: "प्लान आईडी आवश्यक है।" });
+      return res.status(400).json({ error: "à¤ªà¥à¤²à¤¾à¤¨ à¤†à¤ˆà¤¡à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆà¥¤" });
     }
 
     const catalog = loadPlansCatalogDatabase();
@@ -24203,7 +24534,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
         const targetRank = tierRank[targetId] || 1;
 
         if (targetRank < currentRank) {
-          return res.status(400).json({ error: "डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।" });
+          return res.status(400).json({ error: "à¤¡à¤¾à¤‰à¤¨à¤—à¥à¤°à¥‡à¤¡ à¤¸à¤‚à¤­à¤µ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ à¤†à¤ª à¤•à¥‡à¤µà¤² à¤‰à¤šà¥à¤šà¤¤à¤° à¤ªà¥à¤²à¤¾à¤¨ à¤®à¥‡à¤‚ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤" });
         }
 
         // Server-side upgrade proration adjustment
@@ -24287,7 +24618,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
           if (!cfRes.ok) {
             return res.status(cfRes.status || 400).json({
               success: false,
-              error: `Cashfree त्रुटि: ${cfData.message || cfData.code || "ऑर्डर जनरेट नहीं हो सका"}`,
+              error: `Cashfree à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${cfData.message || cfData.code || "à¤‘à¤°à¥à¤¡à¤° à¤œà¤¨à¤°à¥‡à¤Ÿ à¤¨à¤¹à¥€à¤‚ à¤¹à¥‹ à¤¸à¤•à¤¾"}`,
               details: cfData,
             });
           }
@@ -24296,7 +24627,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
         console.error("Cashfree live API call error:", cfErr.message);
         return res.status(502).json({
           success: false,
-          error: `Cashfree API कनेक्टिविटी त्रुटि: ${cfErr.message}`,
+          error: `Cashfree API à¤•à¤¨à¥‡à¤•à¥à¤Ÿà¤¿à¤µà¤¿à¤Ÿà¥€ à¤¤à¥à¤°à¥à¤Ÿà¤¿: ${cfErr.message}`,
         });
       }
     }
@@ -24356,7 +24687,7 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
   try {
     const { orderId, userEmail } = req.body || {};
     if (!orderId) {
-      return res.status(400).json({ error: "ऑर्डर आईडी अनिवार्य है।" });
+      return res.status(400).json({ error: "à¤‘à¤°à¥à¤¡à¤° à¤†à¤ˆà¤¡à¥€ à¤…à¤¨à¤¿à¤µà¤¾à¤°à¥à¤¯ à¤¹à¥ˆà¥¤" });
     }
 
     const allPayments = loadPaymentsDatabase();
@@ -24533,7 +24864,7 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
         amount: existingOrder?.orderAmount,
         couponCode: existingOrder?.couponCode,
         discountAmount: existingOrder?.discountAmount,
-        message: "भुगतान सफलतापूर्वक सत्यापित हुआ! प्लान सक्रिय कर दिया गया है।",
+        message: "à¤­à¥à¤—à¤¤à¤¾à¤¨ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤¸à¤¤à¥à¤¯à¤¾à¤ªà¤¿à¤¤ à¤¹à¥à¤†! à¤ªà¥à¤²à¤¾à¤¨ à¤¸à¤•à¥à¤°à¤¿à¤¯ à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤",
       });
     }
 
@@ -24541,7 +24872,7 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
       success: false,
       status: gatewayStatus,
       orderId,
-      message: "भुगतान अभी लंबित या प्रक्रियाधीन है।",
+      message: "à¤­à¥à¤—à¤¤à¤¾à¤¨ à¤…à¤­à¥€ à¤²à¤‚à¤¬à¤¿à¤¤ à¤¯à¤¾ à¤ªà¥à¤°à¤•à¥à¤°à¤¿à¤¯à¤¾à¤§à¥€à¤¨ à¤¹à¥ˆà¥¤",
     });
   } catch (err: any) {
     console.error("Error verifying Cashfree order:", err);
@@ -24617,7 +24948,7 @@ app.post("/api/cashfree/webhook", async (req, res) => {
         paidAmount: paymentAmount || order?.orderAmount || 0,
         paidAt: Date.now(),
         customerEmail: customerEmail || order?.customerEmail || "",
-        customerName: payload.data?.customer_details?.customer_name || order?.customerName || "यूज़र",
+        customerName: payload.data?.customer_details?.customer_name || order?.customerName || "à¤¯à¥‚à¤œà¤¼à¤°",
         customerPhone: payload.data?.customer_details?.customer_phone || order?.customerPhone || "",
         orderAmount: order?.orderAmount || paymentAmount || 0,
         planId: order?.planId || "advanced",
@@ -24745,7 +25076,7 @@ app.get("/api/user-payments", async (req, res) => {
     return res.json({ success: true, payments: userPayments });
   }
 
-  return res.status(401).json({ success: false, error: "प्रमाणीकरण आवश्यक है", payments: [] });
+  return res.status(401).json({ success: false, error: "à¤ªà¥à¤°à¤®à¤¾à¤£à¥€à¤•à¤°à¤£ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¹à¥ˆ", payments: [] });
 });
 
 // Diagnostic: Payment Gateways Status (Cashfree & Razorpay verification)
@@ -24836,7 +25167,7 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
         limit: 999999,
         usedToday: 0,
         remainingToday: 999999,
-        message: "एडमिन/मास्टर एडमिन: असीमित ग्राफिक निर्माण",
+        message: "à¤à¤¡à¤®à¤¿à¤¨/à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨: à¤…à¤¸à¥€à¤®à¤¿à¤¤ à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¨à¤¿à¤°à¥à¤®à¤¾à¤£",
       });
     }
 
@@ -24866,7 +25197,7 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
         usedToday: userEntry.count,
         remainingToday: Math.max(0, dailyLimit - userEntry.count),
         deduplicated: true,
-        message: "यह समाचार कार्ड आज पहले ही उपयोग किया जा चुका है। कोटा पुनः नहीं काटा गया।",
+        message: "à¤¯à¤¹ à¤¸à¤®à¤¾à¤šà¤¾à¤° à¤•à¤¾à¤°à¥à¤¡ à¤†à¤œ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥‹à¤Ÿà¤¾ à¤ªà¥à¤¨à¤ƒ à¤¨à¤¹à¥€à¤‚ à¤•à¤¾à¤Ÿà¤¾ à¤—à¤¯à¤¾à¥¤",
       });
     }
 
@@ -24889,7 +25220,7 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
         limit: dailyLimit,
         usedToday: userEntry.count,
         remainingToday: 0,
-        error: `आज की ग्राफिक निर्माण दैनिक सीमा (${dailyLimit}/${dailyLimit}) समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।`,
+        error: `à¤†à¤œ à¤•à¥€ à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¨à¤¿à¤°à¥à¤®à¤¾à¤£ à¤¦à¥ˆà¤¨à¤¿à¤• à¤¸à¥€à¤®à¤¾ (${dailyLimit}/${dailyLimit}) à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤•à¤² à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚ à¤¯à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤`,
       });
     }
 
@@ -25024,7 +25355,7 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
         isUnlimitedDisplay: true,
         usedToday: 0,
         remainingToday: 999999,
-        message: "एडमिन/मास्टर एडमिन: असीमित वीडियो निर्माण",
+        message: "à¤à¤¡à¤®à¤¿à¤¨/à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨: à¤…à¤¸à¥€à¤®à¤¿à¤¤ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¨à¤¿à¤°à¥à¤®à¤¾à¤£",
       });
     }
 
@@ -25056,7 +25387,7 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
         usedToday: userEntry.count,
         remainingToday: Math.max(0, videoRule.limit - userEntry.count),
         deduplicated: true,
-        message: "यह वीडियो आज पहले ही उपयोग किया जा चुका है। कोटा पुनः नहीं काटा गया।",
+        message: "à¤¯à¤¹ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤†à¤œ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤šà¥à¤•à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥‹à¤Ÿà¤¾ à¤ªà¥à¤¨à¤ƒ à¤¨à¤¹à¥€à¤‚ à¤•à¤¾à¤Ÿà¤¾ à¤—à¤¯à¤¾à¥¤",
       });
     }
 
@@ -25083,7 +25414,7 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
         isUnlimitedDisplay: videoRule.isUnlimitedDisplay,
         usedToday: userEntry.count,
         remainingToday: 0,
-        error: `आज की वीडियो निर्माण दैनिक सीमा (${videoRule.limit}/${videoRule.limit}) समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।`,
+        error: `à¤†à¤œ à¤•à¥€ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¨à¤¿à¤°à¥à¤®à¤¾à¤£ à¤¦à¥ˆà¤¨à¤¿à¤• à¤¸à¥€à¤®à¤¾ (${videoRule.limit}/${videoRule.limit}) à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤•à¤² à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚ à¤¯à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤`,
       });
     }
 
@@ -25183,14 +25514,14 @@ app.post("/api/membership/calculate-upgrade", (req, res) => {
     if (targetRank <= currentRank) {
       return res.status(400).json({
         allowed: false,
-        error: "डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।",
+        error: "à¤¡à¤¾à¤‰à¤¨à¤—à¥à¤°à¥‡à¤¡ à¤¸à¤‚à¤­à¤µ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ à¤†à¤ª à¤•à¥‡à¤µà¤² à¤‰à¤šà¥à¤šà¤¤à¤° à¤ªà¥à¤²à¤¾à¤¨ à¤®à¥‡à¤‚ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤",
       });
     }
 
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find(p => p.id?.toLowerCase() === targetId || p.planKey?.toLowerCase() === targetId);
     if (!targetPlan) {
-      return res.status(404).json({ allowed: false, error: "लक्षित प्लान नहीं मिला" });
+      return res.status(404).json({ allowed: false, error: "à¤²à¤•à¥à¤·à¤¿à¤¤ à¤ªà¥à¤²à¤¾à¤¨ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
     }
 
     const now = Date.now();
@@ -25446,7 +25777,7 @@ app.get("/api/user-download-status", (req, res) => {
   }
 });
 
-app.post("/api/verify-download-entitlement", (req, res) => {
+app.post("/api/verify-download-entitlement", async (req, res) => {
   try {
     const { email, frameId, checkOnly, isBonus, headlineScheduleMode, hasScheduledHeadlines, card } = req.body || {};
     const cleanEmail = (email || "").toString().toLowerCase().trim();
@@ -25459,7 +25790,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       if (!templateValid || !headlineValid || !locationValid) {
         return res.status(400).json({
           allowed: false,
-          error: "अधूरे ग्राफिक्स को डाउनलोड नहीं किया जा सकता। कृपया सभी आवश्यक स्टेप (टेम्पलेट, हेडलाइन और स्थान) पूरे करें।",
+          error: "à¤…à¤§à¥‚à¤°à¥‡ à¤—à¥à¤°à¤¾à¤«à¤¿à¤•à¥à¤¸ à¤•à¥‹ à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤¨à¤¹à¥€à¤‚ à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤¸à¤•à¤¤à¤¾à¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¸à¤­à¥€ à¤†à¤µà¤¶à¥à¤¯à¤• à¤¸à¥à¤Ÿà¥‡à¤ª (à¤Ÿà¥‡à¤®à¥à¤ªà¤²à¥‡à¤Ÿ, à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤”à¤° à¤¸à¥à¤¥à¤¾à¤¨) à¤ªà¥‚à¤°à¥‡ à¤•à¤°à¥‡à¤‚à¥¤",
           incompleteSteps: true,
         });
       }
@@ -25502,7 +25833,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
     if (matchedUser?.isBlocked) {
       return res.status(403).json({
         allowed: false,
-        error: "आपका खाता व्यवस्थापक (Admin) द्वारा ब्लॉक कर दिया गया है। सहायता डेस्क से संपर्क करें।",
+        error: "à¤†à¤ªà¤•à¤¾ à¤–à¤¾à¤¤à¤¾ à¤µà¥à¤¯à¤µà¤¸à¥à¤¥à¤¾à¤ªà¤• (Admin) à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤¬à¥à¤²à¥‰à¤• à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤¡à¥‡à¤¸à¥à¤• à¤¸à¥‡ à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚à¥¤",
         blocked: true,
       });
     }
@@ -25518,10 +25849,50 @@ app.post("/api/verify-download-entitlement", (req, res) => {
       if (!isProOrVip) {
         return res.status(403).json({
           allowed: false,
-          error: "मल्टी-हेडलाइन शेड्यूलिंग (Multi-Headline Scheduling) केवल Pro और VIP-Desk प्लान धारकों के लिए उपलब्ध है। कृपया प्लान अपग्रेड करें।",
+          error: "à¤®à¤²à¥à¤Ÿà¥€-à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨ à¤¶à¥‡à¤¡à¥à¤¯à¥‚à¤²à¤¿à¤‚à¤— (Multi-Headline Scheduling) à¤•à¥‡à¤µà¤² Pro à¤”à¤° VIP-Desk à¤ªà¥à¤²à¤¾à¤¨ à¤§à¤¾à¤°à¤•à¥‹à¤‚ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤",
           headlineScheduleLocked: true,
           requiredTier: "PRO",
         });
+      }
+    }
+
+    // 3.2 Verify Custom Footer Entitlement on exported card
+    const hasCustomFooter = Boolean(card?.customFooterPng || card?.customFooterId);
+    const userTierKey = (tier || "basic").toLowerCase();
+    const isProOrVipUser = userTierKey === "ultra" || userTierKey === "vip" || userTierKey === "vip_desk" || userTierKey === "professional" || userTierKey === "pro" || isAdminAccount;
+
+    if (hasCustomFooter && !isProOrVipUser) {
+      return res.status(403).json({
+        allowed: false,
+        error: "à¤•à¤¸à¥à¤Ÿà¤® à¤«à¥‚à¤Ÿà¤° à¤¸à¥à¤µà¤¿à¤§à¤¾ à¤•à¥‡à¤µà¤² Pro à¤”à¤° VIP Desk à¤ªà¥à¤²à¤¾à¤¨ à¤¯à¥‚à¤œà¤¼à¤°à¥à¤¸ à¤•à¥‡ à¤²à¤¿à¤ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤…à¤ªà¤¨à¤¾ à¤ªà¥à¤²à¤¾à¤¨ à¤…à¤ªà¤—à¥à¤°à¥‡à¤¡ à¤•à¤°à¥‡à¤‚à¥¤",
+        customFooterLocked: true,
+        requiredTier: "PRO",
+      });
+    }
+
+    // 3.3 Verify Banned Footer Color on exported card
+    if (card?.frameDesign && card.frameDesign.startsWith("df_")) {
+      const dynamicFrames = await loadDynamicFramesDatabaseAsync();
+      const df = dynamicFrames.find((f) => f.id === card.frameDesign);
+      const bannedColor = df?.footerConfig?.bannedFooterColor || (df as any)?.bannedFooterColor;
+      if (bannedColor) {
+        const cleanBanned = String(bannedColor).trim().toLowerCase();
+        const cardBg = card.footerBgColor ? String(card.footerBgColor).trim().toLowerCase() : "";
+        const cardText = card.footerTextColor ? String(card.footerTextColor).trim().toLowerCase() : "";
+        if (cardBg && cleanBanned === cardBg) {
+          return res.status(400).json({
+            allowed: false,
+            error: `à¤«à¥‚à¤Ÿà¤° à¤¬à¥ˆà¤•à¤—à¥à¤°à¤¾à¤‰à¤‚à¤¡ à¤•à¤²à¤° '${card.footerBgColor}' à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ (Banned) à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¦à¥‚à¤¸à¤°à¤¾ à¤°à¤‚à¤— à¤šà¥à¤¨à¥‡à¤‚à¥¤`,
+            bannedFooterColorViolation: true,
+          });
+        }
+        if (cardText && cleanBanned === cardText) {
+          return res.status(400).json({
+            allowed: false,
+            error: `à¤«à¥‚à¤Ÿà¤° à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤•à¤²à¤° '${card.footerTextColor}' à¤®à¤¾à¤¸à¥à¤Ÿà¤° à¤à¤¡à¤®à¤¿à¤¨ à¤¦à¥à¤µà¤¾à¤°à¤¾ à¤ªà¥à¤°à¤¤à¤¿à¤¬à¤‚à¤§à¤¿à¤¤ (Banned) à¤•à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¦à¥‚à¤¸à¤°à¤¾ à¤°à¤‚à¤— à¤šà¥à¤¨à¥‡à¤‚à¥¤`,
+            bannedFooterColorViolation: true,
+          });
+        }
       }
     }
 
@@ -25542,7 +25913,7 @@ app.post("/api/verify-download-entitlement", (req, res) => {
           const isUnlocked = unlockRecord && unlockRecord.expiresAt > Date.now();
           if (!isUnlocked) {
             return res.status(403).json({
-              error: `यह फ्रेम (${frameConfig.customName || frameId}) आपके पैकेज में उपलब्ध नहीं है। यह ${frameConfig.selectedTier || allowedPlans.join(', ')} के लिए आरक्षित है। आप इसे ${frameConfig.coinPrice || 0} कॉइन्स में अनलॉक कर सकते हैं।`,
+              error: `à¤¯à¤¹ à¤«à¥à¤°à¥‡à¤® (${frameConfig.customName || frameId}) à¤†à¤ªà¤•à¥‡ à¤ªà¥ˆà¤•à¥‡à¤œ à¤®à¥‡à¤‚ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆà¥¤ à¤¯à¤¹ ${frameConfig.selectedTier || allowedPlans.join(', ')} à¤•à¥‡ à¤²à¤¿à¤ à¤†à¤°à¤•à¥à¤·à¤¿à¤¤ à¤¹à¥ˆà¥¤ à¤†à¤ª à¤‡à¤¸à¥‡ ${frameConfig.coinPrice || 0} à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤®à¥‡à¤‚ à¤…à¤¨à¤²à¥‰à¤• à¤•à¤° à¤¸à¤•à¤¤à¥‡ à¤¹à¥ˆà¤‚à¥¤`,
               frameLocked: true,
               requiredTier: frameConfig.selectedTier,
               coinPrice: frameConfig.coinPrice || 0,
@@ -25587,8 +25958,8 @@ app.post("/api/verify-download-entitlement", (req, res) => {
 
     if (downloadsToday >= maxAllowed) {
       return res.status(403).json({
-        error: "आपकी आज की ग्राफिक डाउनलोड सीमा पूरी हो चुकी है। कृपया अगली दैनिक सीमा रीसेट होने तक प्रतीक्षा करें।",
-        message: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।",
+        error: "à¤†à¤ªà¤•à¥€ à¤†à¤œ à¤•à¥€ à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤¸à¥€à¤®à¤¾ à¤ªà¥‚à¤°à¥€ à¤¹à¥‹ à¤šà¥à¤•à¥€ à¤¹à¥ˆà¥¤ à¤•à¥ƒà¤ªà¤¯à¤¾ à¤…à¤—à¤²à¥€ à¤¦à¥ˆà¤¨à¤¿à¤• à¤¸à¥€à¤®à¤¾ à¤°à¥€à¤¸à¥‡à¤Ÿ à¤¹à¥‹à¤¨à¥‡ à¤¤à¤• à¤ªà¥à¤°à¤¤à¥€à¤•à¥à¤·à¤¾ à¤•à¤°à¥‡à¤‚à¥¤",
+        message: "à¤†à¤œ à¤•à¤¾ à¤†à¤ªà¤•à¤¾ à¤¦à¥ˆà¤¨à¤¿à¤• à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¥‹à¤Ÿà¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¨à¤¯à¤¾ à¤•à¥‹à¤Ÿà¤¾ à¤•à¤² à¤ªà¥à¤¨à¤ƒ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥‹à¤—à¤¾à¥¤",
         quotaExceeded: true,
         maxAllowed,
         downloadsToday,
@@ -25687,7 +26058,7 @@ app.post("/api/complete-download-export", async (req, res) => {
       return res.json({
         success: false,
         quotaDeducted: 0,
-        message: "एक्सपोर्ट निरस्त या असफल होने के कारण कोई कोटा नहीं घटाया गया।",
+        message: "à¤à¤•à¥à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ à¤¨à¤¿à¤°à¤¸à¥à¤¤ à¤¯à¤¾ à¤…à¤¸à¤«à¤² à¤¹à¥‹à¤¨à¥‡ à¤•à¥‡ à¤•à¤¾à¤°à¤£ à¤•à¥‹à¤ˆ à¤•à¥‹à¤Ÿà¤¾ à¤¨à¤¹à¥€à¤‚ à¤˜à¤Ÿà¤¾à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤",
       });
     }
 
@@ -25760,7 +26131,7 @@ app.post("/api/complete-download-export", async (req, res) => {
       if (ids.includes(reqId)) {
         txResult = { success: true, idempotent: true, count: currentCount, remaining: Math.max(0, maxAllowed - currentCount) };
       } else if (currentCount >= maxAllowed) {
-        txResult = { success: false, quotaExceeded: true, count: currentCount, remaining: 0, error: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।" };
+        txResult = { success: false, quotaExceeded: true, count: currentCount, remaining: 0, error: "à¤†à¤œ à¤•à¤¾ à¤†à¤ªà¤•à¤¾ à¤¦à¥ˆà¤¨à¤¿à¤• à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¥‹à¤Ÿà¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¨à¤¯à¤¾ à¤•à¥‹à¤Ÿà¤¾ à¤•à¤² à¤ªà¥à¤¨à¤ƒ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥‹à¤—à¤¾à¥¤" };
       } else {
         const newCount = currentCount + 1;
         ids.push(reqId);
@@ -25777,13 +26148,13 @@ app.post("/api/complete-download-export", async (req, res) => {
           invalidToken: true,
           replayDetected: Boolean(txResult.replayDetected),
           reason: txResult.reason || txResult.error,
-          error: `डाउनलोड टोकन अमान्य, समाप्त या पहले ही उपयोग किया जा चुका है (${txResult.reason || txResult.error || "अमान्य"}). कृपया पुनः प्रयास करें।`,
+          error: `à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤Ÿà¥‹à¤•à¤¨ à¤…à¤®à¤¾à¤¨à¥à¤¯, à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¯à¤¾ à¤ªà¤¹à¤²à¥‡ à¤¹à¥€ à¤‰à¤ªà¤¯à¥‹à¤— à¤•à¤¿à¤¯à¤¾ à¤œà¤¾ à¤šà¥à¤•à¤¾ à¤¹à¥ˆ (${txResult.reason || txResult.error || "à¤…à¤®à¤¾à¤¨à¥à¤¯"}). à¤•à¥ƒà¤ªà¤¯à¤¾ à¤ªà¥à¤¨à¤ƒ à¤ªà¥à¤°à¤¯à¤¾à¤¸ à¤•à¤°à¥‡à¤‚à¥¤`,
         });
       }
       return res.status(403).json({
         success: false,
         quotaExceeded: true,
-        error: txResult.error || "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।",
+        error: txResult.error || "à¤†à¤œ à¤•à¤¾ à¤†à¤ªà¤•à¤¾ à¤¦à¥ˆà¤¨à¤¿à¤• à¤—à¥à¤°à¤¾à¤«à¤¿à¤• à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¥‹à¤Ÿà¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤¨à¤¯à¤¾ à¤•à¥‹à¤Ÿà¤¾ à¤•à¤² à¤ªà¥à¤¨à¤ƒ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¹à¥‹à¤—à¤¾à¥¤",
         downloadsToday: txResult.count,
         remainingToday: 0,
       });
@@ -25818,13 +26189,13 @@ let appVersionData = {
   releaseDate: "2026-09-08",
   downloadUrl: "/app-release.apk",
   apkAvailable: true,
-  releaseTitle: "न्यू अपडेट v1.2.0: मॉर्निंग AI स्टूडियो व मोबाइल स्प्लिट व्यू",
+  releaseTitle: "à¤¨à¥à¤¯à¥‚ à¤…à¤ªà¤¡à¥‡à¤Ÿ v1.2.0: à¤®à¥‰à¤°à¥à¤¨à¤¿à¤‚à¤— AI à¤¸à¥à¤Ÿà¥‚à¤¡à¤¿à¤¯à¥‹ à¤µ à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¸à¥à¤ªà¥à¤²à¤¿à¤Ÿ à¤µà¥à¤¯à¥‚",
   releaseNotes: [
-    "🌅 मॉर्निंग जैकेट: 1-क्लिक AI सुविचार व एस्थेटिक फोटो जनरेटर (बिना टाइप किए तुरंत नया सुविचार बनाएं)",
-    "📱 मोबाइल लाइव प्रीव्यू: स्क्रॉल करते ही कॉम्पैक्ट हाफ-स्क्रीन मोड — नीचे एडिट करते हुए ऊपर लाइव बदलाव देखें",
-    "👤 रिपोर्टर रोल: रिपोर्टर को केवल 4 मुख्य जैकेट्स (ओरिजिनल, सुपर ब्रेकिंग, टेक्स्ट ब्रेकिंग, मॉर्निंग) दिखेंगी",
-    "👑 मुख्य संपादक (Admin): सभी 7 जैकेट्स और एडवांस्ड फीचर्स उपलब्ध",
-    "📲 इन-ऐप अपडेट सिस्टम: नया वर्जन आने पर नोटिफिकेशन पॉपअप व डायरेक्ट APK डाउनलोड की सुविधा"
+    "ðŸŒ… à¤®à¥‰à¤°à¥à¤¨à¤¿à¤‚à¤— à¤œà¥ˆà¤•à¥‡à¤Ÿ: 1-à¤•à¥à¤²à¤¿à¤• AI à¤¸à¥à¤µà¤¿à¤šà¤¾à¤° à¤µ à¤à¤¸à¥à¤¥à¥‡à¤Ÿà¤¿à¤• à¤«à¥‹à¤Ÿà¥‹ à¤œà¤¨à¤°à¥‡à¤Ÿà¤° (à¤¬à¤¿à¤¨à¤¾ à¤Ÿà¤¾à¤‡à¤ª à¤•à¤¿à¤ à¤¤à¥à¤°à¤‚à¤¤ à¤¨à¤¯à¤¾ à¤¸à¥à¤µà¤¿à¤šà¤¾à¤° à¤¬à¤¨à¤¾à¤à¤‚)",
+    "ðŸ“± à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤²à¤¾à¤‡à¤µ à¤ªà¥à¤°à¥€à¤µà¥à¤¯à¥‚: à¤¸à¥à¤•à¥à¤°à¥‰à¤² à¤•à¤°à¤¤à¥‡ à¤¹à¥€ à¤•à¥‰à¤®à¥à¤ªà¥ˆà¤•à¥à¤Ÿ à¤¹à¤¾à¤«-à¤¸à¥à¤•à¥à¤°à¥€à¤¨ à¤®à¥‹à¤¡ â€” à¤¨à¥€à¤šà¥‡ à¤à¤¡à¤¿à¤Ÿ à¤•à¤°à¤¤à¥‡ à¤¹à¥à¤ à¤Šà¤ªà¤° à¤²à¤¾à¤‡à¤µ à¤¬à¤¦à¤²à¤¾à¤µ à¤¦à¥‡à¤–à¥‡à¤‚",
+    "ðŸ‘¤ à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¤° à¤°à¥‹à¤²: à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¤° à¤•à¥‹ à¤•à¥‡à¤µà¤² 4 à¤®à¥à¤–à¥à¤¯ à¤œà¥ˆà¤•à¥‡à¤Ÿà¥à¤¸ (à¤“à¤°à¤¿à¤œà¤¿à¤¨à¤², à¤¸à¥à¤ªà¤° à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—, à¤Ÿà¥‡à¤•à¥à¤¸à¥à¤Ÿ à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤—, à¤®à¥‰à¤°à¥à¤¨à¤¿à¤‚à¤—) à¤¦à¤¿à¤–à¥‡à¤‚à¤—à¥€",
+    "ðŸ‘‘ à¤®à¥à¤–à¥à¤¯ à¤¸à¤‚à¤ªà¤¾à¤¦à¤• (Admin): à¤¸à¤­à¥€ 7 à¤œà¥ˆà¤•à¥‡à¤Ÿà¥à¤¸ à¤”à¤° à¤à¤¡à¤µà¤¾à¤‚à¤¸à¥à¤¡ à¤«à¥€à¤šà¤°à¥à¤¸ à¤‰à¤ªà¤²à¤¬à¥à¤§",
+    "ðŸ“² à¤‡à¤¨-à¤à¤ª à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤¸à¤¿à¤¸à¥à¤Ÿà¤®: à¤¨à¤¯à¤¾ à¤µà¤°à¥à¤œà¤¨ à¤†à¤¨à¥‡ à¤ªà¤° à¤¨à¥‹à¤Ÿà¤¿à¤«à¤¿à¤•à¥‡à¤¶à¤¨ à¤ªà¥‰à¤ªà¤…à¤ª à¤µ à¤¡à¤¾à¤¯à¤°à¥‡à¤•à¥à¤Ÿ APK à¤¡à¤¾à¤‰à¤¨à¤²à¥‹à¤¡ à¤•à¥€ à¤¸à¥à¤µà¤¿à¤§à¤¾"
   ],
   minRequiredVersion: "1.0.0",
   forceUpdate: false,
@@ -25944,7 +26315,7 @@ app.post("/api/admin/update-version-info", requireMasterAdminMiddleware, (req, r
 
     return res.json({
       success: true,
-      message: "ऐप वर्जन जानकारी सफलतापूर्वक अपडेट हो गई!",
+      message: "à¤à¤ª à¤µà¤°à¥à¤œà¤¨ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€ à¤¸à¤«à¤²à¤¤à¤¾à¤ªà¥‚à¤°à¥à¤µà¤• à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤¹à¥‹ à¤—à¤ˆ!",
       versionInfo: appVersionData,
     });
   } catch (err: any) {
@@ -25991,10 +26362,10 @@ app.post("/api/logo-requests", (req, res) => {
       userEmail: cleanEmail,
       userName: userName || cleanEmail.split("@")[0],
       username: username || cleanEmail.split("@")[0],
-      channelName: channelName || "न्यूज़ चैनल",
+      channelName: channelName || "à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤šà¥ˆà¤¨à¤²",
       currentLogoUrl: currentLogoUrl || "",
       newLogoUrl: newLogoUrl || "",
-      reason: (reason || "लोगो बदलने का अनुरोध").trim(),
+      reason: (reason || "à¤²à¥‹à¤—à¥‹ à¤¬à¤¦à¤²à¤¨à¥‡ à¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§").trim(),
       status: "pending",
       createdAt: Date.now(),
       requestType,
@@ -26012,7 +26383,7 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
     const { id } = req.params;
     const reqs = loadLogoRequestsDatabase();
     const target = reqs.find((r: any) => r.id === id);
-    if (!target) return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+    if (!target) return res.status(404).json({ error: "à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
 
     target.status = "approved";
     target.approvedAt = Date.now();
@@ -26105,7 +26476,7 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
       console.warn("[LogoApproval:Firestore] Non-fatal sync error:", fsErr.message);
     }
 
-    return res.json({ success: true, message: "लोगो अनुरोध स्वीकृत और प्रोफाइल अपडेट हो गया।" });
+    return res.json({ success: true, message: "à¤²à¥‹à¤—à¥‹ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤”à¤° à¤ªà¥à¤°à¥‹à¤«à¤¾à¤‡à¤² à¤…à¤ªà¤¡à¥‡à¤Ÿ à¤¹à¥‹ à¤—à¤¯à¤¾à¥¤" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -26116,13 +26487,13 @@ app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject
     const { id } = req.params;
     const reqs = loadLogoRequestsDatabase();
     const target = reqs.find((r: any) => r.id === id);
-    if (!target) return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+    if (!target) return res.status(404).json({ error: "à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾" });
 
     target.status = "rejected";
     target.rejectedAt = Date.now();
     saveLogoRequestsDatabase(reqs);
 
-    return res.json({ success: true, message: "लोगो अनुरोध अस्वीकृत कर दिया गया।" });
+    return res.json({ success: true, message: "à¤²à¥‹à¤—à¥‹ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤…à¤¸à¥à¤µà¥€à¤•à¥ƒà¤¤ à¤•à¤° à¤¦à¤¿à¤¯à¤¾ à¤—à¤¯à¤¾à¥¤" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -26226,7 +26597,7 @@ async function startServer() {
     const availableBundle = findAnyAvailableIndexJs();
 
     if (!validDistPath && !availableBundle) {
-      console.warn("⚠️ No pre-built JS bundle found in dist/ or public/; falling back to live Vite server middleware.");
+      console.warn("âš ï¸ No pre-built JS bundle found in dist/ or public/; falling back to live Vite server middleware.");
       const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: {
@@ -26298,8 +26669,8 @@ async function startServer() {
           ).toString().trim();
           const cleanBase = "https://www.ainewsmaker.online";
 
-          let title = "AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो";
-          let description = "भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।";
+          let title = "AI News Maker â€” à¤¸à¥à¤®à¤¾à¤°à¥à¤Ÿ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¸à¥à¤Ÿà¥‚à¤¡à¤¿à¤¯à¥‹";
+          let description = "à¤­à¤¾à¤°à¤¤ à¤•à¤¾ à¤¨à¤‚à¤¬à¤° 1 à¤¸à¥à¤®à¤¾à¤°à¥à¤Ÿ à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¸à¥à¤Ÿà¥‚à¤¡à¤¿à¤¯à¥‹à¥¤ à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤—à¥à¤°à¤¾à¤«à¤¼à¤¿à¤•à¥à¤¸, à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤°à¥€à¤²à¥à¤¸ à¤”à¤° à¤ˆ-à¤ªà¥‡à¤ªà¤° à¤¬à¤¨à¤¾à¤à¤‚ à¤¸à¥‡à¤•à¤‚à¤¡à¥‹à¤‚ à¤®à¥‡à¤‚à¥¤";
           let canonical = `${cleanBase}${req.path === "/" ? "/" : req.path}`;
           let ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
           let ogType = "website";
@@ -26329,9 +26700,9 @@ async function startServer() {
               }
 
               if (found) {
-                const safeTitle = (found.title || found.approvedHeadline || "ताज़ा समाचार").trim();
+                const safeTitle = (found.title || found.approvedHeadline || "à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¤®à¤¾à¤šà¤¾à¤°").trim();
                 const safeSummary = (found.summary || found.approvedCaptionDetailed || found.captionShort || safeTitle).trim();
-                title = `${safeTitle} — AI News Maker`;
+                title = `${safeTitle} â€” AI News Maker`;
                 description = safeSummary.slice(0, 280);
                 canonical = `${cleanBase}/newsroom?article=${encodeURIComponent(found.id || articleId)}`;
 
@@ -26386,9 +26757,9 @@ async function startServer() {
                 prerenderContent = `
                   <article class="bot-news-prerender" style="max-width:800px;margin:20px auto;padding:20px;font-family:sans-serif;color:#f8fafc;">
                     <header>
-                      <nav aria-label="Breadcrumb"><a href="${cleanBase}/" style="color:#f59e0b;">होम</a> &raquo; <a href="${cleanBase}/newsroom" style="color:#f59e0b;">न्यूज़ रूम</a></nav>
+                      <nav aria-label="Breadcrumb"><a href="${cleanBase}/" style="color:#f59e0b;">à¤¹à¥‹à¤®</a> &raquo; <a href="${cleanBase}/newsroom" style="color:#f59e0b;">à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤°à¥‚à¤®</a></nav>
                       <h1 style="font-size:26px;font-weight:700;margin:15px 0;">${safeTitle}</h1>
-                      <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker संपादकीय डेस्क</p>
+                      <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¡à¥‡à¤¸à¥à¤•</p>
                     </header>
                     ${ogImage && !ogImage.includes('breaking_news_wala_logo.png') ? `<figure><img src="${ogImage}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
                     <div class="content" style="line-height:1.7;font-size:16px;">
@@ -26401,40 +26772,40 @@ async function startServer() {
               console.warn("[SEO Prerender] Error resolving article:", err?.message);
             }
           } else if (rawPath.startsWith("/studio") || rawPath.startsWith("/generator")) {
-            title = "फोटो न्यूज़ स्टूडियो — AI News Maker";
-            description = "एआई फोटो फ्रेम जनरेटर — 4:5 व 9:16 पोर्ट्रेट फ्रेम, कस्टमाइज़ेबल हेडलाइन, लोगो और स्मार्ट लोकेशन बैज।";
+            title = "à¤«à¥‹à¤Ÿà¥‹ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¸à¥à¤Ÿà¥‚à¤¡à¤¿à¤¯à¥‹ â€” AI News Maker";
+            description = "à¤à¤†à¤ˆ à¤«à¥‹à¤Ÿà¥‹ à¤«à¥à¤°à¥‡à¤® à¤œà¤¨à¤°à¥‡à¤Ÿà¤° â€” 4:5 à¤µ 9:16 à¤ªà¥‹à¤°à¥à¤Ÿà¥à¤°à¥‡à¤Ÿ à¤«à¥à¤°à¥‡à¤®, à¤•à¤¸à¥à¤Ÿà¤®à¤¾à¤‡à¤œà¤¼à¥‡à¤¬à¤² à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤¨, à¤²à¥‹à¤—à¥‹ à¤”à¤° à¤¸à¥à¤®à¤¾à¤°à¥à¤Ÿ à¤²à¥‹à¤•à¥‡à¤¶à¤¨ à¤¬à¥ˆà¤œà¥¤";
             canonical = `${cleanBase}/studio`;
           } else if (rawPath.startsWith("/videos")) {
-            title = "वीडियो न्यूज़ स्टूडियो व रील्स — AI News Maker";
-            description = "एआई वीडियो न्यूज़ स्टूडियो — प्रोफेशनल वीडियो हेडलाइंस, लोअर-थर्ड्स, ब्रेकिंग न्यूज़ वीडियो रील्स और ऑडियो मिक्सर।";
+            title = "à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¸à¥à¤Ÿà¥‚à¤¡à¤¿à¤¯à¥‹ à¤µ à¤°à¥€à¤²à¥à¤¸ â€” AI News Maker";
+            description = "à¤à¤†à¤ˆ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤¸à¥à¤Ÿà¥‚à¤¡à¤¿à¤¯à¥‹ â€” à¤ªà¥à¤°à¥‹à¤«à¥‡à¤¶à¤¨à¤² à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤¹à¥‡à¤¡à¤²à¤¾à¤‡à¤‚à¤¸, à¤²à¥‹à¤…à¤°-à¤¥à¤°à¥à¤¡à¥à¤¸, à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤µà¥€à¤¡à¤¿à¤¯à¥‹ à¤°à¥€à¤²à¥à¤¸ à¤”à¤° à¤‘à¤¡à¤¿à¤¯à¥‹ à¤®à¤¿à¤•à¥à¤¸à¤°à¥¤";
             canonical = `${cleanBase}/videos`;
           } else if (rawPath.startsWith("/newsroom")) {
-            title = "लाइव डिजिटल न्यूज़ रूम — AI News Maker";
-            description = "लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।";
+            title = "à¤²à¤¾à¤‡à¤µ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤°à¥‚à¤® â€” AI News Maker";
+            description = "à¤²à¤¾à¤‡à¤µ à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤°à¥‚à¤® â€” à¤ªà¥à¤°à¤®à¤¾à¤£à¤¿à¤¤ à¤¸à¤‚à¤ªà¤¾à¤¦à¤•à¥€à¤¯ à¤¸à¤®à¤¾à¤šà¤¾à¤°, à¤¤à¤¾à¤œà¤¼à¤¾ à¤¸à¥à¤°à¥à¤–à¤¿à¤¯à¤¾à¤ à¤”à¤° à¤®à¤²à¥à¤Ÿà¥€-à¤¸à¥‹à¤°à¥à¤¸ à¤†à¤°à¤à¤¸à¤à¤¸ à¤«à¤¼à¥€à¤¡à¥¤";
             canonical = `${cleanBase}/newsroom`;
           } else if (rawPath.startsWith("/profile")) {
-            title = "प्रोफ़ाइल एवं पैकेज प्लांस — AI News Maker";
-            description = "एआई न्यूज़ मेकर सब्सक्रिप्शन प्लांस, कॉइन्स वॉलेट और रिपोर्टर प्रोफ़ाइल सेटिंग्स।";
+            title = "à¤ªà¥à¤°à¥‹à¤«à¤¼à¤¾à¤‡à¤² à¤à¤µà¤‚ à¤ªà¥ˆà¤•à¥‡à¤œ à¤ªà¥à¤²à¤¾à¤‚à¤¸ â€” AI News Maker";
+            description = "à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤° à¤¸à¤¬à¥à¤¸à¤•à¥à¤°à¤¿à¤ªà¥à¤¶à¤¨ à¤ªà¥à¤²à¤¾à¤‚à¤¸, à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤µà¥‰à¤²à¥‡à¤Ÿ à¤”à¤° à¤°à¤¿à¤ªà¥‹à¤°à¥à¤Ÿà¤° à¤ªà¥à¤°à¥‹à¤«à¤¼à¤¾à¤‡à¤² à¤¸à¥‡à¤Ÿà¤¿à¤‚à¤—à¥à¤¸à¥¤";
             canonical = `${cleanBase}/profile`;
           } else if (rawPath.startsWith("/terms")) {
-            title = "नियम एवं शर्तें (Terms & Conditions) — AI News Maker";
-            description = "एआई न्यूज़ मेकर नियम और शर्तें — आधिकारिक सेवा दिशा-निर्देश और उपयोग नीति।";
+            title = "à¤¨à¤¿à¤¯à¤® à¤à¤µà¤‚ à¤¶à¤°à¥à¤¤à¥‡à¤‚ (Terms & Conditions) â€” AI News Maker";
+            description = "à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤° à¤¨à¤¿à¤¯à¤® à¤”à¤° à¤¶à¤°à¥à¤¤à¥‡à¤‚ â€” à¤†à¤§à¤¿à¤•à¤¾à¤°à¤¿à¤• à¤¸à¥‡à¤µà¤¾ à¤¦à¤¿à¤¶à¤¾-à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶ à¤”à¤° à¤‰à¤ªà¤¯à¥‹à¤— à¤¨à¥€à¤¤à¤¿à¥¤";
             canonical = `${cleanBase}/terms`;
           } else if (rawPath.startsWith("/privacy")) {
-            title = "गोपनीयता नीति (Privacy Policy) — AI News Maker";
-            description = "एआई न्यूज़ मेकर गोपनीयता नीति — यूज़र डेटा सुरक्षा व गोपनीयता संरक्षण मानक।";
+            title = "à¤—à¥‹à¤ªà¤¨à¥€à¤¯à¤¤à¤¾ à¤¨à¥€à¤¤à¤¿ (Privacy Policy) â€” AI News Maker";
+            description = "à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤° à¤—à¥‹à¤ªà¤¨à¥€à¤¯à¤¤à¤¾ à¤¨à¥€à¤¤à¤¿ â€” à¤¯à¥‚à¤œà¤¼à¤° à¤¡à¥‡à¤Ÿà¤¾ à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤µ à¤—à¥‹à¤ªà¤¨à¥€à¤¯à¤¤à¤¾ à¤¸à¤‚à¤°à¤•à¥à¤·à¤£ à¤®à¤¾à¤¨à¤•à¥¤";
             canonical = `${cleanBase}/privacy`;
           } else if (rawPath.startsWith("/refunds")) {
-            title = "रिफंड एवं रद्दीकरण नीति (Refund Policy) — AI News Maker";
-            description = "रिफंड व रद्दीकरण नीति — डिजिटल कॉइन्स व पैकेज खरीद रद्दीकरण दिशा-निर्देश।";
+            title = "à¤°à¤¿à¤«à¤‚à¤¡ à¤à¤µà¤‚ à¤°à¤¦à¥à¤¦à¥€à¤•à¤°à¤£ à¤¨à¥€à¤¤à¤¿ (Refund Policy) â€” AI News Maker";
+            description = "à¤°à¤¿à¤«à¤‚à¤¡ à¤µ à¤°à¤¦à¥à¤¦à¥€à¤•à¤°à¤£ à¤¨à¥€à¤¤à¤¿ â€” à¤¡à¤¿à¤œà¤¿à¤Ÿà¤² à¤•à¥‰à¤‡à¤¨à¥à¤¸ à¤µ à¤ªà¥ˆà¤•à¥‡à¤œ à¤–à¤°à¥€à¤¦ à¤°à¤¦à¥à¤¦à¥€à¤•à¤°à¤£ à¤¦à¤¿à¤¶à¤¾-à¤¨à¤¿à¤°à¥à¤¦à¥‡à¤¶à¥¤";
             canonical = `${cleanBase}/refunds`;
           } else if (rawPath.startsWith("/support")) {
-            title = "सहायता एवं संपर्क (Support) — AI News Maker";
-            description = "ग्राहक सहायता व संपर्क — एआई न्यूज़ मेकर हेल्पडेस्क, व्हाट्सएप सपोर्ट +91 9669802408।";
+            title = "à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤à¤µà¤‚ à¤¸à¤‚à¤ªà¤°à¥à¤• (Support) â€” AI News Maker";
+            description = "à¤—à¥à¤°à¤¾à¤¹à¤• à¤¸à¤¹à¤¾à¤¯à¤¤à¤¾ à¤µ à¤¸à¤‚à¤ªà¤°à¥à¤• â€” à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤° à¤¹à¥‡à¤²à¥à¤ªà¤¡à¥‡à¤¸à¥à¤•, à¤µà¥à¤¹à¤¾à¤Ÿà¥à¤¸à¤à¤ª à¤¸à¤ªà¥‹à¤°à¥à¤Ÿ +91 9669802408à¥¤";
             canonical = `${cleanBase}/support`;
           } else if (rawPath.startsWith("/delete-account")) {
-            title = "खाता हटाने का अनुरोध — AI News Maker";
-            description = "खाता हटाने का अनुरोध — एआई न्यूज़ मेकर डेटा सुरक्षा व अकाउंट डिलीशन प्रक्रिया।";
+            title = "à¤–à¤¾à¤¤à¤¾ à¤¹à¤Ÿà¤¾à¤¨à¥‡ à¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ â€” AI News Maker";
+            description = "à¤–à¤¾à¤¤à¤¾ à¤¹à¤Ÿà¤¾à¤¨à¥‡ à¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ â€” à¤à¤†à¤ˆ à¤¨à¥à¤¯à¥‚à¤œà¤¼ à¤®à¥‡à¤•à¤° à¤¡à¥‡à¤Ÿà¤¾ à¤¸à¥à¤°à¤•à¥à¤·à¤¾ à¤µ à¤…à¤•à¤¾à¤‰à¤‚à¤Ÿ à¤¡à¤¿à¤²à¥€à¤¶à¤¨ à¤ªà¥à¤°à¤•à¥à¤°à¤¿à¤¯à¤¾à¥¤";
             canonical = `${cleanBase}/delete-account`;
           }
 
@@ -26542,4 +26913,3 @@ setInterval(() => {}, 60000);
 startServer().catch((err) => {
   console.error("Failed to start server:", err);
 });
-

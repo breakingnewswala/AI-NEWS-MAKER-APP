@@ -40,11 +40,16 @@ export default defineConfig(() => {
               if (id.includes('lucide-react')) {
                 return 'vendor-icons';
               }
-              if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+              if (
+                id.includes('react') ||
+                id.includes('react-dom') ||
+                id.includes('scheduler') ||
+                id.includes('motion') ||
+                id.includes('framer-motion') ||
+                id.includes('remotion') ||
+                id.includes('@remotion')
+              ) {
                 return 'vendor-react';
-              }
-              if (id.includes('motion') || id.includes('framer-motion')) {
-                return 'vendor-motion';
               }
               return 'vendor';
             }
