@@ -12,8 +12,8 @@ android {
         applicationId = "com.aistudio.ainewsmaker.hzwptx"
         minSdk = 24
         targetSdk = 36
-        versionCode = 13
-        versionName = "13.0"
+        versionCode = 14
+        versionName = "14.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -46,12 +46,16 @@ android {
             signingConfig = signingConfigs.getByName("debugConfig")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
         }
     }
     compileOptions {

@@ -8791,9 +8791,19 @@ async function processRssItemWithAiEditorial(
       };
     }
   } catch (err: any) {
-    const msg = String(err?.message || err);
-    if (msg.includes("quota") || msg.includes("rate") || msg.includes("429")) {
-      isGeminiQuotaPausedUntil = Date.now() + 60000;
+    const msg = String(err?.message || err || "").toLowerCase();
+    const errTypes: string[] = Array.isArray(err?.errorTypes) ? err.errorTypes : [];
+    if (
+      err?.code === "ALL_API_KEYS_EXHAUSTED" ||
+      errTypes.includes("billing") ||
+      msg.includes("402") ||
+      msg.includes("depleted") ||
+      msg.includes("payment") ||
+      msg.includes("billing")
+    ) {
+      isGeminiQuotaPausedUntil = Date.now() + 15 * 60 * 1000;
+    } else if (errTypes.includes("quota") || msg.includes("quota") || msg.includes("rate") || msg.includes("429")) {
+      isGeminiQuotaPausedUntil = Date.now() + 2 * 60 * 1000;
     }
   }
 
@@ -8846,7 +8856,11 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
-async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecord): Promise<StoredNewsPost[]> {
+async function parseRssItemsFromXml(
+  xmlText: string,
+  source: AdminRssSourceRecord,
+  knownFilter?: { existingUrls: Set<string>; existingTitles: Set<string>; deletedIds: Set<string> }
+): Promise<StoredNewsPost[]> {
 
   const posts: StoredNewsPost[] = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
@@ -8900,13 +8914,47 @@ async function parseRssItemsFromXml(xmlText: string, source: AdminRssSourceRecor
         if (!isNaN(parsedTime)) timestamp = parsedTime;
       }
 
+      // Skip expensive AI rewriting & remote image scraping for already-known/duplicate items
+      if (knownFilter) {
+        const normLink = (link || "").trim().toLowerCase();
+        const fallbackTitleKey = cleanAndCraftHindiHeadline(rawTitle, rawDesc).title.trim().toLowerCase().slice(0, 40);
+        const rawTitleKey = rawTitle.trim().toLowerCase().slice(0, 40);
+        if (
+          (normLink && knownFilter.existingUrls.has(normLink)) ||
+          knownFilter.existingTitles.has(rawTitleKey) ||
+          knownFilter.existingTitles.has(fallbackTitleKey)
+        ) {
+          const dupCatName = source.category || "देश";
+          const dupCatKey = resolveCategoryKeyFromName(dupCatName, link || source.url);
+          return {
+            id: `dup-${source.id}-${Buffer.from(rawTitleKey + normLink).toString("base64url").slice(0, 12)}`,
+            sourceId: source.id,
+            sourceFeedUrl: source.url,
+            sourceChannel: source.name,
+            title: rawTitle,
+            summary: rawDesc,
+            sourceUrl: link,
+            category: dupCatKey,
+            categoryName: dupCatName,
+            publishedTime: formatRelativeTime(timestamp),
+            imageUrl: "",
+            breaking: false,
+            isExclusive: false,
+            isBonus: false,
+            rewardCoins: 0,
+            timestamp,
+            status: "DUPLICATE_SKIPPED",
+          } as StoredNewsPost;
+        }
+      }
+
       // 1. Strict Priority Image Selection (media:content -> enclosure -> content img -> og:image -> twitter:image -> article img)
       const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
 
       // 2. Article-Aware AI Editorial Headline & Summary Generation
       const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
 
-      const catName = editorial.categoryName || source.category || "à¤¦à¥‡à¤¶";
+      const catName = editorial.categoryName || source.category || "देश";
       const catKey = resolveCategoryKeyFromName(catName, link || source.url);
 
       const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
@@ -9688,6 +9736,16 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
       return res;
     }
 
+    const preloadedPosts = loadNewsDatabase();
+    const preloadedUrls = new Set(preloadedPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
+    const preloadedTitles = new Set(preloadedPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+    const preloadedDeletedIds = loadDeletedNewsIds();
+    const knownFilter = {
+      existingUrls: preloadedUrls,
+      existingTitles: preloadedTitles,
+      deletedIds: preloadedDeletedIds,
+    };
+
     const fetchedPosts: StoredNewsPost[] = [];
 
     await Promise.allSettled(
@@ -9703,7 +9761,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
             });
             if (resp.ok) {
               const xmlText = await resp.text();
-              const items = await parseRssItemsFromXml(xmlText, src);
+              const items = await parseRssItemsFromXml(xmlText, src, knownFilter);
               if (items.length > 0) {
                 src.lastFetchedAt = Date.now();
                 src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
@@ -9815,9 +9873,11 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
       timestamp: Date.now(),
     };
     lastRssSyncResult = result;
-    console.log(
-      `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped, ${failedSourcesCount} failed in ${durationMs}ms`
-    );
+    if (newArticlesCount > 0 || failedSourcesCount > 0) {
+      console.log(
+        `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped, ${failedSourcesCount} failed in ${durationMs}ms`
+      );
+    }
     return result;
   } catch (err: any) {
     const durationMs = Date.now() - startTime;
@@ -15249,7 +15309,26 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
   const errMsg = String(err?.message || err?.error || err || "").toLowerCase();
   const status = err?.status || err?.statusCode || 0;
 
-  // 1. Billing / Prepayment Credit Exhaustion (HTTP 402)
+  // 1. Quota / Rate Limiting (HTTP 429) — check BEFORE generic "billing" text because 429 messages mention billing details
+  if (
+    status === 429 ||
+    errMsg.includes("429") ||
+    errMsg.includes("resource_exhausted") ||
+    errMsg.includes("rate limit") ||
+    errMsg.includes("too many requests") ||
+    errMsg.includes("quota")
+  ) {
+    return {
+      type: "quota",
+      isRetryable: true,
+      cooldownMs: 60 * 1000, // 60 seconds rate limit cooldown
+      userFacingError: "दैनिक कोटा / रेट लिमिट समाप्त (429 Quota Exhausted)",
+      healthStatus: "quota_exceeded",
+      shouldDisableKey: false,
+    };
+  }
+
+  // 2. Billing / Prepayment Credit Exhaustion (HTTP 402)
   if (
     status === 402 ||
     errMsg.includes("402") ||
@@ -15263,26 +15342,7 @@ function classifyApiKeyError(err: any): ClassifiedKeyError {
       type: "billing",
       isRetryable: true,
       cooldownMs: 15 * 60 * 1000, // 15 mins cooldown
-      userFacingError: "à¤•à¥à¤°à¥‡à¤¡à¤¿à¤Ÿ à¤¸à¤®à¤¾à¤ªà¥à¤¤ (402 Payment Required / Depleted Credits)",
-      healthStatus: "quota_exceeded",
-      shouldDisableKey: false,
-    };
-  }
-
-  // 2. Quota / Rate Limiting (HTTP 429)
-  if (
-    status === 429 ||
-    errMsg.includes("429") ||
-    errMsg.includes("resource_exhausted") ||
-    errMsg.includes("rate limit") ||
-    errMsg.includes("too many requests") ||
-    errMsg.includes("quota")
-  ) {
-    return {
-      type: "quota",
-      isRetryable: true,
-      cooldownMs: 60 * 1000, // 60 seconds rate limit cooldown
-      userFacingError: "à¤¦à¥ˆà¤¨à¤¿à¤• à¤•à¥‹à¤Ÿà¤¾ à¤¸à¤®à¤¾à¤ªà¥à¤¤ (429 Quota Exhausted)",
+      userFacingError: "क्रेडिट समाप्त (402 Payment Required / Depleted Credits)",
       healthStatus: "quota_exceeded",
       shouldDisableKey: false,
     };
@@ -15562,7 +15622,7 @@ function loadApiKeysVault(): ApiKeysVault {
         {
           id: "free_env_primary",
           key: envKey,
-          label: "à¤¸à¤¿à¤¸à¥à¤Ÿà¤® à¤œà¥‡à¤®à¤¿à¤¨à¥€ à¤•à¥€ (Primary System Key)",
+          label: "सिस्टम जेमिनी की (Primary System Key)",
           addedAt: Date.now(),
           status: "active",
           cooldownUntil: 0,
@@ -15727,12 +15787,14 @@ async function executeGeminiWithKeyPool<T>(
     return true;
   });
 
-  // If all active keys are in cooldown, pick the active key with earliest cooldown and try it immediately
+  // If all active keys are in cooldown, only retry non-billing keys (rate-limited) so depleted 402 keys stay in cooldown
   if (candidateKeys.length === 0) {
-    const activeKeys = vault.freeKeys.filter((k) => k.status === "active");
-    if (activeKeys.length > 0) {
-      activeKeys.sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0));
-      const earliestKey = activeKeys[0];
+    const nonBillingActiveKeys = vault.freeKeys.filter(
+      (k) => k.status === "active" && !(k.lastError || "").includes("402")
+    );
+    if (nonBillingActiveKeys.length > 0) {
+      nonBillingActiveKeys.sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0));
+      const earliestKey = nonBillingActiveKeys[0];
       earliestKey.cooldownUntil = 0;
       candidateKeys = [earliestKey];
     }
@@ -15788,9 +15850,16 @@ async function executeGeminiWithKeyPool<T>(
           saveApiKeysVault(vault).catch((e: any) => console.warn("[KeyPool Failover Sync]", e?.message));
         }
 
-        console.warn(
-          `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failover to next candidate...`
-        );
+        const hasMoreCandidates = i < candidateKeys.length - 1;
+        if (hasMoreCandidates) {
+          console.log(
+            `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failing over to next candidate...`
+          );
+        } else {
+          console.log(
+            `[KeyPool] Free Key "${candidate.label}" (${candidate.id}) entered cooldown (${classified.type}: ${classified.userFacingError}).`
+          );
+        }
       }
     }
   }
@@ -15801,7 +15870,7 @@ async function executeGeminiWithKeyPool<T>(
     fallbackEnvKey &&
     fallbackEnvKey.length >= 15 &&
     fallbackEnvKey !== "MY_GEMINI_API_KEY" &&
-    !attemptedKeys.has(fallbackEnvKey)
+    !attemptedKeys.has(fallbackEnvKey) && !vault.freeKeys.some((k) => k.key?.trim() === fallbackEnvKey && (k.status === "disabled" || (k.cooldownUntil && k.cooldownUntil > now)))
   ) {
     attemptedKeys.add(fallbackEnvKey);
     try {

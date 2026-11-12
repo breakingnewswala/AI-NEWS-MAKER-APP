@@ -19287,9 +19287,12 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
       };
     }
   } catch (err) {
-    const msg = String(err?.message || err);
-    if (msg.includes("quota") || msg.includes("rate") || msg.includes("429")) {
-      isGeminiQuotaPausedUntil = Date.now() + 6e4;
+    const msg = String(err?.message || err || "").toLowerCase();
+    const errTypes = Array.isArray(err?.errorTypes) ? err.errorTypes : [];
+    if (err?.code === "ALL_API_KEYS_EXHAUSTED" || errTypes.includes("billing") || msg.includes("402") || msg.includes("depleted") || msg.includes("payment") || msg.includes("billing")) {
+      isGeminiQuotaPausedUntil = Date.now() + 15 * 60 * 1e3;
+    } else if (errTypes.includes("quota") || msg.includes("quota") || msg.includes("rate") || msg.includes("429")) {
+      isGeminiQuotaPausedUntil = Date.now() + 2 * 60 * 1e3;
     }
   }
   return {
@@ -19317,7 +19320,7 @@ function decodeHtmlEntities(str) {
     }
   }).replace(/\uFFFD+/g, " ").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/\s+/g, " ").trim();
 }
-async function parseRssItemsFromXml(xmlText, source) {
+async function parseRssItemsFromXml(xmlText, source, knownFilter) {
   const posts = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
   let items = xmlText.match(itemRegex) || [];
@@ -19364,6 +19367,34 @@ async function parseRssItemsFromXml(xmlText, source) {
       if (pubDateStr) {
         const parsedTime = Date.parse(pubDateStr);
         if (!isNaN(parsedTime)) timestamp = parsedTime;
+      }
+      if (knownFilter) {
+        const normLink = (link || "").trim().toLowerCase();
+        const fallbackTitleKey = cleanAndCraftHindiHeadline(rawTitle, rawDesc).title.trim().toLowerCase().slice(0, 40);
+        const rawTitleKey = rawTitle.trim().toLowerCase().slice(0, 40);
+        if (normLink && knownFilter.existingUrls.has(normLink) || knownFilter.existingTitles.has(rawTitleKey) || knownFilter.existingTitles.has(fallbackTitleKey)) {
+          const dupCatName = source.category || "देश";
+          const dupCatKey = resolveCategoryKeyFromName(dupCatName, link || source.url);
+          return {
+            id: `dup-${source.id}-${Buffer.from(rawTitleKey + normLink).toString("base64url").slice(0, 12)}`,
+            sourceId: source.id,
+            sourceFeedUrl: source.url,
+            sourceChannel: source.name,
+            title: rawTitle,
+            summary: rawDesc,
+            sourceUrl: link,
+            category: dupCatKey,
+            categoryName: dupCatName,
+            publishedTime: formatRelativeTime(timestamp),
+            imageUrl: "",
+            breaking: false,
+            isExclusive: false,
+            isBonus: false,
+            rewardCoins: 0,
+            timestamp,
+            status: "DUPLICATE_SKIPPED"
+          };
+        }
       }
       const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
       const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
@@ -19982,6 +20013,11 @@ async function executeRssSynchronization() {
       lastRssSyncResult = res;
       return res;
     }
+    const preloadedPosts = loadNewsDatabase();
+    const preloadedUrls = new Set(preloadedPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
+    const preloadedTitles = new Set(preloadedPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+    const preloadedDeletedIds = loadDeletedNewsIds();
+    const knownFilter = { existingUrls: preloadedUrls, existingTitles: preloadedTitles, deletedIds: preloadedDeletedIds };
     const fetchedPosts = [];
     await Promise.allSettled(
       activeSources.map(async (src) => {
@@ -19996,7 +20032,7 @@ async function executeRssSynchronization() {
             });
             if (resp.ok) {
               const xmlText = await resp.text();
-              const items = await parseRssItemsFromXml(xmlText, src);
+              const items = await parseRssItemsFromXml(xmlText, src, knownFilter);
               if (items.length > 0) {
                 src.lastFetchedAt = Date.now();
                 src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
@@ -20090,9 +20126,11 @@ async function executeRssSynchronization() {
       timestamp: Date.now()
     };
     lastRssSyncResult = result;
-    console.log(
-      `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped, ${failedSourcesCount} failed in ${durationMs}ms`
-    );
+    if (newArticlesCount > 0 || failedSourcesCount > 0) {
+      console.log(
+        `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped, ${failedSourcesCount} failed in ${durationMs}ms`
+      );
+    }
     return result;
   } catch (err) {
     const durationMs = Date.now() - startTime;
@@ -24530,24 +24568,22 @@ function maskApiKey(key) {
 function classifyApiKeyError(err) {
   const errMsg = String(err?.message || err?.error || err || "").toLowerCase();
   const status = err?.status || err?.statusCode || 0;
-  if (status === 402 || errMsg.includes("402") || errMsg.includes("payment required") || errMsg.includes("depleted") || errMsg.includes("prepayment credits") || errMsg.includes("insufficient credits") || errMsg.includes("billing")) {
-    return {
-      type: "billing",
-      isRetryable: true,
-      cooldownMs: 15 * 60 * 1e3,
-      // 15 mins cooldown
-      userFacingError: "\xE0\xA4\u2022\xE0\xA5\x8D\xE0\xA4\xB0\xE0\xA5\u2021\xE0\xA4\xA1\xE0\xA4\xBF\xE0\xA4\u0178 \xE0\xA4\xB8\xE0\xA4\xAE\xE0\xA4\xBE\xE0\xA4\xAA\xE0\xA5\x8D\xE0\xA4\xA4 (402 Payment Required / Depleted Credits)",
-      healthStatus: "quota_exceeded",
-      shouldDisableKey: false
-    };
-  }
   if (status === 429 || errMsg.includes("429") || errMsg.includes("resource_exhausted") || errMsg.includes("rate limit") || errMsg.includes("too many requests") || errMsg.includes("quota")) {
     return {
       type: "quota",
       isRetryable: true,
       cooldownMs: 60 * 1e3,
-      // 60 seconds rate limit cooldown
-      userFacingError: "\xE0\xA4\xA6\xE0\xA5\u02C6\xE0\xA4\xA8\xE0\xA4\xBF\xE0\xA4\u2022 \xE0\xA4\u2022\xE0\xA5\u2039\xE0\xA4\u0178\xE0\xA4\xBE \xE0\xA4\xB8\xE0\xA4\xAE\xE0\xA4\xBE\xE0\xA4\xAA\xE0\xA5\x8D\xE0\xA4\xA4 (429 Quota Exhausted)",
+      userFacingError: "दैनिक कोटा / रेट लिमिट समाप्त (429 Quota Exhausted)",
+      healthStatus: "quota_exceeded",
+      shouldDisableKey: false
+    };
+  }
+  if (status === 402 || errMsg.includes("402") || errMsg.includes("payment required") || errMsg.includes("depleted") || errMsg.includes("prepayment credits") || errMsg.includes("insufficient credits") || errMsg.includes("billing")) {
+    return {
+      type: "billing",
+      isRetryable: true,
+      cooldownMs: 15 * 60 * 1e3,
+      userFacingError: "क्रेडिट समाप्त (402 Payment Required / Depleted Credits)",
       healthStatus: "quota_exceeded",
       shouldDisableKey: false
     };
@@ -24722,7 +24758,7 @@ function loadApiKeysVault() {
         {
           id: "free_env_primary",
           key: envKey,
-          label: "\xE0\xA4\xB8\xE0\xA4\xBF\xE0\xA4\xB8\xE0\xA5\x8D\xE0\xA4\u0178\xE0\xA4\xAE \xE0\xA4\u0153\xE0\xA5\u2021\xE0\xA4\xAE\xE0\xA4\xBF\xE0\xA4\xA8\xE0\xA5\u20AC \xE0\xA4\u2022\xE0\xA5\u20AC (Primary System Key)",
+          label: "सिस्टम जेमिनी की (Primary System Key)",
           addedAt: Date.now(),
           status: "active",
           cooldownUntil: 0,
@@ -24859,10 +24895,10 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
     return true;
   });
   if (candidateKeys.length === 0) {
-    const activeKeys = vault.freeKeys.filter((k) => k.status === "active");
-    if (activeKeys.length > 0) {
-      activeKeys.sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0));
-      const earliestKey = activeKeys[0];
+    const nonBillingActiveKeys = vault.freeKeys.filter((k) => k.status === "active" && !(k.lastError || "").includes("402"));
+    if (nonBillingActiveKeys.length > 0) {
+      nonBillingActiveKeys.sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0));
+      const earliestKey = nonBillingActiveKeys[0];
       earliestKey.cooldownUntil = 0;
       candidateKeys = [earliestKey];
     }
@@ -24910,14 +24946,20 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
         if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
           saveApiKeysVault(vault).catch((e) => console.warn("[KeyPool Failover Sync]", e?.message));
         }
-        console.warn(
-          `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failover to next candidate...`
-        );
+        if (i < candidateKeys.length - 1) {
+          console.log(
+            `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failing over to next candidate...`
+          );
+        } else {
+          console.log(
+            `[KeyPool] Free Key "${candidate.label}" (${candidate.id}) entered cooldown (${classified.type}: ${classified.userFacingError}).`
+          );
+        }
       }
     }
   }
   const fallbackEnvKey = (process.env.GEMINI_API_KEY || "").trim();
-  if (fallbackEnvKey && fallbackEnvKey.length >= 15 && fallbackEnvKey !== "MY_GEMINI_API_KEY" && !attemptedKeys.has(fallbackEnvKey)) {
+  if (fallbackEnvKey && fallbackEnvKey.length >= 15 && fallbackEnvKey !== "MY_GEMINI_API_KEY" && !attemptedKeys.has(fallbackEnvKey) && !vault.freeKeys.some((k) => k.key?.trim() === fallbackEnvKey && (k.status === "disabled" || k.cooldownUntil && k.cooldownUntil > now))) {
     attemptedKeys.add(fallbackEnvKey);
     try {
       const ai = new import_genai2.GoogleGenAI({

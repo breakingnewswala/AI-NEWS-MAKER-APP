@@ -1,7 +1,6 @@
 package com.example
 
 import android.os.Bundle
-import android.system.Os
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,21 +15,13 @@ import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        try {
-            Os.setenv("MESA_LOG_FILE", "/dev/null", true)
-            Os.unsetenv("LIBGL_ALWAYS_SOFTWARE")
-            Os.unsetenv("GALLIUM_DRIVER")
-            Os.unsetenv("MESA_LOADER_DRIVER_OVERRIDE")
-        } catch (_: Throwable) {
-        }
-        try {
-            MainApplication.configureGraphicsEnvironment()
-        } catch (_: Throwable) {
-        }
-
         super.onCreate(savedInstanceState)
-        com.example.data.AuthManager.init(this)
-        com.example.data.AuthManager.ensureMasterAdminSession(this)
+        try {
+            com.example.data.AuthManager.init(this)
+            com.example.data.AuthManager.ensureMasterAdminSession(this)
+        } catch (t: Throwable) {
+            android.util.Log.e("MainActivity", "Auth init failed", t)
+        }
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {

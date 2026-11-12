@@ -483,16 +483,17 @@ fun BreakingNewsStudioWebView(
         androidx.compose.runtime.key(webViewCrashId) {
             AndroidView(
                 factory = { ctx ->
-                    WebView(ctx).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
+                    try {
+                        WebView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
 
-                        setBackgroundColor(0xFF0F172A.toInt())
-                        isVerticalScrollBarEnabled = false
-                        isHorizontalScrollBarEnabled = false
-                        overScrollMode = android.view.View.OVER_SCROLL_IF_CONTENT_SCROLLS
+                            setBackgroundColor(0xFF0F172A.toInt())
+                            isVerticalScrollBarEnabled = false
+                            isHorizontalScrollBarEnabled = false
+                            overScrollMode = android.view.View.OVER_SCROLL_IF_CONTENT_SCROLLS
 
                     settings.apply {
                         javaScriptEnabled = true
@@ -770,14 +771,21 @@ fun BreakingNewsStudioWebView(
                         }
                     }
 
-                    loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html?tab=$initialTab#$initialTab")
-                    webViewInstance = this
-                    onWebViewCreated?.invoke(this)
-                }
-            },
-            modifier = modifier
-        )
-    }
+                        loadUrl("https://appassets.androidplatform.net/assets/news_studio/index.html?tab=$initialTab#$initialTab")
+                        webViewInstance = this
+                        onWebViewCreated?.invoke(this)
+                        }
+                    } catch (t: Throwable) {
+                        android.util.Log.e("BreakingNewsStudio", "WebView initialization failed", t)
+                        isRendererCrashed = true
+                        android.view.View(ctx).apply {
+                            setBackgroundColor(0xFF0F172A.toInt())
+                        }
+                    }
+                },
+                modifier = modifier
+            )
+        }
     }
 }
 
