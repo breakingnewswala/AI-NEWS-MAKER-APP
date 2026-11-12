@@ -49,7 +49,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.aistudio.ainewsmaker.dyynbu.fileprovider"
+            android:authorities="com.aistudio.ainewsmaker.hzwptx.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

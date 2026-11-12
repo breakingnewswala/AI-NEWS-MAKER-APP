@@ -1,6 +1,0 @@
-{
-  "name": "News Graphic Studio",
-  "description": "Professional Breaking News image card creator with customizable jacket frames, Gemini 3.1 Pro image analysis, multi-photo layouts, and instant export.",
-  "requestFramePermissions": ["microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

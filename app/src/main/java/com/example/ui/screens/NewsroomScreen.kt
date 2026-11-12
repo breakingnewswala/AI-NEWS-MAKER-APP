@@ -549,6 +549,33 @@ fun BreakingNewsStudioWebView(
                     }
 
                     webViewClient = object : WebViewClient() {
+                        private fun syncMasterAdminToWebView(view: WebView?) {
+                            if (com.example.data.AuthManager.isLoggedIn.value) {
+                                val sessionJson = com.example.data.AuthManager.getUserSessionJson()
+                                val sessionEscaped = sessionJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+                                val profileJson = com.example.data.AuthManager.getChannelProfileJson()
+                                val profileEscaped = profileJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+
+                                view?.evaluateJavascript(
+                                    "(function() { try { " +
+                                    "localStorage.removeItem('user_explicitly_logged_out'); " +
+                                    "localStorage.setItem('show_auth_welcome_screen', 'false'); " +
+                                    "localStorage.setItem('is_onboarding_completed', 'true'); " +
+                                    "localStorage.setItem('onboarding_completed_breakingnewswala.com@gmail.com', 'true'); " +
+                                    "var sess = JSON.parse('$sessionEscaped'); " +
+                                    "var prof = JSON.parse('$profileEscaped'); " +
+                                    "localStorage.setItem('reporter_auth_session', JSON.stringify(sess)); " +
+                                    "localStorage.setItem('reporter_current_user', JSON.stringify(sess)); " +
+                                    "localStorage.setItem('ai_news_user', JSON.stringify(sess)); " +
+                                    "localStorage.setItem('user_channel_profile', JSON.stringify(prof)); " +
+                                    "localStorage.setItem('user_profile_breakingnewswala.com@gmail.com', JSON.stringify(prof)); " +
+                                    "if (window.applyAndroidChannelProfile) { window.applyAndroidChannelProfile(prof); } " +
+                                    "} catch(e) {} })();",
+                                    null
+                                )
+                            }
+                        }
+
                         override fun shouldInterceptRequest(
                             view: WebView?,
                             request: WebResourceRequest?
@@ -557,6 +584,34 @@ fun BreakingNewsStudioWebView(
                             val scheme = uri.scheme ?: ""
                             val host = uri.host ?: ""
                             val path = uri.path ?: ""
+
+                            val corsHeaders = mapOf(
+                                "Access-Control-Allow-Origin" to "*",
+                                "Access-Control-Allow-Methods" to "GET, POST, PUT, DELETE, OPTIONS",
+                                "Access-Control-Allow-Headers" to "*"
+                            )
+
+                            // Intercept legacy defunct Cloud Run container host or local /api/ requests on virtual asset host
+                            if (host == "ais-dev-vhpz665wuo3aifiyjrbnrh-101130074623.asia-southeast1.run.app" ||
+                                (host == "appassets.androidplatform.net" && path.startsWith("/api/"))
+                            ) {
+                                val fallbackAsset = when {
+                                    path.contains("/api/news-posts") || path.contains("/api/news") -> "news_studio/news_database.json"
+                                    path.contains("/api/categories") -> "news_studio/categories_database.json"
+                                    path.contains("/api/rss-sources") -> "news_studio/rss_sources_database.json"
+                                    path.contains("/api/videos") -> "news_studio/videos_database.json"
+                                    path.contains("/api/template-configs") -> "news_studio/news_template_configs.json"
+                                    else -> null
+                                }
+                                if (fallbackAsset != null) {
+                                    try {
+                                        val inputStream = context.assets.open(fallbackAsset)
+                                        return WebResourceResponse("application/json", "UTF-8", 200, "OK", corsHeaders, inputStream)
+                                    } catch (_: Exception) {}
+                                }
+                                val emptyJson = "{\"success\":true,\"posts\":[]}".byteInputStream(Charsets.UTF_8)
+                                return WebResourceResponse("application/json", "UTF-8", 200, "OK", corsHeaders, emptyJson)
+                            }
 
                             if (host == "appassets.androidplatform.net" || (scheme == "file" && path.contains("android_asset"))) {
                                 val cleanPath = when {
@@ -583,14 +638,18 @@ fun BreakingNewsStudioWebView(
                                         cleanPath.endsWith(".ttf") -> "font/ttf"
                                         else -> "application/octet-stream"
                                     }
-                                    val headers = mapOf(
-                                        "Access-Control-Allow-Origin" to "*",
-                                        "Access-Control-Allow-Methods" to "GET, OPTIONS",
-                                        "Access-Control-Allow-Headers" to "*"
-                                    )
-                                    return WebResourceResponse(mimeType, "UTF-8", 200, "OK", headers, inputStream)
+                                    return WebResourceResponse(mimeType, "UTF-8", 200, "OK", corsHeaders, inputStream)
                                 } catch (e: Exception) {
-                                    // Let default handling proceed
+                                    if (host == "appassets.androidplatform.net") {
+                                        return WebResourceResponse(
+                                            "text/plain",
+                                            "UTF-8",
+                                            404,
+                                            "Not Found",
+                                            corsHeaders,
+                                            "".byteInputStream(Charsets.UTF_8)
+                                        )
+                                    }
                                 }
                             }
                             return super.shouldInterceptRequest(view, request)
@@ -625,25 +684,14 @@ fun BreakingNewsStudioWebView(
                             super.onReceivedError(view, request, error)
                         }
 
+                        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                            super.onPageStarted(view, url, favicon)
+                            syncMasterAdminToWebView(view)
+                        }
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            // Synchronize authenticated session & channel profile into studio localStorage only if logged in
-                            if (com.example.data.AuthManager.isLoggedIn.value) {
-                                val sessionJson = com.example.data.AuthManager.getUserSessionJson()
-                                val sessionEscaped = sessionJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
-                                val profileJson = com.example.data.AuthManager.getChannelProfileJson()
-                                val profileEscaped = profileJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
-
-                                view?.evaluateJavascript(
-                                    "(function() { try { " +
-                                    "localStorage.setItem('reporter_auth_session', JSON.stringify(JSON.parse('$sessionEscaped'))); " +
-                                    "localStorage.setItem('user_channel_profile', JSON.stringify(JSON.parse('$profileEscaped'))); " +
-                                    "localStorage.setItem('is_onboarding_completed', 'true'); " +
-                                    "if (window.applyAndroidChannelProfile) { window.applyAndroidChannelProfile(JSON.parse('$profileEscaped')); } " +
-                                    "} catch(e) {} })();",
-                                    null
-                                )
-                            }
+                            syncMasterAdminToWebView(view)
                             val pendingJson = NewsRepository.getPendingNewsJson()
                             if (pendingJson.isNotBlank() && pendingJson != "{}" && NewsRepository.hasPendingGraphicPost()) {
                                 val escaped = pendingJson.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")

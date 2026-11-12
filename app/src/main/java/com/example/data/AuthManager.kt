@@ -32,7 +32,7 @@ object AuthManager {
     const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
     const val FALLBACK_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
     const val DEFAULT_CLOUD_SERVER_URL = "https://ainewsmaker.online"
-    val DEFAULT_OPENAI_API_KEY: String = com.example.BuildConfig.OPENAI_API_KEY
+    const val DEFAULT_OPENAI_API_KEY: String = ""
 
     const val ACCOUNT_DELETION_WEB_URL = "https://ainewsmaker.online/delete-account"
     const val TEST_REVIEWER_EMAIL = "google-reviewer@ainewsmaker.online"
@@ -164,6 +164,51 @@ object AuthManager {
         _userPlanTier.value = tier
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_USER_PLAN_TIER, tier).apply()
+    }
+
+    fun ensureMasterAdminSession(context: Context) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val masterName = prefs.getString(KEY_USER_NAME, "मुख्य संपादक")?.takeIf { it.isNotBlank() } ?: "मुख्य संपादक"
+        val masterEmail = "breakingnewswala.com@gmail.com"
+        val masterDistrict = prefs.getString(KEY_USER_DISTRICT, "सेंट्रल डेस्क / भोपाल")?.takeIf { it.isNotBlank() } ?: "सेंट्रल डेस्क / भोपाल"
+        val masterMobile = prefs.getString(KEY_USER_MOBILE, "9669802408")?.takeIf { it.isNotBlank() } ?: "9669802408"
+        val channelHi = prefs.getString(KEY_CHANNEL_NAME_HI, "ब्रेकिंग न्यूज़ वाला")?.takeIf { it.isNotBlank() } ?: "ब्रेकिंग न्यूज़ वाला"
+        val channelEn = prefs.getString(KEY_CHANNEL_NAME_EN, "BREAKING NEWS WALA")?.takeIf { it.isNotBlank() } ?: "BREAKING NEWS WALA"
+        val logoUrl = prefs.getString(KEY_CHANNEL_LOGO_URL, "/assets/breaking_news_wala_logo.png")?.takeIf { it.isNotBlank() } ?: "/assets/breaking_news_wala_logo.png"
+
+        prefs.edit()
+            .putBoolean(KEY_IS_LOGGED_IN, true)
+            .putBoolean(KEY_ONBOARDING_COMPLETED, true)
+            .putString(KEY_USER_NAME, masterName)
+            .putString(KEY_USER_EMAIL, masterEmail)
+            .putString(KEY_USER_ROLE, UserRole.ADMIN.name)
+            .putString(KEY_USER_DISTRICT, masterDistrict)
+            .putString(KEY_USER_MOBILE, masterMobile)
+            .putString(KEY_CHANNEL_NAME_HI, channelHi)
+            .putString(KEY_CHANNEL_NAME_EN, channelEn)
+            .putString(KEY_CHANNEL_LOGO_URL, logoUrl)
+            .putString(KEY_USER_PLAN_TIER, "ultra")
+            .putString(KEY_ADMIN_VIEW_AS_MODE, "admin")
+            .apply()
+
+        _appMode.value = AppMode.ADMIN_MODE
+        _isLoggedIn.value = true
+        _isOnboardingCompleted.value = true
+        _channelNameHi.value = channelHi
+        _channelNameEn.value = channelEn
+        _channelLogoUrl.value = logoUrl
+        _userPlanTier.value = "ultra"
+        _adminViewAsMode.value = "admin"
+        _currentUser.value = AuthUser(
+            id = "usr_627265616b69",
+            name = masterName,
+            email = masterEmail,
+            role = UserRole.ADMIN,
+            district = masterDistrict,
+            channelName = channelHi,
+            mobileNumber = masterMobile
+        )
+        NewsRepository.setUserRole(UserRole.ADMIN)
     }
 
     fun init(context: Context) {

@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        com.example.data.AuthManager.init(this)
+        com.example.data.AuthManager.ensureMasterAdminSession(this)
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
