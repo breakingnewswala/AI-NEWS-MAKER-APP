@@ -133,3 +133,7 @@ whatsapp_templates_db.json
 .tmp_chrome_audit/
 actual_audit_verified_export.*
 actual_export_audit.*
+
+# Firebase credentials
+google-services.json
+app/google-services.json
