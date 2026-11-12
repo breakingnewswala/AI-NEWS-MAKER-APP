@@ -15566,7 +15566,7 @@ app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
           username: userOrEmail.split("@")[0],
           fullName: userOrEmail.split("@")[0],
           role: "reporter",
-          channelNameHi: "\xE0\xA4\xAC\xE0\xA5\x8D\xE0\xA4\xB0\xE0\xA5\u2021\xE0\xA4\u2022\xE0\xA4\xBF\xE0\xA4\u201A\xE0\xA4\u2014 \xE0\xA4\xA8\xE0\xA5\x8D\xE0\xA4\xAF\xE0\xA5\u201A\xE0\xA4\u0153\xE0\xA4\xBC",
+          channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E",
           channelNameEn: "Breaking News",
           createdAt: Date.now()
         };
@@ -19373,7 +19373,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter) {
         const fallbackTitleKey = cleanAndCraftHindiHeadline(rawTitle, rawDesc).title.trim().toLowerCase().slice(0, 40);
         const rawTitleKey = rawTitle.trim().toLowerCase().slice(0, 40);
         if (normLink && knownFilter.existingUrls.has(normLink) || knownFilter.existingTitles.has(rawTitleKey) || knownFilter.existingTitles.has(fallbackTitleKey)) {
-          const dupCatName = source.category || "देश";
+          const dupCatName = source.category || "\u0926\u0947\u0936";
           const dupCatKey = resolveCategoryKeyFromName(dupCatName, link || source.url);
           return {
             id: `dup-${source.id}-${Buffer.from(rawTitleKey + normLink).toString("base64url").slice(0, 12)}`,
@@ -19398,7 +19398,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter) {
       }
       const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
       const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
-      const catName = editorial.categoryName || source.category || "\xE0\xA4\xA6\xE0\xA5\u2021\xE0\xA4\xB6";
+      const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
       const catKey = resolveCategoryKeyFromName(catName, link || source.url);
       const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
       const postId = `rss-${source.id}-${hashStr}`;
@@ -20017,7 +20017,11 @@ async function executeRssSynchronization() {
     const preloadedUrls = new Set(preloadedPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
     const preloadedTitles = new Set(preloadedPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
     const preloadedDeletedIds = loadDeletedNewsIds();
-    const knownFilter = { existingUrls: preloadedUrls, existingTitles: preloadedTitles, deletedIds: preloadedDeletedIds };
+    const knownFilter = {
+      existingUrls: preloadedUrls,
+      existingTitles: preloadedTitles,
+      deletedIds: preloadedDeletedIds
+    };
     const fetchedPosts = [];
     await Promise.allSettled(
       activeSources.map(async (src) => {
@@ -20896,9 +20900,15 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       isProfileComplete: isMasterAdminEmail || isSubAdminEmail ? true : isProfileComplete,
       profileStatus: isMasterAdminEmail || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
       email: profile.email || existing.email || "",
-      district: profile.district || profile.location || existing.district || existing.location || "",
-      location: profile.location || profile.district || existing.location || existing.district || "",
-      channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
+      district: profile.district !== void 0 && profile.district !== null ? String(profile.district).trim() : existing.district || "",
+      location: profile.location !== void 0 && profile.location !== null ? String(profile.location).trim() : existing.location || "",
+      channelNameHi: (() => {
+        const raw = profile.channelNameHi || profile.channelName || existing.channelNameHi || "";
+        if (typeof raw === "string" && (raw.includes("\xE0\xA4") || raw.includes("\xC3") || raw.trim() === "")) {
+          return "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E";
+        }
+        return raw;
+      })(),
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
       channelLogoUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoUrl || existing.channelLogoUrl || "",
       channelLogoPngUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || "",
@@ -24573,7 +24583,8 @@ function classifyApiKeyError(err) {
       type: "quota",
       isRetryable: true,
       cooldownMs: 60 * 1e3,
-      userFacingError: "दैनिक कोटा / रेट लिमिट समाप्त (429 Quota Exhausted)",
+      // 60 seconds rate limit cooldown
+      userFacingError: "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E / \u0930\u0947\u091F \u0932\u093F\u092E\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (429 Quota Exhausted)",
       healthStatus: "quota_exceeded",
       shouldDisableKey: false
     };
@@ -24583,7 +24594,8 @@ function classifyApiKeyError(err) {
       type: "billing",
       isRetryable: true,
       cooldownMs: 15 * 60 * 1e3,
-      userFacingError: "क्रेडिट समाप्त (402 Payment Required / Depleted Credits)",
+      // 15 mins cooldown
+      userFacingError: "\u0915\u094D\u0930\u0947\u0921\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (402 Payment Required / Depleted Credits)",
       healthStatus: "quota_exceeded",
       shouldDisableKey: false
     };
@@ -24758,7 +24770,7 @@ function loadApiKeysVault() {
         {
           id: "free_env_primary",
           key: envKey,
-          label: "सिस्टम जेमिनी की (Primary System Key)",
+          label: "\u0938\u093F\u0938\u094D\u091F\u092E \u091C\u0947\u092E\u093F\u0928\u0940 \u0915\u0940 (Primary System Key)",
           addedAt: Date.now(),
           status: "active",
           cooldownUntil: 0,
@@ -24895,7 +24907,9 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
     return true;
   });
   if (candidateKeys.length === 0) {
-    const nonBillingActiveKeys = vault.freeKeys.filter((k) => k.status === "active" && !(k.lastError || "").includes("402"));
+    const nonBillingActiveKeys = vault.freeKeys.filter(
+      (k) => k.status === "active" && !(k.lastError || "").includes("402")
+    );
     if (nonBillingActiveKeys.length > 0) {
       nonBillingActiveKeys.sort((a, b) => (a.cooldownUntil || 0) - (b.cooldownUntil || 0));
       const earliestKey = nonBillingActiveKeys[0];
@@ -24946,7 +24960,8 @@ async function executeGeminiWithKeyPool(action, isVip = false) {
         if (classified.cooldownMs > 0 || classified.shouldDisableKey) {
           saveApiKeysVault(vault).catch((e) => console.warn("[KeyPool Failover Sync]", e?.message));
         }
-        if (i < candidateKeys.length - 1) {
+        const hasMoreCandidates = i < candidateKeys.length - 1;
+        if (hasMoreCandidates) {
           console.log(
             `[KeyPool Failover] Free Key "${candidate.label}" (${candidate.id}) failed with ${classified.type} (${classified.userFacingError}). Failing over to next candidate...`
           );

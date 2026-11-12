@@ -503,9 +503,9 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   const spec = getTemplateLayoutSpec(options.templateId, options.aspectRatio);
   const rawHeadline = cleanHeadlineText(options.headline || '');
   const fontFam = options.fontFamily || 'Baloo 2';
-  const maxLines = spec.templateId === 'jacket-morning'
-    ? (options.customMaxLines || spec.headlineArea.maxLines)
-    : Math.min(4, Math.max(3, options.customMaxLines || spec.headlineArea.maxLines || 4));
+  const maxLines = options.customMaxLines
+    ? Math.max(1, Math.min(4, options.customMaxLines))
+    : (spec.templateId === 'jacket-morning' ? spec.headlineArea.maxLines : Math.min(4, Math.max(1, spec.headlineArea.maxLines || 4)));
   const maxW = options.customBounds?.width || spec.headlineArea.maxWidth;
   const maxH = options.customBounds?.height || spec.headlineArea.maxHeight;
 

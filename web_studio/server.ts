@@ -4423,7 +4423,7 @@ app.post("/api/upload-logo", requireAuthMiddleware, async (req, res) => {
           username: userOrEmail.split("@")[0],
           fullName: userOrEmail.split("@")[0],
           role: "reporter",
-          channelNameHi: "à¤¬à¥à¤°à¥‡à¤•à¤¿à¤‚à¤— à¤¨à¥à¤¯à¥‚à¤œà¤¼",
+          channelNameHi: "ब्रेकिंग न्यूज़ वाला",
           channelNameEn: "Breaking News",
           createdAt: Date.now(),
         } as any;
@@ -10841,9 +10841,15 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       isProfileComplete: (isMasterAdminEmail || isSubAdminEmail) ? true : isProfileComplete,
       profileStatus: (isMasterAdminEmail || isSubAdminEmail) ? "active" : (isProfileComplete ? "active" : "incomplete"),
       email: profile.email || existing.email || "",
-      district: profile.district || profile.location || existing.district || existing.location || "",
-      location: profile.location || profile.district || existing.location || existing.district || "",
-      channelNameHi: profile.channelNameHi || profile.channelName || existing.channelNameHi || "",
+      district: (profile.district !== undefined && profile.district !== null) ? String(profile.district).trim() : (existing.district || ""),
+      location: (profile.location !== undefined && profile.location !== null) ? String(profile.location).trim() : (existing.location || ""),
+      channelNameHi: (() => {
+        const raw = profile.channelNameHi || profile.channelName || existing.channelNameHi || "";
+        if (typeof raw === "string" && (raw.includes("à¤") || raw.includes("Ã") || raw.trim() === "")) {
+          return "ब्रेकिंग न्यूज़ वाला";
+        }
+        return raw;
+      })(),
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
       channelLogoUrl: isMasterAdminEmail
         ? '/assets/breaking_news_wala_logo.png'

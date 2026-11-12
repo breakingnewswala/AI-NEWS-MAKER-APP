@@ -157,6 +157,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const bodyAreaRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(480);
   const [bottomPlateHeight, setBottomPlateHeight] = useState<number>(146);
+  const [calloutImgError, setCalloutImgError] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    setCalloutImgError(false);
+  }, [card.frameDesign, card.customCalloutAssetUrl]);
 
   // Interactive Movable Ad Box State
   const [isDraggingAd, setIsDraggingAd] = useState(false);
@@ -407,6 +412,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       aspectRatio: (activeDf?.aspectRatio as any) || card.aspectRatio || '4:5',
       userFontSize: card.headlineFontSize || activeDf?.typographyConfig?.primaryFontSize,
       customBounds,
+      customMaxLines: activeDf?.textSlots?.[0]?.maxLines || 4,
       alignment: (activeDf?.textSlots?.[0]?.alignment as any) || 'center',
     });
   }, [
@@ -444,7 +450,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       ? '#000000'
       : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'))));
 
-    const defaultTemplateHighlight = isGraphic4
+    const defaultTemplateHighlight = activeDf?.primaryHighlightColor || activeDf?.quoteHighlightColor || (isGraphic4
       ? '#DC2626'
       : isGraphic2
       ? '#EA580C'
@@ -454,7 +460,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       ? '#FACC15'
       : isLightTemplate
       ? '#DC2626'
-      : '#FFE600';
+      : '#FFE600');
 
     const highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
     const isBlackText = baseTextColor.toLowerCase() === '#000000' || baseTextColor.toLowerCase() === 'black' || baseTextColor.toLowerCase() === '#0f172a';
@@ -627,6 +633,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   </div>
                 );
               }
+              const slotPosKey = slot.id || (sIdx === 0 ? 'main' : sIdx === 1 ? 'second' : sIdx === 2 ? 'third' : sIdx === 3 ? 'fourth' : `slot_${sIdx}`);
+              const slotCrop = card.imagePositions?.[slotPosKey] || (sIdx === 0 ? (card.imagePositions?.main || card.imagePosition) : undefined);
+              const slotCropStyle = getImageStyle(slotCrop);
+
               return (
                 <div
                   key={slot.id || sIdx}
@@ -645,7 +655,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     className="w-full h-full"
                     style={{
                       objectFit: (slot.cropMode as any) || 'cover',
-                      filter: getFilterCss(card.imageFilters),
+                      ...slotCropStyle,
                     }}
                     onError={handleImgError}
                   />
@@ -655,6 +665,54 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           </div>
         );
       })()}
+
+      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Bug Group E: Render over header photos) */}
+      {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true) && (
+        <div className="absolute inset-0 pointer-events-none z-11 overflow-hidden flex flex-col justify-around select-none">
+          <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
+            {[...Array(6)].map((_, rIdx) => (
+              <div key={rIdx} className="flex whitespace-nowrap gap-12 sm:gap-16 shrink-0 font-black tracking-widest">
+                {[...Array(8)].map((_, cIdx) => (
+                  card.watermarkType === 'image' && card.watermarkImage ? (
+                    <img
+                      key={cIdx}
+                      src={card.watermarkImage}
+                      alt=""
+                      className="object-contain"
+                      style={{
+                        width: `${Math.round((card.watermarkScale || 90) * 0.45)}px`,
+                        opacity: card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.15,
+                      }}
+                    />
+                  ) : (
+                    <span
+                      key={cIdx}
+                      className="flex items-center gap-1.5 shrink-0 uppercase"
+                      style={{
+                        fontFamily: 'Arial, Helvetica, sans-serif',
+                        fontWeight: 900,
+                        color:
+                          (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                            ? `rgba(0, 0, 0, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                            : (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'red'
+                            ? `rgba(220, 38, 38, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                            : `rgba(255, 255, 255, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`,
+                        textShadow:
+                          (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                            ? '0 1px 2px rgba(255,255,255,0.15)'
+                            : '0 1px 2px rgba(0,0,0,0.45)',
+                        fontSize: '15px',
+                      }}
+                    >
+                      {card.textWatermarkContent || card.channelNameEn || card.watermarkText || card.breakingWatermarkText || (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')}
+                    </span>
+                  )
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 0C. DYNAMIC FRAME PANEL B PNG ARTWORK OVERLAY (Layer 2: On top of photo, preserving transparent cutouts & curves) */}
       {(() => {
@@ -3380,19 +3438,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           return (
             <div className="absolute inset-0 z-20 pointer-events-none select-none">
               {/* Dynamic Logo */}
-              {df.headerConfig?.showLogo && (
+              {df.headerConfig?.showLogo && card.showMasterBranding !== false && (
                 <div
-                  className="absolute pointer-events-auto"
+                  className="absolute pointer-events-auto flex items-center justify-start"
                   style={{
                     left: `${df.headerConfig.logoRect?.x ?? 5}%`,
                     top: `${df.headerConfig.logoRect?.y ?? 3.5}%`,
                     width: `${df.headerConfig.logoRect?.width ?? 22}%`,
                     height: `${df.headerConfig.logoRect?.height ?? 9}%`,
                     opacity: df.headerConfig.logoOpacity ?? 1,
+                    transform: card.logoScale ? `scale(${(card.logoScale) / 1.25})` : undefined,
+                    transformOrigin: 'top left',
                   }}
                 >
                   <img
-                    src={card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png'}
+                    src={card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png'}
                     alt="Channel Logo"
                     className="max-w-full max-h-full object-contain"
                   />
@@ -3406,12 +3466,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000');
                 return badgeAsset ? (
                   <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold"
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-3"
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
-                      minWidth: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      minWidth: '90px',
+                      width: 'max-content',
+                      maxWidth: `${Math.max(28, df.headerConfig.locationRect?.width ?? 28)}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundImage: `url(${badgeAsset})`,
                       backgroundSize: '100% 100%',
@@ -3600,47 +3661,51 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
               {/* Full Story Callout */}
               {df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && card.showCallout !== false && (
-                (card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset) ? (
-                  <div
-                    className="absolute pointer-events-auto flex items-center justify-center"
-                    style={{
-                      left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                      top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
-                      width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
-                      height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
-                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
-                      transformOrigin: 'center center',
-                    }}
-                  >
-                    <img
-                      src={card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset}
-                      alt="Callout"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
-                    style={{
-                      left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                      top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
-                      width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
-                      height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
-                      backgroundColor: df.fullStoryCalloutConfig.bgColor || '#DC2626',
-                      color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
-                      borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',
-                      borderWidth: `${df.fullStoryCalloutConfig.borderWidth ?? 1}px`,
-                      transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
-                      transformOrigin: 'center center',
-                      fontSize: `${Math.max(9, Math.round((df.fullStoryCalloutConfig.fontSize || 18) * previewScale))}px`,
-                    }}
-                  >
-                    {df.fullStoryCalloutConfig.showIcon !== false && (
-                      <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse mr-1 inline-block" />
-                    )}
-                    <span className="truncate">{df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में'}</span>
-                  </div>
-                )
+                (() => {
+                  const calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
+                  return (calloutUrl && !calloutImgError) ? (
+                    <div
+                      className="absolute pointer-events-auto flex items-center justify-center"
+                      style={{
+                        left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                        top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
+                        width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                        height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                        transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
+                        transformOrigin: 'center center',
+                      }}
+                    >
+                      <img
+                        src={calloutUrl}
+                        alt="Callout"
+                        className="w-full h-full object-contain"
+                        onError={() => setCalloutImgError(true)}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
+                      style={{
+                        left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                        top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
+                        width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                        height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                        backgroundColor: df.fullStoryCalloutConfig.bgColor || '#DC2626',
+                        color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
+                        borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',
+                        borderWidth: `${df.fullStoryCalloutConfig.borderWidth ?? 1}px`,
+                        transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
+                        transformOrigin: 'center center',
+                        fontSize: `${Math.max(9, Math.round((df.fullStoryCalloutConfig.fontSize || 18) * previewScale))}px`,
+                      }}
+                    >
+                      {df.fullStoryCalloutConfig.showIcon !== false && (
+                        <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse mr-1 inline-block" />
+                      )}
+                      <span className="truncate">{df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में'}</span>
+                    </div>
+                  );
+                })()
               )}
 
               {/* Optional POWERED BY Element */}

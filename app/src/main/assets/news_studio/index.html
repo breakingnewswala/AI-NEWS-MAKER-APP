@@ -2,10 +2,29 @@
 <html lang="hi" translate="no" class="dark notranslate">
   <head>
     <meta charset="UTF-8" />
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-NZ9PBDQK');</script>
+    <!-- End Google Tag Manager -->
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-L3HVGF1YEJ"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-L3HVGF1YEJ');
+    </script>
     <link rel="canonical" href="https://www.ainewsmaker.online/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="google" content="notranslate" />
     <meta name="googlebot" content="notranslate" />
+    <!-- Search Engine Ownership Verification Hooks (Google Search Console & Bing Webmaster Tools) -->
+    <!-- Add your verification tokens below or supply via server environment variables GOOGLE_SITE_VERIFICATION / MS_VALIDATE_TOKEN -->
+    <!-- <meta name="google-site-verification" content="YOUR_GOOGLE_SEARCH_CONSOLE_TOKEN" /> -->
+    <!-- <meta name="msvalidate.01" content="YOUR_BING_WEBMASTER_TOKEN" /> -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -27,6 +46,70 @@
     <meta name="twitter:description" content="भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।" />
     <meta name="twitter:image" content="https://www.ainewsmaker.online/assets/breaking_news_wala_logo.png" />
     <meta name="twitter:image:alt" content="AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो" />
+    <!-- Schema.org Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://www.ainewsmaker.online/#website",
+          "url": "https://www.ainewsmaker.online/",
+          "name": "AI News Maker",
+          "alternateName": ["Breaking News Wala", "AI Newsroom Studio"],
+          "description": "भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।",
+          "publisher": {
+            "@id": "https://www.ainewsmaker.online/#organization"
+          },
+          "inLanguage": "hi",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://www.ainewsmaker.online/?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "NewsMediaOrganization",
+          "@id": "https://www.ainewsmaker.online/#organization",
+          "name": "AI News Maker",
+          "alternateName": "Breaking News Wala",
+          "url": "https://www.ainewsmaker.online/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://www.ainewsmaker.online/assets/breaking_news_wala_logo.png",
+            "width": 1000,
+            "height": 400
+          },
+          "sameAs": [
+            "https://www.facebook.com/breakingnewswala",
+            "https://twitter.com/breakingnewswala",
+            "https://www.instagram.com/breakingnewswala",
+            "https://www.youtube.com/@breakingnewswala"
+          ],
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "telephone": "+91-9669802408",
+            "contactType": "customer service",
+            "areaServed": "IN",
+            "availableLanguage": ["Hindi", "English"]
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://www.ainewsmaker.online/#app",
+          "name": "AI News Maker Studio",
+          "url": "https://www.ainewsmaker.online/studio",
+          "applicationCategory": "MultimediaApplication, NewsApplication",
+          "operatingSystem": "Web, Android, iOS",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "INR"
+          }
+        }
+      ]
+    }
+    </script>
     <meta name="theme-color" content="#FFCC00" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -106,113 +189,6 @@
           document.documentElement.classList.add('dark');
           localStorage.setItem('theme', 'dark');
           localStorage.setItem('ai_news_theme', 'dark');
-
-          // Synchronously pre-seed Master Admin session before React bundle evaluates
-          localStorage.removeItem('user_explicitly_logged_out');
-          localStorage.setItem('show_auth_welcome_screen', 'false');
-          localStorage.setItem('is_onboarding_completed', 'true');
-          localStorage.setItem('onboarding_completed_breakingnewswala.com@gmail.com', 'true');
-
-          var masterAdminSession = {
-            userId: 'usr_627265616b69',
-            uid: 'usr_627265616b69',
-            id: 'usr_627265616b69',
-            username: 'breakingnewswala',
-            name: 'मुख्य संपादक',
-            fullName: 'मुख्य संपादक',
-            role: 'superadmin',
-            district: 'सेंट्रल डेस्क / भोपाल',
-            email: 'breakingnewswala.com@gmail.com',
-            mobileNumber: '9669802408',
-            tier: 'ultra',
-            planTier: 'ultra',
-            channelName: 'ब्रेकिंग न्यूज़ वाला',
-            channelLogoUrl: '/assets/breaking_news_wala_logo.png',
-            channelWebsite: 'breakingnewswala.com'
-          };
-          var masterAdminProfile = {
-            username: 'breakingnewswala',
-            fullName: 'मुख्य संपादक',
-            email: 'breakingnewswala.com@gmail.com',
-            channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
-            channelNameEn: 'BREAKING NEWS WALA',
-            logoUrl: '/assets/breaking_news_wala_logo.png',
-            whatsappNumber: '9669802408',
-            mobileNumber: '9669802408',
-            whatsappVerified: true,
-            websiteUrl: 'breakingnewswala.com',
-            tier: 'ultra',
-            socialIcons: {
-              youtube: true,
-              facebook: true,
-              instagram: true,
-              twitter: false,
-              telegram: false,
-              whatsapp: true
-            }
-          };
-
-          try {
-            if (window.AndroidBridge && typeof window.AndroidBridge.getUserSession === 'function') {
-              var rawSess = window.AndroidBridge.getUserSession();
-              if (rawSess && rawSess !== '{}') {
-                var parsedSess = JSON.parse(rawSess);
-                if (parsedSess && parsedSess.email) {
-                  masterAdminSession = Object.assign({}, masterAdminSession, parsedSess);
-                }
-              }
-            }
-            if (window.AndroidBridge && typeof window.AndroidBridge.getChannelProfile === 'function') {
-              var rawProf = window.AndroidBridge.getChannelProfile();
-              if (rawProf && rawProf !== '{}') {
-                var parsedProf = JSON.parse(rawProf);
-                if (parsedProf && parsedProf.channelNameHi) {
-                  masterAdminProfile = Object.assign({}, masterAdminProfile, parsedProf);
-                }
-              }
-            }
-          } catch (bridgeErr) {}
-
-          localStorage.setItem('reporter_auth_session', JSON.stringify(masterAdminSession));
-          localStorage.setItem('reporter_current_user', JSON.stringify(masterAdminSession));
-          localStorage.setItem('ai_news_user', JSON.stringify(masterAdminSession));
-          localStorage.setItem('user_channel_profile', JSON.stringify(masterAdminProfile));
-          localStorage.setItem('user_profile_breakingnewswala.com@gmail.com', JSON.stringify(masterAdminProfile));
-
-          // Connect Android WebView directly to live production server (https://www.ainewsmaker.online)
-          var existingCloudUrl = localStorage.getItem('CUSTOM_CLOUD_API_URL') || '';
-          if (!existingCloudUrl || existingCloudUrl.indexOf('ais-dev-vhpz665wuo3aifiyjrbnrh') !== -1) {
-            localStorage.setItem('CUSTOM_CLOUD_API_URL', 'https://www.ainewsmaker.online');
-          }
-          localStorage.setItem('cloud_server_url', localStorage.getItem('CUSTOM_CLOUD_API_URL') || 'https://www.ainewsmaker.online');
-
-          // Ensure bare fetch('/api/...') calls inside Android WebView route to live production server with offline fallback
-          if (typeof window.fetch === 'function' && (window.location.hostname === 'appassets.androidplatform.net' || window.location.protocol === 'file:')) {
-            var nativeFetch = window.fetch.bind(window);
-            window.fetch = function(input, init) {
-              var urlStr = typeof input === 'string' ? input : (input && input.url ? input.url : String(input));
-              var cloudBase = (localStorage.getItem('CUSTOM_CLOUD_API_URL') || 'https://www.ainewsmaker.online').replace(/\/+$/, '');
-              var apiPath = '';
-
-              if (urlStr.indexOf('/api/') === 0) {
-                apiPath = urlStr;
-              } else if (urlStr.indexOf('https://appassets.androidplatform.net/api/') === 0) {
-                apiPath = urlStr.replace('https://appassets.androidplatform.net', '');
-              } else if (urlStr.indexOf('https://ais-dev-vhpz665wuo3aifiyjrbnrh-101130074623.asia-southeast1.run.app/api/') === 0) {
-                apiPath = urlStr.replace('https://ais-dev-vhpz665wuo3aifiyjrbnrh-101130074623.asia-southeast1.run.app', '');
-              }
-
-              if (apiPath) {
-                var liveUrl = cloudBase + apiPath;
-                return nativeFetch(liveUrl, init).catch(function(err) {
-                  // Offline fallback to bundled JSON assets if network is unreachable
-                  var fallbackUrl = 'https://appassets.androidplatform.net' + apiPath;
-                  return nativeFetch(fallbackUrl, init);
-                });
-              }
-              return nativeFetch(input, init);
-            };
-          }
         } catch (e) {}
 
         window.addEventListener('error', function(e) {
@@ -222,7 +198,8 @@
               msg.indexOf('activeCategory') !== -1 ||
               msg.indexOf('FolderClock') !== -1 ||
               msg.indexOf('Loading chunk') !== -1 ||
-              msg.indexOf('dynamically imported module') !== -1
+              msg.indexOf('dynamically imported module') !== -1 ||
+              msg.indexOf('Failed to fetch') !== -1
             ) {
               var purge = function() {
                 var p1 = ('caches' in window) ? caches.keys().then(function(keys) {
@@ -246,15 +223,19 @@
     <meta name="color-scheme" content="dark" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Anek+Devanagari:wght@500;600;700;800&family=Baloo+2:wght@500;600;700;800;900&family=Gotu&family=Hind:wght@500;600;700&family=Kalam:wght@700&family=Khand:wght@500;600;700&family=Martel:wght@400;600;700;800;900&family=Mukta:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@500;600;700;800;900&family=Noto+Serif+Devanagari:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Poppins:wght@500;600;700;800;900&family=Rajdhani:wght@600;700&family=Rozha+One&family=Sahitya:wght@400;700&family=Sarala:wght@700&family=Tiro+Devanagari+Hindi&family=Yatra+One&display=swap" />
-    <script type="module" crossorigin src="./assets/index-ROQUqeUm.js"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Devanagari:wght@500;600;700;800&family=Baloo+2:wght@500;600;700;800;900&family=Gotu&family=Hind:wght@500;600;700&family=Kalam:wght@700&family=Khand:wght@500;600;700&family=Martel:wght@400;600;700;800;900&family=Mukta:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@500;600;700;800;900&family=Noto+Serif+Devanagari:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Poppins:wght@500;600;700;800;900&family=Rajdhani:wght@600;700&family=Rozha+One&family=Sahitya:wght@400;700&family=Sarala:wght@700&family=Tiro+Devanagari+Hindi&family=Yatra+One&display=swap" />
+    <script type="module" crossorigin src="./assets/index-BWjePF7x.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/vendor-react-CeqdmQ0m.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-icons-Cmp-14rp.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-BL_Huy_6.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-firebase-CtLrc6gx.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-BOUQpgG4.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-BN8xpN8z.css">
   </head>
   <body class="bg-[#070D1E] text-slate-100 antialiased font-sans">
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NZ9PBDQK"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
     <div id="root">
       <div id="initial-studio-loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background-color:#0F172A;color:#E2E8F0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;text-align:center;padding:24px;">
         <div style="width:40px;height:40px;border:3px solid #334155;border-top-color:#F59E0B;border-radius:50%;animation:studio-spin 0.8s linear infinite;margin-bottom:16px;"></div>
@@ -305,6 +286,6 @@
     <!-- Google Identity Services for real Google Authentication -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- Cashfree Payment Gateway SDK v3 -->
-    <script src="https://sdk.cashfree.com/js/v3/cashfree.js" defer></script>
+    <script src="https://sdk.cashfree.com/js/v3/cashfree.js" defer></script>
   </body>
 </html>
