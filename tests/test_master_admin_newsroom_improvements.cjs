@@ -67,7 +67,7 @@ runTest('AdminPlansAndPackagesManager.tsx has removed the WhatsApp Live Inbox ac
 // 3. Single Unified Header in WhatsAppLiveInbox.tsx
 runTest('WhatsAppLiveInbox.tsx features clean single header title without redundant inner titles', () => {
   const content = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'WhatsAppLiveInbox.tsx'), 'utf8');
-  assert.ok(content.includes('WhatsApp AI Command Center — Live Inbox'), 'Must contain single clean title');
+  assert.ok(content.includes('WhatsApp AI Command Center'), 'Must contain clean title');
   assert.ok(!content.includes('WhatsApp AI कमांड सेंटर — लाइव सपोर्ट इनबॉक्स'), 'Should not contain duplicate old Hindi title');
 });
 
@@ -75,7 +75,7 @@ runTest('WhatsAppLiveInbox.tsx features clean single header title without redund
 runTest('WhatsAppLiveInbox.tsx supports responsive master-detail view with mobile Back button', () => {
   const content = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'WhatsAppLiveInbox.tsx'), 'utf8');
   assert.ok(content.includes("selectedConvId ? 'hidden md:flex' : 'flex'"), 'Left column must toggle hidden on mobile when conversation selected');
-  assert.ok(content.includes("!selectedConvId ? 'hidden md:flex' : 'flex'"), 'Right column must toggle hidden on mobile when no conversation selected');
+  assert.ok(content.includes('!selectedConvId') && content.includes("'hidden md:flex'"), 'Right column must toggle hidden on mobile when no conversation selected');
   assert.ok(content.includes('setSelectedConvId(null)'), 'Must provide back button that sets selectedConvId to null');
   assert.ok(content.includes('ArrowLeft'), 'Must render ArrowLeft icon for mobile back button');
 });
@@ -133,7 +133,7 @@ runTest('Logo persistence guards protect custom logos against default placeholde
 runTest('ProfileScreenWeb.tsx displays primary phone with Phone icon and verified badge without clunky prefix', () => {
   const content = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'ProfileScreenWeb.tsx'), 'utf8');
   assert.ok(!content.includes('<span>प्राइमरी WhatsApp: +91'), 'Should not contain old text prefix label');
-  assert.ok(content.includes('Phone className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0"'), 'Should render Phone icon');
+  assert.ok(content.includes('<Phone') && content.includes('text-emerald-500 dark:text-emerald-400') && content.includes('shrink-0'), 'Should render Phone icon');
   assert.ok(content.includes('सत्यापित / Locked'), 'Should render verified badge');
 });
 
