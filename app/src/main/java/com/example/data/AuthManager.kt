@@ -29,10 +29,16 @@ object AuthManager {
         TEST_MODE
     }
 
-    const val DEFAULT_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
-    const val FALLBACK_GOOGLE_CLIENT_ID = "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com"
     const val DEFAULT_CLOUD_SERVER_URL = "https://www.ainewsmaker.online"
     const val DEFAULT_OPENAI_API_KEY: String = ""
+
+    fun resolveDefaultWebClientId(context: Context): String {
+        return try {
+            context.applicationContext.getString(com.example.R.string.default_web_client_id).trim()
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     const val ACCOUNT_DELETION_WEB_URL = "https://www.ainewsmaker.online/delete-account"
     const val TEST_REVIEWER_EMAIL = "google-reviewer@ainewsmaker.online"
@@ -128,7 +134,7 @@ object AuthManager {
     private val _websiteUrl = MutableStateFlow("breakingnewswala.com")
     val websiteUrl: StateFlow<String> = _websiteUrl.asStateFlow()
 
-    private val _googleClientId = MutableStateFlow(DEFAULT_GOOGLE_CLIENT_ID)
+    private val _googleClientId = MutableStateFlow("")
     val googleClientId: StateFlow<String> = _googleClientId.asStateFlow()
 
     private val _cloudServerUrl = MutableStateFlow(DEFAULT_CLOUD_SERVER_URL)
@@ -220,6 +226,12 @@ object AuthManager {
         _channelLogoUrl.value = prefs.getString(KEY_CHANNEL_LOGO_URL, "/assets/breaking_news_wala_logo.png") ?: "/assets/breaking_news_wala_logo.png"
         _whatsappNumber.value = prefs.getString(KEY_WHATSAPP_NUMBER, "9669802408") ?: "9669802408"
         _websiteUrl.value = prefs.getString(KEY_WEBSITE_URL, "breakingnewswala.com") ?: "breakingnewswala.com"
+        val resolvedClientId = resolveDefaultWebClientId(context)
+        if (resolvedClientId.isNotBlank()) {
+            _googleClientId.value = resolvedClientId
+        } else {
+            _googleClientId.value = prefs.getString(KEY_GOOGLE_CLIENT_ID, "") ?: ""
+        }
         _userPlanTier.value = prefs.getString(KEY_USER_PLAN_TIER, "ultra") ?: "ultra"
         _adminViewAsMode.value = prefs.getString(KEY_ADMIN_VIEW_AS_MODE, "admin") ?: "admin"
 

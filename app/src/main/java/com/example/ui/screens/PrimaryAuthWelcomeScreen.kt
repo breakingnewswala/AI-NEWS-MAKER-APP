@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
+import android.app.Activity
+import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -25,12 +28,26 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.data.AuthManager
+import com.example.data.FirestoreSyncRepository
 import com.example.model.UserRole
 import com.example.ui.theme.Amber400
 import com.example.ui.theme.Red600
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.Slate900
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.firebase.Firebase
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.auth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PrimaryAuthWelcomeScreen(
@@ -38,10 +55,13 @@ fun PrimaryAuthWelcomeScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var isSignUp by remember { mutableStateOf(false) }
+    var isGoogleSigningIn by remember { mutableStateOf(false) }
+    var googleError by remember { mutableStateOf<String?>(null) }
 
     val scrollState = rememberScrollState()
 
@@ -94,7 +114,113 @@ fun PrimaryAuthWelcomeScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Primary Google Sign-In via Jetpack Credential Manager + Firebase Auth
+            OutlinedButton(
+                onClick = {
+                    val activity = context as? Activity
+                    val clientId = AuthManager.resolveDefaultWebClientId(context)
+                    if (activity == null || clientId.isBlank()) {
+                        googleError = "Google Sign-In configuration missing"
+                        return@OutlinedButton
+                    }
+                    isGoogleSigningIn = true
+                    googleError = null
+                    coroutineScope.launch {
+                        try {
+                            val credentialManager = CredentialManager.create(context)
+                            val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
+                            val request = GetCredentialRequest.Builder()
+                                .addCredentialOption(signInOption)
+                                .build()
+                            val result = credentialManager.getCredential(activity, request)
+                            val credential = result.credential
+                            if (credential is CustomCredential &&
+                                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                            ) {
+                                val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data)
+                                val authCredential = GoogleAuthProvider.getCredential(googleIdToken.idToken, null)
+                                val authResult = Firebase.auth.signInWithCredential(authCredential).await()
+                                val firebaseUser = authResult.user
+                                val displayName = firebaseUser?.displayName ?: googleIdToken.displayName ?: "Google User"
+                                val userEmail = firebaseUser?.email ?: googleIdToken.id
+                                if (firebaseUser != null) {
+                                    try {
+                                        withContext(Dispatchers.IO) {
+                                            FirestoreSyncRepository(context).syncSignedInUserProfile(
+                                                user = firebaseUser,
+                                                channelName = AuthManager.channelNameHi.value
+                                            )
+                                        }
+                                    } catch (syncErr: Exception) {
+                                        Log.w("Auth", "Firestore profile sync skipped: ${syncErr.message}")
+                                    }
+                                }
+                                val assignedRole = if (AuthManager.isReviewerEmail(userEmail)) UserRole.ADMIN else UserRole.USER
+                                AuthManager.login(
+                                    context = context,
+                                    name = displayName,
+                                    email = userEmail,
+                                    role = assignedRole,
+                                    district = "डिजिटल डेस्क"
+                                )
+                                isGoogleSigningIn = false
+                                Toast.makeText(context, "Google लॉगिन सफल!", Toast.LENGTH_SHORT).show()
+                                onLoginSuccess()
+                            } else {
+                                isGoogleSigningIn = false
+                                googleError = "Unexpected credential type"
+                            }
+                        } catch (e: GetCredentialCancellationException) {
+                            Log.w("Auth", "Google Sign-In cancelled or dismissed: ${e.message}", e)
+                            isGoogleSigningIn = false
+                        } catch (e: Exception) {
+                            Log.e("Auth", "Google Sign-In failed", e)
+                            isGoogleSigningIn = false
+                            googleError = e.localizedMessage ?: "Google Sign-In failed"
+                        }
+                    }
+                },
+                enabled = !isGoogleSigningIn,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, Amber400),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Slate800,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("google_sign_in_button")
+            ) {
+                if (isGoogleSigningIn) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Amber400,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "Sign in with Google",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            if (googleError != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = googleError ?: "",
+                    fontSize = 12.sp,
+                    color = Red600,
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // Quick Demo Role Chips
             Text(

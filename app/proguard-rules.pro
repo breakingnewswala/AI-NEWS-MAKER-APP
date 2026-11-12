@@ -27,3 +27,12 @@
 -dontwarn com.google.android.gms.**
 -dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement
 
+# Keep Firebase Firestore POJOs/data classes for serialization
+-keepclassmembers class com.example.data.Firestore* { *; }
+-keepclassmembers class * {
+    @com.google.firebase.firestore.* <fields>;
+    @com.google.firebase.firestore.* <methods>;
+}
+-keepattributes Signature
+
+

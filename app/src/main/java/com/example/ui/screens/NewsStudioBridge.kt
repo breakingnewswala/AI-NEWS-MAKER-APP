@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Base64
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.Manifest
 import android.content.pm.PackageManager
@@ -26,13 +27,29 @@ import androidx.core.content.ContextCompat
 import android.webkit.WebView
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import com.example.R
 import com.example.data.AuthManager
+import com.example.data.FirestoreSyncRepository
 import com.example.data.NewsRepository
 import com.example.data.TemplateConfigManager
 import com.example.model.UserRole
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.firebase.Firebase
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.auth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -128,26 +145,53 @@ class NewsStudioBridge(
     @JavascriptInterface
     fun signInWithGoogle() {
         val activity = context as? Activity ?: return
+        val clientId = AuthManager.resolveDefaultWebClientId(context)
+        if (clientId.isBlank()) {
+            Log.e("GoogleAuthBridge", "Google Sign-In configuration missing: default_web_client_id not found")
+            activity.runOnUiThread {
+                Toast.makeText(context, "Google Sign-In कॉन्फ़िगरेशन उपलब्ध नहीं है", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         activity.runOnUiThread {
             CoroutineScope(Dispatchers.Main).launch {
                 try {
-                    val credentialManager = androidx.credentials.CredentialManager.create(context)
-                    val googleIdOption = com.google.android.libraries.identity.googleid.GetGoogleIdOption.Builder()
-                        .setFilterByAuthorizedAccounts(false)
-                        .setServerClientId(AuthManager.DEFAULT_GOOGLE_CLIENT_ID)
-                        .setAutoSelectEnabled(true)
-                        .build()
-
-                    val request = androidx.credentials.GetCredentialRequest.Builder()
-                        .addCredentialOption(googleIdOption)
+                    val credentialManager = CredentialManager.create(context)
+                    val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = clientId).build()
+                    val request = GetCredentialRequest.Builder()
+                        .addCredentialOption(signInOption)
                         .build()
 
                     val result = credentialManager.getCredential(activity, request)
                     val credential = result.credential
-                    if (credential is androidx.credentials.CustomCredential && credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                        val googleIdToken = com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data)
-                        val displayName = googleIdToken.displayName ?: "Google User"
-                        val email = googleIdToken.id
+                    if (credential is CustomCredential &&
+                        credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                    ) {
+                        val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data)
+                        val authCredential = GoogleAuthProvider.getCredential(googleIdToken.idToken, null)
+                        val authResult = Firebase.auth.signInWithCredential(authCredential).await()
+                        val firebaseUser = authResult.user
+
+                        val displayName = firebaseUser?.displayName
+                            ?: googleIdToken.displayName
+                            ?: "Google User"
+                        val email = firebaseUser?.email ?: googleIdToken.id
+                        val photoUrl = firebaseUser?.photoUrl?.toString()
+                            ?: googleIdToken.profilePictureUri?.toString().orEmpty()
+
+                        if (firebaseUser != null) {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    FirestoreSyncRepository(context).syncSignedInUserProfile(
+                                        user = firebaseUser,
+                                        channelName = AuthManager.channelNameHi.value
+                                    )
+                                }
+                            } catch (syncErr: Exception) {
+                                Log.w("GoogleAuthBridge", "Firestore profile sync skipped: ${syncErr.message}")
+                            }
+                        }
 
                         val assignedRole = if (AuthManager.isReviewerEmail(email)) UserRole.ADMIN else UserRole.USER
                         AuthManager.login(
@@ -158,19 +202,60 @@ class NewsStudioBridge(
                             district = "डिजिटल डेस्क"
                         )
 
-                        val cleanName = displayName.replace("'", "\\'")
-                        val cleanEmail = email.replace("'", "\\'")
+                        val cleanName = displayName.replace("\\", "\\\\").replace("'", "\\'")
+                        val cleanEmail = email.replace("\\", "\\\\").replace("'", "\\'")
+                        val cleanPhoto = photoUrl.replace("\\", "\\\\").replace("'", "\\'")
                         getWebView()?.evaluateJavascript(
-                            "if (window.handleGoogleUserSuccess) { window.handleGoogleUserSuccess('$cleanEmail', '$cleanName', ''); }",
+                            "if (window.handleGoogleUserSuccess) { window.handleGoogleUserSuccess('$cleanEmail', '$cleanName', '$cleanPhoto'); }",
                             null
                         )
+                    } else {
+                        Log.w("GoogleAuthBridge", "Unexpected credential type returned")
                     }
+                } catch (e: GetCredentialCancellationException) {
+                    Log.w("GoogleAuthBridge", "Google Sign-In flow cancelled or dismissed: ${e.message}", e)
+                    Toast.makeText(context, "Google लॉगिन रद्द किया गया", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    android.util.Log.w("GoogleAuthBridge", "Native Google sign-in failed: ${e.message}", e)
-                    Toast.makeText(context, "Google लॉगिन: ${e.localizedMessage ?: "रद्द किया गया"}", Toast.LENGTH_SHORT).show()
+                    Log.e("GoogleAuthBridge", "Native Google sign-in failed: ${e.message}", e)
+                    Toast.makeText(context, "Google लॉगिन: ${e.localizedMessage ?: "विफल"}", Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    @JavascriptInterface
+    fun signOutFirebase() {
+        CoroutineScope(Dispatchers.Main).launch {
+            withContext(NonCancellable) {
+                try {
+                    CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest())
+                } catch (e: Exception) {
+                    Log.w("GoogleAuthBridge", "Failed to clear credential state: ${e.message}")
+                } finally {
+                    Firebase.auth.signOut()
+                }
+            }
+        }
+    }
+
+    @JavascriptInterface
+    fun getFirebaseAuthStatus(): String {
+        val user = Firebase.auth.currentUser
+        return JSONObject().apply {
+            put("isSignedIn", user != null)
+            put("uid", user?.uid ?: "")
+            put("email", user?.email ?: "")
+            put("displayName", user?.displayName ?: "")
+        }.toString()
+    }
+
+    @JavascriptInterface
+    fun getFirebaseProjectInfo(): String {
+        return JSONObject().apply {
+            put("projectId", try { context.getString(R.string.project_id) } catch (_: Exception) { "" })
+            put("googleAppId", try { context.getString(R.string.google_app_id) } catch (_: Exception) { "" })
+            put("firestoreDatabaseId", try { context.getString(R.string.firestore_database_id) } catch (_: Exception) { "" })
+        }.toString()
     }
 
     @JavascriptInterface
