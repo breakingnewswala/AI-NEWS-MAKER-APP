@@ -12,10 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.example.ui.screens.BreakingNewsStudioWebView
 import com.example.ui.theme.MyApplicationTheme
+import com.example.util.configureAppCheck
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configureAppCheck(this, intent)
         try {
             com.example.data.AuthManager.init(this)
             com.example.data.AuthManager.ensureMasterAdminSession(this)

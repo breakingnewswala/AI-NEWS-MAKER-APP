@@ -41,14 +41,22 @@ import com.example.model.UserRole
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
+import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.Schema
+import com.google.firebase.ai.type.generationConfig
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -62,6 +70,36 @@ class NewsStudioBridge(
     private val onStudioModeChanged: ((mode: String) -> Unit)? = null,
     private val getWebView: () -> WebView? = { null }
 ) {
+
+    private val newsCardSchema by lazy {
+        Schema.obj(
+            properties = mapOf(
+                "headline" to Schema.string(description = "Crisp breaking news headline matching input language"),
+                "subHeadline" to Schema.string(description = "Supporting sub-headline with concise context"),
+                "summary" to Schema.string(description = "2-3 sentence news summary for a graphic card"),
+                "socialCaption" to Schema.string(description = "Share-ready social media caption"),
+                "hashtags" to Schema.array(
+                    items = Schema.string(),
+                    description = "3 to 5 relevant hashtags"
+                )
+            ),
+            optionalProperties = listOf("subHeadline", "hashtags")
+        )
+    }
+
+    private val generativeModel by lazy {
+        Firebase.ai.generativeModel("gemini-3.8-flash")
+    }
+
+    private val structuredNewsModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = newsCardSchema
+            }
+        )
+    }
 
     @JavascriptInterface
     fun getNotificationPermissionStatus(): String {
@@ -256,6 +294,204 @@ class NewsStudioBridge(
             put("googleAppId", try { context.getString(R.string.google_app_id) } catch (_: Exception) { "" })
             put("firestoreDatabaseId", try { context.getString(R.string.firestore_database_id) } catch (_: Exception) { "" })
         }.toString()
+    }
+
+    @JavascriptInterface
+    fun isGeminiAiAvailable(): Boolean {
+        return try {
+            FirebaseApp.getApps(context).isNotEmpty()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @JavascriptInterface
+    fun generateNewsWithGemini(inputJsonOrPrompt: String, callbackName: String) {
+        if (!isValidJsCallbackName(callbackName)) {
+            Log.e("NewsStudioBridge", "Invalid JS callback name for generateNewsWithGemini")
+            return
+        }
+        val prompt = extractPromptFromBridgeInput(inputJsonOrPrompt)
+        if (prompt.isBlank()) {
+            dispatchBridgeJson(
+                callbackName,
+                JSONObject().apply {
+                    put("success", false)
+                    put("error", "Prompt or news content cannot be empty.")
+                }
+            )
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val structuredPrompt = buildString {
+                    appendLine("You are a senior digital newsroom editor.")
+                    appendLine("Generate a structured breaking news graphic card JSON from the input below.")
+                    appendLine("Keep the same language (Hindi or English) as the user input.")
+                    appendLine()
+                    appendLine(prompt)
+                }
+                val response = withTimeout(60_000L) {
+                    structuredNewsModel.generateContent(structuredPrompt)
+                }
+                val rawJson = response.text
+                if (rawJson.isNullOrBlank()) {
+                    dispatchBridgeJson(
+                        callbackName,
+                        JSONObject().apply {
+                            put("success", false)
+                            put("error", "Model returned an empty response.")
+                        }
+                    )
+                    return@launch
+                }
+
+                val parsed = JSONObject(rawJson)
+                val normalizedData = JSONObject().apply {
+                    put("headline", parsed.optString("headline", ""))
+                    put("subHeadline", parsed.optString("subHeadline", ""))
+                    put("summary", parsed.optString("summary", ""))
+                    put("socialCaption", parsed.optString("socialCaption", ""))
+                    put("hashtags", parsed.optJSONArray("hashtags") ?: JSONArray())
+                }
+                dispatchBridgeJson(
+                    callbackName,
+                    JSONObject().apply {
+                        put("success", true)
+                        put("data", normalizedData)
+                    }
+                )
+            } catch (e: TimeoutCancellationException) {
+                Log.e("NewsStudioBridge", "Gemini structured news generation timed out", e)
+                dispatchBridgeJson(
+                    callbackName,
+                    JSONObject().apply {
+                        put("success", false)
+                        put("error", "Generation timed out after 60 seconds. Please try again.")
+                    }
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("NewsStudioBridge", "Gemini structured news generation failed", e)
+                dispatchBridgeJson(
+                    callbackName,
+                    JSONObject().apply {
+                        put("success", false)
+                        put("error", e.localizedMessage ?: "Gemini AI generation failed.")
+                    }
+                )
+            }
+        }
+    }
+
+    @JavascriptInterface
+    fun streamTextWithGemini(prompt: String, callbackName: String) {
+        if (!isValidJsCallbackName(callbackName)) {
+            Log.e("NewsStudioBridge", "Invalid JS callback name for streamTextWithGemini")
+            return
+        }
+        val cleanedPrompt = extractPromptFromBridgeInput(prompt)
+        if (cleanedPrompt.isBlank()) {
+            dispatchBridgeJson(
+                callbackName,
+                JSONObject().apply {
+                    put("done", true)
+                    put("error", "Prompt cannot be empty.")
+                }
+            )
+            return
+        }
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val accumulatedText = StringBuilder()
+            try {
+                withTimeout(60_000L) {
+                    generativeModel.generateContentStream(cleanedPrompt).collect { chunk ->
+                        val chunkText = chunk.text.orEmpty()
+                        if (chunkText.isNotEmpty()) {
+                            accumulatedText.append(chunkText)
+                            dispatchBridgeJson(
+                                callbackName,
+                                JSONObject().apply {
+                                    put("done", false)
+                                    put("chunk", chunkText)
+                                    put("text", accumulatedText.toString())
+                                }
+                            )
+                        }
+                    }
+                }
+                val finalText = accumulatedText.toString()
+                if (finalText.isNotBlank()) {
+                    dispatchBridgeJson(
+                        callbackName,
+                        JSONObject().apply {
+                            put("done", true)
+                            put("text", finalText)
+                        }
+                    )
+                } else {
+                    dispatchBridgeJson(
+                        callbackName,
+                        JSONObject().apply {
+                            put("done", true)
+                            put("error", "Model returned an empty response.")
+                        }
+                    )
+                }
+            } catch (e: TimeoutCancellationException) {
+                Log.e("NewsStudioBridge", "Gemini streaming timed out", e)
+                dispatchBridgeJson(
+                    callbackName,
+                    JSONObject().apply {
+                        put("done", true)
+                        put("error", "Streaming timed out after 60 seconds.")
+                    }
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("NewsStudioBridge", "Gemini streaming failed", e)
+                dispatchBridgeJson(
+                    callbackName,
+                    JSONObject().apply {
+                        put("done", true)
+                        put("error", e.localizedMessage ?: "Gemini streaming failed.")
+                    }
+                )
+            }
+        }
+    }
+
+    private fun isValidJsCallbackName(callbackName: String): Boolean {
+        if (callbackName.isBlank()) return false
+        val segmentRegex = Regex("[A-Za-z_][A-Za-z0-9_]*")
+        return callbackName.split(".").all { it.matches(segmentRegex) }
+    }
+
+    private fun extractPromptFromBridgeInput(rawInput: String): String {
+        val trimmed = rawInput.trim()
+        if (!trimmed.startsWith("{")) return trimmed
+        return try {
+            val obj = JSONObject(trimmed)
+            listOf("prompt", "topic", "article", "text", "headline")
+                .firstNotNullOfOrNull { key ->
+                    obj.optString(key).takeIf { it.isNotBlank() }
+                } ?: trimmed
+        } catch (_: Exception) {
+            trimmed
+        }
+    }
+
+    private fun dispatchBridgeJson(callbackName: String, payload: JSONObject) {
+        val jsonLiteral = JSONObject.quote(payload.toString())
+        val targetExpr = callbackName.split(".").joinToString(prefix = "window", separator = "") { "['$it']" }
+        val js = "(function() { var fn = $targetExpr; if (typeof fn === 'function') { fn(JSON.parse($jsonLiteral)); } })();"
+        Handler(Looper.getMainLooper()).post {
+            getWebView()?.evaluateJavascript(js, null)
+        }
     }
 
     @JavascriptInterface

@@ -13,8 +13,8 @@ android {
         applicationId = "com.aistudio.ainewsmaker.hzwptx"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "14.0"
+        versionCode = 15
+        versionName = "15.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -96,6 +96,9 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)
+    implementation(libs.firebase.ai)
+    implementation(libs.firebase.appcheck.recaptcha)
+    implementation(libs.firebase.appcheck.debug)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
