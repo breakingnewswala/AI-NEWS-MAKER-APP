@@ -99,33 +99,39 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin
         if (!(df.frameMode !== 'video' && df.frameType !== 'video')) return false;
         if (FORBIDDEN_DYNAMIC_FRAME_IDS.has(df.id)) return false;
         if (df.designCategory === 'Story Frames') return false;
+        const isApprovedNonTest = (df as any).approvalStatus === 'APPROVED' && df.designCategory !== 'TEST_FRAMES' && !(df as any).isTestFrame;
         const isTest =
+          !isApprovedNonTest && (
+            df.designCategory === 'TEST_FRAMES' ||
+            Boolean((df as any).isTestFrame) ||
+            (df as any).approvalStatus === 'PENDING_TEST' ||
+            Boolean((df as any).isSampleTestTemplate) ||
+            Boolean((df as any).isSample) ||
+            df.name === '11111' ||
+            df.name === '2222' ||
+            df.id === 'df_test_11111' ||
+            df.id === 'df_test_2222' ||
+            df.id === 'df_sample_11111' ||
+            df.id === 'df_sample_2222' ||
+            df.designCategory === 'Sample Frames'
+          );
+        if (df.publicationStatus !== 'published' && !isTest && !isApprovedNonTest) return false;
+        if (isTest && !(isMaster || isAdmin)) return false;
+        return true;
+      }
+    )
+    .map((df) => {
+      const isApprovedNonTest = (df as any).approvalStatus === 'APPROVED' && df.designCategory !== 'TEST_FRAMES' && !(df as any).isTestFrame;
+      const isTest =
+        !isApprovedNonTest && (
           df.designCategory === 'TEST_FRAMES' ||
           Boolean((df as any).isTestFrame) ||
           (df as any).approvalStatus === 'PENDING_TEST' ||
           Boolean((df as any).isSampleTestTemplate) ||
           Boolean((df as any).isSample) ||
           df.name === '11111' ||
-          df.name === '2222' ||
-          df.id === 'df_test_11111' ||
-          df.id === 'df_test_2222' ||
-          df.id === 'df_sample_11111' ||
-          df.id === 'df_sample_2222' ||
-          df.designCategory === 'Sample Frames';
-        if (df.publicationStatus !== 'published' && !isTest) return false;
-        if (isTest && !(isMaster || isAdmin)) return false;
-        return true;
-      }
-    )
-    .map((df) => {
-      const isTest =
-        df.designCategory === 'TEST_FRAMES' ||
-        Boolean((df as any).isTestFrame) ||
-        (df as any).approvalStatus === 'PENDING_TEST' ||
-        Boolean((df as any).isSampleTestTemplate) ||
-        Boolean((df as any).isSample) ||
-        df.name === '11111' ||
-        df.name === '2222';
+          df.name === '2222'
+        );
       const normCat = isTest ? 'TEST_FRAMES' : normalizeToCanonicalCategory(df.designCategory);
       const tier = df.allowedPlans && df.allowedPlans.length > 0 ? df.allowedPlans[0] : 'BASIC';
       return {
@@ -1687,11 +1693,35 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       key={f.id}
                       onClick={() => {
                         const match = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
-                        onChange({
+                        const updates: any = {
                           frameDesign: f.id,
                           customDynamicFrame: match || undefined,
                           aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
-                        });
+                        };
+                        // Bug D: Synchronize Master Admin's authoritative typography settings
+                        if (match?.typographyConfig?.primaryFontFamily) {
+                          updates.headlineFontFamily = match.typographyConfig.primaryFontFamily;
+                        } else if (match?.textSlots?.[0]?.fontFamily) {
+                          updates.headlineFontFamily = match.textSlots[0].fontFamily;
+                        }
+                        if (match?.typographyConfig?.primaryFontSize) {
+                          updates.headlineFontSize = match.typographyConfig.primaryFontSize;
+                        } else if (match?.textSlots?.[0]?.fontSize) {
+                          updates.headlineFontSize = match.textSlots[0].fontSize;
+                        }
+                        if (match?.textSlots?.[0]?.textColor) {
+                          updates.headlineTextColor = match.textSlots[0].textColor;
+                        }
+                        // Bug B: Automatically enable callout if Master Admin enabled it for this frame
+                        if (match?.fullStoryCalloutConfig?.enabled) {
+                          updates.showCallout = true;
+                        }
+                        // Bug I: Respect banned footer background color
+                        const bannedColor = match?.footerConfig?.bannedFooterColor || (match as any)?.bannedFooterColor;
+                        if (bannedColor && (card.footerBgColor || '#FFFFFF').toUpperCase() === bannedColor.toUpperCase()) {
+                          updates.footerBgColor = match?.footerConfig?.primaryFooterColor || (match as any)?.primaryFooterColor || '#FACC15';
+                        }
+                        onChange(updates);
                       }}
                       className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all relative overflow-hidden select-none cursor-pointer ${
                         isSelected
@@ -1903,70 +1933,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             );
           }
           return null;
-        })()}
-
-        {/* Dynamic Frame Story Callout Selector for PRO & VIP DESK Users (Part 8) */}
-        {(() => {
-          const df = getDynamicFrameById(card.frameDesign || '');
-          if (!df || !df.fullStoryCalloutConfig?.enabled) return null;
-          const planSettings = df.fullStoryCalloutConfig.planCalloutSettings;
-          const isProOrVip = effectiveAdmin || effectiveTier === 'pro' || effectiveTier === 'vip' || effectiveTier === 'professional' || effectiveTier === 'ultra';
-          const rule = (effectiveTier === 'vip' || effectiveTier === 'ultra') ? (planSettings?.vipDesk || planSettings?.pro) : planSettings?.pro;
-          const alternatives = [
-            ...(rule?.allowedAlternativeAssets || []),
-            ...libraryCallouts.map((lc) => ({ id: lc.id, name: lc.name, url: lc.url || lc.assetUrl }))
-          ];
-
-          if (!isProOrVip || alternatives.length === 0) {
-            return null; // Basic & Advanced users are locked to Admin default
-          }
-
-          return (
-            <div className="mt-3 p-3 bg-slate-900/90 border border-amber-500/30 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  स्टोरी कॉलआउट डिज़ाइन (Pro / VIP Desk)
-                </span>
-                <span className="text-[10px] text-slate-400">वैकल्पिक डिज़ाइन चुनें</span>
-              </div>
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                {/* Default option */}
-                <button
-                  type="button"
-                  onClick={() => onChange({ customCalloutAssetUrl: undefined })}
-                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold shrink-0 transition-all cursor-pointer ${
-                    !card.customCalloutAssetUrl
-                      ? 'bg-amber-500 text-black border-amber-400 shadow'
-                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
-                  }`}
-                >
-                  डिफ़ॉल्ट (Default)
-                </button>
-                {/* Allowed alternatives */}
-                {alternatives.map((alt) => {
-                  const isSelected = card.customCalloutAssetUrl === alt.url;
-                  return (
-                    <button
-                      key={alt.id}
-                      type="button"
-                      onClick={() => onChange({ customCalloutAssetUrl: alt.url })}
-                      className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer ${
-                        isSelected
-                          ? 'bg-amber-500 text-black border-amber-400 shadow'
-                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-slate-500'
-                      }`}
-                    >
-                      {alt.url && (
-                        <img src={alt.url} alt={alt.name} className="h-4 object-contain" />
-                      )}
-                      <span>{alt.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
         })()}
 
         {/* Step 1 Mobile Nav Button */}
@@ -3273,48 +3239,95 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 </span>
               </div>
 
-              {/* EXTRACTED ARTICLE MULTI-PHOTO SELECTOR */}
-              {card.extractedArticlePhotos && card.extractedArticlePhotos.length > 1 && (
-                <div className="p-3 bg-neutral-950 border border-yellow-500/40 rounded-xl space-y-2 animate-in fade-in">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-yellow-300 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-                      <span>लेख की लिंक में उपलब्ध फोटोज़ ({card.extractedArticlePhotos.length}):</span>
-                    </span>
-                    <span className="text-[10px] text-neutral-400">टच करके प्राइमरी फोटो बदलें</span>
+              {/* EXTRACTED ARTICLE MULTI-PHOTO SELECTOR (Bug F: Deduplicated, Filtered, No Placeholders) */}
+              {(() => {
+                const rawPhotos = card.extractedArticlePhotos || [];
+                const seenKeys = new Set<string>();
+                const cleanPhotos: string[] = [];
+
+                for (const raw of rawPhotos) {
+                  if (!raw || typeof raw !== 'string') continue;
+                  const trimmed = raw.trim();
+                  if (!trimmed) continue;
+
+                  const lower = trimmed.toLowerCase();
+                  if (
+                    lower.includes('placeholder') ||
+                    lower.includes('placeholder_news') ||
+                    lower.includes('search_16x9') ||
+                    lower.includes('default_news') ||
+                    lower.includes('avatar') ||
+                    lower.includes('favicon') ||
+                    lower.includes('icon') ||
+                    lower.includes('sample_news') ||
+                    lower.startsWith('data:image/svg+xml')
+                  ) {
+                    continue;
+                  }
+
+                  let canonical = trimmed;
+                  while (canonical.includes('/api/proxy-image?url=')) {
+                    const parts = canonical.split('/api/proxy-image?url=');
+                    canonical = decodeURIComponent(parts[parts.length - 1]);
+                  }
+                  let base = canonical;
+                  try {
+                    const u = new URL(canonical);
+                    base = `${u.origin}${u.pathname}`;
+                  } catch {}
+
+                  const key = base.toLowerCase().replace(/\/+$/, '');
+                  if (seenKeys.has(key)) {
+                    continue;
+                  }
+                  seenKeys.add(key);
+                  cleanPhotos.push(trimmed);
+                }
+
+                if (cleanPhotos.length <= 1) return null;
+
+                return (
+                  <div className="p-3 bg-neutral-950 border border-yellow-500/40 rounded-xl space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-yellow-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
+                        <span>लेख की लिंक में उपलब्ध फोटोज़ ({cleanPhotos.length}):</span>
+                      </span>
+                      <span className="text-[10px] text-neutral-400">टच करके प्राइमरी फोटो बदलें</span>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {cleanPhotos.map((photoUrl, pIdx) => {
+                        const isSelected = card.images?.main === photoUrl || card.photoUrl === photoUrl;
+                        return (
+                          <button
+                            key={`ext-photo-${pIdx}`}
+                            type="button"
+                            onClick={() => {
+                              onChange({
+                                photoUrl,
+                                images: {
+                                  ...card.images,
+                                  main: photoUrl,
+                                },
+                              });
+                            }}
+                            className={`relative shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-yellow-400 ring-2 ring-yellow-400/50 scale-105 shadow-lg'
+                                : 'border-neutral-800 opacity-60 hover:opacity-100'
+                            }`}
+                          >
+                            <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
+                            <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
+                              फोटो {pIdx + 1}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    {card.extractedArticlePhotos.map((photoUrl, pIdx) => {
-                      const isSelected = card.images?.main === photoUrl || card.photoUrl === photoUrl;
-                      return (
-                        <button
-                          key={`ext-photo-${pIdx}`}
-                          type="button"
-                          onClick={() => {
-                            onChange({
-                              photoUrl,
-                              images: {
-                                ...card.images,
-                                main: photoUrl,
-                              },
-                            });
-                          }}
-                          className={`relative shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                            isSelected
-                              ? 'border-yellow-400 ring-2 ring-yellow-400/50 scale-105 shadow-lg'
-                              : 'border-neutral-800 opacity-60 hover:opacity-100'
-                          }`}
-                        >
-                          <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
-                          <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
-                            फोटो {pIdx + 1}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* SINGLE PHOTO WORKSPACE: Exactly 1 Photo Slot */}
               {(card.layout === 'single' || card.layout === 'full' || (card.frameDesign as string) === 'jacket-quote') && (
@@ -4219,74 +4232,103 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         )}
 
 
-        {/* 1. Central Custom Footer Library Selection (Top of Step 6) */}
-        <div className="p-3 bg-neutral-950/80 border border-amber-500/40 rounded-xl space-y-3 text-xs shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-amber-300 font-bold">
-              <span className="text-base">🏛️</span>
-              <span>कस्टम फ़ुटर लाइब्रेरी (Custom Footers)</span>
-            </span>
-            {card.selectedCustomFooterId && (
-              <button
-                type="button"
-                onClick={() => {
-                  onChange({
-                    selectedCustomFooterId: undefined,
-                    customFooterConfig: undefined,
-                    customFooterPng: undefined,
-                  });
-                }}
-                className="text-[10px] text-red-400 hover:text-red-300 underline font-semibold cursor-pointer"
-              >
-                ✕ फ़ुटर हटाएं
-              </button>
-            )}
-          </div>
-          <p className="text-[11px] text-neutral-400 leading-relaxed">
-            सेंट्रल एसेट लाइब्रेरी से आधुनिक फ़ुटर डिज़ाइन चुनें। प्रो और वीआईपी डेस्क प्लान के लिए विशेष स्टाइल्स उपलब्ध हैं।
-          </p>
+        {/* 1. Central Custom Footer Library Selection (Top of Step 6 - Bug I: PRO/VIP Desk & Banned Color Filtering) */}
+        {(() => {
+          const isProOrVip = effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra' || effectiveTier === 'pro' || effectiveTier === 'vip';
+          const activeDf = getDynamicFrameById(card.frameDesign || '');
+          const bannedFooterColor = activeDf?.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
 
-          {/* Category Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-            {[
-              { id: 'all', label: 'सब (All)' },
-              { id: 'regular', label: 'रेगुलर फ़ुटर' },
-              { id: 'branding', label: 'ब्रांडिंग फ़ुटर' },
-              { id: 'social', label: 'सोशल मीडिया फ़ुटर' },
-              { id: 'news', label: 'न्यूज़ फ़ुटर' },
-              { id: 'special', label: 'स्पेशल फ़ुटर' },
-            ].map((cat) => {
-              const isCatActive = footerCategoryFilter === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setFooterCategoryFilter(cat.id)}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all cursor-pointer ${
-                    isCatActive
-                      ? 'bg-amber-500 text-neutral-950 shadow-sm font-black'
-                      : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-neutral-200'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              );
-            })}
-          </div>
+          if (!isProOrVip) {
+            return (
+              <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-2 text-xs">
+                <div className="flex items-center justify-between text-amber-300 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>कस्टम फ़ुटर लाइब्रेरी (Custom Footers)</span>
+                  </span>
+                  <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-black">
+                    🔒 केवल PRO / VIP DESK
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  मास्टर एडमिन द्वारा स्वीकृत विशेष कस्टम फुटर केवल PRO और VIP DESK पैकेज में उपलब्ध हैं।
+                </p>
+              </div>
+            );
+          }
 
-          {/* Footer Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-            {libraryFooters
-              .filter((lf) => {
-                if (footerCategoryFilter === 'all') return true;
-                const c = String(lf.category || '').toLowerCase().trim();
-                if (footerCategoryFilter === 'regular') return c === 'regular' || c.includes('रेगुलर');
-                if (footerCategoryFilter === 'branding') return c === 'branding' || c.includes('ब्रांडिंग');
-                if (footerCategoryFilter === 'social') return c === 'social' || c.includes('सोशल');
-                if (footerCategoryFilter === 'news') return c === 'news' || c.includes('न्यूज़') || c.includes('न्यूज');
-                if (footerCategoryFilter === 'special') return c === 'special' || c.includes('स्पेशल');
-                return true;
-              })
+          return (
+            <div className="p-3 bg-neutral-950/80 border border-amber-500/40 rounded-xl space-y-3 text-xs shadow-md">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+                  <span className="text-base">🏛️</span>
+                  <span>कस्टम फ़ुटर लाइब्रेरी (Custom Footers)</span>
+                </span>
+                {card.selectedCustomFooterId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange({
+                        selectedCustomFooterId: undefined,
+                        customFooterConfig: undefined,
+                        customFooterPng: undefined,
+                      });
+                    }}
+                    className="text-[10px] text-red-400 hover:text-red-300 underline font-semibold cursor-pointer"
+                  >
+                    ✕ फ़ुटर हटाएं
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-neutral-400 leading-relaxed">
+                सेंट्रल एसेट लाइब्रेरी से आधुनिक फ़ुटर डिज़ाइन चुनें। प्रो और वीआईपी डेस्क प्लान के लिए विशेष स्टाइल्स उपलब्ध हैं।
+              </p>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                {[
+                  { id: 'all', label: 'सब (All)' },
+                  { id: 'regular', label: 'रेगुलर फ़ुटर' },
+                  { id: 'branding', label: 'ब्रांडिंग फ़ुटर' },
+                  { id: 'social', label: 'सोशल मीडिया फ़ुटर' },
+                  { id: 'news', label: 'न्यूज़ फ़ुटर' },
+                  { id: 'special', label: 'स्पेशल फ़ुटर' },
+                ].map((cat) => {
+                  const isCatActive = footerCategoryFilter === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setFooterCategoryFilter(cat.id)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all cursor-pointer ${
+                        isCatActive
+                          ? 'bg-amber-500 text-neutral-950 shadow-sm font-black'
+                          : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-neutral-200'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Footer Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                {libraryFooters
+                  .filter((lf) => {
+                    // Bug I: Exclude footers using Master Admin banned color for this template
+                    if (bannedFooterColor && lf.footerConfig?.footerBgColor && lf.footerConfig.footerBgColor.toUpperCase() === bannedFooterColor.toUpperCase()) {
+                      return false;
+                    }
+                    if (footerCategoryFilter === 'all') return true;
+                    const c = String(lf.category || '').toLowerCase().trim();
+                    if (footerCategoryFilter === 'regular') return c === 'regular' || c.includes('रेगुलर');
+                    if (footerCategoryFilter === 'branding') return c === 'branding' || c.includes('ब्रांडिंग');
+                    if (footerCategoryFilter === 'social') return c === 'social' || c.includes('सोशल');
+                    if (footerCategoryFilter === 'news') return c === 'news' || c.includes('न्यूज़') || c.includes('न्यूज');
+                    if (footerCategoryFilter === 'special') return c === 'special' || c.includes('स्पेशल');
+                    return true;
+                  })
               .map((lf) => {
                 const isSelected = card.selectedCustomFooterId === lf.id;
                 const plans = lf.allowedPlans || lf.footerConfig?.allowedPlans;
@@ -4346,6 +4388,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               })}
           </div>
         </div>
+      );
+    })()}
 
         {/* 2. Story Callout Selection from Central Asset Library (Step 6) */}
         <div className="p-3 bg-neutral-950/80 border border-amber-500/30 rounded-xl space-y-3 text-xs shadow-md">
@@ -5089,20 +5133,40 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                           {FOOTER_BG_SECONDARY_PRESETS.map((p) => {
                             const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+                            const activeDf = getDynamicFrameById(card.frameDesign || '');
+                            const isColorBanned = Boolean(
+                              activeDf && (
+                                (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
+                                (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF') ||
+                                (activeDf.bannedFooterColor && activeDf.bannedFooterColor.toUpperCase() === p.color.toUpperCase())
+                              )
+                            );
                             return (
                               <button
                                 key={p.color}
                                 type="button"
-                                onClick={() => onChange({ footerBgColor: p.color })}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
-                                  isSel ? 'ring-2 ring-yellow-400 scale-105 shadow-md border-yellow-400' : 'hover:border-neutral-500'
+                                disabled={isColorBanned}
+                                onClick={() => {
+                                  if (isColorBanned) return;
+                                  onChange({ footerBgColor: p.color });
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 transition-all ${
+                                  isColorBanned
+                                    ? 'opacity-40 cursor-not-allowed bg-neutral-900 border-neutral-800'
+                                    : isSel
+                                      ? 'ring-2 ring-yellow-400 scale-105 shadow-md border-yellow-400 cursor-pointer'
+                                      : 'hover:border-neutral-500 cursor-pointer'
                                 } ${p.border}`}
                                 style={{ backgroundColor: p.color, color: '#0F172A' }}
-                                title={`${p.nameHi} (${p.name}) - ${p.color}`}
+                                title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} (${p.name}) - ${p.color}`}
                               >
                                 <span className="w-3 h-3 rounded-full border border-neutral-400/60 shadow-inner" style={{ backgroundColor: p.color }} />
                                 <span className="text-[10px] whitespace-nowrap">{p.nameHi}</span>
-                                <span className="font-mono text-[9px] text-neutral-600">{p.color}</span>
+                                {isColorBanned ? (
+                                  <span className="font-mono text-[8px] text-red-600 font-black shrink-0">🚫 आरक्षित</span>
+                                ) : (
+                                  <span className="font-mono text-[9px] text-neutral-600">{p.color}</span>
+                                )}
                               </button>
                             );
                           })}
@@ -5118,25 +5182,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           <span>कस्टम बैकग्राउंड रंग (VIP Desk):</span>
                         </span>
                         <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            value={card.footerBgColor || '#FFFFFF'}
-                            onChange={(e) => onChange({ footerBgColor: e.target.value })}
-                            className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0"
-                            title="कस्टम बैकग्राउंड रंग चुनें"
-                          />
-                          <input
-                            type="text"
-                            value={card.footerBgColor || '#FFFFFF'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) {
-                                onChange({ footerBgColor: val });
-                              }
-                            }}
-                            className="w-20 px-2 py-0.5 bg-neutral-950 border border-neutral-700 rounded text-amber-300 font-mono text-xs focus:border-yellow-400 focus:outline-hidden"
-                            placeholder="#FFFFFF"
-                          />
+                          {(() => {
+                            const activeDf = getDynamicFrameById(card.frameDesign || '');
+                            const bannedFooterColor = activeDf?.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
+                            return (
+                              <>
+                                <input
+                                  type="color"
+                                  value={card.footerBgColor || '#FFFFFF'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (bannedFooterColor && val.toUpperCase() === bannedFooterColor.toUpperCase()) {
+                                      alert(`यह रंग (${val}) मास्टर एडमिन द्वारा इस फ्रेम में प्रतिबंधित है।`);
+                                      return;
+                                    }
+                                    onChange({ footerBgColor: val });
+                                  }}
+                                  className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0"
+                                  title="कस्टम बैकग्राउंड रंग चुनें"
+                                />
+                                <input
+                                  type="text"
+                                  value={card.footerBgColor || '#FFFFFF'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (bannedFooterColor && val.toUpperCase() === bannedFooterColor.toUpperCase()) {
+                                      alert(`यह रंग (${val}) मास्टर एडमिन द्वारा इस फ्रेम में प्रतिबंधित है।`);
+                                      return;
+                                    }
+                                    onChange({ footerBgColor: val });
+                                  }}
+                                  className="w-20 bg-neutral-950 border border-neutral-700 rounded px-1.5 py-0.5 text-[11px] font-mono text-white uppercase text-center"
+                                />
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}

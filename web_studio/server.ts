@@ -11629,7 +11629,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
       ? frames
       : frames.filter(
           (f) =>
-            f.publicationStatus === "published" &&
+            (f.publicationStatus === "published" || f.approvalStatus === "APPROVED") &&
             !f.isTestFrame &&
             f.designCategory !== "TEST_FRAMES" &&
             !f.isSampleTestTemplate &&
@@ -11846,6 +11846,22 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
       if (!payload.approvalStatus) {
         updatedFrame.approvalStatus = updatedFrame.approvalStatus === 'APPROVED' ? 'APPROVED' : 'PENDING_TEST';
       }
+      updatedFrame.publicationStatus = 'draft';
+    } else if (
+      (payload.designCategory && payload.designCategory !== 'TEST_FRAMES') ||
+      payload.approvalStatus === 'APPROVED' ||
+      payload.isTestFrame === false
+    ) {
+      updatedFrame.isTestFrame = false;
+      if (payload.designCategory && payload.designCategory !== 'TEST_FRAMES') {
+        updatedFrame.designCategory = payload.designCategory;
+      }
+      if (payload.approvalStatus) {
+        updatedFrame.approvalStatus = payload.approvalStatus;
+      } else if (updatedFrame.approvalStatus !== 'REJECTED') {
+        updatedFrame.approvalStatus = 'APPROVED';
+      }
+      updatedFrame.publicationStatus = 'published';
     }
 
     // Save single frame document

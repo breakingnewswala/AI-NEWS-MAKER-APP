@@ -21608,7 +21608,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
     const isMaster = isAuthorizedMasterAdmin(req);
     let frames = await loadDynamicFramesDatabaseAsync();
     let filtered = isMaster ? frames : frames.filter(
-      (f) => f.publicationStatus === "published" && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
+      (f) => (f.publicationStatus === "published" || f.approvalStatus === "APPROVED") && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
     );
     const { frameType, frameMode } = req.query;
     if (frameType) {
@@ -21783,6 +21783,18 @@ app.put("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, res
       if (!payload.approvalStatus) {
         updatedFrame.approvalStatus = updatedFrame.approvalStatus === "APPROVED" ? "APPROVED" : "PENDING_TEST";
       }
+      updatedFrame.publicationStatus = "draft";
+    } else if (payload.designCategory && payload.designCategory !== "TEST_FRAMES" || payload.approvalStatus === "APPROVED" || payload.isTestFrame === false) {
+      updatedFrame.isTestFrame = false;
+      if (payload.designCategory && payload.designCategory !== "TEST_FRAMES") {
+        updatedFrame.designCategory = payload.designCategory;
+      }
+      if (payload.approvalStatus) {
+        updatedFrame.approvalStatus = payload.approvalStatus;
+      } else if (updatedFrame.approvalStatus !== "REJECTED") {
+        updatedFrame.approvalStatus = "APPROVED";
+      }
+      updatedFrame.publicationStatus = "published";
     }
     await saveSingleDynamicFrameAsync(updatedFrame);
     return res.json({ success: true, frame: updatedFrame });

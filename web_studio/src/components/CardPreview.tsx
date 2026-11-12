@@ -3410,16 +3410,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
+                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
                       minWidth: `${df.headerConfig.locationRect?.width ?? 28}%`,
-                      width: 'max-content',
-                      maxWidth: '85%',
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundImage: `url(${badgeAsset})`,
                       backgroundSize: '100% 100%',
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
                       color: locColor,
-                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
+                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale * 1.1))}px`,
                     }}
                   >
                     {df.headerConfig.textRegion ? (
