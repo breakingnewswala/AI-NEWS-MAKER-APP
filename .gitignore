@@ -123,6 +123,7 @@ web_studio/deleted_users_tombstones.json
 
 scripts/*
 test_*.cjs
+!tests/**
 verify_*.cjs
 whatsapp_news_sessions_db.json
 whatsapp_templates_db.json

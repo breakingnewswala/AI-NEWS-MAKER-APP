@@ -11140,10 +11140,10 @@ app.delete("/api/custom-frames/:id", requireMasterAdminMiddleware, (req, res) =>
 });
 
 // --- DYNAMIC FRAME GENERATOR & SOCIAL MEDIA STORY SYSTEM ---
-const DYNAMIC_FRAMES_DB_FILE = path.join(process.cwd(), "dynamic_frames_db.json");
+const DYNAMIC_FRAMES_DB_FILE = process.env.DYNAMIC_FRAMES_DB_FILE || path.join(process.cwd(), "dynamic_frames_db.json");
 const USER_STORY_PREF_DB_FILE = path.join(process.cwd(), "user_story_preferences_db.json");
 
-const ASSET_LIBRARIES_DB_FILE = path.join(process.cwd(), "asset_libraries_db.json");
+const ASSET_LIBRARIES_DB_FILE = process.env.ASSET_LIBRARIES_DB_FILE || path.join(process.cwd(), "asset_libraries_db.json");
 
 const DUMMY_ASSET_IDS = new Set([
   "loc_badge_red_pin",
@@ -11188,7 +11188,7 @@ function getDefaultAssetLibraries(): any[] {
   ];
 }
 
-const DELETED_ASSETS_TOMBSTONE_FILE = path.join(process.cwd(), "deleted_assets_tombstone.json");
+const DELETED_ASSETS_TOMBSTONE_FILE = process.env.DELETED_ASSETS_TOMBSTONE_FILE || path.join(process.cwd(), "deleted_assets_tombstone.json");
 let memoryAssetTombstones: Set<string> | null = null;
 
 function loadDeletedAssetTombstones(): Set<string> {
@@ -11280,7 +11280,7 @@ const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
   'df_story_9_16_breaking'
 ]);
 
-const DELETED_FRAMES_TOMBSTONE_FILE = path.join(process.cwd(), "deleted_frames_tombstone.json");
+const DELETED_FRAMES_TOMBSTONE_FILE = process.env.DELETED_FRAMES_TOMBSTONE_FILE || path.join(process.cwd(), "deleted_frames_tombstone.json");
 
 let memoryFrameTombstones: Set<string> | null = null;
 
