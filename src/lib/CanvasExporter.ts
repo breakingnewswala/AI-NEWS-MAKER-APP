@@ -82,11 +82,26 @@ const getSafeImageUrl = (rawUrl: string): string => {
   return trimmed;
 };
 
+export interface LoadImageOptions {
+  isMandatory?: boolean;
+  assetName?: string;
+}
+
 /**
  * High-resolution canvas renderer for News Graphic Cards (1080x1350 4:5 or 1080x1080 1:1)
  */
-export const loadImage = async (src: string): Promise<HTMLImageElement> => {
+export const loadImage = async (
+  src: string,
+  options?: LoadImageOptions
+): Promise<HTMLImageElement> => {
   if (!src || !src.trim()) {
+    if (options?.isMandatory) {
+      throw new Error(
+        options.assetName
+          ? `अनिवार्य ${options.assetName} लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या पुनः चुनें।`
+          : 'अनिवार्य फ्रेम आर्टवर्क लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फ्रेम पुनः चुनें।'
+      );
+    }
     const fallback = new Image();
     fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
     await new Promise((r) => { fallback.onload = r; fallback.onerror = r; });
@@ -136,7 +151,7 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
     }
   }
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     if (!effectiveSrc.startsWith('data:') && !effectiveSrc.startsWith('blob:')) {
       img.crossOrigin = 'anonymous';
@@ -154,20 +169,41 @@ export const loadImage = async (src: string): Promise<HTMLImageElement> => {
     const photoFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
     const getFallbackSrc = () => isOverlayOrFrame ? transparentFallback : photoFallback;
 
-    const handleDecodeSuccess = (targetImg: HTMLImageElement) => {
-      if (targetImg.naturalWidth > 0 && targetImg.naturalHeight > 0) {
-        finish(targetImg);
-      } else {
-        handleDecodeFailure();
-      }
-    };
-
     const handleDecodeFailure = () => {
       clearTimeout(timeout);
+      if (options?.isMandatory) {
+        if (!settled) {
+          settled = true;
+          reject(
+            new Error(
+              options.assetName
+                ? `अनिवार्य ${options.assetName} लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या पुनः चुनें।`
+                : 'अनिवार्य फ्रेम आर्टवर्क लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फ्रेम पुनः चुनें।'
+            )
+          );
+        }
+        return;
+      }
       const fallback = new Image();
       fallback.src = getFallbackSrc();
       fallback.onload = () => finish(fallback);
       fallback.onerror = () => finish(fallback);
+    };
+
+    const handleDecodeSuccess = (targetImg: HTMLImageElement) => {
+      if (options?.isMandatory) {
+        if (targetImg.naturalWidth > 1 && targetImg.naturalHeight > 1) {
+          finish(targetImg);
+        } else {
+          handleDecodeFailure();
+        }
+      } else {
+        if (targetImg.naturalWidth > 0 && targetImg.naturalHeight > 0) {
+          finish(targetImg);
+        } else {
+          handleDecodeFailure();
+        }
+      }
     };
 
     const timeout = setTimeout(handleDecodeFailure, 8000);
@@ -1129,14 +1165,17 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     }
   }
 
-  // Optional full frame transparent overlay PNG when custom-png template is selected OR when frame overlay is uploaded
+  // Full frame transparent overlay PNG when custom-png template is selected OR when frame overlay is uploaded
   if ((card.frameDesign === 'custom-png' || card.customFrameOverlayPng) && card.customFrameOverlayPng) {
-    try {
-      const overlayImg = await loadImage(card.customFrameOverlayPng);
-      ctx.drawImage(overlayImg, 0, 0, width, height);
-    } catch (err) {
-      console.warn('Frame overlay load error:', err);
+    const isCustomPngTemplate = card.frameDesign === 'custom-png';
+    const overlayImg = await loadImage(card.customFrameOverlayPng, {
+      isMandatory: isCustomPngTemplate,
+      assetName: 'कस्टम फ्रेम ओवरले',
+    });
+    if (isCustomPngTemplate && (!overlayImg || overlayImg.naturalWidth <= 1 || overlayImg.naturalHeight <= 1)) {
+      throw new Error('अनिवार्य कस्टम फ्रेम ओवरले लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फ्रेम पुनः चुनें।');
     }
+    ctx.drawImage(overlayImg, 0, 0, width, height);
   }
 
   // 7C. Date Stamp: Vertical along Right Wall, Rotated 270° in Hindi (Legacy / Standard only; Dynamic Frames render their own single date layer)
@@ -1168,7 +1207,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
       card.footerTextColor,
       card.footerIconStyle || 'color',
       card.showWebsite,
-      card.customFooterConfig || (df as any)?.footerConfig
+      card.customFooterConfig || (card.customDynamicFrame as any)?.footerConfig
     );
   }
 
@@ -1687,12 +1726,14 @@ async function drawAuthoritativeDynamicFrameCanvas(
   // LAYER 2: PANEL B ORIGINAL PNG ARTWORK OVERLAY (Preserving transparency & natural curves)
   const bgArtworkUrl = df.primaryBackgroundAsset;
   if (bgArtworkUrl) {
-    try {
-      const bgImg = await loadImage(bgArtworkUrl);
-      ctx.drawImage(bgImg, 0, 0, width, height);
-    } catch (e) {
-      console.warn('Dynamic frame PNG artwork load error:', e);
+    const bgImg = await loadImage(bgArtworkUrl, {
+      isMandatory: true,
+      assetName: 'फ्रेम आर्टवर्क',
+    });
+    if (!bgImg || bgImg.naturalWidth <= 1 || bgImg.naturalHeight <= 1) {
+      throw new Error('अनिवार्य फ्रेम आर्टवर्क लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फ्रेम पुनः चुनें।');
     }
+    ctx.drawImage(bgImg, 0, 0, width, height);
   }
 
   // 2.5 TRANSPARENT OVERLAY ASSET (If configured separately)
@@ -4110,7 +4151,7 @@ async function drawDefaultJacketContent(
       card.footerTextColor,
       card.footerIconStyle || 'color',
       card.showWebsite,
-      card.customFooterConfig || (df as any)?.footerConfig
+      card.customFooterConfig || (card.customDynamicFrame as any)?.footerConfig
     );
   }
 
@@ -7450,5 +7491,14 @@ function triggerGraphicWelcomeReward() {
       reject(err);
     }
   });
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).__CANVAS_EXPORTER__ = {
+    loadImage,
+    renderCardToCanvas,
+    generateCardCanvas,
+    downloadCanvas,
+  };
 }
 

@@ -2526,7 +2526,10 @@ export default function App() {
       // Primary: High-fidelity canonical 1080x1350 canvas renderer
       try {
         canvas = await renderCardToCanvas(card);
-      } catch (renderErr) {
+      } catch (renderErr: any) {
+        if (renderErr?.message && renderErr.message.includes('अनिवार्य')) {
+          throw renderErr;
+        }
         console.warn('renderCardToCanvas failed, attempting DOM capture fallback:', renderErr);
         try {
           canvas = await generateCardCanvas('news-card-container');
@@ -2615,7 +2618,10 @@ export default function App() {
       showToast(`✅ ${fmt === 'jpeg' ? 'JPG' : 'PNG'} 1080x1350 न्यूज़ कार्ड सफलतापूर्वक डाउनलोड हो गया!`);
     } catch (err: any) {
       console.error('Download error:', err);
-      showToast('❌ इमेज डाउनलोड करने में त्रुटि हुई, कृपया पुनः प्रयास करें');
+      const msg = (err?.message && err.message.includes('अनिवार्य'))
+        ? `❌ ${err.message}`
+        : '❌ इमेज डाउनलोड करने में त्रुटि हुई, कृपया पुनः प्रयास करें';
+      showToast(msg);
     } finally {
       setDownloading(false);
       setDownloadProgressText('');
@@ -2634,7 +2640,10 @@ export default function App() {
       let canvas: HTMLCanvasElement | null = null;
       try {
         canvas = await renderCardToCanvas(card);
-      } catch (e) {
+      } catch (renderErr: any) {
+        if (renderErr?.message && renderErr.message.includes('अनिवार्य')) {
+          throw renderErr;
+        }
         canvas = await generateCardCanvas('news-card-container');
       }
       if (!canvas) throw new Error('Canvas rendering failed');
@@ -2655,8 +2664,12 @@ export default function App() {
           setDownloading(false);
         }
       }, 'image/png');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const msg = (err?.message && err.message.includes('अनिवार्य'))
+        ? `❌ ${err.message}`
+        : '❌ इमेज कॉपी करने में त्रुटि हुई, कृपया पुनः प्रयास करें';
+      showToast(msg);
       setDownloading(false);
     }
   };
