@@ -1,0 +1,236 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <!-- Metallic gradient for TV legs -->
+    <linearGradient id="legGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4a4d52"/>
+      <stop offset="35%" stop-color="#a6abb3"/>
+      <stop offset="65%" stop-color="#e8ecf1"/>
+      <stop offset="100%" stop-color="#60646b"/>
+    </linearGradient>
+
+    <!-- TV screen warm golden yellow gradient -->
+    <linearGradient id="screenGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFDE43"/>
+      <stop offset="40%" stop-color="#FFD214"/>
+      <stop offset="100%" stop-color="#FFBA00"/>
+    </linearGradient>
+
+    <!-- Glossy CRT screen reflection -->
+    <linearGradient id="glossGradient" x1="0%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.65"/>
+      <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="85%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Red power LED glow -->
+    <radialGradient id="ledGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF6B6B"/>
+      <stop offset="50%" stop-color="#FF1111"/>
+      <stop offset="100%" stop-color="#B30000"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 1. Bottom Ground Shadow -->
+  <ellipse cx="500" cy="942" rx="335" ry="26" fill="#000000" />
+
+  <!-- 2. TV Legs -->
+  <!-- Left Leg -->
+  <polygon points="312,830 362,830 344,952 296,952" fill="url(#legGradient)" stroke="#000000" stroke-width="8" stroke-linejoin="round" />
+  <!-- Right Leg -->
+  <polygon points="638,830 688,830 704,952 656,952" fill="url(#legGradient)" stroke="#000000" stroke-width="8" stroke-linejoin="round" />
+
+  <!-- 3. Antenna (Yagi TV Aerial) -->
+  <g stroke="#000000" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Main Mast -->
+    <line x1="620" y1="285" x2="795" y2="45" stroke-width="15" />
+    
+    <!-- Crossbar 1 (Lowest) -->
+    <line x1="595" y1="165" x2="745" y2="105" stroke-width="10" />
+    
+    <!-- Crossbar 2 (Middle, longest) -->
+    <line x1="632" y1="120" x2="798" y2="55" stroke-width="10" />
+    
+    <!-- Crossbar 3 (Top) -->
+    <line x1="675" y1="75" x2="815" y2="20" stroke-width="10" />
+
+    <!-- Yagi Director Stubs -->
+    <line x1="645" y1="145" x2="655" y2="170" stroke-width="7" />
+    <line x1="695" y1="125" x2="705" y2="150" stroke-width="7" />
+    <line x1="720" y1="85" x2="730" y2="110" stroke-width="7" />
+    <line x1="765" y1="65" x2="775" y2="90" stroke-width="7" />
+  </g>
+
+  <!-- 4. TV Outer Black Bezel / Frame -->
+  <!-- Curved organic vintage TV shape -->
+  <path d="
+    M 260,285
+    C 380,265 620,265 740,285
+    C 810,298 845,340 850,420
+    C 858,540 848,680 815,770
+    C 795,825 760,855 690,862
+    C 590,872 410,872 310,862
+    C 240,855 205,825 185,770
+    C 152,680 142,540 150,420
+    C 155,340 190,298 260,285
+    Z"
+    fill="#000000"
+  />
+
+  <!-- 5. TV Inner Screen (Golden Yellow) -->
+  <path d="
+    M 275,318
+    C 385,302 615,302 725,318
+    C 778,328 805,362 810,430
+    C 816,530 808,655 778,735
+    C 762,778 732,805 675,812
+    C 585,822 415,822 325,812
+    C 268,805 238,778 222,735
+    C 192,655 184,530 190,430
+    C 195,362 222,328 275,318
+    Z"
+    fill="url(#screenGradient)"
+  />
+
+  <!-- 6. Glossy Reflection Arc on Screen -->
+  <path d="
+    M 275,322
+    C 360,310 520,312 610,330
+    C 510,380 340,430 250,560
+    C 218,605 208,550 205,480
+    C 202,400 225,338 275,322
+    Z"
+    fill="url(#glossGradient)"
+  />
+
+  <!-- 7. Red Power LED at Bottom Bezel -->
+  <circle cx="376" cy="834" r="9" fill="url(#ledGlow)" stroke="#500000" stroke-width="1.5" />
+  <circle cx="373" cy="831" r="2.5" fill="#FFFFFF" opacity="0.85" />
+
+  <!-- 8. Screen Typography: "BNW" and "TV" in Retro Comic 3D Shadow Font -->
+  <g id="typography">
+    <!-- Drop Shadows for BNW -->
+    <!-- B -->
+    <path d="M 285,380 L 350,380 C 375,380 395,392 395,410 C 395,422 385,432 370,438 C 390,444 402,458 402,480 C 402,504 380,522 350,522 L 285,522 Z" fill="#000000" transform="translate(6, 6)" opacity="0.35"/>
+    <!-- N -->
+    <path d="M 425,380 L 458,380 L 512,475 L 512,380 L 545,380 L 545,522 L 512,522 L 458,427 L 458,522 L 425,522 Z" fill="#000000" transform="translate(6, 6)" opacity="0.35"/>
+    <!-- W -->
+    <path d="M 570,380 L 602,380 L 632,485 L 660,380 L 690,380 L 718,485 L 748,380 L 780,380 L 740,522 L 702,522 L 675,425 L 648,522 L 610,522 Z" fill="#000000" transform="translate(6, 6)" opacity="0.35"/>
+
+    <!-- MAIN BNW LETTERS -->
+    <!-- B -->
+    <g>
+      <!-- B 3D Outline / Shadow -->
+      <path d="
+        M 276,370 L 345,370
+        C 375,370 398,385 398,410
+        C 398,425 388,436 372,442
+        C 392,448 405,464 405,488
+        C 405,516 380,534 345,534
+        L 276,534 Z
+        M 314,402 L 314,432 L 340,432 C 352,432 360,425 360,417 C 360,409 352,402 340,402 Z
+        M 314,464 L 314,502 L 342,502 C 356,502 366,494 366,483 C 366,472 356,464 342,464 Z"
+        fill="#000000"
+      />
+      <!-- B Inner details (White comic accent lines) -->
+      <path d="M 314,382 L 338,382 C 350,382 358,385 358,388" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <circle cx="330" cy="417" r="4" fill="#FFFFFF"/>
+      <circle cx="330" cy="483" r="4" fill="#FFFFFF"/>
+    </g>
+
+    <!-- N -->
+    <g>
+      <path d="
+        M 420,370 L 456,370
+        L 516,478 L 516,370
+        L 552,370 L 552,534
+        L 516,534 L 456,426
+        L 456,534 L 420,534 Z"
+        fill="#000000"
+      />
+      <!-- N White accent highlights -->
+      <line x1="430" y1="380" x2="430" y2="520" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+      <line x1="465" y1="390" x2="510" y2="475" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <!-- W -->
+    <g>
+      <path d="
+        M 572,370 L 610,370
+        L 640,482 L 670,370
+        L 704,370 L 734,482
+        L 764,370 L 802,370
+        L 758,534 L 716,534
+        L 687,422 L 658,534
+        L 616,534 Z"
+        fill="#000000"
+      />
+      <!-- W White accent highlights -->
+      <line x1="585" y1="380" x2="622" y2="515" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+      <line x1="695" y1="430" x2="724" y2="515" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+    </g>
+
+    <!-- Decorative Underline Dashes / Dots for B . N . W . -->
+    <rect x="262" y="546" width="22" height="7" rx="2" fill="#000000" />
+    <rect x="378" y="546" width="30" height="7" rx="2" fill="#000000" />
+    <rect x="526" y="546" width="30" height="7" rx="2" fill="#000000" />
+    <rect x="674" y="546" width="30" height="7" rx="2" fill="#000000" />
+    <rect x="712" y="546" width="28" height="7" rx="2" fill="#000000" />
+
+    <!-- ================= LINE 2: "TV" ================= -->
+    <!-- TV 3D extruded shadow layer -->
+    <g transform="translate(8, 8)" opacity="0.30">
+      <!-- T Shadow -->
+      <path d="M 330,590 L 530,590 L 530,645 L 455,645 L 455,780 L 395,780 L 395,645 L 330,645 Z" fill="#000000"/>
+      <!-- V Shadow -->
+      <path d="M 545,590 L 615,590 L 665,720 L 715,590 L 785,590 L 705,780 L 625,780 Z" fill="#000000"/>
+    </g>
+
+    <!-- Main T -->
+    <g>
+      <!-- T Body -->
+      <path d="
+        M 338,582 L 534,582
+        C 538,582 542,586 542,592
+        L 542,636
+        C 542,642 538,646 532,646
+        L 462,646 L 462,776
+        C 462,782 458,786 452,786
+        L 396,786
+        C 390,786 386,782 386,776
+        L 386,646 L 338,646
+        C 332,646 328,642 328,636
+        L 328,592
+        C 328,586 332,582 338,582 Z"
+        fill="#000000"
+      />
+      <!-- T 3D extrusion stroke outline -->
+      <path d="M 340,592 L 530,592 M 396,654 L 396,774 M 452,654 L 452,774" stroke="#FFE600" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.8"/>
+      <!-- T White top highlight -->
+      <line x1="336" y1="590" x2="534" y2="590" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+      <line x1="394" y1="656" x2="394" y2="766" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+    </g>
+
+    <!-- Main V -->
+    <g>
+      <!-- V Body -->
+      <path d="
+        M 550,582 L 624,582
+        C 628,582 633,586 635,592
+        L 668,715 L 701,592
+        C 703,586 708,582 712,582
+        L 786,582
+        C 792,582 796,588 793,594
+        L 712,778
+        C 709,784 703,788 696,788
+        L 640,788
+        C 633,788 627,784 624,778
+        L 543,594
+        C 540,588 544,582 550,582 Z"
+        fill="#000000"
+      />
+      <!-- V White and Yellow highlights -->
+      <line x1="556" y1="590" x2="636" y2="774" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+      <line x1="720" y1="596" x2="676" y2="700" stroke="#FFE600" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+    </g>
+  </g>
+</svg>

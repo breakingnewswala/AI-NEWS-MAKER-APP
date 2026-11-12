@@ -1,0 +1,110 @@
+[
+  {
+    "id": "res_aajtak",
+    "channelName": "आज तक (Aaj Tak)",
+    "websiteUrl": "aajtak.in",
+    "username": "aajtak",
+    "logoUrl": "https://akm-img-a-in.tosshub.com/aajtak/resource/img/aajtak-logo-156X116.png",
+    "reason": "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_abp",
+    "channelName": "एबीपी न्यूज़ (ABP News)",
+    "websiteUrl": "abplive.com",
+    "username": "abpnews",
+    "logoUrl": "https://static.abplive.com/frontend/images/ABP_Hindi.svg",
+    "reason": "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_ndtv",
+    "channelName": "एनडीटीवी इंडिया (NDTV India)",
+    "websiteUrl": "ndtv.in",
+    "username": "ndtv",
+    "logoUrl": "https://drop.ndtv.com/homepage/images/ndtvlogo.svg",
+    "reason": "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_zeenews",
+    "channelName": "ज़ी न्यूज़ (Zee News)",
+    "websiteUrl": "zeenews.india.com",
+    "username": "zeenews",
+    "logoUrl": "https://english.cdn.zeenews.com/static/apprun/dna/icons/dna-logo.svg",
+    "reason": "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_indiatv",
+    "channelName": "इंडिया टीवी (India TV)",
+    "websiteUrl": "indiatvnews.com",
+    "username": "indiatv",
+    "logoUrl": "https://resize.indiatvnews.com/en/resize/newbucket/1200_-/2020/03/indiatv-logo-1584955685.jpg",
+    "reason": "राष्ट्रीय समाचार चैनल - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_republic",
+    "channelName": "रिपब्लिक भारत (Republic Bharat)",
+    "websiteUrl": "republicbharat.com",
+    "username": "republicbharat",
+    "logoUrl": "https://www.republicbharat.com/assets/images/bharat-logo.svg",
+    "reason": "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_news18",
+    "channelName": "न्यूज़18 इंडिया (News18 India)",
+    "websiteUrl": "news18.com",
+    "username": "news18",
+    "logoUrl": "https://images.news18.com/static_netstorage/images/news18_logo_hindi.svg",
+    "reason": "राष्ट्रीय समाचार नेटवर्क - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_bhaskar",
+    "channelName": "दैनिक भास्कर (Dainik Bhaskar)",
+    "websiteUrl": "dainikbhaskar.com",
+    "username": "dainikbhaskar",
+    "logoUrl": "https://www.bhaskar.com/assets/images/db-logo-hindi.svg",
+    "reason": "राष्ट्रीय समाचार पत्र व मीडिया समूह",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_amarujala",
+    "channelName": "अमर उजाला (Amar Ujala)",
+    "websiteUrl": "amarujala.com",
+    "username": "amarujala",
+    "logoUrl": "https://www.amarujala.com/assets/images/amarujala.svg",
+    "reason": "राष्ट्रीय समाचार पत्र - अनधिकृत उपयोग प्रतिबंधित",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_jagran",
+    "channelName": "दैनिक जागरण (Dainik Jagran)",
+    "websiteUrl": "jagran.com",
+    "username": "dainikjagran",
+    "logoUrl": "https://www.jagran.com/assets/images/jagran-logo.svg",
+    "reason": "राष्ट्रीय समाचार पत्र समूह",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_hindustan",
+    "channelName": "हिन्दुस्तान (Live Hindustan)",
+    "websiteUrl": "livehindustan.com",
+    "username": "livehindustan",
+    "logoUrl": "https://www.livehindustan.com/static/lh-logo.svg",
+    "reason": "राष्ट्रीय समाचार पत्र समूह",
+    "createdAt": 1700000000000
+  },
+  {
+    "id": "res_bbc",
+    "channelName": "बीबीसी हिंदी (BBC Hindi)",
+    "websiteUrl": "bbc.com/hindi",
+    "username": "bbchindi",
+    "logoUrl": "https://news.files.bbci.co.uk/ws/img/logos/og/hindi.png",
+    "reason": "अंतर्राष्ट्रीय समाचार संगठन",
+    "createdAt": 1700000000000
+  }
+]

@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF500" />
+      <stop offset="45%" stop-color="#FFDD00" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+
+    <!-- Globe Sphere Shading -->
+    <radialGradient id="globeSphere" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#FFE600" />
+      <stop offset="60%" stop-color="#FACC15" />
+      <stop offset="100%" stop-color="#CA8A04" />
+    </radialGradient>
+
+    <!-- Outer Shadow -->
+    <filter id="dropShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+    
+    <!-- Text Shadow -->
+    <filter id="textGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Base Icon Background with Rounded Corners -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bgGrad)" stroke="#DC2626" stroke-width="12" />
+
+  <!-- Inner Red Accent Line -->
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-opacity="0.4" />
+
+  <!-- Top Center: The Iconic 3D Blue & Gold Globe -->
+  <g transform="translate(256, 172)" filter="url(#dropShadow)">
+    <!-- Globe Circle -->
+    <circle cx="0" cy="0" r="110" fill="url(#globeSphere)" stroke="#DC2626" stroke-width="5" />
+    
+    <!-- Longitude Grids -->
+    <ellipse cx="0" cy="0" rx="80" ry="109" fill="none" stroke="#CA8A04" stroke-width="2.5" opacity="0.75" />
+    <ellipse cx="0" cy="0" rx="42" ry="109" fill="none" stroke="#CA8A04" stroke-width="2.5" opacity="0.75" />
+    <line x1="0" y1="-110" x2="0" y2="110" stroke="#CA8A04" stroke-width="2.5" opacity="0.75" />
+
+    <!-- Latitude Grids -->
+    <line x1="-109" y1="0" x2="109" y2="0" stroke="#CA8A04" stroke-width="2.5" opacity="0.85" />
+    <ellipse cx="0" cy="-45" rx="100" ry="24" fill="none" stroke="#CA8A04" stroke-width="2" opacity="0.7" />
+    <ellipse cx="0" cy="45" rx="100" ry="24" fill="none" stroke="#CA8A04" stroke-width="2" opacity="0.7" />
+
+    <!-- Continents in Deep Royal Blue (Africa, Europe, Asia / India) -->
+    <!-- Africa & Middle East -->
+    <path d="M -14 -10 C -12 -28 10 -35 25 -25 C 38 -15 32 15 28 35 C 24 55 5 70 -5 72 C -18 68 -28 45 -22 25 C -15 15 -18 0 -14 -10 Z" fill="#1D4ED8" stroke="#1E40AF" stroke-width="1.5" />
+    <!-- Europe -->
+    <path d="M -30 -38 C -22 -55 5 -60 15 -48 C 22 -40 10 -30 -5 -32 C -15 -35 -24 -28 -30 -38 Z" fill="#1D4ED8" />
+    <!-- Asia & India -->
+    <path d="M 18 -45 C 35 -55 65 -45 75 -25 C 80 -10 65 15 50 18 C 42 28 32 38 28 42 C 24 35 30 18 35 5 C 25 -10 12 -25 18 -45 Z" fill="#1D4ED8" />
+    <!-- Americas hint on left -->
+    <path d="M -75 -40 C -60 -45 -55 -25 -70 -10 C -82 5 -88 -20 -75 -40 Z" fill="#1D4ED8" opacity="0.9" />
+    <path d="M -72 15 C -62 30 -65 55 -78 60 C -85 45 -82 25 -72 15 Z" fill="#1D4ED8" opacity="0.9" />
+  </g>
+
+  <!-- Lower Section: Red Headline Banner with Devanagari Typography -->
+  <!-- "ब्रेकिंग" -->
+  <text x="256" y="342" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', 'Mukta', sans-serif" font-size="62" font-weight="900" fill="#DC2626" stroke="#991B1B" stroke-width="1.5" filter="url(#textGlow)">
+    ब्रेकिंग
+  </text>
+
+  <!-- "न्यूजवाला" -->
+  <text x="256" y="415" text-anchor="middle" font-family="'Baloo 2', 'Noto Sans Devanagari', 'Mukta', sans-serif" font-size="66" font-weight="900" fill="#DC2626" stroke="#991B1B" stroke-width="1.5" filter="url(#textGlow)">
+    न्यूजवाला
+  </text>
+
+  <!-- Tagline Underline -->
+  <line x1="80" y1="438" x2="432" y2="438" stroke="#DC2626" stroke-width="3" stroke-linecap="round" />
+
+  <!-- Tagline Text -->
+  <text x="256" y="464" text-anchor="middle" font-family="'Noto Sans Devanagari', sans-serif" font-size="20" font-weight="800" fill="#18181B" letter-spacing="0.5">
+    भारत के जिलों से, आपके दिलों तक
+  </text>
+</svg>
