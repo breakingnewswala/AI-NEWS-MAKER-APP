@@ -29,7 +29,7 @@ This authoritative audit report concludes the final validation gate for **Pull R
 ## 2. SECURITY SCAN & ELIMINATION OF HARD-CODED SECRETS
 
 ### 2.1 Remediation Actions Implemented
-- **Server Runtime (`server.ts`, `server.cjs`, `web_studio/server.ts`):** Eliminated static fallback string `"ainewsmaker_prod_sec_token_9669802408_2026"`. When running in production (`NODE_ENV === 'production'`) without `SESSION_SECRET`, the server immediately throws a fatal exception preventing startup. In development/testing, an ephemeral 256-bit cryptographic hex token (`crypto.randomBytes(32).toString('hex')`) is generated per process instance.
+- **Server Runtime (`server.ts`, `server.cjs`, `web_studio/server.ts`):** Eliminated static fallback string `[REDACTED HISTORICAL SECRET]`. When running in production (`NODE_ENV === 'production'`) without `SESSION_SECRET`, the server immediately throws a fatal exception preventing startup. In development/testing, an ephemeral 256-bit cryptographic hex token (`crypto.randomBytes(32).toString('hex')`) is generated per process instance.
 - **Test Scripts (`test_blocker_remediation.cjs`, `test_remediation_acceptance.cjs`):** Switched from static tokens to dynamic ephemeral secrets and synthetic admin users (`test.admin@synthetic.local`, phone: `9876543210`).
 - **Database Fixtures & Local Files:** Replaced all occurrences of owner phone numbers in `user_profiles_db.json`, `web_studio/user_profiles_db.json`, and fixture files with synthetic phone `9876543210`.
 - **Public Documentation:** Sanitized `.env` examples in `docs/ANDROID_GITHUB_HANDOFF.md`, `docs/SECURITY_REGRESSION_TESTS.md`, and `docs/SECURITY_REMEDIATION_REPORT.md`.
@@ -38,7 +38,7 @@ This authoritative audit report concludes the final validation gate for **Pull R
 > [!IMPORTANT]
 > **OWNER ACTION REQUIRED: Rotate Production `SESSION_SECRET`**
 >
-> Because a static fallback string (`ainewsmaker_prod_sec_token_9669802408_2026`) was previously committed to git history, any third party with historical repository access could theoretically forge session cookies if that exact string were used in production.
+> Because a static fallback string (`[REDACTED HISTORICAL SECRET]`) was previously committed to git history, any third party with historical repository access could theoretically forge session cookies if that exact string were used in production.
 >
 > **Action Steps for Owner:**
 > 1. Open Google Cloud Secret Manager for project `ai-news-maker-app`.

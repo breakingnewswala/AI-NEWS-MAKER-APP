@@ -189,16 +189,20 @@ runTest('Group 11.1: Byte parity for core modified files across src/ and web_stu
 // -------------------------------------------------------------
 // Group 12: Production Frame df_1794406067554_albmw Preservation
 // -------------------------------------------------------------
-runTest('Group 12.1: Target production template df_1794406067554_albmw preserved', () => {
-  const dbPath = path.join(process.env.USERPROFILE || 'C:/Users/pc', '.gemini/antigravity/local_central_db/ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd/system_app_assets/df_1794406067554_albmw.json');
-  if (fs.existsSync(dbPath)) {
-    const raw = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-    assert.strictEqual(raw.approvalStatus, 'APPROVED');
-    assert.strictEqual(raw.publicationStatus, 'published');
-  } else {
-    // Also check server local mock/fixtures
-    assert(true, 'Local database file not on this host disk, verified through server API tests in Suite C');
-  }
+runTest('Group 12.1: Target production template df_1794406067554_albmw preserved in dynamic_frames_db.json', () => {
+  const rootDb = JSON.parse(fs.readFileSync('dynamic_frames_db.json', 'utf8'));
+  const studioDb = JSON.parse(fs.readFileSync('web_studio/dynamic_frames_db.json', 'utf8'));
+  const targetRoot = rootDb.find(f => f.id === 'df_1794406067554_albmw');
+  const targetStudio = studioDb.find(f => f.id === 'df_1794406067554_albmw');
+  assert(targetRoot, 'df_1794406067554_albmw must exist in dynamic_frames_db.json');
+  assert(targetStudio, 'df_1794406067554_albmw must exist in web_studio/dynamic_frames_db.json');
+  assert.strictEqual(targetRoot.approvalStatus, 'APPROVED', 'approvalStatus must be APPROVED');
+  assert.strictEqual(targetRoot.publicationStatus, 'published', 'publicationStatus must be published');
+  assert.strictEqual(targetRoot.isTestFrame, false, 'isTestFrame must be false');
+  assert.strictEqual(targetRoot.designCategory, 'Special Frames', 'designCategory must be Special Frames');
+  assert.strictEqual(targetStudio.approvalStatus, 'APPROVED');
+  assert.strictEqual(targetStudio.publicationStatus, 'published');
+  assert.strictEqual(targetStudio.isTestFrame, false);
 });
 
 console.log('\n================================================================');

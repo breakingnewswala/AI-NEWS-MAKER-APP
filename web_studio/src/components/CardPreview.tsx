@@ -17,6 +17,7 @@ import {
   getTemplateLayoutSpec,
   getActionSafeZone,
   getTitleSafeZone,
+  resolveEffectiveHeadline,
 } from '../lib/canonicalLayoutEngine';
 
 interface CardPreviewProps {
@@ -405,8 +406,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       height: (textSlotRect.height / 100) * canvasH,
     } : undefined;
 
+    const effectiveHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
+
     return computeCanonicalHeadlineLayout({
-      headline: card.formattedHeadline || card.headline,
+      headline: effectiveHeadline,
       highlightWords: card.highlightWords,
       fontFamily: activeFont,
       templateId: card.frameDesign || 'graphic_001',
@@ -474,7 +477,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const alignLineClass = headlineAlign === 'left' ? 'items-center justify-start text-left' : headlineAlign === 'right' ? 'items-center justify-end text-right' : 'items-center justify-center text-center';
 
     return (
-      <div className={`w-full flex flex-col ${alignContainerClass} select-none pointer-events-none`}>
+      <div data-testid="canonical-headline-preview" className={`w-full flex flex-col ${alignContainerClass} select-none pointer-events-none`}>
         {canonicalLayout.lines.map((line, lIdx) => (
           <div
             key={lIdx}

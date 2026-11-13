@@ -1499,6 +1499,11 @@ export default function App() {
     return initial;
   });
 
+  const cardRef = useRef<NewsCardData>(card);
+  useEffect(() => {
+    cardRef.current = card;
+  }, [card]);
+
   // Listen to profile updates from Profile / Control Panel tab in real-time
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
@@ -1965,8 +1970,19 @@ export default function App() {
       setCard((prev) => ({ ...prev, frameDesign: jacketId }));
       showToast(`जैकेट बदला: ${jacketId}`);
     };
+    (window as any).getStudioCard = () => cardRef.current;
     (window as any).updateStudioCard = (data: Partial<NewsCardData>) => {
-      setCard((prev) => ({ ...prev, ...data }));
+      setCard((prev) => {
+        const next = { ...prev, ...data };
+        if (data.headline && (!data.formattedHeadline || data.formattedHeadline.includes('कृपया स्टेप 3'))) {
+          next.formattedHeadline = data.headline;
+        }
+        cardRef.current = next;
+        return next;
+      });
+    };
+    (window as any).setStudioStep = (step: number) => {
+      setActiveStep(step);
     };
     (window as any).triggerDownload = () => {
       handleDownload();
@@ -4638,6 +4654,7 @@ export default function App() {
                         return (
                           <button
                             key={s.step}
+                            data-testid={`studio-step-${s.step}`}
                             type="button"
                             onClick={() => {
                               setActiveStep(s.step);

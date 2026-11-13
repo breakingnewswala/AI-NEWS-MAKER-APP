@@ -488,6 +488,32 @@ export interface HeadlineLayoutOptions {
   isBreakingStyle?: boolean;
 }
 
+export const CANONICAL_INSTRUCTIONAL_HEADLINE = 'कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...';
+
+/**
+ * Resolves the effective headline string between formattedHeadline and headline.
+ * Prevents a stale default instructional placeholder in formattedHeadline from
+ * blocking a freshly entered or updated headline in the card state.
+ */
+export function resolveEffectiveHeadline(headline?: string, formattedHeadline?: string): string {
+  const isDefault = (text?: string) =>
+    !text ||
+    text.trim().length === 0 ||
+    text.includes('कृपया स्टेप 3') ||
+    text.includes('अपनी मुख्य खबर का शीर्षक दर्ज करें') ||
+    text.includes('मुख्य खबर का शीर्षक');
+
+  // If formattedHeadline has real user text (not default instructional text), use it
+  if (formattedHeadline && !isDefault(formattedHeadline)) {
+    return formattedHeadline;
+  }
+  // If headline has real user text (not default instructional text), use it
+  if (headline && !isDefault(headline)) {
+    return headline;
+  }
+  return formattedHeadline || headline || CANONICAL_INSTRUCTIONAL_HEADLINE;
+}
+
 /**
  * The Canonical Headline Layout Calculation
  * 
@@ -501,7 +527,8 @@ export interface HeadlineLayoutOptions {
  */
 export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): CanonicalHeadlineLayout {
   const spec = getTemplateLayoutSpec(options.templateId, options.aspectRatio);
-  const rawHeadline = cleanHeadlineText(options.headline || '');
+  const resolved = resolveEffectiveHeadline(options.headline, (options as any).formattedHeadline);
+  const rawHeadline = cleanHeadlineText(resolved || '');
   const fontFam = options.fontFamily || 'Baloo 2';
   const maxLines = options.customMaxLines
     ? Math.max(1, Math.min(4, options.customMaxLines))

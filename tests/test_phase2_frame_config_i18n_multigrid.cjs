@@ -208,6 +208,33 @@ runTest('Suite H.1: CanvasExporter implements retry loop and Hindi error reporti
 });
 
 // -------------------------------------------------------------
+// SUITE I: PRODUCTION FRAME INTEGRITY & REGRESSION ASSERTION
+// -------------------------------------------------------------
+runTest('Suite I.1: Production template df_1794406067554_albmw is preserved, published, and APPROVED', () => {
+  const rootDb = JSON.parse(fs.readFileSync(path.join(__dirname, '../dynamic_frames_db.json'), 'utf8'));
+  const studioDb = JSON.parse(fs.readFileSync(path.join(__dirname, '../web_studio/dynamic_frames_db.json'), 'utf8'));
+  const targetRoot = rootDb.find(f => f.id === 'df_1794406067554_albmw');
+  const targetStudio = studioDb.find(f => f.id === 'df_1794406067554_albmw');
+  assert(targetRoot, 'df_1794406067554_albmw must exist in dynamic_frames_db.json');
+  assert(targetStudio, 'df_1794406067554_albmw must exist in web_studio/dynamic_frames_db.json');
+  assert.strictEqual(targetRoot.approvalStatus, 'APPROVED', 'approvalStatus must be APPROVED');
+  assert.strictEqual(targetRoot.publicationStatus, 'published', 'publicationStatus must be published');
+  assert.strictEqual(targetRoot.isTestFrame, false, 'isTestFrame must be false');
+  assert.strictEqual(targetRoot.designCategory, 'Special Frames', 'designCategory must be Special Frames');
+  assert.strictEqual(targetStudio.approvalStatus, 'APPROVED');
+  assert.strictEqual(targetStudio.publicationStatus, 'published');
+  assert.strictEqual(targetStudio.isTestFrame, false);
+
+  // Assert no test frame in production data
+  const testFrameRoot = rootDb.find(f => f.id === 'df_1794544360478_6ptot');
+  assert(!testFrameRoot, 'Test frame df_1794544360478_6ptot must NOT be in production dynamic_frames_db.json');
+
+  // Assert production frame is not tombstoned
+  const tombstones = JSON.parse(fs.readFileSync(path.join(__dirname, '../deleted_frames_tombstone.json'), 'utf8'));
+  assert(!tombstones.includes('df_1794406067554_albmw'), 'df_1794406067554_albmw must NOT be in deleted_frames_tombstone.json');
+});
+
+// -------------------------------------------------------------
 // DUAL PARITY VERIFICATION
 // -------------------------------------------------------------
 runTest('Dual Parity: Root src and web_studio/src must be 100% byte identical for modified files', () => {

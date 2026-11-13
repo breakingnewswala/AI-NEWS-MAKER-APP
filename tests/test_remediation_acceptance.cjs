@@ -8,7 +8,8 @@ const { spawn, execSync } = require('child_process');
 const PROJECT_DIR = process.env.PROJECT_DIR || path.resolve(__dirname, '..');
 const PORT = 5058;
 const REDIRECT_PORT = 5059;
-const TEST_SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+// Cryptographically random ephemeral secret strictly generated per test run (isolated, never inherits process.env.SESSION_SECRET)
+const TEST_SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));

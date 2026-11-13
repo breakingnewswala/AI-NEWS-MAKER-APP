@@ -1,0 +1,52 @@
+name: PR Validation & Runtime Acceptance CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - fix/frame-config-profile-i18n-multigrid
+      - "fix/**"
+      - "feature/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm install --legacy-peer-deps --no-audit
+
+      - name: Install web_studio dependencies
+        run: npm --prefix web_studio install --legacy-peer-deps --no-audit
+
+      - name: Build frontend and server bundles
+        run: node web_studio/build_and_sync.js
+
+      - name: Verify Phase 2 Acceptance Suite (17/17)
+        run: node tests/test_phase2_frame_config_i18n_multigrid.cjs
+
+      - name: Verify Master Frame Generator & Photo Studio Suite (17/17)
+        run: node tests/test_frame_generator_and_photo_studio_rendering.cjs
+
+      - name: Verify Security Blocker & RBAC Suite (32/32)
+        run: node tests/test_blocker_remediation.cjs
+
+      - name: Verify Remediation Acceptance Suite (34/34)
+        run: node tests/test_remediation_acceptance.cjs
+
+      - name: Verify Genuine Headless Chrome Multi-Grid E2E Suite
+        run: node scripts/test_studio_e2e_multigrid.cjs
+        env:
+          CHROME_BIN: /usr/bin/google-chrome

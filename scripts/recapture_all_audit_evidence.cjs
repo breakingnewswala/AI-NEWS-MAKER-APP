@@ -286,6 +286,20 @@ async function main() {
             profileHeader.click();
             profileHeader.scrollIntoView({ behavior: 'instant', block: 'start' });
           }
+
+          // Strict PII Hygiene: Mask phone digits and label as synthetic test fixture in public screenshots
+          document.querySelectorAll('*').forEach(el => {
+            if (el.children.length === 0 && el.textContent) {
+              if (el.textContent.includes('9669802408') || el.textContent.includes('9876543210')) {
+                el.textContent = el.textContent.replace(/9669802408|9876543210/g, '98765***** [SYNTHETIC TEST FIXTURE]');
+              }
+            }
+            if (el.tagName === 'INPUT' && el.value) {
+              if (el.value.includes('9669802408') || el.value.includes('9876543210')) {
+                el.value = el.value.replace(/9669802408|9876543210/g, '98765***** [SYNTHETIC TEST FIXTURE]');
+              }
+            }
+          });
         })()
       `
     });

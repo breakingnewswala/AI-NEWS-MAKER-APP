@@ -3177,6 +3177,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               ) : (
                 <button
                   type="button"
+                  data-testid="layout-btn-2photo"
                   onClick={() => {
                     const targetLayout = (card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h')
                       ? card.layout
@@ -3216,6 +3217,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               ) : (
                 <button
                   type="button"
+                  data-testid="layout-btn-multigrid"
                   onClick={() => {
                     const targetLayout = (card.layout === 'grid-3-bottom' || card.layout === 'grid-4')
                       ? card.layout
@@ -3267,6 +3269,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     return (
                       <button
                         key={l.id}
+                        data-testid={`layout-subvariant-${l.id}`}
                         type="button"
                         onClick={() => {
                           const updates: Partial<NewsCardData> = { layout: l.id };
@@ -3307,6 +3310,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     return (
                       <button
                         key={l.id}
+                        data-testid={`layout-subvariant-${l.id}`}
                         type="button"
                         onClick={() => {
                           const updates: Partial<NewsCardData> = { layout: l.id };
@@ -3599,6 +3603,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <Upload className="w-3.5 h-3.5 text-yellow-400" />
                       <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
                       <input
+                        data-testid="file-input-main"
                         type="file"
                         accept="image/*"
                         className="hidden"
@@ -3647,6 +3652,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <Upload className="w-3.5 h-3.5 text-blue-400" />
                       <span>{card.images.second ? 'फोटो 2 बदलें' : 'दूसरी फोटो अपलोड करें'}</span>
                       <input
+                        data-testid="file-input-second"
                         type="file"
                         accept="image/*"
                         className="hidden"
@@ -3678,7 +3684,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-500/50 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold">
                       <Upload className="w-3 h-3 text-yellow-400" />
                       <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('main', f); }} />
+                      <input data-testid="file-input-main" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('main', f); }} />
                     </label>
                   </div>
 
@@ -3697,7 +3703,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-blue-500/50 rounded-lg cursor-pointer text-xs text-blue-300 font-bold">
                       <Upload className="w-3 h-3 text-blue-400" />
                       <span>{card.images.second ? 'फोटो 2 बदलें' : 'फोटो 2 अपलोड'}</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('second', f); }} />
+                      <input data-testid="file-input-second" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('second', f); }} />
                     </label>
                   </div>
 
@@ -3716,7 +3722,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-purple-500/50 rounded-lg cursor-pointer text-xs text-purple-300 font-bold">
                       <Upload className="w-3 h-3 text-purple-400" />
                       <span>{card.images.third ? 'फोटो 3 बदलें' : 'फोटो 3 अपलोड'}</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('third', f); }} />
+                      <input data-testid="file-input-third" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('third', f); }} />
                     </label>
                   </div>
 
@@ -3736,7 +3742,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-emerald-500/50 rounded-lg cursor-pointer text-xs text-emerald-300 font-bold">
                         <Upload className="w-3 h-3 text-emerald-400" />
                         <span>{card.images.fourth ? 'फोटो 4 बदलें' : 'फोटो 4 अपलोड'}</span>
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('fourth', f); }} />
+                        <input data-testid="file-input-fourth" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('fourth', f); }} />
                       </label>
                     </div>
                   )}

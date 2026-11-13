@@ -12,6 +12,7 @@ import {
   getTitleSafeZone,
   validateCardBeforeDownload,
   WordToken,
+  resolveEffectiveHeadline,
 } from './canonicalLayoutEngine';
 import {
   drawOriginalHeader,
@@ -403,7 +404,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   targetFontSize = Math.max(isQuote ? 44 : 52, Math.min(isQuote ? 64 : 80, targetFontSize));
 
   ctx.save();
-  const rawHeadline = cleanHeadlineText(card.formattedHeadline || card.headline || '');
+  const effectiveHeadlineText = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
+  const rawHeadline = cleanHeadlineText(effectiveHeadlineText || '');
   const manualLines = rawHeadline.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (manualLines.length >= 2) {
     for (let s = targetFontSize; s >= 36; s -= 2) {
@@ -449,7 +451,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   const headlineLineHeight = Math.round(headlineFontSize * 1.34);
   const headlineLines = getHeadlineLines(
     ctx,
-    card.formattedHeadline || card.headline,
+    effectiveHeadlineText,
     card.highlightWords,
     maxHeadlineWidth,
     headlineFontSize
@@ -2087,7 +2089,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.restore();
   }
 
-  const rawHeadline = card.formattedHeadline || card.headline;
+  const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
   if (rawHeadline && rawHeadline.trim().length > 0) {
     ctx.save();
     const fontFam = card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || textSlot.fontFamily || 'Baloo 2';
@@ -2636,7 +2638,7 @@ async function drawGraphic001Canvas(
 
   if (hasUserHeadline) {
     // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#FFE600';
 
@@ -3172,7 +3174,7 @@ async function drawGraphic002Canvas(
     ctx.restore();
   } else {
     ctx.save();
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#EA580C';
 
@@ -3559,7 +3561,7 @@ async function drawGraphic003Canvas(
     ctx.font = '700 34px "Baloo 2", sans-serif';
     ctx.fillText('(अधिकतम 3 लाइन में, आपके टेक्स्ट के अनुसार)', width / 2, headlineAreaCenterY + 84);
   } else {
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#FFE600';
 
@@ -3747,7 +3749,7 @@ async function drawGraphic004Canvas(
     ctx.font = '900 102px "Baloo 2", sans-serif';
     ctx.fillText('गिरफ्तार कर पेश करो!', width / 2, 272);
   } else {
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#DC2626';
 
@@ -4242,7 +4244,7 @@ async function drawMorningJacketContent(
   const hlLineH = Math.round(hlFontSize * 1.36);
 
   // Raw headline containing [yellow]...[/yellow] tags
-  const rawHeadline = card.formattedHeadline || card.headline || '';
+  const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
 
   ctx.font = `900 ${hlFontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
   const tokenLines = getHeadlineLines(
