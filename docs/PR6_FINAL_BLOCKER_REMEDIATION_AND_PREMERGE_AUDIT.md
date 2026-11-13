@@ -5,11 +5,11 @@
 **Target Feature Branch:** `fix/frame-config-profile-i18n-multigrid`  
 **Base Branch:** `main` (`531a07e114b38223b4e30de46210ef479903cb93`)  
 **Branch Status:** Clean and fast-forward ready against main  
-**Validated Code SHA:** `42b947e819b7e7e27f8d542725c70fc83deb7b19`  
+**Latest Remote HEAD SHA:** `4db3c626dd042a37066165978575ede07f37f8a7`  
 **Firebase Project ID:** `ai-news-maker-app`  
 **Production Domain:** `https://www.ainewsmaker.online`  
 **Report Date:** 2026-11-13  
-**Final Audit Recommendation:** **READY FOR OWNER REVIEW (ALL THREE FINAL BLOCKERS RESOLVED)**
+**Final Audit Recommendation:** **BLOCKED — NOT READY FOR MERGE (Pending Owner GitHub CI Workflow Activation)**
 
 ---
 
@@ -233,7 +233,9 @@ All 11 visual audit screenshots in `audit_screenshots/` were recaptured without 
 
 ## 11. GitHub CI Workflow Configuration (Blocker 3)
 
-Prepared CI workflow definition at `.github/workflows/pr6-full-validation.yml` and mirrored at `docs/ci/pr6-full-validation.yml`.
+**Status:** **NOT ACTIVATED ON REMOTE REPOSITORY (Local Definition Complete)**
+
+Prepared full CI workflow definition at `.github/workflows/pr6-full-validation.yml` and mirrored at `docs/ci/pr6-full-validation.yml`.
 The workflow runs across 10 validation stages:
 1. Environment checkout & Node.js 20 LTS setup.
 2. Web Studio clean build & sync (`node web_studio/build_and_sync.js`).
@@ -246,12 +248,36 @@ The workflow runs across 10 validation stages:
 9. Safety Invariants (Production template preservation & Android `applicationId` verification).
 10. Android assembleDebug build check.
 
-*Owner Token Scope Note:* GitHub personal access tokens or CLI sessions require the `workflow` scope to add or modify files in `.github/workflows/`. If the local environment token has `repo` but lacks `workflow`, the Owner can execute `gh auth refresh -s workflow` to authorize pushing the workflow file directly.
+### GitHub Authentication Scope Limitation & Owner Action
+Inspection of the current GitHub CLI credentials via `gh auth status`:
+- **Scopes present:** `'gist'`, `'read:org'`, `'repo'`
+- **Missing scope:** `'workflow'`
+
+GitHub strictly refuses to allow personal access tokens or CLI sessions to create or update files under `.github/workflows/` without the `workflow` scope. In accordance with system security boundaries, no credential spoofing, interception, or unauthorized workarounds were attempted. The workflow file is safely retained locally in the workspace and mirrored at `docs/ci/pr6-full-validation.yml`.
+
+**Exact Owner Commands to Activate GitHub CI:**
+```bash
+# 1. Authorize the workflow scope on your GitHub account
+gh auth refresh -s workflow
+
+# 2. Add and push the workflow file to the remote feature branch
+git add .github/workflows/pr6-full-validation.yml
+git commit -m "ci: activate PR #6 full validation workflow"
+git push origin fix/frame-config-profile-i18n-multigrid
+```
+Once pushed, the live execution run will be accessible at:  
+`https://github.com/breakingnewswala/AI-NEWS-MAKER-APP/actions`
 
 ---
 
 ## 12. Final Recommendation
 
-**STATUS:** **`READY FOR OWNER REVIEW`**
+**STATUS:** **`BLOCKED — NOT READY FOR MERGE`**
 
-All P0 blockers have been completely resolved, empirically verified, and backed by reproducible artifacts. The branch `fix/frame-config-profile-i18n-multigrid` is clean, stable, and ready for final Owner review on PR #6.
+Per strict pre-merge safety criteria:
+1. **Blocker 1 (Profile Screenshot Privacy):** **PASS ✅** — Authoritative synthetic profile screenshot captured with 0 real PII, dimensions 1920x1080, SHA-256 `6040751644e1c2c5bc504ad792537bbdb4c561e0a38155895a725cc29124a982`.
+2. **Blocker 2 (Genuine Multi-Grid E2E):** **PASS ✅** — Pure UI workflow executed without programmatic shortcuts, generating real 1080x1350 downloads with distinct pixels (2-photo SHA `62023dd00ad5...` and 4-photo SHA `8611985c0f83...`).
+3. **Blocker 3 (GitHub Actions CI Workflow):** **BLOCKED (PENDING OWNER ACTIVATION)** — Workflow definition completed and mirrored locally, but pending Owner token scope refresh (`gh auth refresh -s workflow`) before it can be pushed and executed on GitHub Actions runners.
+4. **Production Safety Invariants:** **PASS ✅** — Approved production template `df_1794406067554_albmw` is intact, published, and absent from tombstones. Android `applicationId` preserved.
+
+PR #6 remains **OPEN** on GitHub. Merge and production deployment must remain on hold until the Owner executes the workflow push and confirms a green GitHub Actions run.
