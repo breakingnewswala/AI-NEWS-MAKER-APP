@@ -41,6 +41,7 @@ import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
 import { formatCleanLocationText } from './lib/locationUtils';
+import { getDynamicFrameById } from './lib/dynamicFramesManager';
 
 export const CANONICAL_DEFAULT_HEADLINE = 'कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
@@ -1498,6 +1499,11 @@ export default function App() {
     return initial;
   });
 
+  const cardRef = useRef<NewsCardData>(card);
+  useEffect(() => {
+    cardRef.current = card;
+  }, [card]);
+
   // Listen to profile updates from Profile / Control Panel tab in real-time
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
@@ -1696,22 +1702,54 @@ export default function App() {
     }
   }, [currentTab]);
 
-  // Automatically apply profile-configured Header/Footer settings for the active template
+  // Automatically apply profile-configured Header/Footer settings & authoritative dynamic frame defaults
   useEffect(() => {
     const profileConfig = getProfileHeaderFooter(card.frameDesign || 'graphic_001');
-    if (profileConfig && profileConfig.isConfigured) {
-      setCard((prev) => ({
-        ...prev,
-        brandName: profileConfig.brandName !== undefined && profileConfig.brandName !== '' ? profileConfig.brandName : prev.brandName,
-        brandTagline: profileConfig.brandTagline !== undefined && profileConfig.brandTagline !== '' ? profileConfig.brandTagline : prev.brandTagline,
-        customLogoUrl: profileConfig.customLogoUrl !== undefined && profileConfig.customLogoUrl !== '' ? profileConfig.customLogoUrl : prev.customLogoUrl,
-        customHeaderPng: profileConfig.customHeaderPng !== undefined && profileConfig.customHeaderPng !== '' ? profileConfig.customHeaderPng : prev.customHeaderPng,
-        whatsappNumber: profileConfig.whatsappNumber !== undefined && profileConfig.whatsappNumber !== '' ? profileConfig.whatsappNumber : prev.whatsappNumber,
-        socialHandle: profileConfig.socialHandle !== undefined && profileConfig.socialHandle !== '' ? profileConfig.socialHandle : prev.socialHandle,
-        newsUpdateBadge: profileConfig.newsUpdateBadge !== undefined && profileConfig.newsUpdateBadge !== '' ? profileConfig.newsUpdateBadge : prev.newsUpdateBadge,
-        customFooterPng: profileConfig.customFooterPng !== undefined && profileConfig.customFooterPng !== '' ? profileConfig.customFooterPng : prev.customFooterPng,
-      }));
-    }
+    const df = getDynamicFrameById(card.frameDesign || '');
+
+    setCard((prev) => {
+      let updated = { ...prev };
+      if (profileConfig && profileConfig.isConfigured) {
+        updated = {
+          ...updated,
+          brandName: profileConfig.brandName !== undefined && profileConfig.brandName !== '' ? profileConfig.brandName : prev.brandName,
+          brandTagline: profileConfig.brandTagline !== undefined && profileConfig.brandTagline !== '' ? profileConfig.brandTagline : prev.brandTagline,
+          customLogoUrl: profileConfig.customLogoUrl !== undefined && profileConfig.customLogoUrl !== '' ? profileConfig.customLogoUrl : prev.customLogoUrl,
+          customHeaderPng: profileConfig.customHeaderPng !== undefined && profileConfig.customHeaderPng !== '' ? profileConfig.customHeaderPng : prev.customHeaderPng,
+          whatsappNumber: profileConfig.whatsappNumber !== undefined && profileConfig.whatsappNumber !== '' ? profileConfig.whatsappNumber : prev.whatsappNumber,
+          socialHandle: profileConfig.socialHandle !== undefined && profileConfig.socialHandle !== '' ? profileConfig.socialHandle : prev.socialHandle,
+          newsUpdateBadge: profileConfig.newsUpdateBadge !== undefined && profileConfig.newsUpdateBadge !== '' ? profileConfig.newsUpdateBadge : prev.newsUpdateBadge,
+          customFooterPng: profileConfig.customFooterPng !== undefined && profileConfig.customFooterPng !== '' ? profileConfig.customFooterPng : prev.customFooterPng,
+        };
+      }
+      if (df) {
+        const dfFooterBg = df.footerConfig?.footerBgColor || (df.footerConfig as any)?.primaryFooterBg || (df.footerConfig as any)?.primaryFooterColor;
+        const dfFooterText = df.footerConfig?.footerTextColor;
+        const bannedColor = df.footerConfig?.bannedFooterColor || (df as any)?.bannedFooterColor;
+        if (dfFooterBg) {
+          if (bannedColor && dfFooterBg.toUpperCase() === bannedColor.toUpperCase()) {
+            updated.footerBgColor = df.footerConfig?.primaryFooterColor || '#FACC15';
+          } else {
+            updated.footerBgColor = dfFooterBg;
+          }
+        } else if (bannedColor && (updated.footerBgColor || '#FFFFFF').toUpperCase() === bannedColor.toUpperCase()) {
+          updated.footerBgColor = df.footerConfig?.primaryFooterColor || '#FACC15';
+        }
+        if (dfFooterText) {
+          updated.footerTextColor = dfFooterText;
+        }
+        if (df.fullStoryCalloutConfig?.enabled) {
+          updated.showCallout = true;
+          if (df.fullStoryCalloutConfig.manualCalloutAsset || (df.fullStoryCalloutConfig as any).calloutAssetUrl) {
+            updated.customCalloutAssetUrl = df.fullStoryCalloutConfig.manualCalloutAsset || (df.fullStoryCalloutConfig as any).calloutAssetUrl;
+          }
+          if (df.fullStoryCalloutConfig.text) {
+            updated.calloutTag = df.fullStoryCalloutConfig.text;
+          }
+        }
+      }
+      return updated;
+    });
   }, [card.frameDesign]);
 
   const [isAIAnalyzeOpen, setIsAIAnalyzeOpen] = useState(false);
@@ -1932,8 +1970,19 @@ export default function App() {
       setCard((prev) => ({ ...prev, frameDesign: jacketId }));
       showToast(`जैकेट बदला: ${jacketId}`);
     };
+    (window as any).getStudioCard = () => cardRef.current;
     (window as any).updateStudioCard = (data: Partial<NewsCardData>) => {
-      setCard((prev) => ({ ...prev, ...data }));
+      setCard((prev) => {
+        const next = { ...prev, ...data };
+        if (data.headline && (!data.formattedHeadline || data.formattedHeadline.includes('कृपया स्टेप 3'))) {
+          next.formattedHeadline = data.headline;
+        }
+        cardRef.current = next;
+        return next;
+      });
+    };
+    (window as any).setStudioStep = (step: number) => {
+      setActiveStep(step);
     };
     (window as any).triggerDownload = () => {
       handleDownload();
@@ -4605,6 +4654,7 @@ export default function App() {
                         return (
                           <button
                             key={s.step}
+                            data-testid={`studio-step-${s.step}`}
                             type="button"
                             onClick={() => {
                               setActiveStep(s.step);

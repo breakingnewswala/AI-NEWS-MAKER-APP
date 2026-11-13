@@ -46,7 +46,7 @@ The script automatically spawns an ephemeral test server on port 3891 with a ded
 
 ### Group 3: P0 — Hardcoded Secret Token Forgery Rejection
 7. **Assertion 3.1:** `Token signed with old hardcoded static secret is rejected (401/403)`
-   - *Secret Tested:* `"ainewsmaker_prod_sec_token_9669802408_2026"`
+   - *Secret Tested:* `"[REDACTED HISTORICAL SECRET]"` (legacy static secret)
    - *Status:* PASS (HTTP 401/403)
 
 ### Group 4: P1 — Admin Header & Body Spoofing Rejection

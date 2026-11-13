@@ -132,8 +132,8 @@ This automatically updates `app/src/main/assets/news_studio/`.
 ### 5.2 Environment Variables (`.env`)
 The Android build utilizes the `com.google.android.libraries.mapsplatform.secrets-gradle-plugin` to safely read API keys from `.env`. Ensure your local `.env` contains valid strings:
 ```bash
-ADMIN_API_KEY="default_admin_key"
-SESSION_SECRET="ainewsmaker_prod_sec_token_9669802408_2026"
+ADMIN_API_KEY="your_admin_api_key_here"
+SESSION_SECRET="your_min_32_character_session_secret_here"
 ```
 
 ---

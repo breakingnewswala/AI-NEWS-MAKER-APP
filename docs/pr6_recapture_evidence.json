@@ -1,0 +1,134 @@
+{
+  "timestamp": "2026-11-13T10:21:49.672Z",
+  "branch": "fix/frame-config-profile-i18n-multigrid",
+  "commitSha": "42b947e819b7e7e27f8d542725c70fc83deb7b19",
+  "validatedCodeSha": "42b947e819b7e7e27f8d542725c70fc83deb7b19",
+  "baseBranch": "main",
+  "baseSha": "531a07e114b38223b4e30de46210ef479903cb93",
+  "unobstructed": true,
+  "zeroModalOverlays": true,
+  "piiMasked": true,
+  "screenshots": [
+    {
+      "filename": "01_admin_notification_panel_hindi.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\01_admin_notification_panel_hindi.png",
+      "sizeBytes": 139282,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "a8277bdc704bc9a878d48cd79e42582ee8ff8b94ef8372c9b96d88ab84dffd4b",
+      "testCase": "Scenario 1 - Notification Devanagari",
+      "scenarioDesc": "Admin Notification Panel rendering Devanagari notifications cleanly with zero mojibake, completely unobstructed by modal backdrops.",
+      "status": "PASS"
+    },
+    {
+      "filename": "02_user_profile_hindi_channel.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\02_user_profile_hindi_channel.png",
+      "sizeBytes": 148577,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "6040751644e1c2c5bc504ad792537bbdb4c561e0a38155895a725cc29124a982",
+      "testCase": "Scenario 2 - User Profile Unicode & Masked Phone",
+      "scenarioDesc": "User Profile displaying synthetic reporter identity 'डिजिटल रिपोर्टर', channel 'दैनिक भारत समाचार', email 'reporter_synthetic_test@example.com', and redacted contact fields 'TEST CONTACT REDACTED' with locked indicator.",
+      "status": "PASS"
+    },
+    {
+      "filename": "03_footer_master_admin_yellow_default.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\03_footer_master_admin_yellow_default.png",
+      "sizeBytes": 269741,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "475221db1b3090a2642990df01150ee691cc710467d5d5c9c699762f2fc19a85",
+      "testCase": "Scenario 3 - Footer Yellow Default",
+      "scenarioDesc": "Photo News Studio Step 6 showing Master Admin yellow default footer selection in preview and control panel unobstructed.",
+      "status": "PASS"
+    },
+    {
+      "filename": "04_footer_allowed_alternate_color.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\04_footer_allowed_alternate_color.png",
+      "sizeBytes": 269934,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "01db9c0a36136bcf6c0156ee7a184052490a98e4bc091650e561339dcb2e4d3d",
+      "testCase": "Scenario 4 - Footer Alternate Color",
+      "scenarioDesc": "Photo News Studio Step 6 updated immediately with allowed alternate footer color in CardPreview unobstructed.",
+      "status": "PASS"
+    },
+    {
+      "filename": "05_location_badge_geometry_centered.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\05_location_badge_geometry_centered.png",
+      "sizeBytes": 245395,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "611fb98eb9d48e0348a51958938053eedd57bbc58d77afd18b7972a827dba7c3",
+      "testCase": "Scenario 5 - Location Badge Centering",
+      "scenarioDesc": "Location badge in CardPreview showing 'धार, मध्य प्रदेश' correctly centered with full percentage width and no text squashing.",
+      "status": "PASS"
+    },
+    {
+      "filename": "06_story_callout_auto_visible.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\06_story_callout_auto_visible.png",
+      "sizeBytes": 279911,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "ed8bd9335b11c48dd93151253de4814d02bccd75ada30d2409abcfc5931d0ce6",
+      "testCase": "Scenario 6 - Story Callout Default State",
+      "scenarioDesc": "Story Callout visible automatically in CardPreview without manual toggle manipulation.",
+      "status": "PASS"
+    },
+    {
+      "filename": "07_custom_frame_headline_preview.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\07_custom_frame_headline_preview.png",
+      "sizeBytes": 456534,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "492348cb852a3c2cf18e420d661ff29f8683e9e30ed505bc446576fa975abd26",
+      "testCase": "Scenario 7 - Headline Preview & Matras",
+      "scenarioDesc": "CardPreview and Live Card correctly rendering active news headline 'दाहोद रेल लाइन परियोजना के तहत टीही-धार रेलखंड पर विद्युतीकरण का काम पूरा' with zero stale placeholder text and full Devanagari matra clearance.",
+      "status": "PASS"
+    },
+    {
+      "filename": "08_final_export_matching_preview.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\08_final_export_matching_preview.png",
+      "sizeBytes": 285739,
+      "width": 1080,
+      "height": 1350,
+      "sha256": "f02c76dba75985ce6c73e15ebc602a6e93a33e5c4ccbaecc78b23d428cfc9ce2",
+      "testCase": "Scenario 8 - Final Export",
+      "scenarioDesc": "Authoritative 1080x1350 canvas export exactly matching Preview layout, Hindi headline, callout, and styling.",
+      "status": "PASS"
+    },
+    {
+      "filename": "09_two_photo_grid_render.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\09_two_photo_grid_render.png",
+      "sizeBytes": 370570,
+      "width": 1080,
+      "height": 1350,
+      "sha256": "62023dd00ad5e19823aa1062284aa7571923b58a1f428ad651084cdd3687906b",
+      "testCase": "Scenario 9 - Two Photo Grid (50-50 Left-Right / double-h)",
+      "scenarioDesc": "Authoritative 1080x1350 genuine browser downloaded export of two-photo grid with distinct real photographs in Slot 1 and Slot 2 (Slot 2 replaced via file input, verified distinct RGB pixels via real UI flow).",
+      "status": "PASS"
+    },
+    {
+      "filename": "10_four_photo_grid_render.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\10_four_photo_grid_render.png",
+      "sizeBytes": 447672,
+      "width": 1080,
+      "height": 1350,
+      "sha256": "8611985c0f83770cee93d55aa32e4a80e89d09af27ac6262295051cb7c50fcc0",
+      "testCase": "Scenario 10 - Four Photo Grid (2x2 / grid-4)",
+      "scenarioDesc": "Authoritative 1080x1350 genuine browser downloaded export of 4-photo grid mapping strictly to 4 distinct photographs across quadrants (Slot 3 replaced via file input, all 4 quadrants verified distinct RGB pixels via real UI flow).",
+      "status": "PASS"
+    },
+    {
+      "filename": "11_mandatory_artwork_failure_recovery.png",
+      "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\11_mandatory_artwork_failure_recovery.png",
+      "sizeBytes": 461784,
+      "width": 1920,
+      "height": 1080,
+      "sha256": "5ff035bed2a1298bff60c4a374d8c18ab11b311017a3b21c430193d6e225e9a2",
+      "testCase": "Scenario 11 - Mandatory Asset Error & Recovery",
+      "scenarioDesc": "Browser runtime execution confirming explicit Hindi exception throw and UI recovery notice when mandatory artwork fails.",
+      "status": "PASS"
+    }
+  ]
+}

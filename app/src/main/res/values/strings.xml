@@ -4,4 +4,5 @@
     <string name="switch_role">Switch</string>
     <string name="tab">Tab</string>
     <string name="template_percent">%1$d percent.</string>
+    <string name="default_web_client_id" translatable="false">401033199805-5hl33kn2tltd8n69sjmrlv21roe2880j.apps.googleusercontent.com</string>
 </resources>

@@ -8,7 +8,8 @@ const { spawn, execSync } = require('child_process');
 const PROJECT_DIR = process.env.PROJECT_DIR || path.resolve(__dirname, '..');
 const PORT = 5065;
 const REDIRECT_PORT = 5066;
-const SECRET = process.env.SESSION_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+// Cryptographically random ephemeral secret strictly generated per test run (isolated, never inherits process.env.SESSION_SECRET)
+const TEST_SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -45,7 +46,7 @@ function createJwt(payload) {
   const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
   const encodedPayload = Buffer.from(JSON.stringify(fullPayload)).toString("base64url");
   const signature = crypto
-    .createHmac("sha256", SECRET)
+    .createHmac("sha256", TEST_SESSION_SECRET)
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest("base64url");
   return `${encodedHeader}.${encodedPayload}.${signature}`;
@@ -111,6 +112,7 @@ async function runRemediationTests() {
       ...process.env,
       PORT: String(PORT),
       NODE_ENV: 'production',
+      SESSION_SECRET: TEST_SESSION_SECRET,
       DYNAMIC_FRAMES_DB_FILE: path.join(__dirname, 'fixtures', 'test_dynamic_frames.json'),
       ASSET_LIBRARIES_DB_FILE: path.join(__dirname, 'fixtures', 'test_asset_libraries.json'),
       DELETED_FRAMES_TOMBSTONE_FILE: path.join(__dirname, 'fixtures', 'test_deleted_frames_tombstone.json'),
@@ -241,11 +243,11 @@ async function runRemediationTests() {
     // =========================================================================
     console.log('\n--- SUITE B: Master Admin Custom Footer Asset Library RBAC ---');
 
-    const tokenMasterAdmin = createJwt({ userId: 'usr_master', email: 'breakingnewswala.com@gmail.com', role: 'superadmin' });
-    const tokenSubAdmin = createJwt({ userId: 'usr_subadmin', email: 'subadmin@breakingnewswala.com', role: 'admin' });
-    const tokenVip = createJwt({ userId: 'usr_vip', email: 'vipuser@example.com', role: 'user', plan: 'VIP DESK' });
-    const tokenPro = createJwt({ userId: 'usr_pro', email: 'prouser@example.com', role: 'user', plan: 'PRO' });
-    const tokenBasic = createJwt({ userId: 'usr_basic', email: 'basicuser@example.com', role: 'user', plan: 'BASIC' });
+    const tokenMasterAdmin = createJwt({ userId: 'usr_test_synthetic_master', email: 'test_master_admin@test.local', role: 'superadmin' });
+    const tokenSubAdmin = createJwt({ userId: 'usr_test_synthetic_subadmin', email: 'test_subadmin@test.local', role: 'admin' });
+    const tokenVip = createJwt({ userId: 'usr_test_synthetic_vip', email: 'test_vip@test.local', role: 'user', plan: 'VIP DESK' });
+    const tokenPro = createJwt({ userId: 'usr_test_synthetic_pro', email: 'test_pro@test.local', role: 'user', plan: 'PRO' });
+    const tokenBasic = createJwt({ userId: 'usr_test_synthetic_basic', email: 'test_basic@test.local', role: 'user', plan: 'BASIC' });
 
     // B.1: Anonymous user cannot create Custom Footer asset (401)
     const resAnonCreate = await httpRequest({

@@ -1,0 +1,105 @@
+name: "PR #6 Full Validation & Runtime Acceptance CI"
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - fix/frame-config-profile-i18n-multigrid
+
+jobs:
+  validate:
+    name: Full Regression, Security & Browser Acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 1. Install root dependencies
+        run: npm install --legacy-peer-deps --no-audit
+
+      - name: 2. Install web_studio dependencies
+        run: npm --prefix web_studio install --legacy-peer-deps --no-audit
+
+      - name: 3 & 4. Build Root application & synchronize Web Studio
+        run: node web_studio/build_and_sync.js
+
+      - name: Set up stable Chrome browser
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Verify Chrome installation and headless startup
+        run: |
+          CHROME_PATH="${{ steps.setup-chrome.outputs.chrome-path }}"
+          if [ -z "$CHROME_PATH" ] || [ ! -x "$CHROME_PATH" ]; then
+            CHROME_PATH=$(which google-chrome || which google-chrome-stable || which chromium-browser || which chromium || true)
+          fi
+          if [ -z "$CHROME_PATH" ] || [ ! -x "$CHROME_PATH" ]; then
+            echo "❌ Chrome/Chromium browser not found or not executable!"
+            exit 1
+          fi
+          echo "CHROME_BIN=$CHROME_PATH" >> $GITHUB_ENV
+          echo "✅ Using Chrome executable at: $CHROME_PATH"
+          "$CHROME_PATH" --version
+          "$CHROME_PATH" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom about:blank > /dev/null
+          echo "✅ Chrome launched in headless mode successfully."
+
+      - name: 5. Run Phase 2 Frame Config & i18n Suite (17/17)
+        run: node tests/test_phase2_frame_config_i18n_multigrid.cjs
+
+      - name: 6. Run Master Frame Generator & Photo Studio Suite (17/17)
+        run: node tests/test_frame_generator_and_photo_studio_rendering.cjs
+
+      - name: 7. Run Security Blocker & RBAC Suite (32/32)
+        run: node tests/test_blocker_remediation.cjs
+
+      - name: 8. Run Remediation Acceptance Suite (34/34)
+        run: node tests/test_remediation_acceptance.cjs
+
+      - name: 9. Run React Studio Mount Verification
+        run: node scripts/verify_react_mount.cjs
+
+      - name: 10. Run Canvas Multi-Grid Render Suite
+        run: node scripts/test_grid_exports.cjs
+
+      - name: 11. Run Genuine Headless Chrome Multi-Grid E2E Suite
+        run: node scripts/test_studio_e2e_multigrid.cjs
+
+      - name: 12. Verify Safety Invariants (Production Frame & Android ID)
+        run: node tests/test_safety_invariants.cjs
+
+      - name: Set up JDK 17 for Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configure Android SDK and licenses
+        run: |
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Ensure Android build signing and configuration fixtures
+        run: |
+          if [ ! -f "debug.keystore" ]; then
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          if [ ! -f "app/google-services.json" ]; then
+            echo '{"project_info":{"project_number":"401033199805","project_id":"ai-news-maker-app","storage_bucket":"ai-news-maker-app.firebasestorage.app"},"client":[{"client_info":{"mobilesdk_app_id":"1:401033199805:android:abcdef","android_client_info":{"package_name":"com.aistudio.ainewsmaker.hzwptx"}},"oauth_client":[{"client_id":"401033199805-5hl33kn2tltd8n69sjmrlv21roe2880j.apps.googleusercontent.com","client_type":3}],"api_key":[{"current_key":"fake_key"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
+          fi
+
+      - name: 13. Run Android Debug Build (assembleDebug)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --stacktrace

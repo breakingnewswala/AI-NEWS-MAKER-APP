@@ -67,6 +67,17 @@ try {
       fs.copyFileSync(srcFile, destFile);
     }
   }
+  // Safeguard news database fallback snapshot from root public into web_studio
+  const rootPubNews = path.resolve(rootDir, 'public', 'news_database.json');
+  if (fs.existsSync(rootPubNews)) {
+    const raw = fs.readFileSync(rootPubNews, 'utf-8');
+    try {
+      if (JSON.parse(raw).length >= 5) {
+        fs.writeFileSync(path.resolve(__dirname, 'public', 'news_database.json'), raw, 'utf-8');
+        fs.writeFileSync(path.resolve(__dirname, 'news_database.json'), raw, 'utf-8');
+      }
+    } catch {}
+  }
   console.log('🔄 Synchronized root source files into web_studio before build.');
 } catch (syncErr) {
   console.warn('⚠️ Source sync warning:', syncErr.message);
@@ -177,31 +188,36 @@ targets.forEach((target) => {
   }
 });
 
-// 3. Copy server.cjs to root
+// 3. Copy server.cjs to root and web_studio
 const rootServerCjs = path.resolve(rootDir, 'server.cjs');
+const studioServerCjs = path.resolve(__dirname, 'server.cjs');
 const distServerCjs = path.resolve(distDir, 'server.cjs');
 if (fs.existsSync(distServerCjs)) {
   try {
     fs.copyFileSync(distServerCjs, rootServerCjs);
-    console.log(` ✅ Updated root server.cjs`);
+    fs.copyFileSync(distServerCjs, studioServerCjs);
+    console.log(` ✅ Updated root server.cjs and web_studio/server.cjs`);
   } catch (err) {
-    console.log(` ⚠️ Could not update root server.cjs directly:`, err.message);
+    console.log(` ⚠️ Could not update server.cjs directly:`, err.message);
   }
 }
 
-// 4. Ensure latest news_database.json is everywhere
-const dbPath = path.resolve(rootDir, 'news_database.json');
-if (fs.existsSync(dbPath)) {
-  const rawDb = fs.readFileSync(dbPath, 'utf-8');
+// 4. Ensure published public news_database.json is synchronized across client bundles
+const pubDbPath = path.resolve(rootDir, 'public', 'news_database.json');
+if (fs.existsSync(pubDbPath)) {
+  const rawDb = fs.readFileSync(pubDbPath, 'utf-8');
   try {
-    fs.writeFileSync(path.resolve(__dirname, 'news_database.json'), rawDb, 'utf-8');
+    const list = JSON.parse(rawDb);
+    if (Array.isArray(list) && list.length >= 5) {
+      fs.writeFileSync(path.resolve(__dirname, 'news_database.json'), rawDb, 'utf-8');
+      targets.forEach((target) => {
+        try {
+          fs.writeFileSync(path.join(target, 'news_database.json'), rawDb, 'utf-8');
+        } catch {}
+      });
+      console.log(' ✅ Synchronized published news_database.json across all bundles');
+    }
   } catch {}
-  targets.forEach((target) => {
-    try {
-      fs.writeFileSync(path.join(target, 'news_database.json'), rawDb, 'utf-8');
-    } catch {}
-  });
-  console.log(' ✅ Synchronized news_database.json across all bundles');
 
   // 4b. Ensure latest rss_sources_database.json is everywhere and sanitized
   const rssPath = path.resolve(rootDir, 'rss_sources_database.json');
@@ -317,10 +333,12 @@ if (fs.existsSync(dbPath)) {
     });
   }
 
-  // 7. Generate and synchronize RSS 2.0 Feed (rss.xml) from news_database.json
+  // 7. Generate and synchronize RSS 2.0 Feed (rss.xml) from published news in public/news_database.json
   try {
-    const posts = JSON.parse(rawDb);
-    if (Array.isArray(posts) && posts.length > 0) {
+    const pubNewsPath = path.resolve(rootDir, 'public', 'news_database.json');
+    if (fs.existsSync(pubNewsPath)) {
+      const posts = JSON.parse(fs.readFileSync(pubNewsPath, 'utf-8'));
+      if (Array.isArray(posts) && posts.length > 0) {
       const siteUrl = 'https://www.ainewsmaker.online';
       const itemsXml = posts.map((post) => {
         const pubDate = post.timestamp ? new Date(post.timestamp).toUTCString() : new Date().toUTCString();
@@ -363,6 +381,7 @@ ${itemsXml}
       fs.writeFileSync(path.join(distDir, 'rss.xml'), rssContent, 'utf-8');
       console.log(' ✅ Generated and synchronized rss.xml feed across all bundles');
     }
+  }
   } catch (rssErr) {
     console.warn(' ⚠️ Could not generate rss.xml:', rssErr.message);
   }

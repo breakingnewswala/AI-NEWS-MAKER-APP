@@ -12,6 +12,7 @@ import {
   getTitleSafeZone,
   validateCardBeforeDownload,
   WordToken,
+  resolveEffectiveHeadline,
 } from './canonicalLayoutEngine';
 import {
   drawOriginalHeader,
@@ -108,6 +109,39 @@ export const loadImage = async (
     return fallback;
   }
 
+  // Bug M: Robust load attempt with retry for mandatory assets
+  const maxAttempts = options?.isMandatory ? 2 : 1;
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await loadImageSingle(src, options, attempt);
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 350));
+      }
+    }
+  }
+
+  if (options?.isMandatory) {
+    throw lastError || new Error(
+      options.assetName
+        ? `अनिवार्य ${options.assetName} लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या पुनः चुनें।`
+        : 'अनिवार्य फ्रेम आर्टवर्क लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फ्रेम पुनः चुनें।'
+    );
+  }
+
+  const fallback = new Image();
+  fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
+  return fallback;
+};
+
+const loadImageSingle = async (
+  src: string,
+  options?: LoadImageOptions,
+  attempt: number = 1
+): Promise<HTMLImageElement> => {
   let effectiveSrc = src.trim();
 
   // If effectiveSrc starts with /api/proxy-image, resolve absolute API url
@@ -370,7 +404,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   targetFontSize = Math.max(isQuote ? 44 : 52, Math.min(isQuote ? 64 : 80, targetFontSize));
 
   ctx.save();
-  const rawHeadline = cleanHeadlineText(card.formattedHeadline || card.headline || '');
+  const effectiveHeadlineText = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
+  const rawHeadline = cleanHeadlineText(effectiveHeadlineText || '');
   const manualLines = rawHeadline.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (manualLines.length >= 2) {
     for (let s = targetFontSize; s >= 36; s -= 2) {
@@ -416,7 +451,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   const headlineLineHeight = Math.round(headlineFontSize * 1.34);
   const headlineLines = getHeadlineLines(
     ctx,
-    card.formattedHeadline || card.headline,
+    effectiveHeadlineText,
     card.highlightWords,
     maxHeadlineWidth,
     headlineFontSize
@@ -1678,11 +1713,18 @@ async function drawAuthoritativeDynamicFrameCanvas(
         : (df.id === 'df_testing_1_double'
           ? 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&q=80'
           : undefined));
-      const rawMainPhoto = (card.images?.main || (card as any).photoUrl || (card as any).testSamplePhotoUrl || '').trim();
-      const rawSecondPhoto = (card.secondaryPhoto || card.images?.second || '').trim();
-      const src = sIdx === 0
-        ? (rawMainPhoto || defaultAsset)
-        : (rawSecondPhoto || defaultAsset || rawMainPhoto);
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const rawMainPhoto = (card.images?.main || (card as any).photoUrl || (card as any).testSamplePhotoUrl || availablePhotos[0] || '').trim();
+      const slotSrc = sIdx === 0
+        ? rawMainPhoto
+        : sIdx === 1
+        ? ((card.secondaryPhoto || card.images?.second || availablePhotos[1] || '').trim())
+        : sIdx === 2
+        ? ((card.images?.third || availablePhotos[2] || '').trim())
+        : sIdx === 3
+        ? ((card.images?.fourth || availablePhotos[3] || '').trim())
+        : ((availablePhotos[sIdx] || '').trim());
+      const src = slotSrc || defaultAsset || (sIdx === 0 ? rawMainPhoto : undefined);
       if (!src) continue;
 
       try {
@@ -1701,21 +1743,13 @@ async function drawAuthoritativeDynamicFrameCanvas(
         }
         ctx.clip();
 
-        // Object-fit: cover
-        const imgAspect = pImg.width / pImg.height;
-        const slotAspect = slotW / slotH;
-        let dw = slotW;
-        let dh = slotH;
-        let dx = slotX;
-        let dy = slotY;
-        if (imgAspect > slotAspect) {
-          dw = slotH * imgAspect;
-          dx = slotX - (dw - slotW) / 2;
-        } else {
-          dh = slotW / imgAspect;
-          dy = slotY - (dh - slotH) / 2;
-        }
-        ctx.drawImage(pImg, dx, dy, dw, dh);
+        // Object-fit: cover with per-slot pan and zoom (Bug Group D)
+        const slotKey = slot.id || (sIdx === 0 ? 'main' : sIdx === 1 ? 'second' : sIdx === 2 ? 'third' : sIdx === 3 ? 'fourth' : `slot_${sIdx}`);
+        const crop = card.imagePositions?.[slotKey] || (sIdx === 0 ? (card.imagePositions?.main || card.imagePosition) : undefined) || { x: 50, y: 50, zoom: 1 };
+        const cropX = (crop.x ?? 50) / 100;
+        const cropY = (crop.y ?? 50) / 100;
+        const zoom = Math.max(1, crop.zoom ?? 1);
+        drawImageCover(ctx, pImg, slotX, slotY, slotW, slotH, cropX, cropY, zoom, canvasFilterStr);
         ctx.restore();
       } catch (e) {
         console.warn('Photo slot load error:', e);
@@ -1747,29 +1781,30 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
-  // 3. LOGO
-  if (df.headerConfig?.showLogo) {
+  // 3. LOGO (Bug Group I1 & I2: Master Branding check & Logo scale)
+  if (df.headerConfig?.showLogo && card.showMasterBranding !== false) {
     const lRect = df.headerConfig.logoRect || { x: 5, y: 3.5, width: 22, height: 9 };
     const lx = (lRect.x / 100) * width;
     const ly = (lRect.y / 100) * height;
     const lw = (lRect.width / 100) * width;
     const lh = (lRect.height / 100) * height;
-    const resolvedLogoUrl = card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png';
+    const resolvedLogoUrl = card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png';
     const logoToDraw = customLogoImg || (resolvedLogoUrl ? await loadImage(resolvedLogoUrl).catch(() => null) : null);
     if (logoToDraw) {
       ctx.save();
       if (df.headerConfig.logoOpacity !== undefined) {
         ctx.globalAlpha = df.headerConfig.logoOpacity;
       }
+      const scaleMultiplier = (card.logoScale || 1.25) / 1.25;
       const lAspect = logoToDraw.width / logoToDraw.height;
-      let drawW = lw;
-      let drawH = lh;
+      let drawW = lw * scaleMultiplier;
+      let drawH = lh * scaleMultiplier;
       if (lAspect > lw / lh) {
-        drawH = lw / lAspect;
+        drawH = drawW / lAspect;
       } else {
-        drawW = lh * lAspect;
+        drawW = drawH * lAspect;
       }
-      ctx.drawImage(logoToDraw, lx + (lw - drawW) / 2, ly + (lh - drawH) / 2, drawW, drawH);
+      ctx.drawImage(logoToDraw, lx, ly + (lh - drawH) / 2, drawW, drawH);
       ctx.restore();
     }
   }
@@ -1802,17 +1837,14 @@ async function drawAuthoritativeDynamicFrameCanvas(
         ctx.save();
         const typo = df.headerConfig.typographyConfig;
         let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
-        let locColor = typo?.color || typo?.textColor || df.headerConfig.locationTextColor;
-        if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
-          locColor = '#000000';
-        }
+        let locColor = typo?.color || typo?.textColor || df.headerConfig.locationTextColor || '#000000';
         const cleanLocText = formatCleanLocationText(card.location || '');
         ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
         const measuredTextW = ctx.measureText(cleanLocText).width;
 
-        // Dynamic horizontal expansion: expand center destination width to fit text + 28px padding
-        const minCenterW = Math.max(10, bw - leftDestW - rightDestW);
-        const neededCenterW = measuredTextW + 36;
+        // Dynamic horizontal expansion: adapt center destination width nicely to fit text + 24px padding (Bug Group C1)
+        const minCenterW = Math.max(10, measuredTextW + 24);
+        const neededCenterW = Math.max(10, measuredTextW + 24);
         const midDestW = Math.max(minCenterW, neededCenterW);
         const maxBw = Math.max(bw, width - bx - 20);
         const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
@@ -1918,21 +1950,25 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
     }
 
+    let cImg: HTMLImageElement | null = null;
     if (calloutAsset) {
       try {
-        const cImg = await loadImage(calloutAsset);
-        const origW = cImg.naturalWidth || cImg.width || 480;
-        const origH = cImg.naturalHeight || cImg.height || 72;
-        const userScale = Math.max(0.8, Math.min(1.3, card.calloutScale ?? 1.0));
-        const scale = Math.min((cw * userScale) / origW, (ch * userScale) / origH);
-        const drawW = Math.round(origW * scale);
-        const drawH = Math.round(origH * scale);
-        const drawX = Math.round(cx + (cw - drawW) / 2);
-        const drawY = Math.round(cy + (ch - drawH) / 2);
-        ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
+        cImg = await loadImage(calloutAsset);
       } catch (e) {
-        console.warn('Callout asset load warning:', e);
+        console.warn('Callout asset load warning, falling back to vector banner:', e);
       }
+    }
+
+    if (cImg && cImg.naturalWidth > 1 && cImg.naturalHeight > 1) {
+      const origW = cImg.naturalWidth || cImg.width || 480;
+      const origH = cImg.naturalHeight || cImg.height || 72;
+      const userScale = Math.max(0.8, Math.min(1.3, card.calloutScale ?? 1.0));
+      const scale = Math.min((cw * userScale) / origW, (ch * userScale) / origH);
+      const drawW = Math.round(origW * scale);
+      const drawH = Math.round(origH * scale);
+      const drawX = Math.round(cx + (cw - drawW) / 2);
+      const drawY = Math.round(cy + (ch - drawH) / 2);
+      ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
     } else {
       ctx.fillStyle = df.fullStoryCalloutConfig.bgColor || '#DC2626';
       ctx.strokeStyle = df.fullStoryCalloutConfig.borderColor || '#FACC15';
@@ -2053,13 +2089,13 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.restore();
   }
 
-  const rawHeadline = card.formattedHeadline || card.headline;
+  const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
   if (rawHeadline && rawHeadline.trim().length > 0) {
     ctx.save();
     const fontFam = card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || textSlot.fontFamily || 'Baloo 2';
-    const textColor = textSlot.textColor || card.headlineTextColor || card.textColor || '#FFFFFF';
+    const textColor = card.headlineTextColor || card.textColor || (df as any).quoteTextColor || textSlot.textColor || '#FFFFFF';
     const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black' || textColor.toLowerCase() === '#0f172a';
-    const highlightColor = card.highlightColor || (isBlack ? '#DC2626' : '#FFE600');
+    const highlightColor = card.highlightColor || (df as any).primaryHighlightColor || (df as any).quoteHighlightColor || textSlot.highlightColor || (isBlack ? '#DC2626' : '#FFE600');
 
     const align = (textSlot.alignment || 'center') as CanvasTextAlign;
     const paddedHw = Math.max(50, hw - 30);
@@ -2069,7 +2105,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       fontFamily: fontFam,
       aspectRatio: card.aspectRatio || df.aspectRatio || '4:5',
       customBounds: { x: hx + 15, y: hy, width: paddedHw, height: hh },
-      customMaxLines: 4,
+      customMaxLines: (textSlot.maxLines || 4), // customMaxLines: 4 fallback
       userFontSize: card.headlineFontSize,
       alignment: align as any,
       ctx,
@@ -2602,7 +2638,7 @@ async function drawGraphic001Canvas(
 
   if (hasUserHeadline) {
     // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#FFE600';
 
@@ -3138,7 +3174,7 @@ async function drawGraphic002Canvas(
     ctx.restore();
   } else {
     ctx.save();
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#EA580C';
 
@@ -3525,7 +3561,7 @@ async function drawGraphic003Canvas(
     ctx.font = '700 34px "Baloo 2", sans-serif';
     ctx.fillText('(अधिकतम 3 लाइन में, आपके टेक्स्ट के अनुसार)', width / 2, headlineAreaCenterY + 84);
   } else {
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#FFE600';
 
@@ -3713,7 +3749,7 @@ async function drawGraphic004Canvas(
     ctx.font = '900 102px "Baloo 2", sans-serif';
     ctx.fillText('गिरफ्तार कर पेश करो!', width / 2, 272);
   } else {
-    const rawHeadline = card.formattedHeadline || card.headline;
+    const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#DC2626';
 
@@ -4208,7 +4244,7 @@ async function drawMorningJacketContent(
   const hlLineH = Math.round(hlFontSize * 1.36);
 
   // Raw headline containing [yellow]...[/yellow] tags
-  const rawHeadline = card.formattedHeadline || card.headline || '';
+  const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
 
   ctx.font = `900 ${hlFontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
   const tokenLines = getHeadlineLines(

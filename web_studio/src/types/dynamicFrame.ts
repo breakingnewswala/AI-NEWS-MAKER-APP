@@ -201,6 +201,8 @@ export interface HeaderConfig {
   locationBadgeMode?: LocationBadgeMode;
   manualLocationAsset?: string; // Uploaded manual badge skin or static badge
   locationBadgeAssetId?: string;
+  maxLocationWords?: number; // Bug Group C3: Master Admin per-frame limit (2, 3, 4, default 3)
+  supportsLocationBadgeBackgroundColor?: boolean; // Bug Group C4: Conditional BG color support
   sliceConfig?: { leftWidthPct: number; rightWidthPct: number; centerMinPct?: number };
   textRegion?: NormalizedRect;
   typographyConfig?: {
@@ -463,6 +465,11 @@ export interface DynamicFrameTemplate {
   sliceConfig?: { leftWidthPct: number; rightWidthPct: number; centerMinPct: number };
   visibilitySettings?: FrameVisibilitySettings;
   customFooterId?: string;
+  primaryHighlightColor?: string; // Bug Group B: Master Admin Primary Highlight Color
+  quoteHighlightColor?: string; // Bug Group B: Text/Quote Highlight Color
+  quoteTextColor?: string; // Bug Group B: Text/Quote Text Color
+  maxLocationWords?: number; // Bug Group C3: Location word limit
+  supportsLocationBadgeBackgroundColor?: boolean; // Bug Group C4: Conditional BG color support
 }
 
 export interface UserStoryPreference {

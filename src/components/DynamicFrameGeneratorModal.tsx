@@ -2030,16 +2030,23 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       previewImageUrl: primaryBackgroundAsset || sampleImage,
       primaryFooterColor,
       bannedFooterColor,
-      isTestFrame: designCategory === 'TEST_FRAMES',
-      approvalStatus: designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : 'APPROVED',
+      isTestFrame: initialFrame?.id ? (initialFrame.isTestFrame ?? (designCategory === 'TEST_FRAMES')) : (designCategory === 'TEST_FRAMES'),
+      approvalStatus: initialFrame?.id ? (initialFrame.approvalStatus || (designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : 'APPROVED')) : (designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : 'APPROVED'),
       designCategory: isVideo ? 'Special Frames' : (designCategory || 'Regular Frames'),
       allowedPlans,
-      publicationStatus: designCategory === 'TEST_FRAMES' ? 'draft' : 'published',
-      createdBy: currentUser?.email || 'breakingnewswala.com@gmail.com',
+      publicationStatus: initialFrame?.id ? (initialFrame.publicationStatus || (designCategory === 'TEST_FRAMES' ? 'draft' : 'published')) : (designCategory === 'TEST_FRAMES' ? 'draft' : 'published'),
+      createdBy: currentUser?.email || initialFrame?.createdBy || 'breakingnewswala.com@gmail.com',
       version: finalVersion,
+      primaryHighlightColor: textSlots[0]?.highlightColor || '#FFE600',
+      quoteHighlightColor: textSlots[0]?.highlightColor || '#FFE600',
+      quoteTextColor: textSlots[0]?.textColor || '#FFFFFF',
+      maxLocationWords: headerConfig.maxLocationWords || 3,
+      supportsLocationBadgeBackgroundColor: headerConfig.supportsLocationBadgeBackgroundColor !== false,
       headerConfig: {
         ...headerConfig,
         manualLocationAsset: videoLocationBadgeUrl || headerConfig.manualLocationAsset,
+        maxLocationWords: headerConfig.maxLocationWords || 3,
+        supportsLocationBadgeBackgroundColor: headerConfig.supportsLocationBadgeBackgroundColor !== false,
       },
       footerConfig: {
         ...footerConfig,
@@ -2059,6 +2066,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               fontSize: typographyFontSize || ts.fontSize,
               fontWeight: typographyFontWeight || ts.fontWeight,
               textColor: ts.textColor || '#FFFFFF',
+              highlightColor: ts.highlightColor || '#FFE600',
               backgroundColor: ts.backgroundColor === '#B91C1C' ? 'transparent' : ts.backgroundColor || 'transparent',
             }
           : ts
@@ -3171,6 +3179,39 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 </div>
                               </div>
                             )}
+
+                            {/* Bug Group C3: Location Word Limit Configuration */}
+                            <div className="mt-2.5 flex items-center justify-between bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                              <div>
+                                <span className="text-[10px] text-slate-200 font-semibold block">लोकेशन शब्द सीमा (Word Limit):</span>
+                                <span className="text-[9px] text-slate-400">अधिकतम शब्दों की सीमा (2, 3, या 4 शब्द)</span>
+                              </div>
+                              <select
+                                value={headerConfig.maxLocationWords || 3}
+                                onChange={(e) => setHeaderConfig({ ...headerConfig, maxLocationWords: parseInt(e.target.value) || 3 })}
+                                className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-white"
+                              >
+                                <option value={2}>अधिकतम 2 शब्द</option>
+                                <option value={3}>अधिकतम 3 शब्द (डिफ़ॉल्ट)</option>
+                                <option value={4}>अधिकतम 4 शब्द</option>
+                              </select>
+                            </div>
+
+                            {/* Bug Group C4: Supports Location Background Color Toggle */}
+                            <div className="mt-2 flex items-center justify-between bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                              <div>
+                                <span className="text-[10px] text-slate-200 font-semibold block">डायनामिक बैकग्राउंड रंग अनुमति:</span>
+                                <span className="text-[9px] text-slate-400">क्या यूज़र स्टूडियो में रंग बदल सकता है? (स्टैटिक बैज के लिए बंद रखें)</span>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={headerConfig.supportsLocationBadgeBackgroundColor !== false}
+                                  onChange={(e) => setHeaderConfig({ ...headerConfig, supportsLocationBadgeBackgroundColor: e.target.checked })}
+                                  className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                                />
+                              </label>
+                            </div>
                           </div>
                         </div>
                       );
@@ -4613,6 +4654,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         <option value={1}>1 लाइन</option>
                         <option value={2}>2 लाइन</option>
                         <option value={3}>3 लाइन</option>
+                        <option value={4}>4 लाइन</option>
                       </select>
                     </div>
 
@@ -4628,6 +4670,33 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         }
                         className="w-full h-8 bg-slate-900 rounded cursor-pointer"
                       />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-0.5">प्राइमरी हाईलाइट रंग</label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="color"
+                          value={slot.highlightColor || '#FFE600'}
+                          onChange={(e) =>
+                            setTextSlots((prev) =>
+                              prev.map((s) => (s.id === slot.id ? { ...s, highlightColor: e.target.value } : s))
+                            )
+                          }
+                          className="w-10 h-8 bg-slate-900 rounded cursor-pointer shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={slot.highlightColor || '#FFE600'}
+                          onChange={(e) =>
+                            setTextSlots((prev) =>
+                              prev.map((s) => (s.id === slot.id ? { ...s, highlightColor: e.target.value } : s))
+                            )
+                          }
+                          placeholder="#FFE600"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-xs"
+                        />
+                      </div>
                     </div>
 
                     <div>

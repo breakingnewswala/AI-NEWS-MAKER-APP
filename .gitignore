@@ -128,9 +128,16 @@ verify_*.cjs
 whatsapp_news_sessions_db.json
 whatsapp_templates_db.json
 !scripts/test_headline_regen_coin_pricing.cjs
+!scripts/verify_react_mount.cjs
+!scripts/test_grid_exports.cjs
+!scripts/test_studio_multigrid_workflow.cjs
+!scripts/test_studio_e2e_multigrid.cjs
+!scripts/recapture_all_audit_evidence.cjs
 
 # Temporary audit & test output
 .tmp_chrome_audit/
+.tmp_chrome_*/
+.tmp_*
 actual_audit_verified_export.*
 actual_export_audit.*
 

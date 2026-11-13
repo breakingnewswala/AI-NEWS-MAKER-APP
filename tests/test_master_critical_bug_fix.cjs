@@ -74,7 +74,7 @@ runTest('Test 3 — Master Admin Story Callout Control (Bug B)', () => {
 // -------------------------------------------------------------
 runTest('Test 4 — Headline Four-Line Rendering & Safe Clipping Bounds (Bug C)', () => {
   const engineSrc = fs.readFileSync('src/lib/canonicalLayoutEngine.ts', 'utf8');
-  assert(engineSrc.includes('Math.min(4, Math.max(3'), 'canonicalLayoutEngine must allow up to 4 lines');
+  assert(engineSrc.includes('Math.min(4, Math.max(1') || engineSrc.includes('Math.min(4, Math.max(3'), 'canonicalLayoutEngine must allow 1 to 4 lines');
   assert(engineSrc.includes('down to 20px so text fits cleanly within maxLines'), 'canonicalLayoutEngine must step down to 20px');
 
   const canvasExporterSrc = fs.readFileSync('src/lib/CanvasExporter.ts', 'utf8');

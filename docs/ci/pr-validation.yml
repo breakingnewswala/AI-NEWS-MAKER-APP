@@ -1,0 +1,62 @@
+name: PR #6 Full Validation & Runtime Acceptance CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - fix/frame-config-profile-i18n-multigrid
+
+jobs:
+  validate:
+    name: Full Regression, Security & Browser Acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: 1. Install root dependencies
+        run: npm install --legacy-peer-deps --no-audit
+
+      - name: 2. Install web_studio dependencies
+        run: npm --prefix web_studio install --legacy-peer-deps --no-audit
+
+      - name: 3 & 4. Build Root application & synchronize Web Studio
+        run: node web_studio/build_and_sync.js
+
+      - name: Verify Chrome installation
+        run: |
+          which google-chrome || true
+          google-chrome --version || true
+
+      - name: 5. Run Phase 2 Frame Config & i18n Suite (17/17)
+        run: node tests/test_phase2_frame_config_i18n_multigrid.cjs
+
+      - name: 6. Run Master Frame Generator & Photo Studio Suite (17/17)
+        run: node tests/test_frame_generator_and_photo_studio_rendering.cjs
+
+      - name: 7. Run Security Blocker & RBAC Suite (32/32)
+        run: node tests/test_blocker_remediation.cjs
+
+      - name: 8. Run Remediation Acceptance Suite (34/34)
+        run: node tests/test_remediation_acceptance.cjs
+
+      - name: 9. Run React Studio Mount Verification
+        run: node scripts/verify_react_mount.cjs
+
+      - name: 10. Run Canvas Multi-Grid Render Suite
+        run: node scripts/test_grid_exports.cjs
+
+      - name: 11. Run Genuine Headless Chrome Multi-Grid E2E Suite
+        run: node scripts/test_studio_e2e_multigrid.cjs
+        env:
+          CHROME_BIN: /usr/bin/google-chrome

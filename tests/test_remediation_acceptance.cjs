@@ -2,11 +2,14 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawn, execSync } = require('child_process');
 
 const PROJECT_DIR = process.env.PROJECT_DIR || path.resolve(__dirname, '..');
 const PORT = 5058;
 const REDIRECT_PORT = 5059;
+// Cryptographically random ephemeral secret strictly generated per test run (isolated, never inherits process.env.SESSION_SECRET)
+const TEST_SESSION_SECRET = crypto.randomBytes(32).toString('hex');
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -82,6 +85,7 @@ async function runTests() {
       ...process.env,
       PORT: String(PORT),
       NODE_ENV: 'production',
+      SESSION_SECRET: TEST_SESSION_SECRET,
       DYNAMIC_FRAMES_DB_FILE: path.join(__dirname, 'fixtures', 'test_dynamic_frames.json'),
       ASSET_LIBRARIES_DB_FILE: path.join(__dirname, 'fixtures', 'test_asset_libraries.json'),
       DELETED_FRAMES_TOMBSTONE_FILE: path.join(__dirname, 'fixtures', 'test_deleted_frames_tombstone.json'),
@@ -175,13 +179,11 @@ async function runTests() {
     console.log('\n--- 2. Testing Frame Category, Approval & Publication Decoupling ---');
 
     function createAdminToken() {
-      const crypto = require('crypto');
-      const secret = process.env.SESSION_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
       const payload = {
-        userId: "usr_627265616b69",
-        email: "breakingnewswala.com@gmail.com",
+        userId: "usr_test_synthetic_admin",
+        email: "test.admin@synthetic.local",
         role: "superadmin",
-        username: "Master Admin",
+        username: "Test Synthetic SuperAdmin",
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 86400,
       };
@@ -189,7 +191,7 @@ async function runTests() {
       const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
       const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
       const signature = crypto
-        .createHmac("sha256", secret)
+        .createHmac("sha256", TEST_SESSION_SECRET)
         .update(`${encodedHeader}.${encodedPayload}`)
         .digest("base64url");
       return `${encodedHeader}.${encodedPayload}.${signature}`;

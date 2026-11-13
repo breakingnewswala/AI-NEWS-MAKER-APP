@@ -1,0 +1,259 @@
+{
+  "name": "projects/ai-news-maker-app/databases/ai-studio-ainewsmakerapp-dc75889d-179d-4f39-b479-76519c8874bd/documents/system_config/deleted_assets_tombstones",
+  "fields": {
+    "updatedAt": {
+      "integerValue": "1794571323397"
+    },
+    "tombstones": {
+      "arrayValue": {
+        "values": [
+          {
+            "stringValue": "loc_badge_red_pin"
+          },
+          {
+            "stringValue": "loc_badge_blue_modern"
+          },
+          {
+            "stringValue": "loc_badge_gold_vip"
+          },
+          {
+            "stringValue": "loc_badge_dark_glass"
+          },
+          {
+            "stringValue": "callout_yellow_banner"
+          },
+          {
+            "stringValue": "callout_crimson_strip"
+          },
+          {
+            "stringValue": "callout_neon_blue_tag"
+          },
+          {
+            "stringValue": "suvichar_sunrise_morning"
+          },
+          {
+            "stringValue": "suvichar_spiritual_temple"
+          },
+          {
+            "stringValue": "suvichar_motivation_mountain"
+          },
+          {
+            "stringValue": "suvichar_crimson_velvet"
+          },
+          {
+            "stringValue": "asset_1794292462482_06ktq"
+          },
+          {
+            "stringValue": "asset_1794292462451_n8uw6"
+          },
+          {
+            "stringValue": "asset_1794460278386_9v2u1"
+          },
+          {
+            "stringValue": "asset_1794461622087_ihb1x"
+          },
+          {
+            "stringValue": "asset_1794461622075_zkw85"
+          },
+          {
+            "stringValue": "asset_1794461880075_th1cn"
+          },
+          {
+            "stringValue": "asset_1794461880060_npuyu"
+          },
+          {
+            "stringValue": "asset_1794462949040_lw364"
+          },
+          {
+            "stringValue": "asset_1794462949026_bckpm"
+          },
+          {
+            "stringValue": "asset_1794463039868_ptmc8"
+          },
+          {
+            "stringValue": "asset_1794463039853_jngj6"
+          },
+          {
+            "stringValue": "asset_1794463082520_3dqhi"
+          },
+          {
+            "stringValue": "asset_1794463082507_yhbs9"
+          },
+          {
+            "stringValue": "asset_1794463161182_r4tdr"
+          },
+          {
+            "stringValue": "asset_1794463161170_ysm0v"
+          },
+          {
+            "stringValue": "asset_1794470525530_v1su7"
+          },
+          {
+            "stringValue": "asset_1794470525507_881t2"
+          },
+          {
+            "stringValue": "asset_1794470616934_8wpbp"
+          },
+          {
+            "stringValue": "asset_1794470616922_299cd"
+          },
+          {
+            "stringValue": "asset_1794471576105_hdklt"
+          },
+          {
+            "stringValue": "asset_1794471571602_kr9o6"
+          },
+          {
+            "stringValue": "asset_1794471859060_iy9jc"
+          },
+          {
+            "stringValue": "asset_1794471859047_twbg6"
+          },
+          {
+            "stringValue": "asset_1794474089842_5n9zq"
+          },
+          {
+            "stringValue": "asset_1794474089827_8zbuf"
+          },
+          {
+            "stringValue": "asset_1794474965978_scfyy"
+          },
+          {
+            "stringValue": "asset_1794474965954_ta7ls"
+          },
+          {
+            "stringValue": "asset_1794476878261_2m5rb"
+          },
+          {
+            "stringValue": "asset_1794476878249_tld65"
+          },
+          {
+            "stringValue": "asset_1794132101671_u0g9s"
+          },
+          {
+            "stringValue": "callout_bully_forward_story"
+          },
+          {
+            "stringValue": "asset_1794485238739_pxkhn"
+          },
+          {
+            "stringValue": "asset_1794485238728_zzxwm"
+          },
+          {
+            "stringValue": "footer_regular_gold"
+          },
+          {
+            "stringValue": "footer_social_blue"
+          },
+          {
+            "stringValue": "footer_branding_navy"
+          },
+          {
+            "stringValue": "footer_news_breaking_red"
+          },
+          {
+            "stringValue": "footer_special_vip_gold"
+          },
+          {
+            "stringValue": "asset_1794545180074_i00bn"
+          },
+          {
+            "stringValue": "asset_1794545180061_lb5dx"
+          },
+          {
+            "stringValue": "asset_1794550024618_xpvhn"
+          },
+          {
+            "stringValue": "asset_1794550024608_2nrsc"
+          },
+          {
+            "stringValue": "asset_1794551615778_pfmqo"
+          },
+          {
+            "stringValue": "asset_1794551615768_g00b3"
+          },
+          {
+            "stringValue": "asset_1794554162504_6xhua"
+          },
+          {
+            "stringValue": "asset_1794554162490_7euta"
+          },
+          {
+            "stringValue": "asset_1794555584778_kknqg"
+          },
+          {
+            "stringValue": "asset_1794555584765_q47jg"
+          },
+          {
+            "stringValue": "asset_1794557586602_7vjh0"
+          },
+          {
+            "stringValue": "asset_1794557586589_f7687"
+          },
+          {
+            "stringValue": "asset_1794557646313_5na88"
+          },
+          {
+            "stringValue": "asset_1794557646303_hqd5r"
+          },
+          {
+            "stringValue": "asset_1794560109480_3a42y"
+          },
+          {
+            "stringValue": "asset_1794560109469_6hbbq"
+          },
+          {
+            "stringValue": "asset_1794560821469_7wymo"
+          },
+          {
+            "stringValue": "asset_1794560821458_ddyu3"
+          },
+          {
+            "stringValue": "asset_1794562591901_wjqxj"
+          },
+          {
+            "stringValue": "asset_1794562591888_3d2td"
+          },
+          {
+            "stringValue": "asset_1794562644319_503f7"
+          },
+          {
+            "stringValue": "asset_1794562644307_phlb4"
+          },
+          {
+            "stringValue": "asset_1794564184319_p2hg1"
+          },
+          {
+            "stringValue": "asset_1794564184303_7mw63"
+          },
+          {
+            "stringValue": "asset_1794564924063_8ujip"
+          },
+          {
+            "stringValue": "asset_1794564924051_rzuol"
+          },
+          {
+            "stringValue": "asset_1794566262948_ow59u"
+          },
+          {
+            "stringValue": "asset_1794566262937_sgi54"
+          },
+          {
+            "stringValue": "asset_1794570753966_9d8gc"
+          },
+          {
+            "stringValue": "asset_1794570753951_pzuql"
+          },
+          {
+            "stringValue": "asset_1794571322802_dlskj"
+          },
+          {
+            "stringValue": "asset_1794571322791_2gggp"
+          }
+        ]
+      }
+    }
+  },
+  "createTime": "2026-11-12T05:11:18.568987Z",
+  "updateTime": "2026-11-13T12:02:03.539483Z"
+}
