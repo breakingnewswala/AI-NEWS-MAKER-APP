@@ -231,42 +231,57 @@ All 11 visual audit screenshots in `audit_screenshots/` were recaptured without 
 
 ---
 
-## 11. GitHub CI Workflow Configuration (Blocker 3)
+## 11. GitHub CI Workflow Configuration & CI Failure Remediation (Blocker 3)
 
-**Status:** **NOT ACTIVATED ON REMOTE REPOSITORY (Local Definition Complete)**
+**Status:** **ACTIVATED & REMEDIATED FOR GITHUB RUNNER EXECUTION**
 
-Prepared full CI workflow definition at `.github/workflows/pr6-full-validation.yml` and mirrored at `docs/ci/pr6-full-validation.yml`.
-The workflow runs across 10 validation stages:
-1. Environment checkout & Node.js 20 LTS setup.
-2. Web Studio clean build & sync (`node web_studio/build_and_sync.js`).
-3. Core build verification (`npm run build`).
-4. Test Suite 1: Blocker Remediation & Security (`tests/test_blocker_remediation.cjs`).
-5. Test Suite 2: Remediation Acceptance (`tests/test_remediation_acceptance.cjs`).
-6. Test Suite 3: Phase 2 Acceptance (`tests/test_phase2_frame_config_i18n_multigrid.cjs`).
-7. Test Suite 4: Master Frame Generator & Canvas (`tests/test_frame_generator_and_photo_studio_rendering.cjs`).
-8. Test Suite 5: Genuine Headless Chrome Multi-Grid E2E (`scripts/test_studio_e2e_multigrid.cjs`).
-9. Safety Invariants (Production template preservation & Android `applicationId` verification).
-10. Android assembleDebug build check.
-
-### GitHub Authentication Scope Limitation & Owner Action
-Inspection of the current GitHub CLI credentials via `gh auth status`:
-- **Scopes present:** `'gist'`, `'read:org'`, `'repo'`
-- **Missing scope:** `'workflow'`
-
-GitHub strictly refuses to allow personal access tokens or CLI sessions to create or update files under `.github/workflows/` without the `workflow` scope. In accordance with system security boundaries, no credential spoofing, interception, or unauthorized workarounds were attempted. The workflow file is safely retained locally in the workspace and mirrored at `docs/ci/pr6-full-validation.yml`.
-
-**Exact Owner Commands to Activate GitHub CI:**
-```bash
-# 1. Authorize the workflow scope on your GitHub account
-gh auth refresh -s workflow
-
-# 2. Add and push the workflow file to the remote feature branch
-git add .github/workflows/pr6-full-validation.yml
-git commit -m "ci: activate PR #6 full validation workflow"
-git push origin fix/frame-config-profile-i18n-multigrid
+### Initial Run Failure & Root Cause (Run #43426645128)
+When the Owner activated PR #6 CI with `workflow` scope permissions, the initial GitHub Actions run failed at the `actions/setup-node@v4` step with the following error:
 ```
-Once pushed, the live execution run will be accessible at:  
-`https://github.com/breakingnewswala/AI-NEWS-MAKER-APP/actions`
+##[error]Dependencies lock file is not found in /home/runner/work/AI-NEWS-MAKER-APP/AI-NEWS-MAKER-APP. Supported file patterns: package-lock.json,npm-shrinkwrap.json,yarn.lock
+```
+**Root Cause:** The project's `.gitignore` deliberately ignores `package-lock.json` and `**/package-lock.json`. Because no lock file is tracked in git, configuring `cache: npm` in `actions/setup-node@v4` caused the action to fail during pre-flight cache resolution.
+
+### Remediation Applied Across Workflow & Test Automation
+1. **Node.js Setup Correction:**
+   - Removed `cache: npm` from `actions/setup-node@v4` in `.github/workflows/pr6-full-validation.yml`.
+   - Preserved Node.js 22 LTS environment.
+   - Retained the project's supported dependency installation commands (`npm install --legacy-peer-deps --no-audit`).
+2. **Stable Chrome Browser Installation on Ubuntu Runner:**
+   - Integrated `browser-actions/setup-chrome@v1` with `chrome-version: stable`.
+   - Implemented cross-platform executable path detection with fallback to `/usr/bin/google-chrome`.
+   - Exported verified executable path to `$GITHUB_ENV` as `CHROME_BIN`.
+   - Added pre-test headless launch verification (`$CHROME_PATH --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom about:blank > /dev/null`).
+3. **Cross-Platform Test Script Hardening:**
+   - Updated `scripts/verify_react_mount.cjs`, `scripts/test_grid_exports.cjs`, and `scripts/test_studio_e2e_multigrid.cjs` to consume `process.env.CHROME_BIN` dynamically instead of using hard-coded Windows paths.
+   - Added `--disable-dev-shm-usage` and `--disable-setuid-sandbox` for headless execution in Linux runner environments.
+   - Replaced Windows-only `taskkill` calls with cross-platform process termination.
+   - Protected `audit_screenshots/` evidence by routing unit test exports in `scripts/test_grid_exports.cjs` to `.tmp_test_grid_exports/`.
+4. **Safety Invariants Automated Step:**
+   - Authored `tests/test_safety_invariants.cjs` to enforce production frame durability (`df_1794406067554_albmw`), zero tombstones, and Android `applicationId = "com.aistudio.ainewsmaker.hzwptx"`.
+5. **Android Debug Build Verification:**
+   - Added automated Android build verification step executing `./gradlew :app:assembleDebug --stacktrace`.
+   - Configured `actions/setup-java@v4` with Temurin JDK 17 (matching `compileOptions.sourceCompatibility = JavaVersion.VERSION_17`).
+   - Configured `android-actions/setup-android@v3` for SDK management and license acceptance.
+   - Ensured CI signing keystore and dummy google-services fallback are generated when running in headless CI environments.
+
+### Complete 13-Stage Validation Pipeline
+1. Checkout repository (`actions/checkout@v4`).
+2. Set up Node.js 22 (without lockfile cache requirement).
+3. Install root dependencies (`npm install --legacy-peer-deps --no-audit`).
+4. Install web_studio dependencies (`npm --prefix web_studio install --legacy-peer-deps --no-audit`).
+5. Build Root application & synchronize Web Studio (`node web_studio/build_and_sync.js`).
+6. Set up stable Chrome browser (`browser-actions/setup-chrome@v1`) & verify headless startup.
+7. Run Phase 2 Frame Config & i18n Suite (`tests/test_phase2_frame_config_i18n_multigrid.cjs` — 17/17).
+8. Run Master Frame Generator & Photo Studio Suite (`tests/test_frame_generator_and_photo_studio_rendering.cjs` — 17/17).
+9. Run Security Blocker & RBAC Suite (`tests/test_blocker_remediation.cjs` — 32/32).
+10. Run Remediation Acceptance Suite (`tests/test_remediation_acceptance.cjs` — 34/34).
+11. Run React Studio Mount Verification (`scripts/verify_react_mount.cjs`).
+12. Run Canvas Multi-Grid Render Suite (`scripts/test_grid_exports.cjs`).
+13. Run Genuine Headless Chrome Multi-Grid E2E Suite (`scripts/test_studio_e2e_multigrid.cjs`).
+14. Verify Safety Invariants (`tests/test_safety_invariants.cjs`).
+15. Set up JDK 17 & Android SDK.
+16. Run Android Debug Build (`./gradlew :app:assembleDebug`).
 
 ---
 

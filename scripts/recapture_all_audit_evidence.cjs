@@ -76,18 +76,42 @@ async function main() {
     if (!serverReady) throw new Error('Server not ready on port ' + PORT);
     console.log('✅ Server running and verified on port ' + PORT);
 
-    const chromePath = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+    // Cross-platform Chrome binary resolution
+    let chromePath = process.env.CHROME_BIN;
+    if (!chromePath) {
+      if (process.platform === 'win32') {
+        const paths = [
+          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+          'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+          path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe')
+        ];
+        chromePath = paths.find(p => fs.existsSync(p));
+      } else {
+        const linuxPaths = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium-browser', '/usr/bin/chromium'];
+        chromePath = linuxPaths.find(p => fs.existsSync(p));
+      }
+    }
+    if (!chromePath || !fs.existsSync(chromePath)) {
+      throw new Error('Chrome browser executable not found. Set CHROME_BIN.');
+    }
+
     const userDataDir = path.join(process.cwd(), '.tmp_chrome_recapture_v3');
     if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
 
-    console.log('2. Launching Chrome CDP on port ' + CDP_PORT + '...');
-    const chrome = spawn(chromePath, [
+    console.log('2. Launching Chrome CDP on port ' + CDP_PORT + ' at:', chromePath);
+    const chromeArgs = [
       '--headless=new',
       `--remote-debugging-port=${CDP_PORT}`,
       `--user-data-dir=${userDataDir}`,
       '--window-size=1920,1080',
-      `http://127.0.0.1:${PORT}/`
-    ]);
+      '--disable-gpu',
+      '--no-sandbox'
+    ];
+    if (process.platform !== 'win32') {
+      chromeArgs.push('--disable-dev-shm-usage', '--disable-setuid-sandbox');
+    }
+    chromeArgs.push(`http://127.0.0.1:${PORT}/`);
+    const chrome = spawn(chromePath, chromeArgs);
 
     let wsUrl = '';
     for (let i = 0; i < 25; i++) {

@@ -103,14 +103,18 @@ async function runRealWorkflowE2E() {
     try { fs.unlinkSync(path.join(downloadDir, f)); } catch {}
   });
 
-  const chrome = spawn(chromePath, [
+  const chromeArgs = [
     '--headless=new',
     '--remote-debugging-port=9245',
     '--disable-gpu',
     '--no-sandbox',
     '--hide-scrollbars',
     `--user-data-dir=${userDataDir}`
-  ]);
+  ];
+  if (process.platform !== 'win32') {
+    chromeArgs.push('--disable-dev-shm-usage', '--disable-setuid-sandbox');
+  }
+  const chrome = spawn(chromePath, chromeArgs);
 
   // Connect to Chrome Browser Target via /json/version
   let browserWsUrl = '';
@@ -786,10 +790,10 @@ async function runRealWorkflowE2E() {
   console.log('🎉 GENUINE USER WORKFLOW E2E: ALL ASSERTIONS PASSED (100%)');
   console.log('================================================================\n');
 
-  ws.close();
-  wsBrowser.close();
-  chrome.kill();
-  server.kill();
+  try { ws.close(); } catch {}
+  try { wsBrowser.close(); } catch {}
+  try { chrome.kill('SIGKILL'); } catch {}
+  try { server.kill('SIGKILL'); } catch {}
 
   // Cleanup downloads dir
   fs.rmSync(downloadDir, { recursive: true, force: true });

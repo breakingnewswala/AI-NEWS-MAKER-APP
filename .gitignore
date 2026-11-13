@@ -137,6 +137,7 @@ whatsapp_templates_db.json
 # Temporary audit & test output
 .tmp_chrome_audit/
 .tmp_chrome_*/
+.tmp_*
 actual_audit_verified_export.*
 actual_export_audit.*
 
