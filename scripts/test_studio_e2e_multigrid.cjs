@@ -60,7 +60,8 @@ async function runRealWorkflowE2E() {
       ...process.env,
       PORT: String(PORT),
       NODE_ENV: 'production',
-      SESSION_SECRET: ephemeralSecret
+      SESSION_SECRET: ephemeralSecret,
+      DELETED_FRAMES_TOMBSTONE_FILE: path.join(__dirname, '../tests/fixtures/test_deleted_frames_tombstone.json')
     },
     stdio: 'pipe'
   });

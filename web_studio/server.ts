@@ -11442,6 +11442,7 @@ function loadDeletedFramesTombstones(): Set<string> {
 
 async function getDurableFrameTombstones(): Promise<Set<string>> {
   const set = loadDeletedFramesTombstones();
+  const initialCount = set.size;
   if (centralDb && typeof centralDb.readDoc === "function") {
     try {
       const cloudDoc = await centralDb.readDoc("system_config", "deleted_frames_tombstones");
@@ -11461,9 +11462,14 @@ async function getDurableFrameTombstones(): Promise<Set<string>> {
   set.add('df_test_2222');
   PROTECTED_PRODUCTION_FRAME_IDS.forEach(id => set.delete(id));
   memoryFrameTombstones = set;
-  try {
-    fs.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
-  } catch {}
+  if (set.size !== initialCount) {
+    try {
+      const serialized = JSON.stringify(Array.from(set), null, 2);
+      const tmpPath = `${DELETED_FRAMES_TOMBSTONE_FILE}.tmp.${Date.now()}`;
+      fs.writeFileSync(tmpPath, serialized, "utf-8");
+      fs.renameSync(tmpPath, DELETED_FRAMES_TOMBSTONE_FILE);
+    } catch {}
+  }
   return set;
 }
 
@@ -11484,7 +11490,10 @@ async function recordDeletedFrameTombstone(id: string): Promise<boolean> {
   memoryFrameTombstones = tombstones;
 
   try {
-    fs.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    const serialized = JSON.stringify(Array.from(tombstones), null, 2);
+    const tmpPath = `${DELETED_FRAMES_TOMBSTONE_FILE}.tmp.${Date.now()}`;
+    fs.writeFileSync(tmpPath, serialized, "utf-8");
+    fs.renameSync(tmpPath, DELETED_FRAMES_TOMBSTONE_FILE);
   } catch (fsErr) {
     console.warn("Failed to write deleted_frames_tombstone.json:", fsErr);
   }

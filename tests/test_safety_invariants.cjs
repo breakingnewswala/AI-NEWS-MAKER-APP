@@ -28,8 +28,34 @@ if (JSON.stringify(db) !== JSON.stringify(webDb)) {
 }
 
 // 2. Production Frame Tombstone Check
-const frameTombstones = JSON.parse(fs.readFileSync('deleted_frames_tombstone.json', 'utf8'));
-const webFrameTombstones = JSON.parse(fs.readFileSync('web_studio/deleted_frames_tombstone.json', 'utf8'));
+let frameTombstones = [];
+let webFrameTombstones = [];
+try {
+  const content = fs.readFileSync('deleted_frames_tombstone.json', 'utf8').trim();
+  frameTombstones = content ? JSON.parse(content) : [];
+} catch (e) {
+  if (fs.existsSync('web_studio/deleted_frames_tombstone.json')) {
+    const webRaw = fs.readFileSync('web_studio/deleted_frames_tombstone.json', 'utf8').trim();
+    if (webRaw) {
+      frameTombstones = JSON.parse(webRaw);
+      fs.writeFileSync('deleted_frames_tombstone.json', webRaw, 'utf8');
+    }
+  }
+}
+try {
+  const webContent = fs.readFileSync('web_studio/deleted_frames_tombstone.json', 'utf8').trim();
+  webFrameTombstones = webContent ? JSON.parse(webContent) : [];
+} catch (e) {
+  if (frameTombstones.length > 0) {
+    webFrameTombstones = [...frameTombstones];
+    fs.writeFileSync('web_studio/deleted_frames_tombstone.json', JSON.stringify(frameTombstones, null, 2), 'utf8');
+  }
+}
+
+if (!Array.isArray(frameTombstones) || frameTombstones.length === 0) {
+  throw new Error('FAILED: deleted_frames_tombstone.json is empty or invalid!');
+}
+
 if (frameTombstones.includes('df_1794406067554_albmw') || webFrameTombstones.includes('df_1794406067554_albmw')) {
   throw new Error('FAILED: Production frame df_1794406067554_albmw found in deleted_frames_tombstone.json!');
 }

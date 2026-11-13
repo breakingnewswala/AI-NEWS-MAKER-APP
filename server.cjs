@@ -21441,6 +21441,7 @@ function loadDeletedFramesTombstones() {
 }
 async function getDurableFrameTombstones() {
   const set = loadDeletedFramesTombstones();
+  const initialCount = set.size;
   if (centralDb && typeof centralDb.readDoc === "function") {
     try {
       const cloudDoc = await centralDb.readDoc("system_config", "deleted_frames_tombstones");
@@ -21460,9 +21461,14 @@ async function getDurableFrameTombstones() {
   set.add("df_test_2222");
   PROTECTED_PRODUCTION_FRAME_IDS.forEach((id) => set.delete(id));
   memoryFrameTombstones = set;
-  try {
-    import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
-  } catch {
+  if (set.size !== initialCount) {
+    try {
+      const serialized = JSON.stringify(Array.from(set), null, 2);
+      const tmpPath = `${DELETED_FRAMES_TOMBSTONE_FILE}.tmp.${Date.now()}`;
+      import_fs2.default.writeFileSync(tmpPath, serialized, "utf-8");
+      import_fs2.default.renameSync(tmpPath, DELETED_FRAMES_TOMBSTONE_FILE);
+    } catch {
+    }
   }
   return set;
 }
@@ -21482,7 +21488,10 @@ async function recordDeletedFrameTombstone(id) {
   PROTECTED_PRODUCTION_FRAME_IDS.forEach((pid) => tombstones.delete(pid));
   memoryFrameTombstones = tombstones;
   try {
-    import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    const serialized = JSON.stringify(Array.from(tombstones), null, 2);
+    const tmpPath = `${DELETED_FRAMES_TOMBSTONE_FILE}.tmp.${Date.now()}`;
+    import_fs2.default.writeFileSync(tmpPath, serialized, "utf-8");
+    import_fs2.default.renameSync(tmpPath, DELETED_FRAMES_TOMBSTONE_FILE);
   } catch (fsErr) {
     console.warn("Failed to write deleted_frames_tombstone.json:", fsErr);
   }

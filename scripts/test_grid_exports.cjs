@@ -13,7 +13,12 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 async function main() {
   console.log('🚀 Starting server on port ' + PORT + '...');
   const server = spawn('node', ['dist/server.cjs'], {
-    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'production' },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      NODE_ENV: 'production',
+      DELETED_FRAMES_TOMBSTONE_FILE: path.join(__dirname, '../tests/fixtures/test_deleted_frames_tombstone.json')
+    },
     stdio: 'pipe'
   });
 
