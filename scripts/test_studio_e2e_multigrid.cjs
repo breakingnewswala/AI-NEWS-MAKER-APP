@@ -241,6 +241,10 @@ async function runRealWorkflowE2E() {
   ws.on('message', data => {
     try {
       const msg = JSON.parse(data.toString());
+      if (msg.method === 'Page.javascriptDialogOpening') {
+        console.log('[BROWSER DIALOG AUTO-ACCEPTED]', msg.params.message);
+        sendCdp('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+      }
       if (msg.method === 'Runtime.consoleAPICalled') {
         const text = msg.params.args.map(a => typeof a.value === 'object' ? JSON.stringify(a.value) : (a.value || a.description || '')).join(' ');
         if (!text.includes('Download the React DevTools') && !text.includes('vite:') && text.trim()) {
@@ -280,6 +284,13 @@ async function runRealWorkflowE2E() {
   await sendCdp('Runtime.enable');
   await sendCdp('DOM.enable');
   await sendCdp('Page.enable');
+  await sendCdp('Page.addScriptToEvaluateOnNewDocument', {
+    source: `
+      window.alert = function(msg) { console.log('[SUPPRESSED ALERT]', msg); };
+      window.confirm = function(msg) { console.log('[SUPPRESSED CONFIRM]', msg); return true; };
+      window.prompt = function(msg) { console.log('[SUPPRESSED PROMPT]', msg); return null; };
+    `
+  });
   await sendCdp('Emulation.setDeviceMetricsOverride', {
     width: 1920,
     height: 1080,
@@ -358,6 +369,9 @@ async function runRealWorkflowE2E() {
     await sendCdp('Runtime.evaluate', {
       expression: `
         (() => {
+          window.alert = function(msg) { console.log('[SUPPRESSED ALERT]', msg); };
+          window.confirm = function(msg) { console.log('[SUPPRESSED CONFIRM]', msg); return true; };
+          window.prompt = function(msg) { console.log('[SUPPRESSED PROMPT]', msg); return null; };
           document.querySelectorAll('.fixed.inset-0').forEach(e => e.remove());
           document.querySelectorAll('.toast, .notification-modal').forEach(e => e.remove());
         })()
@@ -681,6 +695,7 @@ async function runRealWorkflowE2E() {
   const step4Click2 = await clickEditorStep('4', 'फोटो');
   console.log('   Step 4 clicked:', step4Click2.clicked);
   await sleep(1000);
+  await dismissModals();
 
   console.log('2. Selecting Multi-Grid primary layout...');
   const selectMultiGridResult = await sendCdp('Runtime.evaluate', {
