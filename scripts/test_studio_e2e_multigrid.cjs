@@ -29,6 +29,23 @@ function createToken(payload = {}, secret = "ephemeral_test_secret") {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+let activeWs = null;
+let activeWsBrowser = null;
+let activeChrome = null;
+let activeServer = null;
+let activeDownloadDir = null;
+
+function cleanup() {
+  try { if (activeWs) activeWs.close(); } catch {}
+  try { if (activeWsBrowser) activeWsBrowser.close(); } catch {}
+  try { if (activeChrome) activeChrome.kill('SIGKILL'); } catch {}
+  try { if (activeServer) activeServer.kill('SIGKILL'); } catch {}
+  try { if (activeDownloadDir && fs.existsSync(activeDownloadDir)) fs.rmSync(activeDownloadDir, { recursive: true, force: true }); } catch {}
+}
+
+process.on('SIGINT', () => { cleanup(); process.exit(1); });
+process.on('SIGTERM', () => { cleanup(); process.exit(1); });
+
 async function runRealWorkflowE2E() {
   console.log('================================================================');
   console.log('🧪 GENUINE USER WORKFLOW E2E: Photo News Studio Multi-Grid');
@@ -47,6 +64,7 @@ async function runRealWorkflowE2E() {
     },
     stdio: 'pipe'
   });
+  activeServer = server;
 
   server.stderr.on('data', d => {
     const s = d.toString();
@@ -96,6 +114,7 @@ async function runRealWorkflowE2E() {
 
   const userDataDir = path.join(process.cwd(), '.tmp_chrome_e2e_real_workflow');
   const downloadDir = path.join(process.cwd(), '.tmp_e2e_downloads');
+  activeDownloadDir = downloadDir;
   if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
 
   // Clean any old downloads
@@ -109,12 +128,16 @@ async function runRealWorkflowE2E() {
     '--disable-gpu',
     '--no-sandbox',
     '--hide-scrollbars',
-    `--user-data-dir=${userDataDir}`
+    `--user-data-dir=${userDataDir}`,
+    'about:blank'
   ];
   if (process.platform !== 'win32') {
     chromeArgs.push('--disable-dev-shm-usage', '--disable-setuid-sandbox');
   }
   const chrome = spawn(chromePath, chromeArgs);
+  activeChrome = chrome;
+  if (chrome.stdout) chrome.stdout.on('data', () => {});
+  if (chrome.stderr) chrome.stderr.on('data', () => {});
 
   // Connect to Chrome Browser Target via /json/version
   let browserWsUrl = '';
@@ -138,17 +161,29 @@ async function runRealWorkflowE2E() {
   console.log('3. Connected to Chrome Browser Target:', browserWsUrl);
 
   const wsBrowser = new WebSocket(browserWsUrl);
-  await new Promise(r => wsBrowser.on('open', r));
+  activeWsBrowser = wsBrowser;
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('wsBrowser connection timeout')), 15000);
+    wsBrowser.on('open', () => { clearTimeout(t); resolve(); });
+    wsBrowser.on('error', (e) => { clearTimeout(t); reject(e); });
+  });
 
   let bid = 1;
   const sendBrowserCdp = (method, params = {}) => new Promise((resolve, reject) => {
     const cur = bid++;
+    const t = setTimeout(() => {
+      wsBrowser.off('message', handler);
+      reject(new Error(`sendBrowserCdp('${method}') timed out after 30s`));
+    }, 30000);
     const handler = d => {
-      const m = JSON.parse(d);
-      if (m.id === cur) {
-        wsBrowser.off('message', handler);
-        if (m.error) reject(m.error); else resolve(m.result);
-      }
+      try {
+        const m = JSON.parse(d);
+        if (m.id === cur) {
+          clearTimeout(t);
+          wsBrowser.off('message', handler);
+          if (m.error) reject(m.error); else resolve(m.result);
+        }
+      } catch {}
     };
     wsBrowser.on('message', handler);
     wsBrowser.send(JSON.stringify({ id: cur, method, params }));
@@ -162,17 +197,46 @@ async function runRealWorkflowE2E() {
   });
   console.log('   Browser download behavior enabled to:', downloadDir);
 
-  // Connect to Chrome Page Target via /json
-  const pages = await new Promise((res, rej) => {
-    http.get('http://127.0.0.1:9245/json', r => {
-      let buf = '';
-      r.on('data', d => buf += d);
-      r.on('end', () => res(JSON.parse(buf)));
-    }).on('error', rej);
-  });
+  // Connect to Chrome Page Target via /json/list (polling up to 30 attempts)
+  let pageWsUrl = '';
+  for (let i = 0; i < 30; i++) {
+    await sleep(400);
+    try {
+      const pages = await new Promise((res, rej) => {
+        http.get('http://127.0.0.1:9245/json/list', r => {
+          let buf = '';
+          r.on('data', d => buf += d);
+          r.on('end', () => {
+            try { res(JSON.parse(buf)); } catch (err) { rej(err); }
+          });
+        }).on('error', rej);
+      });
+      if (Array.isArray(pages) && pages.length > 0) {
+        const pageTarget = pages.find(p => p.type === 'page' && p.webSocketDebuggerUrl) || pages[0];
+        if (pageTarget && pageTarget.webSocketDebuggerUrl) {
+          pageWsUrl = pageTarget.webSocketDebuggerUrl;
+          break;
+        }
+      }
+    } catch {}
+  }
 
-  const ws = new WebSocket(pages[0].webSocketDebuggerUrl);
-  await new Promise(r => ws.on('open', r));
+  // Fallback: If no page target found via polling, create one via Browser CDP
+  if (!pageWsUrl) {
+    console.log('   Creating new page target via Browser CDP...');
+    const createRes = await sendBrowserCdp('Target.createTarget', { url: 'about:blank' });
+    const targetId = createRes?.targetId;
+    pageWsUrl = `ws://127.0.0.1:9245/devtools/page/${targetId}`;
+  }
+  console.log('4. Connected to Chrome Page Target:', pageWsUrl);
+
+  const ws = new WebSocket(pageWsUrl);
+  activeWs = ws;
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('Page WebSocket connection timeout')), 15000);
+    ws.on('open', () => { clearTimeout(t); resolve(); });
+    ws.on('error', (e) => { clearTimeout(t); reject(e); });
+  });
 
   ws.on('message', data => {
     try {
@@ -193,13 +257,20 @@ async function runRealWorkflowE2E() {
   function sendCdp(method, params = {}) {
     return new Promise((resolve, reject) => {
       const id = msgId++;
+      const t = setTimeout(() => {
+        ws.off('message', handler);
+        reject(new Error(`sendCdp('${method}') timed out after 30s`));
+      }, 30000);
       const handler = data => {
-        const msg = JSON.parse(data.toString());
-        if (msg.id === id) {
-          ws.off('message', handler);
-          if (msg.error) reject(msg.error);
-          else resolve(msg.result);
-        }
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.id === id) {
+            clearTimeout(t);
+            ws.off('message', handler);
+            if (msg.error) reject(msg.error);
+            else resolve(msg.result);
+          }
+        } catch {}
       };
       ws.on('message', handler);
       ws.send(JSON.stringify({ id, method, params }));
@@ -790,13 +861,7 @@ async function runRealWorkflowE2E() {
   console.log('🎉 GENUINE USER WORKFLOW E2E: ALL ASSERTIONS PASSED (100%)');
   console.log('================================================================\n');
 
-  try { ws.close(); } catch {}
-  try { wsBrowser.close(); } catch {}
-  try { chrome.kill('SIGKILL'); } catch {}
-  try { server.kill('SIGKILL'); } catch {}
-
-  // Cleanup downloads dir
-  fs.rmSync(downloadDir, { recursive: true, force: true });
+  cleanup();
 
   return {
     success: true,
@@ -817,5 +882,6 @@ async function runRealWorkflowE2E() {
 
 runRealWorkflowE2E().catch(e => {
   console.error('[E2E ERROR]', e);
+  cleanup();
   process.exit(1);
 });
