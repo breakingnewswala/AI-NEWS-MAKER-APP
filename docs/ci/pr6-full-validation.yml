@@ -96,7 +96,7 @@ jobs:
             keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
           if [ ! -f "app/google-services.json" ]; then
-            echo '{"project_info":{"project_number":"123456789","project_id":"ai-news-maker-app","storage_bucket":"ai-news-maker-app.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789:android:abcdef","android_client_info":{"package_name":"com.aistudio.ainewsmaker.hzwptx"}},"oauth_client":[],"api_key":[{"current_key":"fake_key"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
+            echo '{"project_info":{"project_number":"401033199805","project_id":"ai-news-maker-app","storage_bucket":"ai-news-maker-app.firebasestorage.app"},"client":[{"client_info":{"mobilesdk_app_id":"1:401033199805:android:abcdef","android_client_info":{"package_name":"com.aistudio.ainewsmaker.hzwptx"}},"oauth_client":[{"client_id":"401033199805-5hl33kn2tltd8n69sjmrlv21roe2880j.apps.googleusercontent.com","client_type":3}],"api_key":[{"current_key":"fake_key"}],"services":{}}],"configuration_version":"1"}' > app/google-services.json
           fi
 
       - name: 13. Run Android Debug Build (assembleDebug)
