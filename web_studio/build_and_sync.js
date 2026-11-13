@@ -67,6 +67,17 @@ try {
       fs.copyFileSync(srcFile, destFile);
     }
   }
+  // Safeguard news database fallback snapshot from root public into web_studio
+  const rootPubNews = path.resolve(rootDir, 'public', 'news_database.json');
+  if (fs.existsSync(rootPubNews)) {
+    const raw = fs.readFileSync(rootPubNews, 'utf-8');
+    try {
+      if (JSON.parse(raw).length >= 5) {
+        fs.writeFileSync(path.resolve(__dirname, 'public', 'news_database.json'), raw, 'utf-8');
+        fs.writeFileSync(path.resolve(__dirname, 'news_database.json'), raw, 'utf-8');
+      }
+    } catch {}
+  }
   console.log('🔄 Synchronized root source files into web_studio before build.');
 } catch (syncErr) {
   console.warn('⚠️ Source sync warning:', syncErr.message);
@@ -196,14 +207,17 @@ const pubDbPath = path.resolve(rootDir, 'public', 'news_database.json');
 if (fs.existsSync(pubDbPath)) {
   const rawDb = fs.readFileSync(pubDbPath, 'utf-8');
   try {
-    fs.writeFileSync(path.resolve(__dirname, 'news_database.json'), rawDb, 'utf-8');
+    const list = JSON.parse(rawDb);
+    if (Array.isArray(list) && list.length >= 5) {
+      fs.writeFileSync(path.resolve(__dirname, 'news_database.json'), rawDb, 'utf-8');
+      targets.forEach((target) => {
+        try {
+          fs.writeFileSync(path.join(target, 'news_database.json'), rawDb, 'utf-8');
+        } catch {}
+      });
+      console.log(' ✅ Synchronized published news_database.json across all bundles');
+    }
   } catch {}
-  targets.forEach((target) => {
-    try {
-      fs.writeFileSync(path.join(target, 'news_database.json'), rawDb, 'utf-8');
-    } catch {}
-  });
-  console.log(' ✅ Synchronized published news_database.json across all bundles');
 
   // 4b. Ensure latest rss_sources_database.json is everywhere and sanitized
   const rssPath = path.resolve(rootDir, 'rss_sources_database.json');
