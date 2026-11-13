@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-13T15:20:00.000Z",
+  "timestamp": "2026-11-13T10:21:49.672Z",
   "branch": "fix/frame-config-profile-i18n-multigrid",
   "commitSha": "5d6df8e0c04373c1a772ac0c047439c06c23f009",
   "validatedCodeSha": "5d6df8e0c04373c1a772ac0c047439c06c23f009",
@@ -12,10 +12,10 @@
     {
       "filename": "01_admin_notification_panel_hindi.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\01_admin_notification_panel_hindi.png",
-      "sizeBytes": 139569,
+      "sizeBytes": 139282,
       "width": 1920,
       "height": 1080,
-      "sha256": "20e6d9d9df3e7678b2f917e5d95e2b1f60393370a6f09f97f4bc6ce5ec2a84b6",
+      "sha256": "a8277bdc704bc9a878d48cd79e42582ee8ff8b94ef8372c9b96d88ab84dffd4b",
       "testCase": "Scenario 1 - Notification Devanagari",
       "scenarioDesc": "Admin Notification Panel rendering Devanagari notifications cleanly with zero mojibake, completely unobstructed by modal backdrops.",
       "status": "PASS"
@@ -23,10 +23,10 @@
     {
       "filename": "02_user_profile_hindi_channel.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\02_user_profile_hindi_channel.png",
-      "sizeBytes": 132875,
+      "sizeBytes": 133396,
       "width": 1920,
       "height": 1080,
-      "sha256": "c52b81b06d361e52818cacce623f8550073a17306f421b82f1cd3ebbcc24e16f",
+      "sha256": "ac1d0c2663851ca6b77871c1bfd120b2ace8c2a2e1bbc9cd97314cf4eff0f371",
       "testCase": "Scenario 2 - User Profile Unicode & Masked Phone",
       "scenarioDesc": "User Profile displaying Hindi full name 'मुख्य संपादक', Hindi channel 'ब्रेकिंग न्यूज़ वाला', and masked synthetic fixture phone '98765***** [SYNTHETIC TEST FIXTURE]' with locked indicator.",
       "status": "PASS"
@@ -34,10 +34,10 @@
     {
       "filename": "03_footer_master_admin_yellow_default.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\03_footer_master_admin_yellow_default.png",
-      "sizeBytes": 269466,
+      "sizeBytes": 269741,
       "width": 1920,
       "height": 1080,
-      "sha256": "1a832e887bec2356db4c8067d8c0240bb91e675b3d9c3daecc153202cd55692c",
+      "sha256": "475221db1b3090a2642990df01150ee691cc710467d5d5c9c699762f2fc19a85",
       "testCase": "Scenario 3 - Footer Yellow Default",
       "scenarioDesc": "Photo News Studio Step 6 showing Master Admin yellow default footer selection in preview and control panel unobstructed.",
       "status": "PASS"
@@ -45,10 +45,10 @@
     {
       "filename": "04_footer_allowed_alternate_color.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\04_footer_allowed_alternate_color.png",
-      "sizeBytes": 269305,
+      "sizeBytes": 269934,
       "width": 1920,
       "height": 1080,
-      "sha256": "e682b26d04757a2e519b5d94d931c72c568ca7cfc949014538bb1caa26c949a0",
+      "sha256": "01db9c0a36136bcf6c0156ee7a184052490a98e4bc091650e561339dcb2e4d3d",
       "testCase": "Scenario 4 - Footer Alternate Color",
       "scenarioDesc": "Photo News Studio Step 6 updated immediately with allowed alternate footer color in CardPreview unobstructed.",
       "status": "PASS"
@@ -56,10 +56,10 @@
     {
       "filename": "05_location_badge_geometry_centered.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\05_location_badge_geometry_centered.png",
-      "sizeBytes": 246019,
+      "sizeBytes": 245395,
       "width": 1920,
       "height": 1080,
-      "sha256": "c7e2732d6e24ddfee6dcb38620e9e305d6b69a8eb36bf8af9583c479e93dc4d7",
+      "sha256": "611fb98eb9d48e0348a51958938053eedd57bbc58d77afd18b7972a827dba7c3",
       "testCase": "Scenario 5 - Location Badge Centering",
       "scenarioDesc": "Location badge in CardPreview showing 'धार, मध्य प्रदेश' correctly centered with full percentage width and no text squashing.",
       "status": "PASS"
@@ -67,10 +67,10 @@
     {
       "filename": "06_story_callout_auto_visible.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\06_story_callout_auto_visible.png",
-      "sizeBytes": 280444,
+      "sizeBytes": 279911,
       "width": 1920,
       "height": 1080,
-      "sha256": "b634dbd164cf068b706125def2ded40e5ee4c755fd4bd6ebf8bff3a72e3d0263",
+      "sha256": "ed8bd9335b11c48dd93151253de4814d02bccd75ada30d2409abcfc5931d0ce6",
       "testCase": "Scenario 6 - Story Callout Default State",
       "scenarioDesc": "Story Callout visible automatically in CardPreview without manual toggle manipulation.",
       "status": "PASS"
@@ -78,10 +78,10 @@
     {
       "filename": "07_custom_frame_headline_preview.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\07_custom_frame_headline_preview.png",
-      "sizeBytes": 456044,
+      "sizeBytes": 456534,
       "width": 1920,
       "height": 1080,
-      "sha256": "22398596292439b30bbac24656139f8ffa32eb6f670b18c45395fb11836d01c2",
+      "sha256": "492348cb852a3c2cf18e420d661ff29f8683e9e30ed505bc446576fa975abd26",
       "testCase": "Scenario 7 - Headline Preview & Matras",
       "scenarioDesc": "CardPreview and Live Card correctly rendering active news headline 'दाहोद रेल लाइन परियोजना के तहत टीही-धार रेलखंड पर विद्युतीकरण का काम पूरा' with zero stale placeholder text and full Devanagari matra clearance.",
       "status": "PASS"
@@ -122,10 +122,10 @@
     {
       "filename": "11_mandatory_artwork_failure_recovery.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\11_mandatory_artwork_failure_recovery.png",
-      "sizeBytes": 461972,
+      "sizeBytes": 461784,
       "width": 1920,
       "height": 1080,
-      "sha256": "d915a2e9180f51ce5e6dc73e9d1c324143f1baee1df9f0d0a1180c8a22c323ae",
+      "sha256": "5ff035bed2a1298bff60c4a374d8c18ab11b311017a3b21c430193d6e225e9a2",
       "testCase": "Scenario 11 - Mandatory Asset Error & Recovery",
       "scenarioDesc": "Browser runtime execution confirming explicit Hindi exception throw and UI recovery notice when mandatory artwork fails.",
       "status": "PASS"

@@ -21411,6 +21411,10 @@ var FORBIDDEN_DYNAMIC_FRAME_IDS = /* @__PURE__ */ new Set([
   "df_story_9_16_standard",
   "df_story_9_16_breaking"
 ]);
+var PROTECTED_PRODUCTION_FRAME_IDS = /* @__PURE__ */ new Set([
+  "df_1794406067554_albmw"
+  // Authoritative production template - MUST NEVER BE TOMBSTONED OR DELETED
+]);
 var DELETED_FRAMES_TOMBSTONE_FILE = process.env.DELETED_FRAMES_TOMBSTONE_FILE || import_path2.default.join(process.cwd(), "deleted_frames_tombstone.json");
 var memoryFrameTombstones = null;
 function loadDeletedFramesTombstones() {
@@ -21432,6 +21436,7 @@ function loadDeletedFramesTombstones() {
   set.add("df_sample_2222");
   set.add("df_test_11111");
   set.add("df_test_2222");
+  PROTECTED_PRODUCTION_FRAME_IDS.forEach((id) => set.delete(id));
   return set;
 }
 async function getDurableFrameTombstones() {
@@ -21453,6 +21458,7 @@ async function getDurableFrameTombstones() {
   set.add("df_sample_2222");
   set.add("df_test_11111");
   set.add("df_test_2222");
+  PROTECTED_PRODUCTION_FRAME_IDS.forEach((id) => set.delete(id));
   memoryFrameTombstones = set;
   try {
     import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
@@ -21461,6 +21467,10 @@ async function getDurableFrameTombstones() {
   return set;
 }
 async function recordDeletedFrameTombstone(id) {
+  if (PROTECTED_PRODUCTION_FRAME_IDS.has(id)) {
+    console.warn(`[Tombstone] Refusing to tombstone protected production frame ${id}`);
+    return false;
+  }
   const tombstones = await getDurableFrameTombstones();
   tombstones.add(id);
   tombstones.add("11111");
@@ -21469,6 +21479,7 @@ async function recordDeletedFrameTombstone(id) {
   tombstones.add("df_sample_2222");
   tombstones.add("df_test_11111");
   tombstones.add("df_test_2222");
+  PROTECTED_PRODUCTION_FRAME_IDS.forEach((pid) => tombstones.delete(pid));
   memoryFrameTombstones = tombstones;
   try {
     import_fs2.default.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
@@ -21639,15 +21650,22 @@ async function saveSingleDynamicFrameAsync(rawFrame) {
       } catch {
       }
     }
-    const updated = [frame, ...local.filter((f) => f.id !== frame.id)];
-    import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    const isProdDb = DYNAMIC_FRAMES_DB_FILE.endsWith("dynamic_frames_db.json") && !DYNAMIC_FRAMES_DB_FILE.includes("fixtures");
+    if (isProdDb && (frame.isTestFrame || frame.designCategory === "TEST_FRAMES" || frame.id.startsWith("df_test_") || frame.id === "df_1794544360478_6ptot")) {
+    } else {
+      const updated = [frame, ...local.filter((f) => f.id !== frame.id)];
+      import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    }
   } catch (err) {
     console.warn("Failed to update dynamic_frames_db.json cache:", err);
   }
   return true;
 }
 async function deleteSingleDynamicFrameAsync(frameId) {
-  if (!frameId) return false;
+  if (!frameId || PROTECTED_PRODUCTION_FRAME_IDS.has(frameId)) {
+    console.warn(`[deleteSingleDynamicFrameAsync] Refusing to delete protected production frame ${frameId}`);
+    return false;
+  }
   await recordDeletedFrameTombstone(frameId);
   if (centralDb && typeof centralDb.deleteDoc === "function") {
     try {
@@ -21691,9 +21709,32 @@ async function loadDynamicFramesDatabaseAsync() {
       const listRes = await centralDb.listDocs("dynamic_frames", 300);
       if (listRes && listRes.success && Array.isArray(listRes.documents) && listRes.documents.length > 0) {
         frames = listRes.documents;
-        try {
-          import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
-        } catch {
+        const isProdDb = DYNAMIC_FRAMES_DB_FILE.endsWith("dynamic_frames_db.json") && !DYNAMIC_FRAMES_DB_FILE.includes("fixtures");
+        if (isProdDb) {
+          let existingProd = [];
+          if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+            try {
+              existingProd = JSON.parse(import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8"));
+            } catch {
+            }
+          }
+          const validProdFrames = frames.filter((f) => !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.id.startsWith("df_test_") && f.id !== "df_1794544360478_6ptot");
+          const hasAlbmw = validProdFrames.some((f) => f.id === "df_1794406067554_albmw");
+          if (!hasAlbmw) {
+            const albmwFromDisk = existingProd.find((f) => f.id === "df_1794406067554_albmw");
+            if (albmwFromDisk) validProdFrames.unshift(albmwFromDisk);
+          }
+          if (validProdFrames.length > 0) {
+            try {
+              import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(validProdFrames, null, 2), "utf-8");
+            } catch {
+            }
+          }
+        } else {
+          try {
+            import_fs2.default.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
+          } catch {
+          }
         }
       }
     } catch (e) {
@@ -21741,6 +21782,19 @@ async function loadDynamicFramesDatabaseAsync() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) frames = parsed;
     } catch {
+    }
+  } else if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    const hasAlbmw = frames.some((f) => f.id === "df_1794406067554_albmw");
+    if (!hasAlbmw) {
+      try {
+        const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const albmw = parsed.find((f) => f.id === "df_1794406067554_albmw");
+          if (albmw) frames.unshift(albmw);
+        }
+      } catch {
+      }
     }
   }
   return frames.filter(

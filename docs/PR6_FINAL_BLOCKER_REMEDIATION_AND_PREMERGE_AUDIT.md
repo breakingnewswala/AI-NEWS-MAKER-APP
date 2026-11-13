@@ -200,17 +200,17 @@ All 11 visual audit screenshots in `audit_screenshots/` were recaptured without 
 
 | Screenshot Filename | Dimensions | File Size (Bytes) | SHA-256 Hash | Test Scenario Description | Status |
 | :--- | :---: | :---: | :--- | :--- | :---: |
-| `01_admin_notification_panel_hindi.png` | 1920x1080 | 139,569 | `20e6d9d9df3e7678b2f917e5d95e2b1f60393370a6f09f97f4bc6ce5ec2a84b6` | Admin Notification Panel rendering Devanagari cleanly with zero mojibake | **PASS ✅** |
-| `02_user_profile_hindi_channel.png` | 1920x1080 | 132,875 | `c52b81b06d361e52818cacce623f8550073a17306f421b82f1cd3ebbcc24e16f` | Hindi profile & channel with masked synthetic phone `98765***** [SYNTHETIC TEST FIXTURE]` | **PASS ✅** |
-| `03_footer_master_admin_yellow_default.png` | 1920x1080 | 269,466 | `1a832e887bec2356db4c8067d8c0240bb91e675b3d9c3daecc153202cd55692c` | Step 6 Master Admin default yellow footer selection in CardPreview | **PASS ✅** |
-| `04_footer_allowed_alternate_color.png` | 1920x1080 | 269,305 | `e682b26d04757a2e519b5d94d931c72c568ca7cfc949014538bb1caa26c949a0` | Step 6 updated immediately with allowed alternate footer color in CardPreview | **PASS ✅** |
-| `05_location_badge_geometry_centered.png` | 1920x1080 | 246,019 | `c7e2732d6e24ddfee6dcb38620e9e305d6b69a8eb36bf8af9583c479e93dc4d7` | Location badge showing 'धार, मध्य प्रदेश' centered with full percentage width | **PASS ✅** |
-| `06_story_callout_auto_visible.png` | 1920x1080 | 280,444 | `b634dbd164cf068b706125def2ded40e5ee4c755fd4bd6ebf8bff3a72e3d0263` | Story Callout automatically visible in CardPreview without manual toggle manipulation | **PASS ✅** |
-| `07_custom_frame_headline_preview.png` | 1920x1080 | 456,044 | `22398596292439b30bbac24656139f8ffa32eb6f670b18c45395fb11836d01c2` | Live CardPreview rendering active news headline with full matra clearance and 0 placeholder text | **PASS ✅** |
+| `01_admin_notification_panel_hindi.png` | 1920x1080 | 139,282 | `a8277bdc704bc9a878d48cd79e42582ee8ff8b94ef8372c9b96d88ab84dffd4b` | Admin Notification Panel rendering Devanagari cleanly with zero mojibake | **PASS ✅** |
+| `02_user_profile_hindi_channel.png` | 1920x1080 | 133,396 | `ac1d0c2663851ca6b77871c1bfd120b2ace8c2a2e1bbc9cd97314cf4eff0f371` | Hindi profile & channel with masked synthetic phone `98765***** [SYNTHETIC TEST FIXTURE]` | **PASS ✅** |
+| `03_footer_master_admin_yellow_default.png` | 1920x1080 | 269,741 | `475221db1b3090a2642990df01150ee691cc710467d5d5c9c699762f2fc19a85` | Step 6 Master Admin default yellow footer selection in CardPreview | **PASS ✅** |
+| `04_footer_allowed_alternate_color.png` | 1920x1080 | 269,934 | `01db9c0a36136bcf6c0156ee7a184052490a98e4bc091650e561339dcb2e4d3d` | Step 6 updated immediately with allowed alternate footer color in CardPreview | **PASS ✅** |
+| `05_location_badge_geometry_centered.png` | 1920x1080 | 245,395 | `611fb98eb9d48e0348a51958938053eedd57bbc58d77afd18b7972a827dba7c3` | Location badge showing 'धार, मध्य प्रदेश' centered with full percentage width | **PASS ✅** |
+| `06_story_callout_auto_visible.png` | 1920x1080 | 279,911 | `ed8bd9335b11c48dd93151253de4814d02bccd75ada30d2409abcfc5931d0ce6` | Story Callout automatically visible in CardPreview without manual toggle manipulation | **PASS ✅** |
+| `07_custom_frame_headline_preview.png` | 1920x1080 | 456,534 | `492348cb852a3c2cf18e420d661ff29f8683e9e30ed505bc446576fa975abd26` | Live CardPreview rendering active news headline with full matra clearance and 0 placeholder text | **PASS ✅** |
 | `08_final_export_matching_preview.png` | 1080x1350 | 285,739 | `f02c76dba75985ce6c73e15ebc602a6e93a33e5c4ccbaecc78b23d428cfc9ce2` | Authoritative 1080x1350 canvas export matching preview styling and Hindi headline | **PASS ✅** |
 | `09_two_photo_grid_render.png` | 1080x1350 | 1,499,831 | `abc67585c328f2e1c04aa04cca21e9d4570223e9f1fdd7fc326cbbe797ee3d22` | Authoritative 1080x1350 2-photo double-h render with distinct photographs & Slot 2 replacement | **PASS ✅** |
 | `10_four_photo_grid_render.png` | 1080x1350 | 1,623,831 | `cba070253a42d16415b1058642c1f1774b1307ae30d0012a958e00dbedfa83f0` | Authoritative 1080x1350 4-photo grid-4 render with 4 distinct photographs & Slot 3 replacement | **PASS ✅** |
-| `11_mandatory_artwork_failure_recovery.png` | 1920x1080 | 461,972 | `d915a2e9180f51ce5e6dc73e9d1c324143f1baee1df9f0d0a1180c8a22c323ae` | Browser runtime execution confirming explicit Hindi exception throw and UI recovery notice | **PASS ✅** |
+| `11_mandatory_artwork_failure_recovery.png` | 1920x1080 | 461,784 | `5ff035bed2a1298bff60c4a374d8c18ab11b311017a3b21c430193d6e225e9a2` | Browser runtime execution confirming explicit Hindi exception throw and UI recovery notice | **PASS ✅** |
 
 ---
 

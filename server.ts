@@ -11409,6 +11409,10 @@ const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
   'df_story_9_16_breaking'
 ]);
 
+const PROTECTED_PRODUCTION_FRAME_IDS = new Set([
+  'df_1794406067554_albmw' // Authoritative production template - MUST NEVER BE TOMBSTONED OR DELETED
+]);
+
 const DELETED_FRAMES_TOMBSTONE_FILE = process.env.DELETED_FRAMES_TOMBSTONE_FILE || path.join(process.cwd(), "deleted_frames_tombstone.json");
 
 let memoryFrameTombstones: Set<string> | null = null;
@@ -11432,6 +11436,7 @@ function loadDeletedFramesTombstones(): Set<string> {
   set.add('df_sample_2222');
   set.add('df_test_11111');
   set.add('df_test_2222');
+  PROTECTED_PRODUCTION_FRAME_IDS.forEach(id => set.delete(id));
   return set;
 }
 
@@ -11454,6 +11459,7 @@ async function getDurableFrameTombstones(): Promise<Set<string>> {
   set.add('df_sample_2222');
   set.add('df_test_11111');
   set.add('df_test_2222');
+  PROTECTED_PRODUCTION_FRAME_IDS.forEach(id => set.delete(id));
   memoryFrameTombstones = set;
   try {
     fs.writeFileSync(DELETED_FRAMES_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
@@ -11462,6 +11468,10 @@ async function getDurableFrameTombstones(): Promise<Set<string>> {
 }
 
 async function recordDeletedFrameTombstone(id: string): Promise<boolean> {
+  if (PROTECTED_PRODUCTION_FRAME_IDS.has(id)) {
+    console.warn(`[Tombstone] Refusing to tombstone protected production frame ${id}`);
+    return false;
+  }
   const tombstones = await getDurableFrameTombstones();
   tombstones.add(id);
   tombstones.add('11111');
@@ -11470,6 +11480,7 @@ async function recordDeletedFrameTombstone(id: string): Promise<boolean> {
   tombstones.add('df_sample_2222');
   tombstones.add('df_test_11111');
   tombstones.add('df_test_2222');
+  PROTECTED_PRODUCTION_FRAME_IDS.forEach(pid => tombstones.delete(pid));
   memoryFrameTombstones = tombstones;
 
   try {
@@ -11657,8 +11668,13 @@ async function saveSingleDynamicFrameAsync(rawFrame: any): Promise<boolean> {
         if (Array.isArray(parsed)) local = parsed;
       } catch {}
     }
-    const updated = [frame, ...local.filter((f) => f.id !== frame.id)];
-    fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    const isProdDb = DYNAMIC_FRAMES_DB_FILE.endsWith('dynamic_frames_db.json') && !DYNAMIC_FRAMES_DB_FILE.includes('fixtures');
+    if (isProdDb && (frame.isTestFrame || frame.designCategory === 'TEST_FRAMES' || frame.id.startsWith('df_test_') || frame.id === 'df_1794544360478_6ptot')) {
+      // Security: Test frames are never inserted into production frame databases
+    } else {
+      const updated = [frame, ...local.filter((f) => f.id !== frame.id)];
+      fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    }
   } catch (err) {
     console.warn("Failed to update dynamic_frames_db.json cache:", err);
   }
@@ -11667,7 +11683,10 @@ async function saveSingleDynamicFrameAsync(rawFrame: any): Promise<boolean> {
 }
 
 async function deleteSingleDynamicFrameAsync(frameId: string): Promise<boolean> {
-  if (!frameId) return false;
+  if (!frameId || PROTECTED_PRODUCTION_FRAME_IDS.has(frameId)) {
+    console.warn(`[deleteSingleDynamicFrameAsync] Refusing to delete protected production frame ${frameId}`);
+    return false;
+  }
   await recordDeletedFrameTombstone(frameId);
 
   // 1. Delete individual frame document from Firestore collection 'dynamic_frames'
@@ -11719,10 +11738,29 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
       const listRes = await centralDb.listDocs("dynamic_frames", 300);
       if (listRes && listRes.success && Array.isArray(listRes.documents) && listRes.documents.length > 0) {
         frames = listRes.documents;
-        // Update local cache
-        try {
-          fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
-        } catch {}
+        // Update local cache safely without clobbering production frames or injecting test frames
+        const isProdDb = DYNAMIC_FRAMES_DB_FILE.endsWith('dynamic_frames_db.json') && !DYNAMIC_FRAMES_DB_FILE.includes('fixtures');
+        if (isProdDb) {
+          let existingProd: any[] = [];
+          if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+            try { existingProd = JSON.parse(fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, 'utf-8')); } catch {}
+          }
+          const validProdFrames = frames.filter(f => !f.isTestFrame && f.designCategory !== 'TEST_FRAMES' && !f.id.startsWith('df_test_') && f.id !== 'df_1794544360478_6ptot');
+          const hasAlbmw = validProdFrames.some(f => f.id === 'df_1794406067554_albmw');
+          if (!hasAlbmw) {
+            const albmwFromDisk = existingProd.find(f => f.id === 'df_1794406067554_albmw');
+            if (albmwFromDisk) validProdFrames.unshift(albmwFromDisk);
+          }
+          if (validProdFrames.length > 0) {
+            try {
+              fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(validProdFrames, null, 2), "utf-8");
+            } catch {}
+          }
+        } else {
+          try {
+            fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
+          } catch {}
+        }
       }
     } catch (e: any) {
       console.warn("[loadDynamicFramesDatabaseAsync] listDocs dynamic_frames warning:", e.message);
@@ -11778,6 +11816,19 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) frames = parsed;
     } catch {}
+  } else if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    // Ensure production template df_1794406067554_albmw is always preserved
+    const hasAlbmw = frames.some(f => f.id === 'df_1794406067554_albmw');
+    if (!hasAlbmw) {
+      try {
+        const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const albmw = parsed.find((f: any) => f.id === 'df_1794406067554_albmw');
+          if (albmw) frames.unshift(albmw);
+        }
+      } catch {}
+    }
   }
 
   return frames.filter(f =>
@@ -11791,9 +11842,13 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
 }
 
 async function saveDynamicFramesDatabaseAsync(frames: any[]): Promise<boolean> {
+  const isProdDb = DYNAMIC_FRAMES_DB_FILE.endsWith('dynamic_frames_db.json') && !DYNAMIC_FRAMES_DB_FILE.includes('fixtures');
   // Update local cache
   try {
-    fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(frames, null, 2), "utf-8");
+    const toSave = isProdDb
+      ? frames.filter(f => !f.isTestFrame && f.designCategory !== 'TEST_FRAMES' && !f.id.startsWith('df_test_') && f.id !== 'df_1794544360478_6ptot')
+      : frames;
+    fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(toSave, null, 2), "utf-8");
   } catch (err) {
     console.warn("Failed to write dynamic_frames_db.json:", err);
   }

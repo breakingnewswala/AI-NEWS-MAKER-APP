@@ -2,31 +2,31 @@
   {
     "id": "df_1794544360478_6ptot",
     "docId": "df_1794544360478_6ptot",
-    "description": "",
-    "aspectRatio": "4:5",
-    "primaryBackgroundAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/bg_df_1794544360478_6ptot_1794544360562_bb37b1f2.png",
-    "targetCategory": null,
-    "footerConfig": {
-      "bannedFooterColor": "",
-      "enforcePermanentFooter": true,
-      "primaryFooterColor": "#FFFFFF",
-      "footerAlignment": "center",
-      "footerWidthPct": 100,
-      "footerTextColor": "#000000",
-      "footerHeightRatio": 0.08,
-      "footerBgColor": "#FFFFFF"
-    },
-    "designCategory": "TEST_FRAMES",
-    "version": 1,
     "sliceConfig": {
-      "rightWidthPct": 0.15,
       "centerMinPct": 0.57,
-      "leftWidthPct": 0.28
+      "leftWidthPct": 0.28,
+      "rightWidthPct": 0.15
     },
-    "primaryBackgroundHex": "#0B1329",
-    "sampleReferenceUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/ref_df_1794544360478_6ptot_1794544371843_6091dffb.png",
-    "calloutAssetUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/callout_df_1794544360478_6ptot_1794544375692_7033c8ef.png",
-    "frameMode": "photo",
+    "bannedFooterColor": "",
+    "poweredByConfig": {
+      "bgColor": "rgba(15, 23, 42, 0.85)",
+      "text": "POWERED BY AINEWSMAKER.ONLINE",
+      "rotation": 0,
+      "rect": {
+        "x": 55,
+        "width": 42,
+        "height": 3.5,
+        "y": 92
+      },
+      "borderWidth": 1,
+      "enabled": false,
+      "alignment": "center",
+      "fontSize": 16,
+      "borderColor": "#3B82F6",
+      "opacity": 0.85,
+      "textColor": "#FFFFFF"
+    },
+    "targetCategory": null,
     "textSlots": [
       {
         "id": "slot_text_headline",
@@ -49,123 +49,32 @@
         "backgroundColor": "transparent"
       }
     ],
-    "watermarkConfig": {
-      "label": "AI GENERATED",
-      "watermarkStyle": "badge",
-      "textColor": "#FFFFFF",
-      "bgColor": "rgba(0,0,0,0.6)",
-      "enabled": true,
-      "customText": "AI GENERATED",
-      "fontSize": 14,
-      "rotation": 90,
-      "align": "center",
-      "opacity": 0.85,
-      "rect": {
-        "x": 83.4,
-        "y": 35.5,
-        "width": 21,
-        "height": 3.5
-      },
-      "type": "text",
-      "position": "right_edge"
-    },
-    "fullStoryCalloutConfig": {
-      "align": "center",
-      "borderWidth": 1,
-      "enabled": true,
-      "bgColor": "#DC2626",
-      "calloutVisibilityPolicy": "optional",
-      "text": "पूरी खबर डिस्क्रिप्शन में",
-      "textColor": "#FFFFFF",
-      "calloutAssetMode": "static_image",
-      "calloutAssetId": "callout_breaking_red",
-      "rect": {
-        "height": 7,
-        "x": 10,
-        "y": 83.3,
-        "width": 80
-      },
-      "showIcon": true,
-      "borderColor": "#FACC15",
-      "rotation": 0,
-      "fontSize": 18,
-      "manualCalloutAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/callout_df_1794544360478_6ptot_1794544378279_caeae54c.png"
-    },
-    "approvedAt": null,
-    "updatedAt": 1794544360478,
-    "createdBy": "breakingnewswala.com@gmail.com",
-    "headerConfig": {
-      "typographyConfig": {
-        "fontFamily": "Mukta",
-        "textAlign": "center",
-        "textColor": "#000000",
-        "fontSize": 40,
-        "fontWeight": "bold"
-      },
-      "locationStyle": "pill",
-      "locationAlign": "center",
-      "locationTextColor": "#000000",
-      "logoOpacity": 1,
-      "logoPosition": "top_left",
-      "dateOpacity": 0.9,
-      "manualLocationAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/loc_df_1794544360478_6ptot_1794544375962_3471fd20.png",
-      "sliceConfig": {
-        "rightWidthPct": 0.15,
-        "leftWidthPct": 0.28,
-        "centerMinPct": 0.57
-      },
-      "dateFontSize": 20,
-      "dateStampStyle": "only_text",
-      "showDate": true,
-      "dateRect": {
-        "width": 34,
-        "height": 3.2,
-        "y": 34.3,
-        "x": -11.4
-      },
-      "showLocation": true,
-      "logoAlign": "left",
-      "showLogo": true,
-      "dateRotation": 270,
-      "dateTextColor": "#CBD5E1",
-      "textRegion": {
-        "y": 26,
-        "x": 32,
-        "width": 55,
-        "height": 49
-      },
-      "locationBadgeMode": "static_image",
-      "dateFormat": "hi_full",
-      "locationBadgeAssetId": "asset_1794514930564_1ig7i",
-      "locationBgColor": "#DC2626",
-      "locationRect": {
-        "height": 4.5,
-        "width": 28,
-        "x": 68,
-        "y": 4
-      },
-      "logoScalePct": 100,
-      "locationShowIcon": true,
-      "dateBgColor": "rgba(0,0,0,0.7)",
-      "dateAlign": "center",
-      "logoPaddingPx": 4,
-      "locationFontSize": 24,
-      "logoRect": {
-        "x": 5,
-        "y": 3.5,
-        "width": 29.647058823529413,
-        "height": 10.411764705882353
+    "primaryBackgroundHex": "#0B1329",
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "calloutAssetId": "callout_breaking_red",
+    "publicationStatus": "draft",
+    "isLayoutLocked": false,
+    "photoSlots": [
+      {
+        "id": "slot_photo_1",
+        "name": "मुख्य फोटो (Main Photo)",
+        "slotType": "normal",
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 57.09470588235294
+        },
+        "required": true,
+        "cropMode": "cover",
+        "bgRemoval": false
       }
-    },
-    "safeZoneConfig": {
-      "enabled": true,
-      "headerSafeAreaPct": 12,
-      "topMarginPct": 4,
-      "bottomMarginPct": 8,
-      "leftMarginPct": 4,
-      "rightMarginPct": 4,
-      "footerSafeAreaPct": 8
-    },
+    ],
     "layers": [
       {
         "id": "layer_photo_slot_photo_1",
@@ -285,66 +194,68 @@
         "zIndex": 50
       }
     ],
-    "poweredByConfig": {
-      "bgColor": "rgba(15, 23, 42, 0.85)",
-      "borderColor": "#3B82F6",
-      "rotation": 0,
-      "fontSize": 16,
-      "rect": {
-        "height": 3.5,
-        "x": 55,
-        "y": 92,
-        "width": 42
-      },
-      "opacity": 0.85,
-      "borderWidth": 1,
-      "textColor": "#FFFFFF",
-      "enabled": false,
-      "text": "POWERED BY AINEWSMAKER.ONLINE",
-      "alignment": "center"
-    },
-    "activePhotoLayoutMode": "single",
-    "statementOptions": {
-      "cutoutPosition": "right",
-      "solidBackgroundHex": "#C81E1E",
-      "curatedBackgroundId": "bg_crimson_editorial",
-      "backgroundMode": "solid",
-      "aiPrompt": "गंभीर राजनीतिक वक्तव्य के लिए डार्क एलिगेंट बैकग्राउंड"
-    },
+    "isTestFrame": true,
+    "canvasHeight": 1350,
+    "name": "TEST 1",
+    "createdAt": 1794544360478,
     "primaryBackgroundMode": "image",
-    "ribbonConfig": {
-      "enabled": false,
-      "rect": {
-        "width": 70,
-        "height": 8,
-        "x": 15,
-        "y": 60
-      },
-      "scalePct": 70,
-      "ribbonId": "speed-blue-red",
-      "customRibbonUrl": "/assets/breaking_news_ribbon.svg",
-      "rotation": 0
+    "safeZoneConfig": {
+      "headerSafeAreaPct": 12,
+      "footerSafeAreaPct": 8,
+      "leftMarginPct": 4,
+      "bottomMarginPct": 8,
+      "enabled": true,
+      "topMarginPct": 4,
+      "rightMarginPct": 4
+    },
+    "designCategory": "TEST_FRAMES",
+    "sampleVideoUrl": "",
+    "locationBadgeAssetId": "asset_1794514930564_1ig7i",
+    "samplePhotoUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/photo_df_1794544360478_6ptot_1794544373683_fc7f16a3.png",
+    "approvedBy": null,
+    "typographyConfig": {
+      "primaryFontFamily": "Baloo 2",
+      "minFontSize": 24,
+      "fontWeight": "bold",
+      "primaryFontSize": 72
+    },
+    "frameMode": "photo",
+    "previewImageUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/preview_df_1794544360478_6ptot_1794544370299_a175930c.png",
+    "footerConfig": {
+      "footerTextColor": "#000000",
+      "footerHeightRatio": 0.08,
+      "footerBgColor": "#FFFFFF",
+      "footerWidthPct": 100,
+      "footerAlignment": "center",
+      "enforcePermanentFooter": true,
+      "primaryFooterColor": "#FFFFFF",
+      "bannedFooterColor": ""
     },
     "primaryFooterColor": "#FFFFFF",
-    "allowedPlans": [
-      "BASIC",
-      "ADVANCED",
-      "PRO",
-      "VIP DESK"
-    ],
-    "createdAt": 1794544360478,
-    "samplePhotoUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/photo_df_1794544360478_6ptot_1794544373683_fc7f16a3.png",
-    "publicationStatus": "draft",
-    "previewImageUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/preview_df_1794544360478_6ptot_1794544370299_a175930c.png",
-    "approvedBy": null,
-    "isLayoutLocked": false,
-    "bannedFooterColor": "",
-    "isTestFrame": true,
-    "frameType": "graphic",
-    "locationBadgeAssetId": "asset_1794514930564_1ig7i",
-    "approvalStatus": "PENDING_TEST",
-    "name": "TEST 1",
+    "updatedAt": 1794544360478,
     "canvasWidth": 1080,
+    "statementOptions": {
+      "aiPrompt": "गंभीर राजनीतिक वक्तव्य के लिए डार्क एलिगेंट बैकग्राउंड",
+      "cutoutPosition": "right",
+      "backgroundMode": "solid",
+      "curatedBackgroundId": "bg_crimson_editorial",
+      "solidBackgroundHex": "#C81E1E"
+    },
+    "version": 1,
+    "approvedAt": null,
+    "ribbonConfig": {
+      "customRibbonUrl": "/assets/breaking_news_ribbon.svg",
+      "enabled": false,
+      "rotation": 0,
+      "rect": {
+        "y": 60,
+        "x": 15,
+        "width": 70,
+        "height": 8
+      },
+      "ribbonId": "speed-blue-red",
+      "scalePct": 70
+    },
     "photoLayoutVariants": [
       {
         "id": "var_single",
@@ -555,31 +466,120 @@
         ]
       }
     ],
-    "isStatementFrame": false,
-    "canvasHeight": 1350,
-    "sampleVideoUrl": "",
-    "calloutAssetId": "callout_breaking_red",
-    "typographyConfig": {
-      "minFontSize": 24,
-      "primaryFontSize": 72,
-      "fontWeight": "bold",
-      "primaryFontFamily": "Baloo 2"
+    "watermarkConfig": {
+      "bgColor": "rgba(0,0,0,0.6)",
+      "textColor": "#FFFFFF",
+      "position": "right_edge",
+      "fontSize": 14,
+      "rect": {
+        "width": 21,
+        "y": 35.5,
+        "height": 3.5,
+        "x": 83.4
+      },
+      "opacity": 0.85,
+      "customText": "AI GENERATED",
+      "enabled": true,
+      "rotation": 90,
+      "type": "text",
+      "label": "AI GENERATED",
+      "watermarkStyle": "badge",
+      "align": "center"
     },
-    "photoSlots": [
-      {
-        "id": "slot_photo_1",
-        "name": "मुख्य फोटो (Main Photo)",
-        "slotType": "normal",
-        "rect": {
-          "x": 0,
-          "y": 0,
-          "width": 100,
-          "height": 57.09470588235294
-        },
-        "required": true,
-        "cropMode": "cover",
-        "bgRemoval": false
-      }
-    ]
+    "approvalStatus": "PENDING_TEST",
+    "aspectRatio": "4:5",
+    "primaryBackgroundAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/bg_df_1794544360478_6ptot_1794544360562_bb37b1f2.png",
+    "createdBy": "breakingnewswala.com@gmail.com",
+    "frameType": "graphic",
+    "sampleReferenceUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/ref_df_1794544360478_6ptot_1794544371843_6091dffb.png",
+    "activePhotoLayoutMode": "single",
+    "headerConfig": {
+      "showLogo": true,
+      "manualLocationAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/loc_df_1794544360478_6ptot_1794544375962_3471fd20.png",
+      "logoPosition": "top_left",
+      "dateFormat": "hi_full",
+      "dateStampStyle": "only_text",
+      "showDate": true,
+      "locationBadgeMode": "static_image",
+      "locationBgColor": "#DC2626",
+      "dateAlign": "center",
+      "locationBadgeAssetId": "asset_1794514930564_1ig7i",
+      "locationTextColor": "#000000",
+      "locationFontSize": 24,
+      "locationAlign": "center",
+      "showLocation": true,
+      "locationShowIcon": true,
+      "logoRect": {
+        "y": 3.5,
+        "x": 5,
+        "height": 10.411764705882353,
+        "width": 29.647058823529413
+      },
+      "logoOpacity": 1,
+      "locationStyle": "pill",
+      "dateFontSize": 20,
+      "logoPaddingPx": 4,
+      "locationRect": {
+        "y": 4,
+        "height": 4.5,
+        "width": 28,
+        "x": 68
+      },
+      "sliceConfig": {
+        "rightWidthPct": 0.15,
+        "leftWidthPct": 0.28,
+        "centerMinPct": 0.57
+      },
+      "textRegion": {
+        "width": 55,
+        "y": 26,
+        "height": 49,
+        "x": 32
+      },
+      "logoAlign": "left",
+      "dateBgColor": "rgba(0,0,0,0.7)",
+      "typographyConfig": {
+        "fontSize": 40,
+        "textColor": "#000000",
+        "fontWeight": "bold",
+        "fontFamily": "Mukta",
+        "textAlign": "center"
+      },
+      "logoScalePct": 100,
+      "dateOpacity": 0.9,
+      "dateTextColor": "#CBD5E1",
+      "dateRect": {
+        "width": 34,
+        "x": -11.4,
+        "height": 3.2,
+        "y": 34.3
+      },
+      "dateRotation": 270
+    },
+    "calloutAssetUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/callout_df_1794544360478_6ptot_1794544375692_7033c8ef.png",
+    "isStatementFrame": false,
+    "description": "",
+    "fullStoryCalloutConfig": {
+      "borderColor": "#FACC15",
+      "showIcon": true,
+      "textColor": "#FFFFFF",
+      "calloutVisibilityPolicy": "optional",
+      "calloutAssetId": "callout_breaking_red",
+      "fontSize": 18,
+      "align": "center",
+      "text": "पूरी खबर डिस्क्रिप्शन में",
+      "manualCalloutAsset": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/callout_df_1794544360478_6ptot_1794544378279_caeae54c.png",
+      "bgColor": "#DC2626",
+      "rotation": 0,
+      "calloutAssetMode": "static_image",
+      "enabled": true,
+      "rect": {
+        "height": 7,
+        "y": 83.3,
+        "width": 80,
+        "x": 10
+      },
+      "borderWidth": 1
+    }
   }
 ]
