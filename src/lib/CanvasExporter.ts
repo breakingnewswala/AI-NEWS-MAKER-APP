@@ -7144,6 +7144,124 @@ export async function drawThemeFooterBar(
     }
   };
 
+  const hasIndependentAlignments = Boolean(
+    customFooterConfig && (
+      customFooterConfig.channelNameAlign ||
+      customFooterConfig.websiteAlign ||
+      customFooterConfig.socialIconsAlign ||
+      customFooterConfig.phoneAlign
+    )
+  );
+
+  if (hasIndependentAlignments) {
+    const drawSocialBlock = (startX: number) => {
+      let x = startX;
+      for (const iconType of icons) {
+        drawOriginalIcon(x, iconType);
+        x += finalIconDiam + finalIconSpacing;
+      }
+      if (icons.length > 0) x += Math.round(6 * scale);
+      if (displayHandle) {
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = textColor;
+        ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
+        ctx.fillText(displayHandle, x, iconY);
+      }
+    };
+
+    const drawWebsiteBlock = (startX: number) => {
+      let x = startX;
+      const webImg = iconCache['website'];
+      if (webImg && webImg.naturalWidth > 0) {
+        ctx.drawImage(webImg, x, iconY - Math.round(finalWebIconWidth / 2), finalWebIconWidth, finalWebIconWidth);
+      } else {
+        const syncImg = new Image();
+        syncImg.src = SOCIAL_ICONS_DATA.website;
+        if (syncImg.complete && syncImg.naturalWidth > 0) {
+          ctx.drawImage(syncImg, x, iconY - Math.round(finalWebIconWidth / 2), finalWebIconWidth, finalWebIconWidth);
+        } else {
+          ctx.fillStyle = isLightBg ? '#2563EB' : '#60A5FA';
+          ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
+          ctx.fillText('🌐', x, iconY);
+        }
+      }
+      x += finalWebIconWidth + 6;
+      ctx.fillStyle = textColor;
+      ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
+      ctx.fillText(cleanWebsite, x, iconY);
+    };
+
+    const drawPhoneBlock = (startX: number) => {
+      let x = startX;
+      const phoneImg = iconCache['whatsapp'];
+      if (phoneImg && phoneImg.naturalWidth > 0) {
+        ctx.drawImage(phoneImg, x, iconY - Math.round(finalPhoneIconWidth / 2), finalPhoneIconWidth, finalPhoneIconWidth);
+      } else {
+        const syncImg = new Image();
+        syncImg.src = SOCIAL_ICONS_DATA.whatsapp;
+        if (syncImg.complete && syncImg.naturalWidth > 0) {
+          ctx.drawImage(syncImg, x, iconY - Math.round(finalPhoneIconWidth / 2), finalPhoneIconWidth, finalPhoneIconWidth);
+        } else {
+          ctx.fillStyle = isLightBg ? '#059669' : '#34D399';
+          ctx.font = `${Math.round(baseFontSize * 0.9)}px Arial, sans-serif`;
+          ctx.fillText('📞', x, iconY);
+        }
+      }
+      x += finalPhoneIconWidth + 6;
+      ctx.fillStyle = textColor;
+      ctx.font = `700 ${baseFontSize}px Arial, Helvetica, sans-serif`;
+      ctx.fillText(displayPhone, x, iconY);
+    };
+
+    const socialWidth = hasSocial ? finalIconsGroupWidth + (displayHandle ? Math.round(8 * scale) + finalHandleWidth : 0) : 0;
+    const websiteWidth = cleanWebsite ? finalWebIconWidth + 6 + finalWebTextWidth : 0;
+    const phoneWidth = cleanPhone ? finalPhoneIconWidth + 6 + finalPhoneTextWidth : 0;
+
+    const leftItems: { width: number; draw: (x: number) => void }[] = [];
+    const centerItems: { width: number; draw: (x: number) => void }[] = [];
+    const rightItems: { width: number; draw: (x: number) => void }[] = [];
+
+    const assignItem = (w: number, drawFn: (x: number) => void, align?: string) => {
+      if (w <= 0) return;
+      if (align === 'left') leftItems.push({ width: w, draw: drawFn });
+      else if (align === 'right') rightItems.push({ width: w, draw: drawFn });
+      else centerItems.push({ width: w, draw: drawFn });
+    };
+
+    assignItem(socialWidth, drawSocialBlock, customFooterConfig.socialIconsAlign || 'left');
+    assignItem(websiteWidth, drawWebsiteBlock, customFooterConfig.websiteAlign || 'center');
+    assignItem(phoneWidth, drawPhoneBlock, customFooterConfig.phoneAlign || 'right');
+
+    const itemSpacing = Math.round((customFooterConfig.elementSpacing || 16) * scale);
+
+    // Draw Left Items
+    let curL = safeMarginX;
+    for (const it of leftItems) {
+      it.draw(curL);
+      curL += it.width + itemSpacing;
+    }
+
+    // Draw Right Items
+    const totalRightW = rightItems.reduce((acc, it) => acc + it.width, 0) + Math.max(0, rightItems.length - 1) * itemSpacing;
+    let curR = width - safeMarginX - totalRightW;
+    for (const it of rightItems) {
+      it.draw(curR);
+      curR += it.width + itemSpacing;
+    }
+
+    // Draw Center Items
+    const totalCenterW = centerItems.reduce((acc, it) => acc + it.width, 0) + Math.max(0, centerItems.length - 1) * itemSpacing;
+    let curC = Math.round((width - totalCenterW) / 2);
+    for (const it of centerItems) {
+      it.draw(curC);
+      curC += it.width + itemSpacing;
+    }
+
+    ctx.restore();
+    return;
+  }
+
   // 1. Draw Social Icons
   for (const iconType of icons) {
     drawOriginalIcon(curX, iconType);

@@ -175,6 +175,154 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   const pyClass = isMulti ? 'py-2 sm:py-2.5' : 'py-2.5 sm:py-3';
   const gapClass = totalActive >= 3 ? 'gap-2.5 sm:gap-4' : 'gap-3.5 sm:gap-5.5';
 
+  const hasIndependentAlignments = Boolean(
+    footerConfig && (
+      footerConfig.channelNameAlign ||
+      footerConfig.websiteAlign ||
+      footerConfig.socialIconsAlign ||
+      footerConfig.phoneAlign
+    )
+  );
+
+  // Reusable Element Components
+  const channelNameElement = (footerConfig?.elements?.showChannelName && channelName && channelName.trim()) ? (
+    <span
+      key="ch"
+      style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+      className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
+    >
+      {channelName}
+    </span>
+  ) : null;
+
+  const socialElement = (socialIconsList.length > 0 || displayHandle) ? (
+    <div key="soc" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {socialIconsList.map((platform) => (
+          <img
+            key={platform}
+            src={getSocialIconSrc(platform)}
+            alt={platform}
+            className={`${iconSizeClass} object-contain shrink-0`}
+            style={{
+              width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+              height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+            }}
+            loading="eager"
+            onError={(e) => {
+              const target = e.currentTarget;
+              target.src = ICON_PATHS[platform] || `/assets/icons/${platform}.png`;
+            }}
+          />
+        ))}
+      </div>
+      {displayHandle && (
+        <span
+          style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+          className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
+        >
+          {displayHandle}
+        </span>
+      )}
+    </div>
+  ) : null;
+
+  const websiteElement = isWebsiteActive ? (
+    <div key="web" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <img
+        src={getSocialIconSrc('website')}
+        alt="Website"
+        className={`${iconSizeClass} object-contain shrink-0`}
+        style={{
+          width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+          height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+        }}
+        loading="eager"
+        onError={(e) => {
+          const target = e.currentTarget;
+          target.src = ICON_PATHS.website || '/assets/icons/website.png';
+        }}
+      />
+      <span
+        style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+        className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
+      >
+        {cleanWebsite}
+      </span>
+    </div>
+  ) : null;
+
+  const phoneElement = isWhatsappActive ? (
+    <div key="phone" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <img
+        src={getSocialIconSrc('whatsapp')}
+        alt="WhatsApp"
+        className={`${iconSizeClass} object-contain shrink-0`}
+        loading="eager"
+        onError={(e) => {
+          const target = e.currentTarget;
+          target.src = ICON_PATHS.whatsapp || '/assets/icons/whatsapp.png';
+        }}
+      />
+      <span
+        style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+        className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
+      >
+        {displayPhone}
+      </span>
+    </div>
+  ) : null;
+
+  if (hasIndependentAlignments) {
+    const leftEls: React.ReactNode[] = [];
+    const centerEls: React.ReactNode[] = [];
+    const rightEls: React.ReactNode[] = [];
+
+    const placeElement = (el: React.ReactNode, align?: 'left' | 'center' | 'right') => {
+      if (!el) return;
+      if (align === 'left') leftEls.push(el);
+      else if (align === 'right') rightEls.push(el);
+      else centerEls.push(el);
+    };
+
+    placeElement(channelNameElement, footerConfig?.channelNameAlign || 'left');
+    placeElement(socialElement, footerConfig?.socialIconsAlign || 'left');
+    placeElement(websiteElement, footerConfig?.websiteAlign || 'center');
+    placeElement(phoneElement, footerConfig?.phoneAlign || 'right');
+
+    return (
+      <div
+        style={{
+          backgroundColor: effectiveBgColor,
+          color: effectiveTextColor,
+          fontFamily: 'Arial, Helvetica, sans-serif',
+          paddingLeft: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : undefined,
+          paddingRight: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : undefined,
+        }}
+        className="h-full w-full border-t border-neutral-300/40 px-2 sm:px-4 py-0 flex items-center justify-between select-none overflow-hidden"
+      >
+        <div
+          className="flex items-center justify-start min-w-0 shrink-0"
+          style={{ gap: footerConfig?.elementSpacing ? `${footerConfig.elementSpacing}px` : undefined }}
+        >
+          {leftEls}
+        </div>
+        <div
+          className="flex items-center justify-center min-w-0 shrink-0"
+          style={{ gap: footerConfig?.elementSpacing ? `${footerConfig.elementSpacing}px` : undefined }}
+        >
+          {centerEls}
+        </div>
+        <div
+          className="flex items-center justify-end min-w-0 shrink-0"
+          style={{ gap: footerConfig?.elementSpacing ? `${footerConfig.elementSpacing}px` : undefined }}
+        >
+          {rightEls}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -196,41 +344,10 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         }}
       >
         {/* ELEMENT 1: Social Media Icons + Username (No circular crop, original shape preserved) */}
-        <div className="flex items-center justify-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Social Icons list: Original files, object-contain, natural shape */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {socialIconsList.map((platform) => (
-              <img
-                key={platform}
-                src={getSocialIconSrc(platform)}
-                alt={platform}
-                className={`${iconSizeClass} object-contain shrink-0`}
-                style={{
-                  width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
-                  height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
-                }}
-                loading="eager"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  target.src = ICON_PATHS[platform] || `/assets/icons/${platform}.png`;
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Social Username (only if present in user profile) */}
-          {displayHandle && (
-            <span
-              style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
-              className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
-            >
-              {displayHandle}
-            </span>
-          )}
-        </div>
+        {socialElement}
 
         {/* Partition Divider 1 (between Social and Website, OR Social and WhatsApp if Website is hidden) */}
-        {sepChar && (isWebsiteActive || isWhatsappActive) && (
+        {sepChar && (isWebsiteActive || isWhatsappActive) && socialElement && (
           <span
             style={{ color: separatorColor }}
             className="select-none text-xs sm:text-sm font-light opacity-50 shrink-0 px-0.5"
@@ -241,30 +358,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         )}
 
         {/* ELEMENT 2: Website Icon + Website Address (if enabled & provided) */}
-        {isWebsiteActive && (
-          <div className="flex items-center justify-center gap-1.5 sm:gap-2 shrink-0">
-            <img
-              src={getSocialIconSrc('website')}
-              alt="Website"
-              className={`${iconSizeClass} object-contain shrink-0`}
-              style={{
-                width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
-                height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
-              }}
-              loading="eager"
-              onError={(e) => {
-                const target = e.currentTarget;
-                target.src = ICON_PATHS.website || '/assets/icons/website.png';
-              }}
-            />
-            <span
-              style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
-              className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
-            >
-              {cleanWebsite}
-            </span>
-          </div>
-        )}
+        {websiteElement}
 
         {/* Partition Divider 2 (between Website and WhatsApp if both are active) */}
         {sepChar && isWebsiteActive && isWhatsappActive && (
@@ -278,26 +372,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         )}
 
         {/* ELEMENT 3: WhatsApp Icon + WhatsApp Number (if enabled & provided) */}
-        {isWhatsappActive && (
-          <div className="flex items-center justify-center gap-1.5 sm:gap-2 shrink-0">
-            <img
-              src={getSocialIconSrc('whatsapp')}
-              alt="WhatsApp"
-              className={`${iconSizeClass} object-contain shrink-0`}
-              loading="eager"
-              onError={(e) => {
-                const target = e.currentTarget;
-                target.src = ICON_PATHS.whatsapp || '/assets/icons/whatsapp.png';
-              }}
-            />
-            <span
-              style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
-              className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
-            >
-              {displayPhone}
-            </span>
-          </div>
-        )}
+        {phoneElement}
       </div>
     </div>
   );

@@ -111,6 +111,7 @@ export const DEFAULT_SOCIAL_ICONS = {
   facebook: true,
   instagram: true,
   twitter: false,
+  x: false,
   linkedin: false,
 };
 
@@ -261,13 +262,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               username: cloudP.username || prev.username,
               mobileNumber: cloudP.mobileNumber || cloudP.mobile || prev.mobileNumber,
               whatsappNumber: cloudP.whatsappNumber || cloudP.mobileNumber || prev.whatsappNumber || prev.mobileNumber || '',
+              whatsappDisplayNumber: cloudP.whatsappDisplayNumber || prev.whatsappDisplayNumber || cloudP.whatsappNumber || prev.whatsappNumber || '',
               websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
               district: cloudP.district || cloudP.location || prev.district || '',
               location: cloudP.location || cloudP.district || prev.location || '',
               state: cloudP.state || prev.state || '',
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
-              socialIcons: (cloudP.socialIcons && Object.keys(cloudP.socialIcons).length > 0) ? cloudP.socialIcons : (prev.socialIcons || DEFAULT_SOCIAL_ICONS),
+              socialIcons: (cloudP.socialIcons && Object.keys(cloudP.socialIcons).length > 0)
+                ? {
+                    ...cloudP.socialIcons,
+                    twitter: Boolean(cloudP.socialIcons.twitter ?? cloudP.socialIcons.x),
+                    x: Boolean(cloudP.socialIcons.x ?? cloudP.socialIcons.twitter),
+                    linkedin: Boolean(cloudP.socialIcons.linkedin),
+                  }
+                : (prev.socialIcons || DEFAULT_SOCIAL_ICONS),
               socialLinks: { ...DEFAULT_SOCIAL_LINKS, ...(cloudP.socialLinks || prev.socialLinks || {}) },
               customHeaderPng: cloudP.customHeaderPng !== undefined ? cloudP.customHeaderPng : (prev.customHeaderPng || ''),
               customFooterPng: cloudP.customFooterPng !== undefined ? cloudP.customFooterPng : (prev.customFooterPng || ''),
@@ -1205,7 +1214,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     });
   };
 
-  const [reporterDistrict, setReporterDistrict] = useState<string>(() => currentUser?.district || 'भोपाल / सेंट्रल डेस्क');
+  const [reporterDistrict, setReporterDistrict] = useState<string>(() => {
+    const raw = (currentUser?.district || channelProfile.district || channelProfile.location || '').trim();
+    return (raw && raw !== 'सेंट्रल डेस्क / भोपाल') ? raw : 'भोपाल';
+  });
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState<boolean>(false);
 
   // Sync profile when updated externally (e.g. from ChannelOnboardingModal)
@@ -1751,12 +1763,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
     const finalDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
+    const finalWhatsappDisplay = (channelProfile.whatsappDisplayNumber !== undefined && channelProfile.whatsappDisplayNumber.trim())
+      ? channelProfile.whatsappDisplayNumber.trim()
+      : finalPhone;
+
+    const syncedIcons = {
+      ...(channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS),
+      twitter: Boolean(channelProfile.socialIcons?.twitter ?? channelProfile.socialIcons?.x),
+      x: Boolean(channelProfile.socialIcons?.x ?? channelProfile.socialIcons?.twitter),
+      linkedin: Boolean(channelProfile.socialIcons?.linkedin),
+    };
 
     const updatedProfile = {
       ...channelProfile,
       district: finalDistrict,
       location: finalDistrict,
       whatsappNumber: finalPhone,
+      whatsappDisplayNumber: finalWhatsappDisplay,
       mobileNumber: finalPhone || channelProfile.mobileNumber,
       showWebsite: channelProfile.showWebsite !== false,
       showMobileNumber: channelProfile.showMobileNumber !== false,
@@ -1766,7 +1789,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       channelLogoType: channelProfile.channelLogoType || (channelProfile.channelLogoGifUrl ? 'gif' : 'png'),
       customHeaderPng: effectiveHeaderPng,
       customFooterPng: effectiveFooterPng,
-      socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
+      socialIcons: syncedIcons,
       socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
     };
 
@@ -1832,6 +1855,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         username: channelProfile.username,
         websiteUrl: channelProfile.websiteUrl,
         whatsappNumber: finalPhone,
+        whatsappDisplayNumber: finalWhatsappDisplay,
         mobileNumber: finalPhone || channelProfile.mobileNumber,
         showWebsite: channelProfile.showWebsite !== false,
         showMobileNumber: channelProfile.showMobileNumber !== false,
@@ -1846,7 +1870,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         state: channelProfile.state || '',
         address: channelProfile.address || '',
         pincode: channelProfile.pincode || '',
-        socialIcons: channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS,
+        socialIcons: syncedIcons,
         socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
         whatsappMarketingConsent: Boolean(channelProfile.whatsappMarketingConsent),
         whatsappMarketingConsentAt: channelProfile.whatsappMarketingConsent ? (channelProfile.whatsappMarketingConsentAt || new Date().toISOString()) : null,
@@ -3177,7 +3201,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     { id: 'twitter', label: 'X (Twitter)' },
                     { id: 'linkedin', label: 'LinkedIn' },
                   ].map((soc) => {
-                    const isChecked = Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)[soc.id]);
+                    const isChecked = (soc.id === 'twitter' || soc.id === 'x')
+                      ? Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)['twitter'] || ((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)['x'])
+                      : Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)[soc.id]);
                     return (
                       <button
                         key={soc.id}
@@ -3185,12 +3211,18 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         onClick={() => {
                           setChannelProfile((p) => {
                             const base = p || DEFAULT_PROFILE;
+                            const nextVal = !isChecked;
+                            const newIcons = {
+                              ...(base?.socialIcons || DEFAULT_SOCIAL_ICONS),
+                              [soc.id]: nextVal,
+                            };
+                            if (soc.id === 'twitter' || soc.id === 'x') {
+                              newIcons.twitter = nextVal;
+                              newIcons.x = nextVal;
+                            }
                             return {
                               ...base,
-                              socialIcons: {
-                                ...(base?.socialIcons || DEFAULT_SOCIAL_ICONS),
-                                [soc.id]: !isChecked,
-                              },
+                              socialIcons: newIcons,
                             };
                           });
                         }}

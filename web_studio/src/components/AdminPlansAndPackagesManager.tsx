@@ -118,7 +118,7 @@ import { UserTemplateManager } from './UserTemplateManager';
 import { AdminMusicLibraryManager } from './AdminMusicLibraryManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { getApiUrl, getAdminAuthHeaders } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeaders, ensureAuthToken } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -5271,7 +5271,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   disabled={isSyncingRss}
                   onClick={async () => {
                     setIsSyncingRss(true);
+                    setRssMsg(null);
                     try {
+                      await ensureAuthToken().catch(() => {});
                       const res = await syncAllSourcesLive();
                       setRssSources(getAdminRssSources());
                       if (res.success) {
@@ -5546,20 +5548,33 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 }
                 setIsConverting(true);
                 try {
+                  const targetChannel = converterChannel.trim() || (savedChannels[0] || 'Web Feed');
+                  const targetCat = converterCategory || 'देश';
                   const res = await fetch('/api/convert-web-to-rss', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       url: rawUrl,
-                      channelName: converterChannel.trim() || (savedChannels[0] || 'Web Feed'),
-                      category: converterCategory || 'देश',
+                      channelName: targetChannel,
+                      category: targetCat,
                     }),
                   });
                   const data = await res.json();
-                  if (!res.ok || !data.success) {
+                  if (!res.ok || !data.success || !data.feedUrl) {
                     setConverterError(data.error || 'वेबसाइट को RSS में बदलने में त्रुटि हुई।');
                   } else {
                     setConverterResult(data);
+                    // Automatic Single-Click Direct Save to RSS Links Dashboard
+                    addAdminRssSource(targetChannel, data.feedUrl, targetCat);
+                    setRssSources(getAdminRssSources());
+                    // Clear inputs immediately upon conversion & save
+                    setConverterUrl('');
+                    setConverterChannel('');
+                    // Auto-sync feeds in background to ingest latest news cards immediately
+                    syncAllSourcesLive().then(() => {
+                      setRssSources(getAdminRssSources());
+                      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+                    }).catch(() => {});
                   }
                 } catch (err: any) {
                   setConverterError(err.message || 'नेटवर्क त्रुटि हुई।');
@@ -5626,12 +5641,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 {isConverting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>वेबसाइट पार्स व RSS 2.0 जनरेट हो रहा है...</span>
+                    <span>कन्वर्ट व RSS स्रोत सुरक्षित हो रहा है...</span>
                   </>
                 ) : (
                   <>
                     <Zap className="w-4 h-4" />
-                    <span>RSS 2.0 Feed में कन्वर्ट करें</span>
+                    <span>कन्वर्ट व RSS स्रोत सुरक्षित करें (Convert & Save RSS Link)</span>
                   </>
                 )}
               </button>

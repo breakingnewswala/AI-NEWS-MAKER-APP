@@ -83,7 +83,10 @@ export function getAdminRssSources(): AdminRssSource[] {
 export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
   const deletedIds = getDeletedSourceIds();
   try {
-    const res = await fetch(getApiUrl('/api/admin/rss-sources'));
+    const token = await ensureAuthToken().catch(() => '');
+    const headers: Record<string, string> = { ...getAdminAuthHeaders() };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(getApiUrl('/api/admin/rss-sources'), { headers });
     if (res.ok) {
       const data = await res.json();
       const serverSources = (data && data.success && Array.isArray(data.sources)) ? data.sources : [];
@@ -654,7 +657,10 @@ export const DEFAULT_PRESET_CHANNELS: string[] = [
 
 export async function fetchAdminChannelsFromBackend(): Promise<CanonicalChannelItem[]> {
   try {
-    const res = await fetch(getApiUrl('/api/admin/channels'));
+    const token = await ensureAuthToken().catch(() => '');
+    const headers: Record<string, string> = { ...getAdminAuthHeaders() };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(getApiUrl('/api/admin/channels'), { headers });
     if (res.ok) {
       const data = await res.json();
       const serverChannels = (data && data.success && Array.isArray(data.channels)) ? data.channels : [];
