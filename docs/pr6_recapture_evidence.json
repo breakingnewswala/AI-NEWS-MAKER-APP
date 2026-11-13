@@ -23,12 +23,12 @@
     {
       "filename": "02_user_profile_hindi_channel.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\02_user_profile_hindi_channel.png",
-      "sizeBytes": 133396,
+      "sizeBytes": 148577,
       "width": 1920,
       "height": 1080,
-      "sha256": "ac1d0c2663851ca6b77871c1bfd120b2ace8c2a2e1bbc9cd97314cf4eff0f371",
+      "sha256": "6040751644e1c2c5bc504ad792537bbdb4c561e0a38155895a725cc29124a982",
       "testCase": "Scenario 2 - User Profile Unicode & Masked Phone",
-      "scenarioDesc": "User Profile displaying Hindi full name 'मुख्य संपादक', Hindi channel 'ब्रेकिंग न्यूज़ वाला', and masked synthetic fixture phone '98765***** [SYNTHETIC TEST FIXTURE]' with locked indicator.",
+      "scenarioDesc": "User Profile displaying synthetic reporter identity 'डिजिटल रिपोर्टर', channel 'दैनिक भारत समाचार', email 'reporter_synthetic_test@example.com', and redacted contact fields 'TEST CONTACT REDACTED' with locked indicator.",
       "status": "PASS"
     },
     {
@@ -100,23 +100,23 @@
     {
       "filename": "09_two_photo_grid_render.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\09_two_photo_grid_render.png",
-      "sizeBytes": 1499831,
+      "sizeBytes": 370570,
       "width": 1080,
       "height": 1350,
-      "sha256": "abc67585c328f2e1c04aa04cca21e9d4570223e9f1fdd7fc326cbbe797ee3d22",
+      "sha256": "62023dd00ad5e19823aa1062284aa7571923b58a1f428ad651084cdd3687906b",
       "testCase": "Scenario 9 - Two Photo Grid (50-50 Left-Right / double-h)",
-      "scenarioDesc": "Authoritative 1080x1350 canvas export of two-photo grid with distinct real photographs in Slot 1 and Slot 2 (Slot 2 replaced via file input, verified distinct RGB pixels).",
+      "scenarioDesc": "Authoritative 1080x1350 genuine browser downloaded export of two-photo grid with distinct real photographs in Slot 1 and Slot 2 (Slot 2 replaced via file input, verified distinct RGB pixels via real UI flow).",
       "status": "PASS"
     },
     {
       "filename": "10_four_photo_grid_render.png",
       "fullPath": "C:\\Users\\pc\\Downloads\\ai-news-maker-app\\audit_screenshots\\10_four_photo_grid_render.png",
-      "sizeBytes": 1623831,
+      "sizeBytes": 447672,
       "width": 1080,
       "height": 1350,
-      "sha256": "cba070253a42d16415b1058642c1f1774b1307ae30d0012a958e00dbedfa83f0",
+      "sha256": "8611985c0f83770cee93d55aa32e4a80e89d09af27ac6262295051cb7c50fcc0",
       "testCase": "Scenario 10 - Four Photo Grid (2x2 / grid-4)",
-      "scenarioDesc": "Authoritative 1080x1350 canvas export of 4-photo grid mapping strictly to 4 distinct photographs across quadrants (Slot 3 replaced via file input, all 4 quadrants verified distinct RGB pixels).",
+      "scenarioDesc": "Authoritative 1080x1350 genuine browser downloaded export of 4-photo grid mapping strictly to 4 distinct photographs across quadrants (Slot 3 replaced via file input, all 4 quadrants verified distinct RGB pixels via real UI flow).",
       "status": "PASS"
     },
     {

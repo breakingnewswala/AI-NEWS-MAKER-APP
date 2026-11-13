@@ -1,58 +1,40 @@
-/**
- * E2E BROWSER TEST: Photo News Studio Multi-Grid User Workflow
- *
- * Validates genuine user interaction with the actual Photo News Studio:
- * 1. UI Navigation & Step 4 (Photo & Watermark)
- * 2. Real file uploads via <input type="file"> with DataTransfer
- * 3. 2-Photo Layout (double-h: 50-50 Left-Right) & Slot Replacement
- * 4. Pan/Zoom Slider and D-Pad Controls
- * 5. 4-Photo Multi-Grid Layout (grid-4: 2x2) & Slot 3 Replacement
- * 6. Pixel-level quadrant verification on 1080x1350 exported graphic
- * 7. Cross-platform browser resolution (Windows & Linux CI)
- */
-
-const { spawn, execSync } = require('child_process');
-const http = require('http');
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
+const http = require('http');
+const { spawn } = require('child_process');
 const crypto = require('crypto');
+const WebSocket = require('ws');
 
-const PORT = 5087;
-const CDP_PORT = 9239;
-const SCREENSHOTS_DIR = path.join(__dirname, '..', 'audit_screenshots');
-if (!fs.existsSync(SCREENSHOTS_DIR)) fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function findChromeExecutable() {
-  if (process.env.CHROME_BIN && fs.existsSync(process.env.CHROME_BIN)) return process.env.CHROME_BIN;
-  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) return process.env.PUPPETEER_EXECUTABLE_PATH;
-  const candidates = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Users\\pc\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/snap/bin/chromium'
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  try {
-    const whichCmd = process.platform === 'win32' ? 'where chrome' : 'which google-chrome || which chromium';
-    const found = execSync(whichCmd, { stdio: 'pipe' }).toString().split('\n')[0].trim();
-    if (found && fs.existsSync(found)) return found;
-  } catch {}
-  throw new Error('Chrome/Chromium executable not found. Please set CHROME_BIN.');
+// Helper: create JWT for synthetic isolated test account
+function createToken(payload = {}, secret = "ephemeral_test_secret") {
+  const finalPayload = {
+    userId: "usr_synthetic_master_admin",
+    uid: "usr_synthetic_master_admin",
+    email: "reporter_synthetic_test@example.com",
+    role: "admin",
+    tier: "pro",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 86400,
+    ...payload
+  };
+  const header = { alg: "HS256", typ: "JWT" };
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
+  const encodedPayload = Buffer.from(JSON.stringify(finalPayload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-async function main() {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function runRealWorkflowE2E() {
   console.log('================================================================');
-  console.log('🧪 GENUINE E2E TEST: Photo News Studio Multi-Grid User Workflow');
+  console.log('🧪 GENUINE USER WORKFLOW E2E: Photo News Studio Multi-Grid');
   console.log('================================================================');
 
+  const PORT = 5094;
   const ephemeralSecret = crypto.randomBytes(32).toString('hex');
   console.log('1. Starting test server on port ' + PORT + ' with ephemeral secret...');
 
@@ -66,666 +48,770 @@ async function main() {
     stdio: 'pipe'
   });
 
-  server.stdout.on('data', () => {});
-  server.stderr.on('data', () => {});
+  server.stderr.on('data', d => {
+    const s = d.toString();
+    if (!s.includes('DEP0187')) console.error('[SERVER ERR]', s.trim());
+  });
 
-  let chrome = null;
-  let ws = null;
-
-  try {
-    await sleep(2500);
-
-    const chromePath = findChromeExecutable();
-    console.log('2. Detected browser executable:', chromePath);
-
-    const userDataDir = path.join(process.cwd(), '.tmp_chrome_e2e_multigrid');
-    if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
-
-    console.log(`3. Launching headless Chrome via CDP on port ${CDP_PORT}...`);
-    chrome = spawn(chromePath, [
-      '--headless=new',
-      `--remote-debugging-port=${CDP_PORT}`,
-      `--user-data-dir=${userDataDir}`,
-      `http://127.0.0.1:${PORT}/studio`
-    ]);
-
-    let wsUrl = '';
-    for (let i = 0; i < 30; i++) {
-      await sleep(500);
-      try {
-        const json = await new Promise((resolve, reject) => {
-          http.get(`http://127.0.0.1:${CDP_PORT}/json/list`, res => {
-            let body = '';
-            res.on('data', c => body += c);
-            res.on('end', () => resolve(JSON.parse(body)));
-          }).on('error', reject);
-        });
-        if (json && json.length > 0) {
-          wsUrl = json[0].webSocketDebuggerUrl;
-          break;
-        }
-      } catch {}
-    }
-
-    if (!wsUrl) throw new Error('Chrome CDP debugger URL not found');
-    console.log('4. Connected to Chrome WebSocket:', wsUrl);
-
-    const WebSocket = require('ws');
-    ws = new WebSocket(wsUrl);
-    await new Promise(r => ws.on('open', r));
-
-    let msgId = 1;
-    function sendCdp(method, params = {}) {
-      return new Promise((resolve, reject) => {
-        const id = msgId++;
-        const handler = (data) => {
-          const msg = JSON.parse(data.toString());
-          if (msg.id === id) {
-            ws.off('message', handler);
-            if (msg.error) reject(msg.error);
-            else resolve(msg.result);
-          }
-        };
-        ws.on('message', handler);
-        ws.send(JSON.stringify({ id, method, params }));
-      });
-    }
-
-    await sendCdp('Runtime.enable');
-    await sendCdp('Page.enable');
-    await sendCdp('DOM.enable');
-    await sendCdp('Emulation.setDeviceMetricsOverride', {
-      width: 1920,
-      height: 1080,
-      deviceScaleFactor: 1,
-      mobile: false
-    });
-
-    // Set authenticated Master Admin session cookie
-    const tokenPayload = {
-      email: 'breakingnewswala.com@gmail.com',
-      role: 'superadmin',
-      tier: 'vip_desk',
-      admin: true,
-      exp: Math.floor(Date.now() / 1000) + 3600
-    };
-    const b64Header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const b64Payload = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
-    const sig = crypto.createHmac('sha256', ephemeralSecret).update(`${b64Header}.${b64Payload}`).digest('base64url');
-    const adminToken = `${b64Header}.${b64Payload}.${sig}`;
-
-    await sendCdp('Network.setCookie', {
-      name: 'ainewsmaker_session',
-      value: adminToken,
-      domain: '127.0.0.1',
-      path: '/'
-    });
-
-    const syntheticProfile = {
-      fullName: 'मुख्य संपादक (Master Admin)',
-      channelNameHi: 'ब्रेकिंग न्यूज़ वाला',
-      channelName: 'Breaking News Wala',
-      channelNameEn: 'Breaking News Wala',
-      mobile: '9876543210',
-      mobileNumber: '9876543210',
-      whatsappNumber: '9876543210',
-      whatsappVerified: true,
-      username: 'editor_in_chief',
-      role: 'superadmin',
-      tagline: 'सबसे तेज, सबसे सटीक',
-      location: 'मध्य प्रदेश',
-      isLocked: true,
-      isPhoneVerified: true
-    };
-
-    const syntheticUser = {
-      id: 'usr_627265616b69',
-      userId: 'usr_627265616b69',
-      name: 'Master Admin',
-      email: 'breakingnewswala.com@gmail.com',
-      phone: '9876543210',
-      role: 'superadmin',
-      tier: 'vip_desk',
-      status: 'active',
-      credits: 99999
-    };
-
-    console.log('5. Navigating to root and pre-populating localStorage with Master Admin profile...');
-    await sendCdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/` });
-    await sleep(2500);
-
-    await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          localStorage.clear();
-          sessionStorage.clear();
-
-          localStorage.removeItem('user_explicitly_logged_out');
-          localStorage.setItem('reporter_auth_token', '${adminToken}');
-          localStorage.setItem('auth_token', '${adminToken}');
-          localStorage.setItem('reporter_auth_session', JSON.stringify(${JSON.stringify(syntheticUser)}));
-          localStorage.setItem('auth_user', JSON.stringify(${JSON.stringify(syntheticUser)}));
-          localStorage.setItem('current_user', JSON.stringify(${JSON.stringify(syntheticUser)}));
-          localStorage.setItem('channel_profile_data_v1', JSON.stringify(${JSON.stringify(syntheticProfile)}));
-          localStorage.setItem('channel_profile_data', JSON.stringify(${JSON.stringify(syntheticProfile)}));
-          localStorage.setItem('user_channel_profile', JSON.stringify(${JSON.stringify(syntheticProfile)}));
-          localStorage.setItem('user_profile_breakingnewswala.com@gmail.com', JSON.stringify(${JSON.stringify(syntheticProfile)}));
-          localStorage.setItem('user_primary_mobile', '9876543210');
-          localStorage.setItem('show_auth_welcome_screen', 'false');
-          localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
-          localStorage.setItem('pwa_app_installed', 'true');
-          localStorage.setItem('install_pwa_dismissed', 'true');
-          localStorage.setItem('pwa_install_dismissed_until', String(Date.now() + 864000000));
-          sessionStorage.setItem('ai_news_notif_modal_dismissed', 'true');
-          localStorage.setItem('ai_news_notif_dismissed_until', String(Date.now() + 864000000));
-          localStorage.setItem('notification_permission_dismissed', 'true');
-          localStorage.setItem('ai_news_sound_permission_enabled_v1', 'true');
-          localStorage.setItem('ai_news_sound_notice_dismissed_v1', 'true');
-          localStorage.setItem('notification_sound_notice_dismissed', 'true');
-          localStorage.setItem('app_update_dismissed', 'true');
-          localStorage.setItem('is_onboarding_completed', 'true');
-          localStorage.setItem('onboarding_completed_breakingnewswala.com@gmail.com', 'true');
-          return true;
-        })()
-      `
-    });
-
-    await sendCdp('Page.reload');
-    await sleep(3500);
-
-    // Dismiss any overlays/onboarding modals helper
-    async function dismissAllModals() {
-      await sendCdp('Runtime.evaluate', {
-        expression: `
-          (() => {
-            document.querySelectorAll('.fixed.inset-0').forEach(e => e.remove());
-            document.querySelectorAll('.toast, .notification-modal').forEach(e => e.remove());
-          })()
-        `
-      });
-      await sleep(300);
-    }
-    await dismissAllModals();
-
-    console.log('6. Switching tab to Photo News Studio...');
-    await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          if (typeof window.setAppTab === 'function') {
-            window.setAppTab('studio');
-          } else if (typeof window.setTab === 'function') {
-            window.setTab('studio');
+  // Health check: wait for server to actively respond
+  let serverReady = false;
+  for (let i = 0; i < 30; i++) {
+    await sleep(400);
+    try {
+      await new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${PORT}/`, res => {
+          if (res.statusCode >= 200 && res.statusCode < 500) {
+            serverReady = true;
+            resolve();
           } else {
-            const studioBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('स्टूडियो'));
-            if (studioBtn) studioBtn.click();
+            reject(new Error('Status ' + res.statusCode));
           }
-        })()
-      `
-    });
-    await sleep(2500);
-    await dismissAllModals();
+        }).on('error', reject);
+      });
+      if (serverReady) break;
+    } catch {}
+  }
+  if (!serverReady) throw new Error('Server not ready on port ' + PORT);
+  console.log('✅ Server running and verified on port ' + PORT);
 
-    // Ensure Studio Card has clean initial data
-    await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          if (typeof window.updateStudioCard === 'function') {
-            window.updateStudioCard({
-              headline: 'दाहोद रेल लाइन परियोजना के तहत टीही-धार रेलखंड पर विद्युतीकरण का काम पूरा',
-              location: 'धार, मध्य प्रदेश',
-              category: 'विकास कार्य'
-            });
-          }
-        })()
-      `
-    });
-    await sleep(1000);
-
-    // =================================================================
-    // SCENARIO 1: Real 2-Photo Workflow (50-50 Left-Right / double-h)
-    // =================================================================
-    console.log('\n--- SCENARIO 1: Genuine 2-Photo Layout & Slot Replacement ---');
-
-    // Step A: Switch to Step 4 (फ़ोटो एवं वॉटरमार्क)
-    const step4Click = await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          if (typeof window.setStudioStep === 'function') {
-            window.setStudioStep(4);
-            return true;
-          }
-          const btn = document.querySelector('[data-testid="studio-step-4"]') ||
-            Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('फोटो एवं वॉटरमार्क') || b.innerText.includes('स्टेप 4'));
-          if (btn) { btn.click(); return true; }
-          return false;
-        })()
-      `
-    });
-    console.log('  Navigated to Step 4:', step4Click.result?.value ? 'YES ✅' : 'NO ❌');
-    await sleep(1500);
-    await dismissAllModals();
-
-    // Step B: Select 2-Photo Primary Layout
-    const select2Photo = await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          const btn = document.querySelector('[data-testid="layout-btn-2photo"]') ||
-            Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('2 फोटो') || b.innerText.includes('दो फोटो जोड़ें'));
-          if (btn) { btn.click(); return true; }
-          if (typeof window.updateStudioCard === 'function') {
-            window.updateStudioCard({ layout: 'double-h' });
-            return true;
-          }
-          return false;
-        })()
-      `
-    });
-    console.log('  Selected 2-Photo primary layout:', select2Photo.result?.value ? 'YES ✅' : 'NO ❌');
-    await sleep(1500);
-
-    // Step C: Select 50-50 L-R sub-variant (double-h)
-    const selectDoubleH = await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          const btn = document.querySelector('[data-testid="layout-subvariant-double-h"]') ||
-            Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('50-50 L-R') || b.innerText.includes('लेफ्ट-राइट'));
-          if (btn) { btn.click(); return true; }
-          if (typeof window.updateStudioCard === 'function') {
-            window.updateStudioCard({ layout: 'double-h' });
-            return true;
-          }
-          return false;
-        })()
-      `
-    });
-    console.log('  Selected 50-50 L-R (double-h) sub-variant:', selectDoubleH.result?.value ? 'YES ✅' : 'NO ❌');
-    await sleep(1500);
-
-    // Read real image files from disk
-    const photo1Buf = fs.readFileSync(path.join(__dirname, '..', 'tests', 'fixtures', 'test_photo_1.jpg'));
-    const photo2Buf = fs.readFileSync(path.join(__dirname, '..', 'tests', 'fixtures', 'test_photo_2.jpg'));
-    const photoReplBuf = fs.readFileSync(path.join(__dirname, '..', 'tests', 'fixtures', 'test_photo_replacement.jpg'));
-
-    const photo1B64 = photo1Buf.toString('base64');
-    const photo2B64 = photo2Buf.toString('base64');
-    const photoReplB64 = photoReplBuf.toString('base64');
-
-    // Step D: Upload Photo 1 into Slot 1 via real <input type="file">
-    console.log('  Uploading real photograph test_photo_1.jpg into Slot 1 via DOM file input...');
-    const uploadSlot1 = await sendCdp('Runtime.evaluate', {
-      awaitPromise: true,
-      returnByValue: true,
-      expression: `
-        (async () => {
-          const input = document.querySelector('[data-testid="file-input-main"]') || document.querySelectorAll('input[type="file"]')[0];
-          const res = await fetch('data:image/jpeg;base64,${photo1B64}');
-          const blob = await res.blob();
-          const file = new File([blob], 'test_photo_1.jpg', { type: 'image/jpeg' });
-          if (input) {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            input.files = dt.files;
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          if (typeof window.updateStudioCard === 'function') {
-            const card = window.getStudioCard() || {};
-            window.updateStudioCard({
-              images: { ...(card.images || {}), main: 'data:image/jpeg;base64,${photo1B64}' },
-              photoUrl: 'data:image/jpeg;base64,${photo1B64}'
-            });
-          }
-          return { success: true, fileName: file.name, fileSize: file.size };
-        })()
-      `
-    });
-    console.log('  Upload Slot 1 result:', uploadSlot1.result?.value);
-    await sleep(1500);
-
-    // Step E: Upload Photo 2 into Slot 2 via real <input type="file">
-    console.log('  Uploading real photograph test_photo_2.jpg into Slot 2 via DOM file input...');
-    const uploadSlot2 = await sendCdp('Runtime.evaluate', {
-      awaitPromise: true,
-      returnByValue: true,
-      expression: `
-        (async () => {
-          const input = document.querySelector('[data-testid="file-input-second"]') || document.querySelectorAll('input[type="file"]')[1];
-          const res = await fetch('data:image/jpeg;base64,${photo2B64}');
-          const blob = await res.blob();
-          const file = new File([blob], 'test_photo_2.jpg', { type: 'image/jpeg' });
-          if (input) {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            input.files = dt.files;
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          if (typeof window.updateStudioCard === 'function') {
-            const card = window.getStudioCard() || {};
-            window.updateStudioCard({
-              images: { ...(card.images || {}), second: 'data:image/jpeg;base64,${photo2B64}' }
-            });
-          }
-          return { success: true, fileName: file.name, fileSize: file.size };
-        })()
-      `
-    });
-    console.log('  Upload Slot 2 result:', uploadSlot2.result?.value);
-    await sleep(1500);
-
-    // Verify both slots are active in React state
-    const slotCheck1 = await sendCdp('Runtime.evaluate', {
-      returnByValue: true,
-      expression: `
-        (() => {
-          const card = (typeof window.getStudioCard === 'function') ? window.getStudioCard() : null;
-          return {
-            hasSlot1: !!card?.images?.main,
-            hasSlot2: !!card?.images?.second,
-            layout: card?.layout
-          };
-        })()
-      `
-    });
-    console.log('  Both photo slots verified in React state:', slotCheck1.result?.value);
-
-    // Step F: Replace Slot 2 with test_photo_replacement.jpg
-    console.log('  Replacing Slot 2 with test_photo_replacement.jpg via DOM file input...');
-    const replaceSlot2 = await sendCdp('Runtime.evaluate', {
-      awaitPromise: true,
-      returnByValue: true,
-      expression: `
-        (async () => {
-          const input = document.querySelector('[data-testid="file-input-second"]') || document.querySelectorAll('input[type="file"]')[1];
-          const res = await fetch('data:image/jpeg;base64,${photoReplB64}');
-          const blob = await res.blob();
-          const file = new File([blob], 'test_photo_replacement.jpg', { type: 'image/jpeg' });
-          if (input) {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            input.files = dt.files;
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          if (typeof window.updateStudioCard === 'function') {
-            const card = window.getStudioCard() || {};
-            window.updateStudioCard({
-              images: { ...(card.images || {}), second: 'data:image/jpeg;base64,${photoReplB64}' }
-            });
-          }
-          return { success: true, fileName: file.name, fileSize: file.size };
-        })()
-      `
-    });
-    console.log('  Replacement result:', replaceSlot2.result?.value);
-    await sleep(1500);
-
-    // Step G: Test Pan/Zoom controls
-    console.log('  Operating pan and zoom controls via UI sliders and D-pad...');
-    const panZoomOp = await sendCdp('Runtime.evaluate', {
-      returnByValue: true,
-      expression: `
-        (() => {
-          const zoomSliders = Array.from(document.querySelectorAll('input[type="range"]'));
-          let zoomAdjusted = false;
-          if (zoomSliders.length > 0) {
-            zoomSliders[0].value = "1.25";
-            zoomSliders[0].dispatchEvent(new Event('input', { bubbles: true }));
-            zoomSliders[0].dispatchEvent(new Event('change', { bubbles: true }));
-            zoomAdjusted = true;
-          }
-          const rightBtn = document.querySelector('button[title*="Right"], button[title*="दाएं"], button[title*="दाईं"]');
-          if (rightBtn) rightBtn.click();
-          return { zoomAdjusted, dPadRightClicked: !!rightBtn };
-        })()
-      `
-    });
-    console.log('  Pan/Zoom operation:', panZoomOp.result?.value);
-    await sleep(1000);
-
-    // Step H: Export final graphic & analyze pixel quadrants
-    console.log('  Rendering authoritative canvas export for 2-photo graphic...');
-    const export2Photo = await sendCdp('Runtime.evaluate', {
-      awaitPromise: true,
-      returnByValue: true,
-      expression: `
-        (async () => {
-          const exp = window.__CANVAS_EXPORTER__;
-          if (!exp) return { error: 'CanvasExporter not exposed' };
-          const card = (typeof window.getStudioCard === 'function') ? window.getStudioCard() : null;
-          const canvas = await exp.renderCardToCanvas(card);
-          const ctx = canvas.getContext('2d');
-          const leftPixel = ctx.getImageData(270, 500, 1, 1).data;
-          const rightPixel = ctx.getImageData(810, 500, 1, 1).data;
-          const isLeftDistinct = !(leftPixel[0] === rightPixel[0] && leftPixel[1] === rightPixel[1] && leftPixel[2] === rightPixel[2]);
-          return {
-            width: canvas.width,
-            height: canvas.height,
-            leftPixel: [leftPixel[0], leftPixel[1], leftPixel[2]],
-            rightPixel: [rightPixel[0], rightPixel[1], rightPixel[2]],
-            isDistinct: isLeftDistinct,
-            dataUrl: canvas.toDataURL('image/png').split(',')[1]
-          };
-        })()
-      `
-    });
-
-    if (export2Photo.result?.value?.dataUrl) {
-      const buf = Buffer.from(export2Photo.result.value.dataUrl, 'base64');
-      const outPath = path.join(SCREENSHOTS_DIR, '09_two_photo_grid_render.png');
-      fs.writeFileSync(outPath, buf);
-      const sha = crypto.createHash('sha256').update(buf).digest('hex');
-      console.log(`  📸 Saved 09_two_photo_grid_render.png (${buf.length} bytes, SHA: ${sha.slice(0, 16)}...)`);
-      console.log('  Export dimensions:', `${export2Photo.result.value.width}x${export2Photo.result.value.height}`);
-      console.log('  Left Slot Pixel (RGB):', export2Photo.result.value.leftPixel);
-      console.log('  Right Slot Pixel (RGB):', export2Photo.result.value.rightPixel);
-      console.log('  Left & Right are distinct photographs:', export2Photo.result.value.isDistinct ? 'YES ✅' : 'NO ❌');
-    }
-
-    // =================================================================
-    // SCENARIO 2: Real 4-Photo Multi-Grid Workflow (grid-4: 2x2)
-    // =================================================================
-    console.log('\n--- SCENARIO 2: Genuine 4-Photo Multi-Grid & Slot 3 Replacement ---');
-
-    // Step A: Select Multi-Grid Primary Layout Tab
-    const selectMultiGrid = await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          const btn = document.querySelector('[data-testid="layout-btn-multigrid"]') ||
-            Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('मल्टी ग्रिड') || b.innerText.includes('3-4 तस्वीरें'));
-          if (btn) { btn.click(); return true; }
-          if (typeof window.updateStudioCard === 'function') {
-            window.updateStudioCard({ layout: 'grid-4' });
-            return true;
-          }
-          return false;
-        })()
-      `
-    });
-    console.log('  Selected Multi-Grid primary layout:', selectMultiGrid.result?.value ? 'YES ✅' : 'NO ❌');
-    await sleep(1500);
-
-    // Step B: Select 4-Photo Grid (grid-4: 2x2) sub-variant
-    const selectGrid4 = await sendCdp('Runtime.evaluate', {
-      expression: `
-        (() => {
-          const btn = document.querySelector('[data-testid="layout-subvariant-grid-4"]') ||
-            Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('4 इमेज') || b.innerText.includes('4 फोटो ग्रिड'));
-          if (btn) { btn.click(); return true; }
-          if (typeof window.updateStudioCard === 'function') {
-            window.updateStudioCard({ layout: 'grid-4' });
-            return true;
-          }
-          return false;
-        })()
-      `
-    });
-    console.log('  Selected 4-Photo (grid-4) sub-variant:', selectGrid4.result?.value ? 'YES ✅' : 'NO ❌');
-    await sleep(1500);
-
-    // Read photo 3 and photo 4
-    const photo3Buf = fs.readFileSync(path.join(__dirname, '..', 'tests', 'fixtures', 'test_photo_3.jpg'));
-    const photo4Buf = fs.readFileSync(path.join(__dirname, '..', 'tests', 'fixtures', 'test_photo_4.jpg'));
-    const photo3B64 = photo3Buf.toString('base64');
-    const photo4B64 = photo4Buf.toString('base64');
-
-    // Step C: Upload photos into Slots 1, 2, 3, 4 via DOM inputs
-    console.log('  Uploading all 4 distinct photos into Slots 1, 2, 3, 4 via DOM file inputs...');
-    const upload4Slots = await sendCdp('Runtime.evaluate', {
-      awaitPromise: true,
-      returnByValue: true,
-      expression: `
-        (async () => {
-          const inputs = [
-            document.querySelector('[data-testid="file-input-main"]'),
-            document.querySelector('[data-testid="file-input-second"]'),
-            document.querySelector('[data-testid="file-input-third"]'),
-            document.querySelector('[data-testid="file-input-fourth"]')
-          ];
-          const photos = [
-            'data:image/jpeg;base64,${photo1B64}',
-            'data:image/jpeg;base64,${photo2B64}',
-            'data:image/jpeg;base64,${photo3B64}',
-            'data:image/jpeg;base64,${photo4B64}'
-          ];
-          const keys = ['main', 'second', 'third', 'fourth'];
-          const results = [];
-          for (let i = 0; i < 4; i++) {
-            const input = inputs[i];
-            const dataUrl = photos[i];
-            const key = keys[i];
-            if (input) {
-              const res = await fetch(dataUrl);
-              const blob = await res.blob();
-              const file = new File([blob], 'photo_' + (i + 1) + '.jpg', { type: 'image/jpeg' });
-              const dt = new DataTransfer();
-              dt.items.add(file);
-              input.files = dt.files;
-              input.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            if (typeof window.updateStudioCard === 'function') {
-              const card = window.getStudioCard() || {};
-              window.updateStudioCard({
-                images: { ...(card.images || {}), [key]: dataUrl },
-                ...(key === 'main' ? { photoUrl: dataUrl } : {})
-              });
-            }
-            results.push({ slot: i + 1, name: 'photo_' + (i + 1) + '.jpg' });
-          }
-          return results;
-        })()
-      `
-    });
-    console.log('  Uploaded 4 slots:', upload4Slots.result?.value);
-    await sleep(2000);
-
-    // Step D: Replace Slot 3 with test_photo_replacement.jpg
-    console.log('  Replacing Slot 3 with test_photo_replacement.jpg...');
-    const replaceSlot3 = await sendCdp('Runtime.evaluate', {
-      awaitPromise: true,
-      returnByValue: true,
-      expression: `
-        (async () => {
-          const input = document.querySelector('[data-testid="file-input-third"]') || document.querySelectorAll('input[type="file"]')[2];
-          if (input) {
-            const res = await fetch('data:image/jpeg;base64,${photoReplB64}');
-            const blob = await res.blob();
-            const file = new File([blob], 'test_photo_replacement.jpg', { type: 'image/jpeg' });
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            input.files = dt.files;
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-          if (typeof window.updateStudioCard === 'function') {
-            const card = window.getStudioCard() || {};
-            window.updateStudioCard({
-              images: { ...(card.images || {}), third: 'data:image/jpeg;base64,${photoReplB64}' }
-            });
-          }
-          return { success: true, slot: 3, name: 'test_photo_replacement.jpg' };
-        })()
-      `
-    });
-    console.log('  Replacement Slot 3 result:', replaceSlot3.result?.value);
-    await sleep(1500);
-
-    // Step E: Operate Pan/Zoom on active slot
-    const panZoomOp4 = await sendCdp('Runtime.evaluate', {
-      returnByValue: true,
-      expression: `
-        (() => {
-          const rangeInputs = Array.from(document.querySelectorAll('input[type="range"]'));
-          let zoomSet = false;
-          if (rangeInputs.length > 0) {
-            rangeInputs[0].value = "1.15";
-            rangeInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-            rangeInputs[0].dispatchEvent(new Event('change', { bubbles: true }));
-            zoomSet = true;
-          }
-          return { zoomSet };
-        })()
-      `
-    });
-    console.log('  Pan/Zoom on 4-photo grid:', panZoomOp4.result?.value);
-    await sleep(1000);
-
-    // Step F: Export 4-Photo graphic & verify all 4 quadrants
-    console.log('  Rendering authoritative canvas export for 4-photo grid...');
-    const export4Photo = await sendCdp('Runtime.evaluate', {
-      awaitPromise: true,
-      returnByValue: true,
-      expression: `
-        (async () => {
-          const exp = window.__CANVAS_EXPORTER__;
-          if (!exp) return { error: 'CanvasExporter not exposed' };
-          const card = (typeof window.getStudioCard === 'function') ? window.getStudioCard() : null;
-          const canvas = await exp.renderCardToCanvas(card);
-          const ctx = canvas.getContext('2d');
-          const q1 = ctx.getImageData(270, 250, 1, 1).data;
-          const q2 = ctx.getImageData(810, 250, 1, 1).data;
-          const q3 = ctx.getImageData(270, 550, 1, 1).data;
-          const q4 = ctx.getImageData(810, 550, 1, 1).data;
-          return {
-            width: canvas.width,
-            height: canvas.height,
-            q1: [q1[0], q1[1], q1[2]],
-            q2: [q2[0], q2[1], q2[2]],
-            q3: [q3[0], q3[1], q3[2]],
-            q4: [q4[0], q4[1], q4[2]],
-            dataUrl: canvas.toDataURL('image/png').split(',')[1]
-          };
-        })()
-      `
-    });
-
-    if (export4Photo.result?.value?.dataUrl) {
-      const buf = Buffer.from(export4Photo.result.value.dataUrl, 'base64');
-      const outPath = path.join(SCREENSHOTS_DIR, '10_four_photo_grid_render.png');
-      fs.writeFileSync(outPath, buf);
-      const sha = crypto.createHash('sha256').update(buf).digest('hex');
-      console.log(`  📸 Saved 10_four_photo_grid_render.png (${buf.length} bytes, SHA: ${sha.slice(0, 16)}...)`);
-      console.log('  Export dimensions:', `${export4Photo.result.value.width}x${export4Photo.result.value.height}`);
-      console.log('  Q1 Top-Left Pixel:', export4Photo.result.value.q1);
-      console.log('  Q2 Top-Right Pixel:', export4Photo.result.value.q2);
-      console.log('  Q3 Bottom-Left Pixel (Replaced):', export4Photo.result.value.q3);
-      console.log('  Q4 Bottom-Right Pixel:', export4Photo.result.value.q4);
-    }
-
-    console.log('\n================================================================');
-    console.log('🎉 GENUINE E2E TEST: ALL MULTI-GRID SCENARIOS COMPLETED SUCCESSFULLY!');
-    console.log('================================================================');
-
-  } finally {
-    if (ws) {
-      try { ws.close(); } catch {}
-    }
-    if (chrome) {
-      try { chrome.kill('SIGKILL'); } catch {}
-    }
-    if (server) {
-      try { server.kill('SIGKILL'); } catch {}
+  // Cross-platform Chrome binary resolution
+  let chromePath = process.env.CHROME_BIN;
+  if (!chromePath) {
+    if (process.platform === 'win32') {
+      const paths = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe')
+      ];
+      chromePath = paths.find(p => fs.existsSync(p));
+    } else {
+      const linuxPaths = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium-browser', '/usr/bin/chromium'];
+      chromePath = linuxPaths.find(p => fs.existsSync(p));
     }
   }
+  if (!chromePath || !fs.existsSync(chromePath)) {
+    throw new Error('Chrome browser executable not found. Set CHROME_BIN.');
+  }
+  console.log('2. Detected browser executable:', chromePath);
+
+  const userDataDir = path.join(process.cwd(), '.tmp_chrome_e2e_real_workflow');
+  const downloadDir = path.join(process.cwd(), '.tmp_e2e_downloads');
+  if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
+
+  // Clean any old downloads
+  fs.readdirSync(downloadDir).forEach(f => {
+    try { fs.unlinkSync(path.join(downloadDir, f)); } catch {}
+  });
+
+  const chrome = spawn(chromePath, [
+    '--headless=new',
+    '--remote-debugging-port=9245',
+    '--disable-gpu',
+    '--no-sandbox',
+    '--hide-scrollbars',
+    `--user-data-dir=${userDataDir}`
+  ]);
+
+  // Connect to Chrome Browser Target via /json/version
+  let browserWsUrl = '';
+  for (let i = 0; i < 30; i++) {
+    await sleep(400);
+    try {
+      const vData = await new Promise((res, rej) => {
+        http.get('http://127.0.0.1:9245/json/version', r => {
+          let buf = '';
+          r.on('data', d => buf += d);
+          r.on('end', () => res(JSON.parse(buf)));
+        }).on('error', rej);
+      });
+      if (vData && vData.webSocketDebuggerUrl) {
+        browserWsUrl = vData.webSocketDebuggerUrl;
+        break;
+      }
+    } catch {}
+  }
+  if (!browserWsUrl) throw new Error('Chrome Browser CDP debugger URL not found');
+  console.log('3. Connected to Chrome Browser Target:', browserWsUrl);
+
+  const wsBrowser = new WebSocket(browserWsUrl);
+  await new Promise(r => wsBrowser.on('open', r));
+
+  let bid = 1;
+  const sendBrowserCdp = (method, params = {}) => new Promise((resolve, reject) => {
+    const cur = bid++;
+    const handler = d => {
+      const m = JSON.parse(d);
+      if (m.id === cur) {
+        wsBrowser.off('message', handler);
+        if (m.error) reject(m.error); else resolve(m.result);
+      }
+    };
+    wsBrowser.on('message', handler);
+    wsBrowser.send(JSON.stringify({ id: cur, method, params }));
+  });
+
+  // Configure Browser.setDownloadBehavior on the browser target
+  await sendBrowserCdp('Browser.setDownloadBehavior', {
+    behavior: 'allow',
+    downloadPath: downloadDir,
+    eventsEnabled: true
+  });
+  console.log('   Browser download behavior enabled to:', downloadDir);
+
+  // Connect to Chrome Page Target via /json
+  const pages = await new Promise((res, rej) => {
+    http.get('http://127.0.0.1:9245/json', r => {
+      let buf = '';
+      r.on('data', d => buf += d);
+      r.on('end', () => res(JSON.parse(buf)));
+    }).on('error', rej);
+  });
+
+  const ws = new WebSocket(pages[0].webSocketDebuggerUrl);
+  await new Promise(r => ws.on('open', r));
+
+  ws.on('message', data => {
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.method === 'Runtime.consoleAPICalled') {
+        const text = msg.params.args.map(a => typeof a.value === 'object' ? JSON.stringify(a.value) : (a.value || a.description || '')).join(' ');
+        if (!text.includes('Download the React DevTools') && !text.includes('vite:') && text.trim()) {
+          console.log('[BROWSER CONSOLE]', msg.params.type, text);
+        }
+      }
+      if (msg.method === 'Runtime.exceptionThrown') {
+        console.error('[BROWSER EXCEPTION]', msg.params.exceptionDetails?.exception?.description || msg.params.exceptionDetails?.text);
+      }
+    } catch {}
+  });
+
+  let msgId = 1;
+  function sendCdp(method, params = {}) {
+    return new Promise((resolve, reject) => {
+      const id = msgId++;
+      const handler = data => {
+        const msg = JSON.parse(data.toString());
+        if (msg.id === id) {
+          ws.off('message', handler);
+          if (msg.error) reject(msg.error);
+          else resolve(msg.result);
+        }
+      };
+      ws.on('message', handler);
+      ws.send(JSON.stringify({ id, method, params }));
+    });
+  }
+
+  await sendCdp('Runtime.enable');
+  await sendCdp('DOM.enable');
+  await sendCdp('Page.enable');
+  await sendCdp('Emulation.setDeviceMetricsOverride', {
+    width: 1920,
+    height: 1080,
+    deviceScaleFactor: 1,
+    mobile: false
+  });
+
+  // Authenticate using isolated synthetic account ONLY
+  const token = createToken({}, ephemeralSecret);
+  const syntheticUser = {
+    id: 'usr_synthetic_master_admin',
+    userId: 'usr_synthetic_master_admin',
+    name: 'डिजिटल रिपोर्टर',
+    email: 'reporter_synthetic_test@example.com',
+    role: 'admin',
+    tier: 'pro',
+    status: 'active'
+  };
+
+  const syntheticProfile = {
+    fullName: 'डिजिटल रिपोर्टर',
+    channelNameHi: 'दैनिक भारत समाचार',
+    channelNameEn: 'Dainik Bharat Samachar',
+    channelLogoUrl: '/assets/ai_news_maker_logo.png',
+    channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
+    username: 'dainik_bharat',
+    mobileNumber: 'TEST CONTACT REDACTED',
+    whatsappNumber: 'TEST CONTACT REDACTED',
+    whatsappDisplayNumber: 'TEST CONTACT REDACTED',
+    websiteUrl: 'dainikbharat.example.com',
+    district: 'भोपाल',
+    location: 'भोपाल, मध्य प्रदेश'
+  };
+
+  const syntheticSub = {
+    tier: 'pro',
+    planName: 'Pro Reporter',
+    primaryMobile: 'TEST CONTACT REDACTED',
+    isMobileLocked: true,
+    isTrialActive: true,
+    hasActivePaidPlan: true,
+    expiresAt: Date.now() + 86400000 * 30
+  };
+
+  console.log('4. Navigating to application root and authenticating synthetic session...');
+  await sendCdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/` });
+  await sleep(1500);
+
+  await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        localStorage.clear();
+        sessionStorage.clear();
+        localStorage.setItem('reporter_auth_token', '${token}');
+        localStorage.setItem('auth_token', '${token}');
+        localStorage.setItem('reporter_auth_session', JSON.stringify(${JSON.stringify(syntheticUser)}));
+        localStorage.setItem('auth_user', JSON.stringify(${JSON.stringify(syntheticUser)}));
+        localStorage.setItem('current_user', JSON.stringify(${JSON.stringify(syntheticUser)}));
+        localStorage.setItem('user_channel_profile', JSON.stringify(${JSON.stringify(syntheticProfile)}));
+        localStorage.setItem('user_profile_reporter_synthetic_test@example.com', JSON.stringify(${JSON.stringify(syntheticProfile)}));
+        localStorage.setItem('user_subscription_info', JSON.stringify(${JSON.stringify(syntheticSub)}));
+        localStorage.setItem('user_subscription_reporter_synthetic_test@example.com', JSON.stringify(${JSON.stringify(syntheticSub)}));
+        localStorage.setItem('is_onboarding_completed', 'true');
+        localStorage.setItem('show_auth_welcome_screen', 'false');
+        localStorage.setItem('ai_news_maker_admin_system_mode', 'admin');
+        return true;
+      })()
+    `
+  });
+
+  await sendCdp('Page.reload');
+  await sleep(2500);
+
+  // Dismiss any floating toast or notification overlays
+  const dismissModals = async () => {
+    await sendCdp('Runtime.evaluate', {
+      expression: `
+        (() => {
+          document.querySelectorAll('.fixed.inset-0').forEach(e => e.remove());
+          document.querySelectorAll('.toast, .notification-modal').forEach(e => e.remove());
+        })()
+      `
+    });
+  };
+  await dismissModals();
+
+  console.log('5. Navigating to Photo News Studio via UI navigation...');
+  const studioNavResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const studioBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('स्टूडियो'));
+        if (studioBtn) {
+          studioBtn.click();
+          return { clicked: true, text: studioBtn.textContent.trim() };
+        }
+        return { clicked: false };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   Navigated to Studio tab:', studioNavResult.result.value);
+  await sleep(2000);
+  await dismissModals();
+
+  // Helper to click steps via actual StepNavigator UI
+  const clickEditorStep = async (stepNum, stepName) => {
+    const res = await sendCdp('Runtime.evaluate', {
+      expression: `
+        (() => {
+          const stepBtns = Array.from(document.querySelectorAll('button'));
+          const btn = stepBtns.find(b => {
+            const txt = (b.textContent || '').trim();
+            return txt.includes('${stepNum}') && (txt.includes('${stepName}') || txt.includes('स्टेप ${stepNum}'));
+          });
+          if (btn) {
+            btn.click();
+            btn.scrollIntoView({ behavior: 'instant', block: 'center' });
+            return { clicked: true, text: btn.textContent.trim() };
+          }
+          return { clicked: false, available: stepBtns.map(b => (b.textContent || '').trim()).filter(Boolean) };
+        })()
+      `,
+      returnByValue: true
+    });
+    await sleep(600);
+    return res.result.value;
+  };
+
+  // Helper to upload fixture file to a specific file input by selector
+  const uploadFixtureToFileInput = async (selector, fixtureFileName) => {
+    const fixturePath = path.resolve('tests/fixtures', fixtureFileName);
+    if (!fs.existsSync(fixturePath)) throw new Error(`Fixture file ${fixturePath} not found!`);
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const doc = await sendCdp('DOM.getDocument');
+      const node = await sendCdp('DOM.querySelector', { nodeId: doc.root.nodeId, selector });
+      if (node && node.nodeId) {
+        await sendCdp('DOM.setFileInputFiles', {
+          nodeId: node.nodeId,
+          files: [fixturePath]
+        });
+        await sleep(800);
+        return;
+      }
+      await sleep(300);
+    }
+    throw new Error(`File input with selector "${selector}" not found in DOM!`);
+  };
+
+  // ================================================================
+  // SCENARIO 1: GENUINE 2-PHOTO USER WORKFLOW
+  // ================================================================
+  console.log('\n--- SCENARIO 1: Genuine 2-Photo Layout & Slot Replacement ---');
+
+  // Step 3: Enter Headline through visible UI input via React native property setter
+  console.log('1. Navigating to Step 3 (हेडलाइन) via UI...');
+  const step3Click = await clickEditorStep('3', 'हेडलाइन');
+  console.log('   Step 3 clicked:', step3Click.clicked);
+
+  console.log('2. Entering test headline into visible textarea...');
+  const headlineResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const textarea = document.querySelector('#step-headline textarea') || document.querySelector('textarea');
+        if (!textarea) return { success: false, reason: 'textarea not found' };
+
+        const testHeadline = 'दाहोद रेल लाइन परियोजना के तहत टीही-धार रेलखंड पर विद्युतीकरण का काम पूरा, सीआरएस की मंजूरी के बाद जल्द शुरू होगा नियमित संचालन';
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set ||
+                       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        if (setter) {
+          setter.call(textarea, testHeadline);
+        } else {
+          textarea.value = testHeadline;
+        }
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        return { success: true, value: textarea.value };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   Headline set result:', headlineResult.result.value);
+
+  // Step 4: Photo & Watermark
+  console.log('3. Navigating to Step 4 (फोटो एवं वॉटरमार्क) via UI...');
+  const step4Click = await clickEditorStep('4', 'फोटो');
+  console.log('   Step 4 clicked:', step4Click.clicked);
+
+  console.log('4. Selecting 2-Photo primary layout button...');
+  const select2PhotoResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const btn = document.querySelector('button[data-testid="layout-btn-2photo"]') ||
+                    Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('2 फोटो'));
+        if (btn) {
+          btn.click();
+          return { clicked: true, text: btn.textContent.trim() };
+        }
+        return { clicked: false };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   2-Photo primary layout clicked:', select2PhotoResult.result.value);
+  await sleep(800);
+
+  console.log('5. Selecting 50-50 L-R (double-h) sub-variant...');
+  const selectDoubleHResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const btn = document.querySelector('button[data-testid="layout-subvariant-double-h"]') ||
+                    Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('50-50 L-R'));
+        if (btn) {
+          btn.click();
+          return { clicked: true, text: btn.textContent.trim() };
+        }
+        return { clicked: false };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   50-50 L-R sub-variant clicked:', selectDoubleHResult.result.value);
+  await sleep(800);
+
+  console.log('6. Uploading test_photo_1.jpg into Slot 1 via DOM file input...');
+  await uploadFixtureToFileInput('input[data-testid="file-input-main"]', 'test_photo_1.jpg');
+
+  console.log('7. Uploading test_photo_2.jpg into Slot 2 via DOM file input...');
+  await uploadFixtureToFileInput('input[data-testid="file-input-second"]', 'test_photo_2.jpg');
+
+  console.log('8. Replacing Slot 2 with test_photo_replacement.jpg via DOM file input...');
+  await uploadFixtureToFileInput('input[data-testid="file-input-second"]', 'test_photo_replacement.jpg');
+
+  console.log('9. Adjusting Pan & Zoom controls via visible UI...');
+  const adjustControlsResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        // Adjust Zoom slider
+        const zoomSlider = document.querySelector('input[type="range"][min="1"][max="3"]');
+        let zoomSet = false;
+        if (zoomSlider) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+          if (setter) setter.call(zoomSlider, '1.20');
+          else zoomSlider.value = '1.20';
+          zoomSlider.dispatchEvent(new Event('input', { bubbles: true }));
+          zoomSlider.dispatchEvent(new Event('change', { bubbles: true }));
+          zoomSet = true;
+        }
+
+        // Click D-Pad Right button
+        const rightBtn = document.querySelector('button[title="दाईं ओर ले जाएं (Right)"]') ||
+                         Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('दायाँ'));
+        let rightClicked = false;
+        if (rightBtn) {
+          rightBtn.click();
+          rightClicked = true;
+        }
+        return { zoomSet, rightClicked };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   Pan/Zoom UI adjustments:', adjustControlsResult.result.value);
+
+  // Step 5: Location & Date
+  console.log('10. Navigating to Step 5 (स्थान एवं दिनांक) via UI...');
+  const step5Click = await clickEditorStep('5', 'स्थान');
+  console.log('    Step 5 clicked:', step5Click.clicked);
+  await sleep(800);
+
+  console.log('11. Entering location into visible input via React native setter...');
+  const locationResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const locInput = document.querySelector('#step-location input[type="text"]') ||
+                         Array.from(document.querySelectorAll('input[type="text"]')).find(i => (i.placeholder || '').includes('स्थान') || (i.placeholder || '').includes('जिला'));
+        if (!locInput) return { success: false, reason: 'location input not found' };
+
+        const testLocation = 'धार, मध्य प्रदेश';
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        if (setter) {
+          setter.call(locInput, testLocation);
+        } else {
+          locInput.value = testLocation;
+        }
+        locInput.dispatchEvent(new Event('input', { bubbles: true }));
+        locInput.dispatchEvent(new Event('change', { bubbles: true }));
+        return { success: true, value: locInput.value };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('    Location set result:', locationResult.result.value);
+
+  console.log('12. Navigating to Step 7 (डाउनलोड एवं कैप्शन) via UI...');
+  const step7Click = await clickEditorStep('7', 'डाउनलोड');
+  console.log('    Step 7 clicked:', step7Click.clicked);
+  await sleep(1000);
+
+  console.log('13. Clicking real Export button (JPG डाउनलोड)...');
+  // Clean downloadDir before clicking
+  fs.readdirSync(downloadDir).forEach(f => {
+    try { fs.unlinkSync(path.join(downloadDir, f)); } catch {}
+  });
+
+  const exportClickResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const dlBtn = btns.find(b => !b.disabled && ((b.textContent || '').trim() === 'JPG डाउनलोड' || (b.textContent || '').includes('सोशल मीडिया रेडी कार्ड डाउनलोड')));
+        if (dlBtn) {
+          dlBtn.click();
+          return { clicked: true, text: dlBtn.textContent.trim(), disabled: dlBtn.disabled };
+        }
+        return { clicked: false, availableButtons: btns.map(b => ({ text: (b.textContent || '').trim(), disabled: b.disabled })).filter(b => b.text.includes('डाउनलोड')) };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('    Export button clicked:', exportClickResult.result.value);
+
+  // Wait for downloaded file to appear on disk
+  let downloaded2PhotoFile = '';
+  for (let i = 0; i < 40; i++) {
+    await sleep(500);
+    const files = fs.readdirSync(downloadDir).filter(f => !f.endsWith('.crdownload') && !f.endsWith('.tmp'));
+    if (files.length > 0) {
+      downloaded2PhotoFile = path.join(downloadDir, files[0]);
+      break;
+    }
+  }
+
+  if (!downloaded2PhotoFile) {
+    throw new Error('FAILED: Downloaded file did not appear in download directory after export click!');
+  }
+
+  const buf2Photo = fs.readFileSync(downloaded2PhotoFile);
+  const hash2Photo = crypto.createHash('sha256').update(buf2Photo).digest('hex');
+  console.log(`✅ Real browser downloaded: ${path.basename(downloaded2PhotoFile)} (${buf2Photo.length} bytes, SHA256: ${hash2Photo.substring(0, 16)}...)`);
+
+  // Copy to audit_screenshots for persistent evidence
+  fs.copyFileSync(downloaded2PhotoFile, path.join(process.cwd(), 'audit_screenshots', '09_two_photo_grid_render.png'));
+
+  // Verify dimensions via canvas in browser
+  const dim2Photo = await sendCdp('Runtime.evaluate', {
+    expression: `
+      new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        img.src = 'data:image/jpeg;base64,${buf2Photo.toString('base64')}';
+      })
+    `,
+    awaitPromise: true,
+    returnByValue: true
+  });
+  console.log('   Export Dimensions:', dim2Photo.result.value);
+
+  // Sample Left vs Right pixels to verify distinct photographs
+  const pixelCheck2Photo = await sendCdp('Runtime.evaluate', {
+    expression: `
+      new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth;
+          c.height = img.naturalHeight;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          // Sample left slot (x=270, y=400) and right slot (x=810, y=400)
+          const pLeft = Array.from(ctx.getImageData(270, 400, 1, 1).data.slice(0, 3));
+          const pRight = Array.from(ctx.getImageData(810, 400, 1, 1).data.slice(0, 3));
+          const distinct = pLeft.some((v, i) => Math.abs(v - pRight[i]) > 10);
+          resolve({ pLeft, pRight, distinct });
+        };
+        img.src = 'data:image/jpeg;base64,${buf2Photo.toString('base64')}';
+      })
+    `,
+    awaitPromise: true,
+    returnByValue: true
+  });
+  console.log('   Left Slot Pixel:', pixelCheck2Photo.result.value.pLeft);
+  console.log('   Right Slot Pixel:', pixelCheck2Photo.result.value.pRight);
+  console.log('   Left & Right distinct:', pixelCheck2Photo.result.value.distinct);
+
+  if (dim2Photo.result.value.width !== 1080 || dim2Photo.result.value.height !== 1350) {
+    throw new Error(`Invalid dimensions: expected 1080x1350, got ${dim2Photo.result.value.width}x${dim2Photo.result.value.height}`);
+  }
+  if (!pixelCheck2Photo.result.value.distinct) {
+    throw new Error('FAILED: Left and Right slots in 2-photo export are not distinct photographs!');
+  }
+
+  // ================================================================
+  // SCENARIO 2: GENUINE 4-PHOTO MULTI-GRID USER WORKFLOW
+  // ================================================================
+  console.log('\n--- SCENARIO 2: Genuine 4-Photo Multi-Grid & Slot 3 Replacement ---');
+
+  console.log('1. Navigating back to Step 4 (फोटो एवं वॉटरमार्क) via UI...');
+  const step4Click2 = await clickEditorStep('4', 'फोटो');
+  console.log('   Step 4 clicked:', step4Click2.clicked);
+  await sleep(1000);
+
+  console.log('2. Selecting Multi-Grid primary layout...');
+  const selectMultiGridResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const btn = document.querySelector('button[data-testid="layout-btn-multigrid"]') ||
+                    Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('मल्टी ग्रिड'));
+        if (btn) {
+          btn.click();
+          return { clicked: true, text: btn.textContent.trim() };
+        }
+        return { clicked: false };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   Multi-Grid primary layout clicked:', selectMultiGridResult.result.value);
+  await sleep(800);
+
+  console.log('3. Selecting 4-Photo (grid-4) sub-variant...');
+  const selectGrid4Result = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const btn = document.querySelector('button[data-testid="layout-subvariant-grid-4"]') ||
+                    Array.from(document.querySelectorAll('button')).find(b => b.textContent && (b.textContent.includes('4 इमेज') || b.textContent.includes('4 फोटो ग्रिड')));
+        if (btn) {
+          btn.click();
+          return { clicked: true, text: btn.textContent.trim() };
+        }
+        return { clicked: false };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   4-Photo grid-4 clicked:', selectGrid4Result.result.value);
+  await sleep(800);
+
+  console.log('4. Uploading all 4 distinct photos into Slots 1, 2, 3, 4 via DOM file inputs...');
+  await uploadFixtureToFileInput('input[data-testid="file-input-main"]', 'test_photo_1.jpg');
+  await uploadFixtureToFileInput('input[data-testid="file-input-second"]', 'test_photo_2.jpg');
+  await uploadFixtureToFileInput('input[data-testid="file-input-third"]', 'test_photo_3.jpg');
+  await uploadFixtureToFileInput('input[data-testid="file-input-fourth"]', 'test_photo_4.jpg');
+
+  console.log('5. Replacing Slot 3 with test_photo_replacement.jpg via DOM file input...');
+  await uploadFixtureToFileInput('input[data-testid="file-input-third"]', 'test_photo_replacement.jpg');
+
+  console.log('6. Adjusting Pan/Zoom on 4-photo grid...');
+  await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const zoomSlider = document.querySelector('input[type="range"][min="1"][max="3"]');
+        if (zoomSlider) {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+          if (setter) setter.call(zoomSlider, '1.15');
+          else zoomSlider.value = '1.15';
+          zoomSlider.dispatchEvent(new Event('input', { bubbles: true }));
+          zoomSlider.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      })()
+    `
+  });
+  await sleep(500);
+
+  console.log('7. Navigating to Step 7 (डाउनलोड एवं कैप्शन) via UI...');
+  const step7Grid4Click = await clickEditorStep('7', 'डाउनलोड');
+  console.log('   Step 7 clicked:', step7Grid4Click.clicked);
+  await sleep(1000);
+
+  console.log('8. Clicking real Export button for 4-Photo Multi-Grid...');
+  // Clean download directory
+  fs.readdirSync(downloadDir).forEach(f => {
+    try { fs.unlinkSync(path.join(downloadDir, f)); } catch {}
+  });
+
+  const export4ClickResult = await sendCdp('Runtime.evaluate', {
+    expression: `
+      (() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const dlBtn = btns.find(b => !b.disabled && ((b.textContent || '').trim() === 'JPG डाउनलोड' || (b.textContent || '').includes('सोशल मीडिया रेडी कार्ड डाउनलोड')));
+        if (dlBtn) {
+          dlBtn.click();
+          return { clicked: true, text: dlBtn.textContent.trim(), disabled: dlBtn.disabled };
+        }
+        return { clicked: false, availableButtons: btns.map(b => ({ text: (b.textContent || '').trim(), disabled: b.disabled })).filter(b => b.text.includes('डाउनलोड')) };
+      })()
+    `,
+    returnByValue: true
+  });
+  console.log('   4-Photo Export button clicked:', export4ClickResult.result.value);
+
+  let downloaded4PhotoFile = '';
+  for (let i = 0; i < 40; i++) {
+    await sleep(500);
+    const files = fs.readdirSync(downloadDir).filter(f => !f.endsWith('.crdownload') && !f.endsWith('.tmp'));
+    if (files.length > 0) {
+      downloaded4PhotoFile = path.join(downloadDir, files[0]);
+      break;
+    }
+  }
+
+  if (!downloaded4PhotoFile) {
+    throw new Error('FAILED: 4-Photo exported file did not appear in download directory!');
+  }
+
+  const buf4Photo = fs.readFileSync(downloaded4PhotoFile);
+  const hash4Photo = crypto.createHash('sha256').update(buf4Photo).digest('hex');
+  console.log(`✅ Real browser downloaded 4-photo: ${path.basename(downloaded4PhotoFile)} (${buf4Photo.length} bytes, SHA256: ${hash4Photo.substring(0, 16)}...)`);
+
+  fs.copyFileSync(downloaded4PhotoFile, path.join(process.cwd(), 'audit_screenshots', '10_four_photo_grid_render.png'));
+
+  // Verify dimensions
+  const dim4Photo = await sendCdp('Runtime.evaluate', {
+    expression: `
+      new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        img.src = 'data:image/jpeg;base64,${buf4Photo.toString('base64')}';
+      })
+    `,
+    awaitPromise: true,
+    returnByValue: true
+  });
+  console.log('   Export Dimensions:', dim4Photo.result.value);
+
+  // Sample all 4 Quadrants
+  const quadrantCheck = await sendCdp('Runtime.evaluate', {
+    expression: `
+      new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth;
+          c.height = img.naturalHeight;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          // Q1: top-left (x=270, y=200)
+          // Q2: top-right (x=810, y=200)
+          // Q3: bottom-left (x=270, y=550) - Replaced with test_photo_replacement
+          // Q4: bottom-right (x=810, y=550)
+          const q1 = Array.from(ctx.getImageData(270, 200, 1, 1).data.slice(0, 3));
+          const q2 = Array.from(ctx.getImageData(810, 200, 1, 1).data.slice(0, 3));
+          const q3 = Array.from(ctx.getImageData(270, 550, 1, 1).data.slice(0, 3));
+          const q4 = Array.from(ctx.getImageData(810, 550, 1, 1).data.slice(0, 3));
+
+          const allDistinct = [
+            JSON.stringify(q1) !== JSON.stringify(q2),
+            JSON.stringify(q1) !== JSON.stringify(q3),
+            JSON.stringify(q1) !== JSON.stringify(q4),
+            JSON.stringify(q2) !== JSON.stringify(q3),
+            JSON.stringify(q2) !== JSON.stringify(q4),
+            JSON.stringify(q3) !== JSON.stringify(q4)
+          ].every(Boolean);
+
+          resolve({ q1, q2, q3, q4, allDistinct });
+        };
+        img.src = 'data:image/jpeg;base64,${buf4Photo.toString('base64')}';
+      })
+    `,
+    awaitPromise: true,
+    returnByValue: true
+  });
+
+  console.log('   Q1 (Top-Left):', quadrantCheck.result.value.q1);
+  console.log('   Q2 (Top-Right):', quadrantCheck.result.value.q2);
+  console.log('   Q3 (Bottom-Left, Replaced):', quadrantCheck.result.value.q3);
+  console.log('   Q4 (Bottom-Right):', quadrantCheck.result.value.q4);
+  console.log('   All 4 Quadrants Distinct:', quadrantCheck.result.value.allDistinct);
+
+  if (dim4Photo.result.value.width !== 1080 || dim4Photo.result.value.height !== 1350) {
+    throw new Error(`Invalid dimensions: expected 1080x1350, got ${dim4Photo.result.value.width}x${dim4Photo.result.value.height}`);
+  }
+  if (!quadrantCheck.result.value.allDistinct) {
+    throw new Error('FAILED: All 4 quadrants in 4-photo multi-grid are not distinct!');
+  }
+
+  console.log('\n================================================================');
+  console.log('🎉 GENUINE USER WORKFLOW E2E: ALL ASSERTIONS PASSED (100%)');
+  console.log('================================================================\n');
+
+  ws.close();
+  wsBrowser.close();
+  chrome.kill();
+  server.kill();
+
+  // Cleanup downloads dir
+  fs.rmSync(downloadDir, { recursive: true, force: true });
+
+  return {
+    success: true,
+    scenario1: {
+      file: '09_two_photo_grid_render.png',
+      size: buf2Photo.length,
+      hash: hash2Photo,
+      dimensions: dim2Photo.result.value
+    },
+    scenario2: {
+      file: '10_four_photo_grid_render.png',
+      size: buf4Photo.length,
+      hash: hash4Photo,
+      dimensions: dim4Photo.result.value
+    }
+  };
 }
 
-main().catch(err => {
-  console.error('❌ E2E Multi-Grid Test Failed:', err);
+runRealWorkflowE2E().catch(e => {
+  console.error('[E2E ERROR]', e);
   process.exit(1);
 });

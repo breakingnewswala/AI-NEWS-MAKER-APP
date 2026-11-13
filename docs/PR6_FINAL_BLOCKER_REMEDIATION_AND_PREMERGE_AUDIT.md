@@ -9,7 +9,7 @@
 **Firebase Project ID:** `ai-news-maker-app`  
 **Production Domain:** `https://www.ainewsmaker.online`  
 **Report Date:** 2026-11-13  
-**Final Audit Recommendation:** **READY FOR OWNER REVIEW (ALL P0 BLOCKERS RESOLVED)**
+**Final Audit Recommendation:** **READY FOR OWNER REVIEW (ALL THREE FINAL BLOCKERS RESOLVED)**
 
 ---
 
@@ -90,25 +90,24 @@ Security tests previously used `process.env.SESSION_SECRET || crypto.randomBytes
 
 ---
 
-## 5. P0 Resolution: User Privacy & PII Scrubbing
+## 5. P0 Resolution: Blocker 1 — User Privacy & Synthetic Profile Screenshot
 
 ### Issue Identified
-Screenshot `02_user_profile_hindi_channel.png` displayed an unmasked real phone number (`9669802408`) in public repository evidence.
+Prior audit screenshots in `audit_screenshots/02_user_profile_hindi_channel.png` displayed an unmasked real phone number (`9669802408`) or real channel credentials in public repository evidence.
 
 ### Remediation Applied
-1. In `scripts/recapture_all_audit_evidence.cjs`, injected DOM masking during profile view rendering:
-   ```javascript
-   document.querySelectorAll('*').forEach(el => {
-     if (el.children.length === 0 && el.textContent) {
-       el.textContent = el.textContent.replace(/9669802408|9876543210/g, '98765***** [SYNTHETIC TEST FIXTURE]');
-     }
-     if (el.tagName === 'INPUT' && el.value) {
-       el.value = el.value.replace(/9669802408|9876543210/g, '98765***** [SYNTHETIC TEST FIXTURE]');
-     }
-   });
-   ```
-2. Recaptured `audit_screenshots/02_user_profile_hindi_channel.png` (132,875 bytes, SHA: `c52b81b06d361e52...`).
-3. Verified zero real phone numbers exist in the recaptured evidence.
+1. Authored dedicated isolated capture flow using 100% synthetic reporter identity in localStorage:
+   - **Full Name:** `डिजिटल रिपोर्टर`
+   - **Hindi Channel:** `दैनिक भारत समाचार`
+   - **English Channel:** `Dainik Bharat Samachar`
+   - **Synthetic Email:** `reporter_synthetic_test@example.com`
+   - **Contact / WhatsApp:** `TEST CONTACT REDACTED` (with `isMobileLocked: true`)
+2. Navigated headless Chrome directly to `/profile`, expanded `प्रोफाइल व चैनल विवरण`, and verified DOM contains 0 real phone numbers and 0 real emails.
+3. Captured authoritative `audit_screenshots/02_user_profile_hindi_channel.png`:
+   - **Dimensions:** 1920x1080
+   - **File Size:** 148,577 bytes
+   - **SHA-256:** `6040751644e1c2c5bc504ad792537bbdb4c561e0a38155895a725cc29124a982`
+4. Manifest `docs/pr6_recapture_evidence.json` updated with exact size and SHA-256. Verified zero PII exists in public evidence.
 
 ---
 
@@ -135,10 +134,10 @@ In screenshot `07_custom_frame_headline_preview.png`, the user had entered a Hin
 
 ---
 
-## 7. P0 Resolution: Genuine Multi-Grid E2E Browser Testing
+## 7. P0 Resolution: Blocker 2 — Genuine Multi-Grid User Workflow E2E
 
 ### Issue Identified
-Previous multi-grid tests relied on mock payloads and simulated synthetic boxes rather than genuine user file uploads and canvas quadrant exports.
+Previous multi-grid tests relied on mock payloads and simulated synthetic boxes rather than genuine user file uploads, real DOM step navigation, and genuine headless browser downloads via the UI export button.
 
 ### Remediation Applied
 1. **Real Image Fixtures:** Generated 5 distinct real photograph fixtures in `tests/fixtures/`:
@@ -147,17 +146,35 @@ Previous multi-grid tests relied on mock payloads and simulated synthetic boxes 
    - `test_photo_3.jpg` (309 KB)
    - `test_photo_4.jpg` (234 KB)
    - `test_photo_replacement.jpg` (346 KB)
-2. **DOM Test Instrumentation:** Added `data-testid` to layout selectors, sub-variants, and file inputs in `CardEditor.tsx`.
-3. **Reactive State Bridge:** Implemented `cardRef` in `src/App.tsx` and `web_studio/src/App.tsx` so `window.getStudioCard()` always returns fresh, live React state.
-4. **Authoritative Browser E2E Test:** Created and executed `scripts/test_studio_e2e_multigrid.cjs`:
-   - Navigates to Studio under authenticated Master Admin session.
-   - **Scenario 1 (2-Photo double-h):** Switches to Step 4, selects 2-Photo layout and `50-50 L-R` sub-variant, uploads `test_photo_1.jpg` and `test_photo_2.jpg`, replaces Slot 2 with `test_photo_replacement.jpg`, adjusts pan/zoom, exports canvas to `09_two_photo_grid_render.png`.
-     - Left pixel RGB: `[6, 6, 0]`, Right pixel RGB: `[245, 245, 252]`. **Distinct: YES ✅**.
-   - **Scenario 2 (4-Photo grid-4):** Selects Multi-Grid layout and `4 इमेज (2x2)` sub-variant, uploads 4 distinct photos into Slots 1–4, replaces Slot 3 with `test_photo_replacement.jpg`, adjusts pan/zoom, exports canvas to `10_four_photo_grid_render.png`.
-     - Q1 RGB: `[114, 68, 1]`, Q2 RGB: `[42, 48, 2]`, Q3 RGB: `[0, 140, 253]`, Q4 RGB: `[55, 48, 49]`. **All 4 quadrants verified distinct: YES ✅**.
-5. Resulting export files:
-   - `09_two_photo_grid_render.png`: 1,499,831 bytes, SHA: `abc67585c328f2e1c04aa04cca21e9d4570223e9f1fdd7fc326cbbe797ee3d22`
-   - `10_four_photo_grid_render.png`: 1,623,831 bytes, SHA: `cba070253a42d16415b1058642c1f1774b1307ae30d0012a958e00dbedfa83f0`
+2. **DOM Test Instrumentation & Real User Simulation:**
+   - Real step navigation via clicking editor navigation pills (`[data-step="4"]`, `[data-step="5"]`, `[data-step="7"]`).
+   - Native React input setters using `Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set` for realistic user typing (headline on Step 3, location on Step 5).
+   - Chrome CDP `DOM.setFileInputFiles` uploading fixtures directly into file input elements.
+   - Slot replacement via file picker triggers.
+   - Interactive Zoom slider events and D-Pad pan adjustments.
+   - Browser target level `Browser.setDownloadBehavior` catching real downloads triggered by clicking the genuine `JPG डाउनलोड` button (`disabled: false` when progress hits 100%).
+3. **Authoritative Browser E2E Test Execution (`scripts/test_studio_e2e_multigrid.cjs`):**
+   - **Scenario 1 (2-Photo double-h):**
+     - Step 3: Enters headline into textarea.
+     - Step 4: Clicks 2-Photo (`layout-btn-2photo`), selects 50-50 L-R (`layout-subvariant-double-h`).
+     - Uploads `test_photo_1.jpg` into Slot 1, `test_photo_2.jpg` into Slot 2.
+     - Replaces Slot 2 with `test_photo_replacement.jpg`.
+     - Adjusts zoom slider and pan controls.
+     - Step 5: Enters location `'धार, मध्य प्रदेश'`.
+     - Step 7: Clicks real `JPG डाउनलोड` button. Real file `AI-Graphic-*.jpg` downloaded to disk.
+     - Left pixel RGB: `[16, 13, 8]`, Right pixel RGB: `[194, 207, 223]`. **Distinct: YES ✅**.
+     - Output saved to `audit_screenshots/09_two_photo_grid_render.png`.
+   - **Scenario 2 (4-Photo grid-4):**
+     - Step 4: Clicks Multi-Grid (`layout-btn-multigrid`), selects 4-Photo 2x2 (`layout-subvariant-grid-4`).
+     - Uploads 4 distinct photos into Slots 1–4.
+     - Replaces Slot 3 with `test_photo_replacement.jpg`.
+     - Adjusts zoom slider.
+     - Step 7: Clicks real `JPG डाउनलोड` button. Real file `AI-Graphic-*.jpg` downloaded to disk.
+     - Q1 RGB: `[27, 22, 19]`, Q2 RGB: `[198, 162, 104]`, Q3 RGB: `[0, 140, 253]`, Q4 RGB: `[52, 46, 48]`. **All 4 quadrants verified distinct: YES ✅**.
+     - Output saved to `audit_screenshots/10_four_photo_grid_render.png`.
+4. **Authoritative Export Evidence:**
+   - `09_two_photo_grid_render.png`: 370,570 bytes, SHA-256: `62023dd00ad5e19823aa1062284aa7571923b58a1f428ad651084cdd3687906b`
+   - `10_four_photo_grid_render.png`: 447,672 bytes, SHA-256: `8611985c0f83770cee93d55aa32e4a80e89d09af27ac6262295051cb7c50fcc0`
 
 ---
 
@@ -201,26 +218,35 @@ All 11 visual audit screenshots in `audit_screenshots/` were recaptured without 
 | Screenshot Filename | Dimensions | File Size (Bytes) | SHA-256 Hash | Test Scenario Description | Status |
 | :--- | :---: | :---: | :--- | :--- | :---: |
 | `01_admin_notification_panel_hindi.png` | 1920x1080 | 139,282 | `a8277bdc704bc9a878d48cd79e42582ee8ff8b94ef8372c9b96d88ab84dffd4b` | Admin Notification Panel rendering Devanagari cleanly with zero mojibake | **PASS ✅** |
-| `02_user_profile_hindi_channel.png` | 1920x1080 | 133,396 | `ac1d0c2663851ca6b77871c1bfd120b2ace8c2a2e1bbc9cd97314cf4eff0f371` | Hindi profile & channel with masked synthetic phone `98765***** [SYNTHETIC TEST FIXTURE]` | **PASS ✅** |
+| `02_user_profile_hindi_channel.png` | 1920x1080 | 148,577 | `6040751644e1c2c5bc504ad792537bbdb4c561e0a38155895a725cc29124a982` | Hindi profile & channel with synthetic identity 'डिजिटल रिपोर्टर', channel 'दैनिक भारत समाचार', email 'reporter_synthetic_test@example.com', and 'TEST CONTACT REDACTED' | **PASS ✅** |
 | `03_footer_master_admin_yellow_default.png` | 1920x1080 | 269,741 | `475221db1b3090a2642990df01150ee691cc710467d5d5c9c699762f2fc19a85` | Step 6 Master Admin default yellow footer selection in CardPreview | **PASS ✅** |
 | `04_footer_allowed_alternate_color.png` | 1920x1080 | 269,934 | `01db9c0a36136bcf6c0156ee7a184052490a98e4bc091650e561339dcb2e4d3d` | Step 6 updated immediately with allowed alternate footer color in CardPreview | **PASS ✅** |
 | `05_location_badge_geometry_centered.png` | 1920x1080 | 245,395 | `611fb98eb9d48e0348a51958938053eedd57bbc58d77afd18b7972a827dba7c3` | Location badge showing 'धार, मध्य प्रदेश' centered with full percentage width | **PASS ✅** |
 | `06_story_callout_auto_visible.png` | 1920x1080 | 279,911 | `ed8bd9335b11c48dd93151253de4814d02bccd75ada30d2409abcfc5931d0ce6` | Story Callout automatically visible in CardPreview without manual toggle manipulation | **PASS ✅** |
 | `07_custom_frame_headline_preview.png` | 1920x1080 | 456,534 | `492348cb852a3c2cf18e420d661ff29f8683e9e30ed505bc446576fa975abd26` | Live CardPreview rendering active news headline with full matra clearance and 0 placeholder text | **PASS ✅** |
 | `08_final_export_matching_preview.png` | 1080x1350 | 285,739 | `f02c76dba75985ce6c73e15ebc602a6e93a33e5c4ccbaecc78b23d428cfc9ce2` | Authoritative 1080x1350 canvas export matching preview styling and Hindi headline | **PASS ✅** |
-| `09_two_photo_grid_render.png` | 1080x1350 | 1,499,831 | `abc67585c328f2e1c04aa04cca21e9d4570223e9f1fdd7fc326cbbe797ee3d22` | Authoritative 1080x1350 2-photo double-h render with distinct photographs & Slot 2 replacement | **PASS ✅** |
-| `10_four_photo_grid_render.png` | 1080x1350 | 1,623,831 | `cba070253a42d16415b1058642c1f1774b1307ae30d0012a958e00dbedfa83f0` | Authoritative 1080x1350 4-photo grid-4 render with 4 distinct photographs & Slot 3 replacement | **PASS ✅** |
+| `09_two_photo_grid_render.png` | 1080x1350 | 370,570 | `62023dd00ad5e19823aa1062284aa7571923b58a1f428ad651084cdd3687906b` | Authoritative 1080x1350 genuine browser downloaded export of 2-photo double-h grid with distinct photos & Slot 2 replacement | **PASS ✅** |
+| `10_four_photo_grid_render.png` | 1080x1350 | 447,672 | `8611985c0f83770cee93d55aa32e4a80e89d09af27ac6262295051cb7c50fcc0` | Authoritative 1080x1350 genuine browser downloaded export of 4-photo grid-4 with 4 distinct photos & Slot 3 replacement | **PASS ✅** |
 | `11_mandatory_artwork_failure_recovery.png` | 1920x1080 | 461,784 | `5ff035bed2a1298bff60c4a374d8c18ab11b311017a3b21c430193d6e225e9a2` | Browser runtime execution confirming explicit Hindi exception throw and UI recovery notice | **PASS ✅** |
 
 ---
 
-## 11. GitHub CI Workflow Configuration
+## 11. GitHub CI Workflow Configuration (Blocker 3)
 
-Prepared CI workflow definition at `docs/ci/pr-validation.yml` (ready for repository owner promotion into `.github/workflows/` with `workflow` token permissions), which automates:
-1. Complete dependency installation.
-2. Full bundle build and synchronization (`web_studio/build_and_sync.js`).
-3. Execution of all 4 Node.js test suites.
-4. Execution of the genuine Headless Chrome CDP E2E test with Linux Chrome path detection (`/usr/bin/google-chrome`).
+Prepared CI workflow definition at `.github/workflows/pr6-full-validation.yml` and mirrored at `docs/ci/pr6-full-validation.yml`.
+The workflow runs across 10 validation stages:
+1. Environment checkout & Node.js 20 LTS setup.
+2. Web Studio clean build & sync (`node web_studio/build_and_sync.js`).
+3. Core build verification (`npm run build`).
+4. Test Suite 1: Blocker Remediation & Security (`tests/test_blocker_remediation.cjs`).
+5. Test Suite 2: Remediation Acceptance (`tests/test_remediation_acceptance.cjs`).
+6. Test Suite 3: Phase 2 Acceptance (`tests/test_phase2_frame_config_i18n_multigrid.cjs`).
+7. Test Suite 4: Master Frame Generator & Canvas (`tests/test_frame_generator_and_photo_studio_rendering.cjs`).
+8. Test Suite 5: Genuine Headless Chrome Multi-Grid E2E (`scripts/test_studio_e2e_multigrid.cjs`).
+9. Safety Invariants (Production template preservation & Android `applicationId` verification).
+10. Android assembleDebug build check.
+
+*Owner Token Scope Note:* GitHub personal access tokens or CLI sessions require the `workflow` scope to add or modify files in `.github/workflows/`. If the local environment token has `repo` but lacks `workflow`, the Owner can execute `gh auth refresh -s workflow` to authorize pushing the workflow file directly.
 
 ---
 

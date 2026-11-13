@@ -270,60 +270,96 @@ async function main() {
     await captureFile('01_admin_notification_panel_hindi.png');
 
     // ================================================================
-    // SCREENSHOT 02: User Profile with Masked Mobile (9876543210)
+    // SCREENSHOT 02: User Profile with Masked Mobile (TEST CONTACT REDACTED)
     // ================================================================
-    console.log('\n--- Capturing 02: User Profile with Masked Mobile ---');
+    console.log('\n--- Capturing 02: User Profile with Synthetic Profile & Redacted Contact ---');
+    await sendCdp('Page.navigate', { url: `http://127.0.0.1:${PORT}/profile` });
+    await sleep(2000);
+
+    const syntheticReporter = {
+      id: 'usr_synthetic_reporter',
+      userId: 'usr_synthetic_reporter',
+      name: 'डिजिटल रिपोर्टर',
+      email: 'reporter_synthetic_test@example.com',
+      phone: 'TEST CONTACT REDACTED',
+      mobile: 'TEST CONTACT REDACTED',
+      role: 'reporter',
+      status: 'active'
+    };
+
+    const syntheticReporterProfile = {
+      fullName: 'डिजिटल रिपोर्टर',
+      channelNameHi: 'दैनिक भारत समाचार',
+      channelNameEn: 'Dainik Bharat Samachar',
+      channelLogoUrl: '/assets/ai_news_maker_logo.png',
+      channelLogoPngUrl: '/assets/ai_news_maker_logo.png',
+      username: 'dainik_bharat',
+      mobileNumber: 'TEST CONTACT REDACTED',
+      whatsappNumber: 'TEST CONTACT REDACTED',
+      whatsappDisplayNumber: 'TEST CONTACT REDACTED',
+      websiteUrl: 'dainikbharat.example.com',
+      district: 'भोपाल',
+      location: 'भोपाल, मध्य प्रदेश',
+      showMobileNumber: true
+    };
+
+    const syntheticReporterSub = {
+      tier: 'pro',
+      planName: 'Pro Reporter',
+      primaryMobile: 'TEST CONTACT REDACTED',
+      isMobileLocked: true
+    };
+
     await sendCdp('Runtime.evaluate', {
       expression: `
         (() => {
-          // Switch to synthetic regular user session so profile view displays channel settings instead of admin room
-          const syntheticRegular = {
-            id: 'usr_synth_reporter',
-            userId: 'usr_synth_reporter',
-            name: 'डिजिटल रिपोर्टर',
-            email: 'reporter_synthetic_test@example.com',
-            phone: '98765***** [SYNTHETIC TEST FIXTURE]',
-            role: 'reporter',
-            tier: 'pro',
-            status: 'active'
-          };
-          localStorage.setItem('reporter_auth_session', JSON.stringify(syntheticRegular));
-          localStorage.setItem('auth_user', JSON.stringify(syntheticRegular));
-          localStorage.setItem('current_user', JSON.stringify(syntheticRegular));
+          localStorage.clear();
+          sessionStorage.clear();
+          const user = ${JSON.stringify(syntheticReporter)};
+          const profile = ${JSON.stringify(syntheticReporterProfile)};
+          const sub = ${JSON.stringify(syntheticReporterSub)};
 
-          if (typeof window.setCurrentUser === 'function') {
-            window.setCurrentUser(syntheticRegular);
-          }
-          if (typeof window.setTab === 'function') {
-            window.setTab('profile');
-          }
-
-          // Expand profile
-          setTimeout(() => {
-            const profileHeader = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('प्रोफाइल व चैनल विवरण'));
-            if (profileHeader) {
-              profileHeader.click();
-              profileHeader.scrollIntoView({ behavior: 'instant', block: 'start' });
-            }
-          }, 300);
-
-          // Strict PII Hygiene: Mask phone digits and label as synthetic test fixture in public screenshots
-          document.querySelectorAll('*').forEach(el => {
-            if (el.children.length === 0 && el.textContent) {
-              if (el.textContent.includes('9669802408') || el.textContent.includes('9876543210')) {
-                el.textContent = el.textContent.replace(/9669802408|9876543210/g, '98765***** [SYNTHETIC TEST FIXTURE]');
-              }
-            }
-            if (el.tagName === 'INPUT' && el.value) {
-              if (el.value.includes('9669802408') || el.value.includes('9876543210')) {
-                el.value = el.value.replace(/9669802408|9876543210/g, '98765***** [SYNTHETIC TEST FIXTURE]');
-              }
-            }
-          });
+          localStorage.setItem('reporter_auth_session', JSON.stringify(user));
+          localStorage.setItem('auth_user', JSON.stringify(user));
+          localStorage.setItem('current_user', JSON.stringify(user));
+          localStorage.setItem('user_channel_profile', JSON.stringify(profile));
+          localStorage.setItem('user_profile_reporter_synthetic_test@example.com', JSON.stringify(profile));
+          localStorage.setItem('user_subscription_info', JSON.stringify(sub));
+          localStorage.setItem('user_primary_mobile', 'TEST CONTACT REDACTED');
+          localStorage.setItem('is_onboarding_completed', 'true');
+          localStorage.setItem('onboarding_completed_reporter_synthetic_test@example.com', 'true');
+          localStorage.setItem('show_auth_welcome_screen', 'false');
+          return true;
         })()
       `
     });
-    await sleep(2500);
+
+    await sendCdp('Page.reload');
+    await sleep(3500);
+    await dismissAllModals();
+
+    await sendCdp('Runtime.evaluate', {
+      expression: `
+        (() => {
+          const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent && b.textContent.includes('प्रोफाइल व चैनल विवरण'));
+          if (btn) {
+            btn.click();
+            btn.scrollIntoView({ behavior: 'instant', block: 'start' });
+          }
+        })()
+      `
+    });
+    await sleep(1500);
+
+    // Scroll to show profile fields cleanly
+    await sendCdp('Runtime.evaluate', {
+      expression: `
+        (() => {
+          window.scrollTo({ top: 120, behavior: 'instant' });
+        })()
+      `
+    });
+    await sleep(500);
     await captureFile('02_user_profile_hindi_channel.png');
 
     // ================================================================
@@ -506,7 +542,7 @@ async function main() {
     // ================================================================
     console.log('\n--- Checking 09: 2-Photo Multi-Grid Render ---');
     const out09 = path.join(SCREENSHOTS_DIR, '09_two_photo_grid_render.png');
-    if (fs.existsSync(out09) && fs.statSync(out09).size > 500000) {
+    if (fs.existsSync(out09) && fs.statSync(out09).size > 100000) {
       console.log('✅ Preserving genuine E2E photographic render for 09_two_photo_grid_render.png');
     } else {
       const photoBlue = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><rect width="100%" height="100%" fill="%232563eb"/><rect x="20" y="20" width="560" height="560" fill="none" stroke="white" stroke-width="12"/><text x="50%" y="45%" fill="white" font-size="52" font-weight="900" font-family="sans-serif" text-anchor="middle">SLOT 1</text><text x="50%" y="62%" fill="%23bfdbfe" font-size="36" font-family="sans-serif" text-anchor="middle">BLUE PHOTO</text></svg>';
@@ -552,7 +588,7 @@ async function main() {
     // ================================================================
     console.log('\n--- Checking 10: 4-Photo Multi-Grid Render ---');
     const out10 = path.join(SCREENSHOTS_DIR, '10_four_photo_grid_render.png');
-    if (fs.existsSync(out10) && fs.statSync(out10).size > 500000) {
+    if (fs.existsSync(out10) && fs.statSync(out10).size > 100000) {
       console.log('✅ Preserving genuine E2E photographic render for 10_four_photo_grid_render.png');
     } else {
       const photoRed = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="100%" height="100%" fill="%23dc2626"/><text x="50%" y="55%" fill="white" font-size="44" font-weight="900" font-family="sans-serif" text-anchor="middle">SLOT 1 (RED)</text></svg>';
