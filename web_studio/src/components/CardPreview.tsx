@@ -451,7 +451,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       ? '#000000'
       : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'))));
 
-    const defaultTemplateHighlight = activeDf?.primaryHighlightColor || activeDf?.quoteHighlightColor || (isGraphic4
+    const defaultTemplateHighlight = df?.primaryHighlightColor || df?.quoteHighlightColor || (isGraphic4
       ? '#DC2626'
       : isGraphic2
       ? '#EA580C'

@@ -1928,7 +1928,7 @@ class CentralFirestoreDatabaseService {
     const rawToken = typeof tokenInfo === 'string' ? tokenInfo : (tokenInfo?.token || downloadDetails?.token || '');
     const cleanToken = String(rawToken || '').trim();
     const cleanCard = String(tokenInfo?.cardId || downloadDetails?.cardId || '').trim();
-    const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || 'ainewsmaker_prod_sec_token_9669802408_2026';
+    const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || '';
 
     let tokenHash = '';
     let tokenExpiresAt = now + (10 * 60 * 1000);

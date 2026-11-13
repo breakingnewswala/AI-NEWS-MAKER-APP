@@ -212,9 +212,13 @@ function initializeAuthSecret(): string {
     return secret.trim();
   }
 
-  // Graceful fallback: If SESSION_SECRET is not yet bound to container environment, use production fallback
-  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is missing, empty, or < 32 chars. Using fallback secret for continuous availability.");
-  return "ainewsmaker_prod_sec_token_9669802408_2026";
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[SECURITY WARNING] SESSION_SECRET environment variable is missing, empty, or < 32 chars in production environment.");
+  }
+
+  // Generate an ephemeral random secret per instance run if SESSION_SECRET is not supplied
+  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is not configured. Generating ephemeral instance secret.");
+  return crypto.randomBytes(32).toString("hex");
 }
 
 const AUTH_SECRET = initializeAuthSecret();
@@ -247,10 +251,10 @@ function generateAuthToken(user: { userId?: string; email?: string; role?: strin
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
-const LEGACY_AUTH_SECRETS: string[] = [
-  "ainewsmaker_prod_sec_token_9669802408_2026",
-  "ai_news_maker_session_secret_2026_secure",
-];
+const LEGACY_AUTH_SECRETS: string[] = (process.env.LEGACY_AUTH_SECRETS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter((s) => s.length >= 16);
 
 function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignature?: boolean }) | null {
   if (!tokenStr || typeof tokenStr !== "string") return null;

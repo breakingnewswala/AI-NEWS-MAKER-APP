@@ -439,7 +439,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   }, [card.frameDesign]);
 
   // Master Branding custom frames sub-mode and saved catalog state
-    // Auto-select custom footer if dynamic frame specifies customFooterId
+  const [customBrandingSubTab, setCustomBrandingSubTab] = React.useState<'hf' | 'full'>('hf');
+  const [savedCustomFramesList, setSavedCustomFramesList] = React.useState<CustomFrameItem[]>(() =>
+    getCustomFrames(currentUser?.email || currentUser?.username)
+  );
+  const [libraryFooters, setLibraryFooters] = React.useState<any[]>([]);
+  const [libraryCallouts, setLibraryCallouts] = React.useState<any[]>([]);
+  const [footerCategoryFilter, setFooterCategoryFilter] = React.useState<string>('all');
+  const [calloutCategoryFilter, setCalloutCategoryFilter] = React.useState<string>('all');
+
+  // Auto-select custom footer if dynamic frame specifies customFooterId
   React.useEffect(() => {
     const activeDf = getDynamicFrameById(card.frameDesign || '');
     if (!activeDf) return;
@@ -492,15 +501,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       onChange(updates);
     }
   }, [card.frameDesign, libraryFooters]);
-
-  const [customBrandingSubTab, setCustomBrandingSubTab] = React.useState<'hf' | 'full'>('hf');
-  const [savedCustomFramesList, setSavedCustomFramesList] = React.useState<CustomFrameItem[]>(() =>
-    getCustomFrames(currentUser?.email || currentUser?.username)
-  );
-  const [libraryFooters, setLibraryFooters] = React.useState<any[]>([]);
-  const [libraryCallouts, setLibraryCallouts] = React.useState<any[]>([]);
-  const [footerCategoryFilter, setFooterCategoryFilter] = React.useState<string>('all');
-  const [calloutCategoryFilter, setCalloutCategoryFilter] = React.useState<string>('all');
 
   React.useEffect(() => {
     fetch(`/api/admin/asset-libraries?type=custom_footer`, {

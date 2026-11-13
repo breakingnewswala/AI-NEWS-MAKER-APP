@@ -6,7 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const PORT = 3333;
-const AUTH_SECRET = 'ainewsmaker_prod_sec_token_9669802408_2026';
+const AUTH_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const MASTER_ADMIN_EMAIL = 'breakingnewswala.com@gmail.com';
 
 function createToken(email, role, userId) {

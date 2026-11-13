@@ -37,7 +37,7 @@ All confirmed P0 (Critical) and P1 (High) vulnerabilities have been completely e
 ### FIX 2: Elimination of Hardcoded JWT Session Secret (P0)
 - **Finding ID:** `auth.jwt.hardcoded_session_secret`
 - **Files Modified:** `server.ts` (lines 190–215), `apphosting.yaml`.
-- **Root Cause:** `AUTH_SECRET` defaulted to a static fallback string `"ainewsmaker_prod_sec_token_9669802408_2026"`, allowing anyone with source code access to forge valid admin sessions offline.
+- **Root Cause:** `AUTH_SECRET` previously defaulted to a static fallback string, allowing anyone with source code access to forge valid admin sessions offline.
 - **Remediation Implemented:**
   1. Removed static fallback string entirely.
   2. Configured `SESSION_SECRET` secret mapping in `apphosting.yaml` for Google Cloud Secret Manager.

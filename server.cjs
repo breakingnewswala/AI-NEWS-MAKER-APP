@@ -3314,7 +3314,7 @@ var require_firestore_database_service = __commonJS({
         const rawToken = typeof tokenInfo === "string" ? tokenInfo : tokenInfo?.token || downloadDetails?.token || "";
         const cleanToken = String(rawToken || "").trim();
         const cleanCard = String(tokenInfo?.cardId || downloadDetails?.cardId || "").trim();
-        const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+        const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || "";
         let tokenHash = "";
         let tokenExpiresAt = now + 10 * 60 * 1e3;
         if (cleanToken) {
@@ -5667,7 +5667,7 @@ var require_firestore_database_service2 = __commonJS({
         const rawToken = typeof tokenInfo === "string" ? tokenInfo : tokenInfo?.token || downloadDetails?.token || "";
         const cleanToken = String(rawToken || "").trim();
         const cleanCard = String(tokenInfo?.cardId || downloadDetails?.cardId || "").trim();
-        const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || "ainewsmaker_prod_sec_token_9669802408_2026";
+        const authSecret = tokenInfo?.authSecret || process.env.SESSION_SECRET || process.env.JWT_SECRET || "";
         let tokenHash = "";
         let tokenExpiresAt = now + 10 * 60 * 1e3;
         if (cleanToken) {
@@ -12305,8 +12305,11 @@ function initializeAuthSecret() {
   if (secret && typeof secret === "string" && secret.trim().length >= 32) {
     return secret.trim();
   }
-  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is missing, empty, or < 32 chars. Using fallback secret for continuous availability.");
-  return "ainewsmaker_prod_sec_token_9669802408_2026";
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[SECURITY WARNING] SESSION_SECRET environment variable is missing, empty, or < 32 chars in production environment.");
+  }
+  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is not configured. Generating ephemeral instance secret.");
+  return import_crypto2.default.randomBytes(32).toString("hex");
 }
 var AUTH_SECRET = initializeAuthSecret();
 function generateAuthToken(user) {
@@ -12325,10 +12328,7 @@ function generateAuthToken(user) {
   const signature = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
-var LEGACY_AUTH_SECRETS = [
-  "ainewsmaker_prod_sec_token_9669802408_2026",
-  "ai_news_maker_session_secret_2026_secure"
-];
+var LEGACY_AUTH_SECRETS = (process.env.LEGACY_AUTH_SECRETS || "").split(",").map((s) => s.trim()).filter((s) => s.length >= 16);
 function verifyAuthToken(tokenStr) {
   if (!tokenStr || typeof tokenStr !== "string") return null;
   const parts = tokenStr.trim().split(".");
