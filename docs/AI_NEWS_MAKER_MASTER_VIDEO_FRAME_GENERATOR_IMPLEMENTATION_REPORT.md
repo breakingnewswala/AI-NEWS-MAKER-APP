@@ -184,3 +184,39 @@ The dedicated automated test suite `tests/test_master_video_frame_generator_pro.
 - [x] **Production Data Intact**: Real production dynamic frame `df_1794406067554_albmw` is verified published, approved, and not tombstoned.
 - [x] **Photo Frame Mode Intact**: Zero regressions or unintended side effects on Photo Frame mode.
 - [x] **Dual Parity**: All modified source files are byte-for-byte identical across `src/` and `web_studio/src/`.
+
+---
+
+## 5. Visual Evidence & Artifacts Index
+
+All 15 visual verification screenshots have been captured from the real running application via Chrome DevTools Protocol and committed into `audit_screenshots/video_pro/`:
+
+| Screenshot File | Description |
+|---|---|
+| `01_step1_canvas_and_video_ratio.png` | Step 1 with Canvas Ratio selection (9:16, 4:5, 1:1, 4:3) and independent Final Video Ratio selector |
+| `02_canvas_9_16_video_4_5_safe_zone.png` | 9:16 Canvas with 4:5 Video Safe Zone and live ratio indicator (`कैनवास: 9:16 ⟷ वीडियो: 4:5`) |
+| `03_canvas_4_5_video_16_9.png` | 4:5 Portrait Canvas with 16:9 Video Window |
+| `04_canvas_4_3_video_16_9.png` | 4:3 Standard Canvas with 16:9 Video Window |
+| `05_canvas_1_1_video_16_9.png` | 1:1 Square Canvas with 16:9 Video Window |
+| `06_step5_video_space_photo_slots_removed.png` | Step 5 (5. वीडियो स्पेस और सेफ ज़ोन) with Fit vs Crop modes, presets, numeric inputs, and zero photo slots |
+| `07_canvas_marking_independent_layers.png` | Step 4 (4. कैनवास मार्किंग) with Main Video Window layer underneath and movable overlay layers |
+| `08_multiple_ribbons_configuration.png` | Step 3 Additional Breaking News multi-ribbon layers configuration |
+| `09_single_headline_2_line_configuration.png` | Step 6 Single Headline with 2 lines toggle (Reels / Shorts) |
+| `10_single_headline_3_line_configuration.png` | Step 6 Single Headline with 3 lines toggle (Classic Broadcast News) |
+| `11_multiple_headline_blocks_configuration.png` | Step 6 Multiple Headline Blocks configuration with dynamic blocks management |
+| `12_movable_footer_in_header.png` | Movable Footer positioned at Top / Header with preserved branding data |
+| `13_png_gif_overlay_preview.png` | Step 3 Transparent PNG and Animated GIF Logo selector |
+| `14_composed_video_studio_preview.png` | End-user Video Studio with dynamic video frame live preview |
+| `15_video_studio_canvas_export_matching.png` | Video Studio canvas controls and snapshot exporter matching template geometry |
+
+---
+
+## 6. Git Details & Pull Request
+
+- **Repository:** `breakingnewswala/AI-NEWS-MAKER-APP`
+- **Branch:** `feature/master-video-frame-generator-pro`
+- **Base Branch:** `main`
+- **Pushed Commit SHA:** `1736684`
+- **Pull Request:** [PR #7 — https://github.com/breakingnewswala/AI-NEWS-MAKER-APP/pull/7](https://github.com/breakingnewswala/AI-NEWS-MAKER-APP/pull/7)
+- **Final Status:** **READY FOR OWNER REVIEW**
+
