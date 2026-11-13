@@ -442,17 +442,54 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     // Auto-select custom footer if dynamic frame specifies customFooterId
   React.useEffect(() => {
     const activeDf = getDynamicFrameById(card.frameDesign || '');
-    if (activeDf?.customFooterId && !card.selectedCustomFooterId && libraryFooters.length > 0) {
+    if (!activeDf) return;
+
+    const updates: Partial<NewsCardData> = {};
+
+    // Bug C & D: Footer Background and Text Color inheritance
+    const dfFooterBg = activeDf.footerConfig?.footerBgColor || (activeDf.footerConfig as any)?.primaryFooterBg || (activeDf.footerConfig as any)?.primaryFooterColor;
+    const dfFooterText = activeDf.footerConfig?.footerTextColor;
+    const bannedFooterColor = activeDf.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
+
+    if (dfFooterBg) {
+      if (bannedFooterColor && dfFooterBg.toUpperCase() === bannedFooterColor.toUpperCase()) {
+        updates.footerBgColor = activeDf.footerConfig?.primaryFooterColor || '#FACC15';
+      } else {
+        updates.footerBgColor = dfFooterBg;
+      }
+    } else if (bannedFooterColor && (card.footerBgColor || '#FFFFFF').toUpperCase() === bannedFooterColor.toUpperCase()) {
+      updates.footerBgColor = activeDf.footerConfig?.primaryFooterColor || '#FACC15';
+    }
+
+    if (dfFooterText) {
+      updates.footerTextColor = dfFooterText;
+    }
+
+    // Bug F: Story Callout default state from Master Admin
+    if (activeDf.fullStoryCalloutConfig?.enabled) {
+      updates.showCallout = true;
+      if (activeDf.fullStoryCalloutConfig.manualCalloutAsset || (activeDf.fullStoryCalloutConfig as any).calloutAssetUrl) {
+        updates.customCalloutAssetUrl = activeDf.fullStoryCalloutConfig.manualCalloutAsset || (activeDf.fullStoryCalloutConfig as any).calloutAssetUrl;
+      }
+      if (activeDf.fullStoryCalloutConfig.text) {
+        updates.calloutTag = activeDf.fullStoryCalloutConfig.text;
+      }
+    }
+
+    // Bug J: Built-in custom footer auto-selection
+    if (activeDf.customFooterId && !card.selectedCustomFooterId && libraryFooters.length > 0) {
       const matchingFooter = libraryFooters.find((lf) => lf.id === activeDf.customFooterId);
       if (matchingFooter) {
-        onChange({
-          selectedCustomFooterId: matchingFooter.id,
-          customFooterConfig: matchingFooter.footerConfig,
-          customFooterPng: matchingFooter.assetUrl || matchingFooter.url || undefined,
-          footerBgColor: matchingFooter.footerConfig?.footerBgColor || card.footerBgColor,
-          footerTextColor: matchingFooter.footerConfig?.footerTextColor || card.footerTextColor,
-        });
+        updates.selectedCustomFooterId = matchingFooter.id;
+        updates.customFooterConfig = matchingFooter.footerConfig;
+        updates.customFooterPng = matchingFooter.assetUrl || matchingFooter.url || undefined;
+        if (matchingFooter.footerConfig?.footerBgColor) updates.footerBgColor = matchingFooter.footerConfig.footerBgColor;
+        if (matchingFooter.footerConfig?.footerTextColor) updates.footerTextColor = matchingFooter.footerConfig.footerTextColor;
       }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      onChange(updates);
     }
   }, [card.frameDesign, libraryFooters]);
 
@@ -1744,14 +1781,31 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         if (match?.textSlots?.[0]?.textColor) {
                           updates.headlineTextColor = match.textSlots[0].textColor;
                         }
-                        // Bug B: Automatically enable callout if Master Admin enabled it for this frame
+                        // Bug F: Automatically enable callout & set assets if Master Admin enabled it
                         if (match?.fullStoryCalloutConfig?.enabled) {
                           updates.showCallout = true;
+                          if (match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl) {
+                            updates.customCalloutAssetUrl = match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl;
+                          }
+                          if (match.fullStoryCalloutConfig.text) {
+                            updates.calloutTag = match.fullStoryCalloutConfig.text;
+                          }
                         }
-                        // Bug I: Respect banned footer background color
+                        // Bug C & D: Inherit frame-specific footer defaults and respect banned colors
+                        const dfFooterBg = match?.footerConfig?.footerBgColor || (match?.footerConfig as any)?.primaryFooterBg || (match?.footerConfig as any)?.primaryFooterColor;
+                        const dfFooterText = match?.footerConfig?.footerTextColor;
                         const bannedColor = match?.footerConfig?.bannedFooterColor || (match as any)?.bannedFooterColor;
-                        if (bannedColor && (card.footerBgColor || '#FFFFFF').toUpperCase() === bannedColor.toUpperCase()) {
-                          updates.footerBgColor = match?.footerConfig?.primaryFooterColor || (match as any)?.primaryFooterColor || '#FACC15';
+                        if (dfFooterBg) {
+                          if (bannedColor && dfFooterBg.toUpperCase() === bannedColor.toUpperCase()) {
+                            updates.footerBgColor = match?.footerConfig?.primaryFooterColor || '#FACC15';
+                          } else {
+                            updates.footerBgColor = dfFooterBg;
+                          }
+                        } else if (bannedColor && (card.footerBgColor || '#FFFFFF').toUpperCase() === bannedColor.toUpperCase()) {
+                          updates.footerBgColor = match?.footerConfig?.primaryFooterColor || '#FACC15';
+                        }
+                        if (dfFooterText) {
+                          updates.footerTextColor = dfFooterText;
                         }
                         onChange(updates);
                       }}
@@ -3267,6 +3321,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                             newImages.third = availablePhotos[2];
                             changed = true;
                           }
+                          if (l.id === 'grid-4' && (!newImages.fourth || newImages.fourth === newImages.main) && availablePhotos[3]) {
+                            newImages.fourth = availablePhotos[3];
+                            changed = true;
+                          }
                           if (changed) updates.images = newImages;
                           onChange(updates);
                         }}
@@ -3369,31 +3427,82 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     <div className="flex items-center gap-2 overflow-x-auto pb-1">
                       {cleanPhotos.map((photoUrl, pIdx) => {
-                        const isSelected = card.images?.main === photoUrl || card.photoUrl === photoUrl;
+                        const isMainSel = card.images?.main === photoUrl || card.photoUrl === photoUrl;
+                        const isSecondSel = card.images?.second === photoUrl;
+                        const isThirdSel = card.images?.third === photoUrl;
+                        const isFourthSel = card.images?.fourth === photoUrl;
+                        const isMultiGrid = card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h' || card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4';
+
                         return (
-                          <button
-                            key={`ext-photo-${pIdx}`}
-                            type="button"
-                            onClick={() => {
-                              onChange({
-                                photoUrl,
-                                images: {
-                                  ...card.images,
-                                  main: photoUrl,
-                                },
-                              });
-                            }}
-                            className={`relative shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                              isSelected
-                                ? 'border-yellow-400 ring-2 ring-yellow-400/50 scale-105 shadow-lg'
-                                : 'border-neutral-800 opacity-60 hover:opacity-100'
-                            }`}
-                          >
-                            <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
-                            <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
-                              फोटो {pIdx + 1}
-                            </span>
-                          </button>
+                          <div key={`ext-photo-${pIdx}`} className="flex flex-col items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeCropPhotoKey === 'second') {
+                                  onChange({ images: { ...card.images, second: photoUrl } });
+                                } else if (activeCropPhotoKey === 'third') {
+                                  onChange({ images: { ...card.images, third: photoUrl } });
+                                } else if (activeCropPhotoKey === 'fourth') {
+                                  onChange({ images: { ...card.images, fourth: photoUrl } });
+                                } else {
+                                  onChange({
+                                    photoUrl,
+                                    images: { ...card.images, main: photoUrl },
+                                  });
+                                }
+                              }}
+                              className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                                isMainSel || isSecondSel || isThirdSel || isFourthSel
+                                  ? 'border-yellow-400 ring-2 ring-yellow-400/50 scale-105 shadow-lg'
+                                  : 'border-neutral-800 opacity-70 hover:opacity-100'
+                              }`}
+                            >
+                              <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
+                                फोटो {pIdx + 1}
+                              </span>
+                            </button>
+                            {isMultiGrid && (
+                              <div className="flex items-center gap-0.5 text-[8px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => onChange({ photoUrl, images: { ...card.images, main: photoUrl } })}
+                                  className={`px-1 py-0.2 rounded border ${isMainSel ? 'bg-yellow-400 text-black border-yellow-300 font-black' : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'}`}
+                                  title="स्लॉट 1 में सेट करें"
+                                >
+                                  S1
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onChange({ images: { ...card.images, second: photoUrl } })}
+                                  className={`px-1 py-0.2 rounded border ${isSecondSel ? 'bg-blue-400 text-black border-blue-300 font-black' : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'}`}
+                                  title="स्लॉट 2 में सेट करें"
+                                >
+                                  S2
+                                </button>
+                                {(card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onChange({ images: { ...card.images, third: photoUrl } })}
+                                    className={`px-1 py-0.2 rounded border ${isThirdSel ? 'bg-purple-400 text-black border-purple-300 font-black' : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'}`}
+                                    title="स्लॉट 3 में सेट करें"
+                                  >
+                                    S3
+                                  </button>
+                                )}
+                                {card.layout === 'grid-4' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onChange({ images: { ...card.images, fourth: photoUrl } })}
+                                    className={`px-1 py-0.2 rounded border ${isFourthSel ? 'bg-emerald-400 text-black border-emerald-300 font-black' : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'}`}
+                                    title="स्लॉट 4 में सेट करें"
+                                  >
+                                    S4
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -3993,7 +4102,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   const nextLoc = card.showLocation === false ? true : false;
                   onChange({
                     showLocation: nextLoc,
-                    showDate: nextLoc ? card.showDate : false,
                   });
                 }}
                 className={`text-[10px] font-black px-2.5 py-0.5 rounded border transition-all cursor-pointer ${
@@ -4057,7 +4165,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           {/* Location Box Soft Color Selector (Bug Group C4: Conditional only if supported) */}
           {(() => {
             const activeDf = getDynamicFrameById(card.frameDesign || '');
-            const supportsBg = activeDf?.headerConfig?.supportsLocationBadgeBackgroundColor !== false && (activeDf as any)?.supportsLocationBadgeBackgroundColor !== false;
+            const isStaticImage = activeDf?.headerConfig?.locationBadgeMode === 'static_image' || (activeDf?.headerConfig as any)?.locationStyle === 'static_image';
+            const supportsBg = activeDf
+              ? (!isStaticImage && activeDf?.headerConfig?.supportsLocationBadgeBackgroundColor !== false && (activeDf as any)?.supportsLocationBadgeBackgroundColor !== false)
+              : true;
             if (!supportsBg) return null;
 
             return (

@@ -397,10 +397,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const activeFont = card.headlineFontFamily || activeDf?.typographyConfig?.primaryFontFamily || activeDf?.textSlots?.[0]?.fontFamily || 'Baloo 2';
     const textSlotRect = activeDf?.textSlots?.[0]?.rect;
     const canvasH = (activeDf?.aspectRatio === '9:16' || card.aspectRatio === '9:16') ? 1920 : (activeDf?.aspectRatio === '1:1' || card.aspectRatio === '1:1') ? 1080 : 1350;
+    const paddedHw = textSlotRect ? Math.max(50, ((textSlotRect.width / 100) * 1080) - 30) : 0;
     const customBounds = textSlotRect ? {
-      x: (textSlotRect.x / 100) * 1080,
+      x: ((textSlotRect.x / 100) * 1080) + 15,
       y: (textSlotRect.y / 100) * canvasH,
-      width: (textSlotRect.width / 100) * 1080,
+      width: paddedHw,
       height: (textSlotRect.height / 100) * canvasH,
     } : undefined;
 
@@ -479,7 +480,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             key={lIdx}
             className={`w-full flex ${alignLineClass} whitespace-nowrap leading-none`}
             style={{
-              height: `${effectiveLineHeight}px`,
+              minHeight: `${effectiveLineHeight}px`,
               marginBottom: lIdx < canonicalLayout.lines.length - 1 ? `${Math.round(2 * previewScale)}px` : undefined,
             }}
           >
@@ -607,9 +608,17 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 : (df.id === 'df_testing_1_double'
                   ? 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&q=80'
                   : undefined));
-              const src = sIdx === 0
-                ? (mainPhotoSrc || defaultAsset)
-                : (card.secondaryPhoto || card.images?.second || defaultAsset || mainPhotoSrc);
+              const availablePhotos = card.extractedArticlePhotos || [];
+              const slotSrc = sIdx === 0
+                ? (mainPhotoSrc || availablePhotos[0])
+                : sIdx === 1
+                ? (card.secondaryPhoto || card.images?.second || availablePhotos[1])
+                : sIdx === 2
+                ? (card.images?.third || availablePhotos[2])
+                : sIdx === 3
+                ? (card.images?.fourth || availablePhotos[3])
+                : availablePhotos[sIdx];
+              const src = slotSrc || defaultAsset || (sIdx === 0 ? mainPhotoSrc : undefined);
               if (!src) {
                 return (
                   <div
@@ -3470,9 +3479,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      minWidth: '90px',
-                      width: 'max-content',
-                      maxWidth: `${Math.max(28, df.headerConfig.locationRect?.width ?? 28)}%`,
+                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundImage: `url(${badgeAsset})`,
                       backgroundSize: '100% 100%',
@@ -3533,9 +3540,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      minWidth: `${df.headerConfig.locationRect?.width ?? 28}%`,
-                      width: 'max-content',
-                      maxWidth: '85%',
+                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
                       color: df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000'),
@@ -3742,7 +3747,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 }}
               >
                 <h1
-                  className="font-black leading-snug drop-shadow-md overflow-hidden w-full"
+                  className="font-black leading-snug drop-shadow-md w-full pb-0.5"
                   style={{
                     color: df.textSlots[0]?.textColor || '#FFFFFF',
                     fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || df.textSlots[0]?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,

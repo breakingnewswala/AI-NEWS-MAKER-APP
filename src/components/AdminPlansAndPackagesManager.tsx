@@ -1,3 +1,4 @@
+import { sanitizeObjectStrings, sanitizeUtf8Hindi } from '../lib/utf8Sanitizer';
 import React, { useState, useEffect } from 'react';
 import {
   Package,
@@ -446,7 +447,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       if (res.ok) {
         const data = await res.json();
         if (data && Array.isArray(data.notifications)) {
-          setAdminNotifications(data.notifications);
+          setAdminNotifications(sanitizeObjectStrings(data.notifications));
           setAdminNotifCounts(data.unreadCounts || { all: 0, rss: 0, support: 0, logo: 0, requests: 0 });
         }
       }

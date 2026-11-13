@@ -108,6 +108,39 @@ export const loadImage = async (
     return fallback;
   }
 
+  // Bug M: Robust load attempt with retry for mandatory assets
+  const maxAttempts = options?.isMandatory ? 2 : 1;
+  let lastError: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await loadImageSingle(src, options, attempt);
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 350));
+      }
+    }
+  }
+
+  if (options?.isMandatory) {
+    throw lastError || new Error(
+      options.assetName
+        ? `अनिवार्य ${options.assetName} लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या पुनः चुनें।`
+        : 'अनिवार्य फ्रेम आर्टवर्क लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फ्रेम पुनः चुनें।'
+    );
+  }
+
+  const fallback = new Image();
+  fallback.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
+  return fallback;
+};
+
+const loadImageSingle = async (
+  src: string,
+  options?: LoadImageOptions,
+  attempt: number = 1
+): Promise<HTMLImageElement> => {
   let effectiveSrc = src.trim();
 
   // If effectiveSrc starts with /api/proxy-image, resolve absolute API url
@@ -1678,11 +1711,18 @@ async function drawAuthoritativeDynamicFrameCanvas(
         : (df.id === 'df_testing_1_double'
           ? 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=800&q=80'
           : undefined));
-      const rawMainPhoto = (card.images?.main || (card as any).photoUrl || (card as any).testSamplePhotoUrl || '').trim();
-      const rawSecondPhoto = (card.secondaryPhoto || card.images?.second || '').trim();
-      const src = sIdx === 0
-        ? (rawMainPhoto || defaultAsset)
-        : (rawSecondPhoto || defaultAsset || rawMainPhoto);
+      const availablePhotos = card.extractedArticlePhotos || [];
+      const rawMainPhoto = (card.images?.main || (card as any).photoUrl || (card as any).testSamplePhotoUrl || availablePhotos[0] || '').trim();
+      const slotSrc = sIdx === 0
+        ? rawMainPhoto
+        : sIdx === 1
+        ? ((card.secondaryPhoto || card.images?.second || availablePhotos[1] || '').trim())
+        : sIdx === 2
+        ? ((card.images?.third || availablePhotos[2] || '').trim())
+        : sIdx === 3
+        ? ((card.images?.fourth || availablePhotos[3] || '').trim())
+        : ((availablePhotos[sIdx] || '').trim());
+      const src = slotSrc || defaultAsset || (sIdx === 0 ? rawMainPhoto : undefined);
       if (!src) continue;
 
       try {
