@@ -436,6 +436,19 @@ ${itemsXml}
   let purgedCount = 0;
   purgeDirectories.forEach((dir) => {
     if (fs.existsSync(dir)) {
+      // Purge obsolete legacy standalone admin prototypes
+      ['admin', 'web_admin'].forEach((sub) => {
+        const subDir = path.join(dir, sub);
+        if (fs.existsSync(subDir)) {
+          try {
+            fs.rmSync(subDir, { recursive: true, force: true });
+            purgedCount++;
+            console.log(`  🔒 Purged obsolete legacy admin directory: ${path.relative(rootDir, subDir)}`);
+          } catch (e) {
+            console.warn(`  ⚠️ Could not purge legacy admin dir ${subDir}:`, e.message);
+          }
+        }
+      });
       sensitivePurgeFilenames.forEach((fname) => {
         const p = path.join(dir, fname);
         if (fs.existsSync(p)) {

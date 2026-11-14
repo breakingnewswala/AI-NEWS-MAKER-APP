@@ -568,6 +568,11 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
         const errJson = await res.json();
         if (errJson && errJson.error) errText = errJson.error;
       } catch {}
+      if (res.status === 401 || res.status === 403) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('open_admin_login'));
+        }
+      }
       return { success: false, error: errText };
     }
   } catch (err: any) {

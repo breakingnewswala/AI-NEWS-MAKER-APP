@@ -101,13 +101,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [authMode, setAuthMode] = useState<'login' | 'signup'>(initialMode === 'signup' ? 'signup' : 'login');
 
   useEffect(() => {
-    if (!isAdminMode && isOpen) {
+    setIsAdminMode(initialMode === 'admin');
+    setAuthMode(initialMode === 'signup' ? 'signup' : 'login');
+  }, [initialMode, isOpen]);
+
+  useEffect(() => {
+    if (initialMode !== 'admin' && !isAdminMode && isOpen) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('open_auth_welcome_screen'));
       }
       if (onClose) onClose();
     }
-  }, [isAdminMode, isOpen, onClose]);
+  }, [isAdminMode, isOpen, onClose, initialMode]);
 
   if (!isOpen || !isAdminMode) return null;
   

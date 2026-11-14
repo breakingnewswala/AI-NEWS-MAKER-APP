@@ -5332,6 +5332,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           text: parts.join(' | '),
                         });
                       } else {
+                        if (res.error && (res.error.includes('401') || res.error.includes('प्रमाणीकरण आवश्यक'))) {
+                          window.dispatchEvent(new CustomEvent('open_admin_login'));
+                        }
                         setRssMsg({ type: 'error', text: res.error || 'सिंक त्रुटि' });
                       }
                     } catch (e: any) {
@@ -5393,6 +5396,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
                 setRssSources(getAdminRssSources());
                 setNewSourceUrl('');
+                setNewSourceName('');
                 setRssMsg({ type: 'success', text: `नया RSS स्रोत "${name}" जोड़ा गया! वास्तविक RSS से समाचार प्राप्त किए जा रहे हैं...` });
                 syncAllSourcesLive().then((res) => {
                   setRssSources(getAdminRssSources());
@@ -5410,16 +5414,29 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">चैनल चुनें *</label>
-                  <select
-                    value={newSourceName || (savedChannels[0] || '')}
-                    onChange={(e) => setNewSourceName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
-                  >
-                    {savedChannels.map((ch, idx) => (
-                      <option key={`${ch}-${idx}`} value={ch}>{ch}</option>
-                    ))}
-                  </select>
+                  <label className="block text-slate-300 font-bold mb-1">चैनल चुनें या नया नाम लिखें *</label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={savedChannels.includes(newSourceName) ? newSourceName : ''}
+                      onChange={(e) => {
+                        if (e.target.value) setNewSourceName(e.target.value);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="">-- पंजीकृत चैनल चुनें --</option>
+                      {savedChannels.map((ch, idx) => (
+                        <option key={`${ch}-${idx}`} value={ch}>{ch}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      value={newSourceName}
+                      onChange={(e) => setNewSourceName(e.target.value)}
+                      placeholder="या चैनल का नाम लिखें (उदा. आज तक / NDTV)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-amber-400 focus:outline-hidden placeholder-slate-500"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">RSS Feed XML URL *</label>
@@ -5742,14 +5759,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <button
                     type="button"
                     onClick={() => {
-                      const name = converterChannel.trim() || (savedChannels[0] || 'Web Feed');
+                      const name = converterChannel.trim() || (converterResult as any)?.channelName || (savedChannels[0] || 'Web Feed');
+                      saveNewsChannel(name);
+                      setSavedChannels(getSavedNewsChannels());
                       setNewSourceName(name);
                       setNewSourceUrl(converterResult.feedUrl);
                       setNewSourceCategory(converterCategory);
                       setRssActiveSection('dashboard');
                       setRssMsg({
                         type: 'success',
-                        text: `फ़ीड लोड हो गई है! नीचे "RSS स्रोत जोड़ें" बटन दबाकर इसे तुरंत सक्रिय करें।`,
+                        text: `फ़ीड "${name}" लोड हो गई है! नीचे "RSS स्रोत जोड़ें" बटन दबाकर इसे तुरंत सक्रिय करें।`,
                       });
                     }}
                     className="px-4 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"

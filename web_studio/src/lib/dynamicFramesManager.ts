@@ -997,6 +997,9 @@ export async function saveAssetLibraryItem(
     if (res.ok && data.success && data.item) {
       return { success: true, item: data.item };
     }
+    if (!res.ok && (res.status === 401 || res.status === 403)) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open_admin_login'));
+    }
     return { success: false, error: data.error || 'एसेट सुरक्षित करने में त्रुटि' };
   } catch (err: any) {
     return { success: false, error: err.message || 'नेटवर्क त्रुटि' };
@@ -1044,6 +1047,9 @@ export async function updateAssetLibraryItem(
     if (res.ok && data.success && data.item) {
       return { success: true, item: data.item };
     }
+    if (!res.ok && (res.status === 401 || res.status === 403)) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open_admin_login'));
+    }
     return { success: false, error: data.error || 'एसेट अपडेट करने में त्रुटि' };
   } catch (err: any) {
     return { success: false, error: err.message || 'नेटवर्क त्रुटि' };
@@ -1086,6 +1092,9 @@ export async function deleteAssetLibraryItem(
     const data = await res.json();
     if (res.ok && data.success) {
       return { success: true };
+    }
+    if (!res.ok && (res.status === 401 || res.status === 403)) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open_admin_login'));
     }
     return { success: false, error: data.error || 'एसेट हटाने में त्रुटि' };
   } catch (err: any) {

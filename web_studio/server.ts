@@ -13374,36 +13374,45 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
     if (normParam) {
       const q = String(normParam).toLowerCase().trim();
       if (q === 'location_badge' || q === 'location' || q === 'badge') {
-        items = items.filter((it: any) =>
-          it.type === 'location_badge' ||
-          it.category === 'location_badge' ||
-          it.type === 'location' ||
-          it.type === 'badge' ||
-          (it.name && /badge|बैज|location|लोकेशन|pin|पिंन/i.test(it.name))
-        );
+        items = items.filter((it: any) => {
+          if (it.type) {
+            return it.type === 'location_badge' || it.type === 'location' || it.type === 'badge';
+          }
+          if (it.category) {
+            return it.category === 'location_badge' || it.category === 'location' || it.category === 'badge';
+          }
+          return (it.name && /badge|बैज|location|लोकेशन|pin|पिंन/i.test(it.name));
+        });
       } else if (q === 'callout_png' || q === 'callout' || q === 'story_callout' || q === 'full_story' || q === 'description_callout') {
-        items = items.filter((it: any) =>
-          it.type === 'callout_png' ||
-          it.category === 'callout_png' ||
-          it.type === 'callout' ||
-          it.type === 'story_callout' ||
-          it.type === 'full_story' ||
-          it.type === 'description_callout' ||
-          (it.name && /callout|कॉलआउट|विवरण|डिस्क्रिप्शन|story|bully|forward/i.test(it.name))
-        );
+        items = items.filter((it: any) => {
+          if (it.type) {
+            return it.type === 'callout_png' || it.type === 'callout' || it.type === 'story_callout' || it.type === 'full_story' || it.type === 'description_callout';
+          }
+          if (it.category) {
+            return it.category === 'callout_png' || it.category === 'callout' || it.category === 'story_callout' || it.category === 'full_story' || it.category === 'description_callout';
+          }
+          return (it.name && /callout|कॉलआउट|विवरण|डिस्क्रिप्शन|story|bully|forward/i.test(it.name));
+        });
       } else if (q === 'suvichar_background' || q === 'suvichar') {
-        items = items.filter((it: any) =>
-          it.type === 'suvichar_background' ||
-          it.category === 'suvichar_background' ||
-          it.type === 'suvichar'
-        );
+        items = items.filter((it: any) => {
+          if (it.type) {
+            return it.type === 'suvichar_background' || it.type === 'suvichar';
+          }
+          if (it.category) {
+            return it.category === 'suvichar_background' || it.category === 'suvichar';
+          }
+          return (it.name && /suvichar|सुविचार/i.test(it.name));
+        });
       } else if (q === 'custom_footer' || q === 'footer') {
-        items = items.filter((it: any) =>
-          it.type === 'custom_footer' ||
-          it.category === 'custom_footer' ||
-          it.type === 'footer' ||
-          (it.name && /footer|फ़ुटर|फुटर/i.test(it.name))
-        );
+        items = items.filter((it: any) => {
+          if (it.type) {
+            return it.type === 'custom_footer' || it.type === 'footer';
+          }
+          if (it.category) {
+            return it.category === 'custom_footer' || it.category === 'footer';
+          }
+          return (it.name && /footer|फ़ुटर|फुटर/i.test(it.name));
+        });
       } else {
         items = items.filter((it: any) => it.type === q || it.category === q);
       }
@@ -28186,6 +28195,7 @@ async function startServer() {
       for (const staticDir of staticPathsToMount) {
         app.use(
           express.static(staticDir, {
+            index: false,
             setHeaders: (res, filePath) => {
               if (filePath.endsWith(".html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.json")) {
                 res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
@@ -28403,6 +28413,35 @@ async function startServer() {
           return rawHtml;
         }
       };
+
+      // Canonical React Admin Control Room Route: All /admin requests route directly to canonical SPA
+      app.get(["/admin", "/admin/*"], (req, res) => {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+        const indexHtmlPath = path.join(distPath, "index.html");
+        try {
+          let html = fs.readFileSync(indexHtmlPath, "utf-8");
+          const scriptMatch = html.match(/src=["'](?:\.\/|\/)?assets\/(index-[^"']+\.js)["']/);
+          if (scriptMatch && scriptMatch[1]) {
+            const expectedJs = scriptMatch[1];
+            const jsExistsAnywhere = staticPathsToMount.some((d) => fs.existsSync(path.join(d, "assets", expectedJs)));
+            if (!jsExistsAnywhere) {
+              const fallbackBundle = findAnyAvailableIndexJs();
+              if (fallbackBundle) {
+                html = html.replace(expectedJs, fallbackBundle.jsFile);
+                if (fallbackBundle.cssFile) {
+                  html = html.replace(/index-[^"']+\.css/, fallbackBundle.cssFile);
+                }
+              }
+            }
+          }
+          html = injectServerSeoMeta(html, req);
+          return res.status(200).set({ "Content-Type": "text/html" }).send(html);
+        } catch {
+          return res.sendFile(indexHtmlPath);
+        }
+      });
 
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {

@@ -45,7 +45,7 @@ import {
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
-import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders, getAuthToken, ensureAuthToken, isTokenExpired } from '../lib/apiConfig';
 import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
 import { AdvancedLogoCropEditor, CropConfig } from './AdvancedLogoCropEditor';
@@ -231,6 +231,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       username: currentUser?.username || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'breakingnewswala' : '')),
     };
   });
+
+  // Enterprise Strict Admin Session Verification:
+  // Guarantees an active, non-expired cryptographic auth token exists when viewing Admin Control Room
+  useEffect(() => {
+    if (isAdmin) {
+      const token = getAuthToken();
+      if (!token || isTokenExpired(token)) {
+        ensureAuthToken().then((t) => {
+          if (!t || isTokenExpired(t)) {
+            window.dispatchEvent(new CustomEvent('open_admin_login'));
+          }
+        }).catch(() => {
+          window.dispatchEvent(new CustomEvent('open_admin_login'));
+        });
+      }
+    }
+  }, [isAdmin]);
 
   // Fetch Cloud Saved User Profile on Mount or User Change
   useEffect(() => {
