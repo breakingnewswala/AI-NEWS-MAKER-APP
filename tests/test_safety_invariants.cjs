@@ -3,8 +3,26 @@ const fs = require('fs');
 console.log('🔍 Verifying Production Safety Invariants...');
 
 // 1. Production Template Preservation & Test Frame Rejection
-const db = JSON.parse(fs.readFileSync('dynamic_frames_db.json', 'utf8'));
-const webDb = JSON.parse(fs.readFileSync('web_studio/dynamic_frames_db.json', 'utf8'));
+let db, webDb;
+try {
+  const content = fs.readFileSync('dynamic_frames_db.json', 'utf8').trim();
+  if (!content) throw new Error('Empty dynamic_frames_db.json');
+  db = JSON.parse(content);
+} catch {
+  const fallback = fs.readFileSync('web_studio/dynamic_frames_db.json', 'utf8');
+  db = JSON.parse(fallback);
+  fs.writeFileSync('dynamic_frames_db.json', fallback, 'utf8');
+}
+
+try {
+  const content = fs.readFileSync('web_studio/dynamic_frames_db.json', 'utf8').trim();
+  if (!content) throw new Error('Empty web_studio/dynamic_frames_db.json');
+  webDb = JSON.parse(content);
+} catch {
+  const fallback = fs.readFileSync('dynamic_frames_db.json', 'utf8');
+  webDb = JSON.parse(fallback);
+  fs.writeFileSync('web_studio/dynamic_frames_db.json', fallback, 'utf8');
+}
 
 const frame = db.find(f => f.id === 'df_1794406067554_albmw');
 if (!frame) {

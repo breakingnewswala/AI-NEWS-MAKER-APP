@@ -12160,7 +12160,10 @@ async function saveDynamicFramesDatabaseAsync(frames: any[]): Promise<boolean> {
     const toSave = isProdDb
       ? frames.filter(f => !f.isTestFrame && f.designCategory !== 'TEST_FRAMES' && !f.id.startsWith('df_test_') && f.id !== 'df_1794544360478_6ptot')
       : frames;
-    fs.writeFileSync(DYNAMIC_FRAMES_DB_FILE, JSON.stringify(toSave, null, 2), "utf-8");
+    const serialized = JSON.stringify(toSave, null, 2);
+    const tmpPath = `${DYNAMIC_FRAMES_DB_FILE}.tmp.${Date.now()}`;
+    fs.writeFileSync(tmpPath, serialized, "utf-8");
+    fs.renameSync(tmpPath, DYNAMIC_FRAMES_DB_FILE);
   } catch (err) {
     console.warn("Failed to write dynamic_frames_db.json:", err);
   }
