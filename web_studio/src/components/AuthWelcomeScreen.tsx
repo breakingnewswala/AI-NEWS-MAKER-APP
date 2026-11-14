@@ -375,6 +375,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               if (response?.credential) {
                 try {
                   setIsLoggingIn(true);
+                  safeLocalStorageSet('google_id_token', response.credential);
+                  safeLocalStorageSet('reporter_auth_token', response.credential);
+                  setAuthToken(response.credential);
                   try {
                     const cred = GoogleAuthProvider.credential(response.credential);
                     await signInWithCredential(auth, cred);
@@ -384,7 +387,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
                   const decoded = decodeGoogleJwt(response.credential);
                   if (decoded?.email) {
-                    await handleGoogleUserSuccess(decoded.email, decoded.name, decoded.picture);
+                    await handleGoogleUserSuccess(decoded.email, decoded.name, decoded.picture, response.credential);
                     return;
                   }
                 } catch (err) {
@@ -871,24 +874,29 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
       const finalProfile: ChannelProfile = {
         fullName: serverProfile?.fullName || (isBreakingNewsWala ? 'मुख्य संपादक' : (isAiNewsAdmin ? 'सुपर एडमिन (Super Admin)' : (name || (isAdmin ? 'एडमिन' : 'संपादक')))),
-        district: serverProfile?.district || (isBreakingNewsWala ? 'सेंट्रल डेस्क / भोपाल' : (isAiNewsAdmin ? 'हेडक्वार्टर सेंट्रल डेस्क' : (parsedProfile?.district || knownProfile?.district || 'डिजिटल डेस्क'))),
+        district: (serverProfile?.district && serverProfile.district.trim() !== 'सेंट्रल डेस्क / भोपाल')
+          ? serverProfile.district.trim()
+          : (parsedProfile?.district || knownProfile?.district || (isBreakingNewsWala ? 'भोपाल' : (isAiNewsAdmin ? 'हेडक्वार्टर सेंट्रल डेस्क' : 'डिजिटल डेस्क'))),
         channelNameHi: serverProfile?.channelNameHi || (isBreakingNewsWala ? 'ब्रेकिंग न्यूज़ वाला' : (isAiNewsAdmin ? 'एआई न्यूज़ मेकर' : (parsedProfile?.channelNameHi || knownProfile?.channelNameHi || 'एआई न्यूज़ मेकर'))),
         channelNameEn: serverProfile?.channelNameEn || (isBreakingNewsWala ? 'BREAKING NEWS WALA' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.channelNameEn || knownProfile?.channelNameEn || 'AI News Maker'))),
         channelLogoUrl: existingLogo || (isBreakingNewsWala ? '/assets/breaking_news_wala_logo.png' : (isAiNewsAdmin ? '/assets/ai_news_maker_logo.png' : '')),
         channelLogoPngUrl: (existingLogo && !existingLogo.includes('.gif')) ? existingLogo : (serverProfile?.channelLogoPngUrl || ''),
         channelLogoGifUrl: serverProfile?.channelLogoGifUrl || (existingLogo && existingLogo.includes('.gif') ? existingLogo : ''),
         channelLogoType: serverProfile?.channelLogoType || parsedProfile?.channelLogoType || knownProfile?.channelLogoType || 'png',
-        socialIcons: serverProfile?.socialIcons || parsedProfile?.socialIcons || {
+        socialIcons: {
           youtube: true,
           facebook: true,
           instagram: true,
-          twitter: false,
-          telegram: false,
+          twitter: Boolean(serverProfile?.socialIcons?.twitter ?? serverProfile?.socialIcons?.x ?? parsedProfile?.socialIcons?.twitter ?? parsedProfile?.socialIcons?.x ?? false),
+          x: Boolean(serverProfile?.socialIcons?.x ?? serverProfile?.socialIcons?.twitter ?? parsedProfile?.socialIcons?.x ?? parsedProfile?.socialIcons?.twitter ?? false),
+          linkedin: Boolean(serverProfile?.socialIcons?.linkedin ?? parsedProfile?.socialIcons?.linkedin ?? false),
           whatsapp: true,
+          telegram: false,
         },
         username: recoveredUsername,
         mobileNumber: serverProfile?.mobileNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '',
         whatsappNumber: serverProfile?.whatsappNumber || serverProfile?.mobileNumber || parsedProfile?.whatsappNumber || parsedProfile?.mobileNumber || knownProfile?.mobileNumber || primaryMobileNumber || '',
+        whatsappDisplayNumber: serverProfile?.whatsappDisplayNumber || parsedProfile?.whatsappDisplayNumber || (isSuper ? '9669802408' : (serverProfile?.whatsappNumber || '')),
         showMobileNumber: true,
         websiteUrl: serverProfile?.websiteUrl || (isBreakingNewsWala ? 'breakingnewswala.com' : (isAiNewsAdmin ? 'ainewsmaker.online' : (parsedProfile?.websiteUrl || knownProfile?.websiteUrl || ''))),
         whatsappMarketingConsent: serverProfile?.whatsappMarketingConsent ?? parsedProfile?.whatsappMarketingConsent ?? false,
@@ -921,6 +929,39 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       safeLocalStorageSet('is_onboarding_completed', 'true');
       safeLocalStorageRemove('auth_current_step');
       ensureAuthToken().catch(() => {});
+
+      if (idToken || getAuthToken() || safeLocalStorageGet('google_id_token')) {
+        const candidateTok = idToken || getAuthToken() || safeLocalStorageGet('google_id_token');
+        fetch(getApiUrl('/api/auth/login'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${candidateTok}`,
+          },
+          body: JSON.stringify({
+            identifier: cleanEmail,
+            firebaseToken: candidateTok,
+            idToken: candidateTok,
+            profileData: {
+              email: cleanEmail,
+              name: googleUser.name,
+              username: finalProfile.username,
+              district: finalProfile.district,
+              whatsappDisplayNumber: (finalProfile as any).whatsappDisplayNumber,
+              whatsappNumber: finalProfile.whatsappNumber,
+              socialIcons: finalProfile.socialIcons,
+            },
+          }),
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d && d.token) {
+              setAuthToken(d.token);
+              safeLocalStorageSet('reporter_auth_token', d.token);
+            }
+          })
+          .catch((ex) => console.warn('[AUTH] Session token exchange note:', ex));
+      }
 
       registerOrUpdateUser({
         email: cleanEmail,

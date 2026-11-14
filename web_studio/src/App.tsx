@@ -790,7 +790,10 @@ export default function App() {
         }
       } catch {}
       const roleParam = isAdmin ? '&role=admin&includePending=true' : '';
-      const res = await fetch(`${baseUrl}/api/news-posts?_t=${Date.now()}${roleParam}`, { cache: 'no-cache' });
+      const res = await fetch(`${baseUrl}/api/news-posts?_t=${Date.now()}${roleParam}`, {
+        headers: getAuthHeaders(),
+        cache: 'no-cache',
+      });
       if (res.ok) {
         const data = await res.json();
         const apiPosts = Array.isArray(data) ? data : (data?.posts || []);
@@ -980,7 +983,10 @@ export default function App() {
       const baseUrl = getApiBaseUrl();
       fetch(`${baseUrl}/api/news-posts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify(updatedPosts),
       }).catch((err) => console.warn('Sync to backend API failed:', err));
     } catch {}

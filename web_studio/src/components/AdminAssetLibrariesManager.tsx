@@ -24,7 +24,7 @@ import {
   updateAssetLibraryItem,
   deleteAssetLibraryItem,
 } from '../lib/dynamicFramesManager';
-import { getAuthToken } from '../lib/apiConfig';
+import { getAuthToken, ensureAuthToken } from '../lib/apiConfig';
 
 interface AdminAssetLibrariesManagerProps {
   onSelectAsset?: (asset: AssetLibraryItem) => void;
@@ -47,14 +47,14 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     showWebsite: true,
     showPhone: true,
     showSocialIcons: true,
-    showChannelName: true,
-    showTagline: false,
+    showChannelName: false,
     customText: '',
   });
   const [footerAlignment, setFooterAlignment] = useState<'left' | 'center' | 'right'>('center');
   const [footerChannelNameAlign, setFooterChannelNameAlign] = useState<'left' | 'center' | 'right'>('left');
   const [footerWebsiteAlign, setFooterWebsiteAlign] = useState<'left' | 'center' | 'right'>('center');
   const [footerSocialIconsAlign, setFooterSocialIconsAlign] = useState<'left' | 'center' | 'right'>('right');
+  const [footerPhoneAlign, setFooterPhoneAlign] = useState<'left' | 'center' | 'right'>('right');
   const [footerIconSize, setFooterIconSize] = useState<number>(20);
   const [footerElementSpacing, setFooterElementSpacing] = useState<number>(12);
   const [footerPaddingX, setFooterPaddingX] = useState<number>(16);
@@ -240,7 +240,10 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     }
 
     try {
-      const token = getAuthToken();
+      let token = getAuthToken();
+      if (!token) {
+        token = await ensureAuthToken().catch(() => '');
+      }
       const payload: Partial<AssetLibraryItem> = activeTab === 'custom_footer'
         ? {
             name: newName.trim(),
@@ -257,6 +260,7 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
               channelNameAlign: footerChannelNameAlign,
               websiteAlign: footerWebsiteAlign,
               socialIconsAlign: footerSocialIconsAlign,
+              phoneAlign: footerPhoneAlign,
               iconSize: footerIconSize,
               elementSpacing: footerElementSpacing,
               paddingX: footerPaddingX,
@@ -626,20 +630,11 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
                     />
                     <span className="text-xs text-slate-200">सोशल मीडिया आइकन्स</span>
                   </label>
-                  <label className="flex items-center gap-2 p-2 bg-slate-900/60 border border-slate-800 rounded-lg cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={footerElements.showTagline}
-                      onChange={(e) => setFooterElements({ ...footerElements, showTagline: e.target.checked })}
-                      className="rounded accent-amber-500"
-                    />
-                    <span className="text-xs text-slate-200">टैगलाइन / स्लोगन</span>
-                  </label>
                 </div>
               </div>
 
-              {/* Independent Alignments */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
+              {/* Independent Alignments (Left / Center / Right for each element) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-slate-950/60 border border-slate-800/80 rounded-xl">
                 <div>
                   <label className="text-[11px] font-bold text-slate-300 block mb-1">चैनल नाम स्थिति:</label>
                   <select
@@ -669,6 +664,18 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
                   <select
                     value={footerSocialIconsAlign}
                     onChange={(e: any) => setFooterSocialIconsAlign(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                  >
+                    <option value="left">बाईं ओर (Left)</option>
+                    <option value="center">मध्य (Center)</option>
+                    <option value="right">दाईं ओर (Right)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 block mb-1">फ़ोन / व्हाट्सएप स्थिति:</label>
+                  <select
+                    value={footerPhoneAlign}
+                    onChange={(e: any) => setFooterPhoneAlign(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
                   >
                     <option value="right">दाईं ओर (Right)</option>
@@ -767,30 +774,68 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
                 </div>
               </div>
 
-              {/* Live Preview Bar */}
+              {/* Live Preview Bar (Reflecting Left / Center / Right Independent Element Placements) */}
               <div className="space-y-1.5 pt-1">
                 <label className="text-[11px] font-bold text-slate-300 block">लाइव पूर्वावलोकन (Live Preview):</label>
-                <div
-                  className="w-full rounded-xl p-3 flex items-center justify-between text-xs font-bold shadow-inner overflow-hidden transition-all"
-                  style={{
-                    backgroundColor: footerBgColor,
-                    color: footerTextColor,
-                    justifyContent: footerAlignment === 'left' ? 'flex-start' : footerAlignment === 'right' ? 'flex-end' : 'space-between',
-                  }}
-                >
-                  <div className="flex items-center gap-2">
-                    {footerElements.showSocialIcons && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-black/20 font-mono">
+                {(() => {
+                  const leftEls: React.ReactNode[] = [];
+                  const centerEls: React.ReactNode[] = [];
+                  const rightEls: React.ReactNode[] = [];
+
+                  if (footerElements.showChannelName) {
+                    const el = <span key="ch" className="shrink-0 font-black">AI NEWS MAKER</span>;
+                    if (footerChannelNameAlign === 'left') leftEls.push(el);
+                    else if (footerChannelNameAlign === 'right') rightEls.push(el);
+                    else centerEls.push(el);
+                  }
+
+                  if (footerElements.showSocialIcons) {
+                    const el = (
+                      <span key="soc" className="px-1.5 py-0.5 rounded text-[10px] bg-black/20 font-mono shrink-0">
                         ▶ f 𝕏 in
                       </span>
-                    )}
-                    {footerElements.showChannelName && <span>AI NEWS MAKER</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {footerElements.showWebsite && <span>ainewsmaker.online</span>}
-                    {footerElements.showPhone && <span>+91 9669802408</span>}
-                  </div>
-                </div>
+                    );
+                    if (footerSocialIconsAlign === 'left') leftEls.push(el);
+                    else if (footerSocialIconsAlign === 'right') rightEls.push(el);
+                    else centerEls.push(el);
+                  }
+
+                  if (footerElements.showWebsite) {
+                    const el = <span key="web" className="shrink-0 font-bold font-mono">ainewsmaker.online</span>;
+                    if (footerWebsiteAlign === 'left') leftEls.push(el);
+                    else if (footerWebsiteAlign === 'right') rightEls.push(el);
+                    else centerEls.push(el);
+                  }
+
+                  if (footerElements.showPhone) {
+                    const el = <span key="phone" className="shrink-0 font-bold font-mono">+91 9669802408</span>;
+                    if (footerPhoneAlign === 'left') leftEls.push(el);
+                    else if (footerPhoneAlign === 'right') rightEls.push(el);
+                    else centerEls.push(el);
+                  }
+
+                  return (
+                    <div
+                      className="w-full rounded-xl p-3 flex items-center justify-between text-xs font-bold shadow-inner overflow-hidden transition-all"
+                      style={{
+                        backgroundColor: footerBgColor,
+                        color: footerTextColor,
+                        paddingLeft: `${footerPaddingX}px`,
+                        paddingRight: `${footerPaddingX}px`,
+                      }}
+                    >
+                      <div className="flex items-center min-w-0" style={{ gap: `${footerElementSpacing}px` }}>
+                        {leftEls}
+                      </div>
+                      <div className="flex items-center min-w-0 justify-center" style={{ gap: `${footerElementSpacing}px` }}>
+                        {centerEls}
+                      </div>
+                      <div className="flex items-center min-w-0 justify-end" style={{ gap: `${footerElementSpacing}px` }}>
+                        {rightEls}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ) : (

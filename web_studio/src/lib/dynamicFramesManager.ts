@@ -20,7 +20,7 @@ import {
   VideoFrameConfig,
   TypographyConfig,
 } from '../types/dynamicFrame';
-import { getApiBaseUrl } from './apiConfig';
+import { getApiBaseUrl, ensureAuthToken, getAuthToken } from './apiConfig';
 
 const STORAGE_KEY_FRAMES = 'ai_news_dynamic_frames_v1';
 const STORAGE_KEY_STORY_PREF = 'ai_news_user_story_pref_v1';
@@ -676,23 +676,208 @@ export async function requestAiFrameAnalysis(
 
 
 // -------------------------------------------------------------
-// REUSABLE ASSET LIBRARIES API CLIENT
+// REUSABLE ASSET LIBRARIES API CLIENT & BUILT-IN FALLBACKS
 // -------------------------------------------------------------
+
+export function getDefaultAssetLibrariesFallback(type?: string): AssetLibraryItem[] {
+  const defaults: AssetLibraryItem[] = [
+    {
+      id: "asset_1794132101671_u0g9s",
+      name: "Red Map Pin Badge with Divider",
+      category: "general",
+      type: "location_badge",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='36' viewBox='0 0 160 36'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23E11D48'/><stop offset='100%' stop-color='%23BE123C'/></linearGradient></defs><rect width='156' height='36' rx='6' fill='url(%23bgGrad)'/><path d='M18 10c-3.3 0-6 2.7-6 6 0 4.5 6 11 6 11s6-6.5 6-11c0-3.3-2.7-6-6-6zm0 8.5c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5z' fill='%23FFFFFF'/><line x1='34' y1='6' x2='34' y2='30' stroke='%23FFFFFF' stroke-width='1.5' stroke-opacity='0.4'/><text x='42' y='23' font-family='Arial, sans-serif' font-weight='bold' font-size='14' fill='%23FFFFFF' letter-spacing='0.5'>LOCATION</text></svg>",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      createdAt: 1794132101671,
+      updatedAt: 1794132101671,
+    },
+    {
+      id: "callout_bully_forward_story",
+      name: "आगे पढ़ें बुलेटिन स्टोरी (Bully Forward)",
+      category: "general",
+      type: "callout_png",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='goldGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23F59E0B'/><stop offset='50%' stop-color='%23FBBF24'/><stop offset='100%' stop-color='%23D97706'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23goldGrad)' stroke='%23FFFFFF' stroke-width='2'/><circle cx='40' cy='36' r='24' fill='%231E293B'/><polygon points='34,26 50,36 34,46' fill='%23FBBF24'/><text x='76' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%230F172A'>आगे पढ़ें बुलेटिन स्टोरी</text><circle cx='438' cy='36' r='18' fill='%231E293B'/><path d='M432 36 L444 36 M440 30 L446 36 L440 42' stroke='%23FBBF24' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      createdAt: 1794280000000,
+      updatedAt: 1794280000000,
+    },
+    {
+      id: "callout_special_gold",
+      name: "विशेष बुलेटिन (Special Gold Header)",
+      category: "general",
+      type: "callout_png",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='440' height='64' viewBox='0 0 440 64'><defs><linearGradient id='gGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23D97706'/><stop offset='100%' stop-color='%2392400E'/></linearGradient></defs><rect x='2' y='4' width='436' height='56' rx='28' fill='url(%23gGrad)' stroke='%23FDE68A' stroke-width='2'/><text x='32' y='38' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>★ विशेष बुलेटिन कवरेज</text><circle cx='400' cy='32' r='14' fill='%23FDE68A'/><polygon points='396,26 406,32 396,38' fill='%2392400E'/></svg>",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      createdAt: 1794280000000,
+      updatedAt: 1794280000000,
+    },
+    {
+      id: "callout_breaking_red",
+      name: "ब्रेकिंग न्यूज़ रेड पट्टी (Breaking Red Strip)",
+      category: "general",
+      type: "callout_png",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='rGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23rGrad)' stroke='%23FFFFFF' stroke-width='2.5'/><polygon points='38,24 54,36 38,48' fill='%23FFFFFF'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FFFFFF'/><polygon points='436,28 448,36 436,44' fill='%23DC2626'/></svg>",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      createdAt: 1794280000000,
+      updatedAt: 1794280000000,
+    },
+    {
+      id: "footer_regular_gold",
+      name: "रेगुलर क्लीन फ़ुटर (White & Gold)",
+      category: "regular",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#FFFFFF",
+        footerTextColor: "#000000",
+        footerHeightPct: 8,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|",
+      },
+      createdAt: 1794100000000,
+      updatedAt: 1794100000000,
+    },
+    {
+      id: "footer_branding_navy",
+      name: "ब्रांडिंग डार्क फ़ुटर (Navy & Gold Accent)",
+      category: "branding",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#0F172A",
+        footerTextColor: "#FACC15",
+        footerHeightPct: 8,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|",
+      },
+      createdAt: 1794100000000,
+      updatedAt: 1794100000000,
+    },
+    {
+      id: "footer_social_blue",
+      name: "सोशल मीडिया हाइलाइट फ़ुटर (Royal Blue)",
+      category: "social",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#1E40AF",
+        footerTextColor: "#FFFFFF",
+        footerHeightPct: 8,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|",
+      },
+      createdAt: 1794100000000,
+      updatedAt: 1794100000000,
+    },
+    {
+      id: "footer_news_breaking_red",
+      name: "न्यूज़ अलर्ट रेड फ़ुटर (Breaking Red)",
+      category: "news",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#DC2626",
+        footerTextColor: "#FFFFFF",
+        footerHeightPct: 8.5,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|",
+      },
+      createdAt: 1794100000000,
+      updatedAt: 1794100000000,
+    },
+    {
+      id: "footer_special_vip_gold",
+      name: "स्पेशल वीआईपी गोल्ड फ़ुटर (VIP Gold Special)",
+      category: "special",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#FACC15",
+        footerTextColor: "#000000",
+        footerHeightPct: 9,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 22,
+        elementSpacing: 14,
+        paddingX: 18,
+        separator: "•",
+      },
+      createdAt: 1794100000000,
+      updatedAt: 1794100000000,
+    },
+  ];
+
+  if (!type || type === 'all') return defaults;
+  return defaults.filter((item) => item.type === type);
+}
 
 export async function fetchAssetLibraries(type?: string): Promise<AssetLibraryItem[]> {
   try {
     const baseUrl = getApiBaseUrl();
     const qs = type && type !== 'all' ? `?type=${type}` : '';
-    const res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`);
-    if (!res.ok) throw new Error('Failed to fetch asset libraries');
-    const data = await res.json();
-    if (data && Array.isArray(data.items)) {
-      return data.items;
+    let token = getAuthToken();
+    if (!token) {
+      token = await ensureAuthToken().catch(() => '');
     }
-    return [];
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.items) && data.items.length > 0) {
+        return data.items;
+      }
+    }
+    return getDefaultAssetLibrariesFallback(type);
   } catch (err) {
     console.warn('Failed to fetch asset libraries from API, returning defaults:', err);
-    return [];
+    return getDefaultAssetLibrariesFallback(type);
   }
 }
 
@@ -702,8 +887,12 @@ export async function saveAssetLibraryItem(
 ): Promise<{ success: boolean; item?: AssetLibraryItem; error?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
+    let token = authToken || getAuthToken();
+    if (!token) {
+      token = await ensureAuthToken().catch(() => '');
+    }
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${baseUrl}/api/admin/asset-libraries`, {
       method: 'POST',
@@ -727,8 +916,12 @@ export async function updateAssetLibraryItem(
 ): Promise<{ success: boolean; item?: AssetLibraryItem; error?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
+    let token = authToken || getAuthToken();
+    if (!token) {
+      token = await ensureAuthToken().catch(() => '');
+    }
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${baseUrl}/api/admin/asset-libraries/${id}`, {
       method: 'PUT',
@@ -751,8 +944,12 @@ export async function deleteAssetLibraryItem(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
+    let token = authToken || getAuthToken();
+    if (!token) {
+      token = await ensureAuthToken().catch(() => '');
+    }
     const headers: Record<string, string> = {};
-    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${baseUrl}/api/admin/asset-libraries/${id}`, {
       method: 'DELETE',
