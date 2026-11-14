@@ -227,6 +227,24 @@ function wrapDevanagariText(
   return lines;
 }
 
+// In-memory persistent cache for dynamically loaded frame overlay and ribbon artwork
+const dynamicImageCache = new Map<string, HTMLImageElement>();
+function getCachedImage(url?: string): HTMLImageElement | null {
+  if (!url) return null;
+  let img = dynamicImageCache.get(url);
+  if (!img) {
+    try {
+      img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = url;
+      dynamicImageCache.set(url, img);
+    } catch {
+      return null;
+    }
+  }
+  return (img.complete && img.naturalWidth > 0) ? img : null;
+}
+
 /**
  * Authoritative Dynamic Video Frame Renderer
  * Directly grounds video composition in the Master Admin's configured dynamic frame template,
@@ -349,8 +367,13 @@ function drawAuthoritativeDynamicVideoFrame(
       const rh = ((ribbon.rect?.height ?? ribbon.height) / 100) * height;
 
       ctx.save();
-      ctx.fillStyle = ribbon.backgroundColor || '#dc2626';
-      ctx.fillRect(rx, ry, rw, rh);
+      const rImg = ribbon.customRibbonUrl ? getCachedImage(ribbon.customRibbonUrl) : null;
+      if (rImg) {
+        ctx.drawImage(rImg, rx, ry, rw, rh);
+      } else {
+        ctx.fillStyle = ribbon.backgroundColor || '#dc2626';
+        ctx.fillRect(rx, ry, rw, rh);
+      }
 
       const rText = ribbon.text || 'BREAKING NEWS';
       ctx.fillStyle = ribbon.textColor || '#ffffff';
@@ -363,7 +386,36 @@ function drawAuthoritativeDynamicVideoFrame(
     });
   }
 
+  // 3.5. Render Overlay Assets (PNG / GIF)
+  const overlays = vConf.overlayAssets || [];
+  if (overlays.length > 0) {
+    overlays.forEach((overlay) => {
+      if (overlay.visible === false || !overlay.url) return;
+      const ox = Math.round(((overlay.rect?.x ?? overlay.x ?? 0) / 100) * width);
+      const oy = Math.round(((overlay.rect?.y ?? overlay.y ?? 0) / 100) * height);
+      const ow = Math.round(((overlay.rect?.width ?? overlay.width ?? 20) / 100) * width);
+      const oh = Math.round(((overlay.rect?.height ?? overlay.height ?? 20) / 100) * height);
+
+      ctx.save();
+      if (overlay.rotation) {
+        ctx.translate(ox + ow / 2, oy + oh / 2);
+        ctx.rotate((overlay.rotation * Math.PI) / 180);
+        ctx.translate(-(ox + ow / 2), -(oy + oh / 2));
+      }
+      ctx.globalAlpha = overlay.opacity ?? 1;
+      const oImg = getCachedImage(overlay.url);
+      if (oImg) {
+        ctx.drawImage(oImg, ox, oy, ow, oh);
+      }
+      ctx.restore();
+    });
+  }
+
   // 4. Render Channel Logo (PNG or GIF)
+  // Master Admin explicitly defined template logo overrides profile logo fallback
+  const templateLogoImg = vConf.logoUrl ? getCachedImage(vConf.logoUrl) : null;
+  const effectiveLogo = templateLogoImg || logoImg;
+
   const lRect = vConf.logoRect || { x: 3, y: 3, width: 22, height: 7 };
   const lx = Math.round((lRect.x / 100) * width);
   const ly = Math.round((lRect.y / 100) * height);
@@ -377,9 +429,9 @@ function drawAuthoritativeDynamicVideoFrame(
     ctx.translate(-(lx + lw / 2), -(ly + lh / 2));
   }
   ctx.globalAlpha = vConf.logoOpacity ?? 1;
-  if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+  if (effectiveLogo && effectiveLogo.complete && effectiveLogo.naturalWidth > 0) {
     try {
-      const imgAspect = logoImg.naturalWidth / logoImg.naturalHeight;
+      const imgAspect = effectiveLogo.naturalWidth / effectiveLogo.naturalHeight;
       const scalePct = (vConf.logoScalePct ?? 100) / 100;
       let dw = lw * scalePct;
       let dh = dw / imgAspect;
@@ -389,7 +441,7 @@ function drawAuthoritativeDynamicVideoFrame(
       }
       const dx = lx + Math.round((lw - dw) / 2);
       const dy = ly + Math.round((lh - dh) / 2);
-      ctx.drawImage(logoImg, dx, dy, dw, dh);
+      ctx.drawImage(effectiveLogo, dx, dy, dw, dh);
     } catch {
       ctx.fillStyle = '#ffffff';
       ctx.font = '900 16px "Noto Sans Devanagari", Arial, sans-serif';
@@ -581,15 +633,32 @@ function drawAuthoritativeDynamicVideoFrame(
 
     ctx.save();
     ctx.globalAlpha = Math.max(0.1, Math.min(0.9, opts.watermarkOpacity || 0.4));
-    const wmText = vConf.watermarkText || opts.watermarkCustomText || opts.watermarkText || 'AI NEWS MAKER';
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.9)';
-    ctx.shadowBlur = 6;
-    const wmScale = width / 720;
-    ctx.font = `900 ${Math.round(18 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(wmText, wx + ww / 2, wy + wh / 2);
+    if (vConf.watermarkLogoEnabled && vConf.watermarkLogoUrl) {
+      const wmImg = getCachedImage(vConf.watermarkLogoUrl);
+      if (wmImg) {
+        ctx.drawImage(wmImg, wx, wy, ww, wh);
+      } else {
+        const wmText = vConf.watermarkText || opts.watermarkCustomText || opts.watermarkText || 'AI NEWS MAKER';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 6;
+        const wmScale = width / 720;
+        ctx.font = `900 ${Math.round(18 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(wmText, wx + ww / 2, wy + wh / 2);
+      }
+    } else {
+      const wmText = vConf.watermarkText || opts.watermarkCustomText || opts.watermarkText || 'AI NEWS MAKER';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 6;
+      const wmScale = width / 720;
+      ctx.font = `900 ${Math.round(18 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(wmText, wx + ww / 2, wy + wh / 2);
+    }
     ctx.restore();
   }
 }
@@ -2321,12 +2390,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         return;
       }
 
+      const dynamicVConf = activeDynamicFrame?.rawDynamicFrame?.videoConfig;
+      const effectiveLogoUrl = dynamicVConf?.logoUrl || activeLogoUrl;
       let logoImg: HTMLImageElement | null = null;
-      if (activeLogoUrl) {
+      if (effectiveLogoUrl) {
         try {
           logoImg = new Image();
           logoImg.crossOrigin = 'anonymous';
-          logoImg.src = activeLogoUrl;
+          logoImg.src = effectiveLogoUrl;
+          dynamicImageCache.set(effectiveLogoUrl, logoImg);
         } catch {}
       }
 
@@ -2500,13 +2572,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       const ctx = canvas.getContext('2d', { alpha: false });
       if (!ctx) throw new Error('कैनवास संदर्भ उपलब्ध नहीं है');
 
-      // Preload logo image
+      // Preload logo image (Master Admin template logo overrides user profile logo fallback)
+      const dynamicVConf = activeDynamicFrame?.rawDynamicFrame?.videoConfig;
+      const effectiveLogoUrl = dynamicVConf?.logoUrl || activeLogoUrl;
       let logoImg: HTMLImageElement | null = null;
-      if (activeLogoUrl) {
+      if (effectiveLogoUrl) {
         try {
           logoImg = new Image();
           logoImg.crossOrigin = 'anonymous';
-          logoImg.src = activeLogoUrl;
+          logoImg.src = effectiveLogoUrl;
+          dynamicImageCache.set(effectiveLogoUrl, logoImg);
           await new Promise<void>((resolve) => {
             if (logoImg!.complete && logoImg!.naturalWidth > 0) return resolve();
             logoImg!.onload = () => resolve();
@@ -2514,6 +2589,47 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             setTimeout(resolve, 800);
           });
         } catch {}
+      }
+
+      // Preload dynamic overlay assets and custom ribbons
+      if (dynamicVConf?.overlayAssets && dynamicVConf.overlayAssets.length > 0) {
+        await Promise.all(
+          dynamicVConf.overlayAssets
+            .filter((o) => o.url && o.visible !== false)
+            .map((o) => {
+              return new Promise<void>((resolve) => {
+                let img = dynamicImageCache.get(o.url);
+                if (img && img.complete && img.naturalWidth > 0) return resolve();
+                img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+                img.src = o.url;
+                dynamicImageCache.set(o.url, img);
+                setTimeout(resolve, 800);
+              });
+            })
+        );
+      }
+
+      if (dynamicVConf?.ribbonLayers && dynamicVConf.ribbonLayers.length > 0) {
+        await Promise.all(
+          dynamicVConf.ribbonLayers
+            .filter((r) => r.customRibbonUrl && r.visible !== false)
+            .map((r) => {
+              return new Promise<void>((resolve) => {
+                let img = dynamicImageCache.get(r.customRibbonUrl!);
+                if (img && img.complete && img.naturalWidth > 0) return resolve();
+                img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+                img.src = r.customRibbonUrl!;
+                dynamicImageCache.set(r.customRibbonUrl!, img);
+                setTimeout(resolve, 800);
+              });
+            })
+        );
       }
 
       // Preload watermark image if image watermark selected (Part 8.H)

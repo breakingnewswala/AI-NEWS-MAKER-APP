@@ -43,7 +43,38 @@ console.log('🎬 RUNNING AI NEWS MAKER — MASTER VIDEO FRAME GENERATOR PRO TES
 console.log('================================================================\n');
 
 // -------------------------------------------------------------
-// Group 1: Types & Math Engine (dynamicFrame.ts)
+// Core Engine Loader via esbuild runtime bundling
+// -------------------------------------------------------------
+const esbuild = require('esbuild');
+const modelBundle = esbuild.buildSync({
+  entryPoints: ['src/lib/videoFrameLayoutModel.ts'],
+  bundle: true,
+  write: false,
+  format: 'cjs',
+  platform: 'node',
+  target: 'node18',
+});
+const modelModule = { exports: {} };
+new Function('module', 'exports', 'require', modelBundle.outputFiles[0].text)(
+  modelModule,
+  modelModule.exports,
+  require
+);
+const {
+  calculateDefaultVideoRect,
+  normalizeVideoConfig,
+  normalizeVideoFrameConfig,
+  normalizeHeadlineBlock,
+  normalizeVideoRibbonLayer,
+  calculateVideoFrameLayout,
+  getVideoLayerRect,
+  sortVideoLayersByZIndex,
+  validateVideoFrameGeometry,
+  getAuthoritativeVideoLayers,
+} = modelModule.exports;
+
+// -------------------------------------------------------------
+// Group 1: Types & Real Math Engine Execution (videoFrameLayoutModel.ts)
 // -------------------------------------------------------------
 runTest('Group 1.1: VideoFrameConfig supports pro ratios, movable footer, headline modes, & overlays', () => {
   const types = readNorm('src/types/dynamicFrame.ts');
@@ -56,73 +87,58 @@ runTest('Group 1.1: VideoFrameConfig supports pro ratios, movable footer, headli
   assert(types.includes('calculateDefaultVideoRect'), 'Must declare and export calculateDefaultVideoRect');
 });
 
-runTest('Group 1.2: calculateDefaultVideoRect computes mathematically correct dimensions for all combinations', () => {
-  const types = readNorm('src/types/dynamicFrame.ts');
-  assert(types.includes('export function calculateDefaultVideoRect'), 'Must contain calculateDefaultVideoRect');
+runTest('Group 1.2: calculateDefaultVideoRect directly executes production code for all ratio combinations', () => {
+  assert.strictEqual(typeof calculateDefaultVideoRect, 'function', 'calculateDefaultVideoRect must be an executable function');
 
-  // Exact JavaScript implementation mirroring calculateDefaultVideoRect
-  function calc(canvasRatio, videoRatio, preset = 'center') {
-    let cAspect = 9 / 16;
-    if (canvasRatio === '4:5') cAspect = 4 / 5;
-    else if (canvasRatio === '1:1') cAspect = 1 / 1;
-    else if (canvasRatio === '4:3') cAspect = 4 / 3;
-
-    let vAspect = 16 / 9;
-    if (videoRatio === '9:16') vAspect = 9 / 16;
-    else if (videoRatio === '4:5') vAspect = 4 / 5;
-    else if (videoRatio === '4:3') vAspect = 4 / 3;
-    else if (videoRatio === '1:1') vAspect = 1 / 1;
-    else if (videoRatio === '16:9') vAspect = 16 / 9;
-    else if (videoRatio === 'custom') return { x: 0, y: 15, width: 100, height: 70 };
-
-    let widthPct = 100;
-    let heightPct = 100;
-
-    if (vAspect >= cAspect) {
-      widthPct = 100;
-      heightPct = Math.round((cAspect / vAspect) * 100);
-    } else {
-      heightPct = 100;
-      widthPct = Math.round((vAspect / cAspect) * 100);
-    }
-
-    const x = Math.max(0, Math.round((100 - widthPct) / 2));
-    let y = Math.max(0, Math.round((100 - heightPct) / 2));
-    if (preset === 'top') {
-      y = 4;
-    } else if (preset === 'bottom') {
-      y = Math.max(0, 96 - heightPct);
-    }
-
-    return { x, y, width: widthPct, height: heightPct };
-  }
-
-  // Test 1: 9:16 Canvas with 16:9 Video
-  const rect9_16_to_16_9 = calc('9:16', '16:9', 'center');
-  assert.strictEqual(rect9_16_to_16_9.x, 0, '16:9 in 9:16 should be full width (x=0)');
-  assert.strictEqual(rect9_16_to_16_9.width, 100, '16:9 in 9:16 should be 100% width');
-  assert(rect9_16_to_16_9.height >= 31 && rect9_16_to_16_9.height <= 33, `16:9 height should be ~32%, got ${rect9_16_to_16_9.height}`);
-
-  // Test 2: 9:16 Canvas with 9:16 Video
-  const rect9_16_to_9_16 = calc('9:16', '9:16', 'center');
+  // Test 1: 9:16 Canvas with 9:16 Video
+  const rect9_16_to_9_16 = calculateDefaultVideoRect('9:16', '9:16', 'center');
   assert.strictEqual(rect9_16_to_9_16.width, 100);
   assert.strictEqual(rect9_16_to_9_16.height, 100);
 
+  // Test 2: 9:16 Canvas with 4:5 Video
+  const rect9_16_to_4_5 = calculateDefaultVideoRect('9:16', '4:5', 'center');
+  assert.strictEqual(rect9_16_to_4_5.width, 100);
+  assert(rect9_16_to_4_5.height >= 70 && rect9_16_to_4_5.height <= 71, `4:5 height in 9:16 should be ~70.3%, got ${rect9_16_to_4_5.height}`);
+
   // Test 3: 4:5 Canvas with 16:9 Video
-  const rect4_5_to_16_9 = calc('4:5', '16:9', 'center');
+  const rect4_5_to_16_9 = calculateDefaultVideoRect('4:5', '16:9', 'center');
   assert.strictEqual(rect4_5_to_16_9.width, 100);
   assert(rect4_5_to_16_9.height >= 44 && rect4_5_to_16_9.height <= 46, `16:9 height in 4:5 should be ~45%, got ${rect4_5_to_16_9.height}`);
 
-  // Test 4: 1:1 Canvas with 4:5 Video
-  const rect1_1_to_4_5 = calc('1:1', '4:5', 'center');
-  assert.strictEqual(rect1_1_to_4_5.height, 100);
-  assert.strictEqual(rect1_1_to_4_5.width, 80);
+  // Test 4: 4:3 Canvas with 16:9 Video
+  const rect4_3_to_16_9 = calculateDefaultVideoRect('4:3', '16:9', 'center');
+  assert.strictEqual(rect4_3_to_16_9.width, 100);
+  assert(rect4_3_to_16_9.height >= 74 && rect4_3_to_16_9.height <= 76, `16:9 height in 4:3 should be ~75%, got ${rect4_3_to_16_9.height}`);
 
-  // Test 5: Top and Bottom presets
-  const topRect = calc('9:16', '16:9', 'top');
-  assert.strictEqual(topRect.y, 4, 'Top preset should align near top');
-  const bottomRect = calc('9:16', '16:9', 'bottom');
-  assert(bottomRect.y > 60, 'Bottom preset should align near bottom');
+  // Test 5: 1:1 Canvas with 16:9 Video
+  const rect1_1_to_16_9 = calculateDefaultVideoRect('1:1', '16:9', 'center');
+  assert.strictEqual(rect1_1_to_16_9.width, 100);
+  assert(rect1_1_to_16_9.height >= 56 && rect1_1_to_16_9.height <= 57, `16:9 height in 1:1 should be ~56.2%, got ${rect1_1_to_16_9.height}`);
+
+  // Test 6: Top and Bottom presets
+  const topRect = calculateDefaultVideoRect('9:16', '16:9', 'top');
+  assert.strictEqual(topRect.y, 15, 'Top preset should align at y=15% below header');
+  const bottomRect = calculateDefaultVideoRect('9:16', '16:9', 'bottom');
+  assert.strictEqual(bottomRect.y, 55, 'Bottom preset should align at y=55%');
+
+  // Test 7: Custom ratio fallback
+  const customRect = calculateDefaultVideoRect('9:16', 'custom', 'center');
+  assert.deepStrictEqual(customRect, { x: 0, y: 15, width: 100, height: 70 });
+});
+
+runTest('Group 1.3: validateVideoFrameGeometry and getVideoLayerRect execute with mathematical precision', () => {
+  const valid = validateVideoFrameGeometry({ x: 0, y: 10, width: 100, height: 50 });
+  assert.strictEqual(valid.valid, true, 'Valid rect must pass geometry check');
+
+  const invalid = validateVideoFrameGeometry({ x: NaN, y: 10, width: -5, height: 50 });
+  assert.strictEqual(invalid.valid, false, 'Invalid rect must fail geometry check');
+  assert(invalid.errors.length >= 2, 'Should report all geometry errors');
+
+  const pixels = getVideoLayerRect({ x: 10, y: 20, width: 50, height: 25 }, 1080, 1920);
+  assert.strictEqual(pixels.x, 108);
+  assert.strictEqual(pixels.y, 384);
+  assert.strictEqual(pixels.width, 540);
+  assert.strictEqual(pixels.height, 480);
 });
 
 // -------------------------------------------------------------
@@ -312,22 +328,6 @@ runTest('Group 6.3: Photo Frame Generator mode is completely intact with photo s
 // -------------------------------------------------------------
 // Group 7: Layout Model & Normalization Runtime Engine
 // -------------------------------------------------------------
-const esbuild = require('esbuild');
-const modelBundle = esbuild.buildSync({
-  entryPoints: ['src/lib/videoFrameLayoutModel.ts'],
-  bundle: true,
-  write: false,
-  format: 'cjs',
-  platform: 'node',
-  target: 'node18',
-});
-const modelModule = { exports: {} };
-new Function('module', 'exports', 'require', modelBundle.outputFiles[0].text)(
-  modelModule,
-  modelModule.exports,
-  require
-);
-const { normalizeVideoConfig, getAuthoritativeVideoLayers } = modelModule.exports;
 
 runTest('Group 7.1: normalizeVideoConfig normalizes canonical contract, migrating multi to multiple & legacy coords', () => {
   const legacy = {

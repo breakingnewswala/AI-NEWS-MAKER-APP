@@ -1,0 +1,86 @@
+name: "PR #8 Video Frame Generator Pro Post-Merge Hotfix CI"
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - fix/video-frame-generator-post-merge-rendering
+      - feature/master-video-frame-generator-pro
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Video Pro Engine, Shared Layout Model & Visual Acceptance CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 1. Install root dependencies
+        run: npm install --legacy-peer-deps --no-audit
+
+      - name: 2. Install web_studio dependencies
+        run: npm --prefix web_studio install --legacy-peer-deps --no-audit
+
+      - name: 3 & 4. Build Root application & synchronize Web Studio
+        run: node web_studio/build_and_sync.js
+
+      - name: Set up stable Chrome browser
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Verify Chrome installation and headless startup
+        run: |
+          CHROME_PATH="${{ steps.setup-chrome.outputs.chrome-path }}"
+          if [ -z "$CHROME_PATH" ] || [ ! -x "$CHROME_PATH" ]; then
+            CHROME_PATH=$(which google-chrome || which google-chrome-stable || which chromium-browser || which chromium || true)
+          fi
+          if [ -z "$CHROME_PATH" ] || [ ! -x "$CHROME_PATH" ]; then
+            echo "❌ Chrome/Chromium browser not found or not executable!"
+            exit 1
+          fi
+          echo "CHROME_BIN=$CHROME_PATH" >> $GITHUB_ENV
+          echo "✅ Using Chrome executable at: $CHROME_PATH"
+          "$CHROME_PATH" --version
+          "$CHROME_PATH" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom about:blank > /dev/null
+          echo "✅ Chrome launched in headless mode successfully."
+
+      - name: 5. Verify Safety Invariants (Production Frame & Android ID)
+        run: node tests/test_safety_invariants.cjs
+
+      - name: Run Master Video Frame Generator Pro Runtime & E2E Tests
+        run: node tests/test_master_video_frame_generator_pro.cjs
+
+      - name: 7. Run Master Frame Generator & Photo Studio Suite (17/17)
+        run: node tests/test_frame_generator_and_photo_studio_rendering.cjs
+
+      - name: 8. Run Security Blocker & RBAC Suite (32/32)
+        run: node tests/test_blocker_remediation.cjs
+
+      - name: 9. Run Remediation Acceptance Suite (34/34)
+        run: node tests/test_remediation_acceptance.cjs
+
+      - name: 10. Run Phase 2 Frame Config & i18n Suite (17/17)
+        run: node tests/test_phase2_frame_config_i18n_multigrid.cjs
+
+      - name: 11. Run Genuine Headless Chrome Multi-Grid E2E Suite
+        run: node scripts/test_studio_e2e_multigrid.cjs
+
+      - name: 12. Upload Video Pro Visual Evidence Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: video-pro-audit-screenshots
+          path: audit_screenshots/video_pro/
+          retention-days: 14

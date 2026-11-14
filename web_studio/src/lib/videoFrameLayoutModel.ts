@@ -17,6 +17,8 @@ import {
   calculateDefaultVideoRect,
 } from '../types/dynamicFrame';
 
+export { calculateDefaultVideoRect };
+
 export interface NormalizedVideoLayout {
   config: VideoFrameConfig;
   canvasAspect: DynamicAspectRatio;
@@ -47,6 +49,113 @@ export interface VideoLayoutLayer {
   opacity: number;
   visible: boolean;
   data: any;
+}
+
+/**
+ * Validates whether a NormalizedRect has valid coordinates within 0..100% canvas space.
+ */
+export function validateVideoFrameGeometry(rect?: Partial<NormalizedRect> | null): {
+  valid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+  if (!rect) {
+    errors.push('Rectangle is null or undefined');
+    return { valid: false, errors };
+  }
+  if (typeof rect.x !== 'number' || isNaN(rect.x)) errors.push('rect.x must be a valid number');
+  if (typeof rect.y !== 'number' || isNaN(rect.y)) errors.push('rect.y must be a valid number');
+  if (typeof rect.width !== 'number' || isNaN(rect.width) || rect.width <= 0) errors.push('rect.width must be > 0');
+  if (typeof rect.height !== 'number' || isNaN(rect.height) || rect.height <= 0) errors.push('rect.height must be > 0');
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Normalizes a single HeadlineBlockConfig object, ensuring canonical `rect` geometry
+ * and migrating legacy properties like `bgColor` -> `backgroundColor` and flat x, y coordinates.
+ */
+export function normalizeHeadlineBlock(b: any = {}, idx: number = 0): HeadlineBlockConfig {
+  const rect: NormalizedRect = b.rect && typeof b.rect.width === 'number'
+    ? {
+        x: Number(b.rect.x || 0),
+        y: Number(b.rect.y || 0),
+        width: Number(b.rect.width || 86),
+        height: Number(b.rect.height || 8),
+      }
+    : {
+        x: Number(b.x ?? 7),
+        y: Number(b.y ?? (68 + idx * 9)),
+        width: Number(b.width ?? 86),
+        height: Number(b.height ?? 8),
+      };
+
+  const bg = b.backgroundColor || b.bgColor || (idx === 0 ? '#b91c1c' : idx === 1 ? '#047857' : '#1e3a8a');
+
+  return {
+    id: String(b.id || `block_${idx + 1}`),
+    name: String(b.name || b.role || `ब्लॉक #${idx + 1}`),
+    role: String(b.role || (idx === 0 ? 'headline' : idx === 1 ? 'subheadline' : 'kicker')),
+    rect,
+    text: String(b.text || ''),
+    fontFamily: String(b.fontFamily || 'Noto Sans Devanagari'),
+    fontSize: Number(b.fontSize || (idx === 0 ? 32 : 24)),
+    fontWeight: String(b.fontWeight || 'bold'),
+    textColor: String(b.textColor || '#ffffff'),
+    highlightColor: b.highlightColor ? String(b.highlightColor) : undefined,
+    backgroundColor: bg,
+    bgColor: bg,
+    alignment: (b.alignment === 'left' || b.alignment === 'right') ? b.alignment : 'center',
+    maxLines: b.maxLines === 3 ? 3 : b.maxLines === 2 ? 2 : 1,
+    lineHeight: Number(b.lineHeight || 1.3),
+    rotation: Number(b.rotation || 0),
+    visible: b.visible !== false,
+    zIndex: Number(b.zIndex ?? (20 + idx)),
+    // Flat coordinates for backward compatibility
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+/**
+ * Normalizes a single VideoRibbonLayer object with canonical `rect` geometry.
+ */
+export function normalizeVideoRibbonLayer(r: any = {}, idx: number = 0): VideoRibbonLayer {
+  const rect: NormalizedRect = r.rect && typeof r.rect.width === 'number'
+    ? {
+        x: Number(r.rect.x || 0),
+        y: Number(r.rect.y || 0),
+        width: Number(r.rect.width || 100),
+        height: Number(r.rect.height || 6),
+      }
+    : {
+        x: Number(r.x ?? 0),
+        y: Number(r.y ?? (58 + idx * 7)),
+        width: Number(r.width ?? 100),
+        height: Number(r.height ?? 6),
+      };
+
+  return {
+    id: String(r.id || `ribbon_${idx + 1}`),
+    ribbonId: String(r.ribbonId || r.id || 'ribbon_breaking_red'),
+    name: String(r.name || `रिबन #${idx + 1}`),
+    customRibbonUrl: r.customRibbonUrl ? String(r.customRibbonUrl) : undefined,
+    rect,
+    backgroundColor: String(r.backgroundColor || '#dc2626'),
+    textColor: String(r.textColor || '#ffffff'),
+    text: String(r.text || 'BREAKING NEWS'),
+    fontSize: Number(r.fontSize || 14),
+    visible: r.visible !== false,
+    zIndex: Number(r.zIndex ?? (12 + idx)),
+    rotation: Number(r.rotation || 0),
+    isAnimatedGif: Boolean(r.isAnimatedGif),
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  };
 }
 
 /**
@@ -111,87 +220,15 @@ export function normalizeVideoConfig(
 
   // Headline Blocks (Multi-headline)
   const rawBlocks = Array.isArray(rawV.headlineBlocks) ? rawV.headlineBlocks : [];
-  const headlineBlocks: HeadlineBlockConfig[] = rawBlocks.map((b: any, idx: number) => {
-    const rect: NormalizedRect = b.rect && typeof b.rect.width === 'number'
-      ? {
-          x: Number(b.rect.x || 0),
-          y: Number(b.rect.y || 0),
-          width: Number(b.rect.width || 86),
-          height: Number(b.rect.height || 8),
-        }
-      : {
-          x: Number(b.x ?? 7),
-          y: Number(b.y ?? (68 + idx * 9)),
-          width: Number(b.width ?? 86),
-          height: Number(b.height ?? 8),
-        };
-
-    const bg = b.backgroundColor || b.bgColor || (idx === 0 ? '#b91c1c' : idx === 1 ? '#047857' : '#1e3a8a');
-
-    return {
-      id: String(b.id || `block_${idx + 1}`),
-      name: String(b.name || b.role || `ब्लॉक #${idx + 1}`),
-      role: String(b.role || (idx === 0 ? 'headline' : idx === 1 ? 'subheadline' : 'kicker')),
-      rect,
-      text: String(b.text || ''),
-      fontFamily: String(b.fontFamily || 'Noto Sans Devanagari'),
-      fontSize: Number(b.fontSize || (idx === 0 ? 32 : 24)),
-      fontWeight: String(b.fontWeight || 'bold'),
-      textColor: String(b.textColor || '#ffffff'),
-      highlightColor: b.highlightColor ? String(b.highlightColor) : undefined,
-      backgroundColor: bg,
-      bgColor: bg,
-      alignment: (b.alignment === 'left' || b.alignment === 'right') ? b.alignment : 'center',
-      maxLines: b.maxLines === 3 ? 3 : b.maxLines === 2 ? 2 : 1,
-      lineHeight: Number(b.lineHeight || 1.3),
-      rotation: Number(b.rotation || 0),
-      visible: b.visible !== false,
-      zIndex: Number(b.zIndex ?? (20 + idx)),
-      // Flat coordinates for backward compatibility
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    };
-  });
+  const headlineBlocks: HeadlineBlockConfig[] = rawBlocks.map((b: any, idx: number) =>
+    normalizeHeadlineBlock(b, idx)
+  );
 
   // Ribbon Layers
   const rawRibbons = Array.isArray(rawV.ribbonLayers) ? rawV.ribbonLayers : [];
-  const ribbonLayers: VideoRibbonLayer[] = rawRibbons.map((r: any, idx: number) => {
-    const rect: NormalizedRect = r.rect && typeof r.rect.width === 'number'
-      ? {
-          x: Number(r.rect.x || 0),
-          y: Number(r.rect.y || 0),
-          width: Number(r.rect.width || 100),
-          height: Number(r.rect.height || 6),
-        }
-      : {
-          x: Number(r.x ?? 0),
-          y: Number(r.y ?? (58 + idx * 7)),
-          width: Number(r.width ?? 100),
-          height: Number(r.height ?? 6),
-        };
-
-    return {
-      id: String(r.id || `ribbon_${idx + 1}`),
-      ribbonId: String(r.ribbonId || r.id || 'ribbon_breaking_red'),
-      name: String(r.name || `रिबन #${idx + 1}`),
-      customRibbonUrl: r.customRibbonUrl ? String(r.customRibbonUrl) : undefined,
-      rect,
-      backgroundColor: String(r.backgroundColor || '#dc2626'),
-      textColor: String(r.textColor || '#ffffff'),
-      text: String(r.text || 'BREAKING NEWS'),
-      fontSize: Number(r.fontSize || 14),
-      visible: r.visible !== false,
-      zIndex: Number(r.zIndex ?? (12 + idx)),
-      rotation: Number(r.rotation || 0),
-      isAnimatedGif: Boolean(r.isAnimatedGif),
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    };
-  });
+  const ribbonLayers: VideoRibbonLayer[] = rawRibbons.map((r: any, idx: number) =>
+    normalizeVideoRibbonLayer(r, idx)
+  );
 
   // Overlay Assets (PNG / GIF)
   const rawOverlays = Array.isArray(rawV.overlayAssets) ? rawV.overlayAssets : [];
@@ -312,6 +349,35 @@ export function normalizeVideoConfig(
     watermarkUserAllowed: rawV.watermarkUserAllowed !== false,
     watermarkRect,
     cropFocalPoint: rawV.cropFocalPoint || { x: 0.5, y: 0.5 },
+  };
+}
+
+/**
+ * Direct alias for normalizeVideoConfig to satisfy normalizeVideoFrameConfig naming requirement.
+ */
+export const normalizeVideoFrameConfig = normalizeVideoConfig;
+
+/**
+ * Sorts any list of video layers by effective zIndex ascending.
+ */
+export function sortVideoLayersByZIndex(layers: VideoLayoutLayer[]): VideoLayoutLayer[] {
+  return [...layers].sort((a, b) => a.zIndex - b.zIndex);
+}
+
+/**
+ * Converts a normalized percentage rectangle into absolute pixel coordinates.
+ */
+export function getVideoLayerRect(
+  layer: NormalizedRect | { rect: NormalizedRect },
+  canvasWidth: number,
+  canvasHeight: number
+): { x: number; y: number; width: number; height: number } {
+  const r = 'rect' in layer ? layer.rect : layer;
+  return {
+    x: Math.round((r.x / 100) * canvasWidth),
+    y: Math.round((r.y / 100) * canvasHeight),
+    width: Math.round((r.width / 100) * canvasWidth),
+    height: Math.round((r.height / 100) * canvasHeight),
   };
 }
 
@@ -522,5 +588,41 @@ export function getAuthoritativeVideoLayers(
   });
 
   // Sort visible layers strictly by effective zIndex ascending
-  return layers.sort((a, b) => a.zIndex - b.zIndex);
+  return sortVideoLayersByZIndex(layers);
+}
+
+/**
+ * Calculates complete normalized layout dimensions and layer hierarchy for a given canvas size.
+ */
+export function calculateVideoFrameLayout(
+  rawV: any = {},
+  canvasRatio: DynamicAspectRatio = '9:16',
+  canvasWidth?: number,
+  canvasHeight?: number
+): NormalizedVideoLayout {
+  let defaultW = 1080;
+  let defaultH = 1920;
+  if (canvasRatio === '4:5') {
+    defaultW = 1080;
+    defaultH = 1350;
+  } else if (canvasRatio === '1:1') {
+    defaultW = 1080;
+    defaultH = 1080;
+  } else if (canvasRatio === '4:3') {
+    defaultW = 1440;
+    defaultH = 1080;
+  }
+
+  const w = canvasWidth || defaultW;
+  const h = canvasHeight || defaultH;
+  const config = normalizeVideoConfig(rawV, canvasRatio);
+  const layers = getAuthoritativeVideoLayers(config);
+
+  return {
+    config,
+    canvasAspect: canvasRatio,
+    canvasWidth: w,
+    canvasHeight: h,
+    layers,
+  };
 }
