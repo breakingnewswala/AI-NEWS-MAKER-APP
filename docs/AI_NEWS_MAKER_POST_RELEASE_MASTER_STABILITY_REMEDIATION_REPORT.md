@@ -208,4 +208,5 @@ The 8 reference screenshots were systematically audited and resolved:
 - **Status:** `READY FOR OWNER REVIEW`
 - **Target Base:** `main`
 - **Feature Branch:** `fix/admin-api-pools-photo-vision-users-rss-notifications`
-- **PR:** Created via GitHub CLI targeting `main`.
+- **Pull Request URL:** `https://github.com/breakingnewswala/AI-NEWS-MAKER-APP/pull/9`
+- **CI / Safety Guarantee:** No merge to `main` and no deployment to Firebase App Hosting has been performed. PR #9 is staged and fully validated for Owner review.
