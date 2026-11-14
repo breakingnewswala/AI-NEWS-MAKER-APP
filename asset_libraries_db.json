@@ -4,19 +4,19 @@
     "name": "Red Map Pin Badge with Divider",
     "type": "location_badge",
     "category": "general",
-    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='280' height='45' viewBox='0 0 280 45'><rect x='1' y='1' width='278' height='43' rx='22' fill='%23FFFFFF' stroke='%23DC2626' stroke-width='2'/><circle cx='22' cy='22' r='14' fill='%23DC2626'/><path d='M22 13 C18 13 15 16 15 20 C15 25 22 31 22 31 C22 31 29 25 29 20 C29 16 26 13 22 13 Z' fill='%23FFFFFF'/><circle cx='22' cy='19' r='3' fill='%23DC2626'/><line x1='44' y1='10' x2='44' y2='34' stroke='%23E2E8F0' stroke-width='2'/></svg>",
+    "url": "/assets/location_white_icon.png",
     "enabled": true,
     "createdAt": 1794132101671,
-    "updatedAt": 1794280530344,
+    "updatedAt": 1794132144005,
     "textRegion": {
       "x": 32,
-      "y": 27,
+      "y": 24,
       "width": 58,
       "height": 55
     },
     "typographyConfig": {
-      "fontFamily": "Noto Sans Devanagari",
-      "fontSize": 20,
+      "fontFamily": "Mukta",
+      "fontSize": 50,
       "fontWeight": "bold",
       "textColor": "#000000",
       "textAlign": "center"
@@ -52,11 +52,25 @@
     "footerConfig": {
       "footerBgColor": "#FFFFFF",
       "footerTextColor": "#000000",
-      "accentColor": "#D97706",
-      "layout": "standard"
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    "createdAt": 1794280000000,
-    "updatedAt": 1794280000000
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
   },
   {
     "id": "footer_branding_navy",
@@ -71,12 +85,26 @@
     ],
     "footerConfig": {
       "footerBgColor": "#0F172A",
-      "footerTextColor": "#F8FAFC",
-      "accentColor": "#F59E0B",
-      "layout": "branding"
+      "footerTextColor": "#FACC15",
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    "createdAt": 1794280000000,
-    "updatedAt": 1794280000000
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
   },
   {
     "id": "footer_social_blue",
@@ -85,17 +113,33 @@
     "category": "social",
     "enabled": true,
     "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
     "footerConfig": {
-      "footerBgColor": "#1E3A8A",
+      "footerBgColor": "#1E40AF",
       "footerTextColor": "#FFFFFF",
-      "accentColor": "#38BDF8",
-      "layout": "social"
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    "createdAt": 1794280000000,
-    "updatedAt": 1794280000000
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
   },
   {
     "id": "footer_news_breaking_red",
@@ -104,19 +148,31 @@
     "category": "news",
     "enabled": true,
     "allowedPlans": [
-      "BASIC",
-      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
     "footerConfig": {
-      "footerBgColor": "#B91C1C",
+      "footerBgColor": "#DC2626",
       "footerTextColor": "#FFFFFF",
-      "accentColor": "#FDE047",
-      "layout": "news"
+      "footerHeightPct": 8.5,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    "createdAt": 1794280000000,
-    "updatedAt": 1794280000000
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
   },
   {
     "id": "footer_special_vip_gold",
@@ -125,17 +181,30 @@
     "category": "special",
     "enabled": true,
     "allowedPlans": [
-      "PRO",
       "VIP DESK"
     ],
     "footerConfig": {
-      "footerBgColor": "#78350F",
-      "footerTextColor": "#FEF08A",
-      "accentColor": "#FACC15",
-      "layout": "special"
+      "footerBgColor": "#FACC15",
+      "footerTextColor": "#000000",
+      "footerHeightPct": 9,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 22,
+      "elementSpacing": 14,
+      "paddingX": 18,
+      "separator": "•"
     },
-    "createdAt": 1794280000000,
-    "updatedAt": 1794280000000
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
   },
   {
     "id": "callout_special_gold",

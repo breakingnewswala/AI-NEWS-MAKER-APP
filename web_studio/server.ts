@@ -11569,11 +11569,22 @@ function getDefaultAssetLibraries(): any[] {
 }
 
 const DELETED_ASSETS_TOMBSTONE_FILE = process.env.DELETED_ASSETS_TOMBSTONE_FILE || path.join(process.cwd(), "deleted_assets_tombstone.json");
+export const PROTECTED_BUILTIN_ASSET_IDS = new Set<string>([
+  'asset_1794132101671_u0g9s',
+  'callout_bully_forward_story',
+  'footer_regular_gold',
+  'footer_branding_navy',
+  'footer_social_blue',
+  'footer_news_breaking_red',
+  'footer_special_vip_gold'
+]);
 let memoryAssetTombstones: Set<string> | null = null;
 
 function loadDeletedAssetTombstones(): Set<string> {
   if (memoryAssetTombstones && memoryAssetTombstones.size > 0) {
-    return new Set(memoryAssetTombstones);
+    const set = new Set(memoryAssetTombstones);
+    PROTECTED_BUILTIN_ASSET_IDS.forEach(id => set.delete(id));
+    return set;
   }
   const set = new Set<string>();
   try {
@@ -11583,12 +11594,33 @@ function loadDeletedAssetTombstones(): Set<string> {
       if (Array.isArray(list)) list.forEach((id) => set.add(id));
     }
   } catch {}
+  PROTECTED_BUILTIN_ASSET_IDS.forEach(id => set.delete(id));
   memoryAssetTombstones = set;
   return set;
 }
 
+function writeDurableAssetTombstonesToDisk(set: Set<string>) {
+  try {
+    const list = Array.from(set).filter(id => !PROTECTED_BUILTIN_ASSET_IDS.has(id));
+    const serialized = JSON.stringify(list, null, 2);
+    const tmpPath = `${DELETED_ASSETS_TOMBSTONE_FILE}.tmp.${Date.now()}`;
+    fs.writeFileSync(tmpPath, serialized, "utf-8");
+    fs.renameSync(tmpPath, DELETED_ASSETS_TOMBSTONE_FILE);
+
+    const webPath = path.join(process.cwd(), "web_studio", "deleted_assets_tombstone.json");
+    if (fs.existsSync(path.dirname(webPath)) && path.resolve(webPath) !== path.resolve(DELETED_ASSETS_TOMBSTONE_FILE)) {
+      try {
+        fs.writeFileSync(webPath, serialized, "utf-8");
+      } catch {}
+    }
+  } catch (e: any) {
+    console.warn("Failed to write asset tombstones to disk:", e?.message);
+  }
+}
+
 async function getDurableAssetTombstones(): Promise<Set<string>> {
   const set = loadDeletedAssetTombstones();
+  const initialCount = set.size;
   if (centralDb && typeof centralDb.readDoc === "function") {
     try {
       const cloudDoc = await centralDb.readDoc("system_config", "deleted_assets_tombstones");
@@ -11598,19 +11630,25 @@ async function getDurableAssetTombstones(): Promise<Set<string>> {
       }
     } catch {}
   }
+  PROTECTED_BUILTIN_ASSET_IDS.forEach(id => set.delete(id));
   memoryAssetTombstones = set;
-  try {
-    fs.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
-  } catch {}
+  if (set.size !== initialCount) {
+    writeDurableAssetTombstonesToDisk(set);
+  }
   return set;
 }
 
 async function recordDeletedAssetTombstone(id: string) {
   try {
+    if (PROTECTED_BUILTIN_ASSET_IDS.has(id)) {
+      console.warn(`[Tombstone] Refusing to tombstone protected built-in asset ${id}`);
+      return;
+    }
     const tombstones = await getDurableAssetTombstones();
     tombstones.add(id);
+    PROTECTED_BUILTIN_ASSET_IDS.forEach(pid => tombstones.delete(pid));
     memoryAssetTombstones = tombstones;
-    fs.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    writeDurableAssetTombstonesToDisk(tombstones);
     if (centralDb && typeof centralDb.writeDoc === "function") {
       const res = await centralDb.writeDoc("system_config", "deleted_assets_tombstones", {
         tombstones: Array.from(tombstones),
@@ -11643,7 +11681,14 @@ function loadAssetLibrariesDatabase(): any[] {
 
 function saveAssetLibrariesDatabase(items: any[]) {
   try {
-    fs.writeFileSync(ASSET_LIBRARIES_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    const serialized = JSON.stringify(items, null, 2);
+    fs.writeFileSync(ASSET_LIBRARIES_DB_FILE, serialized, "utf-8");
+    const webPath = path.join(process.cwd(), "web_studio", "asset_libraries_db.json");
+    if (fs.existsSync(path.dirname(webPath)) && path.resolve(webPath) !== path.resolve(ASSET_LIBRARIES_DB_FILE)) {
+      try {
+        fs.writeFileSync(webPath, serialized, "utf-8");
+      } catch {}
+    }
   } catch (err) {
     console.warn("Failed to write asset_libraries_db.json:", err);
   }

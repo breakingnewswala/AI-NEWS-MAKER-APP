@@ -6478,6 +6478,7 @@ __export(server_exports, {
   HEADLINE_5_TIER_RANGES: () => HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT: () => HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES: () => HEADLINE_TIER_RANGES,
+  PROTECTED_BUILTIN_ASSET_IDS: () => PROTECTED_BUILTIN_ASSET_IDS,
   buildMasterNewsEditorialPrompt: () => buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString: () => buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity: () => calculateHeadlineSimilarity,
@@ -21564,10 +21565,21 @@ function getDefaultAssetLibraries() {
   ];
 }
 var DELETED_ASSETS_TOMBSTONE_FILE = process.env.DELETED_ASSETS_TOMBSTONE_FILE || import_path2.default.join(process.cwd(), "deleted_assets_tombstone.json");
+var PROTECTED_BUILTIN_ASSET_IDS = /* @__PURE__ */ new Set([
+  "asset_1794132101671_u0g9s",
+  "callout_bully_forward_story",
+  "footer_regular_gold",
+  "footer_branding_navy",
+  "footer_social_blue",
+  "footer_news_breaking_red",
+  "footer_special_vip_gold"
+]);
 var memoryAssetTombstones = null;
 function loadDeletedAssetTombstones() {
   if (memoryAssetTombstones && memoryAssetTombstones.size > 0) {
-    return new Set(memoryAssetTombstones);
+    const set2 = new Set(memoryAssetTombstones);
+    PROTECTED_BUILTIN_ASSET_IDS.forEach((id) => set2.delete(id));
+    return set2;
   }
   const set = /* @__PURE__ */ new Set();
   try {
@@ -21578,11 +21590,31 @@ function loadDeletedAssetTombstones() {
     }
   } catch {
   }
+  PROTECTED_BUILTIN_ASSET_IDS.forEach((id) => set.delete(id));
   memoryAssetTombstones = set;
   return set;
 }
+function writeDurableAssetTombstonesToDisk(set) {
+  try {
+    const list = Array.from(set).filter((id) => !PROTECTED_BUILTIN_ASSET_IDS.has(id));
+    const serialized = JSON.stringify(list, null, 2);
+    const tmpPath = `${DELETED_ASSETS_TOMBSTONE_FILE}.tmp.${Date.now()}`;
+    import_fs2.default.writeFileSync(tmpPath, serialized, "utf-8");
+    import_fs2.default.renameSync(tmpPath, DELETED_ASSETS_TOMBSTONE_FILE);
+    const webPath = import_path2.default.join(process.cwd(), "web_studio", "deleted_assets_tombstone.json");
+    if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(DELETED_ASSETS_TOMBSTONE_FILE)) {
+      try {
+        import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
+      } catch {
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to write asset tombstones to disk:", e?.message);
+  }
+}
 async function getDurableAssetTombstones() {
   const set = loadDeletedAssetTombstones();
+  const initialCount = set.size;
   if (centralDb && typeof centralDb.readDoc === "function") {
     try {
       const cloudDoc = await centralDb.readDoc("system_config", "deleted_assets_tombstones");
@@ -21593,19 +21625,24 @@ async function getDurableAssetTombstones() {
     } catch {
     }
   }
+  PROTECTED_BUILTIN_ASSET_IDS.forEach((id) => set.delete(id));
   memoryAssetTombstones = set;
-  try {
-    import_fs2.default.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
-  } catch {
+  if (set.size !== initialCount) {
+    writeDurableAssetTombstonesToDisk(set);
   }
   return set;
 }
 async function recordDeletedAssetTombstone(id) {
   try {
+    if (PROTECTED_BUILTIN_ASSET_IDS.has(id)) {
+      console.warn(`[Tombstone] Refusing to tombstone protected built-in asset ${id}`);
+      return;
+    }
     const tombstones = await getDurableAssetTombstones();
     tombstones.add(id);
+    PROTECTED_BUILTIN_ASSET_IDS.forEach((pid) => tombstones.delete(pid));
     memoryAssetTombstones = tombstones;
-    import_fs2.default.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    writeDurableAssetTombstonesToDisk(tombstones);
     if (centralDb && typeof centralDb.writeDoc === "function") {
       const res = await centralDb.writeDoc("system_config", "deleted_assets_tombstones", {
         tombstones: Array.from(tombstones),
@@ -21637,7 +21674,15 @@ function loadAssetLibrariesDatabase() {
 }
 function saveAssetLibrariesDatabase(items) {
   try {
-    import_fs2.default.writeFileSync(ASSET_LIBRARIES_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    const serialized = JSON.stringify(items, null, 2);
+    import_fs2.default.writeFileSync(ASSET_LIBRARIES_DB_FILE, serialized, "utf-8");
+    const webPath = import_path2.default.join(process.cwd(), "web_studio", "asset_libraries_db.json");
+    if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(ASSET_LIBRARIES_DB_FILE)) {
+      try {
+        import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
+      } catch {
+      }
+    }
   } catch (err) {
     console.warn("Failed to write asset_libraries_db.json:", err);
   }
@@ -34217,6 +34262,7 @@ startServer().catch((err) => {
   HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES,
+  PROTECTED_BUILTIN_ASSET_IDS,
   buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity,
