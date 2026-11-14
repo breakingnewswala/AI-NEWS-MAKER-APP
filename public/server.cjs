@@ -12385,61 +12385,6 @@ function verifyAuthToken(tokenStr) {
     return null;
   }
 }
-function verifyAuthTokenAllowingExpired(tokenStr, gracePeriodSec = 30 * 24 * 60 * 60) {
-  if (!tokenStr || typeof tokenStr !== "string") return null;
-  const parts = tokenStr.trim().split(".");
-  if (parts.length !== 3) return null;
-  const [encodedHeader, encodedPayload, signature] = parts;
-  try {
-    const headerJson = Buffer.from(encodedHeader, "base64url").toString("utf8");
-    const header = JSON.parse(headerJson);
-    if (!header || header.alg !== "HS256" || header.typ !== "JWT") {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-  let isValid = false;
-  let isLegacySignature = false;
-  const expectedSig = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
-  if (signature.length === expectedSig.length) {
-    const sigBuf = Buffer.from(signature);
-    const expBuf = Buffer.from(expectedSig);
-    if (import_crypto2.default.timingSafeEqual(sigBuf, expBuf)) {
-      isValid = true;
-    }
-  }
-  if (!isValid) {
-    for (const legacySecret of LEGACY_AUTH_SECRETS) {
-      if (!legacySecret) continue;
-      const legacyExpectedSig = import_crypto2.default.createHmac("sha256", legacySecret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
-      if (signature.length === legacyExpectedSig.length) {
-        const sigBuf = Buffer.from(signature);
-        const expBuf = Buffer.from(legacyExpectedSig);
-        if (import_crypto2.default.timingSafeEqual(sigBuf, expBuf)) {
-          isValid = true;
-          isLegacySignature = true;
-          break;
-        }
-      }
-    }
-  }
-  if (!isValid) return null;
-  try {
-    const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
-    const payload = JSON.parse(payloadJson);
-    const nowSec = Math.floor(Date.now() / 1e3);
-    const isExpired = Boolean(payload.exp && payload.exp < nowSec);
-    if (payload.exp && payload.exp < nowSec - gracePeriodSec) {
-      return null;
-    }
-    payload.isLegacySignature = isLegacySignature;
-    payload.isExpired = isExpired;
-    return payload;
-  } catch {
-    return null;
-  }
-}
 var firebaseAdminAuth = null;
 try {
   let projectId = process.env.FIREBASE_PROJECT_ID;
@@ -14093,7 +14038,8 @@ function loadNewsDatabase() {
     const list = Array.from(centralDb.cache.news.values());
     const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
     if (diskPosts.length > 0) {
-      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
+      const deletedSourceIds = loadDeletedRssSourceIds();
+      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive && !deletedSourceIds.has(s.id));
       const activeSourceIds = new Set(activeSources.map((s) => s.id));
       const activeSourceUrls = /* @__PURE__ */ new Set([
         ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
@@ -14106,12 +14052,20 @@ function loadNewsDatabase() {
           if (activeSources.length === 0) continue;
           const parts = String(dp.id).split("-");
           const srcId = dp.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
-          const matchesId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
+          const cleanSrcId = srcId.replace(/^src_/, "");
+          if (srcId && (deletedSourceIds.has(srcId) || deletedSourceIds.has(`src_${srcId}`) || deletedSourceIds.has(cleanSrcId))) {
+            continue;
+          }
+          const matchesId = Boolean(
+            srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`) || activeSourceIds.has(cleanSrcId) || activeSources.some(
+              (s) => dp.id.startsWith(`rss-${s.id}-`) || dp.id.startsWith(`web-${s.id}-`) || s.id.startsWith("src_") && (dp.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || dp.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`))
+            ))
+          );
           const matchesUrl = Boolean(dp.sourceUrl && (activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
             try {
-              const feedHost = new URL(u).hostname.replace(/^www\./, "");
-              const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, "");
-              return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+              const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+              const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+              return feedHost === postHost || postHost.endsWith("." + feedHost);
             } catch {
               return false;
             }
@@ -14339,7 +14293,8 @@ app.get("/api/news-posts", async (req, res) => {
   const posts = loadNewsDatabase();
   const editorialDb = loadApprovedEditorialDatabase();
   const now = Date.now();
-  const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
+  const deletedSourceIds = loadDeletedRssSourceIds();
+  const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive && !deletedSourceIds.has(s.id));
   const activeSourceIds = new Set(activeSources.map((s) => s.id));
   const activeSourceUrls = /* @__PURE__ */ new Set([
     ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
@@ -14357,27 +14312,49 @@ app.get("/api/news-posts", async (req, res) => {
     }
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
+      if (activeSources.length === 0 && !isAdmin) {
+        return false;
+      }
       const parts = String(p.id).split("-");
       const postSourceId = p.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
+      const cleanPostSrc = postSourceId.replace(/^src_/, "");
+      const isExplicitlyDeleted = Boolean(
+        postSourceId && (deletedSourceIds.has(postSourceId) || deletedSourceIds.has(`src_${postSourceId}`) || deletedSourceIds.has(cleanPostSrc))
+      ) || Array.from(deletedSourceIds).some(
+        (dId) => p.id.startsWith(`rss-${dId}-`) || p.id.startsWith(`web-${dId}-`) || dId.startsWith("src_") && (p.id.startsWith(`rss-${dId.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${dId.replace(/^src_/, "")}-`))
+      );
+      if (isExplicitlyDeleted && !isAdmin) {
+        return false;
+      }
       const matchesSourceId = Boolean(
-        postSourceId && (activeSourceIds.has(postSourceId) || activeSourceIds.has(`src_${postSourceId}`) || Array.from(activeSourceIds).some((id) => id.includes(postSourceId) || postSourceId.includes(id)))
+        postSourceId && (activeSourceIds.has(postSourceId) || activeSourceIds.has(`src_${postSourceId}`) || activeSourceIds.has(cleanPostSrc) || activeSources.some(
+          (s) => p.id.startsWith(`rss-${s.id}-`) || p.id.startsWith(`web-${s.id}-`) || s.id.startsWith("src_") && (p.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`))
+        ))
       );
       const matchesUrl = Boolean(p.sourceUrl && (activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
         try {
-          const feedHost = new URL(u).hostname.replace(/^www\./, "");
-          const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "");
-          return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+          const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+          const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+          return feedHost === postHost || postHost.endsWith("." + feedHost);
         } catch {
           return false;
         }
       })));
       const matchesFeedUrl = Boolean(
-        p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase())
+        p.sourceFeedUrl && (activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+          try {
+            const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+            const postFeedHost = new URL(p.sourceFeedUrl).hostname.replace(/^www\./, "").toLowerCase();
+            return feedHost === postFeedHost || postFeedHost.endsWith("." + feedHost);
+          } catch {
+            return false;
+          }
+        }))
       );
       const matchesChannel = Boolean(
-        p.sourceChannel && activeSources.some((s) => s.name && s.name.trim().toLowerCase() === p.sourceChannel.trim().toLowerCase())
+        p.sourceChannel && p.sourceChannel.trim() !== "" && activeSources.some((s) => s.name && s.name.trim().toLowerCase() === p.sourceChannel.trim().toLowerCase())
       );
-      const hasActiveSource = activeSources.length === 0 || matchesSourceId || matchesFeedUrl || matchesUrl || matchesChannel;
+      const hasActiveSource = activeSources.length > 0 && !isExplicitlyDeleted && Boolean(matchesSourceId || matchesFeedUrl || matchesUrl || matchesChannel);
       if (!hasActiveSource && !isAdmin) {
         return false;
       }
@@ -14421,18 +14398,40 @@ app.get("/api/news-posts", async (req, res) => {
         if (activeSources.length === 0) return false;
         const parts = String(p.id).split("-");
         const srcId = p.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
-        const matchesSourceId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
-        const matchesFeedUrl = Boolean(p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()));
-        const matchesUrl = Boolean(p.sourceUrl && (activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+        const cleanSrcId = srcId.replace(/^src_/, "");
+        const isExplicitlyDeleted = Boolean(
+          srcId && (deletedSourceIds.has(srcId) || deletedSourceIds.has(`src_${srcId}`) || deletedSourceIds.has(cleanSrcId))
+        ) || Array.from(deletedSourceIds).some(
+          (dId) => p.id.startsWith(`rss-${dId}-`) || p.id.startsWith(`web-${dId}-`) || dId.startsWith("src_") && (p.id.startsWith(`rss-${dId.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${dId.replace(/^src_/, "")}-`))
+        );
+        if (isExplicitlyDeleted) return false;
+        const matchesSourceId = Boolean(
+          srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`) || activeSourceIds.has(cleanSrcId) || activeSources.some(
+            (s) => p.id.startsWith(`rss-${s.id}-`) || p.id.startsWith(`web-${s.id}-`) || s.id.startsWith("src_") && (p.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`))
+          ))
+        );
+        const matchesFeedUrl = Boolean(p.sourceFeedUrl && (activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
           try {
-            const feedHost = new URL(u).hostname.replace(/^www\./, "");
-            const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "");
-            return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+            const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+            const postFeedHost = new URL(p.sourceFeedUrl).hostname.replace(/^www\./, "").toLowerCase();
+            return feedHost === postFeedHost || postFeedHost.endsWith("." + feedHost);
           } catch {
             return false;
           }
         })));
-        const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl);
+        const matchesUrl = Boolean(p.sourceUrl && (activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+          try {
+            const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+            const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+            return feedHost === postHost || postHost.endsWith("." + feedHost);
+          } catch {
+            return false;
+          }
+        })));
+        const matchesChannel = Boolean(
+          p.sourceChannel && p.sourceChannel.trim() !== "" && activeSources.some((s) => s.name && s.name.trim().toLowerCase() === p.sourceChannel.trim().toLowerCase())
+        );
+        const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl || matchesChannel);
         if (!hasActiveSource) {
           return false;
         }
@@ -23450,10 +23449,10 @@ app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
 });
 app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
-    const { identifier, password, googleUid, firebaseToken, idToken, accessToken, profileData } = req.body;
+    const { identifier, password, googleUid, firebaseToken, idToken, accessToken, authToken, token: bodyToken, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
-    if (googleUid || firebaseToken || idToken || accessToken || req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
-      const candidateToken = firebaseToken || idToken || accessToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "");
+    if (googleUid || firebaseToken || idToken || accessToken || authToken || bodyToken || req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      const candidateToken = firebaseToken || idToken || accessToken || authToken || bodyToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "");
       if (!candidateToken) {
         return res.status(401).json({
           success: false,
@@ -23489,7 +23488,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         }
       }
       if (!verifiedEmail) {
-        const internal = verifyAuthToken(candidateToken) || verifyAuthTokenAllowingExpired(candidateToken);
+        const internal = verifyAuthToken(candidateToken);
         if (internal && internal.email) {
           verifiedEmail = internal.email.toLowerCase().trim();
           verifiedUid = internal.userId || internal.email;
@@ -23532,7 +23531,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         (u) => u.email && u.email.toLowerCase().trim() === verifiedEmail || u.userId && u.userId === verifiedUid
       );
       const isSuper = verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL;
-      const isSubAdmin = verifiedEmail === SUB_ADMIN_EMAIL;
+      const isSubAdmin = verifiedEmail === REGULAR_ADMIN_EMAIL;
       const isAdmin = isSuper || isSubAdmin;
       const release = await userDbLock.acquire();
       let savedUser;
