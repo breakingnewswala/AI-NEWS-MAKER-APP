@@ -6483,6 +6483,7 @@ __export(server_exports, {
   buildMasterNewsEditorialPromptString: () => buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity: () => calculateHeadlineSimilarity,
   calculateHeadlineSimilarityInternal: () => calculateHeadlineSimilarityInternal,
+  checkDefaultGeminiHealth: () => checkDefaultGeminiHealth,
   cleanCaptionParagraphs: () => cleanCaptionParagraphs,
   cleanHeadlineText: () => cleanHeadlineText,
   countHeadlineGraphemes: () => countHeadlineGraphemes,
@@ -26083,18 +26084,36 @@ async function saveApiKeysVault(vault) {
   }
   let firestoreSuccess = false;
   let firestoreError;
+  const isProduction = Boolean(
+    process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING || process.env.USE_FIRESTORE === "true"
+  );
   try {
     const adapter = require_server_firestore_adapter();
-    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
-      const writeRes = await adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
-        ...vault,
-        updatedAt: Date.now()
-      });
-      if (writeRes && writeRes.success) {
-        firestoreSuccess = true;
-      } else {
-        firestoreError = writeRes?.error || `Firestore write failed (HTTP ${writeRes?.statusCode})`;
-        console.error("[KeyPool Firestore Persistence Error]", firestoreError);
+    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE || isProduction)) {
+      const maxRetries = 3;
+      const retryDelaysMs = [250, 750];
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const writeRes = await adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
+            ...vault,
+            updatedAt: Date.now()
+          });
+          if (writeRes && writeRes.success) {
+            firestoreSuccess = true;
+            firestoreError = void 0;
+            break;
+          } else {
+            firestoreError = writeRes?.error || `Firestore write failed (HTTP ${writeRes?.statusCode})`;
+            console.warn(`[KeyPool Firestore Persistence] Attempt ${attempt + 1}/${maxRetries} failed:`, firestoreError);
+          }
+        } catch (attemptErr) {
+          firestoreError = attemptErr.message;
+          console.warn(`[KeyPool Firestore Persistence] Attempt ${attempt + 1}/${maxRetries} exception:`, attemptErr.message);
+        }
+        if (attempt < maxRetries - 1) {
+          const delayMs = retryDelaysMs[attempt] || 500;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
       }
     } else {
       firestoreSuccess = savedAtLeastOne;
@@ -26103,7 +26122,7 @@ async function saveApiKeysVault(vault) {
     firestoreError = err.message;
     console.error("[KeyPool Firestore Exception]", err.message);
   }
-  const overallSuccess = Boolean(firestoreSuccess || savedAtLeastOne);
+  const overallSuccess = isProduction ? firestoreSuccess : Boolean(firestoreSuccess || savedAtLeastOne);
   return {
     success: overallSuccess,
     firestoreSuccess,
@@ -26307,11 +26326,78 @@ function mapAiPoolErrorToUserResponse(err) {
     error: "AI \u0938\u0947\u0935\u093E \u092B\u093F\u0932\u0939\u093E\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 API Pool \u0915\u0940 \u0938\u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 Keys \u0915\u0940 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948 \u092F\u093E \u0935\u0947 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964"
   };
 }
+var cachedDefaultGeminiHealth = null;
+async function checkDefaultGeminiHealth(forceRefresh = false) {
+  const isConfigured = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 5);
+  if (!isConfigured) {
+    return {
+      isConfigured: false,
+      healthStatus: "not_configured",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
+      errorMessage: "\u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F GEMINI_API_KEY \u092A\u0930\u094D\u092F\u093E\u0935\u0930\u0923 \u092E\u0947\u0902 \u0938\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u0948"
+    };
+  }
+  const now = Date.now();
+  if (!forceRefresh && cachedDefaultGeminiHealth && now - cachedDefaultGeminiHealth.checkedAt < 6e4) {
+    return cachedDefaultGeminiHealth;
+  }
+  const cleanKey = process.env.GEMINI_API_KEY.trim();
+  const start = Date.now();
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
+  let lastErr = null;
+  let testSuccess = false;
+  for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
+    try {
+      const testAi = new import_genai2.GoogleGenAI({
+        apiKey: cleanKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-default-health-check" } }
+      });
+      const timeoutPromise = new Promise(
+        (_, reject) => setTimeout(() => reject(new Error("Health check timeout after 4s")), 4e3)
+      );
+      const testCall = testAi.models.generateContent({
+        model: candidateModel,
+        contents: "Say 'OK'"
+      });
+      await Promise.race([testCall, timeoutPromise]);
+      successfulModel = candidateModel;
+      testSuccess = true;
+      break;
+    } catch (err) {
+      lastErr = err;
+      const classified = classifyApiKeyError(err);
+      if (classified.type === "invalid") {
+        break;
+      }
+    }
+  }
+  const latencyMs = Date.now() - start;
+  let resultHealth = "healthy";
+  let errorMessage;
+  if (testSuccess) {
+    resultHealth = "healthy";
+  } else if (lastErr) {
+    const classified = classifyApiKeyError(lastErr);
+    resultHealth = classified.healthStatus;
+    errorMessage = classified.userFacingError;
+  }
+  cachedDefaultGeminiHealth = {
+    isConfigured: true,
+    healthStatus: resultHealth,
+    model: successfulModel,
+    latencyMs,
+    errorMessage,
+    checkedAt: now
+  };
+  return cachedDefaultGeminiHealth;
+}
 app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0915\u0940\u091C\u093C \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }
-  const vault = await getOrLoadApiKeysVault(true);
+  const vault = await getOrLoadApiKeysVault(req.query.forceReload === "true");
+  const forceCheck = req.query.refresh === "true" || req.query.testHealth === "true";
+  const defaultHealth = await checkDefaultGeminiHealth(forceCheck);
   const now = Date.now();
   const maskedFreeKeys = vault.freeKeys.map((k) => ({
     id: k.id,
@@ -26332,20 +26418,23 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   }));
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
   const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey.key) : null;
-  const defaultKeyConfigured = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 5);
+  const defaultKeyConfigured = defaultHealth.isConfigured;
   const maskedDefaultKey = defaultKeyConfigured ? maskApiKey(process.env.GEMINI_API_KEY) : "\u092A\u0930\u094D\u092F\u093E\u0935\u0930\u0923 \u092E\u0947\u0902 \u0938\u0947\u091F \u0928\u0939\u0940\u0902";
   return res.json({
     success: true,
     defaultProvider: {
-      configured: defaultKeyConfigured,
+      configured: defaultHealth.isConfigured,
+      healthStatus: defaultHealth.healthStatus,
+      latencyMs: defaultHealth.latencyMs,
+      errorMessage: defaultHealth.errorMessage,
       maskedKey: maskedDefaultKey,
       label: "Google Gemini \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u092A\u094D\u0930\u094B\u0935\u093E\u0907\u0921\u0930 (System Default Provider)",
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: "gemini-3-flash-preview",
+      model: defaultHealth.model,
       fallbackModels: DEFAULT_FALLBACK_MODELS,
       source: "Firebase Secret Manager (GEMINI_API_KEY)",
-      status: defaultKeyConfigured ? "active" : "inactive",
-      lastHealthStatus: defaultKeyConfigured ? "healthy" : "missing"
+      status: defaultHealth.isConfigured ? defaultHealth.healthStatus === "healthy" ? "active" : "degraded" : "inactive",
+      lastHealthStatus: defaultHealth.healthStatus
     },
     freeKeys: maskedFreeKeys,
     paidKey: {
@@ -26585,6 +26674,17 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }
   const { keyId, type } = req.body || {};
+  if (type === "default" || keyId === "default") {
+    const health = await checkDefaultGeminiHealth(true);
+    return res.json({
+      success: health.healthStatus === "healthy",
+      message: health.healthStatus === "healthy" ? `\u2705 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F Gemini API Key \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0938\u094D\u0935\u0938\u094D\u0925 \u0939\u0948! \u0930\u093F\u0938\u094D\u092A\u0949\u0928\u094D\u0938 \u0938\u092E\u092F: ${health.latencyMs || 0}ms` : `\u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F API \u0938\u092E\u0938\u094D\u092F\u093E: ${health.errorMessage || health.healthStatus}`,
+      latencyMs: health.latencyMs,
+      healthStatus: health.healthStatus,
+      model: health.model,
+      errorMessage: health.errorMessage
+    });
+  }
   const vault = await getOrLoadApiKeysVault(true);
   let targetKeyStr = "";
   let targetRef = null;
@@ -35142,6 +35242,7 @@ startServer().catch((err) => {
   buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity,
   calculateHeadlineSimilarityInternal,
+  checkDefaultGeminiHealth,
   cleanCaptionParagraphs,
   cleanHeadlineText,
   countHeadlineGraphemes,

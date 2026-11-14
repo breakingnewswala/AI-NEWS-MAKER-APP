@@ -64,6 +64,9 @@ interface PaidKeyInfo {
 
 interface DefaultProviderInfo {
   configured: boolean;
+  healthStatus?: 'healthy' | 'quota_exceeded' | 'invalid' | 'not_configured' | 'error' | string;
+  latencyMs?: number | null;
+  errorMessage?: string | null;
   maskedKey: string | null;
   label: string;
   provider: string;
@@ -532,7 +535,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
 
   const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
 
-  const handleTestSavedKey = async (keyId: string, type: 'free' | 'paid') => {
+  const handleTestSavedKey = async (keyId: string, type: 'free' | 'paid' | 'default') => {
     setTestingKeyId(keyId);
     try {
       let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
@@ -562,7 +565,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
       if (res.ok && resData.success) {
         showToast(resData.message || '✅ API की सक्रिय है!');
       } else {
-        showToast(resData.error || '❌ API की स्वास्थ्य परीक्षण विफल रहा');
+        showToast(resData.error || resData.message || '❌ API की स्वास्थ्य परीक्षण विफल रहा');
       }
       await fetchKeysData(true);
     } catch (err: any) {
@@ -892,17 +895,63 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
               सिस्टम-स्तरीय ऑपरेशन्स, बैकग्राउंड टास्क और सामान्य व फ्री यूज़र्स के लिए फॉलबैक Google Gemini API प्रोवाइडर।
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Configuration Badge */}
             <span className={`px-2.5 py-1 text-xs font-bold rounded-lg flex items-center gap-1.5 ${
-              (data?.defaultProvider?.configured || data?.stats?.fallbackEnvKeyConfigured)
-                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
-                : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+              data?.defaultProvider?.configured
+                ? 'bg-blue-500/15 border border-blue-500/30 text-blue-400'
+                : 'bg-slate-800 border border-slate-700 text-slate-400'
             }`}>
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{(data?.defaultProvider?.configured || data?.stats?.fallbackEnvKeyConfigured) ? '🟢 सक्रिय (Active)' : '🔴 सेट नहीं'}</span>
+              <Shield className="w-3.5 h-3.5" />
+              <span>{data?.defaultProvider?.configured ? 'कॉन्फ़िगरेशन: एक्टिव' : 'कॉन्फ़िगरेशन: सेट नहीं'}</span>
             </span>
+
+            {/* 2. Live Health Status Badge */}
+            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg flex items-center gap-1.5 ${
+              data?.defaultProvider?.healthStatus === 'healthy' || data?.defaultProvider?.lastHealthStatus === 'healthy'
+                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
+                : data?.defaultProvider?.healthStatus === 'quota_exceeded'
+                ? 'bg-amber-500/15 border border-amber-500/30 text-amber-400'
+                : data?.defaultProvider?.healthStatus === 'invalid'
+                ? 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+                : 'bg-slate-800 border border-slate-700 text-slate-400'
+            }`}>
+              <Activity className="w-3.5 h-3.5" />
+              <span>
+                {data?.defaultProvider?.healthStatus === 'healthy' || data?.defaultProvider?.lastHealthStatus === 'healthy'
+                  ? `🟢 लाइव स्वस्थ (${data?.defaultProvider?.latencyMs || 120}ms)`
+                  : data?.defaultProvider?.healthStatus === 'quota_exceeded'
+                  ? '🟡 कोटा सीमा - 429'
+                  : data?.defaultProvider?.healthStatus === 'invalid'
+                  ? '🔴 अमान्य कुंजी'
+                  : '⚪ अप्रयुक्त / मिसिंग'}
+              </span>
+            </span>
+
+            {/* 3. Live Health Test Button */}
+            <button
+              type="button"
+              onClick={() => handleTestSavedKey('default', 'default')}
+              disabled={testingKeyId === 'default'}
+              className="px-3 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="डिफ़ॉल्ट Gemini API का लाइव स्वास्थ्य परीक्षण करें"
+            >
+              {testingKeyId === 'default' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Activity className="w-3.5 h-3.5" />
+              )}
+              <span>जाँचें</span>
+            </button>
           </div>
         </div>
+
+        {data?.defaultProvider?.errorMessage && (
+          <div className="p-2.5 bg-rose-950/60 border border-rose-500/40 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <span>{data.defaultProvider.errorMessage}</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl space-y-1">
@@ -935,8 +984,8 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
           <span>
             💡 <strong>फॉलबैक मॉडल्स:</strong> gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash (ऑटो-रोटेशन सपोर्टेड)
           </span>
-          <span className="text-emerald-400 font-bold text-[10px]">
-            स्वास्थ्य: {data?.defaultProvider?.lastHealthStatus || ((data?.defaultProvider?.configured || data?.stats?.fallbackEnvKeyConfigured) ? 'स्वस्थ (Healthy)' : 'मिसिंग')}
+          <span className="text-indigo-400 font-bold text-[10px]">
+            डिफ़ॉल्ट इंजन स्थिति: {data?.defaultProvider?.configured ? 'कॉन्फ़िगर्ड व सक्रिय' : 'अक्रिय'}
           </span>
         </div>
       </div>

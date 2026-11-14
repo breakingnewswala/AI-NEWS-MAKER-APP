@@ -221,16 +221,32 @@ export async function addAdminRssSourceAsync(
   return newSource;
 }
 
-export function addAdminRssSource(
+export async function addAdminRssSource(
   name: string,
   url: string,
   type: 'rss' | 'web',
   category: string
-): AdminRssSource {
+): Promise<{ success: boolean; source?: AdminRssSource; error?: string }> {
+  const cleanUrl = url.trim();
+  const cleanName = name.trim() || (type === 'rss' ? 'RSS News Feed' : 'Web Article Link');
+
+  // Prevent duplicate source registration (by URL)
+  const existing = getAdminRssSources();
+  const duplicate = existing.find(
+    (s) => s && s.url && s.url.trim().toLowerCase() === cleanUrl.toLowerCase()
+  );
+  if (duplicate) {
+    return {
+      success: false,
+      error: 'यह RSS / वेब स्रोत पहले से ही सूची में मौजूद है।',
+      source: duplicate,
+    };
+  }
+
   const newSource: AdminRssSource = {
     id: `src_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-    name: name.trim() || (type === 'rss' ? 'RSS News Feed' : 'Web Article Link'),
-    url: url.trim(),
+    name: cleanName,
+    url: cleanUrl,
     type,
     category: category || 'देश',
     isActive: true,
@@ -239,24 +255,47 @@ export function addAdminRssSource(
     addedDateFormatted: formatHindiDate(Date.now()),
     itemsFetchedCount: 0,
   };
-  const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id && s.url !== newSource.url)];
-  saveAdminRssSources(list);
-  // Authoritatively sync new source to server database, then trigger live sync
-  (async () => {
-    try {
-      const headers = await getAdminAuthHeadersAsync();
-      await fetch(getApiUrl('/api/admin/rss-sources'), {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(newSource),
-      });
-    } catch (e) {
-      console.warn('Backend RSS source registration notice:', e);
-    } finally {
-      syncAllSourcesLive().catch(() => {});
+
+  try {
+    const headers = await getAdminAuthHeadersAsync();
+    const res = await fetch(getApiUrl('/api/admin/rss-sources'), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(newSource),
+    });
+
+    if (!res.ok) {
+      let errText = 'सर्वर पर स्रोत जोड़ने में विफलता (401/403/500)';
+      try {
+        const errJson = await res.json();
+        if (errJson && errJson.error) errText = errJson.error;
+      } catch {}
+      return { success: false, error: errText };
     }
-  })();
-  return newSource;
+
+    const data = await res.json().catch(() => null);
+    const savedSource = (data && data.source) ? data.source : newSource;
+
+    // Only update memory and storage after authoritative server confirmation
+    const list = [savedSource, ...existing.filter((s) => s.id !== savedSource.id && s.url !== savedSource.url)];
+    memoryRssSources = list;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(list));
+        window.dispatchEvent(new CustomEvent('ai_news_admin_rss_sources_updated', { detail: list }));
+      } catch {}
+    }
+
+    // Authoritative post-registration synchronization
+    syncAllSourcesLive().catch(() => {});
+
+    return { success: true, source: savedSource };
+  } catch (e: any) {
+    return {
+      success: false,
+      error: `नेटवर्क त्रुटि: ${e?.message || 'सर्वर से संपर्क नहीं हो सका'}`,
+    };
+  }
 }
 
 export function toggleAdminRssSource(id: string): AdminRssSource[] {

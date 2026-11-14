@@ -11,8 +11,8 @@ console.log('===================================================================
 console.log('\n--- 1. Verification: Session & Token Preservation ---');
 const apiConfig = fs.readFileSync('src/lib/apiConfig.ts', 'utf8');
 assert(!apiConfig.includes("window.dispatchEvent(new CustomEvent('ai_news_session_expired'))"), 'ensureAuthToken must NEVER dispatch ai_news_session_expired');
-assert(apiConfig.includes("ya29."), 'isTokenExpired must support Google OAuth ya29. tokens');
-assert(apiConfig.includes("google_access_token"), 'getAuthToken must check google_access_token');
+assert(apiConfig.includes("parts.length === 3"), 'isTokenExpired must strictly enforce 3-part JWT structure');
+assert(apiConfig.includes("isTokenExpired(cand)"), 'getAuthToken must verify token is not expired before returning');
 
 const appTsx = fs.readFileSync('src/App.tsx', 'utf8');
 assert(!appTsx.includes("handleSessionExpired = () => {\n      showToast('⚠️ आपका लॉगिन सत्र समाप्त हो गया है। कृपया जारी रखने के लिए पुनः एडमिन लॉगिन करें।');\n      clearAuthTokens();\n      try {\n        localStorage.removeItem('reporter_auth_session');\n      } catch {}\n      setCurrentUser(null);"), 'App.tsx must not destructively wipe session in handleSessionExpired');
@@ -54,10 +54,11 @@ assert(apiKeysManager.includes('Google Gemini डिफ़ॉल्ट प्र
 assert(apiKeysManager.includes('defaultProvider?.provider'), 'AdminApiKeysManager must display default provider info');
 console.log('✅ [PASS] Google Gemini Default Provider card and API response verified');
 
-// Test 5: Key Pool Persistence Resiliency
+// Test 5: Key Pool Persistence Resiliency & Firestore Durability in Production
 console.log('\n--- 5. Verification: Key Pool Persistence Resiliency ---');
-assert(serverTs.includes('const overallSuccess = Boolean(firestoreSuccess || savedAtLeastOne);'), 'server.ts saveApiKeysVault must consider disk save successful and not roll back');
-console.log('✅ [PASS] Key Pool persistence resiliency verified');
+assert(serverTs.includes('const overallSuccess = isProduction ? firestoreSuccess : Boolean(firestoreSuccess || savedAtLeastOne);'), 'server.ts saveApiKeysVault must enforce durable firestore in production');
+assert(serverTs.includes('checkDefaultGeminiHealth'), 'server.ts must implement live checkDefaultGeminiHealth');
+console.log('✅ [PASS] Key Pool persistence resiliency and live health check verified');
 
 // Test 6: Web Links Dashboard Combo Input & Custom Channel Name Preservation
 console.log('\n--- 6. Verification: Web Links Dashboard Combo Input ---');

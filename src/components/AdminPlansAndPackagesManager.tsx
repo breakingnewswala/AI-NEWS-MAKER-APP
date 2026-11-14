@@ -5381,7 +5381,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
             {/* Add New RSS Source Form */}
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!newSourceUrl.trim()) {
                   setRssMsg({ type: 'error', text: 'कृपया वैध RSS Feed XML URL दर्ज करें।' });
@@ -5390,7 +5390,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 const name = newSourceName.trim() || (savedChannels[0] || 'RSS Source');
                 saveNewsChannel(name);
                 setSavedChannels(getSavedNewsChannels());
-                addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
+                setRssMsg({ type: 'success', text: `RSS स्रोत "${name}" को सर्वर पर पंजीकृत किया जा रहा है...` });
+                const addRes = await addAdminRssSource(name, newSourceUrl, 'rss', newSourceCategory);
+                if (!addRes.success) {
+                  setRssMsg({ type: 'error', text: addRes.error || 'सर्वर पर RSS स्रोत जोड़ने में विफलता।' });
+                  return;
+                }
                 setRssSources(getAdminRssSources());
                 setNewSourceUrl('');
                 setNewSourceName('');
@@ -5399,6 +5404,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   setRssSources(getAdminRssSources());
                   if (res.success) {
                     setRssMsg({ type: 'success', text: `🎉 RSS स्रोत "${name}" सक्रिय! ${res.totalNewItems || 0} नए समाचार होम फ़ीड में जुड़ गए।` });
+                  } else {
+                    setRssMsg({ type: 'error', text: res.error || 'RSS सिंक में समस्या आई।' });
                   }
                 });
               }}
@@ -5622,16 +5629,20 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   } else {
                     setConverterResult(data);
                     // Automatic Single-Click Direct Save to RSS Links Dashboard
-                    addAdminRssSource(targetChannel, data.feedUrl, targetCat);
-                    setRssSources(getAdminRssSources());
-                    // Clear inputs immediately upon conversion & save
-                    setConverterUrl('');
-                    setConverterChannel('');
-                    // Auto-sync feeds in background to ingest latest news cards immediately
-                    syncAllSourcesLive().then(() => {
+                    const addRes = await addAdminRssSource(targetChannel, data.feedUrl, 'rss', targetCat);
+                    if (!addRes.success) {
+                      setConverterError(addRes.error || 'कन्वर्टेड RSS स्रोत जोड़ने में विफलता।');
+                    } else {
                       setRssSources(getAdminRssSources());
-                      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-                    }).catch(() => {});
+                      // Clear inputs immediately upon conversion & save
+                      setConverterUrl('');
+                      setConverterChannel('');
+                      // Auto-sync feeds in background to ingest latest news cards immediately
+                      syncAllSourcesLive().then(() => {
+                        setRssSources(getAdminRssSources());
+                        window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+                      }).catch(() => {});
+                    }
                   }
                 } catch (err: any) {
                   setConverterError(err.message || 'नेटवर्क त्रुटि हुई।');
@@ -5893,7 +5904,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
             {/* Add New Web Source Form */}
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 if (!newSourceUrl.trim()) {
                   setRssMsg({ type: 'error', text: 'कृपया वैध वेब आर्टिकल लिंक दर्ज करें।' });
@@ -5902,7 +5913,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 const name = newSourceName.trim() || (newsPortals[0]?.name || 'Web Source');
                 saveNewsChannel(name);
                 setSavedChannels(getSavedNewsChannels());
-                addAdminRssSource(name, newSourceUrl, 'web', newSourceCategory);
+                setRssMsg({ type: 'success', text: `वेब स्रोत "${name}" को सर्वर पर पंजीकृत किया जा रहा है...` });
+                const addRes = await addAdminRssSource(name, newSourceUrl, 'web', newSourceCategory);
+                if (!addRes.success) {
+                  setRssMsg({ type: 'error', text: addRes.error || 'सर्वर पर वेब लिंक जोड़ने में विफलता।' });
+                  return;
+                }
                 setRssSources(getAdminRssSources());
                 setNewSourceName('');
                 setNewSourceUrl('');
@@ -5911,6 +5927,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   setRssSources(getAdminRssSources());
                   if (res.success) {
                     setRssMsg({ type: 'success', text: `🎉 वेब आर्टिकल "${name}" प्रोसेस होकर होम फ़ीड में जुड़ गया!` });
+                  } else {
+                    setRssMsg({ type: 'error', text: res.error || 'वेब आर्टिकल सिंक में समस्या आई।' });
                   }
                 });
               }}

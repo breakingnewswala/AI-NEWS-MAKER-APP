@@ -101,11 +101,8 @@ export function isTokenExpired(token: string): boolean {
   if (!token || typeof token !== 'string') return true;
   try {
     const trimmed = token.trim();
-    // Non-JWT tokens (e.g. Google OAuth ya29. access tokens) are opaque; treat active non-empty tokens as valid
-    if (trimmed.startsWith('ya29.') || !trimmed.includes('.')) {
-      return false;
-    }
     const parts = trimmed.split('.');
+    // Standard application bearer tokens must be valid 3-part JWTs (Firebase ID Token or HMAC Session Token)
     if (parts.length === 3) {
       let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
       const padLen = (4 - (base64.length % 4)) % 4;
@@ -123,36 +120,38 @@ export function isTokenExpired(token: string): boolean {
       return false;
     }
   } catch {}
-  return false;
+  // Arbitrary non-JWT strings or malformed tokens are treated as invalid/expired
+  return true;
 }
 
 export function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   try {
-    const direct =
-      localStorage.getItem('reporter_auth_token') ||
-      localStorage.getItem('auth_token') ||
-      localStorage.getItem('token') ||
-      localStorage.getItem('google_id_token') ||
-      localStorage.getItem('google_access_token') ||
-      sessionStorage.getItem('reporter_auth_token') ||
-      sessionStorage.getItem('auth_token') ||
-      sessionStorage.getItem('token') ||
-      sessionStorage.getItem('google_access_token');
-    if (direct && !isTokenExpired(direct)) return direct.trim();
+    const directCandidates = [
+      localStorage.getItem('reporter_auth_token'),
+      localStorage.getItem('auth_token'),
+      localStorage.getItem('token'),
+      localStorage.getItem('firebase_token'),
+      sessionStorage.getItem('reporter_auth_token'),
+      sessionStorage.getItem('auth_token'),
+      sessionStorage.getItem('token'),
+    ];
+    for (const cand of directCandidates) {
+      if (cand && typeof cand === 'string' && !isTokenExpired(cand)) {
+        return cand.trim();
+      }
+    }
     const sessionKeys = ['reporter_auth_session', 'ai_news_user', 'user', 'currentUser'];
     for (const key of sessionKeys) {
       const sessionStr = localStorage.getItem(key) || sessionStorage.getItem(key);
       if (sessionStr) {
         const u = JSON.parse(sessionStr);
         if (u) {
-          const t = u.token || u.authToken || u.idToken || u.googleIdToken || u.firebaseToken || u.accessToken || u.googleAccessToken;
+          const t = u.token || u.authToken || u.idToken || u.firebaseToken;
           if (t && typeof t === 'string' && !isTokenExpired(t)) return t.trim();
         }
       }
     }
-    // As resilient fallback, if direct exists even if close to expiry, return it so headers are never stripped
-    if (direct && typeof direct === 'string') return direct.trim();
   } catch {}
   return '';
 }
@@ -160,15 +159,16 @@ export function getAuthToken(): string {
 export function setAuthToken(token: string): void {
   if (typeof window === 'undefined') return;
   try {
-    if (token) {
-      localStorage.setItem('reporter_auth_token', token.trim());
-      localStorage.setItem('auth_token', token.trim());
-      localStorage.setItem('token', token.trim());
+    if (token && typeof token === 'string') {
+      const clean = token.trim();
+      localStorage.setItem('reporter_auth_token', clean);
+      localStorage.setItem('auth_token', clean);
+      localStorage.setItem('token', clean);
       try {
         const sessStr = localStorage.getItem('reporter_auth_session');
         if (sessStr) {
           const sess = JSON.parse(sessStr);
-          sess.token = token.trim();
+          sess.token = clean;
           localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
         }
       } catch {}
@@ -193,8 +193,10 @@ let ongoingAuthPromise: Promise<string> | null = null;
 
 /**
  * Enterprise Automatic Session Token Assurance:
- * Guarantees a cryptographically verified JWT / HMAC session token is active in localStorage.
- * Automatically exchanges active reporter/admin session with /api/auth/refresh-session or /api/auth/login if token is missing or expired.
+ * 1. Prefers a valid Firebase ID Token retrieved via official Firebase Auth Web SDK (currentUser.getIdToken()).
+ * 2. Attempts controlled refresh via /api/auth/refresh-session if session token is close to expiry.
+ * 3. Never knowingly returns an expired token as a bearer credential.
+ * 4. Preserves active reporter/admin session without erasing localStorage on transient network hiccups.
  */
 export async function ensureAuthToken(forceRefresh = false): Promise<string> {
   if (typeof window === 'undefined') return '';
@@ -224,13 +226,27 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         }
       } catch {}
 
-      const existingToken = getAuthToken();
-      let googleAccessToken = '';
+      // 1. Primary Preference: Firebase Auth Web SDK supported token retrieval & refresh
       try {
-        googleAccessToken = localStorage.getItem('google_access_token') || '';
-      } catch {}
+        const { auth } = await import('./firebaseConfig');
+        if (auth) {
+          if (typeof (auth as any).authStateReady === 'function') {
+            await (auth as any).authStateReady().catch(() => {});
+          }
+          if (auth.currentUser) {
+            const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh);
+            if (firebaseIdToken && !isTokenExpired(firebaseIdToken)) {
+              setAuthToken(firebaseIdToken);
+              return firebaseIdToken;
+            }
+          }
+        }
+      } catch (fbErr) {
+        console.warn('[AUTH] Firebase client token refresh notice:', fbErr);
+      }
 
-      // 1. Primary Seamless Recovery: Call session refresh endpoint if active (unexpired) token exists
+      // 2. Secondary Preference: Backend /api/auth/refresh-session if unexpired session token exists
+      const existingToken = getAuthToken();
       if (existingToken && !isTokenExpired(existingToken)) {
         try {
           const refRes = await fetch(getApiUrl('/api/auth/refresh-session'), {
@@ -243,12 +259,11 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
               email,
               token: existingToken,
               authToken: existingToken,
-              accessToken: googleAccessToken || undefined,
             }),
           });
           if (refRes.ok) {
             const refData = await refRes.json();
-            if (refData.success && refData.token) {
+            if (refData.success && refData.token && !isTokenExpired(refData.token)) {
               setAuthToken(refData.token);
               return refData.token;
             }
@@ -258,72 +273,47 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         }
       }
 
-      // 2. Firebase Client Auth Recovery: Await authStateReady and retrieve fresh ID Token from Firebase Web SDK
-      let firebaseIdToken = '';
-      try {
-        const { auth } = await import('./firebaseConfig');
-        if (auth) {
-          if (typeof (auth as any).authStateReady === 'function') {
-            await (auth as any).authStateReady().catch(() => {});
-          }
-          if (auth.currentUser) {
-            firebaseIdToken = (await auth.currentUser.getIdToken(forceRefresh)) || '';
-            if (firebaseIdToken && !email && auth.currentUser.email) {
-              email = auth.currentUser.email.toLowerCase().trim();
-            }
-          }
-        }
-      } catch (fbErr) {
-        console.warn('[AUTH] Firebase client token check notice:', fbErr);
-      }
-
-      // 3. Google OAuth / GIS Credential Recovery: Check stored google_id_token
+      // 3. Fallback: Controlled exchange if valid candidate ID token is stored
       let googleIdToken = '';
       try {
-        googleIdToken = localStorage.getItem('google_id_token') || '';
+        const storedGId = localStorage.getItem('google_id_token') || '';
+        if (storedGId && !isTokenExpired(storedGId)) {
+          googleIdToken = storedGId;
+        }
       } catch {}
 
-      const candidateIdToken = firebaseIdToken || googleIdToken || googleAccessToken;
-      if (candidateIdToken && (email || (typeof window !== 'undefined' && localStorage.getItem('reporter_auth_session')))) {
-        const loginPayload: any = {
-          identifier: email || undefined,
-          firebaseToken: candidateIdToken,
-          idToken: googleIdToken || firebaseIdToken || undefined,
-          accessToken: googleAccessToken || undefined,
-          profileData: { email, name, username },
-        };
-        const res = await fetch(getApiUrl('/api/auth/login'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${candidateIdToken}`,
-          },
-          body: JSON.stringify(loginPayload),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.token) {
-            setAuthToken(data.token);
-            return data.token;
+      if (googleIdToken && (email || (typeof window !== 'undefined' && localStorage.getItem('reporter_auth_session')))) {
+        try {
+          const res = await fetch(getApiUrl('/api/auth/login'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${googleIdToken}`,
+            },
+            body: JSON.stringify({
+              identifier: email || undefined,
+              idToken: googleIdToken,
+              firebaseToken: googleIdToken,
+              profileData: { email, name, username },
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.token && !isTokenExpired(data.token)) {
+              setAuthToken(data.token);
+              return data.token;
+            }
           }
+        } catch (exErr) {
+          console.warn('[AUTH] login exchange notice:', exErr);
         }
       }
-
-      // Resilient preservation: NEVER clear user sessions or tokens on network hiccups or refresh failures
-      const currentRaw = (() => {
-        try {
-          return localStorage.getItem('reporter_auth_token') || localStorage.getItem('google_access_token') || '';
-        } catch { return ''; }
-      })();
-      if (currentRaw) {
-        return currentRaw;
-      }
     } catch (err) {
-      console.warn('[AUTH] ensureAuthToken exchange notice:', err);
+      console.warn('[AUTH] ensureAuthToken exchange error:', err);
     } finally {
       ongoingAuthPromise = null;
     }
+    // Never knowingly return an expired token; return empty string if no valid token could be acquired
     return getAuthToken();
   })();
 
@@ -333,7 +323,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getAuthToken();
-  if (token) {
+  if (token && !isTokenExpired(token)) {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
@@ -393,12 +383,38 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           urlStr.includes('/api/scheduler/rss-sync') ||
           urlStr.includes('/api/user-profile');
 
+        // Check and sanitize caller-supplied Authorization header
+        let existingAuth = '';
+        if (init?.headers) {
+          if (init.headers instanceof Headers) {
+            existingAuth = init.headers.get('Authorization') || '';
+          } else if (Array.isArray(init.headers)) {
+            const found = init.headers.find(([k]) => k.toLowerCase() === 'authorization');
+            if (found) existingAuth = found[1];
+          } else {
+            existingAuth = (init.headers as any)?.Authorization || (init.headers as any)?.authorization || '';
+          }
+        }
+        if (existingAuth && existingAuth.startsWith('Bearer ')) {
+          const cand = existingAuth.slice(7).trim();
+          if (isTokenExpired(cand)) {
+            if (init!.headers instanceof Headers) {
+              init!.headers.delete('Authorization');
+            } else if (Array.isArray(init!.headers)) {
+              init!.headers = init!.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
+            } else {
+              delete (init!.headers as any).Authorization;
+              delete (init!.headers as any).authorization;
+            }
+          }
+        }
+
         if ((!token || isTokenExpired(token)) && isProtectedApi) {
           try {
             token = await ensureAuthToken();
           } catch {}
         }
-        if (token) {
+        if (token && !isTokenExpired(token)) {
           init = init || {};
           if (init.headers instanceof Headers) {
             init.headers.set('Authorization', `Bearer ${token}`);
@@ -406,20 +422,20 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
             init.headers = init.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
             init.headers.push(['Authorization', `Bearer ${token}`]);
           } else {
-            init.headers = {
-              ...(init.headers || {}),
-              Authorization: (init.headers as any)?.Authorization || `Bearer ${token}`,
-            };
+            const h = { ...(init.headers || {}) } as any;
+            h.Authorization = `Bearer ${token}`;
+            init.headers = h;
           }
         }
       }
       let response = await originalFetch(input, init);
-      // Auto-retry once on 401 for protected endpoints by acquiring fresh token
-      if (response.status === 401 && (urlStr.includes('/api/admin') || urlStr.includes('/api/dynamic-frames') || urlStr.includes('/api/scheduler/rss-sync'))) {
+      // Controlled 401 Recovery: Refresh once and retry the original request exactly once
+      const isAlreadyRetried = Boolean((init as any)?._is401Retry);
+      if (response.status === 401 && !isAlreadyRetried && isProtectedApi) {
         try {
           const fresh = await ensureAuthToken(true);
-          if (fresh) {
-            const retryInit = { ...(init || {}) };
+          if (fresh && !isTokenExpired(fresh)) {
+            const retryInit = { ...(init || {}), _is401Retry: true };
             if (retryInit.headers instanceof Headers) {
               retryInit.headers.set('Authorization', `Bearer ${fresh}`);
             } else if (Array.isArray(retryInit.headers)) {

@@ -151,7 +151,7 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
       let token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
       if (!token) {
-        alert('प्रमाणीकरण आवश्यक है: व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है। कृपया पुनः लॉगिन करें।');
+        showToast('⚠️ व्यवस्थापक प्रमाणीकरण आवश्यक है। कृपया पुनः लॉगिन करें।');
         setIsSavingMarking(false);
         return;
       }
@@ -348,10 +348,10 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
         setItems((prev) => prev.filter((it) => it.id !== item.id));
         showToast('🗑️ एसेट हटा दिया गया!');
       } else {
-        alert(res.error || 'एसेट हटाने में विफल');
+        showToast(`❌ ${res.error || 'एसेट हटाने में विफल'}`);
       }
     } catch {
-      alert('सर्वर त्रुटि');
+      showToast('❌ सर्वर से संपर्क करने में त्रुटि');
     }
   };
 

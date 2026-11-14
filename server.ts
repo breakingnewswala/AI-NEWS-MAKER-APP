@@ -413,6 +413,21 @@ function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
   return verified;
 }
 
+/**
+ * TOKEN REVOCATION & CRYPTOGRAPHIC VALIDATION POLICY (Area 2):
+ * 1. Cryptographic Local Verification: Firebase ID tokens are validated locally using
+ *    `firebaseAdminAuth.verifyIdToken(token, false)`. This locally validates the RS256 signature
+ *    against Google's public keys, issuer, audience, and unexpired timestamp (`exp`) without
+ *    incurring external network latency per request.
+ * 2. Real-time Block & Disable Enforcement: To prevent revoked or disabled accounts from
+ *    accessing protected APIs, account status is authoritatively evaluated on EVERY request
+ *    against `loadUsersMasterDatabase()`, `centralDb.cache.users`, and `loadProfilesDatabase()`.
+ *    If `isBlocked` is true or the account was deleted, HTTP 403 Forbidden is returned immediately.
+ * 3. Token Separation: Google OAuth access tokens (`ya29.`) are never passed to `verifyIdToken()`
+ *    (which requires standard 3-part RS256 JWTs) and are handled separately via Google's `userinfo` endpoint.
+ * 4. Authoritative Administrative Privileges: Admin and Superadmin privileges are determined
+ *    strictly server-side from verified cryptographic identity (email) and never from client headers.
+ */
 export async function resolveAuthenticatedUser(req: express.Request, res?: express.Response): Promise<VerifiedUser | null> {
   if ((req as any).user) {
     return (req as any).user;
@@ -17151,22 +17166,45 @@ async function saveApiKeysVault(vault: ApiKeysVault): Promise<{ success: boolean
     }
   }
 
-  // Cloud Firestore Permanent Authoritative Persistence
+  // Cloud Firestore Permanent Authoritative Persistence with Bounded Retries (Area 3)
   let firestoreSuccess = false;
   let firestoreError: string | undefined;
 
+  const isProduction = Boolean(
+    process.env.K_SERVICE ||
+    process.env.FIREBASE_APP_HOSTING ||
+    process.env.USE_FIRESTORE === "true"
+  );
+
   try {
     const adapter = require("./server_firestore_adapter.cjs");
-    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE)) {
-      const writeRes = await adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
-        ...vault,
-        updatedAt: Date.now(),
-      });
-      if (writeRes && writeRes.success) {
-        firestoreSuccess = true;
-      } else {
-        firestoreError = writeRes?.error || `Firestore write failed (HTTP ${writeRes?.statusCode})`;
-        console.error("[KeyPool Firestore Persistence Error]", firestoreError);
+    if (adapter && (process.env.USE_FIRESTORE === "true" || adapter.USE_FIRESTORE || isProduction)) {
+      const maxRetries = 3;
+      const retryDelaysMs = [250, 750];
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const writeRes = await adapter.firestoreWriteDoc("system_config", "gemini_api_keys_vault", {
+            ...vault,
+            updatedAt: Date.now(),
+          });
+          if (writeRes && writeRes.success) {
+            firestoreSuccess = true;
+            firestoreError = undefined;
+            break;
+          } else {
+            firestoreError = writeRes?.error || `Firestore write failed (HTTP ${writeRes?.statusCode})`;
+            console.warn(`[KeyPool Firestore Persistence] Attempt ${attempt + 1}/${maxRetries} failed:`, firestoreError);
+          }
+        } catch (attemptErr: any) {
+          firestoreError = attemptErr.message;
+          console.warn(`[KeyPool Firestore Persistence] Attempt ${attempt + 1}/${maxRetries} exception:`, attemptErr.message);
+        }
+
+        if (attempt < maxRetries - 1) {
+          const delayMs = retryDelaysMs[attempt] || 500;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
       }
     } else {
       // In local dev without Firestore, local disk save is sufficient
@@ -17177,7 +17215,9 @@ async function saveApiKeysVault(vault: ApiKeysVault): Promise<{ success: boolean
     console.error("[KeyPool Firestore Exception]", err.message);
   }
 
-  const overallSuccess = Boolean(firestoreSuccess || savedAtLeastOne);
+  // In production / Cloud Run environments, ephemeral disk writes are not durable storage.
+  // Success MUST strictly require firestoreSuccess to ensure multi-instance persistence.
+  const overallSuccess = isProduction ? firestoreSuccess : Boolean(firestoreSuccess || savedAtLeastOne);
 
   return {
     success: overallSuccess,
@@ -17464,12 +17504,102 @@ function mapAiPoolErrorToUserResponse(err: any): {
   };
 }
 
+// Global in-memory cache for live default Gemini API health check (60s TTL)
+let cachedDefaultGeminiHealth: {
+  isConfigured: boolean;
+  healthStatus: "healthy" | "quota_exceeded" | "invalid" | "not_configured" | "error";
+  model: string;
+  latencyMs?: number;
+  errorMessage?: string;
+  checkedAt: number;
+} | null = null;
+
+export async function checkDefaultGeminiHealth(forceRefresh = false): Promise<{
+  isConfigured: boolean;
+  healthStatus: "healthy" | "quota_exceeded" | "invalid" | "not_configured" | "error";
+  model: string;
+  latencyMs?: number;
+  errorMessage?: string;
+}> {
+  const isConfigured = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 5);
+  if (!isConfigured) {
+    return {
+      isConfigured: false,
+      healthStatus: "not_configured",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
+      errorMessage: "डिफ़ॉल्ट GEMINI_API_KEY पर्यावरण में सेट नहीं है",
+    };
+  }
+
+  const now = Date.now();
+  if (!forceRefresh && cachedDefaultGeminiHealth && (now - cachedDefaultGeminiHealth.checkedAt < 60000)) {
+    return cachedDefaultGeminiHealth;
+  }
+
+  const cleanKey = process.env.GEMINI_API_KEY!.trim();
+  const start = Date.now();
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
+  let lastErr: any = null;
+  let testSuccess = false;
+
+  for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
+    try {
+      const testAi = new GoogleGenAI({
+        apiKey: cleanKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-default-health-check" } },
+      });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Health check timeout after 4s")), 4000)
+      );
+      const testCall = testAi.models.generateContent({
+        model: candidateModel,
+        contents: "Say 'OK'",
+      });
+      await Promise.race([testCall, timeoutPromise]);
+      successfulModel = candidateModel;
+      testSuccess = true;
+      break;
+    } catch (err: any) {
+      lastErr = err;
+      const classified = classifyApiKeyError(err);
+      if (classified.type === "invalid") {
+        break;
+      }
+    }
+  }
+
+  const latencyMs = Date.now() - start;
+  let resultHealth: "healthy" | "quota_exceeded" | "invalid" | "not_configured" | "error" = "healthy";
+  let errorMessage: string | undefined;
+
+  if (testSuccess) {
+    resultHealth = "healthy";
+  } else if (lastErr) {
+    const classified = classifyApiKeyError(lastErr);
+    resultHealth = classified.healthStatus;
+    errorMessage = classified.userFacingError;
+  }
+
+  cachedDefaultGeminiHealth = {
+    isConfigured: true,
+    healthStatus: resultHealth,
+    model: successfulModel,
+    latencyMs,
+    errorMessage,
+    checkedAt: now,
+  };
+
+  return cachedDefaultGeminiHealth;
+}
+
 // Admin API Keys Manager Endpoints
 app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API कीज़ देख सकते हैं।" });
   }
-  const vault = await getOrLoadApiKeysVault(true);
+  const vault = await getOrLoadApiKeysVault(req.query.forceReload === "true");
+  const forceCheck = req.query.refresh === "true" || req.query.testHealth === "true";
+  const defaultHealth = await checkDefaultGeminiHealth(forceCheck);
   const now = Date.now();
   const maskedFreeKeys = vault.freeKeys.map((k) => ({
     id: k.id,
@@ -17492,21 +17622,24 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
   const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey!.key) : null;
 
-  const defaultKeyConfigured = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 5);
+  const defaultKeyConfigured = defaultHealth.isConfigured;
   const maskedDefaultKey = defaultKeyConfigured ? maskApiKey(process.env.GEMINI_API_KEY!) : "पर्यावरण में सेट नहीं";
 
   return res.json({
     success: true,
     defaultProvider: {
-      configured: defaultKeyConfigured,
+      configured: defaultHealth.isConfigured,
+      healthStatus: defaultHealth.healthStatus,
+      latencyMs: defaultHealth.latencyMs,
+      errorMessage: defaultHealth.errorMessage,
       maskedKey: maskedDefaultKey,
       label: "Google Gemini डिफ़ॉल्ट प्रोवाइडर (System Default Provider)",
       provider: "Google Gemini (गूगल जेमिनी)",
-      model: "gemini-3-flash-preview",
+      model: defaultHealth.model,
       fallbackModels: DEFAULT_FALLBACK_MODELS,
       source: "Firebase Secret Manager (GEMINI_API_KEY)",
-      status: defaultKeyConfigured ? "active" : "inactive",
-      lastHealthStatus: defaultKeyConfigured ? "healthy" : "missing",
+      status: defaultHealth.isConfigured ? (defaultHealth.healthStatus === "healthy" ? "active" : "degraded") : "inactive",
+      lastHealthStatus: defaultHealth.healthStatus,
     },
     freeKeys: maskedFreeKeys,
     paidKey: {
@@ -17772,6 +17905,19 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API स्वास्थ्य परीक्षण कर सकते हैं।" });
   }
   const { keyId, type } = req.body || {};
+  if (type === "default" || keyId === "default") {
+    const health = await checkDefaultGeminiHealth(true);
+    return res.json({
+      success: health.healthStatus === "healthy",
+      message: health.healthStatus === "healthy"
+        ? `✅ डिफ़ॉल्ट Gemini API Key सक्रिय व स्वस्थ है! रिस्पॉन्स समय: ${health.latencyMs || 0}ms`
+        : `डिफ़ॉल्ट API समस्या: ${health.errorMessage || health.healthStatus}`,
+      latencyMs: health.latencyMs,
+      healthStatus: health.healthStatus,
+      model: health.model,
+      errorMessage: health.errorMessage,
+    });
+  }
   const vault = await getOrLoadApiKeysVault(true);
   let targetKeyStr = "";
   let targetRef: VaultFreeKey | VaultPaidKey | null = null;
