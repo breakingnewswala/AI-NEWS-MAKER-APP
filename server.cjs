@@ -35029,7 +35029,7 @@ async function startServer() {
           return rawHtml;
         }
       };
-      app.get(["/admin", "/admin/*"], (req, res) => {
+      const renderSpaIndexHtml = (req, res) => {
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
@@ -35055,6 +35055,12 @@ async function startServer() {
         } catch {
           return res.sendFile(indexHtmlPath);
         }
+      };
+      app.get(["/admin", "/admin/*"], (req, res) => {
+        return renderSpaIndexHtml(req, res);
+      });
+      app.get(["/studio", "/studio/*"], (req, res) => {
+        return renderSpaIndexHtml(req, res);
       });
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {

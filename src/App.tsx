@@ -460,7 +460,7 @@ export default function App() {
       }
 
       // 2. Admin & Control Room routes
-      if (path === '/admin' || hash === 'admin' || fullUrl.includes('tab=admin')) {
+      if (path === '/admin' || hash === 'admin' || fullUrl.includes('tab=admin') || path === '/admin/' || path.startsWith('/admin')) {
         return 'admin';
       }
       const lastTab = localStorage.getItem('last_active_tab');
@@ -469,16 +469,26 @@ export default function App() {
       }
 
       // 3. Standard application tabs
-      if (hash === 'profile' || path === '/profile' || fullUrl.includes('tab=profile')) {
+      if (hash === 'profile' || path === '/profile' || path === '/profile/' || path.startsWith('/profile') || fullUrl.includes('tab=profile')) {
         return isAdmin ? 'admin' : 'profile';
       }
-      if (hash === 'videos' || path === '/videos' || fullUrl.includes('tab=videos')) {
+      if (hash === 'videos' || path === '/videos' || path === '/videos/' || path.startsWith('/videos') || fullUrl.includes('tab=videos')) {
         return 'videos';
       }
-      if (hash === 'studio' || hash === 'generator' || path === '/studio' || path === '/generator' || fullUrl.includes('tab=studio')) {
+      if (
+        hash === 'studio' ||
+        hash === 'generator' ||
+        path === '/studio' ||
+        path === '/studio/' ||
+        path.startsWith('/studio') ||
+        path === '/generator' ||
+        path === '/generator/' ||
+        path.startsWith('/generator') ||
+        fullUrl.includes('tab=studio')
+      ) {
         return 'studio';
       }
-      if (hash === 'newsroom' || hash === 'epaper' || hash === 'drafts' || path === '/newsroom' || fullUrl.includes('tab=newsroom')) {
+      if (hash === 'newsroom' || hash === 'epaper' || hash === 'drafts' || path === '/newsroom' || path === '/newsroom/' || path.startsWith('/newsroom') || fullUrl.includes('tab=newsroom')) {
         return 'newsroom';
       }
 
@@ -490,7 +500,7 @@ export default function App() {
 
   const isStudio = currentTab === 'studio' || currentTab === 'generator';
 
-  // Navigate to tab cleanly using HTML5 history without visible hashtags
+  // Navigate to tab cleanly using HTML5 history without visible hashtags or ?fresh= accumulation
   const navigateToTab = useCallback((tab: AppTab) => {
     const isCurrentlyBlocked = typeof window !== 'undefined' && (() => {
       try {
@@ -514,14 +524,20 @@ export default function App() {
         localStorage.setItem('last_active_tab', target);
       } catch {}
       const cleanPath = target === 'home' ? '/' : `/${target}`;
+      const currentPath = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
+      const expectedPath = cleanPath.replace(/\/+$/, '') || '/';
       if (window.history && window.history.pushState) {
-        if (window.location.pathname !== cleanPath) {
+        if (currentPath !== expectedPath) {
           window.history.pushState({ tab: target }, '', cleanPath);
+        } else if (window.location.pathname !== cleanPath) {
+          window.history.replaceState({ tab: target }, '', cleanPath);
         }
       }
-      // Strip any lingering hashtag from the browser address bar
-      if (window.location.hash) {
-        window.history.replaceState({ tab: target }, '', cleanPath);
+      // Strip any lingering hashtag or ?fresh= from the browser address bar
+      if (window.location.hash || (window.location.search && window.location.search.includes('fresh='))) {
+        const cleanSearch = (window.location.search || '').replace(/[?&]fresh=\d+/, '').replace(/^&/, '?');
+        const finalUrl = cleanPath + (cleanSearch === '?' ? '' : cleanSearch);
+        window.history.replaceState({ tab: target }, '', finalUrl);
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -535,6 +551,14 @@ export default function App() {
     if (window.location.hash === '#home' || window.location.hash === '#' || window.location.hash === '#/') {
       if (window.history && window.history.replaceState) {
         window.history.replaceState(null, '', window.location.pathname || '/');
+      }
+    }
+    // Clean up any lingering ?fresh= query param on initial visit
+    if (window.location.search && window.location.search.includes('fresh=')) {
+      const cleanSearch = window.location.search.replace(/[?&]fresh=\d+/, '').replace(/^&/, '?');
+      const cleanPath = (window.location.pathname || '/') + (cleanSearch === '?' ? '' : cleanSearch);
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', cleanPath);
       }
     }
 

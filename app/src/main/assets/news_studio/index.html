@@ -194,27 +194,37 @@
         window.addEventListener('error', function(e) {
           try {
             var msg = (e && e.message) ? e.message : '';
-            if (
-              msg.indexOf('activeCategory') !== -1 ||
-              msg.indexOf('FolderClock') !== -1 ||
+            // Only handle fatal script / bundle chunk mismatches, NEVER network or fetch errors
+            var isScriptChunkError = (
               msg.indexOf('Loading chunk') !== -1 ||
-              msg.indexOf('dynamically imported module') !== -1 ||
-              msg.indexOf('Failed to fetch') !== -1
-            ) {
-              var purge = function() {
-                var p1 = ('caches' in window) ? caches.keys().then(function(keys) {
-                  return Promise.all(keys.map(function(k) { return caches.delete(k); }));
-                }) : Promise.resolve();
-                var p2 = ('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistrations().then(function(regs) {
-                  return Promise.all(regs.map(function(r) { return r.unregister(); }));
-                }) : Promise.resolve();
-                Promise.all([p1, p2]).then(function() {
-                  window.location.replace(window.location.origin + window.location.pathname + '?fresh=' + Date.now());
-                }).catch(function() {
-                  window.location.replace(window.location.origin + window.location.pathname + '?fresh=' + Date.now());
-                });
-              };
-              purge();
+              msg.indexOf('dynamically imported module') !== -1
+            );
+            if (isScriptChunkError) {
+              var hasAttempted = false;
+              try {
+                hasAttempted = sessionStorage.getItem('__chunk_recovery_attempted') === 'true';
+              } catch (storageErr) {}
+
+              if (!hasAttempted) {
+                try {
+                  sessionStorage.setItem('__chunk_recovery_attempted', 'true');
+                } catch (storageErr) {}
+
+                var purge = function() {
+                  var p1 = ('caches' in window) ? caches.keys().then(function(keys) {
+                    return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+                  }) : Promise.resolve();
+                  var p2 = ('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    return Promise.all(regs.map(function(r) { return r.unregister(); }));
+                  }) : Promise.resolve();
+                  Promise.all([p1, p2]).then(function() {
+                    window.location.reload();
+                  }).catch(function() {
+                    window.location.reload();
+                  });
+                };
+                purge();
+              }
             }
           } catch(err) {}
         });
@@ -224,7 +234,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Devanagari:wght@500;600;700;800&family=Baloo+2:wght@500;600;700;800;900&family=Gotu&family=Hind:wght@500;600;700&family=Kalam:wght@700&family=Khand:wght@500;600;700&family=Martel:wght@400;600;700;800;900&family=Mukta:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@500;600;700;800;900&family=Noto+Serif+Devanagari:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Poppins:wght@500;600;700;800;900&family=Rajdhani:wght@600;700&family=Rozha+One&family=Sahitya:wght@400;700&family=Sarala:wght@700&family=Tiro+Devanagari+Hindi&family=Yatra+One&display=swap" />
-    <script type="module" crossorigin src="./assets/index-BlHxCM2B.js"></script>
+    <script type="module" crossorigin src="./assets/index-CkXbku40.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/vendor-react-CeqdmQ0m.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-icons-D_4YQfqq.js">
     <link rel="modulepreload" crossorigin href="./assets/vendor-BL_Huy_6.js">
@@ -244,7 +254,7 @@
         <div id="loading-troubleshoot" style="display:none;margin-top:20px;max-width:380px;background:rgba(30,41,59,0.8);border:1px solid #334155;border-radius:12px;padding:14px;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
           <div style="font-size:13px;color:#FCD34D;font-weight:600;margin-bottom:6px;">स्टूडियो लोड होने में सामान्य से अधिक समय लग रहा है</div>
           <div style="font-size:11px;color:#94A3B8;margin-bottom:12px;line-height:1.4;">यदि स्क्रीन यहीं रुकी रहे, तो कृपया नीचे दिए बटन से कैश साफ़ करके पुनः लोड करें।</div>
-          <button onclick="if(window.caches){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(w){w.unregister();});});}window.location.replace(window.location.origin + window.location.pathname + '?fresh=' + Date.now());" style="background:#F59E0B;color:#0F172A;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">🔄 पुनः लोड करें (Reload & Clear Cache)</button>
+          <button onclick="if(window.caches){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(w){w.unregister();});});}window.location.reload();" style="background:#F59E0B;color:#0F172A;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">🔄 पुनः लोड करें (Reload & Clear Cache)</button>
         </div>
       </div>
     </div>

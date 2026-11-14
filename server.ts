@@ -28414,8 +28414,7 @@ async function startServer() {
         }
       };
 
-      // Canonical React Admin Control Room Route: All /admin requests route directly to canonical SPA
-      app.get(["/admin", "/admin/*"], (req, res) => {
+      const renderSpaIndexHtml = (req: any, res: any) => {
         res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
@@ -28441,6 +28440,16 @@ async function startServer() {
         } catch {
           return res.sendFile(indexHtmlPath);
         }
+      };
+
+      // Canonical React Admin Control Room Route: All /admin requests route directly to canonical SPA
+      app.get(["/admin", "/admin/*"], (req, res) => {
+        return renderSpaIndexHtml(req, res);
+      });
+
+      // Canonical React Studio Route: All /studio requests route directly to canonical SPA
+      app.get(["/studio", "/studio/*"], (req, res) => {
+        return renderSpaIndexHtml(req, res);
       });
 
       app.get("*", (req, res) => {
