@@ -907,6 +907,5 @@ async function runRealWorkflowE2E() {
 runRealWorkflowE2E().catch(e => {
   console.error('[E2E ERROR]', e);
   cleanup();
-  await sleep(600);
   process.exit(1);
 });
