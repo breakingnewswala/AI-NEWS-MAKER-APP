@@ -1,1 +1,239 @@
-[]
+[
+  {
+    "id": "asset_1794132101671_u0g9s",
+    "name": "Red Map Pin Badge with Divider",
+    "category": "general",
+    "type": "location_badge",
+    "url": "/assets/location_white_icon.png",
+    "enabled": true,
+    "createdAt": 1794132101671,
+    "updatedAt": 1794132144005,
+    "sliceConfig": {
+      "leftWidthPct": 0.28,
+      "rightWidthPct": 0.15,
+      "centerMinPct": 0.57
+    },
+    "textRegion": {
+      "x": 32,
+      "y": 24,
+      "width": 58,
+      "height": 55
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 50,
+      "fontWeight": "bold",
+      "textColor": "#000000",
+      "textAlign": "center"
+    }
+  },
+  {
+    "id": "callout_bully_forward_story",
+    "name": "पूरी खबर विवरण कॉलआउट (Full Story Callout)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
+    "enabled": true,
+    "createdAt": 1793880000000,
+    "updatedAt": 1793880000000
+  },
+  {
+    "id": "callout_special_gold",
+    "name": "गोल्डन वीआईपी स्टोरी कॉलआउट (Gold VIP)",
+    "category": "special",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='gGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%2378350F'/><stop offset='50%' stop-color='%23B45309'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23gGrad)' stroke='%23FDE047' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FDE047'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FEF08A'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FDE047'/><polygon points='436,28 448,36 436,44' fill='%2378350F'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "callout_breaking_red",
+    "name": "ब्रेकिंग न्यूज़ रेड कॉलआउट (Breaking Red)",
+    "category": "breaking",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='rGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23B91C1C'/><stop offset='70%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23rGrad)' stroke='%23FFFFFF' stroke-width='2.5'/><polygon points='38,24 54,36 38,48' fill='%23FFFFFF'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FFFFFF'/><polygon points='436,28 448,36 436,44' fill='%23DC2626'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "footer_regular_gold",
+    "name": "रेगुलर क्लीन फ़ुटर (White & Gold)",
+    "category": "regular",
+    "type": "custom_footer",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#FFFFFF",
+      "footerTextColor": "#000000",
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
+    },
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_branding_navy",
+    "name": "ब्रांडिंग डार्क फ़ुटर (Navy & Gold Accent)",
+    "category": "branding",
+    "type": "custom_footer",
+    "enabled": true,
+    "allowedPlans": [
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#0F172A",
+      "footerTextColor": "#FACC15",
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
+    },
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_social_blue",
+    "name": "सोशल मीडिया हाइलाइट फ़ुटर (Royal Blue)",
+    "category": "social",
+    "type": "custom_footer",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#1E40AF",
+      "footerTextColor": "#FFFFFF",
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
+    },
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_news_breaking_red",
+    "name": "न्यूज़ अलर्ट रेड फ़ुटर (Breaking Red)",
+    "category": "news",
+    "type": "custom_footer",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#DC2626",
+      "footerTextColor": "#FFFFFF",
+      "footerHeightPct": 8.5,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
+    },
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_special_vip_gold",
+    "name": "स्पेशल वीआईपी गोल्ड फ़ुटर (VIP Gold Special)",
+    "category": "special",
+    "type": "custom_footer",
+    "enabled": true,
+    "allowedPlans": [
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#FACC15",
+      "footerTextColor": "#000000",
+      "footerHeightPct": 9,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
+      },
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 22,
+      "elementSpacing": 14,
+      "paddingX": 18,
+      "separator": "•"
+    },
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  }
+]

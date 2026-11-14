@@ -1,5 +1,6 @@
 // AI News Maker App - Video Templates & Frame Registry
 // Defines geometry, safe zones, tier permissions and rendering parameters for custom video frames across 9:16, 1:1, 4:3, 4:5
+import { DynamicFrameTemplate, VideoFrameConfig, FrameLayer } from '../types/dynamicFrame';
 
 export interface VideoFrameDefinition {
   id: string;
@@ -25,7 +26,7 @@ export interface VideoFrameDefinition {
     badgeStyle: 'white_blue_pin' | 'white_red_pin';
   };
   videoWindow: {
-    aspectRatio: '9:16' | '4:5' | '1:1' | '4:3';
+    aspectRatio: '9:16' | '4:5' | '1:1' | '4:3' | '16:9' | string;
     mode: 'full' | 'window';
     // Normalized coordinates (0 to 1) relative to canvas
     top: number;
@@ -45,6 +46,9 @@ export interface VideoFrameDefinition {
   coinPrice?: number;
   isActive: boolean;
   isCustom?: boolean;
+  rawDynamicFrame?: DynamicFrameTemplate;
+  videoConfig?: VideoFrameConfig;
+  customLayers?: FrameLayer[];
 }
 
 export const VIDEO_FRAME_DEFINITIONS: VideoFrameDefinition[] = [

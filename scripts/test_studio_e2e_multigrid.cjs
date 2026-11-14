@@ -39,7 +39,14 @@ function cleanup() {
   try { if (activeWs) activeWs.close(); } catch {}
   try { if (activeWsBrowser) activeWsBrowser.close(); } catch {}
   try { if (activeChrome) activeChrome.kill('SIGKILL'); } catch {}
-  try { if (activeServer) activeServer.kill('SIGKILL'); } catch {}
+  try {
+    if (activeServer) {
+      activeServer.kill('SIGTERM');
+      setTimeout(() => {
+        try { activeServer.kill('SIGKILL'); } catch {}
+      }, 500);
+    }
+  } catch {}
   try { if (activeDownloadDir && fs.existsSync(activeDownloadDir)) fs.rmSync(activeDownloadDir, { recursive: true, force: true }); } catch {}
 }
 
@@ -878,6 +885,7 @@ async function runRealWorkflowE2E() {
   console.log('================================================================\n');
 
   cleanup();
+  await sleep(600);
 
   return {
     success: true,

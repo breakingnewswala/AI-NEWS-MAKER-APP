@@ -168,7 +168,7 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
         locationBadgeUrl: df.videoConfig?.locationBadgeUrl,
         watermarkText: df.videoConfig?.watermarkTextEnabled ? df.videoConfig.watermarkText : undefined,
         watermarkLogoUrl: df.videoConfig?.watermarkLogoEnabled ? df.videoConfig.watermarkLogoUrl : undefined,
-        headlineMaxLines: 3,
+        headlineMaxLines: df.videoConfig?.headlineLineCount || 3,
         rawDynamicFrame: df,
       };
     });
@@ -543,10 +543,26 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
                   }}
                 >
                   {/* Top Bar or Top Footer if configured */}
-                  {previewFrame.footerPosition === 'top' && (
+                  {(previewFrame.footerPosition === 'top' || previewFrame.footerPosition === 'header') && (
                     <div className="absolute top-0 inset-x-0 h-6 bg-amber-400 text-slate-950 px-2 flex items-center justify-between text-[7px] font-bold z-30">
                       <span>@breakingnewswala</span>
                       <span>वीडियो न्यूज़ नेटवर्क</span>
+                    </div>
+                  )}
+
+                  {/* Custom Positioned Footer if configured */}
+                  {previewFrame.footerPosition === 'custom' && previewFrame.rawDynamicFrame?.videoConfig?.footerRect && (
+                    <div
+                      className="absolute bg-slate-900 border border-slate-700 text-amber-300 px-2 flex items-center justify-between text-[7px] font-bold z-30"
+                      style={{
+                        left: `${previewFrame.rawDynamicFrame.videoConfig.footerRect.x}%`,
+                        top: `${previewFrame.rawDynamicFrame.videoConfig.footerRect.y}%`,
+                        width: `${previewFrame.rawDynamicFrame.videoConfig.footerRect.width}%`,
+                        height: `${previewFrame.rawDynamicFrame.videoConfig.footerRect.height}%`,
+                      }}
+                    >
+                      <span>@breakingnewswala</span>
+                      <span>कस्टम फुटर</span>
                     </div>
                   )}
 

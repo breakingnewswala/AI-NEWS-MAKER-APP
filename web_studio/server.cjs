@@ -6478,6 +6478,7 @@ __export(server_exports, {
   HEADLINE_5_TIER_RANGES: () => HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT: () => HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES: () => HEADLINE_TIER_RANGES,
+  PROTECTED_BUILTIN_ASSET_IDS: () => PROTECTED_BUILTIN_ASSET_IDS,
   buildMasterNewsEditorialPrompt: () => buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString: () => buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity: () => calculateHeadlineSimilarity,
@@ -12151,6 +12152,7 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
 // server.ts
 var import_app = require("firebase-admin/app");
 var import_auth = require("firebase-admin/auth");
+var import_google_auth_library = require("google-auth-library");
 var safeFilename = typeof __filename !== "undefined" ? __filename : process.cwd();
 var safeDirname = typeof __dirname !== "undefined" ? __dirname : import_path2.default.dirname(safeFilename);
 import_dotenv.default.config();
@@ -12401,6 +12403,13 @@ try {
 } catch (err) {
   console.warn(`[AUTH] Firebase Admin SDK initialization note: ${err?.message || err}`);
 }
+var GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com";
+var googleOAuthClient = null;
+try {
+  googleOAuthClient = new import_google_auth_library.OAuth2Client(GOOGLE_OAUTH_CLIENT_ID);
+} catch (gErr) {
+  console.warn(`[AUTH] Google OAuth2Client initialization note: ${gErr?.message || gErr}`);
+}
 var MASTER_ADMIN_EMAIL = "breakingnewswala.com@gmail.com";
 var MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 var REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
@@ -12426,6 +12435,60 @@ async function resolveAuthenticatedUser(req, res) {
   }
   const token = extractTokenFromRequest(req);
   if (!token) return null;
+  const internalPayload = verifyAuthToken(token);
+  if (internalPayload && internalPayload.email) {
+    const email = internalPayload.email.toLowerCase().trim();
+    let userRole = internalPayload.role || "user";
+    let isBlocked = false;
+    try {
+      if (typeof loadUsersMasterDatabase === "function") {
+        const users = loadUsersMasterDatabase();
+        const dbUser = users.find(
+          (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === internalPayload.userId
+        );
+        if (dbUser && dbUser.isBlocked) isBlocked = true;
+      }
+      if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
+        for (const [k, u] of centralDb.cache.users.entries()) {
+          if (k && k.toLowerCase().trim() === email || u?.email && u.email.toLowerCase().trim() === email) {
+            if (u?.isBlocked) {
+              isBlocked = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!isBlocked && typeof loadProfilesDatabase === "function") {
+        const profiles = loadProfilesDatabase();
+        const prof = profiles[email] || Object.values(profiles).find((p) => p.email && p.email.toLowerCase().trim() === email);
+        if (prof?.isBlocked) isBlocked = true;
+      }
+    } catch {
+    }
+    if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+      userRole = "superadmin";
+    } else if (email === REGULAR_ADMIN_EMAIL) {
+      userRole = "admin";
+    }
+    const verified = {
+      userId: internalPayload.userId || email,
+      email,
+      role: userRole,
+      username: internalPayload.username || email.split("@")[0],
+      authType: "session",
+      isBlocked
+    };
+    req.user = verified;
+    if (internalPayload.isLegacySignature && res && typeof res.setHeader === "function" && !res.headersSent) {
+      try {
+        const freshToken = generateAuthToken(verified);
+        res.setHeader("X-Refreshed-Token", freshToken);
+        res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
+      } catch {
+      }
+    }
+    return verified;
+  }
   if (firebaseAdminAuth) {
     try {
       const decoded = await firebaseAdminAuth.verifyIdToken(token, true);
@@ -12481,59 +12544,72 @@ async function resolveAuthenticatedUser(req, res) {
     } catch {
     }
   }
-  const internalPayload = verifyAuthToken(token);
-  if (internalPayload && internalPayload.email) {
-    const email = internalPayload.email.toLowerCase().trim();
-    let userRole = internalPayload.role || "user";
-    let isBlocked = false;
+  if (googleOAuthClient) {
     try {
-      if (typeof loadUsersMasterDatabase === "function") {
-        const users = loadUsersMasterDatabase();
-        const dbUser = users.find(
-          (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === internalPayload.userId
-        );
-        if (dbUser && dbUser.isBlocked) isBlocked = true;
-      }
-      if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
-        for (const [k, u] of centralDb.cache.users.entries()) {
-          if (k && k.toLowerCase().trim() === email || u?.email && u.email.toLowerCase().trim() === email) {
-            if (u?.isBlocked) {
-              isBlocked = true;
-              break;
+      const ticket = await googleOAuthClient.verifyIdToken({
+        idToken: token,
+        audience: GOOGLE_OAUTH_CLIENT_ID
+      });
+      const gPayload = ticket.getPayload();
+      if (gPayload && gPayload.email) {
+        const email = gPayload.email.toLowerCase().trim();
+        const userId = gPayload.sub || email;
+        let userRole = "user";
+        let isBlocked = false;
+        try {
+          if (typeof loadUsersMasterDatabase === "function") {
+            const users = loadUsersMasterDatabase();
+            const dbUser = users.find(
+              (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === userId
+            );
+            if (dbUser) {
+              if (dbUser.role) userRole = dbUser.role;
+              if (dbUser.isBlocked) isBlocked = true;
             }
           }
+          if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
+            for (const [k, u] of centralDb.cache.users.entries()) {
+              if (k && k.toLowerCase().trim() === email || u?.email && u.email.toLowerCase().trim() === email || u?.userId && u.userId === userId) {
+                if (u?.isBlocked) {
+                  isBlocked = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (!isBlocked && typeof loadProfilesDatabase === "function") {
+            const profiles = loadProfilesDatabase();
+            const prof = profiles[email] || Object.values(profiles).find((p) => p.email && p.email.toLowerCase().trim() === email || p.userId && p.userId === userId);
+            if (prof?.isBlocked) isBlocked = true;
+          }
+        } catch {
         }
-      }
-      if (!isBlocked && typeof loadProfilesDatabase === "function") {
-        const profiles = loadProfilesDatabase();
-        const prof = profiles[email] || Object.values(profiles).find((p) => p.email && p.email.toLowerCase().trim() === email);
-        if (prof?.isBlocked) isBlocked = true;
+        if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+          userRole = "superadmin";
+        } else if (email === REGULAR_ADMIN_EMAIL) {
+          userRole = "admin";
+        }
+        const verified = {
+          userId,
+          email,
+          role: userRole,
+          username: gPayload.name || email.split("@")[0],
+          authType: "session",
+          isBlocked
+        };
+        req.user = verified;
+        if (res && typeof res.setHeader === "function" && !res.headersSent) {
+          try {
+            const freshToken = generateAuthToken(verified);
+            res.setHeader("X-Refreshed-Token", freshToken);
+            res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
+          } catch {
+          }
+        }
+        return verified;
       }
     } catch {
     }
-    if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
-      userRole = "superadmin";
-    } else if (email === REGULAR_ADMIN_EMAIL) {
-      userRole = "admin";
-    }
-    const verified = {
-      userId: internalPayload.userId || email,
-      email,
-      role: userRole,
-      username: internalPayload.username || email.split("@")[0],
-      authType: "session",
-      isBlocked
-    };
-    req.user = verified;
-    if (internalPayload.isLegacySignature && res && typeof res.setHeader === "function" && !res.headersSent) {
-      try {
-        const freshToken = generateAuthToken(verified);
-        res.setHeader("X-Refreshed-Token", freshToken);
-        res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
-      } catch {
-      }
-    }
-    return verified;
   }
   return null;
 }
@@ -13066,7 +13142,7 @@ app.post("/api/auth/verify-captcha", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/auth/refresh-session", async (req, res) => {
+app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) => {
   try {
     const user = await resolveAuthenticatedUser(req, res);
     if (!user) {
@@ -16835,15 +16911,17 @@ function syncUserToProfiles(u) {
       uid: u.userId,
       tier: u.tier,
       email: u.email,
-      district: u.district || u.location || "",
-      location: u.location || u.district || "",
+      district: u.district && u.district.trim() ? u.district : u.location || allProfiles[cleanKey] && allProfiles[cleanKey].district || "",
+      location: u.location && u.location.trim() ? u.location : u.district || allProfiles[cleanKey] && allProfiles[cleanKey].location || "",
       channelNameHi: u.channelNameHi || u.channelName || "",
       channelNameEn: u.channelNameEn || "",
       channelLogoUrl: u.channelLogoUrl || "",
       channelLogoPngUrl: u.channelLogoPngUrl,
       channelLogoGifUrl: u.channelLogoGifUrl,
       channelLogoType: u.channelLogoType || "png",
-      mobileNumber: u.mobileNumber || u.mobile || "",
+      mobileNumber: u.mobileNumber || u.mobile || allProfiles[cleanKey] && allProfiles[cleanKey].mobileNumber || "",
+      whatsappNumber: u.whatsappNumber || u.whatsappDisplayNumber || u.mobileNumber || u.mobile || allProfiles[cleanKey] && allProfiles[cleanKey].whatsappNumber || "",
+      whatsappDisplayNumber: u.whatsappDisplayNumber || u.whatsappNumber || allProfiles[cleanKey] && allProfiles[cleanKey].whatsappDisplayNumber || u.mobileNumber || "",
       websiteUrl: u.websiteUrl || "",
       socialIcons: u.socialIcons || allProfiles[cleanKey] && allProfiles[cleanKey].socialIcons || void 0,
       isBlocked: Boolean(u.isBlocked),
@@ -16934,8 +17012,10 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelLogoType: userPayload.channelLogoType || existing.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || existing.mobile || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || existing.mobile || "",
-      district: userPayload.district || userPayload.location || existing.district || existing.location || "",
-      location: userPayload.location || userPayload.district || existing.location || existing.district || "",
+      whatsappNumber: userPayload.whatsappNumber || userPayload.whatsappDisplayNumber || existing.whatsappNumber || userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || "",
+      whatsappDisplayNumber: userPayload.whatsappDisplayNumber || userPayload.whatsappNumber || existing.whatsappDisplayNumber || existing.whatsappNumber || userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || "",
+      district: userPayload.district && String(userPayload.district).trim() ? String(userPayload.district).trim() : userPayload.location || existing.district || existing.location || "",
+      location: userPayload.location && String(userPayload.location).trim() ? String(userPayload.location).trim() : userPayload.district || existing.location || existing.district || "",
       state: userPayload.state || existing.state || "",
       address: userPayload.address || existing.address || "",
       pincode: userPayload.pincode || existing.pincode || "",
@@ -16983,6 +17063,8 @@ function registerOrUpdateUserAuthoritative(userPayload) {
       channelLogoType: userPayload.channelLogoType || "png",
       mobile: userPayload.mobile || userPayload.mobileNumber || "",
       mobileNumber: userPayload.mobileNumber || userPayload.mobile || "",
+      whatsappNumber: userPayload.whatsappNumber || userPayload.whatsappDisplayNumber || userPayload.mobileNumber || userPayload.mobile || "",
+      whatsappDisplayNumber: userPayload.whatsappDisplayNumber || userPayload.whatsappNumber || userPayload.mobileNumber || userPayload.mobile || "",
       district: userPayload.district || userPayload.location || "",
       location: userPayload.location || userPayload.district || "",
       state: userPayload.state || "",
@@ -17248,10 +17330,13 @@ function reconcileAllUsers() {
       channelLogoPngUrl: adminProf?.channelLogoPngUrl || existingAdmin?.channelLogoPngUrl || "/assets/breaking_news_wala_logo.png",
       channelLogoGifUrl: adminProf?.channelLogoGifUrl || existingAdmin?.channelLogoGifUrl || "",
       channelLogoType: adminProf?.channelLogoType || existingAdmin?.channelLogoType || "png",
-      mobile: adminProf?.mobileNumber || existingAdmin?.mobile || "9669802408",
-      mobileNumber: adminProf?.mobileNumber || existingAdmin?.mobileNumber || "9669802408",
-      district: adminProf?.district || existingAdmin?.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
+      mobile: adminProf?.mobileNumber && adminProf.mobileNumber.trim() ? adminProf.mobileNumber : existingAdmin?.mobile || "9669802408",
+      mobileNumber: adminProf?.mobileNumber && adminProf.mobileNumber.trim() ? adminProf.mobileNumber : existingAdmin?.mobileNumber || "9669802408",
+      whatsappNumber: adminProf?.whatsappNumber && adminProf.whatsappNumber.trim() ? adminProf.whatsappNumber : existingAdmin?.whatsappNumber || "9669802408",
+      whatsappDisplayNumber: adminProf?.whatsappDisplayNumber && String(adminProf.whatsappDisplayNumber).trim() ? String(adminProf.whatsappDisplayNumber).trim() : adminProf?.whatsappNumber || existingAdmin?.whatsappDisplayNumber || existingAdmin?.whatsappNumber || "9669802408",
+      district: adminProf?.district && adminProf.district.trim() ? adminProf.district : existingAdmin?.district && existingAdmin.district.trim() ? existingAdmin.district : "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
       websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || "breakingnewswala.com",
+      socialIcons: adminProf?.socialIcons || existingAdmin?.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: false, x: false, linkedin: false },
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
@@ -20156,13 +20241,13 @@ async function executeRssSynchronization() {
           continue;
         }
         p.ingestionStatus = "IMPORTED";
-        p.approvalStatus = "PENDING_APPROVAL";
-        p.publicationStatus = "UNPUBLISHED";
-        p.status = "PENDING_APPROVAL";
-        p.isApproved = false;
-        p.isPrePublished = false;
-        p.isPublished = false;
-        p.editorialApproved = false;
+        p.approvalStatus = "APPROVED";
+        p.publicationStatus = "PUBLISHED";
+        p.status = "APPROVED";
+        p.isApproved = true;
+        p.isPrePublished = true;
+        p.isPublished = true;
+        p.editorialApproved = true;
         p.visibility = "public";
         p.pendingCreatedAt = Date.now();
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
@@ -20975,8 +21060,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       isProfileComplete: isMasterAdminEmail || isSubAdminEmail ? true : isProfileComplete,
       profileStatus: isMasterAdminEmail || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
       email: profile.email || existing.email || "",
-      district: profile.district !== void 0 && profile.district !== null ? String(profile.district).trim() : existing.district || "",
-      location: profile.location !== void 0 && profile.location !== null ? String(profile.location).trim() : existing.location || "",
+      district: profile.district !== void 0 && profile.district !== null && String(profile.district).trim() !== "" ? String(profile.district).trim() : existing.district || "",
+      location: profile.location !== void 0 && profile.location !== null && String(profile.location).trim() !== "" ? String(profile.location).trim() : existing.location || "",
       channelNameHi: (() => {
         const raw = profile.channelNameHi || profile.channelName || existing.channelNameHi || "";
         if (typeof raw === "string" && (raw.includes("\xE0\xA4") || raw.includes("\xC3") || raw.trim() === "")) {
@@ -20989,9 +21074,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       channelLogoPngUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || "",
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
-      mobileNumber: finalMobile || "",
-      whatsappNumber: existing.whatsappNumber || finalMobile || "",
-      whatsappDisplayNumber: profile.whatsappDisplayNumber || existing.whatsappDisplayNumber || profile.whatsappNumber || finalMobile || "",
+      mobileNumber: finalMobile || existing.mobileNumber || "",
+      whatsappNumber: profile.whatsappNumber && String(profile.whatsappNumber).trim() !== "" ? String(profile.whatsappNumber).trim() : profile.whatsappDisplayNumber || existing.whatsappNumber || finalMobile || "",
+      whatsappDisplayNumber: profile.whatsappDisplayNumber && String(profile.whatsappDisplayNumber).trim() !== "" ? String(profile.whatsappDisplayNumber).trim() : profile.whatsappNumber || existing.whatsappDisplayNumber || existing.whatsappNumber || finalMobile || "",
       whatsappMarketingConsent: finalMarketingConsent,
       whatsappMarketingConsentAt: finalConsentAt,
       whatsappMarketingConsentPhone: finalConsentPhone,
@@ -21004,7 +21089,19 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       logoApprovedAt: existing.logoApprovedAt,
       logoApprovedBy: existing.logoApprovedBy,
       websiteUrl: profile.websiteUrl || existing.websiteUrl || "",
-      socialIcons: profile.socialIcons || existing.socialIcons,
+      socialIcons: (() => {
+        const icons = profile.socialIcons || existing.socialIcons || {};
+        if (typeof icons === "object" && icons !== null) {
+          const hasTw = icons.twitter !== void 0 ? Boolean(icons.twitter) : icons.x !== void 0 ? Boolean(icons.x) : false;
+          return {
+            ...icons,
+            twitter: hasTw,
+            x: hasTw,
+            linkedin: Boolean(icons.linkedin)
+          };
+        }
+        return icons;
+      })(),
       socialLinks: profile.socialLinks ? { ...existing.socialLinks || {}, ...profile.socialLinks } : existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: isProOrVipUser ? profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng : void 0,
@@ -21317,14 +21414,172 @@ function getDefaultAssetLibraries() {
       enabled: true,
       createdAt: 179388e7,
       updatedAt: 179388e7
+    },
+    {
+      id: "callout_special_gold",
+      name: "\u0917\u094B\u0932\u094D\u0921\u0928 \u0935\u0940\u0906\u0908\u092A\u0940 \u0938\u094D\u091F\u094B\u0930\u0940 \u0915\u0949\u0932\u0906\u0909\u091F (Gold VIP)",
+      category: "special",
+      type: "callout_png",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='gGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%2378350F'/><stop offset='50%' stop-color='%23B45309'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23gGrad)' stroke='%23FDE047' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FDE047'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FEF08A'>\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0935\u093F\u0935\u0930\u0923 \u0928\u0940\u091A\u0947 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u092A\u0922\u093C\u0947\u0902</text><circle cx='440' cy='36' r='16' fill='%23FDE047'/><polygon points='436,28 448,36 436,44' fill='%2378350F'/></svg>",
+      enabled: true,
+      allowedPlans: ["PRO", "VIP DESK"],
+      createdAt: 179428e7,
+      updatedAt: 179428e7
+    },
+    {
+      id: "callout_breaking_red",
+      name: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0930\u0947\u0921 \u0915\u0949\u0932\u0906\u0909\u091F (Breaking Red)",
+      category: "breaking",
+      type: "callout_png",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='rGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23B91C1C'/><stop offset='70%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23rGrad)' stroke='%23FFFFFF' stroke-width='2.5'/><polygon points='38,24 54,36 38,48' fill='%23FFFFFF'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0935\u093F\u0935\u0930\u0923 \u0928\u0940\u091A\u0947 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u092A\u0922\u093C\u0947\u0902</text><circle cx='440' cy='36' r='16' fill='%23FFFFFF'/><polygon points='436,28 448,36 436,44' fill='%23DC2626'/></svg>",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      createdAt: 179428e7,
+      updatedAt: 179428e7
+    },
+    {
+      id: "footer_regular_gold",
+      name: "\u0930\u0947\u0917\u0941\u0932\u0930 \u0915\u094D\u0932\u0940\u0928 \u092B\u093C\u0941\u091F\u0930 (White & Gold)",
+      category: "regular",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#FFFFFF",
+        footerTextColor: "#000000",
+        footerHeightPct: 8,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|"
+      },
+      createdAt: 17941e8,
+      updatedAt: 17941e8
+    },
+    {
+      id: "footer_branding_navy",
+      name: "\u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u0921\u093E\u0930\u094D\u0915 \u092B\u093C\u0941\u091F\u0930 (Navy & Gold Accent)",
+      category: "branding",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#0F172A",
+        footerTextColor: "#FACC15",
+        footerHeightPct: 8,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|"
+      },
+      createdAt: 17941e8,
+      updatedAt: 17941e8
+    },
+    {
+      id: "footer_social_blue",
+      name: "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0939\u093E\u0907\u0932\u093E\u0907\u091F \u092B\u093C\u0941\u091F\u0930 (Royal Blue)",
+      category: "social",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#1E40AF",
+        footerTextColor: "#FFFFFF",
+        footerHeightPct: 8,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|"
+      },
+      createdAt: 17941e8,
+      updatedAt: 17941e8
+    },
+    {
+      id: "footer_news_breaking_red",
+      name: "\u0928\u094D\u092F\u0942\u091C\u093C \u0905\u0932\u0930\u094D\u091F \u0930\u0947\u0921 \u092B\u093C\u0941\u091F\u0930 (Breaking Red)",
+      category: "news",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["PRO", "VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#DC2626",
+        footerTextColor: "#FFFFFF",
+        footerHeightPct: 8.5,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 20,
+        elementSpacing: 12,
+        paddingX: 16,
+        separator: "|"
+      },
+      createdAt: 17941e8,
+      updatedAt: 17941e8
+    },
+    {
+      id: "footer_special_vip_gold",
+      name: "\u0938\u094D\u092A\u0947\u0936\u0932 \u0935\u0940\u0906\u0908\u092A\u0940 \u0917\u094B\u0932\u094D\u0921 \u092B\u093C\u0941\u091F\u0930 (VIP Gold Special)",
+      category: "special",
+      type: "custom_footer",
+      enabled: true,
+      allowedPlans: ["VIP DESK"],
+      footerConfig: {
+        footerBgColor: "#FACC15",
+        footerTextColor: "#000000",
+        footerHeightPct: 9,
+        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
+        alignment: "center",
+        channelNameAlign: "left",
+        websiteAlign: "center",
+        socialIconsAlign: "left",
+        phoneAlign: "right",
+        iconSize: 22,
+        elementSpacing: 14,
+        paddingX: 18,
+        separator: "\u2022"
+      },
+      createdAt: 17941e8,
+      updatedAt: 17941e8
     }
   ];
 }
 var DELETED_ASSETS_TOMBSTONE_FILE = process.env.DELETED_ASSETS_TOMBSTONE_FILE || import_path2.default.join(process.cwd(), "deleted_assets_tombstone.json");
+var PROTECTED_BUILTIN_ASSET_IDS = /* @__PURE__ */ new Set([
+  "asset_1794132101671_u0g9s",
+  "callout_bully_forward_story",
+  "footer_regular_gold",
+  "footer_branding_navy",
+  "footer_social_blue",
+  "footer_news_breaking_red",
+  "footer_special_vip_gold"
+]);
 var memoryAssetTombstones = null;
 function loadDeletedAssetTombstones() {
   if (memoryAssetTombstones && memoryAssetTombstones.size > 0) {
-    return new Set(memoryAssetTombstones);
+    const set2 = new Set(memoryAssetTombstones);
+    PROTECTED_BUILTIN_ASSET_IDS.forEach((id) => set2.delete(id));
+    return set2;
   }
   const set = /* @__PURE__ */ new Set();
   try {
@@ -21335,11 +21590,33 @@ function loadDeletedAssetTombstones() {
     }
   } catch {
   }
+  PROTECTED_BUILTIN_ASSET_IDS.forEach((id) => set.delete(id));
   memoryAssetTombstones = set;
   return set;
 }
+function writeDurableAssetTombstonesToDisk(set) {
+  try {
+    const list = Array.from(set).filter((id) => !PROTECTED_BUILTIN_ASSET_IDS.has(id));
+    const serialized = JSON.stringify(list, null, 2);
+    const tmpPath = `${DELETED_ASSETS_TOMBSTONE_FILE}.tmp.${Date.now()}`;
+    import_fs2.default.writeFileSync(tmpPath, serialized, "utf-8");
+    import_fs2.default.renameSync(tmpPath, DELETED_ASSETS_TOMBSTONE_FILE);
+    if (!process.env.DELETED_ASSETS_TOMBSTONE_FILE) {
+      const webPath = import_path2.default.join(process.cwd(), "web_studio", "deleted_assets_tombstone.json");
+      if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(DELETED_ASSETS_TOMBSTONE_FILE)) {
+        try {
+          import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
+        } catch {
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to write asset tombstones to disk:", e?.message);
+  }
+}
 async function getDurableAssetTombstones() {
   const set = loadDeletedAssetTombstones();
+  const initialCount = set.size;
   if (centralDb && typeof centralDb.readDoc === "function") {
     try {
       const cloudDoc = await centralDb.readDoc("system_config", "deleted_assets_tombstones");
@@ -21350,19 +21627,24 @@ async function getDurableAssetTombstones() {
     } catch {
     }
   }
+  PROTECTED_BUILTIN_ASSET_IDS.forEach((id) => set.delete(id));
   memoryAssetTombstones = set;
-  try {
-    import_fs2.default.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(set), null, 2), "utf-8");
-  } catch {
+  if (set.size !== initialCount) {
+    writeDurableAssetTombstonesToDisk(set);
   }
   return set;
 }
 async function recordDeletedAssetTombstone(id) {
   try {
+    if (PROTECTED_BUILTIN_ASSET_IDS.has(id)) {
+      console.warn(`[Tombstone] Refusing to tombstone protected built-in asset ${id}`);
+      return;
+    }
     const tombstones = await getDurableAssetTombstones();
     tombstones.add(id);
+    PROTECTED_BUILTIN_ASSET_IDS.forEach((pid) => tombstones.delete(pid));
     memoryAssetTombstones = tombstones;
-    import_fs2.default.writeFileSync(DELETED_ASSETS_TOMBSTONE_FILE, JSON.stringify(Array.from(tombstones), null, 2), "utf-8");
+    writeDurableAssetTombstonesToDisk(tombstones);
     if (centralDb && typeof centralDb.writeDoc === "function") {
       const res = await centralDb.writeDoc("system_config", "deleted_assets_tombstones", {
         tombstones: Array.from(tombstones),
@@ -21394,7 +21676,17 @@ function loadAssetLibrariesDatabase() {
 }
 function saveAssetLibrariesDatabase(items) {
   try {
-    import_fs2.default.writeFileSync(ASSET_LIBRARIES_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    const serialized = JSON.stringify(items, null, 2);
+    import_fs2.default.writeFileSync(ASSET_LIBRARIES_DB_FILE, serialized, "utf-8");
+    if (!process.env.ASSET_LIBRARIES_DB_FILE) {
+      const webPath = import_path2.default.join(process.cwd(), "web_studio", "asset_libraries_db.json");
+      if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(ASSET_LIBRARIES_DB_FILE)) {
+        try {
+          import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
+        } catch {
+        }
+      }
+    }
   } catch (err) {
     console.warn("Failed to write asset_libraries_db.json:", err);
   }
@@ -22750,32 +23042,51 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       if (!candidateToken) {
         return res.status(401).json({
           success: false,
-          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0935\u093F\u092B\u0932: Google \u0932\u0949\u0917\u093F\u0928 \u0915\u0947 \u0932\u093F\u090F \u0935\u0948\u0927 Firebase ID \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
+          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0935\u093F\u092B\u0932: Google \u0932\u0949\u0917\u093F\u0928 \u0915\u0947 \u0932\u093F\u090F \u0935\u0948\u0927 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
         });
       }
-      if (!firebaseAdminAuth) {
-        return res.status(503).json({
-          success: false,
-          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964"
-        });
+      let decoded = null;
+      let verifiedEmail = "";
+      let verifiedUid = "";
+      if (firebaseAdminAuth) {
+        try {
+          decoded = await firebaseAdminAuth.verifyIdToken(candidateToken, true);
+          if (decoded && decoded.email) {
+            verifiedEmail = decoded.email.toLowerCase().trim();
+            verifiedUid = decoded.uid;
+          }
+        } catch (fbErr) {
+        }
       }
-      let decoded;
-      try {
-        decoded = await firebaseAdminAuth.verifyIdToken(candidateToken, true);
-      } catch (tokenErr) {
+      if (!verifiedEmail && googleOAuthClient) {
+        try {
+          const ticket = await googleOAuthClient.verifyIdToken({
+            idToken: candidateToken,
+            audience: GOOGLE_OAUTH_CLIENT_ID
+          });
+          const payload = ticket.getPayload();
+          if (payload && payload.email) {
+            verifiedEmail = payload.email.toLowerCase().trim();
+            verifiedUid = payload.sub;
+            decoded = payload;
+          }
+        } catch (gErr) {
+        }
+      }
+      if (!verifiedEmail) {
+        const internal = verifyAuthToken(candidateToken);
+        if (internal && internal.email) {
+          verifiedEmail = internal.email.toLowerCase().trim();
+          verifiedUid = internal.userId || internal.email;
+          decoded = internal;
+        }
+      }
+      if (!verifiedEmail) {
         return res.status(401).json({
           success: false,
           error: "\u0905\u0935\u0948\u0927 \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u091F\u094B\u0915\u0928\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
         });
       }
-      if (!decoded || !decoded.email) {
-        return res.status(401).json({
-          success: false,
-          error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u091F\u094B\u0915\u0928 \u092E\u0947\u0902 \u0935\u0948\u0927 \u0908\u092E\u0947\u0932 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964"
-        });
-      }
-      const verifiedEmail = decoded.email.toLowerCase().trim();
-      const verifiedUid = decoded.uid;
       if (cleanId && cleanId !== verifiedEmail) {
         return res.status(401).json({
           success: false,
@@ -22842,10 +23153,13 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           channelLogoPngUrl: isSuper ? "/assets/breaking_news_wala_logo.png" : isSubAdmin ? "/assets/ai_news_maker_logo.png" : isProfileComplete ? existing?.channelLogoPngUrl || existing?.channelLogoUrl || "" : "",
           channelLogoGifUrl: isProfileComplete ? existing?.channelLogoGifUrl || "" : "",
           channelLogoType: existing?.channelLogoType || "png",
-          mobile: isSuper || isSubAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
-          mobileNumber: isSuper || isSubAdmin ? "9669802408" : existing?.mobileNumber || profileData?.mobile || "",
-          district: isSuper ? "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" : isSubAdmin ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : existing?.district || "",
+          mobile: isSuper || isSubAdmin ? "9669802408" : existing?.mobileNumber || existing?.mobile || profileData?.mobile || "",
+          mobileNumber: isSuper || isSubAdmin ? "9669802408" : existing?.mobileNumber || existing?.mobile || profileData?.mobile || "",
+          whatsappNumber: existing?.whatsappNumber || (isSuper || isSubAdmin ? "9669802408" : profileData?.whatsappNumber || ""),
+          whatsappDisplayNumber: existing?.whatsappDisplayNumber || profileData?.whatsappDisplayNumber || (isSuper || isSubAdmin ? "9669802408" : ""),
+          district: existing?.district && existing.district.trim() ? existing.district.trim() : isSuper ? "\u092D\u094B\u092A\u093E\u0932" : isSubAdmin ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : "",
           websiteUrl: isSuper ? "breakingnewswala.com" : isSubAdmin ? "ainewsmaker.online" : isProfileComplete ? existing?.websiteUrl || "" : profileData?.websiteUrl || "",
+          socialIcons: existing?.socialIcons || profileData?.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: true, x: true, linkedin: true },
           isProfileLocked: isSuper || isSubAdmin ? false : Boolean(isProfileComplete && existing?.isProfileLocked),
           isProfileComplete: isSuper || isSubAdmin ? true : isProfileComplete,
           profileStatus: isSuper || isSubAdmin ? "active" : isProfileComplete ? "active" : "incomplete"
@@ -33952,6 +34266,7 @@ startServer().catch((err) => {
   HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES,
+  PROTECTED_BUILTIN_ASSET_IDS,
   buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity,

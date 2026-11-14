@@ -100,7 +100,7 @@ export function getApiUrl(endpoint: string): string {
 export function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   try {
-    const direct = localStorage.getItem('reporter_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('token');
+    const direct = localStorage.getItem('reporter_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('google_id_token');
     if (direct) return direct.trim();
     const sessionStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
     if (sessionStr) {
@@ -224,7 +224,13 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         }
       }
 
-      // 2. Firebase Client Auth Recovery: Retrieve genuine Google ID Token from Firebase Web SDK
+      // 2. Google OAuth / GIS Credential Recovery: Check stored google_id_token
+      let googleIdToken = '';
+      try {
+        googleIdToken = localStorage.getItem('google_id_token') || '';
+      } catch {}
+
+      // 3. Firebase Client Auth Recovery: Retrieve genuine Google ID Token from Firebase Web SDK
       let firebaseIdToken = '';
       try {
         const { auth } = await import('./firebaseConfig');
@@ -235,16 +241,18 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         console.warn('[AUTH] Firebase client token check notice:', fbErr);
       }
 
-      if (firebaseIdToken && email) {
+      const candidateIdToken = firebaseIdToken || googleIdToken;
+      if (candidateIdToken && email) {
         const res = await fetch(getApiUrl('/api/auth/login'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${firebaseIdToken}`,
+            'Authorization': `Bearer ${candidateIdToken}`,
           },
           body: JSON.stringify({
             identifier: email,
-            firebaseToken: firebaseIdToken,
+            firebaseToken: candidateIdToken,
+            idToken: candidateIdToken,
             profileData: { email, name, username },
           }),
         });
@@ -297,7 +305,15 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
       if (urlStr.includes('/api/')) {
         let token = getAuthToken();
-        if (!token && (urlStr.includes('/api/admin') || urlStr.includes('/api/process-news') || urlStr.includes('/api/generate-video'))) {
+        const isProtectedApi =
+          urlStr.includes('/api/admin') ||
+          urlStr.includes('/api/dynamic-frames') ||
+          urlStr.includes('/api/process-news') ||
+          urlStr.includes('/api/generate-video') ||
+          urlStr.includes('/api/rss-sync') ||
+          urlStr.includes('/api/user-profile');
+
+        if (!token && isProtectedApi) {
           try {
             token = await ensureAuthToken();
           } catch {}
@@ -321,7 +337,28 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           }
         }
       }
-      const response = await originalFetch(input, init);
+      let response = await originalFetch(input, init);
+      // Auto-retry once on 401 for protected endpoints by acquiring fresh token
+      if (response.status === 401 && (urlStr.includes('/api/admin') || urlStr.includes('/api/dynamic-frames'))) {
+        try {
+          const fresh = await ensureAuthToken(true);
+          if (fresh) {
+            const retryInit = { ...(init || {}) };
+            if (retryInit.headers instanceof Headers) {
+              retryInit.headers.set('Authorization', `Bearer ${fresh}`);
+            } else if (Array.isArray(retryInit.headers)) {
+              retryInit.headers = retryInit.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
+              retryInit.headers.push(['Authorization', `Bearer ${fresh}`]);
+            } else {
+              retryInit.headers = {
+                ...(retryInit.headers || {}),
+                Authorization: `Bearer ${fresh}`,
+              };
+            }
+            response = await originalFetch(input, retryInit);
+          }
+        } catch {}
+      }
       // Auto-capture and persist refreshed token from server header
       try {
         const refreshed = response?.headers?.get?.('x-refreshed-token');

@@ -131,6 +131,7 @@ interface DrawCompositionOptions {
   showLocation?: boolean;
   showTicker?: boolean;
   socialIcons?: { fb?: HTMLImageElement | null; ig?: HTMLImageElement | null; yt?: HTMLImageElement | null; x?: HTMLImageElement | null };
+  activeDynamicFrame?: VideoFrameDefinition | null;
 }
 
 /**
@@ -226,6 +227,367 @@ function wrapDevanagariText(
 }
 
 /**
+ * Authoritative Dynamic Video Frame Renderer
+ * Directly grounds video composition in the Master Admin's configured dynamic frame template,
+ * respecting canvas ratio vs video window ratio, fit vs crop mode, movable footer,
+ * single or multi-headline blocks, breaking news ribbons, transparent PNG/GIF logo,
+ * location badge, and watermark.
+ */
+function drawAuthoritativeDynamicVideoFrame(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  frameDef: VideoFrameDefinition,
+  opts: DrawCompositionOptions
+) {
+  const rawDf = frameDef.rawDynamicFrame;
+  const vConf = frameDef.videoConfig || rawDf?.videoConfig;
+  const {
+    video,
+    headline,
+    subHeadline,
+    location,
+    channelTag,
+    logoImg,
+    websiteUrl,
+    mobileNumber,
+    socialHandle,
+    zoomScale = 1,
+    offsetY = 0,
+    cropRegion,
+  } = opts;
+
+  // 1. Clear & Background Fill
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, width, height);
+
+  // 2. Video Window Geometry & Display Mode (Fit vs Crop)
+  const vRectNorm = vConf?.videoRect || { x: 0, y: 15, width: 100, height: 70 };
+  const vx = Math.round((vRectNorm.x / 100) * width);
+  const vy = Math.round((vRectNorm.y / 100) * height);
+  const vw = Math.max(10, Math.round((vRectNorm.width / 100) * width));
+  const vh = Math.max(10, Math.round((vRectNorm.height / 100) * height));
+  const isCrop = (vConf?.displayMode || 'fit') === 'crop';
+
+  // Draw Main Video Window Background Placeholder
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(vx, vy, vw, vh);
+
+  if (video && video.readyState >= 2) {
+    try {
+      const vidNatW = video.videoWidth || 720;
+      const vidNatH = video.videoHeight || 1280;
+      const vidAspect = vidNatW / vidNatH;
+      const winAspect = vw / vh;
+
+      ctx.save();
+      // Clip to video window region so nothing spills onto canvas
+      ctx.beginPath();
+      ctx.rect(vx, vy, vw, vh);
+      ctx.clip();
+
+      if (opts.filterCss && opts.filterCss !== 'none' && (ctx as any).filter !== undefined) {
+        (ctx as any).filter = opts.filterCss;
+      }
+
+      if (isCrop) {
+        // CROP MODE: Fill entire window, centering and clipping overflow
+        let sx = 0;
+        let sy = 0;
+        let sw = vidNatW;
+        let sh = vidNatH;
+
+        if (vidAspect > winAspect) {
+          // Video is wider than window: crop sides
+          sw = Math.round(vidNatH * winAspect);
+          sx = Math.round((vidNatW - sw) / 2);
+        } else {
+          // Video is taller than window: crop top/bottom
+          sh = Math.round(vidNatW / winAspect);
+          const maxCropY = Math.max(0, vidNatH - sh);
+          const normY = cropRegion ? Math.max(0, Math.min(1, cropRegion.y)) : 0.15;
+          sy = Math.round(normY * maxCropY);
+        }
+
+        ctx.translate(vx + vw / 2, vy + vh / 2);
+        ctx.scale(zoomScale, zoomScale);
+        ctx.translate(0, offsetY);
+        ctx.drawImage(video, sx, sy, sw, sh, -vw / 2, -vh / 2, vw, vh);
+      } else {
+        // FIT MODE: Preserve original video aspect ratio inside window (letterbox/pillarbox)
+        let dw = vw;
+        let dh = vh;
+        if (vidAspect > winAspect) {
+          dh = Math.round(vw / vidAspect);
+        } else {
+          dw = Math.round(vh * vidAspect);
+        }
+        const dx = vx + Math.round((vw - dw) / 2);
+        const dy = vy + Math.round((vh - dh) / 2);
+
+        ctx.translate(dx + dw / 2, dy + dh / 2);
+        ctx.scale(zoomScale, zoomScale);
+        ctx.translate(0, offsetY);
+        ctx.drawImage(video, 0, 0, vidNatW, vidNatH, -dw / 2, -dh / 2, dw, dh);
+      }
+      ctx.restore();
+    } catch {
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(vx, vy, vw, vh);
+    }
+  }
+
+  // 3. Render Breaking News Ribbon Layers
+  const ribbons = vConf?.ribbonLayers || [];
+  if (ribbons.length > 0) {
+    ribbons.forEach((ribbon) => {
+      if (ribbon.visible === false) return;
+      const rx = (ribbon.x / 100) * width;
+      const ry = (ribbon.y / 100) * height;
+      const rw = (ribbon.width / 100) * width;
+      const rh = (ribbon.height / 100) * height;
+
+      ctx.save();
+      ctx.fillStyle = ribbon.backgroundColor || '#dc2626';
+      ctx.fillRect(rx, ry, rw, rh);
+
+      const rText = ribbon.text || 'BREAKING NEWS';
+      ctx.fillStyle = ribbon.textColor || '#ffffff';
+      const rScale = width / 720;
+      ctx.font = `900 ${Math.round((ribbon.fontSize || 14) * rScale)}px Arial, "Noto Sans Devanagari", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(rText, rx + rw / 2, ry + rh / 2);
+      ctx.restore();
+    });
+  }
+
+  // 4. Render Channel Logo (PNG or GIF)
+  const lRect = vConf?.logoRect || { x: 3, y: 3, width: 22, height: 7 };
+  const lx = Math.round((lRect.x / 100) * width);
+  const ly = Math.round((lRect.y / 100) * height);
+  const lw = Math.round((lRect.width / 100) * width);
+  const lh = Math.round((lRect.height / 100) * height);
+
+  ctx.save();
+  if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+    try {
+      const imgAspect = logoImg.naturalWidth / logoImg.naturalHeight;
+      let dw = lw;
+      let dh = dw / imgAspect;
+      if (dh > lh) {
+        dh = lh;
+        dw = dh * imgAspect;
+      }
+      const dx = lx + Math.round((lw - dw) / 2);
+      const dy = ly + Math.round((lh - dh) / 2);
+      ctx.drawImage(logoImg, dx, dy, dw, dh);
+    } catch {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 16px "Noto Sans Devanagari", Arial, sans-serif';
+      ctx.fillText((channelTag || 'AI NEWS').trim().slice(0, 16), lx, ly + lh * 0.7);
+    }
+  } else {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 16px "Noto Sans Devanagari", Arial, sans-serif';
+    ctx.fillText((channelTag || 'AI NEWS').trim().slice(0, 16), lx, ly + lh * 0.7);
+  }
+  ctx.restore();
+
+  // 5. Render Location Badge (with Central Asset support & "भोपाल" dynamic text)
+  if (opts.showLocation !== false && location && location.trim()) {
+    const locNorm = vConf?.locationBadgeRect || { x: 68, y: 3, width: 29, height: 6 };
+    const locX = Math.round((locNorm.x / 100) * width);
+    const locY = Math.round((locNorm.y / 100) * height);
+    const locW = Math.round((locNorm.width / 100) * width);
+    const locH = Math.round((locNorm.height / 100) * height);
+
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (typeof (ctx as any).roundRect === 'function') {
+      (ctx as any).roundRect(locX, locY, locW, locH, 6);
+    } else {
+      ctx.rect(locX, locY, locW, locH);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#0f172a';
+    const locScale = width / 720;
+    ctx.font = `bold ${Math.round(15 * locScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`📍 ${location.trim()}`, locX + locW / 2, locY + locH / 2);
+    ctx.restore();
+  }
+
+  // 6. Render Headlines (Single 2/3 lines OR Multi-Headline Blocks)
+  const isMulti = vConf?.headlineMode === 'multi';
+  const headlineBlocks = vConf?.headlineBlocks || [];
+
+  if (isMulti && headlineBlocks.length > 0) {
+    headlineBlocks.forEach((block, bIdx) => {
+      const bx = (block.x / 100) * width;
+      const by = (block.y / 100) * height;
+      const bw = (block.width / 100) * width;
+      const bh = (block.height / 100) * height;
+
+      ctx.save();
+      ctx.fillStyle = block.backgroundColor || '#b91c1c';
+      ctx.fillRect(bx, by, bw, bh);
+
+      const blockText = (bIdx === 0 ? headline : bIdx === 1 ? subHeadline : block.text) || block.text || '';
+      if (blockText.trim()) {
+        ctx.fillStyle = block.textColor || '#ffffff';
+        const scale = width / 720;
+        const fontSize = Math.round((block.fontSize || 20) * scale);
+        ctx.font = `bold ${fontSize}px "Noto Sans Devanagari", "Baloo 2", Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const wrapped = wrapDevanagariText(ctx, blockText, bw - 20).slice(0, block.maxLines || 2);
+        const lineH = Math.round(fontSize * 1.3);
+        const startY = by + bh / 2 - ((wrapped.length - 1) * lineH) / 2;
+        wrapped.forEach((line, lIdx) => {
+          ctx.fillText(line.trim(), bx + bw / 2, startY + lIdx * lineH);
+        });
+      }
+      ctx.restore();
+    });
+  } else {
+    // Single Headline (2 or 3 lines toggle)
+    const maxLines = vConf?.headlineLineCount || 2;
+    const footerPos = vConf?.footerPosition || 'bottom';
+    const fRect = vConf?.footerRect || (footerPos === 'top' || footerPos === 'header'
+      ? { x: 0, y: 0, width: 100, height: 8 }
+      : { x: 0, y: 92, width: 100, height: 8 });
+
+    let headY: number;
+    let headH: number;
+    let headW = Math.round(width * 0.94);
+    let headX = Math.round(width * 0.03);
+
+    if (footerPos === 'bottom') {
+      headH = maxLines === 3 ? Math.round(height * 0.14) : Math.round(height * 0.10);
+      headY = Math.round((fRect.y / 100) * height) - headH - 10;
+    } else {
+      headH = maxLines === 3 ? Math.round(height * 0.14) : Math.round(height * 0.10);
+      headY = Math.round(height * 0.82);
+    }
+
+    ctx.save();
+    const hGrad = ctx.createLinearGradient(headX, headY, headX + headW, headY);
+    hGrad.addColorStop(0, '#991b1b');
+    hGrad.addColorStop(0.5, '#dc2626');
+    hGrad.addColorStop(1, '#991b1b');
+    ctx.fillStyle = hGrad;
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (typeof (ctx as any).roundRect === 'function') {
+      (ctx as any).roundRect(headX, headY, headW, headH, 8);
+    } else {
+      ctx.rect(headX, headY, headW, headH);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    const rawH = (headline || '').split('\n').filter((l) => l.trim().length > 0);
+    let lines: string[] = [];
+    if (rawH.length > 0) {
+      rawH.forEach((p) => {
+        lines.push(...wrapDevanagariText(ctx, p, headW - 30));
+      });
+      lines = lines.slice(0, maxLines);
+    } else {
+      lines = ['यहाँ आपकी वीडियो की मुख्य हेडलाइन दिखाई देगी'];
+    }
+
+    const scale = width / 720;
+    let fSize = Math.round((maxLines === 3 ? 22 : 26) * scale);
+    ctx.font = `900 ${fSize}px "Noto Sans Devanagari", "Baloo 2", Arial, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 2;
+
+    const lineH = Math.round(fSize * 1.35);
+    const startY = headY + headH / 2 - ((lines.length - 1) * lineH) / 2 + Math.round(fSize * 0.35);
+    lines.forEach((line, idx) => {
+      ctx.fillText(line.trim(), headX + headW / 2, startY + idx * lineH);
+    });
+    ctx.restore();
+  }
+
+  // 7. Render Movable Footer (Placement: Bottom, Top, Header, Custom)
+  const footerPos = vConf?.footerPosition || 'bottom';
+  const fRectNorm = vConf?.footerRect || (footerPos === 'top' || footerPos === 'header'
+    ? { x: 0, y: 0, width: 100, height: 8 }
+    : { x: 0, y: 92, width: 100, height: 8 });
+  const fx = Math.round((fRectNorm.x / 100) * width);
+  const fy = Math.round((fRectNorm.y / 100) * height);
+  const fw = Math.round((fRectNorm.width / 100) * width);
+  const fh = Math.round((fRectNorm.height / 100) * height);
+
+  ctx.save();
+  ctx.fillStyle = '#111827';
+  ctx.fillRect(fx, fy, fw, fh);
+  ctx.fillStyle = '#f59e0b';
+  const footerScale = width / 720;
+  ctx.font = `bold ${Math.round(15 * footerScale)}px Arial, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const footerParts: string[] = [];
+  if (socialHandle && socialHandle.trim()) footerParts.push(socialHandle.trim());
+  if (opts.showWebsite !== false && websiteUrl && websiteUrl.trim()) footerParts.push(`🌐 ${websiteUrl.trim()}`);
+  if ((opts.showWhatsapp !== false && opts.showMobileNumber !== false) && mobileNumber && mobileNumber.trim()) footerParts.push(`📞 ${mobileNumber.trim()}`);
+  const footerText = footerParts.join('   •   ') || (channelTag || 'AI NEWS MAKER');
+  ctx.fillText(footerText, fx + fw / 2, fy + fh / 2);
+  ctx.restore();
+
+  // 8. Watermark (Respect Part 8.H)
+  if (opts.showWatermark) {
+    if (opts.watermarkType === 'image' && opts.watermarkImageImg && opts.watermarkImageImg.complete && opts.watermarkImageImg.naturalWidth > 0) {
+      try {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.1, Math.min(0.95, opts.watermarkOpacity || 0.4));
+        const img = opts.watermarkImageImg;
+        const maxW = Math.round(width * 0.28);
+        const imgAspect = img.naturalWidth / img.naturalHeight;
+        const dw = maxW;
+        const dh = dw / imgAspect;
+        const dx = width - dw - 24;
+        const dy = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
+        ctx.drawImage(img, dx, dy, dw, dh);
+        ctx.restore();
+      } catch {}
+    } else {
+      const wmText = opts.watermarkCustomText || opts.watermarkText;
+      if (wmText) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0.08, Math.min(0.9, opts.watermarkOpacity || 0.25));
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 8;
+        const wmScale = width / 720;
+        ctx.font = `900 ${Math.round(24 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const wmY = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
+        ctx.fillText(wmText, width / 2, wmY);
+        ctx.restore();
+      }
+    }
+  }
+}
+
+/**
  * Shared Canvas Composition Function
  * Renders the EXACT same layout for Frame 1, Frame 2, and Classic Frame
  * ensuring 100% parity between Live Canvas and Exported Video.
@@ -258,6 +620,11 @@ function drawVideoCompositionToCanvas(
   } = opts;
 
   ctx.clearRect(0, 0, width, height);
+
+  if (opts.activeDynamicFrame?.rawDynamicFrame) {
+    drawAuthoritativeDynamicVideoFrame(ctx, width, height, opts.activeDynamicFrame, opts);
+    return;
+  }
 
   if (selectedFrameId === 'frame-custom-3line-4-5') {
     // ==========================================
@@ -1232,9 +1599,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         coinPrice: 0,
         isActive: true,
         isCustom: true,
+        rawDynamicFrame: df,
+        videoConfig: df.videoConfig,
+        customLayers: df.layers,
       };
     });
   }, [dynamicVideoFrames]);
+
+  const activeDynamicFrame = useMemo(() => {
+    return dynamicConvertedVideoFrames.find((f) => f.id === selectedFrameId) || null;
+  }, [dynamicConvertedVideoFrames, selectedFrameId]);
 
   // Compatible Frames List
   const compatibleFrames = useMemo(() => {
@@ -1952,6 +2326,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       drawVideoCompositionToCanvas(ctx, width, height, {
         video,
         selectedFrameId,
+        activeDynamicFrame,
         headline,
         subHeadline,
         location,
@@ -2310,6 +2685,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       drawVideoCompositionToCanvas(ctx, width, height, {
         video,
         selectedFrameId,
+        activeDynamicFrame,
         headline: initialExpHeadline,
         subHeadline,
         location,
@@ -2397,6 +2773,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           drawVideoCompositionToCanvas(ctx, width, height, {
             video,
             selectedFrameId,
+            activeDynamicFrame,
             headline: currentExpH,
             subHeadline,
             location,
@@ -3056,6 +3433,210 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
                 </div>
+              ) : activeDynamicFrame?.rawDynamicFrame ? (
+                // ==========================================
+                // DYNAMIC VIDEO FRAME PRO (Master Admin Defined)
+                // ==========================================
+                (() => {
+                  const vConf = activeDynamicFrame.videoConfig || activeDynamicFrame.rawDynamicFrame?.videoConfig;
+                  const vRect = vConf?.videoRect || { x: 0, y: 15, width: 100, height: 70 };
+                  const footerPos = vConf?.footerPosition || 'bottom';
+                  const fRect = vConf?.footerRect || (footerPos === 'top' || footerPos === 'header'
+                    ? { x: 0, y: 0, width: 100, height: 8 }
+                    : { x: 0, y: 92, width: 100, height: 8 });
+                  const isCrop = (vConf?.displayMode || 'fit') === 'crop';
+                  const lRect = vConf?.logoRect || { x: 3, y: 3, width: 22, height: 7 };
+                  const locRect = vConf?.locationBadgeRect || { x: 68, y: 3, width: 29, height: 6 };
+                  const isMultiHeadline = vConf?.headlineMode === 'multi';
+                  const maxHeadLines = vConf?.headlineLineCount || 2;
+                  const headlineBlocks = vConf?.headlineBlocks || [];
+                  const ribbonLayers = vConf?.ribbonLayers || [];
+
+                  return (
+                    <div className="relative w-full h-full overflow-hidden bg-[#0a0a0a] select-none">
+                      {/* Main Video Window */}
+                      <div
+                        className="absolute overflow-hidden bg-slate-900 flex items-center justify-center"
+                        style={{
+                          left: `${vRect.x}%`,
+                          top: `${vRect.y}%`,
+                          width: `${vRect.width}%`,
+                          height: `${vRect.height}%`,
+                        }}
+                      >
+                        <video
+                          ref={videoRef}
+                          src={videoUrl}
+                          playsInline
+                          loop
+                          muted={isMuted}
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            const el = e.currentTarget;
+                            if (el.crossOrigin) {
+                              el.removeAttribute("crossOrigin");
+                              el.load();
+                            }
+                          }}
+                          className="w-full h-full transition-transform duration-100 cursor-pointer"
+                          style={{
+                            objectFit: isCrop ? 'cover' : 'contain',
+                            transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
+                            filter: getVideoFilterCss(videoColorFilter),
+                          }}
+                        />
+                      </div>
+
+                      {/* Transition Simulation */}
+                      {isTransitionActive && transitionType !== 'none' && (
+                        <div className="absolute inset-0 pointer-events-none z-20 bg-white/80 animate-ping" />
+                      )}
+
+                      {/* Play/Pause Center Indicator */}
+                      {!isPlaying && (
+                        <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none z-10">
+                          <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 scale-100 group-hover:scale-110 transition-transform">
+                            <Play className="w-6 h-6 fill-white ml-0.5" />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Breaking News Ribbon Layers */}
+                      {ribbonLayers.filter((r) => r.visible !== false).map((ribbon) => (
+                        <div
+                          key={ribbon.id}
+                          className="absolute z-10 flex items-center justify-center font-black tracking-wider uppercase shadow-md pointer-events-none"
+                          style={{
+                            left: `${ribbon.x}%`,
+                            top: `${ribbon.y}%`,
+                            width: `${ribbon.width}%`,
+                            height: `${ribbon.height}%`,
+                            backgroundColor: ribbon.backgroundColor || '#dc2626',
+                            color: ribbon.textColor || '#ffffff',
+                            fontSize: `${Math.max(9, Math.round((ribbon.fontSize || 14) * 0.75))}px`,
+                          }}
+                        >
+                          {ribbon.text || 'BREAKING NEWS'}
+                        </div>
+                      ))}
+
+                      {/* Logo Container */}
+                      <div
+                        className="absolute z-10 pointer-events-none flex items-center overflow-hidden"
+                        style={{
+                          left: `${lRect.x}%`,
+                          top: `${lRect.y}%`,
+                          width: `${lRect.width}%`,
+                          height: `${lRect.height}%`,
+                        }}
+                      >
+                        {(activeLogoUrl || channelLogoUrl) ? (
+                          <img
+                            src={activeLogoUrl || channelLogoUrl}
+                            alt="Channel Logo"
+                            className="max-h-full max-w-full object-contain drop-shadow-md"
+                            style={{ transform: `scale(${logoScale / 100})` }}
+                          />
+                        ) : (
+                          <div className="font-black text-[10px] text-amber-300 drop-shadow-md">
+                            {channelTag || 'AI NEWS'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Location Badge */}
+                      {showLocation && location.trim() && (
+                        <div
+                          className="absolute z-10 pointer-events-none flex items-center justify-center"
+                          style={{
+                            left: `${locRect.x}%`,
+                            top: `${locRect.y}%`,
+                            width: `${locRect.width}%`,
+                            height: `${locRect.height}%`,
+                          }}
+                        >
+                          <div className="bg-white border border-red-600 rounded-md px-1.5 py-0.5 shadow-md flex items-center gap-1 max-w-full">
+                            <MapPin className="w-3 h-3 text-red-600 fill-red-600 shrink-0" />
+                            <span className="text-slate-900 font-black text-[10px] truncate">
+                              {location.trim()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Headline Section */}
+                      {isMultiHeadline && headlineBlocks.length > 0 ? (
+                        headlineBlocks.map((block, bIdx) => {
+                          const blockText = (bIdx === 0 ? activeHeadline : bIdx === 1 ? subHeadline : block.text) || block.text || '';
+                          return (
+                            <div
+                              key={block.id}
+                              className="absolute z-10 pointer-events-none flex items-center justify-center px-2 shadow-lg"
+                              style={{
+                                left: `${block.x}%`,
+                                top: `${block.y}%`,
+                                width: `${block.width}%`,
+                                height: `${block.height}%`,
+                                backgroundColor: block.backgroundColor || '#b91c1c',
+                                color: block.textColor || '#ffffff',
+                              }}
+                            >
+                              <span
+                                className="font-black text-center line-clamp-2 leading-tight"
+                                style={{ fontSize: `${Math.max(10, Math.round((block.fontSize || 18) * 0.75))}px` }}
+                              >
+                                {blockText}
+                              </span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        /* Single Headline Banner (2 or 3 lines) */
+                        <div
+                          className="absolute z-10 pointer-events-none left-2 right-2 flex justify-center"
+                          style={{
+                            bottom: footerPos === 'bottom' ? `${Math.max(10, fRect.height + 2)}%` : '6%',
+                          }}
+                        >
+                          <div className="w-full bg-gradient-to-r from-red-800 via-red-600 to-red-800 border border-yellow-400 rounded-lg px-2.5 py-1.5 shadow-2xl text-center">
+                            {(activeHeadline.split('\n').filter((l) => l.trim().length > 0).length > 0
+                              ? activeHeadline.split('\n').filter((l) => l.trim().length > 0).slice(0, maxHeadLines)
+                              : ['यहाँ आपकी वीडियो की मुख्य हेडलाइन दिखाई देगी']
+                            ).map((line, idx) => (
+                              <h3
+                                key={idx}
+                                className={`font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] truncate leading-snug ${
+                                  maxHeadLines === 3 ? 'text-[11px] sm:text-xs' : 'text-xs sm:text-sm'
+                                }`}
+                              >
+                                {line}
+                              </h3>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Movable Footer Bar */}
+                      <div
+                        className="absolute z-10 pointer-events-none bg-neutral-900 border-t border-neutral-700 flex items-center justify-center px-2 text-amber-400 font-bold text-[10px] shadow-md truncate"
+                        style={{
+                          left: `${fRect.x}%`,
+                          top: `${fRect.y}%`,
+                          width: `${fRect.width}%`,
+                          height: `${fRect.height}%`,
+                        }}
+                      >
+                        {(() => {
+                          const footerParts: string[] = [];
+                          if (socialHandle && socialHandle.trim()) footerParts.push(socialHandle.trim());
+                          if (showWebsite !== false && websiteUrl && websiteUrl.trim()) footerParts.push(`🌐 ${websiteUrl.trim()}`);
+                          if ((showWhatsapp !== false && showMobileNumber !== false) && mobileNumber && mobileNumber.trim()) footerParts.push(`📞 ${mobileNumber.trim()}`);
+                          return footerParts.join('  •  ') || (channelTag || 'AI NEWS MAKER');
+                        })()}
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 // ==========================================
                 // FRAME 3: Classic Broadcast Lower-Third

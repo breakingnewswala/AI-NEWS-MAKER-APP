@@ -5,18 +5,178 @@
 export type FrameMode = 'photo' | 'video';
 export type DynamicFrameType = 'graphic' | 'video' | 'story';
 
+export type VideoWindowAspectRatio = '9:16' | '16:9' | '4:5' | '4:3' | '1:1' | 'custom';
+export type VideoFooterPlacement = 'bottom' | 'top' | 'header' | 'custom';
+export type HeadlineDisplayMode = 'single' | 'multiple';
+export type HeadlineLineCount = 2 | 3;
+
+export interface HeadlineBlockConfig {
+  id: string;
+  name: string;
+  rect: NormalizedRect;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight?: string;
+  textColor: string;
+  highlightColor?: string;
+  backgroundColor?: string;
+  alignment: 'left' | 'center' | 'right';
+  maxLines: HeadlineLineCount;
+  lineHeight?: number;
+  rotation?: number;
+  visible?: boolean;
+  zIndex?: number;
+}
+
+export interface VideoRibbonLayer {
+  id: string;
+  ribbonId: string;
+  name: string;
+  customRibbonUrl?: string;
+  rect: NormalizedRect;
+  visible: boolean;
+  zIndex: number;
+  rotation?: number;
+  isAnimatedGif?: boolean;
+}
+
+export interface VideoOverlayAsset {
+  id: string;
+  name: string;
+  url: string;
+  mediaType: 'png' | 'gif';
+  rect: NormalizedRect;
+  visible: boolean;
+  zIndex: number;
+  rotation?: number;
+  opacity?: number;
+}
+
 export interface VideoFrameConfig {
   displayMode: 'fit' | 'crop'; // Choice A: 'fit' (Full Video), Choice B: 'crop' (Crop Video to visible region)
   videoRect: NormalizedRect;
-  footerPosition: 'bottom' | 'top'; // Movable video footer
+  footerPosition: 'bottom' | 'top' | 'header' | 'custom'; // Movable video footer
+  footerRect?: NormalizedRect; // Independent custom positioning for footer
+  videoWindowAspectRatio?: VideoWindowAspectRatio; // 9:16, 16:9, 4:5, 4:3, 1:1, custom
+  safeZoneEnabled?: boolean;
+  safeZoneConfig?: SafeZoneConfig;
+  headlineMode?: HeadlineDisplayMode; // 'single' | 'multiple'
+  headlineLineCount?: HeadlineLineCount; // 2 | 3
+  headlineBlocks?: HeadlineBlockConfig[];
+  ribbonLayers?: VideoRibbonLayer[];
+  overlayAssets?: VideoOverlayAsset[];
   locationBadgeUrl?: string; // from Location Badge PNG library
   locationBadgeId?: string;
+  locationBadgeStyle?: 'pill' | 'box' | 'strip';
+  locationRect?: NormalizedRect;
+  logoRect?: NormalizedRect;
+  logoUrl?: string;
+  logoType?: 'png' | 'gif';
+  logoScalePct?: number;
+  logoOpacity?: number;
+  logoRotation?: number;
+  dateRect?: NormalizedRect;
+  dateVisible?: boolean;
   watermarkTextEnabled?: boolean;
   watermarkText?: string;
   watermarkLogoEnabled?: boolean;
   watermarkLogoUrl?: string;
   watermarkUserAllowed?: boolean; // Admin decides whether text/logo watermark options are available to end-users in Studio
   watermarkRect?: NormalizedRect; // Center of actual visible video region
+  cropFocalPoint?: { x: number; y: number };
+}
+
+export function calculateDefaultVideoRect(
+  canvasRatio: DynamicAspectRatio,
+  videoRatio: VideoWindowAspectRatio,
+  preset: 'center' | 'top' | 'bottom' | 'custom' = 'center'
+): NormalizedRect {
+  // 9:16 Canvas (1080 x 1920)
+  if (canvasRatio === '9:16') {
+    if (videoRatio === '9:16') {
+      return { x: 0, y: 0, width: 100, height: 100 };
+    }
+    if (videoRatio === '4:5') {
+      // 1080x1350 in 1080x1920 -> height = (1350 / 1920) * 100 = 70.3125%
+      const h = 70.3;
+      if (preset === 'top') return { x: 0, y: 5, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 24.6, width: 100, height: h };
+      return { x: 0, y: 14.8, width: 100, height: h }; // Center: 285px top/bottom
+    }
+    if (videoRatio === '16:9') {
+      // 1080x607.5 in 1080x1920 -> height = (607.5 / 1920) * 100 = 31.64%
+      const h = 31.6;
+      if (preset === 'top') return { x: 0, y: 15, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 55, width: 100, height: h };
+      return { x: 0, y: 34.2, width: 100, height: h };
+    }
+    if (videoRatio === '1:1') {
+      // 1080x1080 in 1080x1920 -> height = (1080 / 1920) * 100 = 56.25%
+      const h = 56.2;
+      if (preset === 'top') return { x: 0, y: 10, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 33.7, width: 100, height: h };
+      return { x: 0, y: 21.9, width: 100, height: h };
+    }
+    if (videoRatio === '4:3') {
+      // 1080x810 in 1080x1920 -> height = (810 / 1920) * 100 = 42.18%
+      const h = 42.2;
+      if (preset === 'top') return { x: 0, y: 15, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 42.7, width: 100, height: h };
+      return { x: 0, y: 28.9, width: 100, height: h };
+    }
+  }
+
+  // 4:5 Canvas (1080 x 1350)
+  if (canvasRatio === '4:5') {
+    if (videoRatio === '16:9') {
+      // 1080x607.5 in 1080x1350 -> height = (607.5 / 1350) * 100 = 45%
+      const h = 45;
+      if (preset === 'top') return { x: 0, y: 12, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 45, width: 100, height: h };
+      return { x: 0, y: 27.5, width: 100, height: h };
+    }
+    if (videoRatio === '4:5') {
+      return { x: 0, y: 0, width: 100, height: 100 };
+    }
+    if (videoRatio === '1:1') {
+      // 1080x1080 in 1080x1350 -> height = 80%
+      const h = 80;
+      if (preset === 'top') return { x: 0, y: 5, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 15, width: 100, height: h };
+      return { x: 0, y: 10, width: 100, height: h };
+    }
+  }
+
+  // 4:3 Canvas (1440 x 1080)
+  if (canvasRatio === '4:3') {
+    if (videoRatio === '16:9') {
+      // 1440x810 in 1440x1080 -> height = (810 / 1080) * 100 = 75%
+      const h = 75;
+      if (preset === 'top') return { x: 0, y: 5, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 20, width: 100, height: h };
+      return { x: 0, y: 12.5, width: 100, height: h };
+    }
+    if (videoRatio === '4:3') {
+      return { x: 0, y: 0, width: 100, height: 100 };
+    }
+  }
+
+  // 1:1 Canvas (1080 x 1080)
+  if (canvasRatio === '1:1') {
+    if (videoRatio === '16:9') {
+      // 1080x607.5 in 1080x1080 -> height = 56.25%
+      const h = 56.2;
+      if (preset === 'top') return { x: 0, y: 10, width: 100, height: h };
+      if (preset === 'bottom') return { x: 0, y: 33.7, width: 100, height: h };
+      return { x: 0, y: 21.9, width: 100, height: h };
+    }
+    if (videoRatio === '1:1') {
+      return { x: 0, y: 0, width: 100, height: 100 };
+    }
+  }
+
+  // Fallback default
+  return { x: 0, y: 15, width: 100, height: 70 };
 }
 
 export interface TypographyConfig {
