@@ -97,6 +97,28 @@ export function getApiUrl(endpoint: string): string {
   return `${DEFAULT_CLOUD_BASE_URL}${cleanEndpoint}`;
 }
 
+export function isTokenExpired(token: string): boolean {
+  if (!token || typeof token !== 'string') return true;
+  try {
+    const parts = token.trim().split('.');
+    if (parts.length === 3) {
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const jsonStr = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const payload = JSON.parse(jsonStr);
+      if (payload.exp && payload.exp * 1000 <= Date.now()) {
+        return true;
+      }
+      return false;
+    }
+  } catch {}
+  return false;
+}
+
 export function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   try {
@@ -108,7 +130,7 @@ export function getAuthToken(): string {
       sessionStorage.getItem('reporter_auth_token') ||
       sessionStorage.getItem('auth_token') ||
       sessionStorage.getItem('token');
-    if (direct) return direct.trim();
+    if (direct && !isTokenExpired(direct)) return direct.trim();
     const sessionKeys = ['reporter_auth_session', 'ai_news_user', 'user', 'currentUser'];
     for (const key of sessionKeys) {
       const sessionStr = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -116,7 +138,7 @@ export function getAuthToken(): string {
         const u = JSON.parse(sessionStr);
         if (u) {
           const t = u.token || u.authToken || u.idToken || u.googleIdToken || u.firebaseToken;
-          if (t && typeof t === 'string') return t.trim();
+          if (t && typeof t === 'string' && !isTokenExpired(t)) return t.trim();
         }
       }
     }
@@ -167,30 +189,8 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
   if (typeof window === 'undefined') return '';
 
   const existing = getAuthToken();
-  if (existing && !forceRefresh) {
-    try {
-      const parts = existing.split('.');
-      if (parts.length === 3) {
-        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const jsonStr = decodeURIComponent(
-          atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
-        );
-        const payload = JSON.parse(jsonStr);
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          forceRefresh = true;
-        }
-      } else {
-        forceRefresh = true;
-      }
-    } catch {
-      forceRefresh = true;
-    }
-    if (!forceRefresh) {
-      return existing;
-    }
+  if (existing && !forceRefresh && !isTokenExpired(existing)) {
+    return existing;
   }
 
   if (ongoingAuthPromise) {
@@ -219,20 +219,19 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         googleAccessToken = localStorage.getItem('google_access_token') || '';
       } catch {}
 
-      // 1. Primary Seamless Recovery: Call session refresh endpoint with active or legacy token
-      if (existingToken || googleAccessToken) {
+      // 1. Primary Seamless Recovery: Call session refresh endpoint if active (unexpired) token exists
+      if (existingToken && !isTokenExpired(existingToken)) {
         try {
-          const candidateToken = existingToken || googleAccessToken;
           const refRes = await fetch(getApiUrl('/api/auth/refresh-session'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${candidateToken}`,
+              'Authorization': `Bearer ${existingToken}`,
             },
             body: JSON.stringify({
               email,
-              token: candidateToken,
-              authToken: candidateToken,
+              token: existingToken,
+              authToken: existingToken,
               accessToken: googleAccessToken || undefined,
             }),
           });
@@ -240,14 +239,6 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
             const refData = await refRes.json();
             if (refData.success && refData.token) {
               setAuthToken(refData.token);
-              try {
-                const sessStr = localStorage.getItem('reporter_auth_session');
-                if (sessStr) {
-                  const sess = JSON.parse(sessStr);
-                  sess.token = refData.token;
-                  localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
-                }
-              } catch {}
               return refData.token;
             }
           }
@@ -256,54 +247,68 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         }
       }
 
-      // 2. Google OAuth / GIS Credential Recovery: Check stored google_id_token
-      let googleIdToken = '';
-      try {
-        googleIdToken = localStorage.getItem('google_id_token') || '';
-      } catch {}
-
-      // 3. Firebase Client Auth Recovery: Retrieve genuine Google ID Token from Firebase Web SDK
+      // 2. Firebase Client Auth Recovery: Await authStateReady and retrieve fresh ID Token from Firebase Web SDK
       let firebaseIdToken = '';
       try {
         const { auth } = await import('./firebaseConfig');
-        if (auth?.currentUser) {
-          firebaseIdToken = (await auth.currentUser.getIdToken(forceRefresh)) || '';
+        if (auth) {
+          if (typeof (auth as any).authStateReady === 'function') {
+            await (auth as any).authStateReady().catch(() => {});
+          }
+          if (auth.currentUser) {
+            firebaseIdToken = (await auth.currentUser.getIdToken(forceRefresh)) || '';
+            if (firebaseIdToken && !email && auth.currentUser.email) {
+              email = auth.currentUser.email.toLowerCase().trim();
+            }
+          }
         }
       } catch (fbErr) {
         console.warn('[AUTH] Firebase client token check notice:', fbErr);
       }
 
+      // 3. Google OAuth / GIS Credential Recovery: Check stored google_id_token
+      let googleIdToken = '';
+      try {
+        googleIdToken = localStorage.getItem('google_id_token') || '';
+      } catch {}
+
       const candidateIdToken = firebaseIdToken || googleIdToken || googleAccessToken;
-      if (candidateIdToken && email) {
+      if (candidateIdToken && (email || (typeof window !== 'undefined' && localStorage.getItem('reporter_auth_session')))) {
+        const loginPayload: any = {
+          identifier: email || undefined,
+          firebaseToken: candidateIdToken,
+          idToken: googleIdToken || firebaseIdToken || undefined,
+          accessToken: googleAccessToken || undefined,
+          profileData: { email, name, username },
+        };
         const res = await fetch(getApiUrl('/api/auth/login'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${candidateIdToken}`,
           },
-          body: JSON.stringify({
-            identifier: email,
-            firebaseToken: candidateIdToken,
-            idToken: googleIdToken || firebaseIdToken || undefined,
-            accessToken: googleAccessToken || undefined,
-            profileData: { email, name, username },
-          }),
+          body: JSON.stringify(loginPayload),
         });
 
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.token) {
             setAuthToken(data.token);
-            try {
-              const sessStr = localStorage.getItem('reporter_auth_session');
-              if (sessStr) {
-                const sess = JSON.parse(sessStr);
-                sess.token = data.token;
-                localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
-              }
-            } catch {}
             return data.token;
           }
+        }
+      }
+
+      // If token is genuinely expired and cannot be refreshed, clear tokens and dispatch expired event
+      const currentRaw = (() => {
+        try {
+          return localStorage.getItem('reporter_auth_token') || '';
+        } catch { return ''; }
+      })();
+      if (currentRaw && isTokenExpired(currentRaw)) {
+        clearAuthTokens();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ai_news_session_expired'));
         }
       }
     } catch (err) {
@@ -320,7 +325,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getAuthToken();
-  if (token) {
+  if (token && !isTokenExpired(token)) {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
@@ -328,6 +333,28 @@ export function getAuthHeaders(): Record<string, string> {
 
 export function getAdminAuthHeaders(): Record<string, string> {
   const headers = getAuthHeaders();
+  let adminEmail = '';
+  try {
+    const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+    if (sessStr) {
+      const sess = JSON.parse(sessStr);
+      adminEmail = (sess?.email || '').toLowerCase().trim();
+    }
+  } catch {}
+  if (!adminEmail) adminEmail = 'breakingnewswala.com@gmail.com';
+  headers['x-admin-email'] = adminEmail;
+  return headers;
+}
+
+export async function getAdminAuthHeadersAsync(): Promise<Record<string, string>> {
+  let token = await ensureAuthToken().catch(() => '');
+  if (!token || isTokenExpired(token)) {
+    token = await ensureAuthToken(true).catch(() => '');
+  }
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
   let adminEmail = '';
   try {
     const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
@@ -355,9 +382,10 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           urlStr.includes('/api/process-news') ||
           urlStr.includes('/api/generate-video') ||
           urlStr.includes('/api/rss-sync') ||
+          urlStr.includes('/api/scheduler/rss-sync') ||
           urlStr.includes('/api/user-profile');
 
-        if (!token && isProtectedApi) {
+        if ((!token || isTokenExpired(token)) && isProtectedApi) {
           try {
             token = await ensureAuthToken();
           } catch {}
@@ -365,14 +393,10 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
         if (token) {
           init = init || {};
           if (init.headers instanceof Headers) {
-            if (!init.headers.has('Authorization')) {
-              init.headers.set('Authorization', `Bearer ${token}`);
-            }
+            init.headers.set('Authorization', `Bearer ${token}`);
           } else if (Array.isArray(init.headers)) {
-            const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
-            if (!hasAuth) {
-              init.headers.push(['Authorization', `Bearer ${token}`]);
-            }
+            init.headers = init.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
+            init.headers.push(['Authorization', `Bearer ${token}`]);
           } else {
             init.headers = {
               ...(init.headers || {}),
@@ -383,7 +407,7 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       }
       let response = await originalFetch(input, init);
       // Auto-retry once on 401 for protected endpoints by acquiring fresh token
-      if (response.status === 401 && (urlStr.includes('/api/admin') || urlStr.includes('/api/dynamic-frames'))) {
+      if (response.status === 401 && (urlStr.includes('/api/admin') || urlStr.includes('/api/dynamic-frames') || urlStr.includes('/api/scheduler/rss-sync'))) {
         try {
           const fresh = await ensureAuthToken(true);
           if (fresh) {

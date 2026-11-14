@@ -21,7 +21,7 @@ import {
   TypographyConfig,
 } from '../types/dynamicFrame';
 import { normalizeVideoConfig } from './videoFrameLayoutModel';
-import { getApiBaseUrl, ensureAuthToken, getAuthToken, getAdminAuthHeaders } from './apiConfig';
+import { getApiBaseUrl, ensureAuthToken, getAuthToken, getAdminAuthHeaders, isTokenExpired } from './apiConfig';
 
 const STORAGE_KEY_FRAMES = 'ai_news_dynamic_frames_v1';
 const STORAGE_KEY_STORY_PREF = 'ai_news_user_story_pref_v1';
@@ -645,9 +645,10 @@ export async function requestAiFrameAnalysis(
 ): Promise<{ success: boolean; result?: AiFrameAnalysisResult; error?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
-    let token = authToken;
+    let token = authToken && !isTokenExpired(authToken) ? authToken : '';
     if (!token) {
       token = await ensureAuthToken().catch(() => '');
+      if (!token || isTokenExpired(token)) token = await ensureAuthToken(true).catch(() => '');
       if (!token) token = getAuthToken();
     }
     const headers: Record<string, string> = {
@@ -926,15 +927,23 @@ export async function fetchAssetLibraries(type?: string): Promise<AssetLibraryIt
     const baseUrl = getApiBaseUrl();
     const qs = type && type !== 'all' ? `?type=${type}` : '';
     let token = getAuthToken();
-    if (!token) {
+    if (!token || isTokenExpired(token)) {
       token = await ensureAuthToken().catch(() => '');
+      if (!token || isTokenExpired(token)) token = await ensureAuthToken(true).catch(() => '');
     }
     const headers: Record<string, string> = {
       ...getAdminAuthHeaders(),
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
+    let res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
+    if (res.status === 401 || res.status === 403) {
+      const freshToken = await ensureAuthToken(true).catch(() => '');
+      if (freshToken) {
+        headers['Authorization'] = `Bearer ${freshToken}`;
+        res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
+      }
+    }
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.items) && data.items.length > 0) {
@@ -954,9 +963,10 @@ export async function saveAssetLibraryItem(
 ): Promise<{ success: boolean; item?: AssetLibraryItem; error?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
-    let token = authToken;
+    let token = authToken && !isTokenExpired(authToken) ? authToken : '';
     if (!token) {
       token = await ensureAuthToken().catch(() => '');
+      if (!token || isTokenExpired(token)) token = await ensureAuthToken(true).catch(() => '');
       if (!token) token = getAuthToken();
     }
     const headers: Record<string, string> = {
@@ -1000,9 +1010,10 @@ export async function updateAssetLibraryItem(
 ): Promise<{ success: boolean; item?: AssetLibraryItem; error?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
-    let token = authToken;
+    let token = authToken && !isTokenExpired(authToken) ? authToken : '';
     if (!token) {
       token = await ensureAuthToken().catch(() => '');
+      if (!token || isTokenExpired(token)) token = await ensureAuthToken(true).catch(() => '');
       if (!token) token = getAuthToken();
     }
     const headers: Record<string, string> = {
@@ -1045,9 +1056,10 @@ export async function deleteAssetLibraryItem(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
-    let token = authToken;
+    let token = authToken && !isTokenExpired(authToken) ? authToken : '';
     if (!token) {
       token = await ensureAuthToken().catch(() => '');
+      if (!token || isTokenExpired(token)) token = await ensureAuthToken(true).catch(() => '');
       if (!token) token = getAuthToken();
     }
     const headers: Record<string, string> = {

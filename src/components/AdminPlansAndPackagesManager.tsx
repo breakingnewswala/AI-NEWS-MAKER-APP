@@ -118,7 +118,7 @@ import { UserTemplateManager } from './UserTemplateManager';
 import { AdminMusicLibraryManager } from './AdminMusicLibraryManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { getApiUrl, getAdminAuthHeaders, ensureAuthToken } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeaders, ensureAuthToken, isTokenExpired } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -5313,7 +5313,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     setIsSyncingRss(true);
                     setRssMsg(null);
                     try {
-                      await ensureAuthToken().catch(() => {});
+                      let t = await ensureAuthToken().catch(() => '');
+                      if (!t || isTokenExpired(t)) {
+                        await ensureAuthToken(true).catch(() => '');
+                      }
                       const res = await syncAllSourcesLive();
                       setRssSources(getAdminRssSources());
                       if (res.success) {

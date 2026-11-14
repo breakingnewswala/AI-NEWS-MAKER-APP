@@ -1,6 +1,8 @@
 // AI News Maker - Admin RSS & Web Link Source Management
 // Flow: ADMIN -> Add Source -> Active -> News Fetch -> Home Feed -> Users
 
+import { getApiUrl, getAuthHeaders, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders, isTokenExpired } from './apiConfig';
+
 export interface AdminRssSource {
   id: string;
   name: string;
@@ -83,10 +85,20 @@ export function getAdminRssSources(): AdminRssSource[] {
 export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[]> {
   const deletedIds = getDeletedSourceIds();
   try {
-    const token = await ensureAuthToken().catch(() => '');
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token || isTokenExpired(token)) {
+      token = await ensureAuthToken(true).catch(() => '');
+    }
     const headers: Record<string, string> = { ...getAdminAuthHeaders() };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(getApiUrl('/api/admin/rss-sources'), { headers });
+    let res = await fetch(getApiUrl('/api/admin/rss-sources'), { headers });
+    if (res.status === 401 || res.status === 403) {
+      const freshToken = await ensureAuthToken(true).catch(() => '');
+      if (freshToken) {
+        headers['Authorization'] = `Bearer ${freshToken}`;
+        res = await fetch(getApiUrl('/api/admin/rss-sources'), { headers });
+      }
+    }
     if (res.ok) {
       const data = await res.json();
       const serverSources = (data && data.success && Array.isArray(data.sources)) ? data.sources : [];
@@ -120,41 +132,45 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
   }
 
   // Persist permanently to backend database with auto-retry
-  ensureAuthToken().then((token) => {
+  ensureAuthToken().then(async (token) => {
+    let activeToken = token;
+    if (!activeToken || isTokenExpired(activeToken)) {
+      activeToken = await ensureAuthToken(true).catch(() => '');
+    }
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-user-role': 'admin',
       ...getAdminAuthHeaders(),
     };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (activeToken) headers['Authorization'] = `Bearer ${activeToken}`;
 
-    fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
+    let res = await fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
       method: 'POST',
       headers,
       body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.success && Array.isArray(data.sources)) {
-          memoryRssSources = data.sources;
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
-          }
-        }
-      })
-      .catch((err) => {
-        console.warn('Backend saveAdminRssSources warning:', err);
-      });
-  }).catch(() => {
-    fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-role': 'admin',
-        ...getAdminAuthHeaders(),
-      },
-      body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
-    }).catch(() => {});
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      const freshToken = await ensureAuthToken(true).catch(() => '');
+      if (freshToken) {
+        headers['Authorization'] = `Bearer ${freshToken}`;
+        res = await fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
+        });
+      }
+    }
+
+    const data = await res.json().catch(() => null);
+    if (data && data.success && Array.isArray(data.sources)) {
+      memoryRssSources = data.sources;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
+      }
+    }
+  }).catch((err) => {
+    console.warn('Backend saveAdminRssSources warning:', err);
   });
 }
 

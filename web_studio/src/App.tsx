@@ -884,13 +884,20 @@ export default function App() {
             } catch {}
             loaded = true;
           } else {
-            // AUTHORITATIVE RESET: Server explicitly returned 0 posts. Clear local stale posts!
-            setPosts([]);
-            seenNewsIdsRef.current = new Set();
-            try {
-              localStorage.setItem('app_news_posts_v2', JSON.stringify([]));
-            } catch {}
-            loaded = true;
+            // Preserve valid existing news if server temporarily returns 0
+            const hasExisting = posts.length > 0;
+            if (!hasExisting) {
+              try {
+                const cachedStr = localStorage.getItem('app_news_posts_v2');
+                if (cachedStr) {
+                  const cached = JSON.parse(cachedStr);
+                  if (Array.isArray(cached) && cached.length > 0) {
+                    setPosts(cached);
+                    loaded = true;
+                  }
+                }
+              } catch {}
+            }
           }
         }
       }
@@ -1861,14 +1868,21 @@ export default function App() {
       showToast('🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है');
     };
 
+    const handleSessionExpired = () => {
+      showToast('⚠️ आपका लॉगिन सत्र समाप्त हो गया है। कृपया जारी रखने के लिए पुनः लॉगिन करें।');
+      setIsLoginOpen(true);
+    };
+
     window.addEventListener('ai_news_user_plan_updated', handleSubUpdate);
     window.addEventListener('user_account_blocked', handleBlocked);
     window.addEventListener('user_trial_expired', handleExpired);
+    window.addEventListener('ai_news_session_expired', handleSessionExpired);
 
     return () => {
       window.removeEventListener('ai_news_user_plan_updated', handleSubUpdate);
       window.removeEventListener('user_account_blocked', handleBlocked);
       window.removeEventListener('user_trial_expired', handleExpired);
+      window.removeEventListener('ai_news_session_expired', handleSessionExpired);
     };
   }, [currentUser?.email]);
 

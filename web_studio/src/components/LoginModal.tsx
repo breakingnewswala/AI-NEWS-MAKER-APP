@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { registerOrUpdateUser } from '../lib/userPlanManager';
 import { safeLocalStorageSet } from '../lib/storageUtils';
-import { getApiUrl, setAuthToken } from '../lib/apiConfig';
+import { getApiUrl, setAuthToken, isTokenExpired } from '../lib/apiConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 import {
@@ -203,7 +203,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       // Authenticate & sync with Cloud backend /api/auth/login
       try {
-        const activeToken = idToken || accessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_token') : null);
+        const candidateLocalToken = typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_token') : null;
+        const validLocalToken = candidateLocalToken && !isTokenExpired(candidateLocalToken) ? candidateLocalToken : null;
+        const activeToken = idToken || accessToken || validLocalToken;
         const res = await fetch(getApiUrl('/api/auth/login'), {
           method: 'POST',
           headers: {
