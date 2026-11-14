@@ -1,7 +1,7 @@
 // AI News Maker - Admin RSS & Web Link Source Management
 // Flow: ADMIN -> Add Source -> Active -> News Fetch -> Home Feed -> Users
 
-import { getApiUrl, getAuthHeaders, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders, isTokenExpired } from './apiConfig';
+import { getApiUrl, getAuthHeaders, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders, getAdminAuthHeadersAsync, isTokenExpired } from './apiConfig';
 
 export interface AdminRssSource {
   id: string;
@@ -241,8 +241,21 @@ export function addAdminRssSource(
   };
   const list = [newSource, ...getAdminRssSources().filter((s) => s.id !== newSource.id && s.url !== newSource.url)];
   saveAdminRssSources(list);
-  // Trigger background live sync immediately
-  syncAllSourcesLive().catch(() => {});
+  // Authoritatively sync new source to server database, then trigger live sync
+  (async () => {
+    try {
+      const headers = await getAdminAuthHeadersAsync();
+      await fetch(getApiUrl('/api/admin/rss-sources'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(newSource),
+      });
+    } catch (e) {
+      console.warn('Backend RSS source registration notice:', e);
+    } finally {
+      syncAllSourcesLive().catch(() => {});
+    }
+  })();
   return newSource;
 }
 
@@ -568,11 +581,6 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
         const errJson = await res.json();
         if (errJson && errJson.error) errText = errJson.error;
       } catch {}
-      if (res.status === 401 || res.status === 403) {
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('open_admin_login'));
-        }
-      }
       return { success: false, error: errText };
     }
   } catch (err: any) {

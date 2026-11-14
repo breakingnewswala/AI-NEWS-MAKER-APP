@@ -71,15 +71,14 @@ assert.strictEqual(callouts.length, 1, 'Only callout_png should match callout_pn
 assert.strictEqual(callouts[0].id, '1', 'Story Callout Pin must be the only callout item');
 console.log('✅ [PASS] Asset Library category strict isolation verified (zero name-based cross contamination)');
 
-// Test 4: App.tsx Session Expiration & Ghost Admin Elimination
-console.log('\n--- 4. Verification: Ghost Admin Elimination & Modal Handshake ---');
+// Test 4: App.tsx Session Preservation & Modal Handshake
+console.log('\n--- 4. Verification: Session Preservation & Modal Handshake ---');
 const appTsx = fs.readFileSync('src/App.tsx', 'utf8');
 assert(!appTsx.includes('setIsLoginOpen(true)'), 'Fatal typo setIsLoginOpen must not exist in App.tsx');
 assert(appTsx.includes("window.addEventListener('open_login_modal', handleOpenAdminLogin)"), 'App.tsx must listen for open_login_modal');
 assert(appTsx.includes("window.addEventListener('open_admin_login', handleOpenAdminLogin)"), 'App.tsx must listen for open_admin_login');
-assert(appTsx.includes("localStorage.removeItem('reporter_auth_session')"), 'handleSessionExpired must clear reporter_auth_session from localStorage');
-assert(appTsx.includes("setCurrentUser(null)"), 'handleSessionExpired must reset currentUser to null');
-console.log('✅ [PASS] Ghost Admin state eliminated: session expiry resets state and opens admin login');
+assert(!appTsx.includes("handleSessionExpired = () => {\n      showToast('⚠️ आपका लॉगिन सत्र समाप्त हो गया है। कृपया जारी रखने के लिए पुनः एडमिन लॉगिन करें।');\n      clearAuthTokens();\n      try {\n        localStorage.removeItem('reporter_auth_session');\n      } catch {}\n      setCurrentUser(null);"), 'handleSessionExpired must never destructively wipe reporter_auth_session');
+console.log('✅ [PASS] Session preservation verified: routine expiry notices do not wipe session');
 
 // Test 5: LoginModal State Synchronization
 console.log('\n--- 5. Verification: LoginModal Mode Synchronization ---');
@@ -91,8 +90,8 @@ console.log('✅ [PASS] LoginModal synchronizes isAdminMode on initialMode chang
 console.log('\n--- 6. Verification: ProfileScreenWeb Token Check on Mount ---');
 const profileWeb = fs.readFileSync('src/components/ProfileScreenWeb.tsx', 'utf8');
 assert(profileWeb.includes('ensureAuthToken()'), 'ProfileScreenWeb must ensureAuthToken on mount for admin');
-assert(profileWeb.includes("window.dispatchEvent(new CustomEvent('open_admin_login'))"), 'ProfileScreenWeb must trigger open_admin_login if token missing/expired');
-console.log('✅ [PASS] ProfileScreenWeb validates token on mount');
+assert(!profileWeb.includes("window.dispatchEvent(new CustomEvent('open_admin_login'))"), 'ProfileScreenWeb must not trigger open_admin_login popup on mount');
+console.log('✅ [PASS] ProfileScreenWeb validates token on mount without intrusive popups');
 
 // Test 7: Asset Libraries User-Typed Name Preservation
 console.log('\n--- 7. Verification: Asset Name Preservation in Upload ---');

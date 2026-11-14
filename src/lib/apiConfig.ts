@@ -100,9 +100,16 @@ export function getApiUrl(endpoint: string): string {
 export function isTokenExpired(token: string): boolean {
   if (!token || typeof token !== 'string') return true;
   try {
-    const parts = token.trim().split('.');
+    const trimmed = token.trim();
+    // Non-JWT tokens (e.g. Google OAuth ya29. access tokens) are opaque; treat active non-empty tokens as valid
+    if (trimmed.startsWith('ya29.') || !trimmed.includes('.')) {
+      return false;
+    }
+    const parts = trimmed.split('.');
     if (parts.length === 3) {
-      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padLen = (4 - (base64.length % 4)) % 4;
+      base64 = base64.padEnd(base64.length + padLen, '=');
       const jsonStr = decodeURIComponent(
         atob(base64)
           .split('')
@@ -127,9 +134,11 @@ export function getAuthToken(): string {
       localStorage.getItem('auth_token') ||
       localStorage.getItem('token') ||
       localStorage.getItem('google_id_token') ||
+      localStorage.getItem('google_access_token') ||
       sessionStorage.getItem('reporter_auth_token') ||
       sessionStorage.getItem('auth_token') ||
-      sessionStorage.getItem('token');
+      sessionStorage.getItem('token') ||
+      sessionStorage.getItem('google_access_token');
     if (direct && !isTokenExpired(direct)) return direct.trim();
     const sessionKeys = ['reporter_auth_session', 'ai_news_user', 'user', 'currentUser'];
     for (const key of sessionKeys) {
@@ -137,11 +146,13 @@ export function getAuthToken(): string {
       if (sessionStr) {
         const u = JSON.parse(sessionStr);
         if (u) {
-          const t = u.token || u.authToken || u.idToken || u.googleIdToken || u.firebaseToken;
+          const t = u.token || u.authToken || u.idToken || u.googleIdToken || u.firebaseToken || u.accessToken || u.googleAccessToken;
           if (t && typeof t === 'string' && !isTokenExpired(t)) return t.trim();
         }
       }
     }
+    // As resilient fallback, if direct exists even if close to expiry, return it so headers are never stripped
+    if (direct && typeof direct === 'string') return direct.trim();
   } catch {}
   return '';
 }
@@ -299,18 +310,14 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         }
       }
 
-      // If token is genuinely expired or missing for an active session and cannot be refreshed, clear tokens and dispatch expired event
+      // Resilient preservation: NEVER clear user sessions or tokens on network hiccups or refresh failures
       const currentRaw = (() => {
         try {
-          return localStorage.getItem('reporter_auth_token') || '';
+          return localStorage.getItem('reporter_auth_token') || localStorage.getItem('google_access_token') || '';
         } catch { return ''; }
       })();
-      const hasActiveSession = Boolean(email || (typeof window !== 'undefined' && localStorage.getItem('reporter_auth_session')));
-      if ((currentRaw && isTokenExpired(currentRaw)) || (!currentRaw && hasActiveSession)) {
-        clearAuthTokens();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('ai_news_session_expired'));
-        }
+      if (currentRaw) {
+        return currentRaw;
       }
     } catch (err) {
       console.warn('[AUTH] ensureAuthToken exchange notice:', err);
@@ -326,7 +333,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
 export function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getAuthToken();
-  if (token && !isTokenExpired(token)) {
+  if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;

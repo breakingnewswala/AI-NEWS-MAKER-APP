@@ -5332,9 +5332,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                           text: parts.join(' | '),
                         });
                       } else {
-                        if (res.error && (res.error.includes('401') || res.error.includes('प्रमाणीकरण आवश्यक'))) {
-                          window.dispatchEvent(new CustomEvent('open_admin_login'));
-                        }
                         setRssMsg({ type: 'error', text: res.error || 'सिंक त्रुटि' });
                       }
                     } catch (e: any) {
@@ -5926,16 +5923,32 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-bold mb-1">चैनल / न्यूज़ पोर्टल चुनें *</label>
-                  <select
-                    value={newSourceName || (newsPortals[0]?.name || '')}
-                    onChange={(e) => setNewSourceName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
-                  >
-                    {newsPortals.map((p) => (
-                      <option key={p.id} value={p.name}>{p.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-slate-300 font-bold mb-1">चैनल / न्यूज़ पोर्टल चुनें या नाम लिखें *</label>
+                  <div className="space-y-1.5">
+                    <select
+                      value={newsPortals.some((p) => p.name === newSourceName) ? newSourceName : (savedChannels.includes(newSourceName) ? newSourceName : '')}
+                      onChange={(e) => {
+                        if (e.target.value) setNewSourceName(e.target.value);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-xs focus:border-cyan-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="">-- पंजीकृत पोर्टल / चैनल चुनें --</option>
+                      {newsPortals.map((p) => (
+                        <option key={p.id} value={p.name}>{p.name}</option>
+                      ))}
+                      {savedChannels.filter((ch) => !newsPortals.some((p) => p.name === ch)).map((ch, idx) => (
+                        <option key={`saved-ch-${idx}`} value={ch}>{ch}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      value={newSourceName}
+                      onChange={(e) => setNewSourceName(e.target.value)}
+                      placeholder="या चैनल का नाम टाइप करें (उदा. नई दुनिया / भास्कर)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-white text-xs focus:border-cyan-400 focus:outline-hidden placeholder-slate-500"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-slate-300 font-bold mb-1">वेबसाइट / आर्टिकल URL *</label>

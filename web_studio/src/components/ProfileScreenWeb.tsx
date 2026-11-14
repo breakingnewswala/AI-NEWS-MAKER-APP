@@ -238,13 +238,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     if (isAdmin) {
       const token = getAuthToken();
       if (!token || isTokenExpired(token)) {
-        ensureAuthToken().then((t) => {
-          if (!t || isTokenExpired(t)) {
-            window.dispatchEvent(new CustomEvent('open_admin_login'));
-          }
-        }).catch(() => {
-          window.dispatchEvent(new CustomEvent('open_admin_login'));
-        });
+        ensureAuthToken().catch(() => {});
       }
     }
   }, [isAdmin]);

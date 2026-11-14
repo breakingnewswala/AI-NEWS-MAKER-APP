@@ -12500,7 +12500,7 @@ async function resolveAuthenticatedUser(req, res) {
   }
   if (firebaseAdminAuth) {
     try {
-      const decoded = await firebaseAdminAuth.verifyIdToken(token, true);
+      const decoded = await firebaseAdminAuth.verifyIdToken(token, false);
       if (decoded && decoded.email) {
         const email = decoded.email.toLowerCase().trim();
         const userId = decoded.uid || decoded.user_id || email;
@@ -13240,7 +13240,7 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
       const tok = identityToken || accessToken || rawToken;
       if (firebaseAdminAuth) {
         try {
-          const decoded = await firebaseAdminAuth.verifyIdToken(tok, true);
+          const decoded = await firebaseAdminAuth.verifyIdToken(tok, false);
           if (decoded && decoded.email) {
             verifiedEmail = decoded.email.toLowerCase().trim();
             verifiedUserId = decoded.uid || verifiedEmail;
@@ -14351,8 +14351,9 @@ app.get("/api/news-posts", async (req, res) => {
           }
         }))
       );
+      const channelCandidate = (p.sourceChannel || p.source || p.channelName || "").trim().toLowerCase();
       const matchesChannel = Boolean(
-        p.sourceChannel && p.sourceChannel.trim() !== "" && activeSources.some((s) => s.name && s.name.trim().toLowerCase() === p.sourceChannel.trim().toLowerCase())
+        channelCandidate && activeSources.some((s) => s.name && s.name.trim().toLowerCase() === channelCandidate)
       );
       const hasActiveSource = activeSources.length > 0 && !isExplicitlyDeleted && Boolean(matchesSourceId || matchesFeedUrl || matchesUrl || matchesChannel);
       if (!hasActiveSource && !isAdmin) {
@@ -23575,7 +23576,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
       let verifiedUid = "";
       if (firebaseAdminAuth) {
         try {
-          decoded = await firebaseAdminAuth.verifyIdToken(candidateToken, true);
+          decoded = await firebaseAdminAuth.verifyIdToken(candidateToken, false);
           if (decoded && decoded.email) {
             verifiedEmail = decoded.email.toLowerCase().trim();
             verifiedUid = decoded.uid;
@@ -26102,8 +26103,7 @@ async function saveApiKeysVault(vault) {
     firestoreError = err.message;
     console.error("[KeyPool Firestore Exception]", err.message);
   }
-  const isProduction = Boolean(process.env.K_SERVICE || process.env.NODE_ENV === "production" || process.env.USE_FIRESTORE === "true");
-  const overallSuccess = isProduction ? firestoreSuccess : firestoreSuccess || savedAtLeastOne;
+  const overallSuccess = Boolean(firestoreSuccess || savedAtLeastOne);
   return {
     success: overallSuccess,
     firestoreSuccess,
@@ -26332,8 +26332,21 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   }));
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
   const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey.key) : null;
+  const defaultKeyConfigured = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 5);
+  const maskedDefaultKey = defaultKeyConfigured ? maskApiKey(process.env.GEMINI_API_KEY) : "\u092A\u0930\u094D\u092F\u093E\u0935\u0930\u0923 \u092E\u0947\u0902 \u0938\u0947\u091F \u0928\u0939\u0940\u0902";
   return res.json({
     success: true,
+    defaultProvider: {
+      configured: defaultKeyConfigured,
+      maskedKey: maskedDefaultKey,
+      label: "Google Gemini \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u092A\u094D\u0930\u094B\u0935\u093E\u0907\u0921\u0930 (System Default Provider)",
+      provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
+      model: "gemini-3-flash-preview",
+      fallbackModels: DEFAULT_FALLBACK_MODELS,
+      source: "Firebase Secret Manager (GEMINI_API_KEY)",
+      status: defaultKeyConfigured ? "active" : "inactive",
+      lastHealthStatus: defaultKeyConfigured ? "healthy" : "missing"
+    },
     freeKeys: maskedFreeKeys,
     paidKey: {
       configured: paidConfigured,

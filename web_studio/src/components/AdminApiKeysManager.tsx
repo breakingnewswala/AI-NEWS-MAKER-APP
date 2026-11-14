@@ -62,8 +62,21 @@ interface PaidKeyInfo {
   model?: string;
 }
 
+interface DefaultProviderInfo {
+  configured: boolean;
+  maskedKey: string | null;
+  label: string;
+  provider: string;
+  model: string;
+  fallbackModels?: string[];
+  source: string;
+  status: string;
+  lastHealthStatus: string;
+}
+
 interface ApiKeysManagerData {
   success: boolean;
+  defaultProvider?: DefaultProviderInfo;
   freeKeys: FreeKeyItem[];
   paidKey: PaidKeyInfo;
   vipRoutingEnabled: boolean;
@@ -383,8 +396,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         fetchKeysData(true);
       } else {
         if (res.status === 401 || res.status === 403) {
-          showToast('❌ सत्र समाप्त (401 Unauthorized): कृपया एक बार लॉगआउट करके पुनः एडमिन लॉगिन करें।');
-          window.dispatchEvent(new CustomEvent('open_login_modal'));
+          showToast('❌ प्रमाणीकरण त्रुटि (401/403): कृपया एडमिन सत्र की जांच करें।');
         } else {
           showToast(`❌ ${resData.error || 'की जोड़ने में विफलता'}`);
         }
@@ -472,8 +484,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         fetchKeysData(true);
       } else {
         if (res.status === 401 || res.status === 403) {
-          showToast('❌ सत्र समाप्त (401 Unauthorized): कृपया एक बार लॉगआउट करके पुनः एडमिन लॉगिन करें।');
-          window.dispatchEvent(new CustomEvent('open_login_modal'));
+          showToast('❌ प्रमाणीकरण त्रुटि (401/403): कृपया एडमिन सत्र की जांच करें।');
         } else {
           showToast(`❌ ${resData.error || 'सेव करने में विफलता'}`);
         }
@@ -862,6 +873,71 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* SECTION 0.5: Google Gemini डिफ़ॉल्ट प्रोवाइडर (Default System API Provider) */}
+      {/* ======================================================== */}
+      <div className="bg-slate-900 border border-indigo-900/60 rounded-2xl p-5 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div>
+            <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+              <span className="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <span>Google Gemini डिफ़ॉल्ट प्रोवाइडर (Default System Provider)</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              सिस्टम-स्तरीय ऑपरेशन्स, बैकग्राउंड टास्क और सामान्य व फ्री यूज़र्स के लिए फॉलबैक Google Gemini API प्रोवाइडर।
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg flex items-center gap-1.5 ${
+              (data?.defaultProvider?.configured || data?.stats?.fallbackEnvKeyConfigured)
+                ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400'
+                : 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+            }`}>
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{(data?.defaultProvider?.configured || data?.stats?.fallbackEnvKeyConfigured) ? '🟢 सक्रिय (Active)' : '🔴 सेट नहीं'}</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl space-y-1">
+            <span className="text-[11px] text-slate-500 font-bold block">प्रोवाइडर नाम</span>
+            <span className="text-white font-bold text-xs flex items-center gap-1.5">
+              <span>{data?.defaultProvider?.provider || 'Google Gemini (गूगल जेमिनी)'}</span>
+            </span>
+          </div>
+          <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl space-y-1">
+            <span className="text-[11px] text-slate-500 font-bold block">प्राथमिक AI मॉडल</span>
+            <span className="text-amber-400 font-mono font-bold text-xs">
+              {data?.defaultProvider?.model || 'gemini-3-flash-preview'}
+            </span>
+          </div>
+          <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl space-y-1">
+            <span className="text-[11px] text-slate-500 font-bold block">मास्क्ड API Key</span>
+            <span className="text-slate-300 font-mono text-xs">
+              {data?.defaultProvider?.maskedKey || (data?.stats?.fallbackEnvKeyConfigured ? 'AIzaSy********************' : 'पर्यावरण में सेट नहीं')}
+            </span>
+          </div>
+          <div className="bg-slate-950/70 border border-slate-800 p-3 rounded-xl space-y-1">
+            <span className="text-[11px] text-slate-500 font-bold block">कॉन्फ़िगरेशन स्रोत</span>
+            <span className="text-indigo-400 font-bold text-xs">
+              {data?.defaultProvider?.source || 'Firebase Secret Manager (GEMINI_API_KEY)'}
+            </span>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-400 bg-slate-950/40 p-2.5 rounded-xl border border-slate-850 flex items-center justify-between">
+          <span>
+            💡 <strong>फॉलबैक मॉडल्स:</strong> gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash (ऑटो-रोटेशन सपोर्टेड)
+          </span>
+          <span className="text-emerald-400 font-bold text-[10px]">
+            स्वास्थ्य: {data?.defaultProvider?.lastHealthStatus || ((data?.defaultProvider?.configured || data?.stats?.fallbackEnvKeyConfigured) ? 'स्वस्थ (Healthy)' : 'मिसिंग')}
+          </span>
         </div>
       </div>
 
