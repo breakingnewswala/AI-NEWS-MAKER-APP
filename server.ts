@@ -213,13 +213,13 @@ function initializeAuthSecret(): string {
     return secret.trim();
   }
 
-  const isProduction = (process.env.NODE_ENV === "production" || process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
-  if (isProduction) {
+  const isCloudProduction = Boolean(process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
+  if (isCloudProduction) {
     console.error("[SECURITY CRITICAL] SESSION_SECRET is missing or invalid in production! Refusing to start with insecure session secret.");
     throw new Error("[SECURITY CRITICAL] SESSION_SECRET environment variable (minimum 32 characters) must be configured in Secret Manager / Production environment.");
   }
 
-  // Local development or isolated testing only: Ephemeral in-memory secret
+  // Local development, CI runners or isolated testing only: Ephemeral in-memory secret
   return crypto.randomBytes(32).toString("hex");
 }
 

@@ -315,6 +315,15 @@ async function runMasterStabilityRemediationTests() {
     assert.strictEqual(unregRes.status, 404, 'Unregistered user rejected with 404');
     console.log('✅ [PASS] Unregistered user unblock request rejected with 404');
 
+    // Ensure test user is registered in the database for clean CI environments
+    await httpRequest('POST', '/api/users/sync', authHeaders, {
+      userId: 'usr_reporter_test_sync',
+      email: blockedUserEmail,
+      fullName: 'Reporter Test',
+      role: 'reporter',
+      channelName: 'Test Channel',
+    });
+
     // 5a. Block user
     const blockRes = await httpRequest('POST', '/api/admin/block-user', authHeaders, {
       email: blockedUserEmail,
@@ -461,6 +470,11 @@ async function runMasterStabilityRemediationTests() {
     console.log('========================================================================');
   } finally {
     killProcess(serverProcess.pid);
+    try {
+      if (fs.existsSync(TEST_DATA_DIR)) {
+        fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+      }
+    } catch {}
   }
 }
 
