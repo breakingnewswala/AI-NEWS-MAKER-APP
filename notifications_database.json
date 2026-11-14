@@ -1,5 +1,27 @@
 [
   {
+    "id": "notif_warn_user_reporter.test@ainewsmaker.online_1794741242254",
+    "title": "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
+    "message": "नमस्ते reporter.test, आपका 7-दिवसीय फ्री ट्रायल कल (15 नव॰ 2026, 04:44 pm) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।",
+    "time": "अभी",
+    "timestamp": 1794698670610,
+    "unread": true,
+    "type": "plan",
+    "targetUserEmail": "reporter.test@ainewsmaker.online",
+    "linkTab": "profile"
+  },
+  {
+    "id": "notif_warn_admin_reporter.test@ainewsmaker.online_1794741242254",
+    "title": "🔔 ट्रायल चेतावनी: reporter.test",
+    "message": "उपयोगकर्ता 'reporter.test' (reporter.test@ainewsmaker.online) का 7-दिवसीय फ्री ट्रायल 24 घंटे में समाप्त होने वाला है। समाप्ति समय: 15 नव॰ 2026, 04:44 pm।",
+    "time": "अभी",
+    "timestamp": 1794698670610,
+    "unread": true,
+    "type": "admin",
+    "targetUserEmail": "admin",
+    "linkTab": "profile"
+  },
+  {
     "id": "notif_news_rss-src_aajtak_live-1794102524593",
     "title": "📰 नई समाचार स्वीकृत व प्रकाशित",
     "message": "विशेष परीक्षण समाचार: मध्य प्रदेश में सौर ऊर्जा योजना को मंजूरी",

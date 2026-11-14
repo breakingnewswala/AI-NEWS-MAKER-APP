@@ -151,7 +151,7 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
       let token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
       if (!token) {
-        alert('प्रमाणीकरण आवश्यक है: व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है। कृपया पुनः लॉगिन करें।');
+        showToast('⚠️ व्यवस्थापक प्रमाणीकरण आवश्यक है। कृपया पुनः लॉगिन करें।');
         setIsSavingMarking(false);
         return;
       }
@@ -176,13 +176,10 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
         setTextMarkingItem(null);
         showToast('✅ लोकेशन टेक्स्ट क्षेत्र व टाइपोग्राफी सफलतापूर्वक सुरक्षित हुई!');
       } else {
-        if (res.error && (res.error.includes('401') || res.error.includes('प्रमाणीकरण आवश्यक'))) {
-          window.dispatchEvent(new CustomEvent('open_admin_login'));
-        }
-        alert(res.error || 'टेक्स्ट क्षेत्र सुरक्षित करने में समस्या आई');
+        showToast(res.error || '❌ टेक्स्ट क्षेत्र सुरक्षित करने में समस्या आई');
       }
     } catch (err: any) {
-      alert('नेटवर्क त्रुटि: ' + (err.message || 'त्रुटि'));
+      showToast('❌ नेटवर्क त्रुटि: ' + (err.message || 'त्रुटि'));
     } finally {
       setIsSavingMarking(false);
     }
@@ -301,9 +298,6 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
         setNewFileName('');
         showToast('✅ एसेट सफलतापूर्वक लाइब्रेरी में जोड़ा गया!');
       } else {
-        if (res.error && (res.error.includes('401') || res.error.includes('प्रमाणीकरण आवश्यक'))) {
-          window.dispatchEvent(new CustomEvent('open_admin_login'));
-        }
         setUploadError(res.error || 'एसेट अपलोड में विफल');
       }
     } catch {
@@ -354,10 +348,10 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
         setItems((prev) => prev.filter((it) => it.id !== item.id));
         showToast('🗑️ एसेट हटा दिया गया!');
       } else {
-        alert(res.error || 'एसेट हटाने में विफल');
+        showToast(`❌ ${res.error || 'एसेट हटाने में विफल'}`);
       }
     } catch {
-      alert('सर्वर त्रुटि');
+      showToast('❌ सर्वर से संपर्क करने में त्रुटि');
     }
   };
 

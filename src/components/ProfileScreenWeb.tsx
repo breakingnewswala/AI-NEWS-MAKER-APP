@@ -238,13 +238,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     if (isAdmin) {
       const token = getAuthToken();
       if (!token || isTokenExpired(token)) {
-        ensureAuthToken().then((t) => {
-          if (!t || isTokenExpired(t)) {
-            window.dispatchEvent(new CustomEvent('open_admin_login'));
-          }
-        }).catch(() => {
-          window.dispatchEvent(new CustomEvent('open_admin_login'));
-        });
+        ensureAuthToken().catch(() => {});
       }
     }
   }, [isAdmin]);
@@ -1186,7 +1180,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [rssUrlInput, setRssUrlInput] = useState<string>('');
   const [rssSuccessMsg, setRssSuccessMsg] = useState<string>('');
 
-  const handleAddRssSource = (e: React.FormEvent) => {
+  const handleAddRssSource = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rssChannelInput.trim() || !rssUrlInput.trim()) return;
 
@@ -1194,17 +1188,18 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const urlLower = rssUrlInput.trim().toLowerCase();
     const isWebType = !urlLower.includes('.xml') && !urlLower.includes('rss') && !urlLower.includes('feed');
 
-    // Add source to system manager & trigger backend live sync
-    addAdminRssSource(
+    // Add source to system manager & await server confirmation
+    const addRes = await addAdminRssSource(
       rssChannelInput.trim(),
       rssUrlInput.trim(),
       isWebType ? 'web' : 'rss',
       catObj?.name || 'देश'
     );
 
-    syncAllSourcesLive().then(() => {
-      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-    });
+    if (!addRes.success) {
+      showToast(`❌ ${addRes.error || 'RSS स्रोत जोड़ने में विफलता'}`);
+      return;
+    }
 
     setRssChannelInput('');
     setRssUrlInput('');
