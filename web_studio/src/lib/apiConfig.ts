@@ -299,13 +299,14 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         }
       }
 
-      // If token is genuinely expired and cannot be refreshed, clear tokens and dispatch expired event
+      // If token is genuinely expired or missing for an active session and cannot be refreshed, clear tokens and dispatch expired event
       const currentRaw = (() => {
         try {
           return localStorage.getItem('reporter_auth_token') || '';
         } catch { return ''; }
       })();
-      if (currentRaw && isTokenExpired(currentRaw)) {
+      const hasActiveSession = Boolean(email || (typeof window !== 'undefined' && localStorage.getItem('reporter_auth_session')));
+      if ((currentRaw && isTokenExpired(currentRaw)) || (!currentRaw && hasActiveSession)) {
         clearAuthTokens();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('ai_news_session_expired'));

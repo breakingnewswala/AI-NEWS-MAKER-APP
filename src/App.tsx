@@ -25,7 +25,7 @@ import { NotificationPermissionModal } from './components/NotificationPermission
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
 import { NewsDetailModal } from './components/NewsDetailModal';
-import { getApiUrl, getApiBaseUrl, ensureAuthToken, getAuthHeaders } from './lib/apiConfig';
+import { getApiUrl, getApiBaseUrl, ensureAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
@@ -1223,6 +1223,18 @@ export default function App() {
   useEffect(() => {
     fetchLiveNews();
     ensureAuthToken().catch(() => {});
+    if (typeof window !== 'undefined') {
+      const path = (window.location.pathname || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+      if (path === '/admin' || hash === '#admin') {
+        const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+        const token = getAuthToken();
+        if (!isAdmin || !token || isTokenExpired(token)) {
+          setLoginModalMode('admin');
+          setIsLoginModalOpen(true);
+        }
+      }
+    }
   }, [currentUser?.role, currentUser?.email]);
 
   // Onboarding completion status (Login -> Details setup -> App) - Strict Profile + Logo + WhatsApp OTP Gate (Part 10)
@@ -1868,21 +1880,35 @@ export default function App() {
       showToast('🔒 7-दिवसीय फ्री ट्रायल समाप्त हो गया है');
     };
 
+    const handleOpenAdminLogin = () => {
+      setLoginModalMode('admin');
+      setIsLoginModalOpen(true);
+    };
+
     const handleSessionExpired = () => {
-      showToast('⚠️ आपका लॉगिन सत्र समाप्त हो गया है। कृपया जारी रखने के लिए पुनः लॉगिन करें।');
-      setIsLoginOpen(true);
+      showToast('⚠️ आपका लॉगिन सत्र समाप्त हो गया है। कृपया जारी रखने के लिए पुनः एडमिन लॉगिन करें।');
+      clearAuthTokens();
+      try {
+        localStorage.removeItem('reporter_auth_session');
+      } catch {}
+      setCurrentUser(null);
+      handleOpenAdminLogin();
     };
 
     window.addEventListener('ai_news_user_plan_updated', handleSubUpdate);
     window.addEventListener('user_account_blocked', handleBlocked);
     window.addEventListener('user_trial_expired', handleExpired);
     window.addEventListener('ai_news_session_expired', handleSessionExpired);
+    window.addEventListener('open_login_modal', handleOpenAdminLogin);
+    window.addEventListener('open_admin_login', handleOpenAdminLogin);
 
     return () => {
       window.removeEventListener('ai_news_user_plan_updated', handleSubUpdate);
       window.removeEventListener('user_account_blocked', handleBlocked);
       window.removeEventListener('user_trial_expired', handleExpired);
       window.removeEventListener('ai_news_session_expired', handleSessionExpired);
+      window.removeEventListener('open_login_modal', handleOpenAdminLogin);
+      window.removeEventListener('open_admin_login', handleOpenAdminLogin);
     };
   }, [currentUser?.email]);
 

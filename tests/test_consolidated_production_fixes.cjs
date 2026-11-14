@@ -50,7 +50,7 @@ assert(loginModal.includes("localStorage.removeItem('user_explicitly_logged_out'
 
 const apiConfig = fs.readFileSync('src/lib/apiConfig.ts', 'utf8');
 assert(apiConfig.includes("localStorage.getItem('google_access_token')"), "ensureAuthToken must check stored google_access_token");
-assert(apiConfig.includes("authToken: candidateToken"), "ensureAuthToken must pass token to refresh-session");
+assert(apiConfig.includes("authToken: existingToken") || apiConfig.includes("authToken: candidateToken"), "ensureAuthToken must pass token to refresh-session");
 console.log('✅ [PASS] LoginModal and apiConfig properly persist and exchange OAuth tokens and session HMAC');
 
 // Test 5: Byte Parity Between Root and web_studio

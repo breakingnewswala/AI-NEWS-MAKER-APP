@@ -176,6 +176,9 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
         setTextMarkingItem(null);
         showToast('✅ लोकेशन टेक्स्ट क्षेत्र व टाइपोग्राफी सफलतापूर्वक सुरक्षित हुई!');
       } else {
+        if (res.error && (res.error.includes('401') || res.error.includes('प्रमाणीकरण आवश्यक'))) {
+          window.dispatchEvent(new CustomEvent('open_admin_login'));
+        }
         alert(res.error || 'टेक्स्ट क्षेत्र सुरक्षित करने में समस्या आई');
       }
     } catch (err: any) {
@@ -225,7 +228,9 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     }
 
     setNewFileName(file.name);
-    setNewName(file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+    if (!newName.trim()) {
+      setNewName(file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+    }
     setUploadError('');
 
     const reader = new FileReader();
@@ -296,6 +301,9 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
         setNewFileName('');
         showToast('✅ एसेट सफलतापूर्वक लाइब्रेरी में जोड़ा गया!');
       } else {
+        if (res.error && (res.error.includes('401') || res.error.includes('प्रमाणीकरण आवश्यक'))) {
+          window.dispatchEvent(new CustomEvent('open_admin_login'));
+        }
         setUploadError(res.error || 'एसेट अपलोड में विफल');
       }
     } catch {
