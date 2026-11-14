@@ -20624,15 +20624,46 @@ var schedulerSyncTelemetry = {
   runCount: 0,
   error: null
 };
+async function verifyCloudSchedulerOidcToken(token) {
+  if (!token || typeof token !== "string" || token.length < 50) return false;
+  try {
+    const client = googleOAuthClient || new import_google_auth_library.OAuth2Client();
+    const ticket = await client.verifyIdToken({ idToken: token });
+    const payload = ticket.getPayload();
+    if (!payload) return false;
+    const isGoogleIssuer = payload.iss === "https://accounts.google.com" || payload.iss === "accounts.google.com" || payload.iss === "googleapis.com";
+    if (isGoogleIssuer && payload.email_verified && payload.email) {
+      return true;
+    }
+  } catch {
+  }
+  return false;
+}
 async function handleSchedulerRssSync(req, res) {
   const authHeader = req.headers.authorization || "";
-  const cloudSchedulerHeader = req.headers["x-cloudscheduler"] || req.headers["x-cloud-scheduler"];
-  const schedulerToken = process.env.SCHEDULER_SECRET || "ai_news_maker_cloud_scheduler_token_2026";
   const providedBearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  const authUser = getAuthenticatedUser(req);
-  const isAuthorizedScheduler = Boolean(cloudSchedulerHeader) || providedBearer === schedulerToken || Boolean(authUser && (authUser.role === "admin" || authUser.role === "superadmin")) || process.env.IS_TEST_ENV === "true";
-  if (!isAuthorizedScheduler) {
-    return res.status(401).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 Cloud Scheduler \u092F\u093E \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0907\u0938 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F \u0915\u094B \u0915\u0949\u0932 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+  const configuredSecret = process.env.SCHEDULER_SECRET ? process.env.SCHEDULER_SECRET.trim() : "";
+  let isAuthorized = Boolean(configuredSecret && configuredSecret.length >= 16 && providedBearer === configuredSecret);
+  if (!isAuthorized && providedBearer) {
+    isAuthorized = await verifyCloudSchedulerOidcToken(providedBearer);
+  }
+  if (!isAuthorized) {
+    const authUser = getAuthenticatedUser(req);
+    if (authUser && (authUser.role === "admin" || authUser.role === "superadmin")) {
+      isAuthorized = true;
+    }
+  }
+  if (!isAuthorized && process.env.IS_TEST_ENV === "true") {
+    const cloudSchedulerHeader = req.headers["x-cloudscheduler"] || req.headers["x-cloud-scheduler"];
+    if (cloudSchedulerHeader === "true" || providedBearer.startsWith("test_")) {
+      isAuthorized = true;
+    }
+  }
+  if (!isAuthorized) {
+    return res.status(401).json({
+      success: false,
+      error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 Google Cloud Scheduler (\u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 OIDC \u091F\u094B\u0915\u0928) \u092F\u093E \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0907\u0938 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F \u0915\u094B \u0915\u0949\u0932 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+    });
   }
   const now = Date.now();
   if (schedulerLeaseLock.isLocked && now < schedulerLeaseLock.expiresAt) {

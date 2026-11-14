@@ -403,7 +403,12 @@ async function runMasterStabilityRemediationTests() {
     // -------------------------------------------------------------
     console.log('\n--- SUITE 7: Cloud Scheduler 15-Minute Sync & Telemetry ---');
     // 7a. Unauthenticated call without header/token blocked (401)
-    // (Note: in test env IS_TEST_ENV=true, we test both header pass and telemetry response)
+    const unauthTriggerRes = await httpRequest('POST', '/api/scheduler/rss-sync', {
+      'Content-Type': 'application/json',
+    });
+    assert.strictEqual(unauthTriggerRes.status, 401, 'Unauthenticated POST /api/scheduler/rss-sync returns 401');
+    console.log('✅ [PASS] Unauthorized external request without scheduler auth rejected with 401');
+
     const schedulerGetRes = await httpRequest('GET', '/api/scheduler/rss-sync');
     assert.strictEqual(schedulerGetRes.status, 200, 'GET /api/scheduler/rss-sync returns 200');
     assert(schedulerGetRes.json?.telemetry, 'Telemetry returned in scheduler GET');

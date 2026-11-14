@@ -10409,22 +10409,60 @@ let schedulerSyncTelemetry = {
   error: null as string | null,
 };
 
+async function verifyCloudSchedulerOidcToken(token: string): Promise<boolean> {
+  if (!token || typeof token !== "string" || token.length < 50) return false;
+  try {
+    const client = googleOAuthClient || new OAuth2Client();
+    const ticket = await client.verifyIdToken({ idToken: token });
+    const payload = ticket.getPayload();
+    if (!payload) return false;
+    const isGoogleIssuer =
+      payload.iss === "https://accounts.google.com" ||
+      payload.iss === "accounts.google.com" ||
+      payload.iss === "googleapis.com";
+    if (isGoogleIssuer && payload.email_verified && payload.email) {
+      return true;
+    }
+  } catch {
+    // OIDC token signature or payload invalid
+  }
+  return false;
+}
+
 async function handleSchedulerRssSync(req: express.Request, res: express.Response) {
   const authHeader = req.headers.authorization || "";
-  const cloudSchedulerHeader = req.headers["x-cloudscheduler"] || req.headers["x-cloud-scheduler"];
-  const schedulerToken = process.env.SCHEDULER_SECRET || "ai_news_maker_cloud_scheduler_token_2026";
   const providedBearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const configuredSecret = process.env.SCHEDULER_SECRET ? process.env.SCHEDULER_SECRET.trim() : "";
 
-  // Authorization check: Cloud Scheduler header, matching SCHEDULER_SECRET bearer token, authenticated admin, or local test environment
-  const authUser = getAuthenticatedUser(req);
-  const isAuthorizedScheduler =
-    Boolean(cloudSchedulerHeader) ||
-    providedBearer === schedulerToken ||
-    Boolean(authUser && (authUser.role === "admin" || authUser.role === "superadmin")) ||
-    process.env.IS_TEST_ENV === "true";
+  // 1. Authorized via configured non-empty SCHEDULER_SECRET (Bearer token)
+  let isAuthorized = Boolean(configuredSecret && configuredSecret.length >= 16 && providedBearer === configuredSecret);
 
-  if (!isAuthorizedScheduler) {
-    return res.status(401).json({ success: false, error: "अनधिकृत: केवल Cloud Scheduler या अधिकृत व्यवस्थापक ही इस एंडपॉइंट को कॉल कर सकते हैं।" });
+  // 2. Authorized via genuine Google-signed OIDC ID token (Cloud Scheduler Service Account)
+  if (!isAuthorized && providedBearer) {
+    isAuthorized = await verifyCloudSchedulerOidcToken(providedBearer);
+  }
+
+  // 3. Authorized via logged-in admin session
+  if (!isAuthorized) {
+    const authUser = getAuthenticatedUser(req);
+    if (authUser && (authUser.role === "admin" || authUser.role === "superadmin")) {
+      isAuthorized = true;
+    }
+  }
+
+  // 4. Test environment isolation: in automated test runners (IS_TEST_ENV=true), accept test token/header
+  if (!isAuthorized && process.env.IS_TEST_ENV === "true") {
+    const cloudSchedulerHeader = req.headers["x-cloudscheduler"] || req.headers["x-cloud-scheduler"];
+    if (cloudSchedulerHeader === "true" || providedBearer.startsWith("test_")) {
+      isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
+    return res.status(401).json({
+      success: false,
+      error: "अनधिकृत: केवल Google Cloud Scheduler (सत्यापित OIDC टोकन) या अधिकृत व्यवस्थापक ही इस एंडपॉइंट को कॉल कर सकते हैं।",
+    });
   }
 
   const now = Date.now();
