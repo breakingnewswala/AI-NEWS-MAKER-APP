@@ -113,8 +113,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       if (onClose) onClose();
     }
   }, [isAdminMode, isOpen, onClose, initialMode]);
-
-  if (!isOpen || !isAdminMode) return null;
   
   // Login fields
   const [username, setUsername] = useState('');
@@ -142,7 +140,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
   }, [isOpen, initialMode]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !isAdminMode) return null;
 
   // Helper to process authenticated Google User
   const processGoogleUser = async (rawEmail: string, displayName?: string, idToken?: string, accessToken?: string) => {

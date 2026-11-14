@@ -1349,33 +1349,36 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Merge active RSS/Web posts with database news posts seamlessly & filter out items older than 7 days
   const combinedPosts = useMemo(() => {
     const deletedIds = getDeletedIds();
-    const existingIds = new Set(localPosts.map((p) => p.id));
+    const safeLocalPosts = Array.isArray(localPosts) ? localPosts.filter(Boolean) : [];
+    const safeRssPosts = Array.isArray(activeRssPosts) ? activeRssPosts.filter(Boolean) : [];
+    const existingIds = new Set(safeLocalPosts.map((p) => p.id));
     const normalizeUrl = (u?: string) => (u || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/+$/, '').split('?')[0];
-    const existingUrls = new Set(localPosts.map((p) => normalizeUrl(p.sourceUrl)).filter((u) => u.length > 8));
-    const activeRssFiltered = filterActiveNews(activeRssPosts);
-    const localPostsFiltered = filterActiveNews(localPosts);
+    const existingUrls = new Set(safeLocalPosts.map((p) => normalizeUrl(p.sourceUrl)).filter((u) => u.length > 8));
+    const activeRssFiltered = filterActiveNews(safeRssPosts);
+    const localPostsFiltered = filterActiveNews(safeLocalPosts);
     const newFromRss = activeRssFiltered.filter((p) => {
+      if (!p || !p.id) return false;
       if (existingIds.has(p.id) || deletedIds.has(p.id)) return false;
       const norm = normalizeUrl(p.sourceUrl);
       if (norm.length > 8 && existingUrls.has(norm)) return false;
       return true;
     });
-    const validPosts = localPostsFiltered.filter((p) => !deletedIds.has(p.id));
+    const validPosts = localPostsFiltered.filter((p) => p && p.id && !deletedIds.has(p.id));
 
     const rawList = [...newFromRss, ...validPosts];
 
     // Part M: Both Home Feed and Video Feed must show the newest eligible content first and older content below
     rawList.sort((a, b) => {
-      const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
-      const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
+      const timeA = typeof a?.timestamp === 'number' ? a.timestamp : new Date(a?.timestamp || 0).getTime();
+      const timeB = typeof b?.timestamp === 'number' ? b.timestamp : new Date(b?.timestamp || 0).getTime();
       if ((timeB || 0) !== (timeA || 0)) {
         return (timeB || 0) - (timeA || 0);
       }
-      return String(b.id).localeCompare(String(a.id));
+      return String(b?.id || '').localeCompare(String(a?.id || ''));
     });
 
     return rawList;
-  }, [posts, activeRssPosts]);
+  }, [posts, localPosts, activeRssPosts]);
 
   // Bonus News Graphic Download Listener: triggers bonus claim popup
   useEffect(() => {
@@ -4841,7 +4844,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-400 font-bold block mb-1">कुल प्राप्त खबरें</span>
-                  <span className="text-lg font-black text-white font-mono">{newsAnalyticsData?.totalPosts ?? posts.length}</span>
+                  <span className="text-lg font-black text-white font-mono">{newsAnalyticsData?.totalPosts ?? (posts?.length || 0)}</span>
                 </div>
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-emerald-400 font-bold block mb-1">कुल प्रकाशित</span>

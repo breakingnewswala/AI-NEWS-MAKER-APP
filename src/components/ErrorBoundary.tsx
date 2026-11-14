@@ -34,20 +34,36 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Uncaught error in UI component:', error, errorInfo);
     try {
       const msg = (error && error.message) ? error.message : '';
-      if (
-        msg.indexOf('activeCategory') !== -1 ||
-        msg.indexOf('FolderClock') !== -1 ||
+      // Only auto-recover once for genuine missing script chunks, NEVER on network/fetch errors
+      const isChunkError = (
         msg.indexOf('Loading chunk') !== -1 ||
-        msg.indexOf('dynamically imported module') !== -1 ||
-        msg.indexOf('Failed to fetch') !== -1
-      ) {
-        // Auto-recover immediately from legacy/cached chunk mismatches
-        this.handleReset();
+        msg.indexOf('dynamically imported module') !== -1
+      );
+      if (isChunkError) {
+        let hasRecovered = false;
+        try {
+          hasRecovered = sessionStorage.getItem('__eb_chunk_attempted') === 'true';
+        } catch {}
+        if (!hasRecovered) {
+          try {
+            sessionStorage.setItem('__eb_chunk_attempted', 'true');
+          } catch {}
+          this.handleHardReset();
+        }
       }
     } catch {}
   }
 
-  private handleReset = async () => {
+  // Graceful in-place retry without wiping caches or forcing full-page browser reloads
+  private handleReset = () => {
+    this.setState({ isResetting: true });
+    setTimeout(() => {
+      this.setState({ hasError: false, error: null, isResetting: false });
+    }, 150);
+  };
+
+  // Full cache purge & clean reload (strictly bounded, no ?fresh= accumulation)
+  private handleHardReset = async () => {
     this.setState({ isResetting: true });
     try {
       if ('caches' in window) {
@@ -64,43 +80,25 @@ export class ErrorBoundary extends Component<Props, State> {
       }
       try {
         sessionStorage.clear();
-        localStorage.removeItem('__recovery_reload_attempted');
-        localStorage.removeItem('__auto_boundary_recovered');
       } catch {}
     } catch {}
     this.setState({ hasError: false, error: null, isResetting: false });
-    const cleanUrl = window.location.origin + window.location.pathname + '?fresh=' + Date.now();
-    window.location.replace(cleanUrl);
+    window.location.reload();
   };
 
+  // Studio recovery: resets studio drafts and keeps user in Studio cleanly
   private handleStudioReset = async () => {
     this.setState({ isResetting: true });
     try {
-      if ('caches' in window) {
-        try {
-          const names = await caches.keys();
-          await Promise.all(names.map((name) => caches.delete(name)));
-        } catch {}
-      }
-      if ('serviceWorker' in navigator) {
-        try {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((reg) => reg.unregister()));
-        } catch {}
-      }
       try {
-        sessionStorage.clear();
-        localStorage.removeItem('active_app_tab');
         localStorage.removeItem('news_studio_draft');
-        localStorage.removeItem('__recovery_reload_attempted');
-        localStorage.removeItem('__auto_boundary_recovered');
+        sessionStorage.removeItem('news_studio_draft');
       } catch {}
       if (typeof (window as any).setAppTab === 'function') {
-        (window as any).setAppTab('home');
+        (window as any).setAppTab('studio');
       }
     } catch {}
     this.setState({ hasError: false, error: null, isResetting: false });
-    window.location.replace(window.location.origin + '/?fresh=' + Date.now());
   };
 
   public render() {
