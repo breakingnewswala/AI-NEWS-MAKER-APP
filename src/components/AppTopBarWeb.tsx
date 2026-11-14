@@ -87,7 +87,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const isVideos = currentTab === 'videos';
   const isStudio = currentTab === 'studio' || currentTab === 'generator';
   const isNewsroom = currentTab === 'newsroom' || currentTab === 'drafts';
-  const isControlPanel = currentTab === 'profile' || currentTab === 'export';
+  const isControlPanel = currentTab === 'profile' || currentTab === 'export' || currentTab === 'admin';
 
   useEffect(() => {
     fetchNotificationsFromServer(currentUser?.email).then((list) => {
@@ -336,7 +336,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 📰 न्यूज़ रूम
               </button>
               <button
-                onClick={() => onNavigateToTab('profile')}
+                onClick={() => onNavigateToTab(isAdminUser ? 'admin' : 'profile')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isControlPanel
                     ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/20'

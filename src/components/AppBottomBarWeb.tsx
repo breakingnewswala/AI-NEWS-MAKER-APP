@@ -3,7 +3,7 @@ import { Home, Film, Sparkles, Newspaper, Sliders, User } from 'lucide-react';
 import { isUserAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
 
-export type StandardAppTab = 'home' | 'videos' | 'studio' | 'newsroom' | 'profile';
+export type StandardAppTab = 'home' | 'videos' | 'studio' | 'newsroom' | 'profile' | 'admin';
 
 interface AppBottomBarWebProps {
   currentTab: string;
@@ -22,7 +22,7 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
   const isVideos = currentTab === 'videos';
   const isStudio = currentTab === 'studio' || currentTab === 'generator';
   const isNewsroom = currentTab === 'newsroom' || currentTab === 'drafts';
-  const isControlPanel = currentTab === 'profile' || currentTab === 'export';
+  const isControlPanel = currentTab === 'profile' || currentTab === 'export' || currentTab === 'admin';
   const isAdmin = isUserAdmin(currentUser);
   const isCompactStudioBtn = isStudio && isGraphicStudioActive;
 
@@ -99,7 +99,7 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
         {/* Tab 5: Control Room (कंट्रोल रूम - Part 9) */}
         <button
           type="button"
-          onClick={() => onSelectTab('profile')}
+          onClick={() => onSelectTab(isAdmin ? 'admin' : 'profile')}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer min-h-[48px] ${
             isControlPanel ? 'text-amber-400 scale-105' : 'text-slate-400 hover:text-slate-200'
           }`}

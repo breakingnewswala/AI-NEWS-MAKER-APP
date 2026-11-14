@@ -131,6 +131,14 @@ export function setAuthToken(token: string): void {
       localStorage.setItem('reporter_auth_token', token.trim());
       localStorage.setItem('auth_token', token.trim());
       localStorage.setItem('token', token.trim());
+      try {
+        const sessStr = localStorage.getItem('reporter_auth_session');
+        if (sessStr) {
+          const sess = JSON.parse(sessStr);
+          sess.token = token.trim();
+          localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
+        }
+      } catch {}
     } else {
       localStorage.removeItem('reporter_auth_token');
       localStorage.removeItem('auth_token');
@@ -206,17 +214,27 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
       } catch {}
 
       const existingToken = getAuthToken();
+      let googleAccessToken = '';
+      try {
+        googleAccessToken = localStorage.getItem('google_access_token') || '';
+      } catch {}
 
       // 1. Primary Seamless Recovery: Call session refresh endpoint with active or legacy token
-      if (existingToken) {
+      if (existingToken || googleAccessToken) {
         try {
+          const candidateToken = existingToken || googleAccessToken;
           const refRes = await fetch(getApiUrl('/api/auth/refresh-session'), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${existingToken}`,
+              'Authorization': `Bearer ${candidateToken}`,
             },
-            body: JSON.stringify({ email }),
+            body: JSON.stringify({
+              email,
+              token: candidateToken,
+              authToken: candidateToken,
+              accessToken: googleAccessToken || undefined,
+            }),
           });
           if (refRes.ok) {
             const refData = await refRes.json();
@@ -255,7 +273,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         console.warn('[AUTH] Firebase client token check notice:', fbErr);
       }
 
-      const candidateIdToken = firebaseIdToken || googleIdToken;
+      const candidateIdToken = firebaseIdToken || googleIdToken || googleAccessToken;
       if (candidateIdToken && email) {
         const res = await fetch(getApiUrl('/api/auth/login'), {
           method: 'POST',
@@ -266,7 +284,8 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
           body: JSON.stringify({
             identifier: email,
             firebaseToken: candidateIdToken,
-            idToken: candidateIdToken,
+            idToken: googleIdToken || firebaseIdToken || undefined,
+            accessToken: googleAccessToken || undefined,
             profileData: { email, name, username },
           }),
         });
