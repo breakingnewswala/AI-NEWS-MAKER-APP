@@ -11607,11 +11607,14 @@ function writeDurableAssetTombstonesToDisk(set: Set<string>) {
     fs.writeFileSync(tmpPath, serialized, "utf-8");
     fs.renameSync(tmpPath, DELETED_ASSETS_TOMBSTONE_FILE);
 
-    const webPath = path.join(process.cwd(), "web_studio", "deleted_assets_tombstone.json");
-    if (fs.existsSync(path.dirname(webPath)) && path.resolve(webPath) !== path.resolve(DELETED_ASSETS_TOMBSTONE_FILE)) {
-      try {
-        fs.writeFileSync(webPath, serialized, "utf-8");
-      } catch {}
+    // Only mirror to web_studio if running default production/main db (NOT test fixture)
+    if (!process.env.DELETED_ASSETS_TOMBSTONE_FILE) {
+      const webPath = path.join(process.cwd(), "web_studio", "deleted_assets_tombstone.json");
+      if (fs.existsSync(path.dirname(webPath)) && path.resolve(webPath) !== path.resolve(DELETED_ASSETS_TOMBSTONE_FILE)) {
+        try {
+          fs.writeFileSync(webPath, serialized, "utf-8");
+        } catch {}
+      }
     }
   } catch (e: any) {
     console.warn("Failed to write asset tombstones to disk:", e?.message);
@@ -11683,11 +11686,15 @@ function saveAssetLibrariesDatabase(items: any[]) {
   try {
     const serialized = JSON.stringify(items, null, 2);
     fs.writeFileSync(ASSET_LIBRARIES_DB_FILE, serialized, "utf-8");
-    const webPath = path.join(process.cwd(), "web_studio", "asset_libraries_db.json");
-    if (fs.existsSync(path.dirname(webPath)) && path.resolve(webPath) !== path.resolve(ASSET_LIBRARIES_DB_FILE)) {
-      try {
-        fs.writeFileSync(webPath, serialized, "utf-8");
-      } catch {}
+
+    // Only mirror to web_studio if running default production/main db (NOT test fixture)
+    if (!process.env.ASSET_LIBRARIES_DB_FILE) {
+      const webPath = path.join(process.cwd(), "web_studio", "asset_libraries_db.json");
+      if (fs.existsSync(path.dirname(webPath)) && path.resolve(webPath) !== path.resolve(ASSET_LIBRARIES_DB_FILE)) {
+        try {
+          fs.writeFileSync(webPath, serialized, "utf-8");
+        } catch {}
+      }
     }
   } catch (err) {
     console.warn("Failed to write asset_libraries_db.json:", err);

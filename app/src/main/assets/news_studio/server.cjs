@@ -21601,11 +21601,13 @@ function writeDurableAssetTombstonesToDisk(set) {
     const tmpPath = `${DELETED_ASSETS_TOMBSTONE_FILE}.tmp.${Date.now()}`;
     import_fs2.default.writeFileSync(tmpPath, serialized, "utf-8");
     import_fs2.default.renameSync(tmpPath, DELETED_ASSETS_TOMBSTONE_FILE);
-    const webPath = import_path2.default.join(process.cwd(), "web_studio", "deleted_assets_tombstone.json");
-    if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(DELETED_ASSETS_TOMBSTONE_FILE)) {
-      try {
-        import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
-      } catch {
+    if (!process.env.DELETED_ASSETS_TOMBSTONE_FILE) {
+      const webPath = import_path2.default.join(process.cwd(), "web_studio", "deleted_assets_tombstone.json");
+      if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(DELETED_ASSETS_TOMBSTONE_FILE)) {
+        try {
+          import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
+        } catch {
+        }
       }
     }
   } catch (e) {
@@ -21676,11 +21678,13 @@ function saveAssetLibrariesDatabase(items) {
   try {
     const serialized = JSON.stringify(items, null, 2);
     import_fs2.default.writeFileSync(ASSET_LIBRARIES_DB_FILE, serialized, "utf-8");
-    const webPath = import_path2.default.join(process.cwd(), "web_studio", "asset_libraries_db.json");
-    if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(ASSET_LIBRARIES_DB_FILE)) {
-      try {
-        import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
-      } catch {
+    if (!process.env.ASSET_LIBRARIES_DB_FILE) {
+      const webPath = import_path2.default.join(process.cwd(), "web_studio", "asset_libraries_db.json");
+      if (import_fs2.default.existsSync(import_path2.default.dirname(webPath)) && import_path2.default.resolve(webPath) !== import_path2.default.resolve(ASSET_LIBRARIES_DB_FILE)) {
+        try {
+          import_fs2.default.writeFileSync(webPath, serialized, "utf-8");
+        } catch {
+        }
       }
     }
   } catch (err) {
