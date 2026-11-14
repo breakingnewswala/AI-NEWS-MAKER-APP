@@ -655,9 +655,18 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     if (!u) return false;
     const email = (u.email || '').toLowerCase().trim();
     const id = (u.userId || '').toLowerCase().trim();
-    if (u.isTestUser === true || u.isSynthetic === true) return true;
-    if (email.includes('@synthetic.local') || email.includes('@test.local') || email.includes('@example.com') || email.includes('synthetic_') || email.startsWith('test_') || email.startsWith('e2e_') || email.includes('testuser')) return true;
-    if (id.startsWith('test_') || id.startsWith('e2e_') || id.includes('synthetic')) return true;
+    // Authoritative user model flags (Phase 9)
+    if (u.isTestUser === true || u.isSynthetic === true || u.accountType === 'test' || (u.tier || '').toLowerCase() === 'test') {
+      return true;
+    }
+    // Strict test domains
+    if (email.endsWith('@synthetic.local') || email.endsWith('@test.local') || email.endsWith('@example.com')) {
+      return true;
+    }
+    // Strict synthetic prefixes
+    if (email.startsWith('synthetic_') || email.startsWith('e2e_test_') || id.startsWith('synthetic_') || id.startsWith('e2e_test_')) {
+      return true;
+    }
     return false;
   };
 

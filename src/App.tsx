@@ -24,6 +24,7 @@ import { InstallPwaModal } from './components/InstallPwaModal';
 import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
+import { NewsDetailModal } from './components/NewsDetailModal';
 import { getApiUrl, getApiBaseUrl, ensureAuthToken, getAuthHeaders } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
@@ -1248,6 +1249,7 @@ export default function App() {
   const [downloadFormat, setDownloadFormat] = useState<'png' | 'jpeg'>('jpeg');
   const [downloadProgressText, setDownloadProgressText] = useState<string>('');
   const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
+  const [activeNewsDetailPost, setActiveNewsDetailPost] = useState<any>(null);
 
   // Trigger PWA "Add to Home Screen / Web App" popup when user is on Home screen
   useEffect(() => {
@@ -1802,12 +1804,26 @@ export default function App() {
 
   // Deep linking listeners for notifications & external triggers
   useEffect(() => {
-    const handleDeepLinkPost = (e: any) => {
+    const handleDeepLinkPost = async (e: any) => {
       const postId = e.detail?.postId || e.detail?.newsId;
       if (!postId) return;
-      const targetPost = posts.find((p) => String(p.id) === String(postId));
+      let targetPost = posts.find((p) => String(p.id) === String(postId));
+      if (!targetPost) {
+        try {
+          const resp = await fetch(`/api/news-posts/${encodeURIComponent(String(postId))}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data?.post) {
+              targetPost = data.post;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('Failed to fetch deep link post:', fetchErr);
+        }
+      }
       if (targetPost) {
-        handleOpenStudioWithNews(targetPost);
+        // Open read-only News Detail Modal (never auto-generate graphics or consume quota)
+        setActiveNewsDetailPost(targetPost);
       } else {
         navigateToTab('home');
         showToast('📢 सूचना से संबंधित खबर लोड की जा रही है...');
@@ -5007,6 +5023,17 @@ export default function App() {
 
       {/* 13. Mobile Audio & Live News Notification Permission Modal */}
       <NotificationPermissionModal />
+
+      {/* 14. News Detail Read-Only Popup Modal from Notification Deep Link */}
+      <NewsDetailModal
+        post={activeNewsDetailPost}
+        currentUser={currentUser}
+        onClose={() => setActiveNewsDetailPost(null)}
+        onOpenStudio={(selectedPost) => {
+          setActiveNewsDetailPost(null);
+          handleOpenStudioWithNews(selectedPost);
+        }}
+      />
     </div>
   );
 }
