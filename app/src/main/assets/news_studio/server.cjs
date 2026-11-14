@@ -12307,11 +12307,24 @@ function initializeAuthSecret() {
   if (secret && typeof secret === "string" && secret.trim().length >= 32) {
     return secret.trim();
   }
-  if (process.env.NODE_ENV === "production") {
-    console.warn("[SECURITY WARNING] SESSION_SECRET environment variable is missing, empty, or < 32 chars in production environment.");
+  try {
+    const dataDir = import_path2.default.join(process.cwd(), "data");
+    const vaultPath = import_path2.default.join(dataDir, ".session_secret_vault");
+    if (!import_fs2.default.existsSync(dataDir)) {
+      import_fs2.default.mkdirSync(dataDir, { recursive: true });
+    }
+    if (import_fs2.default.existsSync(vaultPath)) {
+      const saved = import_fs2.default.readFileSync(vaultPath, "utf-8").trim();
+      if (saved.length >= 32) {
+        return saved;
+      }
+    }
+    const generated = import_crypto2.default.randomBytes(32).toString("hex");
+    import_fs2.default.writeFileSync(vaultPath, generated, "utf-8");
+    return generated;
+  } catch {
+    return import_crypto2.default.randomBytes(32).toString("hex");
   }
-  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is not configured. Generating ephemeral instance secret.");
-  return import_crypto2.default.randomBytes(32).toString("hex");
 }
 var AUTH_SECRET = initializeAuthSecret();
 function generateAuthToken(user) {
@@ -12331,7 +12344,7 @@ function generateAuthToken(user) {
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 var LEGACY_AUTH_SECRETS = (process.env.LEGACY_AUTH_SECRETS || "").split(",").map((s) => s.trim()).filter((s) => s.length >= 16);
-function verifyAuthToken(tokenStr) {
+function verifyAuthToken(tokenStr, allowGraceSeconds = 0) {
   if (!tokenStr || typeof tokenStr !== "string") return null;
   const parts = tokenStr.trim().split(".");
   if (parts.length !== 3) return null;
@@ -12374,7 +12387,14 @@ function verifyAuthToken(tokenStr) {
   try {
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
     const payload = JSON.parse(payloadJson);
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1e3)) {
+    const nowSec = Math.floor(Date.now() / 1e3);
+    const isExpired = Boolean(payload.exp && payload.exp < nowSec);
+    if (isExpired) {
+      if (allowGraceSeconds > 0 && payload.exp && payload.exp + allowGraceSeconds >= nowSec) {
+        payload.isLegacySignature = isLegacySignature;
+        payload.isExpired = true;
+        return payload;
+      }
       return null;
     }
     payload.isLegacySignature = isLegacySignature;
@@ -12427,7 +12447,11 @@ function getAuthenticatedUser(req) {
   }
   const token = extractTokenFromRequest(req);
   if (!token) return null;
-  return verifyAuthToken(token);
+  const verified = verifyAuthToken(token, 86400 * 30);
+  if (verified) {
+    req.user = verified;
+  }
+  return verified;
 }
 async function resolveAuthenticatedUser(req, res) {
   if (req.user) {
@@ -12435,7 +12459,7 @@ async function resolveAuthenticatedUser(req, res) {
   }
   const token = extractTokenFromRequest(req);
   if (!token) return null;
-  const internalPayload = verifyAuthToken(token);
+  const internalPayload = verifyAuthToken(token, 86400 * 30);
   if (internalPayload && internalPayload.email) {
     const email = internalPayload.email.toLowerCase().trim();
     let userRole = internalPayload.role || "user";
@@ -12479,7 +12503,7 @@ async function resolveAuthenticatedUser(req, res) {
       isBlocked
     };
     req.user = verified;
-    if (internalPayload.isLegacySignature && res && typeof res.setHeader === "function" && !res.headersSent) {
+    if ((internalPayload.isLegacySignature || internalPayload.isExpired) && res && typeof res.setHeader === "function" && !res.headersSent) {
       try {
         const freshToken = generateAuthToken(verified);
         res.setHeader("X-Refreshed-Token", freshToken);
@@ -13144,7 +13168,43 @@ app.post("/api/auth/verify-captcha", (req, res) => {
 });
 app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) => {
   try {
-    const user = await resolveAuthenticatedUser(req, res);
+    let user = await resolveAuthenticatedUser(req, res);
+    if (!user) {
+      const rawToken = extractTokenFromRequest(req);
+      if (rawToken) {
+        const gracePayload = verifyAuthToken(rawToken, 30 * 86400);
+        if (gracePayload && gracePayload.email) {
+          const email = gracePayload.email.toLowerCase().trim();
+          let userRole = gracePayload.role || "user";
+          let isBlocked = false;
+          try {
+            const masterUsers = loadUsersMasterDatabase();
+            const dbUser = masterUsers.find(
+              (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === gracePayload.userId
+            );
+            if (dbUser) {
+              if (dbUser.role) userRole = dbUser.role;
+              if (dbUser.isBlocked) isBlocked = true;
+            }
+          } catch {
+          }
+          if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+            userRole = "superadmin";
+          } else if (email === REGULAR_ADMIN_EMAIL) {
+            userRole = "admin";
+          }
+          user = {
+            userId: gracePayload.userId || email,
+            email,
+            role: userRole,
+            username: gracePayload.username || email.split("@")[0],
+            authType: "session",
+            isBlocked
+          };
+          req.user = user;
+        }
+      }
+    }
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -17994,8 +18054,19 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
       const idKey = (u.userId || "").toLowerCase().trim();
       const w = rDb.wallets[emailKey] || (idKey ? rDb.wallets[idKey] : null) || { coinBalance: 0 };
       const isSuper = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
+      const isMasterEmail = emailKey === "breakingnewswala.com@gmail.com" || emailKey === "breakingnewsvala.com@gmail.com";
+      const cleanName = isMasterEmail ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : u.fullName || u.name || "";
+      const cleanChannelName = isMasterEmail ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u095B \u0935\u093E\u0932\u093E (BREAKING NEWS WALA)" : u.channelName || u.channelNameHi || "";
+      const cleanChannelNameHi = isMasterEmail ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u095B \u0935\u093E\u0932\u093E" : u.channelNameHi || "";
+      const cleanChannelNameEn = isMasterEmail ? "BREAKING NEWS WALA" : u.channelNameEn || "";
       return {
         ...u,
+        name: cleanName,
+        fullName: cleanName,
+        displayName: cleanName,
+        channelName: cleanChannelName,
+        channelNameHi: cleanChannelNameHi,
+        channelNameEn: cleanChannelNameEn,
         coins: w.coinBalance || 0,
         coinBalance: w.coinBalance || 0,
         permanentLock: isSuper,
@@ -20134,7 +20205,7 @@ app.get("/api/rss/web-feed", (req, res) => {
 });
 var isRssSyncRunning = false;
 var lastRssSyncResult = null;
-var RSS_SYNC_INTERVAL_MS = 5 * 60 * 1e3;
+var RSS_SYNC_INTERVAL_MS = 15 * 60 * 1e3;
 async function executeRssSynchronization() {
   if (isRssSyncRunning) {
     console.log("[RSS Auto-Sync] Job already running, skipping overlapping cycle.");
@@ -20474,7 +20545,7 @@ app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
     success: true,
     lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
-    intervalMinutes: 5,
+    intervalMinutes: 15,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS
   });
 });
@@ -23291,11 +23362,13 @@ function loadSupportRequestsDatabase() {
 }
 function saveSupportRequestsDatabase(requests) {
   if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache?.systemConfig) {
+      centralDb.cache.systemConfig.set("support_requests", requests);
+    }
     for (const r of requests) {
       centralDb.saveSupportRequest(r).catch(() => {
       });
     }
-    return true;
   }
   try {
     import_fs2.default.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
@@ -24054,6 +24127,14 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
       try {
         centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {
         });
+        if (centralDb.cache?.users) {
+          for (const [k, u] of centralDb.cache.users.entries()) {
+            if (k && k.toLowerCase().trim() === identifier || u?.email && u.email.toLowerCase().trim() === identifier || u?.userId && u.userId === identifier) {
+              u.isBlocked = false;
+              u.blockedReason = null;
+            }
+          }
+        }
       } catch {
       }
     }
@@ -24071,6 +24152,118 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     } catch {
     }
     return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948", user: users[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/support/unblock-request", async (req, res) => {
+  try {
+    const { email, mobile, reason, userName } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (!cleanEmail && !mobile) {
+      return res.status(400).json({ error: "\u0908\u092E\u0947\u0932 \u092F\u093E \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
+    }
+    const id = `unblock_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}`;
+    const newRequest = {
+      id,
+      userId: cleanEmail,
+      userName: userName || "\u0905\u0935\u0930\u0941\u0926\u094D\u0927 \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E",
+      userEmail: cleanEmail,
+      userMobile: (mobile || "").toString().trim(),
+      message: reason || "\u0916\u093E\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 (Unblock Request)",
+      voiceTranscript: "",
+      attachmentUrl: "",
+      attachmentName: "",
+      status: "pending",
+      createdAt: Date.now(),
+      adminResponse: "",
+      updatedAt: Date.now(),
+      reportType: "unblock_request",
+      targetId: cleanEmail,
+      targetTitle: `\u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927: ${cleanEmail || mobile}`,
+      reportReason: reason || "\u0916\u093E\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927"
+    };
+    const all = loadSupportRequestsDatabase();
+    const updated = [newRequest, ...all.filter((r) => r.id !== id)];
+    saveSupportRequestsDatabase(updated);
+    return res.json({ success: true, message: "\u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0926\u0930\u094D\u091C \u0915\u093F\u092F\u093E \u0917\u092F\u093E", request: newRequest });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/unblock-requests", requireAdminMiddleware, (req, res) => {
+  try {
+    const all = loadSupportRequestsDatabase();
+    const unblocks = all.filter((r) => r.reportType === "unblock_request");
+    return res.json({ success: true, requests: unblocks });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/unblock-requests/action", requireAdminMiddleware, async (req, res) => {
+  try {
+    const { id, requestId, email, action, adminResponse } = req.body || {};
+    const targetId = id || requestId;
+    const cleanAction = String(action || "").toLowerCase().trim();
+    if (!targetId || !cleanAction) {
+      return res.status(400).json({ error: "id and action (approve/reject) are required" });
+    }
+    const all = loadSupportRequestsDatabase();
+    const idx = all.findIndex((r) => r.id === targetId);
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const reqItem = all[idx];
+    const targetEmail = (email || reqItem.userEmail || reqItem.userId || "").toLowerCase().trim();
+    if (cleanAction === "approve" || cleanAction === "approved") {
+      reqItem.status = "resolved";
+      reqItem.adminResponse = adminResponse || "\u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0935 \u0916\u093E\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E";
+      reqItem.updatedAt = Date.now();
+      if (targetEmail) {
+        const users = loadUsersMasterDatabase();
+        const uIdx = users.findIndex((u) => u.email && u.email.toLowerCase().trim() === targetEmail || u.userId && u.userId.toLowerCase().trim() === targetEmail);
+        if (uIdx >= 0) {
+          users[uIdx].isBlocked = false;
+          users[uIdx].blockedReason = null;
+          users[uIdx].unblockedAt = Date.now();
+          users[uIdx].unblockedBy = extractAdminEmail(req) || "Master Admin";
+          saveUsersMasterDatabase(users);
+          syncUserToProfiles(users[uIdx]);
+        }
+        if (centralDb) {
+          try {
+            if (uIdx >= 0) centralDb.saveUser(users[uIdx].email || users[uIdx].userId, users[uIdx]).catch(() => {
+            });
+            if (centralDb.cache?.users) {
+              for (const [k, u] of centralDb.cache.users.entries()) {
+                if (k && k.toLowerCase().trim() === targetEmail || u?.email && u.email.toLowerCase().trim() === targetEmail) {
+                  u.isBlocked = false;
+                  u.blockedReason = null;
+                }
+              }
+            }
+          } catch {
+          }
+        }
+        try {
+          let accounts = loadUsersDatabase();
+          const aIdx = accounts.findIndex((u) => u.email && u.email.toLowerCase().trim() === targetEmail || u.userId && u.userId.toLowerCase().trim() === targetEmail);
+          if (aIdx >= 0) {
+            accounts[aIdx].isBlocked = false;
+            accounts[aIdx].blockedReason = null;
+            accounts[aIdx].unblockedAt = Date.now();
+            saveUsersDatabase(accounts);
+          }
+        } catch {
+        }
+      }
+    } else {
+      reqItem.status = "rejected";
+      reqItem.adminResponse = adminResponse || "\u0905\u0928\u0941\u0930\u094B\u0927 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u093F\u092F\u093E \u0917\u092F\u093E";
+      reqItem.updatedAt = Date.now();
+    }
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, message: action === "approve" ? "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0914\u0930 \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u094D\u0935\u0940\u0915\u0943\u0924" : "\u0905\u0928\u0941\u0930\u094B\u0927 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924", request: reqItem });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -25168,6 +25361,15 @@ async function getOrLoadApiKeysVault(forceRefresh = false) {
           paidKey: doc.data.paidKey || null,
           vipRoutingEnabled: doc.data.vipRoutingEnabled !== false
         };
+        if (firestoreVault.freeKeys.length === 0) {
+          const localVault = loadApiKeysVault();
+          if (localVault.freeKeys && localVault.freeKeys.length > 0) {
+            firestoreVault.freeKeys = localVault.freeKeys;
+          }
+          if (!firestoreVault.paidKey && localVault.paidKey) {
+            firestoreVault.paidKey = localVault.paidKey;
+          }
+        }
         cachedApiKeysVault = firestoreVault;
         vaultLastLoadedAt = now;
         return cachedApiKeysVault;
@@ -25500,7 +25702,7 @@ function mapAiPoolErrorToUserResponse(err) {
     error: "AI \u0938\u0947\u0935\u093E \u092B\u093F\u0932\u0939\u093E\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 API Pool \u0915\u0940 \u0938\u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 Keys \u0915\u0940 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948 \u092F\u093E \u0935\u0947 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964"
   };
 }
-app.get("/api/admin/api-keys", async (req, res) => {
+app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0915\u0940\u091C\u093C \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }
@@ -25550,7 +25752,7 @@ app.get("/api/admin/api-keys", async (req, res) => {
     }
   });
 });
-app.post("/api/admin/api-keys/free", async (req, res) => {
+app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -25743,7 +25945,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
     });
   }
 });
-app.post("/api/admin/api-keys/test-id", async (req, res) => {
+app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }

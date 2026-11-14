@@ -436,13 +436,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const fetchAdminNotifications = async () => {
     setIsLoadingAdminNotifs(true);
     try {
-      const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
-      const res = await fetch(`/api/admin/notifications?email=${encodeURIComponent(adminEmail)}`, {
-        headers: {
-          'x-admin-key': 'master-admin',
-          'x-admin-email': adminEmail,
-          'x-user-role': 'admin',
-        },
+      const adminEmail = effectiveCurrentUser?.email || 'breakingnewswala.com@gmail.com';
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
+      const headers: Record<string, string> = {
+        'x-admin-email': adminEmail,
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(getApiUrl(`/api/admin/notifications?email=${encodeURIComponent(adminEmail)}`), {
+        headers,
       });
       if (res.ok) {
         const data = await res.json();
@@ -540,15 +542,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const handleResolveSupportRequest = async (rawId: string, eventId: string, category: string) => {
     if (!rawId) return;
     try {
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(getApiUrl('/api/admin/support/update-status'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': 'master-admin',
-          'x-user-role': 'superadmin',
-          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
-          'x-user-email': currentUser?.email || 'admin@ainewsmaker.online',
-        },
+        headers,
         body: JSON.stringify({ id: rawId, type: category, status: 'resolved' }),
       });
       const data = await res.json();
@@ -644,9 +647,19 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [editingChannelName, setEditingChannelName] = useState<string>('');
   const [restrictedMsg, setRestrictedMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Master Admin 4 Navigable Categories & Sub-Users Directory State (Section 11)
-  const [userTierCategory, setUserTierCategory] = useState<'ALL' | 'BASIC' | 'ADVANCED' | 'PRO' | 'VIP'>('ALL');
+  // Master Admin 5 Navigable Categories & Sub-Users Directory State (Section 11)
+  const [userTierCategory, setUserTierCategory] = useState<'ALL' | 'BASIC' | 'ADVANCED' | 'PRO' | 'VIP' | 'TEST'>('ALL');
   const [adminAllSubUsers, setAdminAllSubUsers] = useState<any[]>([]);
+
+  const isSyntheticTestAccount = (u: any): boolean => {
+    if (!u) return false;
+    const email = (u.email || '').toLowerCase().trim();
+    const id = (u.userId || '').toLowerCase().trim();
+    if (u.isTestUser === true || u.isSynthetic === true) return true;
+    if (email.includes('@synthetic.local') || email.includes('@test.local') || email.includes('@example.com') || email.includes('synthetic_') || email.startsWith('test_') || email.startsWith('e2e_') || email.includes('testuser')) return true;
+    if (id.startsWith('test_') || id.startsWith('e2e_') || id.includes('synthetic')) return true;
+    return false;
+  };
 
   const fetchAdminAllSubUsers = () => {
     fetch('/api/admin/sub-users')
@@ -3777,14 +3790,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               </div>
             </div>
 
-            {/* SECTION 11: 4 Navigable Categories Bar */}
+            {/* SECTION 11: 5 Navigable Categories Bar */}
             <div className="w-full flex items-center gap-2 overflow-x-auto pb-1">
               {[
-                { id: 'ALL', label: 'सभी श्रेणियां (All Users)', count: planUsers.length, color: 'from-slate-700 to-slate-800' },
-                { id: 'BASIC', label: '1. Basic Users', count: planUsers.filter(u => (u.tier || 'basic').toLowerCase() === 'basic').length, color: 'from-amber-600 to-amber-700' },
-                { id: 'ADVANCED', label: '2. Advanced Users', count: planUsers.filter(u => (u.tier || '').toLowerCase() === 'advanced').length, color: 'from-blue-600 to-blue-700' },
-                { id: 'PRO', label: '3. Pro Users', count: planUsers.filter(u => ['pro', 'professional'].includes((u.tier || '').toLowerCase())).length, color: 'from-purple-600 to-purple-700' },
-                { id: 'VIP', label: '4. VIP Desk Users', count: planUsers.filter(u => ['vip', 'ultra'].includes((u.tier || '').toLowerCase())).length, color: 'from-emerald-600 to-emerald-700' },
+                { id: 'ALL', label: 'सभी श्रेणियां (All Users)', count: planUsers.filter(u => !isSyntheticTestAccount(u)).length, color: 'from-slate-700 to-slate-800' },
+                { id: 'BASIC', label: '1. Basic Users', count: planUsers.filter(u => !isSyntheticTestAccount(u) && (u.tier || 'basic').toLowerCase() === 'basic').length, color: 'from-amber-600 to-amber-700' },
+                { id: 'ADVANCED', label: '2. Advanced Users', count: planUsers.filter(u => !isSyntheticTestAccount(u) && (u.tier || '').toLowerCase() === 'advanced').length, color: 'from-blue-600 to-blue-700' },
+                { id: 'PRO', label: '3. Pro Users', count: planUsers.filter(u => !isSyntheticTestAccount(u) && ['pro', 'professional'].includes((u.tier || '').toLowerCase())).length, color: 'from-purple-600 to-purple-700' },
+                { id: 'VIP', label: '4. VIP Desk Users', count: planUsers.filter(u => !isSyntheticTestAccount(u) && ['vip', 'ultra'].includes((u.tier || '').toLowerCase())).length, color: 'from-emerald-600 to-emerald-700' },
+                { id: 'TEST', label: '5. Test Users', count: planUsers.filter(u => isSyntheticTestAccount(u)).length, color: 'from-rose-600 to-rose-700' },
               ].map((cat) => {
                 const isActive = userTierCategory === cat.id;
                 return (
@@ -3817,12 +3831,17 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
               <div className="sm:hidden space-y-3">
                 {planUsers
                   .filter((u) => {
-                    if (userTierCategory !== 'ALL') {
-                      const normTier = (u.tier || 'basic').toLowerCase();
-                      if (userTierCategory === 'BASIC' && normTier !== 'basic') return false;
-                      if (userTierCategory === 'ADVANCED' && normTier !== 'advanced') return false;
-                      if (userTierCategory === 'PRO' && normTier !== 'professional' && normTier !== 'pro') return false;
-                      if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
+                    if (userTierCategory === 'TEST') {
+                      if (!isSyntheticTestAccount(u)) return false;
+                    } else {
+                      if (isSyntheticTestAccount(u)) return false;
+                      if (userTierCategory !== 'ALL') {
+                        const normTier = (u.tier || 'basic').toLowerCase();
+                        if (userTierCategory === 'BASIC' && normTier !== 'basic') return false;
+                        if (userTierCategory === 'ADVANCED' && normTier !== 'advanced') return false;
+                        if (userTierCategory === 'PRO' && normTier !== 'professional' && normTier !== 'pro') return false;
+                        if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
+                      }
                     }
                     if (userStatusFilter === 'active' && u.isBlocked) return false;
                     if (userStatusFilter === 'blocked' && !u.isBlocked) return false;
@@ -3849,7 +3868,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             {u.channelLogoUrl ? <img src={u.channelLogoUrl} alt={u.name} className="w-full h-full object-contain" /> : (u.name ? u.name[0].toUpperCase() : '👤')}
                           </div>
                           <div className="min-w-0">
-                            <div className="text-xs font-black text-white truncate">{u.name || u.fullName || 'यूज़र'}</div>
+                            {(() => {
+                              const isMasterEmail = u.email && (u.email.toLowerCase().trim() === 'breakingnewswala.com@gmail.com' || u.email.toLowerCase().trim() === 'breakingnewsvala.com@gmail.com');
+                              const displayName = isMasterEmail ? 'मुख्य संपादक' : (u.name || u.fullName || 'यूज़र');
+                              return <div className="text-xs font-black text-white truncate">{displayName}</div>;
+                            })()}
                             <div className="text-[10px] text-slate-400 font-mono truncate">{u.email}</div>
                           </div>
                         </div>
@@ -3938,13 +3961,18 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <tbody className="divide-y divide-slate-800/60 font-medium">
                     {planUsers
                       .filter((u) => {
-                        // Filter by 4 Navigable Categories (Section 11)
-                        if (userTierCategory !== 'ALL') {
-                          const normTier = (u.tier || 'basic').toLowerCase();
-                          if (userTierCategory === 'BASIC' && normTier !== 'basic') return false;
-                          if (userTierCategory === 'ADVANCED' && normTier !== 'advanced') return false;
-                          if (userTierCategory === 'PRO' && normTier !== 'professional' && normTier !== 'pro') return false;
-                          if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
+                        // Filter by 5 Navigable Categories (Section 11)
+                        if (userTierCategory === 'TEST') {
+                          if (!isSyntheticTestAccount(u)) return false;
+                        } else {
+                          if (isSyntheticTestAccount(u)) return false;
+                          if (userTierCategory !== 'ALL') {
+                            const normTier = (u.tier || 'basic').toLowerCase();
+                            if (userTierCategory === 'BASIC' && normTier !== 'basic') return false;
+                            if (userTierCategory === 'ADVANCED' && normTier !== 'advanced') return false;
+                            if (userTierCategory === 'PRO' && normTier !== 'professional' && normTier !== 'pro') return false;
+                            if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
+                          }
                         }
 
                         // Filter by status
@@ -3974,13 +4002,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         const trialStart = u.trialStartedAt || u.createdAt || u.activatedAt;
                         const trialEnds = u.trialEndsAt || (trialStart ? trialStart + 7 * 24 * 3600 * 1000 : 0);
                         const linkedSubs = adminAllSubUsers.filter((s) => s.primaryEmail?.toLowerCase().trim() === u.email?.toLowerCase().trim());
+                        const isMasterEmail = u.email && (u.email.toLowerCase().trim() === 'breakingnewswala.com@gmail.com' || u.email.toLowerCase().trim() === 'breakingnewsvala.com@gmail.com');
+                        const displayName = isMasterEmail ? 'मुख्य संपादक' : (u.name || u.fullName || u.username || 'यूज़र');
+                        const displayChannel = isMasterEmail ? 'ब्रेकिंग न्यूज़ वाला (BREAKING NEWS WALA)' : (u.channelName || 'चैनल नाम नहीं');
 
                         return (
                           <tr key={u.userId || u.email} className={`hover:bg-slate-800/40 transition-colors ${isBlocked ? 'bg-rose-950/15' : ''}`}>
                             {/* 1. User & Account Info + Role (Combined in Column 1) */}
                             <td className="p-3 align-top">
                               <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
-                                <span className="text-sm">{u.name || u.fullName || u.username || 'यूज़र'}</span>
+                                <span className="text-sm">{displayName}</span>
                                 {isSuper ? (
                                   <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black rounded uppercase flex items-center gap-0.5">
                                     👑 Super Admin
@@ -4013,7 +4044,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               )}
                               <div className="text-[10.5px] text-slate-300 mt-1 flex items-center gap-1">
                                 <span className="text-slate-500">📺</span>
-                                <span className="font-bold text-slate-200 truncate">{u.channelName || 'चैनल नाम नहीं'}</span>
+                                <span className="font-bold text-slate-200 truncate">{displayChannel}</span>
                                 {u.websiteUrl && (
                                   <span className="text-slate-500 text-[9.5px] font-mono">({u.websiteUrl})</span>
                                 )}

@@ -235,5 +235,83 @@
     ],
     "createdAt": 1794280000000,
     "updatedAt": 1794280000000
+  },
+  {
+    "id": "callout_story_details_hindi",
+    "name": "पूरी खबर विवरण में पढ़ें (Crimson & Gold Ribbon)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='cgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23BE123C'/><stop offset='50%' stop-color='%23E11D48'/><stop offset='100%' stop-color='%239F1239'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23cgGrad)' stroke='%23FBBF24' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23FBBF24'/><polygon points='36,28 48,36 36,44' fill='%23881337'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23FFFFFF'>पूरी खबर विवरण में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FBBF24'/><path d='M434 36 L446 36 M442 30 L448 36 L442 42' stroke='%23881337' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_info_below",
+    "name": "पूरी जानकारी नीचे पढ़ें (Navy & Cyan Editorial Badge)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='ncGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%230F172A'/><stop offset='70%' stop-color='%231E293B'/><stop offset='100%' stop-color='%230284C7'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23ncGrad)' stroke='%2338BDF8' stroke-width='2'/><circle cx='40' cy='36' r='20' fill='%230284C7'/><path d='M34 36 L46 36 M42 30 L48 36 L42 42' stroke='%23FFFFFF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23F0F9FF'>पूरी जानकारी नीचे पढ़ें</text><circle cx='440' cy='36' r='16' fill='%2338BDF8'/><polygon points='436,28 446,36 436,44' fill='%230F172A'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_detail_read",
+    "name": "विस्तृत खबर के लिए पढ़ें (Emerald & Amber Pill)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='eaGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23065F46'/><stop offset='60%' stop-color='%23047857'/><stop offset='100%' stop-color='%23064E3B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23eaGrad)' stroke='%23F59E0B' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23F59E0B'/><polygon points='36,28 48,36 36,44' fill='%23064E3B'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23ECFDF5'>विस्तृत खबर के लिए पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23F59E0B'/><path d='M434 36 L446 36 M442 30 L448 36 L442 42' stroke='%23064E3B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_live_update",
+    "name": "ताजा अपडेट — विवरण में देखें (Ruby Live Pulse)",
+    "category": "breaking",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='lpGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23991B1B'/><stop offset='50%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%237F1D1D'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23lpGrad)' stroke='%23FEF08A' stroke-width='2.5'/><circle cx='40' cy='36' r='12' fill='%23EF4444' stroke='%23FFFFFF' stroke-width='2'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='21' fill='%23FFFFFF'>ताजा अपडेट — विवरण में देखें</text><circle cx='440' cy='36' r='16' fill='%23FEF08A'/><polygon points='436,28 446,36 436,44' fill='%23991B1B'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_full_read",
+    "name": "विस्तृत विवरण नीचे उपलब्ध है (Royal Indigo & Gold Pill)",
+    "category": "special",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='riGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23312E81'/><stop offset='50%' stop-color='%234338CA'/><stop offset='100%' stop-color='%231E1B4B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23riGrad)' stroke='%23FCD34D' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23FCD34D'/><path d='M34 36 L46 36 M42 30 L48 36 L42 42' stroke='%23312E81' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='21' fill='%23FEF3C7'>विस्तृत विवरण नीचे उपलब्ध है</text><circle cx='440' cy='36' r='16' fill='%23FCD34D'/><polygon points='436,28 446,36 436,44' fill='%23312E81'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
   }
 ]

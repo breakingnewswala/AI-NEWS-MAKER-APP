@@ -1295,7 +1295,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     setIsAnalyzing(true);
     setAnalysisStatusText('Gemini 1.5 Pro विज़न से सैंपल लेआउट का विश्लेषण हो रहा है...');
     try {
-      const res = await requestAiFrameAnalysis(sampleImage, selectedRatio);
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
+      const res = await requestAiFrameAnalysis(sampleImage, selectedRatio, token);
       if (res.success && res.result) {
         setAnalysisResult(res.result);
         setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');

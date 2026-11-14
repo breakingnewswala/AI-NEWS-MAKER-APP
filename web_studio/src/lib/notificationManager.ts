@@ -10,6 +10,9 @@ export interface AppNotification {
   unread: boolean;
   type?: 'news' | 'system' | 'plan' | 'admin' | 'studio';
   linkTab?: 'home' | 'videos' | 'studio' | 'epaper' | 'profile';
+  newsId?: string;
+  postId?: string;
+  videoId?: string;
 }
 
 const STORAGE_KEY = 'ai_news_real_notifications_v1';

@@ -213,13 +213,25 @@ function initializeAuthSecret(): string {
     return secret.trim();
   }
 
-  if (process.env.NODE_ENV === "production") {
-    console.warn("[SECURITY WARNING] SESSION_SECRET environment variable is missing, empty, or < 32 chars in production environment.");
+  // Persistent vault file fallback so restarts on the same instance preserve valid sessions
+  try {
+    const dataDir = path.join(process.cwd(), "data");
+    const vaultPath = path.join(dataDir, ".session_secret_vault");
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    if (fs.existsSync(vaultPath)) {
+      const saved = fs.readFileSync(vaultPath, "utf-8").trim();
+      if (saved.length >= 32) {
+        return saved;
+      }
+    }
+    const generated = crypto.randomBytes(32).toString("hex");
+    fs.writeFileSync(vaultPath, generated, "utf-8");
+    return generated;
+  } catch {
+    return crypto.randomBytes(32).toString("hex");
   }
-
-  // Generate an ephemeral random secret per instance run if SESSION_SECRET is not supplied
-  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is not configured. Generating ephemeral instance secret.");
-  return crypto.randomBytes(32).toString("hex");
 }
 
 const AUTH_SECRET = initializeAuthSecret();
@@ -257,7 +269,7 @@ const LEGACY_AUTH_SECRETS: string[] = (process.env.LEGACY_AUTH_SECRETS || "")
   .map((s) => s.trim())
   .filter((s) => s.length >= 16);
 
-function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignature?: boolean }) | null {
+function verifyAuthToken(tokenStr: string, allowGraceSeconds = 0): (AuthTokenPayload & { isLegacySignature?: boolean; isExpired?: boolean }) | null {
   if (!tokenStr || typeof tokenStr !== "string") return null;
   const parts = tokenStr.trim().split(".");
   if (parts.length !== 3) return null;
@@ -274,7 +286,7 @@ function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignat
     return null;
   }
 
-  // 1. Primary verification with active AUTH_SECRET (from Secret Manager)
+  // 1. Primary verification with active AUTH_SECRET (from Secret Manager or persistent vault)
   let isValid = false;
   let isLegacySignature = false;
 
@@ -315,8 +327,15 @@ function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignat
 
   try {
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
-    const payload = JSON.parse(payloadJson) as AuthTokenPayload & { isLegacySignature?: boolean };
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+    const payload = JSON.parse(payloadJson) as AuthTokenPayload & { isLegacySignature?: boolean; isExpired?: boolean };
+    const nowSec = Math.floor(Date.now() / 1000);
+    const isExpired = Boolean(payload.exp && payload.exp < nowSec);
+    if (isExpired) {
+      if (allowGraceSeconds > 0 && payload.exp && (payload.exp + allowGraceSeconds >= nowSec)) {
+        payload.isLegacySignature = isLegacySignature;
+        payload.isExpired = true;
+        return payload;
+      }
       return null; // Token expired
     }
     payload.isLegacySignature = isLegacySignature;
@@ -389,7 +408,11 @@ function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
   }
   const token = extractTokenFromRequest(req);
   if (!token) return null;
-  return verifyAuthToken(token);
+  const verified = verifyAuthToken(token, 86400 * 30);
+  if (verified) {
+    (req as any).user = verified;
+  }
+  return verified;
 }
 
 export async function resolveAuthenticatedUser(req: express.Request, res?: express.Response): Promise<VerifiedUser | null> {
@@ -400,8 +423,8 @@ export async function resolveAuthenticatedUser(req: express.Request, res?: expre
   const token = extractTokenFromRequest(req);
   if (!token) return null;
 
-  // 1. Verify as internal HMAC-SHA256 session token (Fastest, zero-network, local cryptographic check)
-  const internalPayload = verifyAuthToken(token);
+  // 1. Verify as internal HMAC-SHA256 session token (Fastest, zero-network, local cryptographic check with 30-day grace)
+  const internalPayload = verifyAuthToken(token, 86400 * 30);
   if (internalPayload && internalPayload.email) {
     const email = internalPayload.email.toLowerCase().trim();
     let userRole = internalPayload.role || "user";
@@ -445,8 +468,8 @@ export async function resolveAuthenticatedUser(req: express.Request, res?: expre
     };
     (req as any).user = verified;
 
-    // Seamless secret rotation auto-upgrade: If token was signed with legacy secret, emit refreshed token header
-    if ((internalPayload as any).isLegacySignature && res && typeof res.setHeader === "function" && !res.headersSent) {
+    // Seamless secret rotation auto-upgrade: If token was signed with legacy secret or inside grace period, emit refreshed token header
+    if (((internalPayload as any).isLegacySignature || (internalPayload as any).isExpired) && res && typeof res.setHeader === "function" && !res.headersSent) {
       try {
         const freshToken = generateAuthToken(verified);
         res.setHeader("X-Refreshed-Token", freshToken);
@@ -1308,7 +1331,43 @@ app.post("/api/auth/verify-captcha", (req, res) => {
 // ============================================================================
 app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) => {
   try {
-    const user = await resolveAuthenticatedUser(req, res);
+    let user = await resolveAuthenticatedUser(req, res);
+    // If standard active verification failed, verify token with 30-day grace period
+    if (!user) {
+      const rawToken = extractTokenFromRequest(req);
+      if (rawToken) {
+        const gracePayload = verifyAuthToken(rawToken, 30 * 86400);
+        if (gracePayload && gracePayload.email) {
+          const email = gracePayload.email.toLowerCase().trim();
+          let userRole = gracePayload.role || "user";
+          let isBlocked = false;
+          try {
+            const masterUsers = loadUsersMasterDatabase();
+            const dbUser = masterUsers.find(
+              (u: any) => (u.email && u.email.toLowerCase().trim() === email) || (u.userId && u.userId === gracePayload.userId)
+            );
+            if (dbUser) {
+              if (dbUser.role) userRole = dbUser.role;
+              if (dbUser.isBlocked) isBlocked = true;
+            }
+          } catch {}
+          if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+            userRole = "superadmin";
+          } else if (email === REGULAR_ADMIN_EMAIL) {
+            userRole = "admin";
+          }
+          user = {
+            userId: gracePayload.userId || email,
+            email,
+            role: userRole,
+            username: gracePayload.username || email.split("@")[0],
+            authType: "session",
+            isBlocked,
+          };
+          (req as any).user = user;
+        }
+      }
+    }
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -7316,8 +7375,19 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
       const idKey = (u.userId || "").toLowerCase().trim();
       const w = rDb.wallets[emailKey] || (idKey ? rDb.wallets[idKey] : null) || { coinBalance: 0 };
       const isSuper = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
+      const isMasterEmail = emailKey === 'breakingnewswala.com@gmail.com' || emailKey === 'breakingnewsvala.com@gmail.com';
+      const cleanName = isMasterEmail ? 'मुख्य संपादक' : (u.fullName || u.name || '');
+      const cleanChannelName = isMasterEmail ? 'ब्रेकिंग न्यूज़ वाला (BREAKING NEWS WALA)' : (u.channelName || u.channelNameHi || '');
+      const cleanChannelNameHi = isMasterEmail ? 'ब्रेकिंग न्यूज़ वाला' : (u.channelNameHi || '');
+      const cleanChannelNameEn = isMasterEmail ? 'BREAKING NEWS WALA' : (u.channelNameEn || '');
       return {
         ...u,
+        name: cleanName,
+        fullName: cleanName,
+        displayName: cleanName,
+        channelName: cleanChannelName,
+        channelNameHi: cleanChannelNameHi,
+        channelNameEn: cleanChannelNameEn,
         coins: w.coinBalance || 0,
         coinBalance: w.coinBalance || 0,
         permanentLock: isSuper,
@@ -9844,7 +9914,7 @@ interface RssSyncResult {
 
 let isRssSyncRunning = false;
 let lastRssSyncResult: RssSyncResult | null = null;
-const RSS_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes standard interval
+const RSS_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes background synchronization
 
 async function executeRssSynchronization(): Promise<RssSyncResult> {
   if (isRssSyncRunning) {
@@ -10051,7 +10121,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
   }
 }
 
-// 5-Minute Permanent Backend Auto-Sync Scheduler (Part 1, Section 2.1)
+// 15-Minute Permanent Backend Auto-Sync Scheduler (Part 1, Section 2.1)
 setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
 setTimeout(executeRssSynchronization, 15000);
 
@@ -10225,7 +10295,7 @@ app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
     success: true,
     lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
-    intervalMinutes: 5,
+    intervalMinutes: 15,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS,
   });
 });
@@ -13653,10 +13723,12 @@ function loadSupportRequestsDatabase(): StoredSupportRequest[] {
 
 function saveSupportRequestsDatabase(requests: StoredSupportRequest[]): boolean {
   if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache?.systemConfig) {
+      centralDb.cache.systemConfig.set('support_requests', requests);
+    }
     for (const r of requests) {
       centralDb.saveSupportRequest(r).catch(() => {});
     }
-    return true;
   }
   try {
     fs.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
@@ -14554,10 +14626,18 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
 
-    // Also update Firestore users collection
+    // Also update Firestore users collection and purge/update memory cache
     if (centralDb) {
       try {
         centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {});
+        if (centralDb.cache?.users) {
+          for (const [k, u] of centralDb.cache.users.entries()) {
+            if ((k && k.toLowerCase().trim() === identifier) || (u?.email && u.email.toLowerCase().trim() === identifier) || (u?.userId && u.userId === identifier)) {
+              u.isBlocked = false;
+              u.blockedReason = null;
+            }
+          }
+        }
       } catch {}
     }
 
@@ -14577,6 +14657,125 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     } catch {}
 
     return res.json({ success: true, message: "उपयोगकर्ता को अनब्लॉक कर दिया गया है", user: users[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Support Endpoints: Public Unblock Request and Admin Action
+app.post("/api/support/unblock-request", async (req, res) => {
+  try {
+    const { email, mobile, reason, userName } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    if (!cleanEmail && !mobile) {
+      return res.status(400).json({ error: "ईमेल या मोबाइल नंबर अनिवार्य है" });
+    }
+    const id = `unblock_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const newRequest: StoredSupportRequest = {
+      id,
+      userId: cleanEmail,
+      userName: userName || "अवरुद्ध उपयोगकर्ता",
+      userEmail: cleanEmail,
+      userMobile: (mobile || "").toString().trim(),
+      message: reason || "खाता अनब्लॉक करने का अनुरोध (Unblock Request)",
+      voiceTranscript: "",
+      attachmentUrl: "",
+      attachmentName: "",
+      status: "pending",
+      createdAt: Date.now(),
+      adminResponse: "",
+      updatedAt: Date.now(),
+      reportType: "unblock_request",
+      targetId: cleanEmail,
+      targetTitle: `अनब्लॉक अनुरोध: ${cleanEmail || mobile}`,
+      reportReason: reason || "खाता अनब्लॉक करने का अनुरोध",
+    };
+    const all = loadSupportRequestsDatabase();
+    const updated = [newRequest, ...all.filter(r => r.id !== id)];
+    saveSupportRequestsDatabase(updated);
+
+    return res.json({ success: true, message: "अनब्लॉक अनुरोध सफलतापूर्वक दर्ज किया गया", request: newRequest });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.get("/api/admin/unblock-requests", requireAdminMiddleware, (req, res) => {
+  try {
+    const all = loadSupportRequestsDatabase();
+    const unblocks = all.filter(r => r.reportType === "unblock_request");
+    return res.json({ success: true, requests: unblocks });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/admin/unblock-requests/action", requireAdminMiddleware, async (req, res) => {
+  try {
+    const { id, requestId, email, action, adminResponse } = req.body || {};
+    const targetId = id || requestId;
+    const cleanAction = String(action || "").toLowerCase().trim();
+    if (!targetId || !cleanAction) {
+      return res.status(400).json({ error: "id and action (approve/reject) are required" });
+    }
+    const all = loadSupportRequestsDatabase();
+    const idx = all.findIndex(r => r.id === targetId);
+    if (idx === -1) {
+      return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+    }
+
+    const reqItem = all[idx];
+    const targetEmail = (email || reqItem.userEmail || reqItem.userId || "").toLowerCase().trim();
+
+    if (cleanAction === "approve" || cleanAction === "approved") {
+      reqItem.status = "resolved" as any;
+      reqItem.adminResponse = adminResponse || "मास्टर एडमिन द्वारा अनुरोध स्वीकृत व खाता अनब्लॉक किया गया";
+      reqItem.updatedAt = Date.now();
+
+      // Trigger authoritative unblock for user
+      if (targetEmail) {
+        const users = loadUsersMasterDatabase();
+        const uIdx = users.findIndex(u => (u.email && u.email.toLowerCase().trim() === targetEmail) || (u.userId && u.userId.toLowerCase().trim() === targetEmail));
+        if (uIdx >= 0) {
+          users[uIdx].isBlocked = false;
+          users[uIdx].blockedReason = null;
+          users[uIdx].unblockedAt = Date.now();
+          users[uIdx].unblockedBy = extractAdminEmail(req) || "Master Admin";
+          saveUsersMasterDatabase(users);
+          syncUserToProfiles(users[uIdx]);
+        }
+        if (centralDb) {
+          try {
+            if (uIdx >= 0) centralDb.saveUser(users[uIdx].email || users[uIdx].userId, users[uIdx]).catch(() => {});
+            if (centralDb.cache?.users) {
+              for (const [k, u] of centralDb.cache.users.entries()) {
+                if ((k && k.toLowerCase().trim() === targetEmail) || (u?.email && u.email.toLowerCase().trim() === targetEmail)) {
+                  u.isBlocked = false;
+                  u.blockedReason = null;
+                }
+              }
+            }
+          } catch {}
+        }
+        try {
+          let accounts = loadUsersDatabase();
+          const aIdx = accounts.findIndex(u => (u.email && u.email.toLowerCase().trim() === targetEmail) || (u.userId && u.userId.toLowerCase().trim() === targetEmail));
+          if (aIdx >= 0) {
+            accounts[aIdx].isBlocked = false;
+            accounts[aIdx].blockedReason = null;
+            accounts[aIdx].unblockedAt = Date.now();
+            saveUsersDatabase(accounts);
+          }
+        } catch {}
+      }
+    } else {
+      reqItem.status = "rejected" as any;
+      reqItem.adminResponse = adminResponse || "अनुरोध अस्वीकृत किया गया";
+      reqItem.updatedAt = Date.now();
+    }
+
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, message: action === "approve" ? "उपयोगकर्ता अनब्लॉक और अनुरोध स्वीकृत" : "अनुरोध अस्वीकृत", request: reqItem });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -16027,6 +16226,16 @@ async function getOrLoadApiKeysVault(forceRefresh: boolean = false): Promise<Api
           paidKey: doc.data.paidKey || null,
           vipRoutingEnabled: doc.data.vipRoutingEnabled !== false,
         };
+        // Safety Fallback: If Firestore returned 0 free keys, merge with local vault so keys never vanish
+        if (firestoreVault.freeKeys.length === 0) {
+          const localVault = loadApiKeysVault();
+          if (localVault.freeKeys && localVault.freeKeys.length > 0) {
+            firestoreVault.freeKeys = localVault.freeKeys;
+          }
+          if (!firestoreVault.paidKey && localVault.paidKey) {
+            firestoreVault.paidKey = localVault.paidKey;
+          }
+        }
         cachedApiKeysVault = firestoreVault;
         vaultLastLoadedAt = now;
         return cachedApiKeysVault;
@@ -16461,7 +16670,7 @@ function mapAiPoolErrorToUserResponse(err: any): {
 }
 
 // Admin API Keys Manager Endpoints
-app.get("/api/admin/api-keys", async (req, res) => {
+app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API कीज़ देख सकते हैं।" });
   }
@@ -16514,7 +16723,7 @@ app.get("/api/admin/api-keys", async (req, res) => {
   });
 });
 
-app.post("/api/admin/api-keys/free", async (req, res) => {
+app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
@@ -16731,7 +16940,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
   }
 });
 
-app.post("/api/admin/api-keys/test-id", async (req, res) => {
+app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API स्वास्थ्य परीक्षण कर सकते हैं।" });
   }

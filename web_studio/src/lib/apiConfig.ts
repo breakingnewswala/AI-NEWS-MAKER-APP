@@ -100,12 +100,25 @@ export function getApiUrl(endpoint: string): string {
 export function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   try {
-    const direct = localStorage.getItem('reporter_auth_token') || localStorage.getItem('auth_token') || localStorage.getItem('token') || localStorage.getItem('google_id_token');
+    const direct =
+      localStorage.getItem('reporter_auth_token') ||
+      localStorage.getItem('auth_token') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('google_id_token') ||
+      sessionStorage.getItem('reporter_auth_token') ||
+      sessionStorage.getItem('auth_token') ||
+      sessionStorage.getItem('token');
     if (direct) return direct.trim();
-    const sessionStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
-    if (sessionStr) {
-      const u = JSON.parse(sessionStr);
-      if (u && u.token) return String(u.token).trim();
+    const sessionKeys = ['reporter_auth_session', 'ai_news_user', 'user', 'currentUser'];
+    for (const key of sessionKeys) {
+      const sessionStr = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (sessionStr) {
+        const u = JSON.parse(sessionStr);
+        if (u) {
+          const t = u.token || u.authToken || u.idToken || u.googleIdToken || u.firebaseToken;
+          if (t && typeof t === 'string') return t.trim();
+        }
+      }
     }
   } catch {}
   return '';
@@ -203,6 +216,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${existingToken}`,
             },
+            body: JSON.stringify({ email }),
           });
           if (refRes.ok) {
             const refData = await refRes.json();
@@ -294,7 +308,18 @@ export function getAuthHeaders(): Record<string, string> {
 }
 
 export function getAdminAuthHeaders(): Record<string, string> {
-  return getAuthHeaders();
+  const headers = getAuthHeaders();
+  let adminEmail = '';
+  try {
+    const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+    if (sessStr) {
+      const sess = JSON.parse(sessStr);
+      adminEmail = (sess?.email || '').toLowerCase().trim();
+    }
+  } catch {}
+  if (!adminEmail) adminEmail = 'breakingnewswala.com@gmail.com';
+  headers['x-admin-email'] = adminEmail;
+  return headers;
 }
 
 // Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated

@@ -130,11 +130,9 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
   const adminEmail = currentUser?.email || 'breakingnewswala.com@gmail.com';
 
   const getAuthHeaders = async (extra: Record<string, string> = {}) => {
-    let token = getAuthToken();
+    let token = await ensureAuthToken().catch(() => '');
     if (!token) {
-      try {
-        token = await ensureAuthToken();
-      } catch {}
+      token = getAuthToken();
     }
     const headers: Record<string, string> = {
       'x-admin-email': adminEmail,
@@ -155,7 +153,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -168,6 +166,11 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         if (json.success) {
           setData(json);
           setVipRoutingToggle(json.vipRoutingEnabled);
+        }
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        if (!isSilent) {
+          showToast(`⚠️ API कीज़ लोड नहीं हो सकीं (${res.status}): ${errJson.error || 'सर्वर त्रुटि'}`);
         }
       }
     } catch (err) {
@@ -182,7 +185,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       let headers = await getAuthHeaders();
       let res = await fetch(getApiUrl('/api/admin/api-health/status'), { headers });
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -210,7 +213,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         method: 'POST',
         headers,
       });
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -249,7 +252,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
         body: JSON.stringify({ enabled: nextState }),
       });
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -287,7 +290,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         method: 'POST',
         headers,
       });
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -343,7 +346,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         }),
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -369,7 +372,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         setNewFreeLabel('');
         fetchKeysData(true);
       } else {
-        if (res.status === 401) {
+        if (res.status === 401 || res.status === 403) {
           showToast('❌ सत्र समाप्त (401 Unauthorized): कृपया एक बार लॉगआउट करके पुनः एडमिन लॉगिन करें।');
           window.dispatchEvent(new CustomEvent('open_login_modal'));
         } else {
@@ -394,7 +397,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -432,7 +435,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         }),
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -458,7 +461,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         setPaidKeyInput('');
         fetchKeysData(true);
       } else {
-        if (res.status === 401) {
+        if (res.status === 401 || res.status === 403) {
           showToast('❌ सत्र समाप्त (401 Unauthorized): कृपया एक बार लॉगआउट करके पुनः एडमिन लॉगिन करें।');
           window.dispatchEvent(new CustomEvent('open_login_modal'));
         } else {
@@ -483,7 +486,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -518,7 +521,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         body: JSON.stringify({ keyId, type }),
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -566,7 +569,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         }),
       });
 
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {

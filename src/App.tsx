@@ -1803,7 +1803,7 @@ export default function App() {
   // Deep linking listeners for notifications & external triggers
   useEffect(() => {
     const handleDeepLinkPost = (e: any) => {
-      const postId = e.detail?.postId;
+      const postId = e.detail?.postId || e.detail?.newsId;
       if (!postId) return;
       const targetPost = posts.find((p) => String(p.id) === String(postId));
       if (targetPost) {
@@ -2159,15 +2159,17 @@ export default function App() {
     setToastMessage(msg);
   };
 
-  // Full reset / clean card to default template matching user specification (Part C)
-  const handleResetCard = () => {
-    const hasUnsavedContent = Boolean(
-      (card.headline && card.headline.trim().length > 0 && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी')) ||
-      (card.images?.main && card.images.main.trim().length > 0)
-    );
-    if (hasUnsavedContent) {
-      const confirmReset = window.confirm('क्या आप स्टूडियो को रिफ्रेश करके नया ग्राफिक शुरू करना चाहते हैं? वर्तमान अनसेव्ड बदलाव हट जाएंगे।');
-      if (!confirmReset) return;
+  // Comprehensive Photo News Studio Reset & Refresh Workspace (Issue E Remediation)
+  const resetPhotoNewsStudioWorkspace = (options: { skipConfirm?: boolean } = {}) => {
+    if (!options.skipConfirm) {
+      const hasUnsavedContent = Boolean(
+        (card.headline && card.headline.trim().length > 0 && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी')) ||
+        (card.images?.main && card.images.main.trim().length > 0)
+      );
+      if (hasUnsavedContent) {
+        const confirmReset = window.confirm('क्या आप स्टूडियो को रिफ्रेश करके नया ग्राफिक शुरू करना चाहते हैं? वर्तमान अनसेव्ड बदलाव हट जाएंगे।');
+        if (!confirmReset) return;
+      }
     }
 
     // Trigger dynamic frame and catalog refresh without altering permanent database
@@ -2271,52 +2273,16 @@ export default function App() {
 
     setAutoFillNews(null);
 
-    // Dispatch studio reset event so InlineAiNewsTools clears its internal state & URL
+    // Dispatch studio reset events so InlineAiNewsTools clears its internal state, options 1-5, result & URL
     window.dispatchEvent(new CustomEvent('ai_news_studio_reset'));
+    window.dispatchEvent(new CustomEvent('ai_news_studio_reset_preview'));
 
     setActiveStep(1);
     showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
   };
 
-  const handleRefreshPreview = () => {
-    // Rebuild visual preview while strictly preserving entered user configurations:
-    // Headline text (if entered), selected template, font family, font size,
-    // frame layout, date rotation, watermark rotation, layer positions, user branding.
-    setCard((prev) => {
-      const currentHeadline = prev.headline?.trim() || '';
-      const isHeadlineEmpty =
-        !currentHeadline ||
-        currentHeadline === 'मध्य प्रदेश में ऐतिहासिक फैसला:\nकैबिनेट बैठक में बड़े प्रस्तावों को\nमिली अंतिम मंजूरी' ||
-        currentHeadline === 'मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली अंतिम मंजूरी' ||
-        currentHeadline === CANONICAL_DEFAULT_HEADLINE;
-
-      return {
-        ...prev,
-        // If headline is genuinely empty, restore default instructional text; otherwise preserve user's entered headline!
-        headline: isHeadlineEmpty ? CANONICAL_DEFAULT_HEADLINE : prev.headline,
-        formattedHeadline: isHeadlineEmpty ? CANONICAL_DEFAULT_HEADLINE : prev.formattedHeadline,
-        // Clear stale preview-only images so empty-photo instruction ("फोटो जोड़ने के लिए स्टेप 4 पर जाएँ") is restored when no active photo
-        images: {
-          main: '',
-          second: '',
-          third: '',
-          fourth: '',
-        },
-        photoUrl: '',
-        testSamplePhotoUrl: '',
-        watermarkImage: undefined,
-        customWatermarkUrl: undefined,
-        extractedArticlePhotos: [],
-      };
-    });
-
-    try {
-      localStorage.removeItem('studio_active_news_photos');
-    } catch {}
-
-    window.dispatchEvent(new CustomEvent('ai_news_studio_reset_preview'));
-    showToast('🔄 प्रीव्यू सफलतापूर्वक रिफ्रेश हुआ!');
-  };
+  const handleResetCard = () => resetPhotoNewsStudioWorkspace();
+  const handleRefreshPreview = () => resetPhotoNewsStudioWorkspace({ skipConfirm: true });
 
   useEffect(() => {
     const handleResetRequest = () => {
