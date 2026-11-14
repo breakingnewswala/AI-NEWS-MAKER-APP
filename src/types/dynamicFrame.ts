@@ -13,19 +13,27 @@ export type HeadlineLineCount = 2 | 3;
 export interface HeadlineBlockConfig {
   id: string;
   name: string;
+  role?: string;
   rect: NormalizedRect;
-  fontFamily: string;
-  fontSize: number;
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
   fontWeight?: string;
-  textColor: string;
+  textColor?: string;
   highlightColor?: string;
   backgroundColor?: string;
-  alignment: 'left' | 'center' | 'right';
-  maxLines: HeadlineLineCount;
+  bgColor?: string; // legacy migration alias
+  alignment?: 'left' | 'center' | 'right';
+  maxLines?: HeadlineLineCount | number;
   lineHeight?: number;
   rotation?: number;
   visible?: boolean;
   zIndex?: number;
+  // Backward compatibility flat coordinate aliases
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface VideoRibbonLayer {
@@ -34,10 +42,19 @@ export interface VideoRibbonLayer {
   name: string;
   customRibbonUrl?: string;
   rect: NormalizedRect;
+  text?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  fontSize?: number;
   visible: boolean;
   zIndex: number;
   rotation?: number;
   isAnimatedGif?: boolean;
+  // Backward compatibility flat coordinate aliases
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface VideoOverlayAsset {
@@ -50,6 +67,11 @@ export interface VideoOverlayAsset {
   zIndex: number;
   rotation?: number;
   opacity?: number;
+  // Backward compatibility flat coordinate aliases
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface VideoFrameConfig {
@@ -62,13 +84,15 @@ export interface VideoFrameConfig {
   safeZoneConfig?: SafeZoneConfig;
   headlineMode?: HeadlineDisplayMode; // 'single' | 'multiple'
   headlineLineCount?: HeadlineLineCount; // 2 | 3
+  headlineRect?: NormalizedRect; // Canonical authoritative single headline rect
   headlineBlocks?: HeadlineBlockConfig[];
   ribbonLayers?: VideoRibbonLayer[];
   overlayAssets?: VideoOverlayAsset[];
   locationBadgeUrl?: string; // from Location Badge PNG library
   locationBadgeId?: string;
   locationBadgeStyle?: 'pill' | 'box' | 'strip';
-  locationRect?: NormalizedRect;
+  locationRect?: NormalizedRect; // Canonical location rect
+  locationBadgeRect?: NormalizedRect; // Backward compatibility alias
   logoRect?: NormalizedRect;
   logoUrl?: string;
   logoType?: 'png' | 'gif';
@@ -77,6 +101,11 @@ export interface VideoFrameConfig {
   logoRotation?: number;
   dateRect?: NormalizedRect;
   dateVisible?: boolean;
+  dateRotation?: number;
+  dateFontFamily?: string;
+  dateFontSize?: number;
+  dateTextColor?: string;
+  dateBgColor?: string;
   watermarkTextEnabled?: boolean;
   watermarkText?: string;
   watermarkLogoEnabled?: boolean;

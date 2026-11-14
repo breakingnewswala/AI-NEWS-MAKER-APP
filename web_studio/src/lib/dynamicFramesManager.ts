@@ -20,6 +20,7 @@ import {
   VideoFrameConfig,
   TypographyConfig,
 } from '../types/dynamicFrame';
+import { normalizeVideoConfig } from './videoFrameLayoutModel';
 import { getApiBaseUrl, ensureAuthToken, getAuthToken } from './apiConfig';
 
 const STORAGE_KEY_FRAMES = 'ai_news_dynamic_frames_v1';
@@ -331,20 +332,9 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
   });
 
   const isVideo = raw.frameMode === 'video' || raw.frameType === 'video';
-  const rawV = raw.videoConfig || {};
-  const videoConfig: VideoFrameConfig | undefined = (isVideo || raw.videoConfig) ? {
-    displayMode: rawV.displayMode || 'fit',
-    videoRect: rawV.videoRect || (raw.aspectRatio === '9:16' ? { x: 0, y: 15, width: 100, height: 75 } : { x: 0, y: 15, width: 100, height: 75 }),
-    footerPosition: rawV.footerPosition || 'bottom',
-    locationBadgeUrl: rawV.locationBadgeUrl,
-    locationBadgeId: rawV.locationBadgeId,
-    watermarkTextEnabled: Boolean(rawV.watermarkTextEnabled),
-    watermarkText: rawV.watermarkText || 'AI NEWS MAKER',
-    watermarkLogoEnabled: Boolean(rawV.watermarkLogoEnabled),
-    watermarkLogoUrl: rawV.watermarkLogoUrl,
-    watermarkUserAllowed: rawV.watermarkUserAllowed !== false,
-    watermarkRect: rawV.watermarkRect || { x: 35, y: 48, width: 30, height: 6 },
-  } : undefined;
+  const videoConfig: VideoFrameConfig | undefined = (isVideo || raw.videoConfig)
+    ? normalizeVideoConfig(raw.videoConfig, raw.aspectRatio, textSlots[0]?.rect)
+    : undefined;
 
   const rawT = raw.typographyConfig || {};
   const typographyConfig: TypographyConfig | undefined = raw.typographyConfig ? {

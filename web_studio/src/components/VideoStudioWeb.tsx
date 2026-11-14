@@ -48,6 +48,7 @@ import { VideoFeedItem, INITIAL_VIDEOS } from '../data/newsFeedData';
 import { ChannelProfile } from '../types';
 import { getApiUrl } from '../lib/apiConfig';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
+import { normalizeVideoConfig, getAuthoritativeVideoLayers } from '../lib/videoFrameLayoutModel';
 import { fetchDynamicFramesFromApi, getLocalDynamicFrames } from '../lib/dynamicFramesManager';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { generate5BalancedHeadlineOptions } from '../lib/speakerUtils';
@@ -241,7 +242,8 @@ function drawAuthoritativeDynamicVideoFrame(
   opts: DrawCompositionOptions
 ) {
   const rawDf = frameDef.rawDynamicFrame;
-  const vConf = frameDef.videoConfig || rawDf?.videoConfig;
+  const canvasRatio = (frameDef.aspectRatio || rawDf?.aspectRatio || '9:16') as any;
+  const vConf = normalizeVideoConfig(frameDef.videoConfig || rawDf?.videoConfig, canvasRatio, rawDf?.textSlots?.[0]?.rect);
   const {
     video,
     headline,
@@ -263,12 +265,12 @@ function drawAuthoritativeDynamicVideoFrame(
   ctx.fillRect(0, 0, width, height);
 
   // 2. Video Window Geometry & Display Mode (Fit vs Crop)
-  const vRectNorm = vConf?.videoRect || { x: 0, y: 15, width: 100, height: 70 };
+  const vRectNorm = vConf.videoRect;
   const vx = Math.round((vRectNorm.x / 100) * width);
   const vy = Math.round((vRectNorm.y / 100) * height);
   const vw = Math.max(10, Math.round((vRectNorm.width / 100) * width));
   const vh = Math.max(10, Math.round((vRectNorm.height / 100) * height));
-  const isCrop = (vConf?.displayMode || 'fit') === 'crop';
+  const isCrop = vConf.displayMode === 'crop';
 
   // Draw Main Video Window Background Placeholder
   ctx.fillStyle = '#111827';
@@ -299,11 +301,9 @@ function drawAuthoritativeDynamicVideoFrame(
         let sh = vidNatH;
 
         if (vidAspect > winAspect) {
-          // Video is wider than window: crop sides
           sw = Math.round(vidNatH * winAspect);
           sx = Math.round((vidNatW - sw) / 2);
         } else {
-          // Video is taller than window: crop top/bottom
           sh = Math.round(vidNatW / winAspect);
           const maxCropY = Math.max(0, vidNatH - sh);
           const normY = cropRegion ? Math.max(0, Math.min(1, cropRegion.y)) : 0.15;
@@ -339,14 +339,14 @@ function drawAuthoritativeDynamicVideoFrame(
   }
 
   // 3. Render Breaking News Ribbon Layers
-  const ribbons = vConf?.ribbonLayers || [];
+  const ribbons = vConf.ribbonLayers || [];
   if (ribbons.length > 0) {
     ribbons.forEach((ribbon) => {
       if (ribbon.visible === false) return;
-      const rx = (ribbon.x / 100) * width;
-      const ry = (ribbon.y / 100) * height;
-      const rw = (ribbon.width / 100) * width;
-      const rh = (ribbon.height / 100) * height;
+      const rx = ((ribbon.rect?.x ?? ribbon.x) / 100) * width;
+      const ry = ((ribbon.rect?.y ?? ribbon.y) / 100) * height;
+      const rw = ((ribbon.rect?.width ?? ribbon.width) / 100) * width;
+      const rh = ((ribbon.rect?.height ?? ribbon.height) / 100) * height;
 
       ctx.save();
       ctx.fillStyle = ribbon.backgroundColor || '#dc2626';
@@ -364,20 +364,27 @@ function drawAuthoritativeDynamicVideoFrame(
   }
 
   // 4. Render Channel Logo (PNG or GIF)
-  const lRect = vConf?.logoRect || { x: 3, y: 3, width: 22, height: 7 };
+  const lRect = vConf.logoRect || { x: 3, y: 3, width: 22, height: 7 };
   const lx = Math.round((lRect.x / 100) * width);
   const ly = Math.round((lRect.y / 100) * height);
   const lw = Math.round((lRect.width / 100) * width);
   const lh = Math.round((lRect.height / 100) * height);
 
   ctx.save();
+  if (vConf.logoRotation) {
+    ctx.translate(lx + lw / 2, ly + lh / 2);
+    ctx.rotate((vConf.logoRotation * Math.PI) / 180);
+    ctx.translate(-(lx + lw / 2), -(ly + lh / 2));
+  }
+  ctx.globalAlpha = vConf.logoOpacity ?? 1;
   if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
     try {
       const imgAspect = logoImg.naturalWidth / logoImg.naturalHeight;
-      let dw = lw;
+      const scalePct = (vConf.logoScalePct ?? 100) / 100;
+      let dw = lw * scalePct;
       let dh = dw / imgAspect;
-      if (dh > lh) {
-        dh = lh;
+      if (dh > lh * scalePct) {
+        dh = lh * scalePct;
         dw = dh * imgAspect;
       }
       const dx = lx + Math.round((lw - dw) / 2);
@@ -395,9 +402,9 @@ function drawAuthoritativeDynamicVideoFrame(
   }
   ctx.restore();
 
-  // 5. Render Location Badge (with Central Asset support & "भोपाल" dynamic text)
+  // 5. Render Location Badge
   if (opts.showLocation !== false && location && location.trim()) {
-    const locNorm = vConf?.locationBadgeRect || { x: 68, y: 3, width: 29, height: 6 };
+    const locNorm = vConf.locationRect || vConf.locationBadgeRect || { x: 68, y: 3, width: 29, height: 6 };
     const locX = Math.round((locNorm.x / 100) * width);
     const locY = Math.round((locNorm.y / 100) * height);
     const locW = Math.round((locNorm.width / 100) * width);
@@ -425,19 +432,47 @@ function drawAuthoritativeDynamicVideoFrame(
     ctx.restore();
   }
 
-  // 6. Render Headlines (Single 2/3 lines OR Multi-Headline Blocks)
-  const isMulti = vConf?.headlineMode === 'multi';
-  const headlineBlocks = vConf?.headlineBlocks || [];
+  // 6. Render Date Stamp
+  if (vConf.dateVisible) {
+    const dNorm = vConf.dateRect || { x: 40, y: 3, width: 25, height: 5 };
+    const dx = Math.round((dNorm.x / 100) * width);
+    const dy = Math.round((dNorm.y / 100) * height);
+    const dw = Math.round((dNorm.width / 100) * width);
+    const dh = Math.round((dNorm.height / 100) * height);
+
+    ctx.save();
+    if (vConf.dateRotation) {
+      ctx.translate(dx + dw / 2, dy + dh / 2);
+      ctx.rotate((vConf.dateRotation * Math.PI) / 180);
+      ctx.translate(-(dx + dw / 2), -(dy + dh / 2));
+    }
+    if (vConf.dateBgColor) {
+      ctx.fillStyle = vConf.dateBgColor;
+      ctx.fillRect(dx, dy, dw, dh);
+    }
+    ctx.fillStyle = vConf.dateTextColor || '#ffffff';
+    const dScale = width / 720;
+    ctx.font = `bold ${Math.round((vConf.dateFontSize || 14) * dScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const dateStr = new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+    ctx.fillText(dateStr, dx + dw / 2, dy + dh / 2);
+    ctx.restore();
+  }
+
+  // 7. Render Headlines (Single 2/3 lines OR Multi-Headline Blocks)
+  const isMulti = vConf.headlineMode === 'multiple' || vConf.headlineMode === 'multi';
+  const headlineBlocks = vConf.headlineBlocks || [];
 
   if (isMulti && headlineBlocks.length > 0) {
     headlineBlocks.forEach((block, bIdx) => {
-      const bx = (block.x / 100) * width;
-      const by = (block.y / 100) * height;
-      const bw = (block.width / 100) * width;
-      const bh = (block.height / 100) * height;
+      const bx = ((block.rect?.x ?? block.x) / 100) * width;
+      const by = ((block.rect?.y ?? block.y) / 100) * height;
+      const bw = ((block.rect?.width ?? block.width) / 100) * width;
+      const bh = ((block.rect?.height ?? block.height) / 100) * height;
 
       ctx.save();
-      ctx.fillStyle = block.backgroundColor || '#b91c1c';
+      ctx.fillStyle = block.backgroundColor || block.bgColor || '#b91c1c';
       ctx.fillRect(bx, by, bw, bh);
 
       const blockText = (bIdx === 0 ? headline : bIdx === 1 ? subHeadline : block.text) || block.text || '';
@@ -458,25 +493,13 @@ function drawAuthoritativeDynamicVideoFrame(
       ctx.restore();
     });
   } else {
-    // Single Headline (2 or 3 lines toggle)
-    const maxLines = vConf?.headlineLineCount || 2;
-    const footerPos = vConf?.footerPosition || 'bottom';
-    const fRect = vConf?.footerRect || (footerPos === 'top' || footerPos === 'header'
-      ? { x: 0, y: 0, width: 100, height: 8 }
-      : { x: 0, y: 92, width: 100, height: 8 });
-
-    let headY: number;
-    let headH: number;
-    let headW = Math.round(width * 0.94);
-    let headX = Math.round(width * 0.03);
-
-    if (footerPos === 'bottom') {
-      headH = maxLines === 3 ? Math.round(height * 0.14) : Math.round(height * 0.10);
-      headY = Math.round((fRect.y / 100) * height) - headH - 10;
-    } else {
-      headH = maxLines === 3 ? Math.round(height * 0.14) : Math.round(height * 0.10);
-      headY = Math.round(height * 0.82);
-    }
+    // Single Headline positioned by authoritative headlineRect
+    const maxLines = vConf.headlineLineCount || 2;
+    const hRectNorm = vConf.headlineRect || { x: 3, y: 76, width: 94, height: maxLines === 3 ? 14 : 11 };
+    const headX = Math.round((hRectNorm.x / 100) * width);
+    const headY = Math.round((hRectNorm.y / 100) * height);
+    const headW = Math.round((hRectNorm.width / 100) * width);
+    const headH = Math.round((hRectNorm.height / 100) * height);
 
     ctx.save();
     const hGrad = ctx.createLinearGradient(headX, headY, headX + headW, headY);
@@ -524,11 +547,8 @@ function drawAuthoritativeDynamicVideoFrame(
     ctx.restore();
   }
 
-  // 7. Render Movable Footer (Placement: Bottom, Top, Header, Custom)
-  const footerPos = vConf?.footerPosition || 'bottom';
-  const fRectNorm = vConf?.footerRect || (footerPos === 'top' || footerPos === 'header'
-    ? { x: 0, y: 0, width: 100, height: 8 }
-    : { x: 0, y: 92, width: 100, height: 8 });
+  // 8. Render Movable Footer
+  const fRectNorm = vConf.footerRect || { x: 0, y: 92, width: 100, height: 8 };
   const fx = Math.round((fRectNorm.x / 100) * width);
   const fy = Math.round((fRectNorm.y / 100) * height);
   const fw = Math.round((fRectNorm.width / 100) * width);
@@ -551,39 +571,26 @@ function drawAuthoritativeDynamicVideoFrame(
   ctx.fillText(footerText, fx + fw / 2, fy + fh / 2);
   ctx.restore();
 
-  // 8. Watermark (Respect Part 8.H)
-  if (opts.showWatermark) {
-    if (opts.watermarkType === 'image' && opts.watermarkImageImg && opts.watermarkImageImg.complete && opts.watermarkImageImg.naturalWidth > 0) {
-      try {
-        ctx.save();
-        ctx.globalAlpha = Math.max(0.1, Math.min(0.95, opts.watermarkOpacity || 0.4));
-        const img = opts.watermarkImageImg;
-        const maxW = Math.round(width * 0.28);
-        const imgAspect = img.naturalWidth / img.naturalHeight;
-        const dw = maxW;
-        const dh = dw / imgAspect;
-        const dx = width - dw - 24;
-        const dy = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
-        ctx.drawImage(img, dx, dy, dw, dh);
-        ctx.restore();
-      } catch {}
-    } else {
-      const wmText = opts.watermarkCustomText || opts.watermarkText;
-      if (wmText) {
-        ctx.save();
-        ctx.globalAlpha = Math.max(0.08, Math.min(0.9, opts.watermarkOpacity || 0.25));
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = 'rgba(0,0,0,0.9)';
-        ctx.shadowBlur = 8;
-        const wmScale = width / 720;
-        ctx.font = `900 ${Math.round(24 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const wmY = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
-        ctx.fillText(wmText, width / 2, wmY);
-        ctx.restore();
-      }
-    }
+  // 9. Watermark
+  if (vConf.watermarkTextEnabled || vConf.watermarkLogoEnabled || opts.showWatermark) {
+    const wmRect = vConf.watermarkRect || { x: 35, y: 48, width: 30, height: 6 };
+    const wx = Math.round((wmRect.x / 100) * width);
+    const wy = Math.round((wmRect.y / 100) * height);
+    const ww = Math.round((wmRect.width / 100) * width);
+    const wh = Math.round((wmRect.height / 100) * height);
+
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.1, Math.min(0.9, opts.watermarkOpacity || 0.4));
+    const wmText = vConf.watermarkText || opts.watermarkCustomText || opts.watermarkText || 'AI NEWS MAKER';
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 6;
+    const wmScale = width / 720;
+    ctx.font = `900 ${Math.round(18 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(wmText, wx + ww / 2, wy + wh / 2);
+    ctx.restore();
   }
 }
 
@@ -3438,19 +3445,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 // DYNAMIC VIDEO FRAME PRO (Master Admin Defined)
                 // ==========================================
                 (() => {
-                  const vConf = activeDynamicFrame.videoConfig || activeDynamicFrame.rawDynamicFrame?.videoConfig;
-                  const vRect = vConf?.videoRect || { x: 0, y: 15, width: 100, height: 70 };
-                  const footerPos = vConf?.footerPosition || 'bottom';
-                  const fRect = vConf?.footerRect || (footerPos === 'top' || footerPos === 'header'
-                    ? { x: 0, y: 0, width: 100, height: 8 }
-                    : { x: 0, y: 92, width: 100, height: 8 });
-                  const isCrop = (vConf?.displayMode || 'fit') === 'crop';
-                  const lRect = vConf?.logoRect || { x: 3, y: 3, width: 22, height: 7 };
-                  const locRect = vConf?.locationBadgeRect || { x: 68, y: 3, width: 29, height: 6 };
-                  const isMultiHeadline = vConf?.headlineMode === 'multi';
-                  const maxHeadLines = vConf?.headlineLineCount || 2;
-                  const headlineBlocks = vConf?.headlineBlocks || [];
-                  const ribbonLayers = vConf?.ribbonLayers || [];
+                  const rawDf = activeDynamicFrame.rawDynamicFrame;
+                  const canvasRatio = (activeDynamicFrame.aspectRatio || rawDf?.aspectRatio || '9:16') as any;
+                  const vConf = normalizeVideoConfig(activeDynamicFrame.videoConfig || rawDf?.videoConfig, canvasRatio, rawDf?.textSlots?.[0]?.rect);
+                  const vRect = vConf.videoRect;
+                  const fRect = vConf.footerRect;
+                  const isCrop = vConf.displayMode === 'crop';
+                  const lRect = vConf.logoRect;
+                  const locRect = vConf.locationRect;
+                  const isMultiHeadline = vConf.headlineMode === 'multiple' || vConf.headlineMode === 'multi';
+                  const maxHeadLines = vConf.headlineLineCount || 2;
+                  const headlineBlocks = vConf.headlineBlocks || [];
+                  const ribbonLayers = vConf.ribbonLayers || [];
+                  const hRect = vConf.headlineRect || { x: 3, y: 76, width: 94, height: maxHeadLines === 3 ? 14 : 11 };
 
                   return (
                     <div className="relative w-full h-full overflow-hidden bg-[#0a0a0a] select-none">
@@ -3507,16 +3514,34 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           key={ribbon.id}
                           className="absolute z-10 flex items-center justify-center font-black tracking-wider uppercase shadow-md pointer-events-none"
                           style={{
-                            left: `${ribbon.x}%`,
-                            top: `${ribbon.y}%`,
-                            width: `${ribbon.width}%`,
-                            height: `${ribbon.height}%`,
+                            left: `${ribbon.rect?.x ?? ribbon.x}%`,
+                            top: `${ribbon.rect?.y ?? ribbon.y}%`,
+                            width: `${ribbon.rect?.width ?? ribbon.width}%`,
+                            height: `${ribbon.rect?.height ?? ribbon.height}%`,
                             backgroundColor: ribbon.backgroundColor || '#dc2626',
                             color: ribbon.textColor || '#ffffff',
                             fontSize: `${Math.max(9, Math.round((ribbon.fontSize || 14) * 0.75))}px`,
                           }}
                         >
                           {ribbon.text || 'BREAKING NEWS'}
+                        </div>
+                      ))}
+
+                      {/* Overlay Assets (PNG / GIF) */}
+                      {vConf.overlayAssets && vConf.overlayAssets.filter(o => o.visible !== false && o.url).map((overlay) => (
+                        <div
+                          key={overlay.id}
+                          className="absolute z-10 pointer-events-none"
+                          style={{
+                            left: `${overlay.rect?.x ?? overlay.x}%`,
+                            top: `${overlay.rect?.y ?? overlay.y}%`,
+                            width: `${overlay.rect?.width ?? overlay.width}%`,
+                            height: `${overlay.rect?.height ?? overlay.height}%`,
+                            opacity: overlay.opacity ?? 1,
+                            transform: overlay.rotation ? `rotate(${overlay.rotation}deg)` : undefined,
+                          }}
+                        >
+                          <img src={overlay.url} alt={overlay.name} className="w-full h-full object-contain" />
                         </div>
                       ))}
 
@@ -3528,14 +3553,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           top: `${lRect.y}%`,
                           width: `${lRect.width}%`,
                           height: `${lRect.height}%`,
+                          opacity: vConf.logoOpacity ?? 1,
+                          transform: vConf.logoRotation ? `rotate(${vConf.logoRotation}deg)` : undefined,
                         }}
                       >
-                        {(activeLogoUrl || channelLogoUrl) ? (
+                        {(vConf.logoUrl || activeLogoUrl || channelLogoUrl) ? (
                           <img
-                            src={activeLogoUrl || channelLogoUrl}
+                            src={vConf.logoUrl || activeLogoUrl || channelLogoUrl}
                             alt="Channel Logo"
                             className="max-h-full max-w-full object-contain drop-shadow-md"
-                            style={{ transform: `scale(${logoScale / 100})` }}
+                            style={{ transform: `scale(${(vConf.logoScalePct ?? logoScale) / 100})` }}
                           />
                         ) : (
                           <div className="font-black text-[10px] text-amber-300 drop-shadow-md">
@@ -3564,6 +3591,24 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         </div>
                       )}
 
+                      {/* Date Stamp */}
+                      {vConf.dateVisible && (
+                        <div
+                          className="absolute z-10 pointer-events-none flex items-center justify-center font-bold text-white text-[9px] whitespace-nowrap"
+                          style={{
+                            left: `${vConf.dateRect.x}%`,
+                            top: `${vConf.dateRect.y}%`,
+                            width: `${vConf.dateRect.width}%`,
+                            height: `${vConf.dateRect.height}%`,
+                            backgroundColor: vConf.dateBgColor || 'rgba(0,0,0,0.5)',
+                            color: vConf.dateTextColor || '#ffffff',
+                            transform: vConf.dateRotation ? `rotate(${vConf.dateRotation}deg)` : undefined,
+                          }}
+                        >
+                          {new Date().toLocaleDateString('hi-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </div>
+                      )}
+
                       {/* Headline Section */}
                       {isMultiHeadline && headlineBlocks.length > 0 ? (
                         headlineBlocks.map((block, bIdx) => {
@@ -3573,11 +3618,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                               key={block.id}
                               className="absolute z-10 pointer-events-none flex items-center justify-center px-2 shadow-lg"
                               style={{
-                                left: `${block.x}%`,
-                                top: `${block.y}%`,
-                                width: `${block.width}%`,
-                                height: `${block.height}%`,
-                                backgroundColor: block.backgroundColor || '#b91c1c',
+                                left: `${block.rect?.x ?? block.x}%`,
+                                top: `${block.rect?.y ?? block.y}%`,
+                                width: `${block.rect?.width ?? block.width}%`,
+                                height: `${block.rect?.height ?? block.height}%`,
+                                backgroundColor: block.backgroundColor || block.bgColor || '#b91c1c',
                                 color: block.textColor || '#ffffff',
                               }}
                             >
@@ -3591,14 +3636,17 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           );
                         })
                       ) : (
-                        /* Single Headline Banner (2 or 3 lines) */
+                        /* Single Headline Banner (2 or 3 lines) positioned by authoritative headlineRect */
                         <div
-                          className="absolute z-10 pointer-events-none left-2 right-2 flex justify-center"
+                          className="absolute z-10 pointer-events-none flex justify-center"
                           style={{
-                            bottom: footerPos === 'bottom' ? `${Math.max(10, fRect.height + 2)}%` : '6%',
+                            left: `${hRect.x}%`,
+                            top: `${hRect.y}%`,
+                            width: `${hRect.width}%`,
+                            height: `${hRect.height}%`,
                           }}
                         >
-                          <div className="w-full bg-gradient-to-r from-red-800 via-red-600 to-red-800 border border-yellow-400 rounded-lg px-2.5 py-1.5 shadow-2xl text-center">
+                          <div className="w-full bg-gradient-to-r from-red-800 via-red-600 to-red-800 border border-yellow-400 rounded-lg px-2.5 py-1.5 shadow-2xl text-center flex flex-col justify-center">
                             {(activeHeadline.split('\n').filter((l) => l.trim().length > 0).length > 0
                               ? activeHeadline.split('\n').filter((l) => l.trim().length > 0).slice(0, maxHeadLines)
                               : ['यहाँ आपकी वीडियो की मुख्य हेडलाइन दिखाई देगी']
@@ -3613,6 +3661,27 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                               </h3>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Watermark */}
+                      {(vConf.watermarkTextEnabled || vConf.watermarkLogoEnabled || showWatermark) && (
+                        <div
+                          className="absolute z-10 pointer-events-none flex items-center justify-center font-bold text-white/80 text-[10px]"
+                          style={{
+                            left: `${vConf.watermarkRect.x}%`,
+                            top: `${vConf.watermarkRect.y}%`,
+                            width: `${vConf.watermarkRect.width}%`,
+                            height: `${vConf.watermarkRect.height}%`,
+                          }}
+                        >
+                          {vConf.watermarkLogoEnabled && vConf.watermarkLogoUrl ? (
+                            <img src={vConf.watermarkLogoUrl} alt="Watermark" className="max-h-full max-w-full object-contain" />
+                          ) : (
+                            <span className="bg-black/50 px-2 py-0.5 rounded border border-white/20">
+                              {vConf.watermarkText || 'AI NEWS MAKER'}
+                            </span>
+                          )}
                         </div>
                       )}
 

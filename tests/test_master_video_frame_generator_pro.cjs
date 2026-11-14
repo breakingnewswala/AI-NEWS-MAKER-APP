@@ -214,7 +214,7 @@ runTest('Group 3.3: DOM Live Preview renders authoritative dynamic video frame m
   const studio = readNorm('src/components/VideoStudioWeb.tsx');
   assert(studio.includes('activeDynamicFrame?.rawDynamicFrame ? ('), 'DOM preview must branch on activeDynamicFrame.rawDynamicFrame');
   assert(studio.includes('DYNAMIC VIDEO FRAME PRO (Master Admin Defined)'), 'Must include Dynamic Video Frame Pro block in DOM preview');
-  assert(studio.includes('vConf?.videoRect'), 'DOM preview must position video according to vConf.videoRect');
+  assert(studio.includes('vConf.videoRect') || studio.includes('vConf?.videoRect'), 'DOM preview must position video according to vConf.videoRect');
   assert(studio.includes('fRect.x') && studio.includes('fRect.y'), 'DOM preview must position footer according to fRect');
 });
 
@@ -274,6 +274,12 @@ runTest('Group 5.5: Zero diff between src/ and web_studio/src/ for AdminVideoTem
   assert.strictEqual(src, web, 'src/components/AdminVideoTemplateControl.tsx must be identical to web_studio/src/components/AdminVideoTemplateControl.tsx');
 });
 
+runTest('Group 5.6: Zero diff between src/ and web_studio/src/ for videoFrameLayoutModel.ts', () => {
+  const src = readNorm('src/lib/videoFrameLayoutModel.ts');
+  const web = readNorm('web_studio/src/lib/videoFrameLayoutModel.ts');
+  assert.strictEqual(src, web, 'src/lib/videoFrameLayoutModel.ts must be identical to web_studio/src/lib/videoFrameLayoutModel.ts');
+});
+
 // -------------------------------------------------------------
 // Group 6: Safety Invariants & Photo Frame Preservation
 // -------------------------------------------------------------
@@ -301,6 +307,92 @@ runTest('Group 6.3: Photo Frame Generator mode is completely intact with photo s
   assert(modal.includes('रिबन, हेडर व फुटर'), 'Step 3 must retain all header, ribbon and footer controls');
   assert(modal.includes('fullStoryCalloutConfig'), 'Callout must be preserved for Photo mode');
   assert(modal.includes('सिंगल फोटो (1 Photo Full)'), 'Photo layout presets must be preserved');
+});
+
+// -------------------------------------------------------------
+// Group 7: Layout Model & Normalization Runtime Engine
+// -------------------------------------------------------------
+const esbuild = require('esbuild');
+const modelBundle = esbuild.buildSync({
+  entryPoints: ['src/lib/videoFrameLayoutModel.ts'],
+  bundle: true,
+  write: false,
+  format: 'cjs',
+  platform: 'node',
+  target: 'node18',
+});
+const modelModule = { exports: {} };
+new Function('module', 'exports', 'require', modelBundle.outputFiles[0].text)(
+  modelModule,
+  modelModule.exports,
+  require
+);
+const { normalizeVideoConfig, getAuthoritativeVideoLayers } = modelModule.exports;
+
+runTest('Group 7.1: normalizeVideoConfig normalizes canonical contract, migrating multi to multiple & legacy coords', () => {
+  const legacy = {
+    headlineMode: 'multi',
+    locationBadgeRect: { x: 5, y: 15, width: 25, height: 6 },
+    ribbonLayers: [{ id: 'r1', text: 'BREAKING', position: 'top' }],
+    headlineBlocks: [{ id: 'b1', text: 'Title' }],
+  };
+  const norm = normalizeVideoConfig(legacy, '9:16');
+  assert.strictEqual(norm.headlineMode, 'multiple', 'headlineMode multi must be normalized to multiple');
+  assert.deepStrictEqual(norm.locationRect, { x: 5, y: 15, width: 25, height: 6 }, 'locationBadgeRect must migrate to locationRect');
+  assert(norm.ribbonLayers[0].rect, 'ribbon without rect must get default canonical rect');
+  assert(norm.headlineBlocks[0].rect, 'headlineBlock without rect must get default canonical rect');
+});
+
+runTest('Group 7.2: getAuthoritativeVideoLayers sorts layers in strict zIndex stack order', () => {
+  const norm = normalizeVideoConfig(
+    {
+      videoRect: { x: 0, y: 15, width: 100, height: 75 },
+      logoRect: { x: 5, y: 5, width: 20, height: 8 },
+      locationRect: { x: 5, y: 15, width: 25, height: 6 },
+      footerRect: { x: 0, y: 92, width: 100, height: 8 },
+      ribbonLayers: [{ id: 'r1', name: 'R1', zIndex: 12, visible: true }],
+      headlineMode: 'single',
+      headlineRect: { x: 5, y: 70, width: 90, height: 15 },
+    },
+    '9:16'
+  );
+  const layers = getAuthoritativeVideoLayers(norm);
+  assert(layers.length >= 5, `Expected at least 5 layers, got ${layers.length}`);
+  for (let i = 0; i < layers.length - 1; i++) {
+    assert(
+      layers[i].zIndex <= layers[i + 1].zIndex,
+      `Layer ${layers[i].name} (${layers[i].zIndex}) must be <= ${layers[i + 1].name} (${layers[i + 1].zIndex})`
+    );
+  }
+});
+
+// -------------------------------------------------------------
+// Group 8: Screenshot Evidence & Visual Audit Integrity
+// -------------------------------------------------------------
+runTest('Group 8.1: evidence_manifest.json exists with 15 verified captures', () => {
+  const manifestPath = path.join('audit_screenshots', 'video_pro', 'evidence_manifest.json');
+  assert(fs.existsSync(manifestPath), 'evidence_manifest.json must exist');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  assert.strictEqual(manifest.length, 15, `Manifest must contain 15 entries, got ${manifest.length}`);
+});
+
+runTest('Group 8.2: All 15 screenshots exist on disk, are non-empty (>50KB), and have 100% unique SHA256 hashes', () => {
+  const manifestPath = path.join('audit_screenshots', 'video_pro', 'evidence_manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const crypto = require('crypto');
+  const seenHashes = new Set();
+
+  for (const item of manifest) {
+    const fileOnDisk = path.join('audit_screenshots', 'video_pro', item.file);
+    assert(fs.existsSync(fileOnDisk), `Screenshot file ${item.file} must exist on disk`);
+    const buf = fs.readFileSync(fileOnDisk);
+    assert(buf.length > 50000, `Screenshot file ${item.file} must be >50KB, got ${buf.length} bytes`);
+    const hash = crypto.createHash('sha256').update(buf).digest('hex');
+    assert.strictEqual(hash, item.sha256, `SHA256 for ${item.file} must match manifest`);
+    assert(!seenHashes.has(hash), `Duplicate screenshot detected for ${item.file}!`);
+    seenHashes.add(hash);
+  }
+  assert.strictEqual(seenHashes.size, 15, 'All 15 screenshots must have unique hashes');
 });
 
 // -------------------------------------------------------------
