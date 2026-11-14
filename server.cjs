@@ -13284,7 +13284,7 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
     let verifiedUserId = "";
     let authType = "session";
     if (rawToken) {
-      const activePayload = verifyAuthTokenAllowingExpired(rawToken);
+      const activePayload = verifyAuthToken(rawToken);
       if (activePayload && activePayload.email) {
         verifiedEmail = activePayload.email.toLowerCase().trim();
         verifiedUserId = activePayload.userId || verifiedEmail;

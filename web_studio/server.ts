@@ -1476,9 +1476,9 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
     let verifiedUserId = "";
     let authType: "session" | "firebase" | "google" = "session";
 
-    // 1. If caller provides an application session token with valid HMAC signature, allow refresh
+    // 1. If caller provides an active application session token with valid HMAC signature, allow refresh
     if (rawToken) {
-      const activePayload = verifyAuthTokenAllowingExpired(rawToken);
+      const activePayload = verifyAuthToken(rawToken);
       if (activePayload && activePayload.email) {
         verifiedEmail = activePayload.email.toLowerCase().trim();
         verifiedUserId = activePayload.userId || verifiedEmail;
