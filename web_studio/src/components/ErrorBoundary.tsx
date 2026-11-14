@@ -40,15 +40,17 @@ export class ErrorBoundary extends Component<Props, State> {
         msg.indexOf('dynamically imported module') !== -1
       );
       if (isChunkError) {
+        const CHUNK_KEY = '__chunk_recovery_attempted';
         let hasRecovered = false;
         try {
-          hasRecovered = sessionStorage.getItem('__eb_chunk_attempted') === 'true';
+          hasRecovered = sessionStorage.getItem(CHUNK_KEY) === 'true';
         } catch {}
         if (!hasRecovered) {
           try {
-            sessionStorage.setItem('__eb_chunk_attempted', 'true');
+            sessionStorage.setItem(CHUNK_KEY, 'true');
           } catch {}
           this.handleHardReset();
+          return;
         }
       }
     } catch {}
@@ -62,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
     }, 150);
   };
 
-  // Full cache purge & clean reload (strictly bounded, no ?fresh= accumulation)
+  // Single bounded automatic chunk recovery reload (strictly preserves recovery flag and user session)
   private handleHardReset = async () => {
     this.setState({ isResetting: true });
     try {
@@ -78,22 +80,21 @@ export class ErrorBoundary extends Component<Props, State> {
           await Promise.all(regs.map((reg) => reg.unregister()));
         } catch {}
       }
+      // CRITICAL: Ensure the recovery flag is preserved across the reload.
+      // Do NOT call sessionStorage.clear() or delete user session data!
       try {
-        sessionStorage.clear();
+        sessionStorage.setItem('__chunk_recovery_attempted', 'true');
       } catch {}
     } catch {}
     this.setState({ hasError: false, error: null, isResetting: false });
     window.location.reload();
   };
 
-  // Studio recovery: resets studio drafts and keeps user in Studio cleanly
+  // Studio recovery: restores the Studio interface without deleting user drafts or saved data
   private handleStudioReset = async () => {
     this.setState({ isResetting: true });
     try {
-      try {
-        localStorage.removeItem('news_studio_draft');
-        sessionStorage.removeItem('news_studio_draft');
-      } catch {}
+      // Preserve drafts, saved projects, templates, settings and user data
       if (typeof (window as any).setAppTab === 'function') {
         (window as any).setAppTab('studio');
       }
