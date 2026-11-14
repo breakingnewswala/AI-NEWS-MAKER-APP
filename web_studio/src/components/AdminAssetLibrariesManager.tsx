@@ -148,7 +148,13 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     if (!textMarkingItem) return;
     setIsSavingMarking(true);
     try {
-      const token = getAuthToken();
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
+      if (!token) {
+        alert('प्रमाणीकरण आवश्यक है: व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है। कृपया पुनः लॉगिन करें।');
+        setIsSavingMarking(false);
+        return;
+      }
       const updates = {
         textRegion: {
           x: Math.max(0, Math.min(100, markedRegion.x)),
@@ -243,6 +249,10 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
       let token = await ensureAuthToken().catch(() => '');
       if (!token) {
         token = getAuthToken();
+      }
+      if (!token) {
+        setUploadError('प्रमाणीकरण आवश्यक है: व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है। कृपया पुनः लॉगिन करें।');
+        return;
       }
       const payload: Partial<AssetLibraryItem> = activeTab === 'custom_footer'
         ? {

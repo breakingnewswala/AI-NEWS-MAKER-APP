@@ -9528,13 +9528,13 @@ async function parseRssItemsFromXml(
         fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
         location: editorial.location || "",
         ingestionStatus: "PARSED",
-        approvalStatus: "PENDING_APPROVAL",
-        publicationStatus: "UNPUBLISHED",
-        status: "PENDING_APPROVAL",
-        isApproved: false,
-        isPrePublished: false,
-        isPublished: false,
-        editorialApproved: false,
+        approvalStatus: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
+        publicationStatus: source.isActive !== false && source.enabled !== false ? "PUBLISHED" : "UNPUBLISHED",
+        status: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
+        isApproved: source.isActive !== false && source.enabled !== false,
+        isPrePublished: source.isActive !== false && source.enabled !== false,
+        isPublished: source.isActive !== false && source.enabled !== false,
+        editorialApproved: source.isActive !== false && source.enabled !== false,
         visibility: "public",
       } as StoredNewsPost;
     } catch {
@@ -9677,13 +9677,13 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       fullContent: `${editorial.title}\n\n${editorial.summary}\n\nवेब लिंक स्रोतः ${source.url}`,
       location: editorial.location || "वेब डेस्क",
       ingestionStatus: "PARSED",
-      approvalStatus: "PENDING_APPROVAL",
-      publicationStatus: "UNPUBLISHED",
-      status: "PENDING_APPROVAL",
-      isApproved: false,
-      isPrePublished: false,
-      isPublished: false,
-      editorialApproved: false,
+      approvalStatus: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
+      publicationStatus: source.isActive !== false && source.enabled !== false ? "PUBLISHED" : "UNPUBLISHED",
+      status: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
+      isApproved: source.isActive !== false && source.enabled !== false,
+      isPrePublished: source.isActive !== false && source.enabled !== false,
+      isPublished: source.isActive !== false && source.enabled !== false,
+      editorialApproved: source.isActive !== false && source.enabled !== false,
       visibility: "public",
     }];
   } catch (err: any) {
@@ -10202,15 +10202,66 @@ ${it.imageUrl ? `      <enclosure url="${escapeXmlChars(it.imageUrl)}" type="ima
 });
 
 // GET /api/rss/web-feed - Serves dynamically generated RSS 2.0 XML
-app.get("/api/rss/web-feed", (req, res) => {
+app.get("/api/rss/web-feed", async (req, res) => {
   try {
     const feedId = String(req.query.feedId || "").trim();
     if (!feedId) {
       return res.status(400).set("Content-Type", "text/plain; charset=utf-8").send("feedId query parameter is required");
     }
-    const record = GENERATED_WEB_RSS_FEEDS.get(feedId);
+    let record = GENERATED_WEB_RSS_FEEDS.get(feedId);
     if (!record) {
-      return res.status(404).set("Content-Type", "text/plain; charset=utf-8").send("RSS Feed not found or expired. Please generate a new feed URL.");
+      // Dynamic recovery on container restart: check registered sources in database
+      const allSources = loadRssSourcesDatabase();
+      const matchedSource = allSources.find((s) => (s.url && s.url.includes(feedId)) || s.id === feedId || (s as any).originalWebUrl);
+      if (matchedSource) {
+        try {
+          const webItems = await fetchAndParseWebLink({
+            ...matchedSource,
+            url: (matchedSource as any).originalWebUrl || matchedSource.url,
+          });
+          const channelTitle = matchedSource.name || "Web Feed";
+          const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${escapeXmlChars(channelTitle)}</title>
+    <link>${escapeXmlChars((matchedSource as any).originalWebUrl || matchedSource.url)}</link>
+    <description><![CDATA[${escapeXmlChars(channelTitle)} Live Dynamic Feed]]></description>
+    <language>hi</language>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+${webItems.map((it) => `    <item>
+      <title><![CDATA[${it.title}]]></title>
+      <link>${escapeXmlChars(it.sourceUrl || (matchedSource as any).originalWebUrl || matchedSource.url)}</link>
+      <guid isPermaLink="false">${escapeXmlChars(it.id)}</guid>
+      <description><![CDATA[${it.summary || it.title}]]></description>
+      <category>${escapeXmlChars(it.categoryName || matchedSource.category || 'समाचार')}</category>
+      <pubDate>${new Date(it.timestamp || Date.now()).toUTCString()}</pubDate>
+${it.imageUrl ? `      <enclosure url="${escapeXmlChars(it.imageUrl)}" type="image/jpeg" />` : ''}
+    </item>`).join('\n')}
+  </channel>
+</rss>`;
+          record = {
+            feedId,
+            sourceUrl: (matchedSource as any).originalWebUrl || matchedSource.url,
+            channelTitle,
+            category: matchedSource.category,
+            xmlContent,
+            createdAt: Date.now(),
+          };
+          GENERATED_WEB_RSS_FEEDS.set(feedId, record);
+        } catch {}
+      }
+    }
+    if (!record) {
+      const fallbackXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>AI News Maker Web Feed</title>
+    <link>https://www.ainewsmaker.online</link>
+    <description>AI News Maker Dynamic RSS Feed</description>
+  </channel>
+</rss>`;
+      res.set("Content-Type", "application/rss+xml; charset=utf-8");
+      return res.send(fallbackXml);
     }
     res.set("Content-Type", "application/rss+xml; charset=utf-8");
     return res.send(record.xmlContent);
@@ -10316,6 +10367,21 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
                 (src as any).lastError = undefined;
                 fetchedPosts.push(...items);
               }
+            } else if (src.originalWebUrl || (src as any).webUrl) {
+              // Resilient fallback for converted web feeds after container restart
+              const fallbackUrl = src.originalWebUrl || (src as any).webUrl;
+              const items = await fetchAndParseWebLink({ ...src, url: fallbackUrl });
+              if (items.length > 0) {
+                src.lastFetchedAt = Date.now();
+                src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
+                (src as any).lastSyncStatus = "success";
+                (src as any).lastError = undefined;
+                fetchedPosts.push(...items);
+              } else {
+                failedSourcesCount++;
+                (src as any).lastSyncStatus = "error";
+                (src as any).lastError = `HTTP ${resp.status}`;
+              }
             } else {
               failedSourcesCount++;
               (src as any).lastSyncStatus = "error";
@@ -10332,6 +10398,20 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
             }
           }
         } catch (srcErr: any) {
+          if (src.originalWebUrl || (src as any).webUrl) {
+            try {
+              const fallbackUrl = src.originalWebUrl || (src as any).webUrl;
+              const items = await fetchAndParseWebLink({ ...src, url: fallbackUrl });
+              if (items.length > 0) {
+                src.lastFetchedAt = Date.now();
+                src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
+                (src as any).lastSyncStatus = "success";
+                (src as any).lastError = undefined;
+                fetchedPosts.push(...items);
+                return;
+              }
+            } catch {}
+          }
           failedSourcesCount++;
           (src as any).lastSyncStatus = "error";
           (src as any).lastError = srcErr.message || "Fetch error";
@@ -10699,7 +10779,7 @@ async function handleSchedulerRssSync(req: express.Request, res: express.Respons
 
   // 3. Authorized via logged-in admin session
   if (!isAuthorized) {
-    const authUser = getAuthenticatedUser(req);
+    const authUser = (req as any).user || (await resolveAuthenticatedUser(req, res)) || getAuthenticatedUser(req);
     if (authUser && (authUser.role === "admin" || authUser.role === "superadmin")) {
       isAuthorized = true;
     }
@@ -13412,12 +13492,17 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
   }
 });
 
-app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
+app.post("/api/admin/asset-libraries", requireAdminMiddleware, async (req, res) => {
   try {
     const { id: customId, name, type, category, url, dataUrl, enabled, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
-    const effectiveUrl = url || dataUrl || '';
+    let effectiveUrl = url || dataUrl || '';
     if (!name || !type || (!effectiveUrl && type !== 'custom_footer')) {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer'), and URL (or footerConfig for custom_footer) are required." });
+    }
+
+    // Persist base64 images to Cloud Storage / file system to avoid exceeding Firestore document size limits
+    if (effectiveUrl && effectiveUrl.startsWith('data:')) {
+      effectiveUrl = await saveFrameBase64AssetAsync(effectiveUrl, `asset_${type}`);
     }
 
     // Master Admin Only for Custom Footer operations
@@ -13451,10 +13536,14 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   }
 });
 
-app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => {
+app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, type, category, enabled, url, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    let { name, type, category, enabled, url, dataUrl, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    let effectiveUrl = url || dataUrl;
+    if (effectiveUrl && effectiveUrl.startsWith('data:')) {
+      effectiveUrl = await saveFrameBase64AssetAsync(effectiveUrl, `asset_${type || 'lib'}`);
+    }
     const items = loadAssetLibrariesDatabase();
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) {
@@ -13483,7 +13572,7 @@ app.put("/api/admin/asset-libraries/:id", requireAdminMiddleware, (req, res) => 
       ...(type !== undefined ? { type } : {}),
       ...(category !== undefined ? { category } : {}),
       ...(enabled !== undefined ? { enabled: Boolean(enabled) } : {}),
-      ...(url !== undefined ? { url } : {}),
+      ...(effectiveUrl !== undefined ? { url: effectiveUrl } : {}),
       ...(sliceConfig !== undefined ? { sliceConfig } : {}),
       ...(textRegion !== undefined ? { textRegion } : {}),
       ...(typographyConfig !== undefined ? { typographyConfig } : {}),
@@ -17918,7 +18007,7 @@ AI News Maker • स्वचालित API स्वास्थ्य न�
 
   // 2. Attempt WhatsApp Delivery via configured WhatsApp API / Command Center
   try {
-    const waToken = process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+    const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
     const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
     if (waToken && waPhoneId && verifiedWhatsappNumber) {
       try {
@@ -18150,7 +18239,7 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
     lastSuccessfulCheck: apiLastSuccessfulCheck["whatsapp_api"] || now,
     consecutiveFailures: apiConsecutiveFailures["whatsapp_api"] || 0,
   };
-  const waToken = process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+  const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
   const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
   if (!waToken || !waPhoneId) {
     waItem.status = "Not Configured";

@@ -56,7 +56,7 @@ import {
 } from '../lib/userPlanManager';
 import { isChannelRestricted } from '../lib/restrictedChannelsManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
-import { getApiUrl, ensureAuthToken } from '../lib/apiConfig';
+import { getApiUrl, ensureAuthToken, setAuthToken, getAuthToken, isTokenExpired } from '../lib/apiConfig';
 import { safeLocalStorageSet, safeLocalStorageGet, safeLocalStorageRemove, compressImageBase64 } from '../lib/storageUtils';
 import { GoogleAuthProvider, signInWithPopup, signInWithCredential } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
@@ -928,40 +928,46 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       safeLocalStorageSet(`onboarding_completed_${cleanEmail}`, 'true');
       safeLocalStorageSet('is_onboarding_completed', 'true');
       safeLocalStorageRemove('auth_current_step');
-      ensureAuthToken().catch(() => {});
+      
+      const candidateTok = idToken || (safeLocalStorageGet('google_id_token') && !isTokenExpired(safeLocalStorageGet('google_id_token') || ''))
+        ? (idToken || safeLocalStorageGet('google_id_token'))
+        : getAuthToken();
 
-      if (idToken || getAuthToken() || safeLocalStorageGet('google_id_token')) {
-        const candidateTok = idToken || getAuthToken() || safeLocalStorageGet('google_id_token');
-        fetch(getApiUrl('/api/auth/login'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${candidateTok}`,
-          },
-          body: JSON.stringify({
-            identifier: cleanEmail,
-            firebaseToken: candidateTok,
-            idToken: candidateTok,
-            profileData: {
-              email: cleanEmail,
-              name: googleUser.name,
-              username: finalProfile.username,
-              district: finalProfile.district,
-              whatsappDisplayNumber: (finalProfile as any).whatsappDisplayNumber,
-              whatsappNumber: finalProfile.whatsappNumber,
-              socialIcons: finalProfile.socialIcons,
+      if (candidateTok && !isTokenExpired(candidateTok)) {
+        try {
+          const loginRes = await fetch(getApiUrl('/api/auth/login'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${candidateTok}`,
             },
-          }),
-        })
-          .then((r) => r.json())
-          .then((d) => {
+            body: JSON.stringify({
+              identifier: cleanEmail,
+              firebaseToken: candidateTok,
+              idToken: candidateTok,
+              profileData: {
+                email: cleanEmail,
+                name: googleUser.name,
+                username: finalProfile.username,
+                district: finalProfile.district,
+                whatsappDisplayNumber: (finalProfile as any).whatsappDisplayNumber,
+                whatsappNumber: finalProfile.whatsappNumber,
+                socialIcons: finalProfile.socialIcons,
+              },
+            }),
+          });
+          if (loginRes.ok) {
+            const d = await loginRes.json();
             if (d && d.token) {
               setAuthToken(d.token);
               safeLocalStorageSet('reporter_auth_token', d.token);
             }
-          })
-          .catch((ex) => console.warn('[AUTH] Session token exchange note:', ex));
+          }
+        } catch (ex) {
+          console.warn('[AUTH] Session token exchange note:', ex);
+        }
       }
+      ensureAuthToken().catch(() => {});
 
       registerOrUpdateUser({
         email: cleanEmail,
