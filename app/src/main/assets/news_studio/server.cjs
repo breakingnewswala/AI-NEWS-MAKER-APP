@@ -12417,7 +12417,7 @@ var MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 var REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 var UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
 function extractTokenFromRequest(req) {
-  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || "").toString().trim();
+  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || req.cookies?.reporter_auth_token || req.cookies?.auth_token || req.body && (req.body.authToken || req.body.token) || req.query && (req.query.authToken || req.query.token) || "").toString().trim();
   if (authHeader.startsWith("Bearer ")) {
     return authHeader.slice(7).trim();
   }
@@ -12616,6 +12616,75 @@ async function resolveAuthenticatedUser(req, res) {
           }
         }
         return verified;
+      }
+    } catch {
+    }
+  }
+  if (token && token.startsWith("ya29.")) {
+    try {
+      const gRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(6e3)
+      });
+      if (gRes.ok) {
+        const gPayload = await gRes.json();
+        if (gPayload && gPayload.email) {
+          const email = gPayload.email.toLowerCase().trim();
+          const userId = gPayload.sub || email;
+          let userRole = "user";
+          let isBlocked = false;
+          try {
+            if (typeof loadUsersMasterDatabase === "function") {
+              const users = loadUsersMasterDatabase();
+              const dbUser = users.find(
+                (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === userId
+              );
+              if (dbUser) {
+                if (dbUser.role) userRole = dbUser.role;
+                if (dbUser.isBlocked) isBlocked = true;
+              }
+            }
+            if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
+              for (const [k, u] of centralDb.cache.users.entries()) {
+                if (k && k.toLowerCase().trim() === email || u?.email && u.email.toLowerCase().trim() === email || u?.userId && u.userId === userId) {
+                  if (u?.isBlocked) {
+                    isBlocked = true;
+                    break;
+                  }
+                }
+              }
+            }
+            if (!isBlocked && typeof loadProfilesDatabase === "function") {
+              const profiles = loadProfilesDatabase();
+              const prof = profiles[email] || Object.values(profiles).find((p) => p.email && p.email.toLowerCase().trim() === email || p.userId && p.userId === userId);
+              if (prof?.isBlocked) isBlocked = true;
+            }
+          } catch {
+          }
+          if (email === MASTER_ADMIN_EMAIL || email === MASTER_ADMIN_ALT_EMAIL) {
+            userRole = "superadmin";
+          } else if (email === REGULAR_ADMIN_EMAIL) {
+            userRole = "admin";
+          }
+          const verified = {
+            userId,
+            email,
+            role: userRole,
+            username: gPayload.name || email.split("@")[0],
+            authType: "session",
+            isBlocked
+          };
+          req.user = verified;
+          if (res && typeof res.setHeader === "function" && !res.headersSent) {
+            try {
+              const freshToken = generateAuthToken(verified);
+              res.setHeader("X-Refreshed-Token", freshToken);
+              res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
+            } catch {
+            }
+          }
+          return verified;
+        }
       }
     } catch {
     }
@@ -13154,7 +13223,7 @@ app.post("/api/auth/verify-captcha", (req, res) => {
 app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) => {
   try {
     const rawToken = extractTokenFromRequest(req);
-    const { idToken, firebaseToken, googleIdToken } = req.body || {};
+    const { idToken, firebaseToken, googleIdToken, accessToken } = req.body || {};
     const identityToken = idToken || firebaseToken || googleIdToken;
     let verifiedEmail = "";
     let verifiedUserId = "";
@@ -13167,10 +13236,11 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
         authType = "session";
       }
     }
-    if (!verifiedEmail && identityToken) {
+    if (!verifiedEmail && (identityToken || accessToken || rawToken && rawToken.startsWith("ya29."))) {
+      const tok = identityToken || accessToken || rawToken;
       if (firebaseAdminAuth) {
         try {
-          const decoded = await firebaseAdminAuth.verifyIdToken(identityToken, true);
+          const decoded = await firebaseAdminAuth.verifyIdToken(tok, true);
           if (decoded && decoded.email) {
             verifiedEmail = decoded.email.toLowerCase().trim();
             verifiedUserId = decoded.uid || verifiedEmail;
@@ -13183,7 +13253,7 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
       if (!verifiedEmail && googleOAuthClient) {
         try {
           const ticket = await googleOAuthClient.verifyIdToken({
-            idToken: identityToken,
+            idToken: tok,
             audience: GOOGLE_OAUTH_CLIENT_ID
           });
           const gPayload = ticket.getPayload();
@@ -13194,6 +13264,24 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
           }
         } catch (gErr) {
           console.warn("[AUTH] refresh-session Google token verification failed:", gErr?.message);
+        }
+      }
+      if (!verifiedEmail && (tok.startsWith("ya29.") || accessToken)) {
+        try {
+          const gRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            headers: { Authorization: `Bearer ${tok}` },
+            signal: AbortSignal.timeout(6e3)
+          });
+          if (gRes.ok) {
+            const gData = await gRes.json();
+            if (gData && gData.email) {
+              verifiedEmail = gData.email.toLowerCase().trim();
+              verifiedUserId = gData.sub || verifiedEmail;
+              authType = "google";
+            }
+          }
+        } catch (tokErr) {
+          console.warn("[AUTH] refresh-session Google access token verification note:", tokErr?.message);
         }
       }
     }
@@ -13950,7 +14038,8 @@ function loadNewsDatabase() {
     const list = Array.from(centralDb.cache.news.values());
     const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
     if (diskPosts.length > 0) {
-      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
+      const deletedSourceIds = loadDeletedRssSourceIds();
+      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive && !deletedSourceIds.has(s.id));
       const activeSourceIds = new Set(activeSources.map((s) => s.id));
       const activeSourceUrls = /* @__PURE__ */ new Set([
         ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
@@ -13963,12 +14052,20 @@ function loadNewsDatabase() {
           if (activeSources.length === 0) continue;
           const parts = String(dp.id).split("-");
           const srcId = dp.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
-          const matchesId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
+          const cleanSrcId = srcId.replace(/^src_/, "");
+          if (srcId && (deletedSourceIds.has(srcId) || deletedSourceIds.has(`src_${srcId}`) || deletedSourceIds.has(cleanSrcId))) {
+            continue;
+          }
+          const matchesId = Boolean(
+            srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`) || activeSourceIds.has(cleanSrcId) || activeSources.some(
+              (s) => dp.id.startsWith(`rss-${s.id}-`) || dp.id.startsWith(`web-${s.id}-`) || s.id.startsWith("src_") && (dp.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || dp.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`))
+            ))
+          );
           const matchesUrl = Boolean(dp.sourceUrl && (activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
             try {
-              const feedHost = new URL(u).hostname.replace(/^www\./, "");
-              const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, "");
-              return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+              const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+              const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+              return feedHost === postHost || postHost.endsWith("." + feedHost);
             } catch {
               return false;
             }
@@ -14196,7 +14293,8 @@ app.get("/api/news-posts", async (req, res) => {
   const posts = loadNewsDatabase();
   const editorialDb = loadApprovedEditorialDatabase();
   const now = Date.now();
-  const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive);
+  const deletedSourceIds = loadDeletedRssSourceIds();
+  const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive && !deletedSourceIds.has(s.id));
   const activeSourceIds = new Set(activeSources.map((s) => s.id));
   const activeSourceUrls = /* @__PURE__ */ new Set([
     ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
@@ -14214,30 +14312,54 @@ app.get("/api/news-posts", async (req, res) => {
     }
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
-      if (activeSources.length === 0) {
+      if (activeSources.length === 0 && !isAdmin) {
         return false;
       }
       const parts = String(p.id).split("-");
       const postSourceId = p.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
-      const matchesSourceId = Boolean(postSourceId && (activeSourceIds.has(postSourceId) || activeSourceIds.has(`src_${postSourceId}`)));
+      const cleanPostSrc = postSourceId.replace(/^src_/, "");
+      const isExplicitlyDeleted = Boolean(
+        postSourceId && (deletedSourceIds.has(postSourceId) || deletedSourceIds.has(`src_${postSourceId}`) || deletedSourceIds.has(cleanPostSrc))
+      ) || Array.from(deletedSourceIds).some(
+        (dId) => p.id.startsWith(`rss-${dId}-`) || p.id.startsWith(`web-${dId}-`) || dId.startsWith("src_") && (p.id.startsWith(`rss-${dId.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${dId.replace(/^src_/, "")}-`))
+      );
+      if (isExplicitlyDeleted && !isAdmin) {
+        return false;
+      }
+      const matchesSourceId = Boolean(
+        postSourceId && (activeSourceIds.has(postSourceId) || activeSourceIds.has(`src_${postSourceId}`) || activeSourceIds.has(cleanPostSrc) || activeSources.some(
+          (s) => p.id.startsWith(`rss-${s.id}-`) || p.id.startsWith(`web-${s.id}-`) || s.id.startsWith("src_") && (p.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`))
+        ))
+      );
       const matchesUrl = Boolean(p.sourceUrl && (activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
         try {
-          const feedHost = new URL(u).hostname.replace(/^www\./, "");
-          const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "");
-          return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+          const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+          const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+          return feedHost === postHost || postHost.endsWith("." + feedHost);
         } catch {
           return false;
         }
       })));
       const matchesFeedUrl = Boolean(
-        p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase())
+        p.sourceFeedUrl && (activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+          try {
+            const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+            const postFeedHost = new URL(p.sourceFeedUrl).hostname.replace(/^www\./, "").toLowerCase();
+            return feedHost === postFeedHost || postFeedHost.endsWith("." + feedHost);
+          } catch {
+            return false;
+          }
+        }))
       );
-      const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl);
-      if (!hasActiveSource) {
+      const matchesChannel = Boolean(
+        p.sourceChannel && p.sourceChannel.trim() !== "" && activeSources.some((s) => s.name && s.name.trim().toLowerCase() === p.sourceChannel.trim().toLowerCase())
+      );
+      const hasActiveSource = activeSources.length > 0 && !isExplicitlyDeleted && Boolean(matchesSourceId || matchesFeedUrl || matchesUrl || matchesChannel);
+      if (!hasActiveSource && !isAdmin) {
         return false;
       }
-      const hasExplicitAdminApproval = p.approvalStatus === "APPROVED" && (p.publicationStatus === "PUBLISHED" || p.isPublished === true) || Boolean(
-        editorialDb[p.id] && editorialDb[p.id].status === "APPROVED" && (editorialDb[p.id].isPublished === true || editorialDb[p.id].isPrePublished === true) && editorialDb[p.id].approvedBy && editorialDb[p.id].approvedBy !== "editorial-desk"
+      const hasExplicitAdminApproval = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.isApproved === true || p.isPrePublished === true || Boolean(
+        editorialDb[p.id] && editorialDb[p.id].status === "APPROVED" && (editorialDb[p.id].isPublished === true || editorialDb[p.id].isPrePublished === true)
       );
       if (!hasExplicitAdminApproval) {
         if (!includePending) {
@@ -14247,7 +14369,7 @@ app.get("/api/news-posts", async (req, res) => {
         return true;
       }
     } else {
-      const isManualApproved = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved);
+      const isManualApproved = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved) || Boolean(p.isPrePublished);
       if (!isManualApproved && (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending")) {
         if (!includePending) {
           return false;
@@ -14276,18 +14398,40 @@ app.get("/api/news-posts", async (req, res) => {
         if (activeSources.length === 0) return false;
         const parts = String(p.id).split("-");
         const srcId = p.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
-        const matchesSourceId = Boolean(srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`)));
-        const matchesFeedUrl = Boolean(p.sourceFeedUrl && activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()));
-        const matchesUrl = Boolean(p.sourceUrl && (activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+        const cleanSrcId = srcId.replace(/^src_/, "");
+        const isExplicitlyDeleted = Boolean(
+          srcId && (deletedSourceIds.has(srcId) || deletedSourceIds.has(`src_${srcId}`) || deletedSourceIds.has(cleanSrcId))
+        ) || Array.from(deletedSourceIds).some(
+          (dId) => p.id.startsWith(`rss-${dId}-`) || p.id.startsWith(`web-${dId}-`) || dId.startsWith("src_") && (p.id.startsWith(`rss-${dId.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${dId.replace(/^src_/, "")}-`))
+        );
+        if (isExplicitlyDeleted) return false;
+        const matchesSourceId = Boolean(
+          srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`) || activeSourceIds.has(cleanSrcId) || activeSources.some(
+            (s) => p.id.startsWith(`rss-${s.id}-`) || p.id.startsWith(`web-${s.id}-`) || s.id.startsWith("src_") && (p.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`))
+          ))
+        );
+        const matchesFeedUrl = Boolean(p.sourceFeedUrl && (activeSourceUrls.has(p.sourceFeedUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
           try {
-            const feedHost = new URL(u).hostname.replace(/^www\./, "");
-            const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "");
-            return feedHost === postHost || postHost.endsWith(feedHost) || feedHost.endsWith(postHost);
+            const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+            const postFeedHost = new URL(p.sourceFeedUrl).hostname.replace(/^www\./, "").toLowerCase();
+            return feedHost === postFeedHost || postFeedHost.endsWith("." + feedHost);
           } catch {
             return false;
           }
         })));
-        const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl);
+        const matchesUrl = Boolean(p.sourceUrl && (activeSourceUrls.has(p.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
+          try {
+            const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
+            const postHost = new URL(p.sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
+            return feedHost === postHost || postHost.endsWith("." + feedHost);
+          } catch {
+            return false;
+          }
+        })));
+        const matchesChannel = Boolean(
+          p.sourceChannel && p.sourceChannel.trim() !== "" && activeSources.some((s) => s.name && s.name.trim().toLowerCase() === p.sourceChannel.trim().toLowerCase())
+        );
+        const hasActiveSource = Boolean(matchesSourceId || matchesFeedUrl || matchesUrl || matchesChannel);
         if (!hasActiveSource) {
           return false;
         }
@@ -14529,8 +14673,12 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
           additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : p.additionalPhotos || [],
           approvedPhotos: Array.isArray(postData.approvedPhotos) ? postData.approvedPhotos : p.approvedPhotos || p.additionalPhotos || [],
           status: "APPROVED",
+          approvalStatus: "APPROVED",
+          publicationStatus: "PUBLISHED",
+          isApproved: true,
+          isPublished: true,
+          isPrePublished: true,
           editorialApproved: postData.editorialApproved !== void 0 ? postData.editorialApproved : true,
-          isPrePublished: postData.isPrePublished !== void 0 ? Boolean(postData.isPrePublished) : Boolean(p.isPrePublished),
           breaking: postData.breaking !== void 0 ? postData.breaking : p.breaking,
           isExclusive: postData.isExclusive !== void 0 ? postData.isExclusive : p.isExclusive,
           isBonus: postData.isBonus !== void 0 ? Boolean(postData.isBonus) : Boolean(p.isBonus === true),
@@ -19329,7 +19477,6 @@ function saveRssSourcesDatabase(sources) {
         }
       }
     }
-    return true;
   }
   try {
     const locations = resolveAllDatabaseLocations("rss_sources_database.json");
@@ -20325,7 +20472,10 @@ async function executeRssSynchronization() {
             });
             if (resp.ok) {
               const xmlText = await resp.text();
-              const items = await parseRssItemsFromXml(xmlText, src, knownFilter);
+              let items = await parseRssItemsFromXml(xmlText, src, knownFilter);
+              if (items.length === 0 && (xmlText.includes("<html") || xmlText.includes("<!DOCTYPE") || xmlText.includes("<article"))) {
+                items = await fetchAndParseWebLink(src);
+              }
               if (items.length > 0) {
                 src.lastFetchedAt = Date.now();
                 src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
@@ -20394,10 +20544,13 @@ async function executeRssSynchronization() {
             (ep) => ep.id === p.id || normUrl && ep.sourceUrl && ep.sourceUrl.trim().toLowerCase() === normUrl || ep.title.trim().toLowerCase().slice(0, 40) === titleKey
           );
           if (match) {
-            const isApproved = match.status === "APPROVED" || Boolean(match.isPrePublished) || Boolean(editorialDb[match.id]?.isPrePublished);
-            if (isApproved) {
-              match.status = "APPROVED";
-            }
+            match.status = "APPROVED";
+            match.approvalStatus = "APPROVED";
+            match.publicationStatus = "PUBLISHED";
+            match.isApproved = true;
+            match.isPublished = true;
+            match.isPrePublished = true;
+            match.editorialApproved = true;
           }
         }
       }
@@ -20526,10 +20679,15 @@ async function executeWebScrapeSynchronization() {
           skippedDuplicatesCount++;
           continue;
         }
+        p.ingestionStatus = "IMPORTED";
+        p.approvalStatus = "APPROVED";
+        p.publicationStatus = "PUBLISHED";
         p.status = "APPROVED";
         p.isApproved = true;
         p.isPrePublished = true;
+        p.isPublished = true;
         p.editorialApproved = true;
+        p.visibility = "public";
         p.pendingCreatedAt = Date.now();
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
@@ -20542,6 +20700,18 @@ async function executeWebScrapeSynchronization() {
           newArticlesCount++;
         } else {
           skippedDuplicatesCount++;
+          const match = existingPosts.find(
+            (ep) => ep.id === p.id || normUrl && ep.sourceUrl && ep.sourceUrl.trim().toLowerCase() === normUrl || ep.title.trim().toLowerCase().slice(0, 40) === titleKey
+          );
+          if (match) {
+            match.status = "APPROVED";
+            match.approvalStatus = "APPROVED";
+            match.publicationStatus = "PUBLISHED";
+            match.isApproved = true;
+            match.isPublished = true;
+            match.isPrePublished = true;
+            match.editorialApproved = true;
+          }
         }
       }
       if (trulyNew.length > 0) {
@@ -23279,10 +23449,10 @@ app.post("/api/dynamic-frames/verify-export-permission", async (req, res) => {
 });
 app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
-    const { identifier, password, googleUid, firebaseToken, idToken, profileData } = req.body;
+    const { identifier, password, googleUid, firebaseToken, idToken, accessToken, authToken, token: bodyToken, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
-    if (googleUid || firebaseToken || idToken) {
-      const candidateToken = firebaseToken || idToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "");
+    if (googleUid || firebaseToken || idToken || accessToken || authToken || bodyToken || req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      const candidateToken = firebaseToken || idToken || accessToken || authToken || bodyToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "");
       if (!candidateToken) {
         return res.status(401).json({
           success: false,
@@ -23325,6 +23495,25 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           decoded = internal;
         }
       }
+      if (!verifiedEmail && (candidateToken?.startsWith("ya29.") || accessToken)) {
+        try {
+          const tok = accessToken || candidateToken;
+          const gRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            headers: { Authorization: `Bearer ${tok}` },
+            signal: AbortSignal.timeout(6e3)
+          });
+          if (gRes.ok) {
+            const gPayload = await gRes.json();
+            if (gPayload && gPayload.email) {
+              verifiedEmail = gPayload.email.toLowerCase().trim();
+              verifiedUid = gPayload.sub || verifiedEmail;
+              decoded = gPayload;
+            }
+          }
+        } catch (tokErr) {
+          console.warn("[AUTH] /api/auth/login Google access token verification note:", tokErr?.message);
+        }
+      }
       if (!verifiedEmail) {
         return res.status(401).json({
           success: false,
@@ -23342,7 +23531,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         (u) => u.email && u.email.toLowerCase().trim() === verifiedEmail || u.userId && u.userId === verifiedUid
       );
       const isSuper = verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL;
-      const isSubAdmin = verifiedEmail === SUB_ADMIN_EMAIL;
+      const isSubAdmin = verifiedEmail === REGULAR_ADMIN_EMAIL;
       const isAdmin = isSuper || isSubAdmin;
       const release = await userDbLock.acquire();
       let savedUser;

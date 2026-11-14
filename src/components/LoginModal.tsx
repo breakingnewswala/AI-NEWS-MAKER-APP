@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { registerOrUpdateUser } from '../lib/userPlanManager';
 import { safeLocalStorageSet } from '../lib/storageUtils';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, setAuthToken } from '../lib/apiConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 import {
@@ -140,7 +140,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   if (!isOpen) return null;
 
   // Helper to process authenticated Google User
-  const processGoogleUser = async (rawEmail: string, displayName?: string, idToken?: string) => {
+  const processGoogleUser = async (rawEmail: string, displayName?: string, idToken?: string, accessToken?: string) => {
       // 1. Strict whitespace cleaning
       const cleanEmail = rawEmail.replace(/\s+/g, '').trim().toLowerCase();
 
@@ -152,8 +152,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         return;
       }
 
+      if (accessToken) {
+        try { localStorage.setItem('google_access_token', accessToken); } catch {}
+      }
+      if (idToken) {
+        try { localStorage.setItem('google_id_token', idToken); } catch {}
+      }
+
       const isSuper = cleanEmail === 'admin.ainewsmaker@gmail.com';
-      const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+      const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'breakingnewsvala.com@gmail.com';
 
       let safeUsername = '';
       if (isSuper) {
@@ -188,7 +195,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       let user: ReporterUser = {
         username: safeUsername,
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
-        role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
+        role: isSuper ? 'superadmin' : (isAdmin ? 'superadmin' : 'reporter'),
         email: cleanEmail,
         district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
         planTier: isSuper || isAdmin ? 'ultra' : 'basic',
@@ -196,7 +203,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       // Authenticate & sync with Cloud backend /api/auth/login
       try {
-        const activeToken = idToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_token') : null);
+        const activeToken = idToken || accessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_token') : null);
         const res = await fetch(getApiUrl('/api/auth/login'), {
           method: 'POST',
           headers: {
@@ -205,7 +212,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           },
           body: JSON.stringify({
             identifier: cleanEmail,
-            firebaseToken: activeToken || undefined,
+            firebaseToken: idToken || activeToken || undefined,
+            idToken: idToken || undefined,
+            accessToken: accessToken || undefined,
             profileData: {
               email: cleanEmail,
               name: user.name,
@@ -245,8 +254,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             }
             if (data.token) {
               localStorage.setItem('reporter_auth_token', data.token);
+              setAuthToken(data.token);
               (user as any).token = data.token;
             }
+            localStorage.removeItem('user_explicitly_logged_out');
           }
 
           if (!isServerProfileComplete && !isSuper && !isAdmin) {
@@ -383,7 +394,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   });
                   const userData = await res.json();
                   if (userData?.email) {
-                    processGoogleUser(userData.email, userData.name);
+                    processGoogleUser(userData.email, userData.name, undefined, tokenResponse.access_token);
                     return;
                   }
                 } catch (fetchErr) {
@@ -491,7 +502,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           }
           if (data.token) {
             localStorage.setItem('reporter_auth_token', data.token);
+            setAuthToken(data.token);
           }
+          localStorage.removeItem('user_explicitly_logged_out');
           localStorage.setItem('reporter_auth_session', JSON.stringify(authUser));
           setLoading(false);
           onLoginSuccess(authUser);

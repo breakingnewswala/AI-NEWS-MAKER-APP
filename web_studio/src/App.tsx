@@ -142,6 +142,7 @@ type AppTab =
   | 'newsroom'
   | 'epaper'
   | 'profile'
+  | 'admin'
   | 'generator'
   | 'drafts'
   | 'export'
@@ -422,6 +423,17 @@ export default function App() {
       const path = (window.location.pathname || '').toLowerCase();
       const hash = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
 
+      // Check if user is admin
+      let isAdmin = false;
+      try {
+        const rawUser = localStorage.getItem('reporter_auth_session');
+        if (rawUser) {
+          const parsed = JSON.parse(rawUser);
+          const cleanEmail = (parsed?.email || '').toLowerCase().trim();
+          isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || parsed?.role === 'admin' || parsed?.role === 'superadmin';
+        }
+      } catch {}
+
       // 1. Legal, compliance & support pages
       if (path.includes('terms') || hash.includes('terms') || fullUrl.includes('tab=terms')) return 'terms';
       if (path.includes('privacy') || hash.includes('privacy') || fullUrl.includes('tab=privacy')) return 'privacy';
@@ -447,9 +459,18 @@ export default function App() {
         return 'support';
       }
 
-      // 2. Standard application tabs
+      // 2. Admin & Control Room routes
+      if (path === '/admin' || hash === 'admin' || fullUrl.includes('tab=admin')) {
+        return 'admin';
+      }
+      const lastTab = localStorage.getItem('last_active_tab');
+      if (isAdmin && (lastTab === 'admin' || lastTab === 'profile')) {
+        return 'admin';
+      }
+
+      // 3. Standard application tabs
       if (hash === 'profile' || path === '/profile' || fullUrl.includes('tab=profile')) {
-        return 'profile';
+        return isAdmin ? 'admin' : 'profile';
       }
       if (hash === 'videos' || path === '/videos' || fullUrl.includes('tab=videos')) {
         return 'videos';
@@ -461,7 +482,7 @@ export default function App() {
         return 'newsroom';
       }
 
-      // 3. Primary domain directly lands on Home without any hashtag or fragment
+      // 4. Primary domain directly lands on Home without any hashtag or fragment
       return 'home';
     }
     return 'home';
@@ -489,6 +510,9 @@ export default function App() {
     const target = tab === ('epaper' as any) ? 'newsroom' : tab;
     setCurrentTab(target);
     if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('last_active_tab', target);
+      } catch {}
       const cleanPath = target === 'home' ? '/' : `/${target}`;
       if (window.history && window.history.pushState) {
         if (window.location.pathname !== cleanPath) {
@@ -522,6 +546,7 @@ export default function App() {
       if (path.includes('refund') || path.includes('cancellation') || hash.includes('refund') || hash.includes('cancellation')) { setCurrentTab('refunds'); return; }
       if (path.includes('delete-account') || path.includes('account-deletion') || hash.includes('delete-account')) { setCurrentTab('delete-account'); return; }
       if (path.includes('support') || path.includes('contact') || hash.includes('support')) { setCurrentTab('support'); return; }
+      if (path.includes('admin') || hash === 'admin') { setCurrentTab('admin'); return; }
       if (path.includes('profile') || hash === 'profile' || path.includes('plans')) { setCurrentTab('profile'); return; }
       if (path.includes('video') || hash === 'videos') { setCurrentTab('videos'); return; }
       if (path.includes('studio') || hash === 'studio') { setCurrentTab('studio'); return; }
@@ -564,6 +589,12 @@ export default function App() {
           title: 'लाइव डिजिटल न्यूज़ रूम — AI News Maker',
           description: 'लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।',
           canonical: `${base}/newsroom`,
+        };
+      case 'admin':
+        return {
+          title: 'मास्टर एडमिन कंट्रोल रूम — AI News Maker',
+          description: 'मास्टर एडमिन कंट्रोल पैनल — एपीआई की पूल, एआई फ्रेम जनरेटर प्रो, सेंट्रल एसेट लाइब्रेरी व सिस्टम सेटिंग्स।',
+          canonical: `${base}/admin`,
         };
       case 'profile':
         return {
@@ -783,16 +814,25 @@ export default function App() {
     try {
       const baseUrl = getApiBaseUrl();
       let isAdmin = false;
+      let token = '';
       try {
         const rawUser = typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_session') : null;
         if (rawUser) {
           const u = JSON.parse(rawUser);
-          isAdmin = u.role === 'admin' || u.role === 'superadmin';
+          const cleanEmail = (u?.email || '').toLowerCase().trim();
+          isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'breakingnewsvala.com@gmail.com' || u.role === 'admin' || u.role === 'superadmin';
         }
+        token = await ensureAuthToken().catch(() => '');
       } catch {}
       const roleParam = isAdmin ? '&role=admin&includePending=true' : '';
+      const reqHeaders: Record<string, string> = {
+        ...getAuthHeaders(),
+      };
+      if (token) {
+        reqHeaders['Authorization'] = `Bearer ${token}`;
+      }
       const res = await fetch(`${baseUrl}/api/news-posts?_t=${Date.now()}${roleParam}`, {
-        headers: getAuthHeaders(),
+        headers: reqHeaders,
         cache: 'no-cache',
       });
       if (res.ok) {
@@ -1136,22 +1176,29 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
-      if (explicitLogout === 'true') {
-        const saved = localStorage.getItem('reporter_auth_session');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && (parsed.email || parsed.username || parsed.userId)) {
-            return parsed;
-          }
-        }
-        return null;
-      }
       const saved = localStorage.getItem('reporter_auth_session');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && (parsed.email || parsed.username || parsed.userId)) {
-          return parsed;
+          const cleanEmail = (parsed.email || '').toLowerCase().trim();
+          const isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'breakingnewsvala.com@gmail.com' || parsed.role === 'admin' || parsed.role === 'superadmin';
+          if (isAdmin) {
+            parsed.role = 'superadmin';
+            try {
+              localStorage.removeItem('user_explicitly_logged_out');
+              localStorage.removeItem('show_auth_welcome_screen');
+              localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
+              localStorage.setItem('is_onboarding_completed', 'true');
+            } catch {}
+            return parsed;
+          }
+          if (explicitLogout !== 'true') {
+            return parsed;
+          }
         }
+      }
+      if (explicitLogout === 'true') {
+        return null;
       }
       if ((window as any).AndroidBridge?.getUserSession) {
         const raw = (window as any).AndroidBridge.getUserSession();
@@ -1174,14 +1221,25 @@ export default function App() {
   // Onboarding completion status (Login -> Details setup -> App) - Strict Profile + Logo + WhatsApp OTP Gate (Part 10)
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(() => {
     try {
+      const rawUser = localStorage.getItem('reporter_auth_session');
+      if (rawUser) {
+        const parsedUser = JSON.parse(rawUser);
+        const cleanEmail = (parsedUser?.email || '').toLowerCase().trim();
+        const isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'breakingnewsvala.com@gmail.com' || parsedUser?.role === 'admin' || parsedUser?.role === 'superadmin';
+        if (isAdmin) {
+          try {
+            localStorage.removeItem('user_explicitly_logged_out');
+            localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
+            localStorage.setItem('is_onboarding_completed', 'true');
+          } catch {}
+          return true;
+        }
+      }
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
       if (explicitLogout === 'true') return false;
-      const rawUser = localStorage.getItem('reporter_auth_session');
       if (!rawUser) return false;
       const parsedUser = JSON.parse(rawUser);
       const cleanEmail = (parsedUser?.email || '').toLowerCase().trim();
-      const isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || parsedUser?.role === 'admin' || parsedUser?.role === 'superadmin';
-      if (isAdmin) return true;
       if (!cleanEmail) return false;
 
       // Check user-specific onboarding completion flag
@@ -1216,9 +1274,21 @@ export default function App() {
   // Welcome flow - show primary AuthWelcomeScreen with Google Login for unauthenticated visitors
   const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
     try {
+      const rawUser = localStorage.getItem('reporter_auth_session');
+      if (rawUser) {
+        const parsedUser = JSON.parse(rawUser);
+        const cleanEmail = (parsedUser?.email || '').toLowerCase().trim();
+        const isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'breakingnewsvala.com@gmail.com' || parsedUser?.role === 'admin' || parsedUser?.role === 'superadmin';
+        if (isAdmin) {
+          try {
+            localStorage.removeItem('user_explicitly_logged_out');
+            localStorage.removeItem('show_auth_welcome_screen');
+          } catch {}
+          return false;
+        }
+      }
       const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
       if (explicitLogout === 'true') return true;
-      const rawUser = localStorage.getItem('reporter_auth_session');
       if (!rawUser) return true;
       const flag = localStorage.getItem('show_auth_welcome_screen');
       if (flag === 'true') return true;
@@ -2366,6 +2436,27 @@ export default function App() {
   }, [card, activeStep, currentDraftId]);
 
   const handleLoginSuccess = (user: ReporterUser) => {
+    const cleanEmail = (user?.email || '').toLowerCase().trim();
+    const isAdmin = cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'breakingnewsvala.com@gmail.com' || cleanEmail === 'admin.ainewsmaker@gmail.com' || user?.role === 'superadmin' || user?.role === 'admin';
+    if (isAdmin) {
+      user.role = 'superadmin';
+      try {
+        localStorage.removeItem('user_explicitly_logged_out');
+        localStorage.removeItem('show_auth_welcome_screen');
+        localStorage.setItem(`onboarding_completed_${cleanEmail}`, 'true');
+        localStorage.setItem('is_onboarding_completed', 'true');
+        localStorage.setItem('last_active_tab', 'admin');
+      } catch {}
+      setAdminSystemMode('admin');
+      setIsOnboardingCompleted(true);
+      setShowAuthWelcomeScreen(false);
+      setCurrentUser(user);
+      setIsLoginModalOpen(false);
+      showToast(`👋 मास्टर एडमिन स्वागत है!`);
+      navigateToTab('admin');
+      return;
+    }
+
     setCurrentUser(user);
     setIsLoginModalOpen(false);
     showToast(`👋 स्वागत है, ${user.name}!`);
@@ -3375,8 +3466,10 @@ export default function App() {
   // Studio tabs are accessible so users can freely create graphics & videos on Desktop, Mobile, and Tablet
   const isStudioTab = currentTab === 'studio' || currentTab === 'generator';
 
-  // Primary Screen with Google Login Steps is enforced for unauthenticated visitors unless on legal pages or studio
-  if (!isPublicLegalPage && !isStudioTab && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
+  const isMasterAdminUser = Boolean(currentUser && isUserAdmin(currentUser));
+
+  // Primary Screen with Google Login Steps is enforced for unauthenticated visitors unless on legal pages, studio or admin
+  if (!isPublicLegalPage && !isStudioTab && !isMasterAdminUser && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
     return (
       <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (
@@ -3390,14 +3483,18 @@ export default function App() {
           currentUser={currentUser}
           onLoginSuccess={(user) => {
             localStorage.removeItem('user_explicitly_logged_out');
+            localStorage.removeItem('show_auth_welcome_screen');
             const isAdmin = isUserAdmin(user);
             setCurrentUser(user);
             setShowAuthWelcomeScreen(false);
             if (isAdmin) {
               setAdminSystemMode('admin');
-              navigateToTab('profile');
+              try {
+                localStorage.setItem('last_active_tab', 'admin');
+                localStorage.setItem('is_onboarding_completed', 'true');
+              } catch {}
+              navigateToTab('admin');
               setIsOnboardingCompleted(true);
-              localStorage.setItem('is_onboarding_completed', 'true');
               showToast('👑 एडमिन कंट्रोल पैनल में आपका स्वागत है!');
               return;
             }
@@ -4791,13 +4888,13 @@ export default function App() {
             navigateToTab('videos');
           }}
           onNavigateToControlPanel={() => {
-            navigateToTab('profile');
+            navigateToTab(isUserAdmin(currentUser) ? 'admin' : 'profile');
           }}
         />
       )}
 
       {/* 5. Profile & Control Panel Tab (10 Options + Channel Branding + Plans + APK Download) */}
-      {(currentTab === 'profile' || currentTab === 'export') && (
+      {(currentTab === 'admin' || currentTab === 'profile' || currentTab === 'export') && (
         <ErrorBoundary fallbackTitle="कंट्रोल रूम लोड करने में समस्या आई">
           <ProfileScreenWeb
             currentUser={currentUser}

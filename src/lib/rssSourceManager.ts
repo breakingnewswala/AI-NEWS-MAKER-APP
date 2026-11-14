@@ -120,27 +120,42 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
   }
 
   // Persist permanently to backend database with auto-retry
-  fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
-    method: 'POST',
-    headers: {
+  ensureAuthToken().then((token) => {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-user-role': 'admin',
       ...getAdminAuthHeaders(),
-    },
-    body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
-  })
-    .then((res) => res.json())
-    .then((data) => {
-      if (data && data.success && Array.isArray(data.sources)) {
-        memoryRssSources = data.sources;
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
-        }
-      }
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
     })
-    .catch((err) => {
-      console.warn('Backend saveAdminRssSources warning:', err);
-    });
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && Array.isArray(data.sources)) {
+          memoryRssSources = data.sources;
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(STORAGE_KEY_RSS_SOURCES, JSON.stringify(data.sources));
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Backend saveAdminRssSources warning:', err);
+      });
+  }).catch(() => {
+    fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-role': 'admin',
+        ...getAdminAuthHeaders(),
+      },
+      body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
+    }).catch(() => {});
+  });
 }
 
 export async function addAdminRssSourceAsync(
@@ -170,13 +185,16 @@ export async function addAdminRssSourceAsync(
     } catch {}
   }
   try {
+    const token = await ensureAuthToken().catch(() => '');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-user-role': 'admin',
+      ...getAdminAuthHeaders(),
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     await fetch(getApiUrl('/api/admin/rss-sources?replace=true'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-user-role': 'admin',
-        ...getAdminAuthHeaders(),
-      },
+      headers,
       body: JSON.stringify({ sources: list, replace: true, userRole: 'admin' }),
     });
   } catch (err) {
@@ -239,14 +257,14 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
   return list;
 }
 
-import { getApiUrl, getAuthHeaders, ensureAuthToken } from './apiConfig';
+import { getApiUrl, getAuthHeaders, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders } from './apiConfig';
 import type { NewsFeedPost } from '../data/newsFeedData';
 
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
 const STORAGE_KEY_APPROVED_RSS_IDS = 'ai_news_approved_rss_post_ids_v1';
 
 export function getAdminAuthHeaders(): Record<string, string> {
-  return getAuthHeaders();
+  return getBaseAdminAuthHeaders();
 }
 
 export function getApprovedRssIds(): Set<string> {
@@ -484,7 +502,7 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
       // Fetch latest production posts from /api/news-posts to update active synced feed
       try {
         const postsUrl = getApiUrl('/api/news-posts?includePending=true');
-        const postsRes = await fetch(postsUrl);
+        const postsRes = await fetch(postsUrl, { headers });
         if (postsRes.ok) {
           const rawPosts = await postsRes.json();
           const postsList = Array.isArray(rawPosts) ? rawPosts : (rawPosts?.posts || []);
@@ -578,7 +596,7 @@ export async function scrapeAllWebSourcesLive(): Promise<RssSyncResult> {
       const data = await res.json();
       try {
         const postsUrl = getApiUrl('/api/news-posts?includePending=true');
-        const postsRes = await fetch(postsUrl);
+        const postsRes = await fetch(postsUrl, { headers });
         if (postsRes.ok) {
           const rawPosts = await postsRes.json();
           const postsList = Array.isArray(rawPosts) ? rawPosts : (rawPosts?.posts || []);

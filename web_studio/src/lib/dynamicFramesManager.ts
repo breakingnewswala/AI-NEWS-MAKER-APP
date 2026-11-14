@@ -21,7 +21,7 @@ import {
   TypographyConfig,
 } from '../types/dynamicFrame';
 import { normalizeVideoConfig } from './videoFrameLayoutModel';
-import { getApiBaseUrl, ensureAuthToken, getAuthToken } from './apiConfig';
+import { getApiBaseUrl, ensureAuthToken, getAuthToken, getAdminAuthHeaders } from './apiConfig';
 
 const STORAGE_KEY_FRAMES = 'ai_news_dynamic_frames_v1';
 const STORAGE_KEY_STORY_PREF = 'ai_news_user_story_pref_v1';
@@ -650,7 +650,10 @@ export async function requestAiFrameAnalysis(
       token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
     }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     let res = await fetch(`${baseUrl}/api/dynamic-frames/ai-analyze`, {
@@ -926,7 +929,9 @@ export async function fetchAssetLibraries(type?: string): Promise<AssetLibraryIt
     if (!token) {
       token = await ensureAuthToken().catch(() => '');
     }
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      ...getAdminAuthHeaders(),
+    };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
@@ -954,7 +959,10 @@ export async function saveAssetLibraryItem(
       token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
     }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     let res = await fetch(`${baseUrl}/api/admin/asset-libraries`, {
@@ -997,7 +1005,10 @@ export async function updateAssetLibraryItem(
       token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
     }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     let res = await fetch(`${baseUrl}/api/admin/asset-libraries/${id}`, {
@@ -1039,7 +1050,9 @@ export async function deleteAssetLibraryItem(
       token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
     }
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      ...getAdminAuthHeaders(),
+    };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     let res = await fetch(`${baseUrl}/api/admin/asset-libraries/${id}`, {
