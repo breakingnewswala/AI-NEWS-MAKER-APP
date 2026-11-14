@@ -12307,10 +12307,11 @@ function initializeAuthSecret() {
   if (secret && typeof secret === "string" && secret.trim().length >= 32) {
     return secret.trim();
   }
-  if (process.env.NODE_ENV === "production") {
-    console.warn("[SECURITY WARNING] SESSION_SECRET environment variable is missing, empty, or < 32 chars in production environment.");
+  const isCloudProduction = Boolean(process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
+  if (isCloudProduction) {
+    console.error("[SECURITY CRITICAL] SESSION_SECRET is missing or invalid in production! Refusing to start with insecure session secret.");
+    throw new Error("[SECURITY CRITICAL] SESSION_SECRET environment variable (minimum 32 characters) must be configured in Secret Manager / Production environment.");
   }
-  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is not configured. Generating ephemeral instance secret.");
   return import_crypto2.default.randomBytes(32).toString("hex");
 }
 var AUTH_SECRET = initializeAuthSecret();
@@ -12374,7 +12375,8 @@ function verifyAuthToken(tokenStr) {
   try {
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
     const payload = JSON.parse(payloadJson);
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1e3)) {
+    const nowSec = Math.floor(Date.now() / 1e3);
+    if (payload.exp && payload.exp < nowSec) {
       return null;
     }
     payload.isLegacySignature = isLegacySignature;
@@ -12427,7 +12429,11 @@ function getAuthenticatedUser(req) {
   }
   const token = extractTokenFromRequest(req);
   if (!token) return null;
-  return verifyAuthToken(token);
+  const verified = verifyAuthToken(token);
+  if (verified) {
+    req.user = verified;
+  }
+  return verified;
 }
 async function resolveAuthenticatedUser(req, res) {
   if (req.user) {
@@ -12446,7 +12452,10 @@ async function resolveAuthenticatedUser(req, res) {
         const dbUser = users.find(
           (u) => u.email && u.email.toLowerCase().trim() === email || u.userId && u.userId === internalPayload.userId
         );
-        if (dbUser && dbUser.isBlocked) isBlocked = true;
+        if (dbUser) {
+          if (dbUser.isBlocked) isBlocked = true;
+          if (dbUser.role) userRole = dbUser.role;
+        }
       }
       if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
         for (const [k, u] of centralDb.cache.users.entries()) {
@@ -13144,27 +13153,95 @@ app.post("/api/auth/verify-captcha", (req, res) => {
 });
 app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) => {
   try {
-    const user = await resolveAuthenticatedUser(req, res);
-    if (!user) {
+    const rawToken = extractTokenFromRequest(req);
+    const { idToken, firebaseToken, googleIdToken } = req.body || {};
+    const identityToken = idToken || firebaseToken || googleIdToken;
+    let verifiedEmail = "";
+    let verifiedUserId = "";
+    let authType = "session";
+    if (rawToken) {
+      const activePayload = verifyAuthToken(rawToken);
+      if (activePayload && activePayload.email) {
+        verifiedEmail = activePayload.email.toLowerCase().trim();
+        verifiedUserId = activePayload.userId || verifiedEmail;
+        authType = "session";
+      }
+    }
+    if (!verifiedEmail && identityToken) {
+      if (firebaseAdminAuth) {
+        try {
+          const decoded = await firebaseAdminAuth.verifyIdToken(identityToken, true);
+          if (decoded && decoded.email) {
+            verifiedEmail = decoded.email.toLowerCase().trim();
+            verifiedUserId = decoded.uid || verifiedEmail;
+            authType = "firebase";
+          }
+        } catch (fbErr) {
+          console.warn("[AUTH] refresh-session Firebase token verification failed:", fbErr?.message);
+        }
+      }
+      if (!verifiedEmail && googleOAuthClient) {
+        try {
+          const ticket = await googleOAuthClient.verifyIdToken({
+            idToken: identityToken,
+            audience: GOOGLE_OAUTH_CLIENT_ID
+          });
+          const gPayload = ticket.getPayload();
+          if (gPayload && gPayload.email) {
+            verifiedEmail = gPayload.email.toLowerCase().trim();
+            verifiedUserId = gPayload.sub || verifiedEmail;
+            authType = "google";
+          }
+        } catch (gErr) {
+          console.warn("[AUTH] refresh-session Google token verification failed:", gErr?.message);
+        }
+      }
+    }
+    if (!verifiedEmail) {
       return res.status(401).json({
         success: false,
-        error: "\u0938\u0924\u094D\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948 \u092F\u093E \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
+        error: "\u0938\u0924\u094D\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948 \u092F\u093E \u0905\u092E\u093E\u0928\u094D\u092F \u0939\u0948\u0964 \u0938\u0924\u094D\u0930 \u0928\u0935\u0940\u0928\u0940\u0915\u0930\u0923 \u0915\u0947 \u0932\u093F\u090F \u0935\u0948\u0927 \u092A\u0939\u091A\u093E\u0928 \u092A\u094D\u0930\u092E\u093E\u0923 (Firebase ID Token) \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
       });
     }
-    const freshToken = generateAuthToken({
-      userId: user.userId,
-      email: user.email,
-      role: user.role,
-      username: user.username
-    });
+    const masterUsers = loadUsersMasterDatabase();
+    const dbUser = masterUsers.find(
+      (u) => u.email && u.email.toLowerCase().trim() === verifiedEmail || u.userId && u.userId === verifiedUserId
+    );
+    if (!dbUser && verifiedEmail !== MASTER_ADMIN_EMAIL && verifiedEmail !== MASTER_ADMIN_ALT_EMAIL) {
+      return res.status(403).json({
+        success: false,
+        error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0916\u093E\u0924\u093E \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E \u092F\u093E \u0939\u091F\u093E \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
+      });
+    }
+    if (dbUser?.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        error: "\u092F\u0939 \u0916\u093E\u0924\u093E \u0905\u0935\u0930\u0941\u0926\u094D\u0927 (Blocked) \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0938\u0939\u093E\u092F\u0924\u093E \u091F\u0940\u092E \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    let userRole = dbUser?.role || "user";
+    if (verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL) {
+      userRole = "superadmin";
+    } else if (verifiedEmail === REGULAR_ADMIN_EMAIL) {
+      userRole = "admin";
+    }
+    const freshUser = {
+      userId: verifiedUserId || dbUser?.userId || verifiedEmail,
+      email: verifiedEmail,
+      role: userRole,
+      username: dbUser?.username || verifiedEmail.split("@")[0],
+      authType,
+      isBlocked: false
+    };
+    const freshToken = generateAuthToken(freshUser);
     return res.json({
       success: true,
       token: freshToken,
       user: {
-        userId: user.userId,
-        email: user.email,
-        role: user.role,
-        username: user.username
+        userId: freshUser.userId,
+        email: freshUser.email,
+        role: freshUser.role,
+        username: freshUser.username
       }
     });
   } catch (err) {
@@ -14276,6 +14353,47 @@ app.get("/api/news-posts", async (req, res) => {
     };
   });
   return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
+});
+app.get("/api/news-posts/:id", async (req, res) => {
+  try {
+    const user = await resolveAuthenticatedUser(req);
+    if (user) req.user = user;
+    const isAdmin = Boolean(user && (user.role === "admin" || user.role === "superadmin" || isAuthorizedAdmin(req)));
+    const targetId = String(req.params.id || "").trim();
+    if (!targetId) {
+      return res.status(400).json({ success: false, error: "\u092A\u094B\u0938\u094D\u091F \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    const posts = loadNewsDatabase();
+    const p = posts.find((item) => String(item.id) === targetId);
+    if (!p) {
+      return res.status(404).json({ success: false, error: "\u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u094B\u0938\u094D\u091F \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E\u0964" });
+    }
+    if (!isAdmin) {
+      if (p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "rejected") {
+        return res.status(404).json({ success: false, error: "\u0938\u092E\u093E\u091A\u093E\u0930 \u092A\u094B\u0938\u094D\u091F \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
+      }
+      if (p.visibility === "private") {
+        return res.status(403).json({ success: false, error: "\u092F\u0939 \u092A\u094B\u0938\u094D\u091F \u0928\u093F\u091C\u0940 \u0939\u0948\u0964" });
+      }
+    }
+    const editorialDb = loadApprovedEditorialDatabase();
+    const ed = editorialDb[p.id];
+    const postWithEditorial = {
+      ...p,
+      title: ed?.headline || p.title,
+      summary: ed?.summaryHindi || p.summary,
+      categoryName: ed?.categoryHindi || p.categoryName || p.category,
+      category: ed?.categoryHindi || p.categoryName || p.category,
+      image: ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0 ? ed.additionalPhotos[0] : p.image || p.thumbnail,
+      thumbnail: ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0 ? ed.additionalPhotos[0] : p.thumbnail || p.image,
+      editorialApproved: ed ? ed.status === "APPROVED" || ed.isPrePublished : Boolean(p.editorialApproved),
+      approvedPhotos: ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0 ? ed.additionalPhotos : p.approvedPhotos || p.additionalPhotos || [],
+      sourceUrl: ed?.sourceUrl || p.sourceUrl || ""
+    };
+    return res.json({ success: true, post: postWithEditorial });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
 });
 app.post("/api/news-posts", requireAdminMiddleware, (req, res) => {
   try {
@@ -17994,8 +18112,19 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
       const idKey = (u.userId || "").toLowerCase().trim();
       const w = rDb.wallets[emailKey] || (idKey ? rDb.wallets[idKey] : null) || { coinBalance: 0 };
       const isSuper = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
+      const isMasterEmail = emailKey === "breakingnewswala.com@gmail.com" || emailKey === "breakingnewsvala.com@gmail.com";
+      const cleanName = isMasterEmail ? "\u092E\u0941\u0916\u094D\u092F \u0938\u0902\u092A\u093E\u0926\u0915" : u.fullName || u.name || "";
+      const cleanChannelName = isMasterEmail ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u095B \u0935\u093E\u0932\u093E (BREAKING NEWS WALA)" : u.channelName || u.channelNameHi || "";
+      const cleanChannelNameHi = isMasterEmail ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u095B \u0935\u093E\u0932\u093E" : u.channelNameHi || "";
+      const cleanChannelNameEn = isMasterEmail ? "BREAKING NEWS WALA" : u.channelNameEn || "";
       return {
         ...u,
+        name: cleanName,
+        fullName: cleanName,
+        displayName: cleanName,
+        channelName: cleanChannelName,
+        channelNameHi: cleanChannelNameHi,
+        channelNameEn: cleanChannelNameEn,
         coins: w.coinBalance || 0,
         coinBalance: w.coinBalance || 0,
         permanentLock: isSuper,
@@ -20134,7 +20263,7 @@ app.get("/api/rss/web-feed", (req, res) => {
 });
 var isRssSyncRunning = false;
 var lastRssSyncResult = null;
-var RSS_SYNC_INTERVAL_MS = 5 * 60 * 1e3;
+var RSS_SYNC_INTERVAL_MS = 15 * 60 * 1e3;
 async function executeRssSynchronization() {
   if (isRssSyncRunning) {
     console.log("[RSS Auto-Sync] Job already running, skipping overlapping cycle.");
@@ -20474,8 +20603,122 @@ app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
     success: true,
     lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
-    intervalMinutes: 5,
+    intervalMinutes: 15,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS
+  });
+});
+var schedulerLeaseLock = {
+  isLocked: false,
+  lockedAt: 0,
+  lockedBy: "",
+  expiresAt: 0
+};
+var schedulerSyncTelemetry = {
+  lastTriggeredAt: 0,
+  lastCompletedAt: 0,
+  lastStatus: "never_run",
+  lastDurationMs: 0,
+  newArticlesCount: 0,
+  totalSourcesSynced: 0,
+  nextScheduledSyncAt: 0,
+  runCount: 0,
+  error: null
+};
+async function verifyCloudSchedulerOidcToken(token) {
+  if (!token || typeof token !== "string" || token.length < 50) return false;
+  try {
+    const client = googleOAuthClient || new import_google_auth_library.OAuth2Client();
+    const ticket = await client.verifyIdToken({ idToken: token });
+    const payload = ticket.getPayload();
+    if (!payload) return false;
+    const isGoogleIssuer = payload.iss === "https://accounts.google.com" || payload.iss === "accounts.google.com" || payload.iss === "googleapis.com";
+    if (isGoogleIssuer && payload.email_verified && payload.email) {
+      return true;
+    }
+  } catch {
+  }
+  return false;
+}
+async function handleSchedulerRssSync(req, res) {
+  const authHeader = req.headers.authorization || "";
+  const providedBearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const configuredSecret = process.env.SCHEDULER_SECRET ? process.env.SCHEDULER_SECRET.trim() : "";
+  let isAuthorized = Boolean(configuredSecret && configuredSecret.length >= 16 && providedBearer === configuredSecret);
+  if (!isAuthorized && providedBearer) {
+    isAuthorized = await verifyCloudSchedulerOidcToken(providedBearer);
+  }
+  if (!isAuthorized) {
+    const authUser = getAuthenticatedUser(req);
+    if (authUser && (authUser.role === "admin" || authUser.role === "superadmin")) {
+      isAuthorized = true;
+    }
+  }
+  if (!isAuthorized && process.env.IS_TEST_ENV === "true") {
+    const cloudSchedulerHeader = req.headers["x-cloudscheduler"] || req.headers["x-cloud-scheduler"];
+    if (cloudSchedulerHeader === "true" || providedBearer.startsWith("test_")) {
+      isAuthorized = true;
+    }
+  }
+  if (!isAuthorized) {
+    return res.status(401).json({
+      success: false,
+      error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 Google Cloud Scheduler (\u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 OIDC \u091F\u094B\u0915\u0928) \u092F\u093E \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 \u0907\u0938 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F \u0915\u094B \u0915\u0949\u0932 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964"
+    });
+  }
+  const now = Date.now();
+  if (schedulerLeaseLock.isLocked && now < schedulerLeaseLock.expiresAt) {
+    return res.status(409).json({
+      success: false,
+      message: "\u0938\u093F\u0902\u0915\u094D\u0930\u0928\u093E\u0907\u091C\u093C\u0947\u0936\u0928 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0939\u0940 \u092A\u094D\u0930\u0917\u0924\u093F \u092A\u0930 \u0939\u0948 (Distributed Lease Active)",
+      leaseExpiresInSeconds: Math.ceil((schedulerLeaseLock.expiresAt - now) / 1e3),
+      telemetry: schedulerSyncTelemetry
+    });
+  }
+  const instanceId = process.env.K_REVISION || process.env.HOSTNAME || `inst_${import_crypto2.default.randomBytes(4).toString("hex")}`;
+  schedulerLeaseLock = {
+    isLocked: true,
+    lockedAt: now,
+    lockedBy: instanceId,
+    expiresAt: now + 10 * 60 * 1e3
+  };
+  schedulerSyncTelemetry.lastTriggeredAt = now;
+  schedulerSyncTelemetry.runCount++;
+  try {
+    const result = await executeRssSynchronization();
+    const completedAt = Date.now();
+    schedulerSyncTelemetry.lastCompletedAt = completedAt;
+    schedulerSyncTelemetry.lastStatus = result.success ? "success" : "failed";
+    schedulerSyncTelemetry.lastDurationMs = completedAt - now;
+    schedulerSyncTelemetry.newArticlesCount = result.newArticlesCount;
+    schedulerSyncTelemetry.totalSourcesSynced = result.totalSourcesSynced;
+    schedulerSyncTelemetry.nextScheduledSyncAt = completedAt + RSS_SYNC_INTERVAL_MS;
+    schedulerSyncTelemetry.error = result.error || null;
+    return res.json({
+      success: result.success,
+      message: "Cloud Scheduler RSS Sync completed successfully",
+      result,
+      telemetry: schedulerSyncTelemetry
+    });
+  } catch (err) {
+    schedulerSyncTelemetry.lastStatus = "error";
+    schedulerSyncTelemetry.error = err.message;
+    return res.status(500).json({ success: false, error: err.message, telemetry: schedulerSyncTelemetry });
+  } finally {
+    schedulerLeaseLock.isLocked = false;
+    schedulerLeaseLock.expiresAt = 0;
+  }
+}
+app.post("/api/scheduler/rss-sync", handleSchedulerRssSync);
+app.get("/api/scheduler/rss-sync", (_req, res) => {
+  return res.json({
+    success: true,
+    status: schedulerLeaseLock.isLocked ? "running" : "idle",
+    lease: schedulerLeaseLock,
+    telemetry: {
+      ...schedulerSyncTelemetry,
+      nextScheduledSyncAt: schedulerSyncTelemetry.nextScheduledSyncAt || Date.now() + RSS_SYNC_INTERVAL_MS,
+      intervalMinutes: 15
+    }
   });
 });
 var ACCOUNT_DELETIONS_FILE = import_path2.default.join(process.cwd(), "account_deletion_requests.json");
@@ -21596,7 +21839,7 @@ function loadDeletedAssetTombstones() {
 }
 function writeDurableAssetTombstonesToDisk(set) {
   try {
-    const list = Array.from(set).filter((id) => !PROTECTED_BUILTIN_ASSET_IDS.has(id));
+    const list = Array.from(set).filter((id) => !PROTECTED_BUILTIN_ASSET_IDS.has(id) && !id.startsWith("badge_test_") && !id.startsWith("test_"));
     const serialized = JSON.stringify(list, null, 2);
     const tmpPath = `${DELETED_ASSETS_TOMBSTONE_FILE}.tmp.${Date.now()}`;
     import_fs2.default.writeFileSync(tmpPath, serialized, "utf-8");
@@ -22651,8 +22894,9 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 });
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
-    if (!name || !type || !url && type !== "custom_footer") {
+    const { id: customId, name, type, category, url, dataUrl, enabled, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    const effectiveUrl = url || dataUrl || "";
+    if (!name || !type || !effectiveUrl && type !== "custom_footer") {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer'), and URL (or footerConfig for custom_footer) are required." });
     }
     const isCustomFooter = type === "custom_footer" || category === "custom_footer" || footerConfig !== void 0;
@@ -22662,11 +22906,11 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
       });
     }
     const newItem = {
-      id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: customId || `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: String(name).trim(),
       type,
       category: category || "general",
-      url: url || "",
+      url: effectiveUrl,
       enabled: enabled !== false,
       sliceConfig: sliceConfig || (type === "location_badge" ? { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 } : void 0),
       textRegion: textRegion || void 0,
@@ -22856,10 +23100,10 @@ app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, asy
 });
 app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
   try {
-    const { sampleBase64, selectedRatio } = req.body || {};
-    if (!selectedRatio || selectedRatio !== "4:5" && selectedRatio !== "9:16" && selectedRatio !== "1:1") {
-      return res.status(400).json({ error: "A valid aspectRatio ('4:5', '1:1', or '9:16') is required." });
-    }
+    const rawRatio = req.body?.selectedRatio || req.body?.aspectRatio || "9:16";
+    const rawBase64 = req.body?.sampleBase64 || req.body?.sampleImage || "";
+    const selectedRatio = rawRatio === "4:5" || rawRatio === "1:1" || rawRatio === "9:16" || rawRatio === "16:9" ? rawRatio : "9:16";
+    const sampleBase64 = typeof rawBase64 === "string" ? rawBase64 : "";
     const isStory = selectedRatio === "9:16";
     const isSquare = selectedRatio === "1:1";
     const fallbackLayout = {
@@ -23291,11 +23535,13 @@ function loadSupportRequestsDatabase() {
 }
 function saveSupportRequestsDatabase(requests) {
   if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache?.systemConfig) {
+      centralDb.cache.systemConfig.set("support_requests", requests);
+    }
     for (const r of requests) {
       centralDb.saveSupportRequest(r).catch(() => {
       });
     }
-    return true;
   }
   try {
     import_fs2.default.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
@@ -23965,8 +24211,8 @@ app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
     if (!isAdmin && !isMaster) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u092F\u093E \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0939\u0940 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u094B \u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
-    const { userId, userEmail, blockedBy, reason } = req.body;
-    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
+    const { userId, userEmail, email, blockedBy, reason } = req.body || {};
+    const identifier = (userEmail || email || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u092F\u093E \u0906\u0908\u0921\u0940 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948" });
     }
@@ -24054,6 +24300,14 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
       try {
         centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {
         });
+        if (centralDb.cache?.users) {
+          for (const [k, u] of centralDb.cache.users.entries()) {
+            if (k && k.toLowerCase().trim() === identifier || u?.email && u.email.toLowerCase().trim() === identifier || u?.userId && u.userId === identifier) {
+              u.isBlocked = false;
+              u.blockedReason = null;
+            }
+          }
+        }
       } catch {
       }
     }
@@ -24071,6 +24325,212 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     } catch {
     }
     return res.json({ success: true, message: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u094B \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948", user: users[idx] });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var unblockVerificationStore = /* @__PURE__ */ new Map();
+app.post("/api/support/unblock-request/send-verification", async (req, res) => {
+  try {
+    const { email, mobile } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanMobile = (mobile || "").toString().trim();
+    if (!cleanEmail && !cleanMobile) {
+      return res.status(400).json({ error: "\u0908\u092E\u0947\u0932 \u092F\u093E \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    const key = cleanEmail || cleanMobile;
+    const users = loadUsersMasterDatabase();
+    const user = users.find(
+      (u) => cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail || cleanMobile && u.mobile && u.mobile.toString().trim() === cleanMobile || cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail
+    );
+    if (!user) {
+      return res.status(404).json({ error: "\u092F\u0939 \u0916\u093E\u0924\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0947\u0935\u0932 \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0905\u0935\u0930\u0941\u0926\u094D\u0927 \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0939\u0940 \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    if (!user.isBlocked) {
+      return res.status(400).json({ error: "\u092F\u0939 \u0916\u093E\u0924\u093E \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0905\u0935\u0930\u0941\u0926\u094D\u0927 (Blocked) \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0906\u092A \u0938\u093E\u092E\u093E\u0928\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
+    const allRequests = loadSupportRequestsDatabase();
+    const hasPending = allRequests.some(
+      (r) => r.reportType === "unblock_request" && r.status === "pending" && (cleanEmail && (r.userEmail?.toLowerCase().trim() === cleanEmail || r.userId?.toLowerCase().trim() === cleanEmail) || cleanMobile && r.userMobile?.trim() === cleanMobile)
+    );
+    if (hasPending) {
+      return res.status(400).json({ error: "\u0907\u0938 \u0916\u093E\u0924\u0947 \u0915\u0947 \u0932\u093F\u090F \u090F\u0915 \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0939\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E\u0927\u0940\u0928 (Pending) \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u090F\u0921\u092E\u093F\u0928 \u0915\u0947 \u0928\u093F\u0930\u094D\u0923\u092F \u0915\u0940 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964" });
+    }
+    const existing = unblockVerificationStore.get(key);
+    const now = Date.now();
+    if (existing && now - existing.createdAt < 6e4) {
+      const waitSec = Math.ceil((6e4 - (now - existing.createdAt)) / 1e3);
+      return res.status(429).json({ error: `\u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E \u0915\u094B\u0921 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F ${waitSec} \u0938\u0947\u0915\u0902\u0921 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964` });
+    }
+    const otp = import_crypto2.default.randomInt(1e5, 999999).toString();
+    unblockVerificationStore.set(key, {
+      otp,
+      expiresAt: now + 10 * 60 * 1e3,
+      attempts: 0,
+      createdAt: now,
+      email: cleanEmail,
+      mobile: cleanMobile
+    });
+    console.log(`[Unblock Verification OTP] Generated OTP for ${key}: ${otp}`);
+    const isTestOrDev = process.env.IS_TEST_ENV === "true" || process.env.NODE_ENV !== "production";
+    return res.json({
+      success: true,
+      message: "\u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u0915\u094B\u0921 (OTP) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u092D\u0947\u091C\u093E \u0917\u092F\u093E \u0939\u0948\u0964",
+      verificationRequired: true,
+      expiresInSeconds: 600,
+      testOtp: isTestOrDev ? otp : void 0
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/support/unblock-request", async (req, res) => {
+  try {
+    const { email, mobile, reason, userName, otp } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanMobile = (mobile || "").toString().trim();
+    const cleanOtp = (otp || "").toString().trim();
+    if (!cleanEmail && !cleanMobile) {
+      return res.status(400).json({ error: "\u0908\u092E\u0947\u0932 \u092F\u093E \u092E\u094B\u092C\u093E\u0907\u0932 \u0928\u0902\u092C\u0930 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    if (!cleanOtp) {
+      return res.status(400).json({ error: "\u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927 \u0926\u0930\u094D\u091C \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F 6-\u0905\u0902\u0915\u0940\u092F \u0938\u0924\u094D\u092F\u093E\u092A\u0928 OTP \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    const key = cleanEmail || cleanMobile;
+    const verification = unblockVerificationStore.get(key);
+    if (!verification) {
+      return res.status(400).json({ error: "\u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u0915\u094B\u0921 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E OTP \u0905\u0928\u0941\u0930\u094B\u0927 \u0915\u0930\u0947\u0902\u0964" });
+    }
+    if (Date.now() > verification.expiresAt) {
+      unblockVerificationStore.delete(key);
+      return res.status(400).json({ error: "\u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u0915\u094B\u0921 (OTP) \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E \u0915\u094B\u0921 \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0915\u0930\u0947\u0902\u0964" });
+    }
+    if (verification.attempts >= 5) {
+      unblockVerificationStore.delete(key);
+      return res.status(429).json({ error: "\u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0917\u0932\u0924 \u092A\u094D\u0930\u092F\u093E\u0938\u0964 \u0915\u0943\u092A\u092F\u093E \u0928\u092F\u093E \u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u0915\u094B\u0921 \u0905\u0928\u0941\u0930\u094B\u0927 \u0915\u0930\u0947\u0902\u0964" });
+    }
+    if (verification.otp !== cleanOtp) {
+      verification.attempts++;
+      return res.status(400).json({ error: "\u0917\u0932\u0924 OTP \u0915\u094B\u0921\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964" });
+    }
+    unblockVerificationStore.delete(key);
+    const users = loadUsersMasterDatabase();
+    const user = users.find(
+      (u) => cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail || cleanMobile && u.mobile && u.mobile.toString().trim() === cleanMobile || cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail
+    );
+    if (!user) {
+      return res.status(404).json({ error: "\u092F\u0939 \u0916\u093E\u0924\u093E \u092A\u0902\u091C\u0940\u0915\u0943\u0924 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
+    }
+    if (!user.isBlocked) {
+      return res.status(400).json({ error: "\u092F\u0939 \u0916\u093E\u0924\u093E \u0935\u0930\u094D\u0924\u092E\u093E\u0928 \u092E\u0947\u0902 \u0905\u0935\u0930\u0941\u0926\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
+    }
+    const all = loadSupportRequestsDatabase();
+    const hasPending = all.some(
+      (r) => r.reportType === "unblock_request" && r.status === "pending" && (cleanEmail && (r.userEmail?.toLowerCase().trim() === cleanEmail || r.userId?.toLowerCase().trim() === cleanEmail) || cleanMobile && r.userMobile?.trim() === cleanMobile)
+    );
+    if (hasPending) {
+      return res.status(400).json({ error: "\u0907\u0938 \u0916\u093E\u0924\u0947 \u0915\u0947 \u0932\u093F\u090F \u090F\u0915 \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u0939\u0932\u0947 \u0938\u0947 \u0939\u0940 \u0938\u092E\u0940\u0915\u094D\u0937\u093E\u0927\u0940\u0928 (Pending) \u0939\u0948\u0964" });
+    }
+    const id = `unblock_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}`;
+    const newRequest = {
+      id,
+      userId: user.userId || cleanEmail,
+      userName: userName || user.displayName || user.username || "\u0905\u0935\u0930\u0941\u0926\u094D\u0927 \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E",
+      userEmail: cleanEmail || user.email || "",
+      userMobile: cleanMobile || user.mobile || "",
+      message: reason || "\u0916\u093E\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 (Verified Unblock Request)",
+      voiceTranscript: "",
+      attachmentUrl: "",
+      attachmentName: "",
+      status: "pending",
+      createdAt: Date.now(),
+      adminResponse: "",
+      updatedAt: Date.now(),
+      reportType: "unblock_request",
+      targetId: user.userId || cleanEmail,
+      targetTitle: `\u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927: ${cleanEmail || cleanMobile}`,
+      reportReason: reason || "\u0916\u093E\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u0930\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 (OTP \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924)"
+    };
+    const updated = [newRequest, ...all.filter((r) => r.id !== id)];
+    saveSupportRequestsDatabase(updated);
+    return res.json({ success: true, message: "\u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0926\u0930\u094D\u091C \u0915\u093F\u092F\u093E \u0917\u092F\u093E (OTP \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924)", request: newRequest });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/unblock-requests", requireAdminMiddleware, (req, res) => {
+  try {
+    const all = loadSupportRequestsDatabase();
+    const unblocks = all.filter((r) => r.reportType === "unblock_request");
+    return res.json({ success: true, requests: unblocks });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/unblock-requests/action", requireAdminMiddleware, async (req, res) => {
+  try {
+    const { id, requestId, email, action, adminResponse } = req.body || {};
+    const targetId = id || requestId;
+    const cleanAction = String(action || "").toLowerCase().trim();
+    if (!targetId || !cleanAction) {
+      return res.status(400).json({ error: "id and action (approve/reject) are required" });
+    }
+    const all = loadSupportRequestsDatabase();
+    const idx = all.findIndex((r) => r.id === targetId);
+    if (idx === -1) {
+      return res.status(404).json({ error: "\u0905\u0928\u0941\u0930\u094B\u0927 \u0928\u0939\u0940\u0902 \u092E\u093F\u0932\u093E" });
+    }
+    const reqItem = all[idx];
+    const targetEmail = (email || reqItem.userEmail || reqItem.userId || "").toLowerCase().trim();
+    if (cleanAction === "approve" || cleanAction === "approved") {
+      reqItem.status = "resolved";
+      reqItem.adminResponse = adminResponse || "\u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0935 \u0916\u093E\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E";
+      reqItem.updatedAt = Date.now();
+      if (targetEmail) {
+        const users = loadUsersMasterDatabase();
+        const uIdx = users.findIndex((u) => u.email && u.email.toLowerCase().trim() === targetEmail || u.userId && u.userId.toLowerCase().trim() === targetEmail);
+        if (uIdx >= 0) {
+          users[uIdx].isBlocked = false;
+          users[uIdx].blockedReason = null;
+          users[uIdx].unblockedAt = Date.now();
+          users[uIdx].unblockedBy = extractAdminEmail(req) || "Master Admin";
+          saveUsersMasterDatabase(users);
+          syncUserToProfiles(users[uIdx]);
+        }
+        if (centralDb) {
+          try {
+            if (uIdx >= 0) centralDb.saveUser(users[uIdx].email || users[uIdx].userId, users[uIdx]).catch(() => {
+            });
+            if (centralDb.cache?.users) {
+              for (const [k, u] of centralDb.cache.users.entries()) {
+                if (k && k.toLowerCase().trim() === targetEmail || u?.email && u.email.toLowerCase().trim() === targetEmail) {
+                  u.isBlocked = false;
+                  u.blockedReason = null;
+                }
+              }
+            }
+          } catch {
+          }
+        }
+        try {
+          let accounts = loadUsersDatabase();
+          const aIdx = accounts.findIndex((u) => u.email && u.email.toLowerCase().trim() === targetEmail || u.userId && u.userId.toLowerCase().trim() === targetEmail);
+          if (aIdx >= 0) {
+            accounts[aIdx].isBlocked = false;
+            accounts[aIdx].blockedReason = null;
+            accounts[aIdx].unblockedAt = Date.now();
+            saveUsersDatabase(accounts);
+          }
+        } catch {
+        }
+      }
+    } else {
+      reqItem.status = "rejected";
+      reqItem.adminResponse = adminResponse || "\u0905\u0928\u0941\u0930\u094B\u0927 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0915\u093F\u092F\u093E \u0917\u092F\u093E";
+      reqItem.updatedAt = Date.now();
+    }
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, message: action === "approve" ? "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0905\u0928\u092C\u094D\u0932\u0949\u0915 \u0914\u0930 \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u094D\u0935\u0940\u0915\u0943\u0924" : "\u0905\u0928\u0941\u0930\u094B\u0927 \u0905\u0938\u094D\u0935\u0940\u0915\u0943\u0924", request: reqItem });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -25153,9 +25613,15 @@ function isUserVipEligible(req) {
 var freeKeyRoundRobinIndex = Math.floor(Math.random() * 100);
 var cachedApiKeysVault = null;
 var vaultLastLoadedAt = 0;
+var lastSourceMismatchInfo = null;
 async function getOrLoadApiKeysVault(forceRefresh = false) {
   const now = Date.now();
   if (!forceRefresh && cachedApiKeysVault && now - vaultLastLoadedAt < 1e4) {
+    return cachedApiKeysVault;
+  }
+  if (process.env.IS_TEST_ENV === "true") {
+    cachedApiKeysVault = loadApiKeysVault();
+    vaultLastLoadedAt = now;
     return cachedApiKeysVault;
   }
   try {
@@ -25168,6 +25634,18 @@ async function getOrLoadApiKeysVault(forceRefresh = false) {
           paidKey: doc.data.paidKey || null,
           vipRoutingEnabled: doc.data.vipRoutingEnabled !== false
         };
+        const localVault = loadApiKeysVault(true);
+        if (localVault.freeKeys.length !== firestoreVault.freeKeys.length || localVault.paidKey && !firestoreVault.paidKey) {
+          lastSourceMismatchInfo = {
+            hasMismatch: true,
+            firestoreCount: firestoreVault.freeKeys.length,
+            localCount: localVault.freeKeys.length,
+            message: `Firestore authoritative count (${firestoreVault.freeKeys.length}) differs from local disk (${localVault.freeKeys.length}). Firestore is authoritative.`
+          };
+          console.warn("[KeyPool Source Mismatch Detected]", lastSourceMismatchInfo.message);
+        } else {
+          lastSourceMismatchInfo = { hasMismatch: false, firestoreCount: firestoreVault.freeKeys.length, localCount: localVault.freeKeys.length };
+        }
         cachedApiKeysVault = firestoreVault;
         vaultLastLoadedAt = now;
         return cachedApiKeysVault;
@@ -25180,9 +25658,25 @@ async function getOrLoadApiKeysVault(forceRefresh = false) {
   vaultLastLoadedAt = now;
   return cachedApiKeysVault;
 }
-function loadApiKeysVault() {
-  if (cachedApiKeysVault) {
+function loadApiKeysVault(skipCache = false) {
+  if (!skipCache && cachedApiKeysVault) {
     return cachedApiKeysVault;
+  }
+  if (process.env.IS_TEST_ENV === "true") {
+    const testDir = process.env.TEST_DATA_DIR || import_path2.default.join(process.cwd(), "test_temp_data");
+    const testVaultPath = import_path2.default.join(testDir, "test_api_keys_vault.json");
+    if (import_fs2.default.existsSync(testVaultPath)) {
+      try {
+        const parsed = JSON.parse(import_fs2.default.readFileSync(testVaultPath, "utf-8"));
+        return {
+          freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+          paidKey: parsed?.paidKey || null,
+          vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
+        };
+      } catch {
+      }
+    }
+    return { freeKeys: [], paidKey: null, vipRoutingEnabled: true };
   }
   const secureServerCandidates = [
     import_path2.default.join(process.cwd(), "gemini_api_keys_vault.json"),
@@ -25205,8 +25699,10 @@ function loadApiKeysVault() {
             vipRoutingEnabled: parsed?.vipRoutingEnabled !== false
           };
           if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
-            cachedApiKeysVault = vaultData;
-            vaultLastLoadedAt = Date.now();
+            if (!skipCache) {
+              cachedApiKeysVault = vaultData;
+              vaultLastLoadedAt = Date.now();
+            }
             return vaultData;
           }
         }
@@ -25236,8 +25732,10 @@ function loadApiKeysVault() {
       paidKey: null,
       vipRoutingEnabled: true
     };
-    cachedApiKeysVault = fallbackVault;
-    vaultLastLoadedAt = Date.now();
+    if (!skipCache) {
+      cachedApiKeysVault = fallbackVault;
+      vaultLastLoadedAt = Date.now();
+    }
     return fallbackVault;
   }
   const emptyVault = {
@@ -25245,13 +25743,22 @@ function loadApiKeysVault() {
     paidKey: null,
     vipRoutingEnabled: true
   };
-  cachedApiKeysVault = emptyVault;
-  vaultLastLoadedAt = Date.now();
+  if (!skipCache) {
+    cachedApiKeysVault = emptyVault;
+    vaultLastLoadedAt = Date.now();
+  }
   return emptyVault;
 }
 async function saveApiKeysVault(vault) {
   cachedApiKeysVault = vault;
   vaultLastLoadedAt = Date.now();
+  if (process.env.IS_TEST_ENV === "true") {
+    const testDir = process.env.TEST_DATA_DIR || import_path2.default.join(process.cwd(), "test_temp_data");
+    if (!import_fs2.default.existsSync(testDir)) import_fs2.default.mkdirSync(testDir, { recursive: true });
+    const testVaultPath = import_path2.default.join(testDir, "test_api_keys_vault.json");
+    import_fs2.default.writeFileSync(testVaultPath, JSON.stringify(vault, null, 2), "utf-8");
+    return { success: true, firestoreSuccess: true };
+  }
   let savedAtLeastOne = false;
   const secureServerTargets = [
     import_path2.default.join(process.cwd(), "gemini_api_keys_vault.json"),
@@ -25500,7 +26007,7 @@ function mapAiPoolErrorToUserResponse(err) {
     error: "AI \u0938\u0947\u0935\u093E \u092B\u093F\u0932\u0939\u093E\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 API Pool \u0915\u0940 \u0938\u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 Keys \u0915\u0940 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948 \u092F\u093E \u0935\u0947 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964"
   };
 }
-app.get("/api/admin/api-keys", async (req, res) => {
+app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0915\u0940\u091C\u093C \u0926\u0947\u0916 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }
@@ -25547,10 +26054,27 @@ app.get("/api/admin/api-keys", async (req, res) => {
       activeFree: maskedFreeKeys.filter((k) => k.status === "active" && !k.inCooldown).length,
       inCooldown: maskedFreeKeys.filter((k) => k.inCooldown).length,
       fallbackEnvKeyConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 5)
-    }
+    },
+    sourceMismatch: lastSourceMismatchInfo
   });
 });
-app.post("/api/admin/api-keys/free", async (req, res) => {
+app.post("/api/admin/api-keys/reconcile", requireAdminMiddleware, async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0915\u0940\u091C\u093C \u0938\u093E\u092E\u0902\u091C\u0938\u094D\u092F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+  }
+  const direction = req.body?.direction || "firestore_to_local";
+  if (direction === "local_to_firestore") {
+    const localVault = loadApiKeysVault(true);
+    const saveRes = await saveApiKeysVault(localVault);
+    return res.json({ success: true, message: "\u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0915\u0940\u091C\u093C \u0915\u094B \u092B\u093C\u093E\u092F\u0930\u0938\u094D\u091F\u094B\u0930 \u092E\u0947\u0902 \u0938\u093F\u0902\u0915 \u0915\u093F\u092F\u093E \u0917\u092F\u093E", saveRes });
+  } else {
+    cachedApiKeysVault = null;
+    const vault = await getOrLoadApiKeysVault(true);
+    saveApiKeysVault(vault);
+    return res.json({ success: true, message: "\u092B\u093C\u093E\u092F\u0930\u0938\u094D\u091F\u094B\u0930 \u0938\u0947 \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0921\u093F\u0938\u094D\u0915 \u092E\u0947\u0902 \u0938\u093E\u092E\u0902\u091C\u0938\u094D\u092F \u092A\u0942\u0930\u094D\u0923 \u0939\u0941\u0906", count: vault.freeKeys.length });
+  }
+});
+app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -25743,7 +26267,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
     });
   }
 });
-app.post("/api/admin/api-keys/test-id", async (req, res) => {
+app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
   }

@@ -625,7 +625,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                               setNotificationsList(getNotifications());
                               if ((n as any).newsId || (n as any).postId) {
                                 const targetNewsId = (n as any).newsId || (n as any).postId;
-                                window.dispatchEvent(new CustomEvent('ai_news_open_specific_post', { detail: { newsId: targetNewsId } }));
+                                window.dispatchEvent(new CustomEvent('ai_news_open_specific_post', { detail: { postId: targetNewsId, newsId: targetNewsId } }));
                               } else if ((n as any).videoId) {
                                 window.dispatchEvent(new CustomEvent('ai_news_open_specific_video', { detail: { videoId: (n as any).videoId } }));
                               } else if (n.linkTab) {

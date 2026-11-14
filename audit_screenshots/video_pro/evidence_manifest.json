@@ -1,0 +1,107 @@
+[
+  {
+    "file": "01_step1_canvas_and_video_ratio.png",
+    "bytes": 151361,
+    "sha256": "a7fec001036afe23a5f7152a8071699ea28911fbe8b3ba5d25948fe9f19d35b2",
+    "description": "Step 1: Canvas Aspect Ratio (9:16, 1:1, 4:5, 4:3) and Video Window Ratio Selectors with Fit/Crop",
+    "timestamp": "2026-11-14T03:31:14.953Z"
+  },
+  {
+    "file": "02_canvas_9_16_video_4_5_safe_zone.png",
+    "bytes": 151373,
+    "sha256": "25d67fd1f04de06bd8844425957d600030b1bbfb4b42d83155ea327074cccf44",
+    "description": "Canvas 9:16 with 4:5 Video Window Ratio and Safe Zone Boundary",
+    "timestamp": "2026-11-14T03:31:16.881Z"
+  },
+  {
+    "file": "03_canvas_4_5_video_16_9.png",
+    "bytes": 151581,
+    "sha256": "2d6c6036d27d1f532d69680946601a17733e7070027e43f6d32524411061ead2",
+    "description": "Canvas 4:5 with 16:9 Video Window Ratio and Proportional Center Placement",
+    "timestamp": "2026-11-14T03:31:18.676Z"
+  },
+  {
+    "file": "04_canvas_4_3_video_16_9.png",
+    "bytes": 152149,
+    "sha256": "0e4dd7a5d8d8b6dd71cde9ba4cec697692945cbf80007a08cb9cdb9ef781f5f3",
+    "description": "Canvas 4:3 with 16:9 Video Window Ratio",
+    "timestamp": "2026-11-14T03:31:20.540Z"
+  },
+  {
+    "file": "05_canvas_1_1_video_16_9.png",
+    "bytes": 152082,
+    "sha256": "eebbcdecca00f4a722196e842c3b88d89120b5bbd1445cc7ee51975089418e8d",
+    "description": "Canvas 1:1 (Square) with 16:9 Video Window Ratio",
+    "timestamp": "2026-11-14T03:31:22.400Z"
+  },
+  {
+    "file": "06_step5_video_space_photo_slots_removed.png",
+    "bytes": 151427,
+    "sha256": "85eda72abdbf1e56683028696de10b688d0fe7d681f340dc8273ce40f217b962",
+    "description": "Step 5: Video Space and Safe Zone Configuration with Photo Slots completely removed",
+    "timestamp": "2026-11-14T03:31:25.120Z"
+  },
+  {
+    "file": "07_canvas_marking_independent_layers.png",
+    "bytes": 153095,
+    "sha256": "0ff6a802113dcf333e3a70a80c5b248610e6e8bd00bacc8fc2994a5702149f36",
+    "description": "Step 4: Interactive Canvas Marking with Independent Layer Stack and Movable Footer",
+    "timestamp": "2026-11-14T03:31:27.193Z"
+  },
+  {
+    "file": "08_multiple_ribbons_configuration.png",
+    "bytes": 144143,
+    "sha256": "3a01d381f8b5f8cfe7ea68eb2adec3daeb98742783fedc1c02d1711325af2a58",
+    "description": "Step 3: Ribbon Layers Configuration with Custom URLs, Colors, and Text Stacks",
+    "timestamp": "2026-11-14T03:31:29.376Z"
+  },
+  {
+    "file": "09_single_headline_2_line_configuration.png",
+    "bytes": 139564,
+    "sha256": "ee37dac91e7dca915811fcc6e5ba176a6d8259b07a15ac37b6842255b4215dd4",
+    "description": "Step 6: Single Headline with 2-Line Toggle and Devanagari Matra Safe Height",
+    "timestamp": "2026-11-14T03:31:32.103Z"
+  },
+  {
+    "file": "10_single_headline_3_line_configuration.png",
+    "bytes": 139539,
+    "sha256": "18ddac36105b5ab519ac93d7d455c48a9d759c0fe6b0a33a465109c5dfec4b5c",
+    "description": "Step 6: Single Headline with 3-Line Toggle (Recommended)",
+    "timestamp": "2026-11-14T03:31:33.976Z"
+  },
+  {
+    "file": "11_multiple_headline_blocks_configuration.png",
+    "bytes": 149355,
+    "sha256": "aea59b444407c49a118dbfb81edd2adb6275a15aa88fcdafaac0219dbca70f4e",
+    "description": "Step 6: Multi-Headline Blocks (Kicker, Headline, Subheadline) with Independent Coordinates",
+    "timestamp": "2026-11-14T03:31:36.195Z"
+  },
+  {
+    "file": "12_movable_footer_in_header.png",
+    "bytes": 143705,
+    "sha256": "7986590ff4126ff6ab44f5f1233467e24e132f37b686aeb48926080536155552",
+    "description": "Step 3: Movable Footer positioned at Top / Header with Unlocked Canvas Position",
+    "timestamp": "2026-11-14T03:31:38.864Z"
+  },
+  {
+    "file": "13_png_gif_overlay_preview.png",
+    "bytes": 142863,
+    "sha256": "a3b46ed83021c70762d85538bd04c6c35b5faf08f0abca616aa39327d2697e88",
+    "description": "Step 3: PNG and Animated GIF Logo Configuration with Scale, Opacity, and Rotation",
+    "timestamp": "2026-11-14T03:31:40.807Z"
+  },
+  {
+    "file": "14_composed_video_studio_preview.png",
+    "bytes": 183623,
+    "sha256": "ed5ffb5e74b8e87895e2baaded30499ab952b430c8f161412edde4edb1a1cbaf",
+    "description": "Video Studio Web: Live DOM Preview rendering Authoritative Dynamic Video Frame with Parity",
+    "timestamp": "2026-11-14T03:31:45.786Z"
+  },
+  {
+    "file": "15_video_studio_canvas_export_matching.png",
+    "bytes": 183801,
+    "sha256": "a0bdfb16cb3e155af2512a8e48ec1065a5bec2dc172c2501b265cc5920dffb47",
+    "description": "Video Studio Web: Export Canvas Pipeline with drawAuthoritativeDynamicVideoFrame parity",
+    "timestamp": "2026-11-14T03:31:47.947Z"
+  }
+]

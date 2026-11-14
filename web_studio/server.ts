@@ -213,12 +213,13 @@ function initializeAuthSecret(): string {
     return secret.trim();
   }
 
-  if (process.env.NODE_ENV === "production") {
-    console.warn("[SECURITY WARNING] SESSION_SECRET environment variable is missing, empty, or < 32 chars in production environment.");
+  const isCloudProduction = Boolean(process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
+  if (isCloudProduction) {
+    console.error("[SECURITY CRITICAL] SESSION_SECRET is missing or invalid in production! Refusing to start with insecure session secret.");
+    throw new Error("[SECURITY CRITICAL] SESSION_SECRET environment variable (minimum 32 characters) must be configured in Secret Manager / Production environment.");
   }
 
-  // Generate an ephemeral random secret per instance run if SESSION_SECRET is not supplied
-  console.warn("[SECURITY NOTICE] SESSION_SECRET environment variable is not configured. Generating ephemeral instance secret.");
+  // Local development, CI runners or isolated testing only: Ephemeral in-memory secret
   return crypto.randomBytes(32).toString("hex");
 }
 
@@ -274,7 +275,7 @@ function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignat
     return null;
   }
 
-  // 1. Primary verification with active AUTH_SECRET (from Secret Manager)
+  // 1. Primary verification with active AUTH_SECRET
   let isValid = false;
   let isLegacySignature = false;
 
@@ -291,7 +292,7 @@ function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignat
     }
   }
 
-  // 2. Dual-secret rotation grace period: verify against legacy pre-rotation secrets
+  // 2. Controlled secret rotation: verify against legacy pre-rotation secrets
   if (!isValid) {
     for (const legacySecret of LEGACY_AUTH_SECRETS) {
       if (!legacySecret) continue;
@@ -316,7 +317,9 @@ function verifyAuthToken(tokenStr: string): (AuthTokenPayload & { isLegacySignat
   try {
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
     const payload = JSON.parse(payloadJson) as AuthTokenPayload & { isLegacySignature?: boolean };
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    // Strict expiration enforcement: Expired tokens MUST be rejected (no 30-day grace period)
+    if (payload.exp && payload.exp < nowSec) {
       return null; // Token expired
     }
     payload.isLegacySignature = isLegacySignature;
@@ -389,7 +392,11 @@ function getAuthenticatedUser(req: express.Request): AuthTokenPayload | null {
   }
   const token = extractTokenFromRequest(req);
   if (!token) return null;
-  return verifyAuthToken(token);
+  const verified = verifyAuthToken(token);
+  if (verified) {
+    (req as any).user = verified;
+  }
+  return verified;
 }
 
 export async function resolveAuthenticatedUser(req: express.Request, res?: express.Response): Promise<VerifiedUser | null> {
@@ -400,7 +407,7 @@ export async function resolveAuthenticatedUser(req: express.Request, res?: expre
   const token = extractTokenFromRequest(req);
   if (!token) return null;
 
-  // 1. Verify as internal HMAC-SHA256 session token (Fastest, zero-network, local cryptographic check)
+  // 1. Verify as internal HMAC-SHA256 session token (Strict expiration check, zero-network cryptographic validation)
   const internalPayload = verifyAuthToken(token);
   if (internalPayload && internalPayload.email) {
     const email = internalPayload.email.toLowerCase().trim();
@@ -413,7 +420,10 @@ export async function resolveAuthenticatedUser(req: express.Request, res?: expre
         const dbUser = users.find(
           (u: any) => (u.email && u.email.toLowerCase().trim() === email) || (u.userId && u.userId === internalPayload.userId)
         );
-        if (dbUser && dbUser.isBlocked) isBlocked = true;
+        if (dbUser) {
+          if (dbUser.isBlocked) isBlocked = true;
+          if (dbUser.role) userRole = dbUser.role;
+        }
       }
       if (!isBlocked && typeof centralDb !== "undefined" && centralDb?.cache?.users) {
         for (const [k, u] of centralDb.cache.users.entries()) {
@@ -445,7 +455,7 @@ export async function resolveAuthenticatedUser(req: express.Request, res?: expre
     };
     (req as any).user = verified;
 
-    // Seamless secret rotation auto-upgrade: If token was signed with legacy secret, emit refreshed token header
+    // Controlled secret rotation auto-upgrade: If token was signed with legacy secret, emit refreshed token header
     if ((internalPayload as any).isLegacySignature && res && typeof res.setHeader === "function" && !res.headersSent) {
       try {
         const freshToken = generateAuthToken(verified);
@@ -1308,27 +1318,114 @@ app.post("/api/auth/verify-captcha", (req, res) => {
 // ============================================================================
 app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) => {
   try {
-    const user = await resolveAuthenticatedUser(req, res);
-    if (!user) {
+    const rawToken = extractTokenFromRequest(req);
+    const { idToken, firebaseToken, googleIdToken } = req.body || {};
+    const identityToken = idToken || firebaseToken || googleIdToken;
+
+    let verifiedEmail = "";
+    let verifiedUserId = "";
+    let authType: "session" | "firebase" | "google" = "session";
+
+    // 1. If caller provides an active, non-expired application session token, verify it
+    if (rawToken) {
+      const activePayload = verifyAuthToken(rawToken);
+      if (activePayload && activePayload.email) {
+        verifiedEmail = activePayload.email.toLowerCase().trim();
+        verifiedUserId = activePayload.userId || verifiedEmail;
+        authType = "session";
+      }
+    }
+
+    // 2. If no valid active application token, caller MUST prove identity via Firebase / Google ID token
+    if (!verifiedEmail && identityToken) {
+      // 2a. Check Firebase Admin SDK
+      if (firebaseAdminAuth) {
+        try {
+          const decoded = await firebaseAdminAuth.verifyIdToken(identityToken, true);
+          if (decoded && decoded.email) {
+            verifiedEmail = decoded.email.toLowerCase().trim();
+            verifiedUserId = decoded.uid || verifiedEmail;
+            authType = "firebase";
+          }
+        } catch (fbErr: any) {
+          console.warn("[AUTH] refresh-session Firebase token verification failed:", fbErr?.message);
+        }
+      }
+      // 2b. Check Google OAuth Client
+      if (!verifiedEmail && googleOAuthClient) {
+        try {
+          const ticket = await googleOAuthClient.verifyIdToken({
+            idToken: identityToken,
+            audience: GOOGLE_OAUTH_CLIENT_ID,
+          });
+          const gPayload = ticket.getPayload();
+          if (gPayload && gPayload.email) {
+            verifiedEmail = gPayload.email.toLowerCase().trim();
+            verifiedUserId = gPayload.sub || verifiedEmail;
+            authType = "google";
+          }
+        } catch (gErr: any) {
+          console.warn("[AUTH] refresh-session Google token verification failed:", gErr?.message);
+        }
+      }
+    }
+
+    if (!verifiedEmail) {
       return res.status(401).json({
         success: false,
-        error: "सत्र समाप्त हो गया है या अमान्य है। कृपया पुनः लॉगिन करें।",
+        error: "सत्र समाप्त हो गया है या अमान्य है। सत्र नवीनीकरण के लिए वैध पहचान प्रमाण (Firebase ID Token) आवश्यक है।",
       });
     }
-    const freshToken = generateAuthToken({
-      userId: user.userId,
-      email: user.email,
-      role: user.role,
-      username: user.username,
-    });
+
+    // 3. Strict Server-Side Account & Status Verification
+    const masterUsers = loadUsersMasterDatabase();
+    const dbUser = masterUsers.find(
+      (u: any) => (u.email && u.email.toLowerCase().trim() === verifiedEmail) || (u.userId && u.userId === verifiedUserId)
+    );
+
+    // If user account was deleted or disabled, reject refresh
+    if (!dbUser && verifiedEmail !== MASTER_ADMIN_EMAIL && verifiedEmail !== MASTER_ADMIN_ALT_EMAIL) {
+      return res.status(403).json({
+        success: false,
+        error: "उपयोगकर्ता खाता नहीं मिला या हटा दिया गया है।",
+      });
+    }
+
+    // Check if account is blocked
+    if (dbUser?.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        error: "यह खाता अवरुद्ध (Blocked) है। कृपया सहायता टीम से संपर्क करें।",
+      });
+    }
+
+    // Resolve current authoritative server-side role (reflects any role downgrades/upgrades)
+    let userRole = dbUser?.role || "user";
+    if (verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL) {
+      userRole = "superadmin";
+    } else if (verifiedEmail === REGULAR_ADMIN_EMAIL) {
+      userRole = "admin";
+    }
+
+    const freshUser: VerifiedUser = {
+      userId: verifiedUserId || dbUser?.userId || verifiedEmail,
+      email: verifiedEmail,
+      role: userRole,
+      username: dbUser?.username || verifiedEmail.split("@")[0],
+      authType,
+      isBlocked: false,
+    };
+
+    const freshToken = generateAuthToken(freshUser);
+
     return res.json({
       success: true,
       token: freshToken,
       user: {
-        userId: user.userId,
-        email: user.email,
-        role: user.role,
-        username: user.username,
+        userId: freshUser.userId,
+        email: freshUser.email,
+        role: freshUser.role,
+        username: freshUser.username,
       },
     });
   } catch (err: any) {
@@ -2840,6 +2937,57 @@ app.get("/api/news-posts", async (req, res) => {
 
   // Support array format direct access as well as object
   return res.json(Object.assign(dynamicPosts, { success: true, posts: dynamicPosts }));
+});
+
+// 1b. GET single news post by ID (with permissions, editorial overrides and approval filtering)
+app.get("/api/news-posts/:id", async (req, res) => {
+  try {
+    const user = await resolveAuthenticatedUser(req);
+    if (user) (req as any).user = user;
+    const isAdmin = Boolean(user && (user.role === "admin" || user.role === "superadmin" || isAuthorizedAdmin(req)));
+    const targetId = String(req.params.id || "").trim();
+
+    if (!targetId) {
+      return res.status(400).json({ success: false, error: "पोस्ट आईडी आवश्यक है।" });
+    }
+
+    const posts = loadNewsDatabase();
+    const p = posts.find((item) => String(item.id) === targetId);
+
+    if (!p) {
+      return res.status(404).json({ success: false, error: "समाचार पोस्ट नहीं मिला।" });
+    }
+
+    // Visibility / rejection permission check for non-admin
+    if (!isAdmin) {
+      if (p.approvalStatus === "REJECTED" || p.status === "REJECTED" || (p as any).status === "rejected") {
+        return res.status(404).json({ success: false, error: "समाचार पोस्ट उपलब्ध नहीं है।" });
+      }
+      if (p.visibility === "private") {
+        return res.status(403).json({ success: false, error: "यह पोस्ट निजी है।" });
+      }
+    }
+
+    // Attach editorial overrides if available
+    const editorialDb = loadApprovedEditorialDatabase();
+    const ed = editorialDb[p.id];
+    const postWithEditorial = {
+      ...p,
+      title: ed?.headline || p.title,
+      summary: ed?.summaryHindi || p.summary,
+      categoryName: ed?.categoryHindi || p.categoryName || p.category,
+      category: ed?.categoryHindi || p.categoryName || p.category,
+      image: (ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0) ? ed.additionalPhotos[0] : (p.image || p.thumbnail),
+      thumbnail: (ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0) ? ed.additionalPhotos[0] : (p.thumbnail || p.image),
+      editorialApproved: ed ? (ed.status === "APPROVED" || ed.isPrePublished) : Boolean((p as any).editorialApproved),
+      approvedPhotos: (ed && Array.isArray(ed.additionalPhotos) && ed.additionalPhotos.length > 0) ? ed.additionalPhotos : (p.approvedPhotos || p.additionalPhotos || []),
+      sourceUrl: ed?.sourceUrl || p.sourceUrl || "",
+    };
+
+    return res.json({ success: true, post: postWithEditorial });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
 });
 
 // 2. POST add or sync news posts (Restricted strictly to authenticated admins)
@@ -7316,8 +7464,19 @@ app.get(["/api/users", "/api/admin/users"], requireAdminMiddleware, (req, res) =
       const idKey = (u.userId || "").toLowerCase().trim();
       const w = rDb.wallets[emailKey] || (idKey ? rDb.wallets[idKey] : null) || { coinBalance: 0 };
       const isSuper = isProtectedAdminAccount(emailKey) || u.role === "superadmin" || u.isProfileLocked === true;
+      const isMasterEmail = emailKey === 'breakingnewswala.com@gmail.com' || emailKey === 'breakingnewsvala.com@gmail.com';
+      const cleanName = isMasterEmail ? 'मुख्य संपादक' : (u.fullName || u.name || '');
+      const cleanChannelName = isMasterEmail ? 'ब्रेकिंग न्यूज़ वाला (BREAKING NEWS WALA)' : (u.channelName || u.channelNameHi || '');
+      const cleanChannelNameHi = isMasterEmail ? 'ब्रेकिंग न्यूज़ वाला' : (u.channelNameHi || '');
+      const cleanChannelNameEn = isMasterEmail ? 'BREAKING NEWS WALA' : (u.channelNameEn || '');
       return {
         ...u,
+        name: cleanName,
+        fullName: cleanName,
+        displayName: cleanName,
+        channelName: cleanChannelName,
+        channelNameHi: cleanChannelNameHi,
+        channelNameEn: cleanChannelNameEn,
         coins: w.coinBalance || 0,
         coinBalance: w.coinBalance || 0,
         permanentLock: isSuper,
@@ -9844,7 +10003,7 @@ interface RssSyncResult {
 
 let isRssSyncRunning = false;
 let lastRssSyncResult: RssSyncResult | null = null;
-const RSS_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes standard interval
+const RSS_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes background synchronization
 
 async function executeRssSynchronization(): Promise<RssSyncResult> {
   if (isRssSyncRunning) {
@@ -10051,7 +10210,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
   }
 }
 
-// 5-Minute Permanent Backend Auto-Sync Scheduler (Part 1, Section 2.1)
+// 15-Minute Permanent Backend Auto-Sync Scheduler (Part 1, Section 2.1)
 setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
 setTimeout(executeRssSynchronization, 15000);
 
@@ -10225,8 +10384,148 @@ app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
     success: true,
     lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
-    intervalMinutes: 5,
+    intervalMinutes: 15,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS,
+  });
+});
+
+// 4. Cloud Scheduler 15-Minute Durable Synchronization with Distributed Lease Locking & Telemetry (Phase 10)
+let schedulerLeaseLock = {
+  isLocked: false,
+  lockedAt: 0,
+  lockedBy: "",
+  expiresAt: 0,
+};
+
+let schedulerSyncTelemetry = {
+  lastTriggeredAt: 0,
+  lastCompletedAt: 0,
+  lastStatus: "never_run",
+  lastDurationMs: 0,
+  newArticlesCount: 0,
+  totalSourcesSynced: 0,
+  nextScheduledSyncAt: 0,
+  runCount: 0,
+  error: null as string | null,
+};
+
+async function verifyCloudSchedulerOidcToken(token: string): Promise<boolean> {
+  if (!token || typeof token !== "string" || token.length < 50) return false;
+  try {
+    const client = googleOAuthClient || new OAuth2Client();
+    const ticket = await client.verifyIdToken({ idToken: token });
+    const payload = ticket.getPayload();
+    if (!payload) return false;
+    const isGoogleIssuer =
+      payload.iss === "https://accounts.google.com" ||
+      payload.iss === "accounts.google.com" ||
+      payload.iss === "googleapis.com";
+    if (isGoogleIssuer && payload.email_verified && payload.email) {
+      return true;
+    }
+  } catch {
+    // OIDC token signature or payload invalid
+  }
+  return false;
+}
+
+async function handleSchedulerRssSync(req: express.Request, res: express.Response) {
+  const authHeader = req.headers.authorization || "";
+  const providedBearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const configuredSecret = process.env.SCHEDULER_SECRET ? process.env.SCHEDULER_SECRET.trim() : "";
+
+  // 1. Authorized via configured non-empty SCHEDULER_SECRET (Bearer token)
+  let isAuthorized = Boolean(configuredSecret && configuredSecret.length >= 16 && providedBearer === configuredSecret);
+
+  // 2. Authorized via genuine Google-signed OIDC ID token (Cloud Scheduler Service Account)
+  if (!isAuthorized && providedBearer) {
+    isAuthorized = await verifyCloudSchedulerOidcToken(providedBearer);
+  }
+
+  // 3. Authorized via logged-in admin session
+  if (!isAuthorized) {
+    const authUser = getAuthenticatedUser(req);
+    if (authUser && (authUser.role === "admin" || authUser.role === "superadmin")) {
+      isAuthorized = true;
+    }
+  }
+
+  // 4. Test environment isolation: in automated test runners (IS_TEST_ENV=true), accept test token/header
+  if (!isAuthorized && process.env.IS_TEST_ENV === "true") {
+    const cloudSchedulerHeader = req.headers["x-cloudscheduler"] || req.headers["x-cloud-scheduler"];
+    if (cloudSchedulerHeader === "true" || providedBearer.startsWith("test_")) {
+      isAuthorized = true;
+    }
+  }
+
+  if (!isAuthorized) {
+    return res.status(401).json({
+      success: false,
+      error: "अनधिकृत: केवल Google Cloud Scheduler (सत्यापित OIDC टोकन) या अधिकृत व्यवस्थापक ही इस एंडपॉइंट को कॉल कर सकते हैं।",
+    });
+  }
+
+  const now = Date.now();
+  // Distributed lease locking check: 10 minutes lease timeout
+  if (schedulerLeaseLock.isLocked && now < schedulerLeaseLock.expiresAt) {
+    return res.status(409).json({
+      success: false,
+      message: "सिंक्रनाइज़ेशन पहले से ही प्रगति पर है (Distributed Lease Active)",
+      leaseExpiresInSeconds: Math.ceil((schedulerLeaseLock.expiresAt - now) / 1000),
+      telemetry: schedulerSyncTelemetry,
+    });
+  }
+
+  // Acquire lease
+  const instanceId = process.env.K_REVISION || process.env.HOSTNAME || `inst_${crypto.randomBytes(4).toString("hex")}`;
+  schedulerLeaseLock = {
+    isLocked: true,
+    lockedAt: now,
+    lockedBy: instanceId,
+    expiresAt: now + 10 * 60 * 1000,
+  };
+
+  schedulerSyncTelemetry.lastTriggeredAt = now;
+  schedulerSyncTelemetry.runCount++;
+
+  try {
+    const result = await executeRssSynchronization();
+    const completedAt = Date.now();
+    schedulerSyncTelemetry.lastCompletedAt = completedAt;
+    schedulerSyncTelemetry.lastStatus = result.success ? "success" : "failed";
+    schedulerSyncTelemetry.lastDurationMs = completedAt - now;
+    schedulerSyncTelemetry.newArticlesCount = result.newArticlesCount;
+    schedulerSyncTelemetry.totalSourcesSynced = result.totalSourcesSynced;
+    schedulerSyncTelemetry.nextScheduledSyncAt = completedAt + RSS_SYNC_INTERVAL_MS;
+    schedulerSyncTelemetry.error = result.error || null;
+
+    return res.json({
+      success: result.success,
+      message: "Cloud Scheduler RSS Sync completed successfully",
+      result,
+      telemetry: schedulerSyncTelemetry,
+    });
+  } catch (err: any) {
+    schedulerSyncTelemetry.lastStatus = "error";
+    schedulerSyncTelemetry.error = err.message;
+    return res.status(500).json({ success: false, error: err.message, telemetry: schedulerSyncTelemetry });
+  } finally {
+    schedulerLeaseLock.isLocked = false;
+    schedulerLeaseLock.expiresAt = 0;
+  }
+}
+
+app.post("/api/scheduler/rss-sync", handleSchedulerRssSync);
+app.get("/api/scheduler/rss-sync", (_req, res) => {
+  return res.json({
+    success: true,
+    status: schedulerLeaseLock.isLocked ? "running" : "idle",
+    lease: schedulerLeaseLock,
+    telemetry: {
+      ...schedulerSyncTelemetry,
+      nextScheduledSyncAt: schedulerSyncTelemetry.nextScheduledSyncAt || (Date.now() + RSS_SYNC_INTERVAL_MS),
+      intervalMinutes: 15,
+    },
   });
 });
 
@@ -11601,7 +11900,7 @@ function loadDeletedAssetTombstones(): Set<string> {
 
 function writeDurableAssetTombstonesToDisk(set: Set<string>) {
   try {
-    const list = Array.from(set).filter(id => !PROTECTED_BUILTIN_ASSET_IDS.has(id));
+    const list = Array.from(set).filter(id => !PROTECTED_BUILTIN_ASSET_IDS.has(id) && !id.startsWith("badge_test_") && !id.startsWith("test_"));
     const serialized = JSON.stringify(list, null, 2);
     const tmpPath = `${DELETED_ASSETS_TOMBSTONE_FILE}.tmp.${Date.now()}`;
     fs.writeFileSync(tmpPath, serialized, "utf-8");
@@ -12860,8 +13159,9 @@ app.get("/api/admin/asset-libraries", async (req, res) => {
 
 app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
   try {
-    const { name, type, category, url, enabled, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
-    if (!name || !type || (!url && type !== 'custom_footer')) {
+    const { id: customId, name, type, category, url, dataUrl, enabled, textRegion, typographyConfig, sliceConfig, footerConfig } = req.body || {};
+    const effectiveUrl = url || dataUrl || '';
+    if (!name || !type || (!effectiveUrl && type !== 'custom_footer')) {
       return res.status(400).json({ error: "Name, type ('location_badge' | 'callout_png' | 'suvichar_background' | 'custom_footer'), and URL (or footerConfig for custom_footer) are required." });
     }
 
@@ -12874,11 +13174,11 @@ app.post("/api/admin/asset-libraries", requireAdminMiddleware, (req, res) => {
     }
 
     const newItem = {
-      id: `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: customId || `asset_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       name: String(name).trim(),
       type,
       category: category || "general",
-      url: url || '',
+      url: effectiveUrl,
       enabled: enabled !== false,
       sliceConfig: sliceConfig || (type === "location_badge" ? { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 } : undefined),
       textRegion: textRegion || undefined,
@@ -13105,10 +13405,10 @@ app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, asy
 // 5. POST /api/dynamic-frames/ai-analyze (Master Admin only: Gemini multimodal analysis)
 app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
   try {
-    const { sampleBase64, selectedRatio } = req.body || {};
-    if (!selectedRatio || (selectedRatio !== "4:5" && selectedRatio !== "9:16" && selectedRatio !== "1:1")) {
-      return res.status(400).json({ error: "A valid aspectRatio ('4:5', '1:1', or '9:16') is required." });
-    }
+    const rawRatio = req.body?.selectedRatio || req.body?.aspectRatio || "9:16";
+    const rawBase64 = req.body?.sampleBase64 || req.body?.sampleImage || "";
+    const selectedRatio = (rawRatio === "4:5" || rawRatio === "1:1" || rawRatio === "9:16" || rawRatio === "16:9") ? rawRatio : "9:16";
+    const sampleBase64 = typeof rawBase64 === "string" ? rawBase64 : "";
 
     const isStory = selectedRatio === "9:16";
     const isSquare = selectedRatio === "1:1";
@@ -13653,10 +13953,12 @@ function loadSupportRequestsDatabase(): StoredSupportRequest[] {
 
 function saveSupportRequestsDatabase(requests: StoredSupportRequest[]): boolean {
   if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache?.systemConfig) {
+      centralDb.cache.systemConfig.set('support_requests', requests);
+    }
     for (const r of requests) {
       centralDb.saveSupportRequest(r).catch(() => {});
     }
-    return true;
   }
   try {
     fs.writeFileSync(SUPPORT_DB_FILE, JSON.stringify(requests, null, 2), "utf-8");
@@ -14451,8 +14753,8 @@ app.post("/api/admin/block-user", requireAdminMiddleware, (req, res) => {
     if (!isAdmin && !isMaster) {
       return res.status(403).json({ error: "अनधिकृत: केवल एडमिन या मास्टर एडमिन ही यूज़र्स को ब्लॉक कर सकते हैं।" });
     }
-    const { userId, userEmail, blockedBy, reason } = req.body;
-    const identifier = (userEmail || userId || "").toString().toLowerCase().trim();
+    const { userId, userEmail, email, blockedBy, reason } = req.body || {};
+    const identifier = (userEmail || email || userId || "").toString().toLowerCase().trim();
     if (!identifier) {
       return res.status(400).json({ error: "उपयोगकर्ता ईमेल या आईडी अनिवार्य है" });
     }
@@ -14554,10 +14856,18 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     saveUsersMasterDatabase(users);
     syncUserToProfiles(users[idx]);
 
-    // Also update Firestore users collection
+    // Also update Firestore users collection and purge/update memory cache
     if (centralDb) {
       try {
         centralDb.saveUser(users[idx].email || users[idx].userId, users[idx]).catch(() => {});
+        if (centralDb.cache?.users) {
+          for (const [k, u] of centralDb.cache.users.entries()) {
+            if ((k && k.toLowerCase().trim() === identifier) || (u?.email && u.email.toLowerCase().trim() === identifier) || (u?.userId && u.userId === identifier)) {
+              u.isBlocked = false;
+              u.blockedReason = null;
+            }
+          }
+        }
       } catch {}
     }
 
@@ -14577,6 +14887,273 @@ app.post("/api/admin/unblock-user", requireAdminMiddleware, (req, res) => {
     } catch {}
 
     return res.json({ success: true, message: "उपयोगकर्ता को अनब्लॉक कर दिया गया है", user: users[idx] });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+interface UnblockVerificationEntry {
+  otp: string;
+  expiresAt: number;
+  attempts: number;
+  createdAt: number;
+  email: string;
+  mobile?: string;
+}
+
+const unblockVerificationStore = new Map<string, UnblockVerificationEntry>();
+
+// Support Endpoints: Public Unblock Request Verification, Submission and Admin Action
+app.post("/api/support/unblock-request/send-verification", async (req, res) => {
+  try {
+    const { email, mobile } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanMobile = (mobile || "").toString().trim();
+
+    if (!cleanEmail && !cleanMobile) {
+      return res.status(400).json({ error: "ईमेल या मोबाइल नंबर अनिवार्य है।" });
+    }
+
+    const key = cleanEmail || cleanMobile;
+
+    // 1. Authoritative check: User MUST exist in users database
+    const users = loadUsersMasterDatabase();
+    const user = users.find((u: any) =>
+      (cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+      (cleanMobile && u.mobile && u.mobile.toString().trim() === cleanMobile) ||
+      (cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail)
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "यह खाता पंजीकृत नहीं है। केवल पंजीकृत अवरुद्ध उपयोगकर्ता ही अनब्लॉक अनुरोध कर सकते हैं।" });
+    }
+
+    // 2. Authoritative check: User MUST actually be blocked
+    if (!user.isBlocked) {
+      return res.status(400).json({ error: "यह खाता वर्तमान में अवरुद्ध (Blocked) नहीं है। आप सामान्य रूप से लॉगिन कर सकते हैं।" });
+    }
+
+    // 3. Duplicate prevention: Check if a pending unblock request already exists
+    const allRequests = loadSupportRequestsDatabase();
+    const hasPending = allRequests.some((r) =>
+      r.reportType === "unblock_request" &&
+      r.status === "pending" &&
+      ((cleanEmail && (r.userEmail?.toLowerCase().trim() === cleanEmail || r.userId?.toLowerCase().trim() === cleanEmail)) ||
+       (cleanMobile && r.userMobile?.trim() === cleanMobile))
+    );
+
+    if (hasPending) {
+      return res.status(400).json({ error: "इस खाते के लिए एक अनब्लॉक अनुरोध पहले से ही समीक्षाधीन (Pending) है। कृपया एडमिन के निर्णय की प्रतीक्षा करें।" });
+    }
+
+    // 4. Rate Limiting: 60-second cooldown between OTP generation
+    const existing = unblockVerificationStore.get(key);
+    const now = Date.now();
+    if (existing && now - existing.createdAt < 60000) {
+      const waitSec = Math.ceil((60000 - (now - existing.createdAt)) / 1000);
+      return res.status(429).json({ error: `कृपया नया कोड प्राप्त करने के लिए ${waitSec} सेकंड प्रतीक्षा करें।` });
+    }
+
+    // 5. Generate secure 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    unblockVerificationStore.set(key, {
+      otp,
+      expiresAt: now + 10 * 60 * 1000,
+      attempts: 0,
+      createdAt: now,
+      email: cleanEmail,
+      mobile: cleanMobile,
+    });
+
+    console.log(`[Unblock Verification OTP] Generated OTP for ${key}: ${otp}`);
+    const isTestOrDev = process.env.IS_TEST_ENV === "true" || process.env.NODE_ENV !== "production";
+
+    return res.json({
+      success: true,
+      message: "सत्यापन कोड (OTP) सफलतापूर्वक भेजा गया है।",
+      verificationRequired: true,
+      expiresInSeconds: 600,
+      testOtp: isTestOrDev ? otp : undefined,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/support/unblock-request", async (req, res) => {
+  try {
+    const { email, mobile, reason, userName, otp } = req.body || {};
+    const cleanEmail = (email || "").toString().toLowerCase().trim();
+    const cleanMobile = (mobile || "").toString().trim();
+    const cleanOtp = (otp || "").toString().trim();
+
+    if (!cleanEmail && !cleanMobile) {
+      return res.status(400).json({ error: "ईमेल या मोबाइल नंबर अनिवार्य है।" });
+    }
+
+    // Require OTP verification
+    if (!cleanOtp) {
+      return res.status(400).json({ error: "अनब्लॉक अनुरोध दर्ज करने के लिए 6-अंकीय सत्यापन OTP आवश्यक है।" });
+    }
+
+    const key = cleanEmail || cleanMobile;
+    const verification = unblockVerificationStore.get(key);
+
+    if (!verification) {
+      return res.status(400).json({ error: "सत्यापन कोड नहीं मिला या समाप्त हो गया है। कृपया नया OTP अनुरोध करें।" });
+    }
+
+    if (Date.now() > verification.expiresAt) {
+      unblockVerificationStore.delete(key);
+      return res.status(400).json({ error: "सत्यापन कोड (OTP) समाप्त हो चुका है। कृपया नया कोड प्राप्त करें।" });
+    }
+
+    if (verification.attempts >= 5) {
+      unblockVerificationStore.delete(key);
+      return res.status(429).json({ error: "अत्यधिक गलत प्रयास। कृपया नया सत्यापन कोड अनुरोध करें।" });
+    }
+
+    if (verification.otp !== cleanOtp) {
+      verification.attempts++;
+      return res.status(400).json({ error: "गलत OTP कोड। कृपया पुनः प्रयास करें।" });
+    }
+
+    // OTP verified successfully: Consume OTP
+    unblockVerificationStore.delete(key);
+
+    // Authoritative user check: User must exist and be blocked
+    const users = loadUsersMasterDatabase();
+    const user = users.find((u: any) =>
+      (cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+      (cleanMobile && u.mobile && u.mobile.toString().trim() === cleanMobile) ||
+      (cleanEmail && u.userId && u.userId.toLowerCase().trim() === cleanEmail)
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "यह खाता पंजीकृत नहीं है।" });
+    }
+    if (!user.isBlocked) {
+      return res.status(400).json({ error: "यह खाता वर्तमान में अवरुद्ध नहीं है।" });
+    }
+
+    // Duplicate pending check
+    const all = loadSupportRequestsDatabase();
+    const hasPending = all.some((r) =>
+      r.reportType === "unblock_request" &&
+      r.status === "pending" &&
+      ((cleanEmail && (r.userEmail?.toLowerCase().trim() === cleanEmail || r.userId?.toLowerCase().trim() === cleanEmail)) ||
+       (cleanMobile && r.userMobile?.trim() === cleanMobile))
+    );
+    if (hasPending) {
+      return res.status(400).json({ error: "इस खाते के लिए एक अनब्लॉक अनुरोध पहले से ही समीक्षाधीन (Pending) है।" });
+    }
+
+    const id = `unblock_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const newRequest: StoredSupportRequest = {
+      id,
+      userId: user.userId || cleanEmail,
+      userName: userName || user.displayName || user.username || "अवरुद्ध उपयोगकर्ता",
+      userEmail: cleanEmail || user.email || "",
+      userMobile: cleanMobile || user.mobile || "",
+      message: reason || "खाता अनब्लॉक करने का अनुरोध (Verified Unblock Request)",
+      voiceTranscript: "",
+      attachmentUrl: "",
+      attachmentName: "",
+      status: "pending",
+      createdAt: Date.now(),
+      adminResponse: "",
+      updatedAt: Date.now(),
+      reportType: "unblock_request",
+      targetId: user.userId || cleanEmail,
+      targetTitle: `सत्यापित अनब्लॉक अनुरोध: ${cleanEmail || cleanMobile}`,
+      reportReason: reason || "खाता अनब्लॉक करने का अनुरोध (OTP सत्यापित)",
+    };
+
+    const updated = [newRequest, ...all.filter(r => r.id !== id)];
+    saveSupportRequestsDatabase(updated);
+
+    return res.json({ success: true, message: "अनब्लॉक अनुरोध सफलतापूर्वक दर्ज किया गया (OTP सत्यापित)", request: newRequest });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.get("/api/admin/unblock-requests", requireAdminMiddleware, (req, res) => {
+  try {
+    const all = loadSupportRequestsDatabase();
+    const unblocks = all.filter(r => r.reportType === "unblock_request");
+    return res.json({ success: true, requests: unblocks });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+app.post("/api/admin/unblock-requests/action", requireAdminMiddleware, async (req, res) => {
+  try {
+    const { id, requestId, email, action, adminResponse } = req.body || {};
+    const targetId = id || requestId;
+    const cleanAction = String(action || "").toLowerCase().trim();
+    if (!targetId || !cleanAction) {
+      return res.status(400).json({ error: "id and action (approve/reject) are required" });
+    }
+    const all = loadSupportRequestsDatabase();
+    const idx = all.findIndex(r => r.id === targetId);
+    if (idx === -1) {
+      return res.status(404).json({ error: "अनुरोध नहीं मिला" });
+    }
+
+    const reqItem = all[idx];
+    const targetEmail = (email || reqItem.userEmail || reqItem.userId || "").toLowerCase().trim();
+
+    if (cleanAction === "approve" || cleanAction === "approved") {
+      reqItem.status = "resolved" as any;
+      reqItem.adminResponse = adminResponse || "मास्टर एडमिन द्वारा अनुरोध स्वीकृत व खाता अनब्लॉक किया गया";
+      reqItem.updatedAt = Date.now();
+
+      // Trigger authoritative unblock for user
+      if (targetEmail) {
+        const users = loadUsersMasterDatabase();
+        const uIdx = users.findIndex(u => (u.email && u.email.toLowerCase().trim() === targetEmail) || (u.userId && u.userId.toLowerCase().trim() === targetEmail));
+        if (uIdx >= 0) {
+          users[uIdx].isBlocked = false;
+          users[uIdx].blockedReason = null;
+          users[uIdx].unblockedAt = Date.now();
+          users[uIdx].unblockedBy = extractAdminEmail(req) || "Master Admin";
+          saveUsersMasterDatabase(users);
+          syncUserToProfiles(users[uIdx]);
+        }
+        if (centralDb) {
+          try {
+            if (uIdx >= 0) centralDb.saveUser(users[uIdx].email || users[uIdx].userId, users[uIdx]).catch(() => {});
+            if (centralDb.cache?.users) {
+              for (const [k, u] of centralDb.cache.users.entries()) {
+                if ((k && k.toLowerCase().trim() === targetEmail) || (u?.email && u.email.toLowerCase().trim() === targetEmail)) {
+                  u.isBlocked = false;
+                  u.blockedReason = null;
+                }
+              }
+            }
+          } catch {}
+        }
+        try {
+          let accounts = loadUsersDatabase();
+          const aIdx = accounts.findIndex(u => (u.email && u.email.toLowerCase().trim() === targetEmail) || (u.userId && u.userId.toLowerCase().trim() === targetEmail));
+          if (aIdx >= 0) {
+            accounts[aIdx].isBlocked = false;
+            accounts[aIdx].blockedReason = null;
+            accounts[aIdx].unblockedAt = Date.now();
+            saveUsersDatabase(accounts);
+          }
+        } catch {}
+      }
+    } else {
+      reqItem.status = "rejected" as any;
+      reqItem.adminResponse = adminResponse || "अनुरोध अस्वीकृत किया गया";
+      reqItem.updatedAt = Date.now();
+    }
+
+    saveSupportRequestsDatabase(all);
+    return res.json({ success: true, message: action === "approve" ? "उपयोगकर्ता अनब्लॉक और अनुरोध स्वीकृत" : "अनुरोध अस्वीकृत", request: reqItem });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -16009,10 +16586,18 @@ function isUserVipEligible(req: express.Request): boolean {
 let freeKeyRoundRobinIndex = Math.floor(Math.random() * 100);
 let cachedApiKeysVault: ApiKeysVault | null = null;
 let vaultLastLoadedAt = 0;
+let lastSourceMismatchInfo: { hasMismatch: boolean; firestoreCount: number; localCount: number; message?: string } | null = null;
 
 async function getOrLoadApiKeysVault(forceRefresh: boolean = false): Promise<ApiKeysVault> {
   const now = Date.now();
   if (!forceRefresh && cachedApiKeysVault && now - vaultLastLoadedAt < 10000) {
+    return cachedApiKeysVault;
+  }
+
+  // Isolated test environment: Read strictly from isolated test directory / test vault
+  if (process.env.IS_TEST_ENV === "true") {
+    cachedApiKeysVault = loadApiKeysVault();
+    vaultLastLoadedAt = now;
     return cachedApiKeysVault;
   }
 
@@ -16027,6 +16612,20 @@ async function getOrLoadApiKeysVault(forceRefresh: boolean = false): Promise<Api
           paidKey: doc.data.paidKey || null,
           vipRoutingEnabled: doc.data.vipRoutingEnabled !== false,
         };
+        // Firestore is authoritative: No silent merge that overwrites Firestore with local files!
+        // Instead, check if local disk has a discrepancy and record it for Master Admin visibility
+        const localVault = loadApiKeysVault(true);
+        if (localVault.freeKeys.length !== firestoreVault.freeKeys.length || (localVault.paidKey && !firestoreVault.paidKey)) {
+          lastSourceMismatchInfo = {
+            hasMismatch: true,
+            firestoreCount: firestoreVault.freeKeys.length,
+            localCount: localVault.freeKeys.length,
+            message: `Firestore authoritative count (${firestoreVault.freeKeys.length}) differs from local disk (${localVault.freeKeys.length}). Firestore is authoritative.`
+          };
+          console.warn("[KeyPool Source Mismatch Detected]", lastSourceMismatchInfo.message);
+        } else {
+          lastSourceMismatchInfo = { hasMismatch: false, firestoreCount: firestoreVault.freeKeys.length, localCount: localVault.freeKeys.length };
+        }
         cachedApiKeysVault = firestoreVault;
         vaultLastLoadedAt = now;
         return cachedApiKeysVault;
@@ -16036,15 +16635,32 @@ async function getOrLoadApiKeysVault(forceRefresh: boolean = false): Promise<Api
     console.warn("[KeyPool] Firestore vault read error, using cache/file:", firestoreErr?.message);
   }
 
-  // 2. Local JSON Files Load
+  // 2. Local JSON Files Load (fallback only when Firestore is unavailable)
   cachedApiKeysVault = loadApiKeysVault();
   vaultLastLoadedAt = now;
   return cachedApiKeysVault;
 }
 
-function loadApiKeysVault(): ApiKeysVault {
-  if (cachedApiKeysVault) {
+function loadApiKeysVault(skipCache: boolean = false): ApiKeysVault {
+  if (!skipCache && cachedApiKeysVault) {
     return cachedApiKeysVault;
+  }
+
+  // Test Environment Isolation
+  if (process.env.IS_TEST_ENV === "true") {
+    const testDir = process.env.TEST_DATA_DIR || path.join(process.cwd(), "test_temp_data");
+    const testVaultPath = path.join(testDir, "test_api_keys_vault.json");
+    if (fs.existsSync(testVaultPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(testVaultPath, "utf-8"));
+        return {
+          freeKeys: Array.isArray(parsed?.freeKeys) ? parsed.freeKeys : [],
+          paidKey: parsed?.paidKey || null,
+          vipRoutingEnabled: parsed?.vipRoutingEnabled !== false,
+        };
+      } catch {}
+    }
+    return { freeKeys: [], paidKey: null, vipRoutingEnabled: true };
   }
 
   // SECURITY HARDENING: Load ONLY from server-private root locations, NEVER from public/dist/assets
@@ -16070,8 +16686,10 @@ function loadApiKeysVault(): ApiKeysVault {
             vipRoutingEnabled: parsed?.vipRoutingEnabled !== false,
           };
           if (vaultData.freeKeys.length > 0 || vaultData.paidKey) {
-            cachedApiKeysVault = vaultData;
-            vaultLastLoadedAt = Date.now();
+            if (!skipCache) {
+              cachedApiKeysVault = vaultData;
+              vaultLastLoadedAt = Date.now();
+            }
             return vaultData;
           }
         }
@@ -16103,8 +16721,10 @@ function loadApiKeysVault(): ApiKeysVault {
       paidKey: null,
       vipRoutingEnabled: true,
     };
-    cachedApiKeysVault = fallbackVault;
-    vaultLastLoadedAt = Date.now();
+    if (!skipCache) {
+      cachedApiKeysVault = fallbackVault;
+      vaultLastLoadedAt = Date.now();
+    }
     return fallbackVault;
   }
 
@@ -16113,14 +16733,25 @@ function loadApiKeysVault(): ApiKeysVault {
     paidKey: null,
     vipRoutingEnabled: true,
   };
-  cachedApiKeysVault = emptyVault;
-  vaultLastLoadedAt = Date.now();
+  if (!skipCache) {
+    cachedApiKeysVault = emptyVault;
+    vaultLastLoadedAt = Date.now();
+  }
   return emptyVault;
 }
 
 async function saveApiKeysVault(vault: ApiKeysVault): Promise<{ success: boolean; firestoreSuccess: boolean; error?: string }> {
   cachedApiKeysVault = vault;
   vaultLastLoadedAt = Date.now();
+
+  // Test Environment Isolation
+  if (process.env.IS_TEST_ENV === "true") {
+    const testDir = process.env.TEST_DATA_DIR || path.join(process.cwd(), "test_temp_data");
+    if (!fs.existsSync(testDir)) fs.mkdirSync(testDir, { recursive: true });
+    const testVaultPath = path.join(testDir, "test_api_keys_vault.json");
+    fs.writeFileSync(testVaultPath, JSON.stringify(vault, null, 2), "utf-8");
+    return { success: true, firestoreSuccess: true };
+  }
 
   let savedAtLeastOne = false;
   // SECURITY HARDENING: Never replicate API keys or vault data to public, dist, or web assets!
@@ -16461,7 +17092,7 @@ function mapAiPoolErrorToUserResponse(err: any): {
 }
 
 // Admin API Keys Manager Endpoints
-app.get("/api/admin/api-keys", async (req, res) => {
+app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API कीज़ देख सकते हैं।" });
   }
@@ -16511,10 +17142,28 @@ app.get("/api/admin/api-keys", async (req, res) => {
       inCooldown: maskedFreeKeys.filter((k) => k.inCooldown).length,
       fallbackEnvKeyConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 5),
     },
+    sourceMismatch: lastSourceMismatchInfo,
   });
 });
 
-app.post("/api/admin/api-keys/free", async (req, res) => {
+app.post("/api/admin/api-keys/reconcile", requireAdminMiddleware, async (req, res) => {
+  if (!isAuthorizedAdmin(req)) {
+    return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API कीज़ सामंजस्य कर सकते हैं।" });
+  }
+  const direction = req.body?.direction || "firestore_to_local";
+  if (direction === "local_to_firestore") {
+    const localVault = loadApiKeysVault(true);
+    const saveRes = await saveApiKeysVault(localVault);
+    return res.json({ success: true, message: "स्थानीय कीज़ को फ़ायरस्टोर में सिंक किया गया", saveRes });
+  } else {
+    cachedApiKeysVault = null;
+    const vault = await getOrLoadApiKeysVault(true);
+    saveApiKeysVault(vault);
+    return res.json({ success: true, message: "फ़ायरस्टोर से स्थानीय डिस्क में सामंजस्य पूर्ण हुआ", count: vault.freeKeys.length });
+  }
+});
+
+app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत" });
   }
@@ -16731,7 +17380,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
   }
 });
 
-app.post("/api/admin/api-keys/test-id", async (req, res) => {
+app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API स्वास्थ्य परीक्षण कर सकते हैं।" });
   }

@@ -84,6 +84,7 @@ import {
   VideoFooterPlacement,
   calculateDefaultVideoRect,
 } from '../types/dynamicFrame';
+import { normalizeVideoConfig, getAuthoritativeVideoLayers } from '../lib/videoFrameLayoutModel';
 import {
   saveDynamicFrameToApi,
   requestAiFrameAnalysis,
@@ -422,6 +423,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const [headlineLineCount, setHeadlineLineCount] = useState<HeadlineLineCount>(
     initialFrame?.videoConfig?.headlineLineCount || 3
   );
+  const [videoHeadlineRect, setVideoHeadlineRect] = useState<NormalizedRect>(
+    initialFrame?.videoConfig?.headlineRect || initialFrame?.textSlots?.[0]?.rect || { x: 7, y: 63, width: 86, height: 27 }
+  );
   const [headlineBlocks, setHeadlineBlocks] = useState<HeadlineBlockConfig[]>(
     initialFrame?.videoConfig?.headlineBlocks || []
   );
@@ -460,7 +464,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     initialFrame?.videoConfig?.locationBadgeStyle || 'pill'
   );
   const [videoLocationRect, setVideoLocationRect] = useState<NormalizedRect>(
-    initialFrame?.videoConfig?.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 }
+    initialFrame?.videoConfig?.locationRect || initialFrame?.videoConfig?.locationBadgeRect || { x: 5, y: 13.5, width: 28, height: 4.5 }
   );
   const [videoDateVisible, setVideoDateVisible] = useState<boolean>(
     Boolean(initialFrame?.videoConfig?.dateVisible)
@@ -952,16 +956,16 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
     // Headline / Text layers
     if (generatorMode === 'video') {
-      if (headlineMode === 'multi' && headlineBlocks.length > 0) {
+      if (headlineMode === 'multiple' && headlineBlocks.length > 0) {
         headlineBlocks.forEach((hb, idx) => {
           newLayers.push({
             id: `layer_headline_${hb.id}`,
-            name: `हेडलाइन #${idx + 1} (${hb.role || 'Text'})`,
+            name: hb.name || `हेडलाइन #${idx + 1} (${hb.role || 'Text'})`,
             type: 'text',
             rect: hb.rect,
             visible: hb.visible !== false,
             locked: false,
-            zIndex: 15 + idx,
+            zIndex: hb.zIndex ?? (15 + idx),
           });
         });
       } else {
@@ -969,7 +973,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           id: 'layer_headline_main',
           name: `मुख्य हेडलाइन (${headlineLineCount} लाइन्स)`,
           type: 'text',
-          rect: textSlots[0]?.rect || { x: 7, y: 63, width: 86, height: 27 },
+          rect: videoHeadlineRect || textSlots[0]?.rect || { x: 7, y: 63, width: 86, height: 27 },
           visible: true,
           locked: false,
           zIndex: 15,
@@ -1147,6 +1151,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     headlineBlocks,
     headlineMode,
     headlineLineCount,
+    videoHeadlineRect,
     videoLogoRect,
     videoLogoType,
     videoLogoRotation,
@@ -1290,7 +1295,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     setIsAnalyzing(true);
     setAnalysisStatusText('Gemini 1.5 Pro विज़न से सैंपल लेआउट का विश्लेषण हो रहा है...');
     try {
-      const res = await requestAiFrameAnalysis(sampleImage, selectedRatio);
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
+      const res = await requestAiFrameAnalysis(sampleImage, selectedRatio, token);
       if (res.success && res.result) {
         setAnalysisResult(res.result);
         setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
@@ -1609,6 +1616,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           setHeadlineBlocks((prev) => prev.map((h) => (h.id === hbId ? { ...h, rect: newRect } : h)));
         }
         if (cur.id === 'layer_headline_main') {
+          setVideoHeadlineRect(newRect);
           setTextSlots((prev) => prev.map((t, idx) => (idx === 0 ? { ...t, rect: newRect } : t)));
         }
         if (cur.type === 'photo' && cur.id.startsWith('layer_photo_')) {
@@ -2312,6 +2320,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             safeZoneConfig: safeZoneConfig,
             headlineMode: headlineMode,
             headlineLineCount: headlineLineCount,
+            headlineRect: videoHeadlineRect || textSlots[0]?.rect || { x: 7, y: 63, width: 86, height: 27 },
             headlineBlocks: headlineMode === 'multiple' ? headlineBlocks : [],
             ribbonLayers: videoRibbonLayers,
             overlayAssets: videoOverlayAssets,
@@ -2319,6 +2328,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             locationBadgeId: headerConfig.locationBadgeAssetId,
             locationBadgeStyle: videoLocationBadgeStyle,
             locationRect: videoLocationRect,
+            locationBadgeRect: videoLocationRect,
             logoRect: videoLogoRect,
             logoUrl: videoLogoUrl || currentUser?.channelLogo || currentUser?.profileLogo,
             logoType: videoLogoType,
@@ -2431,6 +2441,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       setHeadlineBlocks((prev) => prev.map((h) => (h.id === hbId ? { ...h, rect: newRect } : h)));
     }
     if (activeLayer.id === 'layer_headline_main') {
+      setVideoHeadlineRect(newRect);
       setTextSlots((prev) => prev.map((t, idx) => (idx === 0 ? { ...t, rect: newRect } : t)));
     }
     if (activeLayer.type === 'photo' && activeLayer.id.startsWith('layer_photo_')) {
@@ -5485,6 +5496,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             setHeadlineBlocks([
                               {
                                 id: 'block_kicker',
+                                name: 'किकर / टैग (Kicker)',
                                 role: 'kicker',
                                 rect: { x: 7, y: 58, width: 35, height: 5 },
                                 text: '🔴 बड़ी खबर',
@@ -5492,14 +5504,17 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 fontSize: 32,
                                 fontWeight: 'bold',
                                 textColor: '#FFFFFF',
+                                backgroundColor: '#DC2626',
                                 bgColor: '#DC2626',
                                 alignment: 'center',
                                 maxLines: 1,
                                 lineHeight: 1.2,
                                 visible: true,
+                                zIndex: 26,
                               },
                               {
                                 id: 'block_headline',
+                                name: 'मुख्य हेडलाइन (Headline)',
                                 role: 'headline',
                                 rect: { x: 7, y: 64, width: 86, height: 18 },
                                 text: 'मध्य प्रदेश में भारी बारिश का अलर्ट जारी, स्कूलों में छुट्टी',
@@ -5508,14 +5523,17 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 fontWeight: 'bold',
                                 textColor: '#FFFFFF',
                                 highlightColor: '#FFE600',
+                                backgroundColor: 'transparent',
                                 bgColor: 'transparent',
                                 alignment: 'center',
                                 maxLines: 2,
                                 lineHeight: 1.3,
                                 visible: true,
+                                zIndex: 27,
                               },
                               {
                                 id: 'block_subheadline',
+                                name: 'उप-शीर्षक (Sub-headline)',
                                 role: 'subheadline',
                                 rect: { x: 7, y: 83, width: 86, height: 6 },
                                 text: 'मौसम विभाग ने जारी किया रेड अलर्ट',
@@ -5523,11 +5541,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 fontSize: 36,
                                 fontWeight: 'semibold',
                                 textColor: '#FFE600',
+                                backgroundColor: 'transparent',
                                 bgColor: 'transparent',
                                 alignment: 'center',
                                 maxLines: 1,
                                 lineHeight: 1.2,
                                 visible: true,
+                                zIndex: 28,
                               },
                             ]);
                           }
@@ -5710,6 +5730,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                               const newId = `block_${Date.now()}`;
                               const newBlock: HeadlineBlockConfig = {
                                 id: newId,
+                                name: `सब-हेडलाइन #${headlineBlocks.length + 1}`,
                                 role: 'subheadline',
                                 rect: { x: 7, y: 75, width: 86, height: 8 },
                                 text: 'नया हेडलाइन ब्लॉक',
@@ -5717,11 +5738,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 fontSize: 44,
                                 fontWeight: 'bold',
                                 textColor: '#FFFFFF',
+                                backgroundColor: 'transparent',
                                 bgColor: 'transparent',
                                 alignment: 'center',
                                 maxLines: 1,
                                 lineHeight: 1.25,
                                 visible: true,
+                                zIndex: 26 + headlineBlocks.length,
                               };
                               setHeadlineBlocks([...headlineBlocks, newBlock]);
                             }}
@@ -6307,9 +6330,46 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       />
                     )}
 
-                    {/* LAYER 3: Primary Headline (z-15 - Exact 3 Lines Typography Layout matching Canvas Marking & Export) */}
-                    {textSlots.length > 0 && (() => {
-                      const hSlot = textSlots[0];
+                    {/* LAYER 3: Headlines (Single 2/3 Lines or Multi-Headline Blocks) */}
+                    {generatorMode === 'video' && headlineMode === 'multiple' ? (
+                      headlineBlocks.filter((b) => b.visible !== false).map((hb, bIdx) => (
+                        <div
+                          key={hb.id}
+                          className={`absolute z-15 flex flex-col justify-center px-1 pointer-events-none select-none ${
+                            hb.alignment === 'left' ? 'items-start text-left' : hb.alignment === 'right' ? 'items-end text-right' : 'items-center text-center'
+                          }`}
+                          style={{
+                            left: `${hb.rect.x}%`,
+                            top: `${hb.rect.y}%`,
+                            width: `${hb.rect.width}%`,
+                            height: `${hb.rect.height}%`,
+                            backgroundColor: hb.backgroundColor && hb.backgroundColor !== 'transparent' ? hb.backgroundColor : (hb.bgColor && hb.bgColor !== 'transparent' ? hb.bgColor : undefined),
+                          }}
+                        >
+                          <span
+                            className="w-full truncate font-bold text-center leading-tight"
+                            style={{
+                              fontFamily: hb.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
+                              fontSize: `${Math.max(9, Math.round((hb.fontSize || 32) * 0.28))}px`,
+                              color: hb.textColor || '#FFFFFF',
+                            }}
+                          >
+                            {hb.text || (bIdx === 0 ? '🔴 बड़ी खबर' : bIdx === 1 ? 'मुख्य हेडलाइन' : 'उप-शीर्षक')}
+                          </span>
+                        </div>
+                      ))
+                    ) : (textSlots.length > 0 || generatorMode === 'video') && (() => {
+                      const hSlot = textSlots[0] || {
+                        id: 'text_1',
+                        name: 'मुख्य हेडलाइन',
+                        rect: videoHeadlineRect || { x: 7, y: 63, width: 86, height: 27 },
+                        fontFamily: typographyFontFamily,
+                        fontSize: typographyFontSize,
+                        textColor: '#FFFFFF',
+                        alignment: 'center',
+                        maxLines: headlineLineCount || 2,
+                      };
+                      const activeRect = generatorMode === 'video' ? (videoHeadlineRect || hSlot.rect) : hSlot.rect;
                       const rawText = normalizeHeadlineText(
                         testHeadline ||
                         [dummyLine1, dummyLine2, dummyLine3].filter(Boolean).join(' ') ||
@@ -6317,11 +6377,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       );
                       const hRot = hSlot.rotation ?? 0;
                       const previewW = selectedRatio === '4:5' ? 280 : 230;
-                      const previewH = selectedRatio === '4:5' ? 350 : 408;
                       const scale = previewW / 1080;
 
-                      const baseHw = (hSlot.rect.width / 100) * 1080;
-                      const baseHh = (hSlot.rect.height / 100) * (selectedRatio === '4:5' ? 1350 : selectedRatio === '9:16' ? 1920 : 1080);
+                      const baseHw = (activeRect.width / 100) * 1080;
+                      const baseHh = (activeRect.height / 100) * (selectedRatio === '4:5' ? 1350 : selectedRatio === '9:16' ? 1920 : 1080);
                       const targetFontSize = hSlot.fontSize || typographyFontSize || 70;
 
                       const layout = computeCanonicalHeadlineLayout({
@@ -6329,9 +6388,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         fontFamily: hSlot.fontFamily || typographyFontFamily || 'Noto Sans Devanagari',
                         aspectRatio: selectedRatio,
                         isBreakingStyle: false,
-                        customBounds: { x: (hSlot.rect.x / 100) * 1080, y: (hSlot.rect.y / 100) * 1350, width: baseHw - 30, height: baseHh },
+                        customBounds: { x: (activeRect.x / 100) * 1080, y: (activeRect.y / 100) * 1350, width: baseHw - 30, height: baseHh },
                         userFontSize: targetFontSize,
-                        customMaxLines: hSlot.maxLines || 3,
+                        customMaxLines: (generatorMode === 'video' ? headlineLineCount : hSlot.maxLines) || 3,
                         alignment: (hSlot.alignment || 'center') as any,
                       });
 
@@ -6342,10 +6401,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         <div
                           className={`absolute z-15 flex flex-col justify-center px-1 pointer-events-none select-none ${hSlot.alignment === 'left' ? 'items-start text-left' : hSlot.alignment === 'right' ? 'items-end text-right' : 'items-center text-center'}`}
                           style={{
-                            left: `${hSlot.rect.x}%`,
-                            top: `${hSlot.rect.y}%`,
-                            width: `${hSlot.rect.width}%`,
-                            height: `${hSlot.rect.height}%`,
+                            left: `${activeRect.x}%`,
+                            top: `${activeRect.y}%`,
+                            width: `${activeRect.width}%`,
+                            height: `${activeRect.height}%`,
                             transform: hRot !== 0 ? `rotate(${hRot}deg)` : undefined,
                             transformOrigin: 'center center',
                             backgroundColor: hSlot.backgroundColor && hSlot.backgroundColor !== 'transparent' ? hSlot.backgroundColor : undefined,
@@ -6379,48 +6438,55 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     })()}
 
                     {/* LAYER 4: Channel Logo (z-16) */}
-                    {headerConfig.showLogo && (
-                      <div
-                        className="absolute z-16 flex items-center justify-center p-0.5 rounded bg-slate-900/80 border border-white/20 shadow pointer-events-none"
-                        style={{
-                          left: `${headerConfig.logoRect?.x ?? 5}%`,
-                          top: `${headerConfig.logoRect?.y ?? 3.5}%`,
-                          maxWidth: `${headerConfig.logoRect?.width ?? 22}%`,
-                          maxHeight: `${headerConfig.logoRect?.height ?? 9}%`,
-                          transform: (headerConfig.logoRotation ?? 0) !== 0 ? `rotate(${headerConfig.logoRotation}deg)` : undefined,
-                          transformOrigin: 'center center',
-                        }}
-                      >
-                        <img
-                          src={currentUser?.channelLogo || currentUser?.profileLogo || "/assets/breaking_news_wala_logo.png"}
-                          alt="Admin Logo"
-                          className="max-h-5 max-w-full object-contain"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/assets/breaking_news_wala_logo.png';
+                    {(generatorMode === 'video' || headerConfig.showLogo) && (() => {
+                      const logoR = generatorMode === 'video' ? (videoLogoRect || { x: 5, y: 3.5, width: 22, height: 9 }) : (headerConfig.logoRect || { x: 5, y: 3.5, width: 22, height: 9 });
+                      const logoRot = generatorMode === 'video' ? (videoLogoRotation || 0) : (headerConfig.logoRotation || 0);
+                      const logoSrc = generatorMode === 'video' && videoLogoUrl ? videoLogoUrl : (currentUser?.channelLogo || currentUser?.profileLogo || "/assets/breaking_news_wala_logo.png");
+                      return (
+                        <div
+                          className="absolute z-16 flex items-center justify-center p-0.5 rounded bg-slate-900/80 border border-white/20 shadow pointer-events-none"
+                          style={{
+                            left: `${logoR.x}%`,
+                            top: `${logoR.y}%`,
+                            maxWidth: `${logoR.width}%`,
+                            maxHeight: `${logoR.height}%`,
+                            transform: logoRot !== 0 ? `rotate(${logoRot}deg)` : undefined,
+                            transformOrigin: 'center center',
                           }}
-                        />
-                      </div>
-                    )}
+                        >
+                          <img
+                            src={logoSrc}
+                            alt="Admin Logo"
+                            className="max-h-5 max-w-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = '/assets/breaking_news_wala_logo.png';
+                            }}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     {/* LAYER 5: Location Badge (z-16) */}
-                    {headerConfig.showLocation && (() => {
-                      const badgeAsset =
-                        headerConfig.manualLocationAsset ||
-                        locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url ||
-                        locationBadgeLibrary[0]?.url;
-                      const locRot = headerConfig.locationRotation ?? 0;
+                    {(generatorMode === 'video' || headerConfig.showLocation) && (() => {
+                      const locR = generatorMode === 'video' ? (videoLocationRect || { x: 5, y: 13.5, width: 28, height: 4.5 }) : (headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 });
+                      const locRot = generatorMode === 'video' ? 0 : (headerConfig.locationRotation ?? 0);
+                      const badgeAsset = generatorMode === 'video'
+                        ? (videoLocationBadgeUrl || headerConfig.manualLocationAsset || locationBadgeLibrary[0]?.url)
+                        : (headerConfig.manualLocationAsset || locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url || locationBadgeLibrary[0]?.url);
                       return (
                         <div
                           className="absolute z-16 flex items-center justify-center pointer-events-none"
                           style={{
-                            left: `${headerConfig.locationRect?.x ?? 5}%`,
-                            top: `${headerConfig.locationRect?.y ?? 13.5}%`,
+                            left: `${locR.x}%`,
+                            top: `${locR.y}%`,
+                            width: `${locR.width}%`,
+                            height: `${locR.height}%`,
                             transform: locRot !== 0 ? `rotate(${locRot}deg)` : undefined,
                             transformOrigin: 'center center',
                           }}
                         >
                           {badgeAsset ? (
-                            <div className="relative flex items-center justify-center h-6">
+                            <div className="relative flex items-center justify-center h-6 w-full">
                               <img
                                 src={badgeAsset}
                                 alt="Location Badge"
@@ -6457,16 +6523,17 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     })()}
 
                     {/* LAYER 6: Date Stamp (z-16) */}
-                    {headerConfig.showDate && (() => {
-                      const dateRot = headerConfig.dateRotation ?? 270;
+                    {((generatorMode === 'video' && videoDateVisible) || (generatorMode === 'photo' && headerConfig.showDate)) && (() => {
+                      const dRect = generatorMode === 'video' ? (videoDateRect || { x: 2, y: 35, width: 4, height: 26 }) : (headerConfig.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 });
+                      const dateRot = generatorMode === 'video' ? (videoDateRotation ?? 270) : (headerConfig.dateRotation ?? 270);
                       return (
                         <div
                           className="absolute text-[8px] font-bold text-slate-300 z-16 pointer-events-none flex items-center justify-center whitespace-nowrap"
                           style={{
-                            left: `${headerConfig.dateRect?.x ?? 5}%`,
-                            top: `${headerConfig.dateRect?.y ?? 18.5}%`,
-                            width: `${headerConfig.dateRect?.width ?? 34}%`,
-                            height: `${headerConfig.dateRect?.height ?? 3.5}%`,
+                            left: `${dRect.x}%`,
+                            top: `${dRect.y}%`,
+                            width: `${dRect.width}%`,
+                            height: `${dRect.height}%`,
                             transform: dateRot !== 0 ? `rotate(${dateRot}deg)` : undefined,
                             transformOrigin: 'center center',
                           }}
@@ -6477,7 +6544,29 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     })()}
 
                     {/* LAYER 7: AI Watermark (z-18) */}
-                    {watermarkConfig.enabled && (() => {
+                    {((generatorMode === 'video' && (videoWatermarkTextEnabled || videoWatermarkLogoEnabled)) || (generatorMode === 'photo' && watermarkConfig.enabled)) && (() => {
+                      if (generatorMode === 'video') {
+                        const wmRect = videoWatermarkRect || { x: 35, y: 48, width: 30, height: 6 };
+                        return (
+                          <div
+                            className="absolute z-18 pointer-events-none flex items-center justify-center font-bold select-none text-[8px] text-white/90 drop-shadow"
+                            style={{
+                              left: `${wmRect.x}%`,
+                              top: `${wmRect.y}%`,
+                              width: `${wmRect.width}%`,
+                              height: `${wmRect.height}%`,
+                            }}
+                          >
+                            {videoWatermarkLogoEnabled && videoWatermarkLogoUrl ? (
+                              <img src={videoWatermarkLogoUrl} alt="Watermark Logo" className="max-h-full max-w-full object-contain" />
+                            ) : (
+                              <span className="bg-black/50 px-2 py-0.5 rounded border border-white/20">
+                                {videoWatermarkText || 'AI NEWS MAKER'}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
                       const rot = watermarkConfig.rotation ?? (watermarkConfig.position === 'right_edge' ? 270 : 0);
                       const pos = watermarkConfig.position || 'right_edge';
                       let posStyle: React.CSSProperties = { right: '8px', top: '35%' };
@@ -6533,19 +6622,57 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       );
                     })()}
 
-                    {/* Breaking News Ribbon */}
-                    {ribbonConfig.enabled && ribbonConfig.customRibbonUrl && (
+                    {/* Breaking News Ribbons */}
+                    {generatorMode === 'video' ? (
+                      videoRibbonLayers.filter((r) => r.visible !== false).map((ribbon) => (
+                        <div
+                          key={ribbon.id}
+                          className="absolute z-14 flex items-center justify-center font-black tracking-wider uppercase shadow-md pointer-events-none"
+                          style={{
+                            left: `${ribbon.rect.x}%`,
+                            top: `${ribbon.rect.y}%`,
+                            width: `${ribbon.rect.width}%`,
+                            height: `${ribbon.rect.height}%`,
+                            backgroundColor: ribbon.backgroundColor || '#dc2626',
+                            color: ribbon.textColor || '#ffffff',
+                            fontSize: '9px',
+                          }}
+                        >
+                          {ribbon.text || 'BREAKING NEWS'}
+                        </div>
+                      ))
+                    ) : (
+                      ribbonConfig.enabled && ribbonConfig.customRibbonUrl && (
+                        <div
+                          className="absolute z-14 pointer-events-none"
+                          style={{
+                            left: `${ribbonConfig.rect?.x ?? 15}%`,
+                            top: `${ribbonConfig.rect?.y ?? 60}%`,
+                            width: `${ribbonConfig.rect?.width ?? 70}%`,
+                          }}
+                        >
+                          <img src={ribbonConfig.customRibbonUrl} alt="Ribbon" className="w-full h-auto" />
+                        </div>
+                      )
+                    )}
+
+                    {/* Overlay Assets (PNG / GIF) in Video Mode */}
+                    {generatorMode === 'video' && videoOverlayAssets.filter((o) => o.visible !== false && o.url).map((overlay) => (
                       <div
+                        key={overlay.id}
                         className="absolute z-14 pointer-events-none"
                         style={{
-                          left: `${ribbonConfig.rect?.x ?? 15}%`,
-                          top: `${ribbonConfig.rect?.y ?? 60}%`,
-                          width: `${ribbonConfig.rect?.width ?? 70}%`,
+                          left: `${overlay.rect.x}%`,
+                          top: `${overlay.rect.y}%`,
+                          width: `${overlay.rect.width}%`,
+                          height: `${overlay.rect.height}%`,
+                          opacity: overlay.opacity ?? 1,
+                          transform: overlay.rotation ? `rotate(${overlay.rotation}deg)` : undefined,
                         }}
                       >
-                        <img src={ribbonConfig.customRibbonUrl} alt="Ribbon" className="w-full h-auto" />
+                        <img src={overlay.url} alt={overlay.name} className="w-full h-full object-contain" />
                       </div>
-                    )}
+                    ))}
 
                     {/* LAYER 8: Full Story Callout (z-18) */}
                     {fullStoryCalloutConfig.enabled && (() => {

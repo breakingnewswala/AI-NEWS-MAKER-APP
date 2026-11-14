@@ -1,0 +1,79 @@
+name: "PR #9 Master Admin Stability, Security & System Integration CI"
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - fix/admin-api-pools-photo-vision-users-rss-notifications
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Master Admin Stability, API Pool Safety & Unblock Verification CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 1. Install root dependencies
+        run: npm install --legacy-peer-deps --no-audit
+
+      - name: 2. Install web_studio dependencies
+        run: npm --prefix web_studio install --legacy-peer-deps --no-audit
+
+      - name: 3 & 4. Build Root application & synchronize Web Studio
+        run: node web_studio/build_and_sync.js
+
+      - name: Set up stable Chrome browser
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Verify Chrome installation and headless startup
+        run: |
+          CHROME_PATH="${{ steps.setup-chrome.outputs.chrome-path }}"
+          if [ -z "$CHROME_PATH" ] || [ ! -x "$CHROME_PATH" ]; then
+            CHROME_PATH=$(which google-chrome || which google-chrome-stable || which chromium-browser || which chromium || true)
+          fi
+          if [ -z "$CHROME_PATH" ] || [ ! -x "$CHROME_PATH" ]; then
+            echo "❌ Chrome/Chromium browser not found or not executable!"
+            exit 1
+          fi
+          echo "CHROME_BIN=$CHROME_PATH" >> $GITHUB_ENV
+          echo "✅ Using Chrome executable at: $CHROME_PATH"
+          "$CHROME_PATH" --version
+          "$CHROME_PATH" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom about:blank > /dev/null
+          echo "✅ Chrome launched in headless mode successfully."
+
+      - name: 5. Verify Safety Invariants (Production Frame & Android ID)
+        run: node tests/test_safety_invariants.cjs
+
+      - name: 6. Run Master Admin Stability & Security Remediation Suite
+        run: node tests/test_master_stability_and_remediation.cjs
+
+      - name: 7. Run Master Video Frame Generator Pro Suite
+        run: node tests/test_master_video_frame_generator_pro.cjs
+
+      - name: 8. Run Security Blocker & RBAC Suite
+        run: node tests/test_blocker_remediation.cjs
+
+      - name: 9. Run Remediation Acceptance Suite
+        run: node tests/test_remediation_acceptance.cjs
+
+      - name: 10. Upload Test Audit Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr9-stability-audit-artifacts
+          path: audit_screenshots/
+          retention-days: 14

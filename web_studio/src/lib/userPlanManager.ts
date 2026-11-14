@@ -1,5 +1,5 @@
 // AI News Maker App - User Tier & Plan Management
-import { getApiUrl } from './apiConfig';
+import { getApiUrl, ensureAuthToken, getAuthToken, getAdminAuthHeaders } from './apiConfig';
 
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
@@ -870,12 +870,10 @@ export function assignPlanToUserManually(
 
   // Authoritatively persist upgrade to Backend Database (Part 7)
   try {
+    const headers = getAdminAuthHeaders();
     fetch(getApiUrl('/api/admin/update-user'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-key': 'master-admin',
-      },
+      headers,
       body: JSON.stringify({
         userId: userEmail.trim(),
         updates: {
@@ -915,12 +913,10 @@ export function adminUpdateUserRecord(
 
       // Authoritatively persist update to Backend Database (Part 7)
       try {
+        const headers = getAdminAuthHeaders();
         fetch(getApiUrl('/api/admin/update-user'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-admin-key': 'master-admin',
-          },
+          headers,
           body: JSON.stringify({
             userId: cleanEmail,
             updates: {
@@ -1892,20 +1888,10 @@ export async function blockUserAuthoritative(
   reason?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token) token = getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('user');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-    } catch {}
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(getApiUrl('/api/admin/block-user'), {
       method: 'POST',
@@ -1919,6 +1905,10 @@ export async function blockUserAuthoritative(
     });
     const json = await res.json();
     if (json.success) {
+      try {
+        const cleanEmail = (userEmailOrId || '').toLowerCase().trim();
+        localStorage.setItem(`user_blocked_${cleanEmail}`, 'true');
+      } catch {}
       await syncCloudUsers();
       window.dispatchEvent(new Event('ai_news_plan_users_changed'));
       return { success: true };
@@ -1934,20 +1924,10 @@ export async function unblockUserAuthoritative(
   unblockedBy?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token) token = getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('user');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-    } catch {}
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(getApiUrl('/api/admin/unblock-user'), {
       method: 'POST',
@@ -1960,6 +1940,10 @@ export async function unblockUserAuthoritative(
     });
     const json = await res.json();
     if (json.success) {
+      try {
+        const cleanEmail = (userEmailOrId || '').toLowerCase().trim();
+        localStorage.removeItem(`user_blocked_${cleanEmail}`);
+      } catch {}
       await syncCloudUsers();
       window.dispatchEvent(new Event('ai_news_plan_users_changed'));
       return { success: true };
@@ -1975,21 +1959,10 @@ export async function adminUpdateCloudUser(
   updates: Record<string, any>
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token) token = getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-      headers['x-admin-key'] = 'master-admin';
-    } catch {}
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(getApiUrl('/api/admin/update-user'), {
       method: 'POST',
@@ -2012,21 +1985,10 @@ export async function adminUpdateCloudUser(
 
 export async function adminDeleteCloudUser(userEmailOrId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
   try {
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token) token = getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-      const stored = localStorage.getItem('ai_news_user') || localStorage.getItem('user_profile') || localStorage.getItem('reporter_auth_session');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.email) headers['x-user-email'] = parsed.email;
-        if (parsed?.role) headers['x-user-role'] = parsed.role;
-        if (parsed?.token) headers['authorization'] = `Bearer ${parsed.token}`;
-      }
-      const directToken = localStorage.getItem('auth_token') || localStorage.getItem('token');
-      if (directToken && !headers['authorization']) {
-        headers['authorization'] = `Bearer ${directToken}`;
-      }
-      headers['x-admin-key'] = 'master-admin';
-    } catch {}
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(getApiUrl('/api/admin/delete-user'), {
       method: 'POST',
@@ -2038,6 +2000,11 @@ export async function adminDeleteCloudUser(userEmailOrId: string, userId?: strin
     });
     if (res.ok) {
       const json = await res.json();
+      try {
+        const cleanEmail = (userEmailOrId || '').toLowerCase().trim();
+        localStorage.removeItem(`user_blocked_${cleanEmail}`);
+        removePlanUser(cleanEmail);
+      } catch {}
       await syncCloudUsers();
       return json;
     }

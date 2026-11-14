@@ -240,9 +240,9 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     }
 
     try {
-      let token = getAuthToken();
+      let token = await ensureAuthToken().catch(() => '');
       if (!token) {
-        token = await ensureAuthToken().catch(() => '');
+        token = getAuthToken();
       }
       const payload: Partial<AssetLibraryItem> = activeTab === 'custom_footer'
         ? {
@@ -299,7 +299,8 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
       prev.map((it) => (it.id === item.id ? { ...it, enabled: newStatus } : it))
     );
     try {
-      const token = getAuthToken();
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
       await updateAssetLibraryItem(item.id, { enabled: newStatus }, token || undefined);
       showToast(newStatus ? '✅ एसेट सक्रिय किया गया' : '⚠️ एसेट निष्क्रिय किया गया');
     } catch {
@@ -314,7 +315,8 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     );
     setEditingId(null);
     try {
-      const token = getAuthToken();
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
       await updateAssetLibraryItem(id, { name: editingName.trim() }, token || undefined);
       showToast('✅ नाम अपडेट किया गया!');
     } catch {
@@ -327,7 +329,8 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
       return;
     }
     try {
-      const token = getAuthToken();
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
       const res = await deleteAssetLibraryItem(item.id, token || undefined);
       if (res.success) {
         setItems((prev) => prev.filter((it) => it.id !== item.id));
