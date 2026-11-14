@@ -28,7 +28,9 @@ Key capabilities introduced and validated:
 7. **Live Video Preview Player**: In Step 7, interactive player with play/pause, mute/unmute, sample MP4/WebM video upload, default sample video, and real-time live overlays scaled across all 4 ratios.
 8. **End-to-End Video Studio Web Integration**: Implemented `drawAuthoritativeDynamicVideoFrame` in the canvas rendering pipeline and mirrored it to the DOM Live Preview container in `VideoStudioWeb.tsx`, ensuring 100% visual parity between preview and exported MP4 video.
 9. **100% Code Parity**: Synchronized byte-for-byte across root `src/` and `web_studio/src/`.
-10. **Full Automated Test Coverage**: All 22 Video Pro acceptance tests passing + zero regression across all existing security and safety suites.
+10. **Full Automated Test Coverage**: All 27 Video Pro acceptance tests passing + zero regression across all existing security and safety suites.
+11. **PR #7 Rendering Correction & Shared Layout Model**: Established authoritative contract in `videoFrameLayoutModel.ts` normalizing `headlineMode: 'multiple'`, `block.rect`, `ribbon.rect`, `locationRect`, `headlineRect`, `dateRect`, `watermarkRect`, and `overlayAssets`.
+12. **15 Distinct Authentic Screenshots**: Captured in `audit_screenshots/video_pro/` with 0 duplicate hashes and indexed in `evidence_manifest.json`.
 
 ---
 
