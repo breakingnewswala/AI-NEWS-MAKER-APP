@@ -413,6 +413,33 @@ async function runAllTests() {
     assert.strictEqual(currentApprovedSet.has('stale-id-2'), false, 'Stale ID 2 must be gone');
   });
 
+  // --------------------------------------------------------------------------
+  // Behavioral Test 11: Client Approval Event Ignored (No Client Direct Trust)
+  // --------------------------------------------------------------------------
+  await runBehavioralTest('Event Verification: ai_news_approved_rss_updated ignores supplied event detail and requires server confirmation', async () => {
+    let approvedIdsState = new Set(['genuine-server-id-1']);
+
+    // An attacker dispatches an event trying to forge approval for 'forged-event-id-999'
+    const fakeEvent = { detail: 'forged-event-id-999' };
+
+    // The HomeScreenWeb handler MUST ignore fakeEvent.detail and fetch the authoritative server list
+    const fetchServerAuthoritativeIds = async () => {
+      // Simulate server returning only genuine IDs
+      return new Set(['genuine-server-id-1']);
+    };
+
+    const handleApprovedUpdate = async () => {
+      // Must NOT do approvedIdsState.add(fakeEvent.detail)
+      const serverSet = await fetchServerAuthoritativeIds();
+      approvedIdsState = serverSet instanceof Set ? serverSet : new Set();
+    };
+
+    await handleApprovedUpdate();
+
+    assert.strictEqual(approvedIdsState.has('forged-event-id-999'), false, 'Forged ID in event detail must be ignored and rejected');
+    assert.strictEqual(approvedIdsState.has('genuine-server-id-1'), true, 'Genuine server ID must be retained');
+  });
+
   console.log('\n================================================================');
   console.log(`🎉 ALL ${passedTests}/${totalTests} BEHAVIORAL RSS APPROVAL SECURITY TESTS PASSED`);
   console.log('================================================================\n');

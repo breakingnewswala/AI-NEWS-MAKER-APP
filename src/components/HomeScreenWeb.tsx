@@ -1380,15 +1380,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const handleChannelsUpdate = () => {
       loadChannels();
     };
-    const handleApprovedUpdate = (e: any) => {
-      const newId = e?.detail;
-      if (typeof newId === 'string' && newId) {
-        setApprovedRssIds((prev) => new Set([...Array.from(prev), newId]));
-      } else {
-        syncAndMigrateLocalApprovals().then((serverSet) => {
-          setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
-        }).catch(() => {});
-      }
+    const handleApprovedUpdate = () => {
+      syncAndMigrateLocalApprovals().then((serverSet) => {
+        setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
+      }).catch(() => {
+        setApprovedRssIds(new Set<string>());
+      });
     };
 
     window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
@@ -2410,7 +2407,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               e.stopPropagation();
                               const ok = await approveRssPost(post.id, post);
                               if (ok) {
-                                setApprovedRssIds((prev) => new Set([...Array.from(prev), post.id]));
                                 alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
                               } else {
                                 alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
@@ -2831,7 +2827,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             e.stopPropagation();
                             const ok = await approveRssPost(post.id, post);
                             if (ok) {
-                              setApprovedRssIds((prev) => new Set([...Array.from(prev), post.id]));
                               alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
                             } else {
                               alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
@@ -2996,7 +2991,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           e.stopPropagation();
                           const ok = await approveRssPost(post.id, post);
                           if (ok) {
-                            setApprovedRssIds((prev) => new Set([...Array.from(prev), post.id]));
                             alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
                           } else {
                             alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
