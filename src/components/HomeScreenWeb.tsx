@@ -1318,6 +1318,30 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
 
   useEffect(() => {
+    // Synchronize server-authoritative approved IDs on mount
+    syncAndMigrateLocalApprovals().then((serverSet) => {
+      if (serverSet && serverSet.size > 0) {
+        setApprovedRssIds((prev) => new Set([...Array.from(prev), ...Array.from(serverSet)]));
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // Keep approved IDs strictly in sync with authoritative server posts
+    if (Array.isArray(posts) && posts.length > 0) {
+      const serverIds = new Set<string>();
+      posts.forEach((p) => {
+        if (p && p.id && (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true)) {
+          serverIds.add(p.id);
+        }
+      });
+      if (serverIds.size > 0) {
+        setApprovedRssIds((prev) => new Set([...Array.from(prev), ...Array.from(serverIds)]));
+      }
+    }
+  }, [posts]);
+
+  useEffect(() => {
     // Automatically load backend RSS & Web link sources and perform live sync on mount
     fetchAdminRssSourcesFromBackend().then(() => {
       syncAllSourcesLive().catch(() => {});
@@ -1389,10 +1413,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Merge active RSS/Web posts with database news posts seamlessly & filter out items older than 7 days
   const combinedPosts = useMemo(() => {
     const deletedIds = getDeletedIds();
-    const approvedRssIds = getApprovedRssIds();
     const safeLocalPosts = Array.isArray(localPosts) ? localPosts.filter(Boolean) : [];
-    const safeRssPosts = Array.isArray(activeRssPosts) ? activeRssPosts.filter((p) => p && isRssPostApproved(p, approvedRssIds)) : [];
     const existingIds = new Set(safeLocalPosts.map((p) => p.id));
+
+    // P0 SECURITY INVARIANT:
+    // For regular users (!canModerate), the server response (safeLocalPosts) from /api/news-posts
+    // is the SOLE AUTHORITATIVE feed. Untrusted posts from localStorage can NEVER be injected into the public feed!
+    if (!canModerate) {
+      return safeLocalPosts.filter((p) => p && p.id && !deletedIds.has(p.id) && isRssPostApproved(p, approvedRssIds));
+    }
+
+    // For admins (canModerate):
+    // Active RSS posts from moderation sync can appear in the admin pending queue
+    const safeRssPosts = Array.isArray(activeRssPosts) ? activeRssPosts.filter(Boolean) : [];
     const normalizeUrl = (u?: string) => (u || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/+$/, '').split('?')[0];
     const existingUrls = new Set(safeLocalPosts.map((p) => normalizeUrl(p.sourceUrl)).filter((u) => u.length > 8));
     const activeRssFiltered = filterActiveNews(safeRssPosts);
@@ -1419,7 +1452,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     });
 
     return rawList;
-  }, [posts, localPosts, activeRssPosts]);
+  }, [posts, localPosts, activeRssPosts, canModerate, approvedRssIds]);
 
   // Bonus News Graphic Download Listener: triggers bonus claim popup
   useEffect(() => {
@@ -1580,10 +1613,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const highlightPosts = useMemo(() => {
     if (!adminNotificationBoardIds || adminNotificationBoardIds.size === 0) return [];
     const deletedIds = getDeletedIds();
-    const approvedRssIds = getApprovedRssIds();
+    const serverVerifiedIds = new Set((Array.isArray(localPosts) ? localPosts : []).map((p) => p.id));
     const isStrictlyApproved = (p: any): boolean => {
       if (!p || !p.id) return false;
       if (deletedIds.has(p.id)) return false;
+
+      // P0 SECURITY INVARIANT:
+      // Must be present in server-verified posts! LocalStorage tampering cannot inject unverified posts.
+      if (!serverVerifiedIds.has(p.id)) return false;
+
+      // Must pass server-authoritative approval check
+      if (!isRssPostApproved(p, approvedRssIds)) return false;
+
       const status = (p.status || '').toUpperCase();
       const approvalStatus = (p.approvalStatus || '').toUpperCase();
       const publicationStatus = (p.publicationStatus || '').toUpperCase();
@@ -1601,7 +1642,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const unremovedFiltered = filteredPosts.filter((p) => !removedHighlightIds.has(p.id));
     const adminSelectedApproved = unremovedFiltered.filter((p) => adminNotificationBoardIds.has(p.id) && isStrictlyApproved(p));
     return adminSelectedApproved.slice(0, 9);
-  }, [filteredPosts, removedHighlightIds, adminNotificationBoardIds]);
+  }, [filteredPosts, removedHighlightIds, adminNotificationBoardIds, localPosts, approvedRssIds]);
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);

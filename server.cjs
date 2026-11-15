@@ -14684,6 +14684,21 @@ app.post("/api/admin/add-news", requireAdminMiddleware, (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
+app.get("/api/approved-news-ids", (_req, res) => {
+  try {
+    const posts = loadNewsDatabase();
+    const editorialDb = loadApprovedEditorialDatabase();
+    const approvedIds = posts.filter((p) => {
+      const isExplicitApproved = p.status === "APPROVED" || p.approvalStatus === "APPROVED" || p.isApproved === true || Boolean(editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
+      const isExplicitPublished = p.publicationStatus === "PUBLISHED" || p.publicationStatus === "published" || p.isPublished === true || p.status === "published" || p.status === "APPROVED" || Boolean(editorialDb[p.id] && editorialDb[p.id].isPublished === true);
+      const isPendingOrDraft = p.status === "pending" || p.approvalStatus === "pending" || p.status === "PENDING_APPROVAL" || p.approvalStatus === "PENDING_APPROVAL" || p.status === "draft" || p.publicationStatus === "draft" || p.status === "REJECTED" || p.approvalStatus === "REJECTED";
+      return isExplicitApproved && isExplicitPublished && !isPendingOrDraft;
+    }).map((p) => p.id);
+    return res.json({ success: true, approvedIds });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
 app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();

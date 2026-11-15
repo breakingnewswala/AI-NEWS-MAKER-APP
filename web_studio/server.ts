@@ -3429,7 +3429,44 @@ app.post("/api/admin/add-news", requireAdminMiddleware, (req, res) => {
   }
 });
 
-// 5. Admin GET Approved News IDs Endpoint
+// 5a. Public & Client GET Approved News IDs Endpoint (Authoritative server list of approved news)
+app.get("/api/approved-news-ids", (_req, res) => {
+  try {
+    const posts = loadNewsDatabase();
+    const editorialDb = loadApprovedEditorialDatabase();
+    const approvedIds = posts
+      .filter((p) => {
+        const isExplicitApproved =
+          p.status === 'APPROVED' ||
+          (p as any).approvalStatus === 'APPROVED' ||
+          p.isApproved === true ||
+          Boolean(editorialDb[p.id] && editorialDb[p.id].status === 'APPROVED');
+        const isExplicitPublished =
+          (p as any).publicationStatus === 'PUBLISHED' ||
+          (p as any).publicationStatus === 'published' ||
+          p.isPublished === true ||
+          p.status === 'published' ||
+          p.status === 'APPROVED' ||
+          Boolean(editorialDb[p.id] && editorialDb[p.id].isPublished === true);
+        const isPendingOrDraft =
+          p.status === 'pending' ||
+          (p as any).approvalStatus === 'pending' ||
+          p.status === 'PENDING_APPROVAL' ||
+          (p as any).approvalStatus === 'PENDING_APPROVAL' ||
+          p.status === 'draft' ||
+          (p as any).publicationStatus === 'draft' ||
+          p.status === 'REJECTED' ||
+          (p as any).approvalStatus === 'REJECTED';
+        return isExplicitApproved && isExplicitPublished && !isPendingOrDraft;
+      })
+      .map((p) => p.id);
+    return res.json({ success: true, approvedIds });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
+// 5b. Admin GET Approved News IDs Endpoint
 app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();

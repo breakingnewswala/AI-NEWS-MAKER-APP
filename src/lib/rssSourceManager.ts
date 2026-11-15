@@ -329,6 +329,12 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
 const STORAGE_KEY_APPROVED_RSS_IDS = 'ai_news_approved_rss_post_ids_v1';
 
+let memoryServerApprovedIds: Set<string> | null = null;
+
+export function setMemoryServerApprovedIds(ids: Set<string>) {
+  memoryServerApprovedIds = ids;
+}
+
 export function getAdminAuthHeaders(): Record<string, string> {
   return getBaseAdminAuthHeaders();
 }
@@ -342,7 +348,7 @@ export function getApprovedRssIds(): Set<string> {
   return new Set();
 }
 
-export function isRssPostApproved(post: NewsFeedPost, _serverApprovedIds?: Set<string>): boolean {
+export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<string>): boolean {
   if (!post || !post.id) return false;
 
   const status = (post.status || '').toUpperCase();
@@ -375,8 +381,7 @@ export function isRssPostApproved(post: NewsFeedPost, _serverApprovedIds?: Set<s
     return false;
   }
 
-  // 4. P0 Invariant: Must have explicit server-authoritative approval.
-  // Manually adding an ID in browser localStorage CANNOT promote an unapproved item to approved.
+  // 4. Must have approved & published status flags
   const isServerApproved =
     status === 'APPROVED' ||
     approvalStatus === 'APPROVED' ||
@@ -388,7 +393,26 @@ export function isRssPostApproved(post: NewsFeedPost, _serverApprovedIds?: Set<s
     (post as any).isPublished === true ||
     status === 'APPROVED';
 
-  return Boolean(isServerApproved && isServerPublished);
+  if (!isServerApproved || !isServerPublished) {
+    return false;
+  }
+
+  // 5. P0 INVARIANT: Server-Authoritative Verification against LocalStorage Tampering
+  // If the post is an RSS or Web feed item (or untrusted local record), a forged status
+  // in localStorage (e.g. status: 'APPROVED') CANNOT grant approval.
+  // It MUST be confirmed by the server's approved IDs set!
+  const isFeedItem = Boolean(String(post.id).startsWith('rss-') || String(post.id).startsWith('web-'));
+  if (isFeedItem) {
+    const authoritativeSet = serverApprovedIds || memoryServerApprovedIds;
+    if (authoritativeSet && authoritativeSet.size > 0) {
+      return authoritativeSet.has(post.id);
+    }
+    // If no server set is passed and memory set is not yet populated:
+    // Untrusted feed posts from localStorage CANNOT be promoted to approved without server confirmation!
+    return false;
+  }
+
+  return true;
 }
 
 export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
@@ -520,19 +544,20 @@ export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
   if (typeof window === 'undefined') return new Set();
   const adminHeaders = getAdminAuthHeaders();
 
-  // If client has admin credentials, fetch authoritative approved IDs directly from server
+  // Fetch authoritative approved IDs directly from server
   try {
-    const url = getApiUrl('/api/admin/approved-news-ids');
     let token = await ensureAuthToken().catch(() => '');
     if (!token) token = getAuthToken();
     const reqHeaders: Record<string, string> = { ...adminHeaders };
     if (token) reqHeaders['Authorization'] = `Bearer ${token}`;
 
+    const url = getApiUrl(token ? '/api/admin/approved-news-ids' : '/api/approved-news-ids');
     const res = await fetch(url, { headers: reqHeaders });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.approvedIds)) {
         const authoritative = new Set<string>(data.approvedIds);
+        memoryServerApprovedIds = authoritative;
         localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(authoritative)));
         return authoritative;
       }
@@ -543,7 +568,7 @@ export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
   return new Set<string>();
 }
 
-export function getActiveRssNewsPosts(): NewsFeedPost[] {
+export function getActiveRssNewsPosts(serverApprovedIds?: Set<string>): NewsFeedPost[] {
   if (typeof window === 'undefined') return [];
   const activeSources = getAdminRssSources().filter((s) => s.isActive);
   if (activeSources.length === 0) {
@@ -559,9 +584,10 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const approvedSet = getApprovedRssIds();
+        const approvedSet = serverApprovedIds || memoryServerApprovedIds;
         return parsed.filter((p: any) => {
           if (!p || !p.id) return false;
+          // P0 Invariant: Must pass isRssPostApproved with server-confirmed IDs; status in localStorage cannot forge approval
           if (!isRssPostApproved(p, approvedSet)) return false;
           if (p.sourceId && activeIds.has(p.sourceId)) return true;
           if (p.sourceFeedUrl && activeUrls.has(p.sourceFeedUrl.trim().toLowerCase())) return true;
