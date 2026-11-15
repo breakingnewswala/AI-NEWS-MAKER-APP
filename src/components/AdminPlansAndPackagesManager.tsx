@@ -1818,7 +1818,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <div className="space-y-1 pt-2 text-[11px] text-slate-300">
                           <div className="flex items-center gap-1.5">
                             <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            <span>{p.hasWatermark ? 'वॉटरमार्क रहेगा' : 'नो वॉटरमार्क'}</span>
+                            <span>{p.id === 'basic' ? 'मास्टर ब्रांडिंग अनिवार्य' : 'मास्टर ब्रांडिंग टॉगल अनलॉक'}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -2058,9 +2058,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     {/* Features List */}
                     <div className="space-y-1.5 pt-1 text-xs text-slate-300">
                       <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
-                        <span>वॉटरमार्क:</span>
-                        <span className={plan.hasWatermark ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
-                          {plan.hasWatermark ? 'हाँ (रहेगा)' : 'नहीं (No Watermark)'}
+                        <span>मास्टर ब्रांडिंग:</span>
+                        <span className={plan.id === 'basic' ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                          {plan.id === 'basic' ? 'अनिवार्य' : 'कस्टम फ्रेम सपोर्ट'}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-[11px] pb-1 border-b border-slate-800 text-slate-400">
@@ -3706,7 +3706,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       onChange={(e) => setNewUserPlan(e.target.value as any)}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-amber-300 font-bold focus:border-amber-400 focus:outline-hidden cursor-pointer"
                     >
-                      <option value="basic">BASIC (वॉटरमार्क सहित)</option>
+                      <option value="basic">BASIC (मास्टर ब्रांडिंग सहित)</option>
                       <option value="advanced">ADVANCE (फुल एचडी)</option>
                       <option value="professional">PRO (वीडियो स्टूडियो)</option>
                       <option value="ultra">VIP DESK (4K फ्रेम्स)</option>

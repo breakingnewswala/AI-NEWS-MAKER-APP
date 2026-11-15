@@ -129,7 +129,7 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     period: 'प्रति माह',
     badge: 'प्रारंभिक / बेसिक',
     tagline: 'बेसिक डिजिटल न्यूज़ कार्ड क्रिएटर — 10 कार्ड प्रतिदिन',
-    hasWatermark: true,
+    hasWatermark: false,
     graphicExportResolution: '720p',
     maxGraphicsPerDay: 10,
     hasVideoStudio: false,
@@ -141,7 +141,7 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
       '✅ केवल Hind फ़ॉन्ट उपलब्ध',
       '✅ 1 फोटो अपलोड व लेआउट',
       '✅ स्टैंडर्ड सफ़ेद फुटर बैकग्राउंड व काला टेक्स्ट',
-      '⚠️ ग्राफिक पर वॉटरमार्क व मास्टर ब्रांडिंग अनिवार्य',
+      '⚠️ ग्राफिक पर मास्टर ब्रांडिंग अनिवार्य',
       '⚠️ इंटरनेट फोटो सर्च व मल्टी-फोटो ग्रिड अनुपलब्ध',
     ],
   },
@@ -160,7 +160,7 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     period: 'प्रति माह',
     badge: 'सबसे लोकप्रिय',
     popular: true,
-    tagline: 'वॉटरमार्क रहित फुल एचडी डिजिटल न्यूज़ कार्ड क्रिएटर — 25 कार्ड प्रतिदिन',
+    tagline: 'फुल एचडी डिजिटल न्यूज़ कार्ड क्रिएटर — 25 कार्ड प्रतिदिन',
     hasWatermark: false,
     graphicExportResolution: '1080p',
     maxGraphicsPerDay: 25,
@@ -169,11 +169,10 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '🚫 वॉटरमार्क पूरी तरह से हटाया जाएगा (No Watermark)',
       '⚡ 25 ग्राफिक डाउनलोड प्रतिदिन',
       '✨ 5 प्रमुख देवनागरी फ़ॉन्ट्स (Hind, खंड, साहित्य, बालू, अनेक)',
       '🎨 5 लाइट हाइलाइट कलर्स व 5 फुटर बैकग्राउंड शेड्स',
-      '📷 2-फोटो लेआउट सपोर्ट व प्रतीकात्मक फोटो वॉटरमार्क',
+      '📷 2-फोटो लेआउट सपोर्ट व प्रतीकात्मक फोटो टैग',
       '🌐 वेबसाइट डिस्प्ले ऑफ करने की सुविधा (WhatsApp अनिवार्य)',
     ],
   },
@@ -200,11 +199,10 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '🚫 100% वॉटरमार्क रहित (No Watermark)',
       '⚡ 40 ग्राफिक डाउनलोड प्रतिदिन',
       '🎨 पूर्ण स्टैंडर्ड फ़ॉन्ट कलेक्शन व प्राइमरी कलर हाइलाइट',
       '🔍 इंटरनेट इमेज सर्च व सभी मल्टी-ग्रिड फोटो लेआउट्स',
-      '🔤 कस्टम टेक्स्ट वॉटरमार्क व सभी फुटर कलर्स',
+      '🔤 प्रीमियम टेक्स्ट स्टाइलिंग व सभी फुटर कलर्स',
       '👑 कस्टम फ्रेम होने पर मास्टर ब्रांडिंग OFF करने की सुविधा',
     ],
   },
@@ -231,7 +229,6 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     hasVipDeskFrames: true,
     isActive: true,
     features: [
-      '🚫 100% वॉटरमार्क रहित (No Watermark)',
       '👑 75 दैनिक ग्राफिक डाउनलोड्स (75 Downloads / Day)',
       '🔤 कस्टम फ़ॉन्ट अपलोड (.ttf / .woff2) सुविधा',
       '🎨 कस्टम हाइलाइट व फुटर बैकग्राउंड कलर पिकर',
@@ -738,7 +735,7 @@ export const DEFAULT_GUARANTEED_PLAN_USERS: PlanUserRecord[] = [
     channelLogoPngUrl: '/assets/breaking_news_wala_logo.png',
     mobile: '9669802408',
     mobileNumber: '9669802408',
-    district: 'सेंट्रल डेस्क / भोपाल',
+    district: 'भोपाल',
     websiteUrl: 'breakingnewswala.com',
     isBlocked: false,
     isProfileLocked: true,
@@ -1241,10 +1238,9 @@ export function isEffectiveAdmin(user: any): boolean {
   return getAdminSystemMode() === 'admin';
 }
 
-// Watermark check: Basic tier has watermark
-export function shouldShowAppWatermark(currentUser?: any): boolean {
-  const effectiveTier = getEffectiveUserTier(currentUser);
-  return effectiveTier === 'basic';
+// Watermark check: Watermarks are permanently eliminated across all tiers (Master Branding enforced instead)
+export function shouldShowAppWatermark(_currentUser?: any): boolean {
+  return false;
 }
 
 export const TIER_LEVELS: Record<UserPlanTier, number> = {

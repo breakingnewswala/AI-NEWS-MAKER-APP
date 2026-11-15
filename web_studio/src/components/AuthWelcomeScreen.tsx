@@ -111,7 +111,7 @@ export const KNOWN_REGISTERED_USERS: Record<
     mobileNumber: '9669802408',
     websiteUrl: 'breakingnewswala.com',
     fullName: 'मुख्य संपादक',
-    district: 'सेंट्रल डेस्क / भोपाल',
+    district: 'भोपाल',
     role: 'superadmin',
   },
 };
@@ -2058,7 +2058,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       required
                       value={reportingDistrict}
                       onChange={(e) => setReportingDistrict(e.target.value)}
-                      placeholder="यहाँ अपना जिला / शहर दर्ज करें (उदा. सेंट्रल डेस्क / भोपाल)"
+                      placeholder="यहाँ अपना जिला / शहर दर्ज करें (उदा. भोपाल, रीवा, इंदौर)"
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>

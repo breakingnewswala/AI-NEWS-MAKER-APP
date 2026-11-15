@@ -2545,77 +2545,14 @@ function loadNewsDatabase(): StoredNewsPost[] {
     console.error("Error reading news_database.json:", err);
   }
 
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.news.size > 0) {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
     if (!centralDb.isCacheValid('news')) {
       centralDb.getNewsPosts({ forceRemote: true }).catch(() => {});
     }
     const list = Array.from(centralDb.cache.news.values()) as StoredNewsPost[];
     const cleaned = list.filter((p: any) => p && p.id && p.id !== '[object Object]' && p.title && !String(p.id).startsWith("live-post-"));
-    // Merge any new/offline posts from disk that are not yet in Firestore cache
-    if (diskPosts.length > 0) {
-      const deletedSourceIds = loadDeletedRssSourceIds();
-      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive && !deletedSourceIds.has(s.id));
-      const activeSourceIds = new Set(activeSources.map((s) => s.id));
-      const activeSourceUrls = new Set([
-        ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
-        ...activeSources.map((s) => ((s as any).originalWebUrl || "").trim().toLowerCase()).filter(Boolean),
-      ]);
-
-      for (const dp of diskPosts) {
-        if (!dp || !dp.id) continue;
-        const isFeed = String(dp.id).startsWith("rss-") || String(dp.id).startsWith("web-");
-        if (isFeed) {
-          if (activeSources.length === 0) continue;
-          const parts = String(dp.id).split("-");
-          const srcId = (dp as any).sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
-          const cleanSrcId = srcId.replace(/^src_/, "");
-          if (
-            srcId && (
-              deletedSourceIds.has(srcId) ||
-              deletedSourceIds.has(`src_${srcId}`) ||
-              deletedSourceIds.has(cleanSrcId)
-            )
-          ) {
-            continue;
-          }
-          const matchesId = Boolean(
-            srcId && (
-              activeSourceIds.has(srcId) ||
-              activeSourceIds.has(`src_${srcId}`) ||
-              activeSourceIds.has(cleanSrcId) ||
-              activeSources.some((s) =>
-                dp.id.startsWith(`rss-${s.id}-`) ||
-                dp.id.startsWith(`web-${s.id}-`) ||
-                (s.id.startsWith("src_") && (dp.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || dp.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`)))
-              )
-            )
-          );
-          const matchesUrl = Boolean(dp.sourceUrl && (
-            activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase()) ||
-            Array.from(activeSourceUrls).some((u) => {
-              try {
-                const feedHost = new URL(u).hostname.replace(/^www\./, '').toLowerCase();
-                const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, '').toLowerCase();
-                return feedHost === postHost || postHost.endsWith("." + feedHost);
-              } catch {
-                return false;
-              }
-            })
-          ));
-          const isApproved = dp.status === "APPROVED" || dp.status === "published" || Boolean(dp.isApproved) || Boolean(dp.isPrePublished);
-          if (!matchesId && !matchesUrl && !isApproved) continue;
-        }
-        if (!centralDb.cache.news.has(dp.id)) {
-          centralDb.cache.news.set(dp.id, dp);
-          cleaned.unshift(dp);
-          centralDb.saveNewsPost(dp.id, dp).catch(() => {});
-        }
-      }
-    }
-    if (cleaned.length > 0) {
-      const deletedIds = loadDeletedNewsIds();
-      return deletedIds.size > 0 ? cleaned.filter((p) => !deletedIds.has(p.id)) : cleaned;
-    }
+    const deletedIds = loadDeletedNewsIds();
+    return deletedIds.size > 0 ? cleaned.filter((p) => !deletedIds.has(p.id)) : cleaned;
   }
 
   const deletedIds = loadDeletedNewsIds();
@@ -2638,7 +2575,6 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
         }
       }
     }
-    return true;
   }
   try {
     const locations = resolveAllDatabaseLocations("news_database.json");
@@ -7030,9 +6966,30 @@ function reconcileAllUsers() {
       mobileNumber: (adminProf?.mobileNumber && adminProf.mobileNumber.trim()) ? adminProf.mobileNumber : (existingAdmin?.mobileNumber || '9669802408'),
       whatsappNumber: (adminProf?.whatsappNumber && adminProf.whatsappNumber.trim()) ? adminProf.whatsappNumber : (existingAdmin?.whatsappNumber || '9669802408'),
       whatsappDisplayNumber: ((adminProf as any)?.whatsappDisplayNumber && String((adminProf as any).whatsappDisplayNumber).trim()) ? String((adminProf as any).whatsappDisplayNumber).trim() : (adminProf?.whatsappNumber || (existingAdmin as any)?.whatsappDisplayNumber || existingAdmin?.whatsappNumber || '9669802408'),
-      district: (adminProf?.district && adminProf.district.trim()) ? adminProf.district : ((existingAdmin?.district && existingAdmin.district.trim()) ? existingAdmin.district : 'सेंट्रल डेस्क / भोपाल'),
+      district: (() => {
+        const raw = (adminProf?.district && adminProf.district.trim()) ? adminProf.district.trim() : ((existingAdmin?.district && existingAdmin.district.trim()) ? existingAdmin.district.trim() : 'भोपाल');
+        return (raw === 'सेंट्रल डेस्क / भोपाल' || raw === 'हेडक्वार्टर सेंट्रल डेस्क') ? 'भोपाल' : raw;
+      })(),
+      location: (() => {
+        const raw = (adminProf?.location && adminProf.location.trim()) ? adminProf.location.trim() : ((existingAdmin?.location && existingAdmin.location.trim()) ? existingAdmin.location.trim() : 'भोपाल');
+        return (raw === 'सेंट्रल डेस्क / भोपाल') ? 'भोपाल' : raw;
+      })(),
       websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || 'breakingnewswala.com',
-      socialIcons: adminProf?.socialIcons || existingAdmin?.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: false, x: false, linkedin: false },
+      socialIcons: (() => {
+        const currentIcons = adminProf?.socialIcons || existingAdmin?.socialIcons;
+        if (currentIcons && typeof currentIcons === 'object') {
+          const hasTw = currentIcons.twitter !== undefined ? Boolean(currentIcons.twitter) : (currentIcons.x !== undefined ? Boolean(currentIcons.x) : true);
+          return {
+            youtube: currentIcons.youtube !== undefined ? Boolean(currentIcons.youtube) : true,
+            facebook: currentIcons.facebook !== undefined ? Boolean(currentIcons.facebook) : true,
+            instagram: currentIcons.instagram !== undefined ? Boolean(currentIcons.instagram) : true,
+            twitter: hasTw,
+            x: hasTw,
+            linkedin: currentIcons.linkedin !== undefined ? Boolean(currentIcons.linkedin) : true,
+          };
+        }
+        return { youtube: true, facebook: true, instagram: true, twitter: true, x: true, linkedin: true };
+      })(),
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
@@ -11297,7 +11254,6 @@ function saveProfilesDatabase(data: Record<string, StoredUserProfile>): boolean 
       const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
       centralDb.saveUser(docId, profile).catch((e: any) => console.warn("[Firestore Profile Sync Error]", e.message));
     }
-    return true;
   }
   try {
     const locations = resolveAllDatabaseLocations("user_profiles_db.json");
@@ -11986,21 +11942,24 @@ function loadAdminBranding(): AdminBrandingRecord {
     return centralDb.cache.systemConfig.get('admin_branding');
   }
   try {
-    if (fs.existsSync(ADMIN_BRANDING_FILE)) {
-      const raw = fs.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
-      return JSON.parse(raw);
+    const locations = resolveAllDatabaseLocations("admin_branding_db.json");
+    for (const loc of locations) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        return JSON.parse(raw);
+      }
     }
   } catch (e) {
     console.error("Error reading admin_branding_db.json:", e);
   }
   return {
-    channelNameHi: "",
-    channelNameEn: "",
-    channelLogoUrl: "",
-    websiteUrl: "",
-    mobileNumber: "",
-    showMobileNumber: false,
-    activeSocialIcons: [],
+    channelNameHi: "ब्रेकिंग न्यूज़ वाला",
+    channelNameEn: "BREAKING NEWS WALA",
+    channelLogoUrl: "/assets/breaking_news_wala_logo.png",
+    websiteUrl: "breakingnewswala.com",
+    mobileNumber: "9669802408",
+    showMobileNumber: true,
+    activeSocialIcons: ["youtube", "facebook", "instagram", "twitter", "x", "linkedin"],
     updatedAt: Date.now(),
   };
 }
@@ -12011,10 +11970,17 @@ function saveAdminBranding(data: AdminBrandingRecord): boolean {
       centralDb.cache.systemConfig.set('admin_branding', data);
     }
     centralDb.saveAdminBranding(data).catch(() => {});
-    return true;
   }
   try {
-    fs.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
+    const locations = resolveAllDatabaseLocations("admin_branding_db.json");
+    const jsonStr = JSON.stringify(data, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
     return true;
   } catch (e) {
     console.error("Error saving admin_branding_db.json:", e);
@@ -13789,6 +13755,24 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
   }
 });
 
+function isPostApprovedAndPublished(p: any): boolean {
+  if (!p) return false;
+  if (p.approvalStatus === "REJECTED" || p.status === "REJECTED" || (p as any).status === "rejected" || p.status === "draft" || p.isApproved === false) {
+    return false;
+  }
+  if (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || (p as any).status === "pending") {
+    return false;
+  }
+  return Boolean(
+    p.approvalStatus === "APPROVED" ||
+    p.status === "APPROVED" ||
+    p.status === "published" ||
+    p.publicationStatus === "PUBLISHED" ||
+    p.isApproved === true ||
+    p.isPrePublished === true
+  );
+}
+
 // Durable Special Notification Board Helpers
 async function getDurableNotificationBoardIds(): Promise<string[]> {
   const idsSet = new Set<string>();
@@ -13820,23 +13804,20 @@ async function getDurableNotificationBoardIds(): Promise<string[]> {
     idsSet.delete(delId);
   }
 
-  // 4. Verify against existing news database (only approved/published items allowed)
+  // 4. Verify against existing news database (only strictly approved/published items allowed)
   try {
     const allNews = loadNewsDatabase();
     const newsMap = new Map(allNews.map((n) => [n.id, n]));
     const validIds: string[] = [];
     for (const id of idsSet) {
       const post = newsMap.get(id);
-      if (post) {
-        if (post.status === "draft" || post.isApproved === false) {
-          continue;
-        }
+      if (post && isPostApprovedAndPublished(post)) {
+        validIds.push(id);
       }
-      validIds.push(id);
     }
     return validIds;
   } catch {
-    return Array.from(idsSet);
+    return [];
   }
 }
 
@@ -13884,6 +13865,14 @@ app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, asy
     const currentIds = await getDurableNotificationBoardIds();
     const idSet = new Set<string>(currentIds);
     if (selected) {
+      const allNews = loadNewsDatabase();
+      const targetPost = allNews.find((p) => p.id === id);
+      if (!targetPost) {
+        return res.status(404).json({ error: "News post not found" });
+      }
+      if (!isPostApprovedAndPublished(targetPost)) {
+        return res.status(400).json({ error: "Only approved and published news can be added to the Special Notification Board" });
+      }
       idSet.add(id);
     } else {
       idSet.delete(id);
@@ -25766,7 +25755,7 @@ const DEFAULT_PLANS_CATALOG = [
     period: 'प्रति माह',
     badge: 'लॉन्चिंग ऑफर 67% OFF',
     tagline: 'बेसिक न्यूज़ ग्राफिक क्रिएटर (10 ग्राफिक प्रतिदिन)',
-    hasWatermark: true,
+    hasWatermark: false,
     graphicExportResolution: '720p',
     maxGraphicsPerDay: 10,
     hasVideoStudio: false,
@@ -25797,7 +25786,7 @@ const DEFAULT_PLANS_CATALOG = [
     period: 'प्रति माह',
     badge: 'लॉन्चिंग ऑफर 50% OFF',
     popular: true,
-    tagline: '25 ग्राफिक प्रतिदिन — 5 फॉन्ट, 2-फोटो लेआउट व AI सिम्बॉलिक वॉटरमार्क',
+    tagline: '25 ग्राफिक प्रतिदिन — 5 फॉन्ट, 2-फोटो लेआउट व AI सिम्बॉलिक फोटो टैग',
     hasWatermark: false,
     graphicExportResolution: '1080p',
     maxGraphicsPerDay: 25,
@@ -25810,7 +25799,7 @@ const DEFAULT_PLANS_CATALOG = [
       '🔤 5 देवनागरी फॉन्ट (Hind, खंड, साहित्य, बालू, अनेक देवनागरी)',
       '🎨 5 हाईलाइट कलर्स व 5 फूटर बैकग्राउंड कलर्स',
       '🖼️ 1 व 2 फोटो लेआउट सपोर्ट',
-      '✨ AI / प्रतीकात्मक फोटो वॉटरमार्क सपोर्ट',
+      '✨ AI / प्रतीकात्मक फोटो टैग सपोर्ट',
       '🌐 फूटर वेबसाइट हाइड टॉगल (WhatsApp ऑन)',
     ],
   },
@@ -25828,7 +25817,7 @@ const DEFAULT_PLANS_CATALOG = [
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
     badge: 'लॉन्चिंग ऑफर 40% OFF',
-    tagline: '40 ग्राफिक प्रतिदिन — सभी मानक फॉन्ट, कस्टम वॉटरमार्क व इंटरनेट सर्च',
+    tagline: '40 ग्राफिक प्रतिदिन — सभी मानक फॉन्ट, प्रीमियम स्टाइलिंग व इंटरनेट सर्च',
     hasWatermark: false,
     graphicExportResolution: '1080p',
     maxGraphicsPerDay: 40,
@@ -25839,7 +25828,7 @@ const DEFAULT_PLANS_CATALOG = [
     features: [
       '⚡ 40 ग्राफिक प्रतिदिन डाउनलोड सीमा',
       '🔤 सभी मानक फॉन्ट कलेक्शन व कलर हाईलाइट्स (प्राइमरी कलर सिलेक्शन)',
-      '🏷️ कस्टम टेक्स्ट वॉटरमार्क व AI सिम्बॉलिक वॉटरमार्क',
+      '🏷️ प्रीमियम टेक्स्ट स्टाइलिंग व AI सिम्बॉलिक फोटो टैग',
       '🖼️ सभी मल्टी-फोटो ग्रिड लेआउट्स व इंटरनेट इमेज सर्च',
       '🎨 सभी फूटर बैकग्राउंड व टेक्स्ट कलर्स',
       '🌐 वेबसाइट व WhatsApp दोनों ऑन/ऑफ टॉगल',
@@ -25873,7 +25862,7 @@ const DEFAULT_PLANS_CATALOG = [
       '🔤 सभी मानक फॉन्ट + कस्टम फॉन्ट (.ttf/.otf) अपलोड',
       '🎨 कस्टम हाईलाइट कलर, फूटर कलर व टेक्स्ट कलर पिकर',
       '📱 प्रति-ग्राफिक WhatsApp नंबर ओवरराइड इनपुट',
-      '🖼️ सभी फोटो लेआउट्स, इंटरनेट सर्च व कस्टम टेक्स्ट वॉटरमार्क',
+      '🖼️ सभी फोटो लेआउट्स, इंटरनेट सर्च व प्रीमियम टेक्स्ट स्टाइलिंग',
       '⭐ VIP DESK विशेष फ्रेम्स व कस्टम फ्रेम सपोर्ट',
     ],
   },

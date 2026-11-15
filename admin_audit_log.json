@@ -1,5 +1,29 @@
 [
   {
+    "id": "audit_1794724373713_oi1c",
+    "timestamp": 1794724373713,
+    "adminEmail": "breakingnewswala.com@gmail.com",
+    "action": "UPDATE_PAID_API_KEY",
+    "target": "paid_key",
+    "details": {
+      "configured": true,
+      "vipRoutingEnabled": true
+    },
+    "ip": "internal"
+  },
+  {
+    "id": "audit_1794724196989_uh2g",
+    "timestamp": 1794724196989,
+    "adminEmail": "breakingnewswala.com@gmail.com",
+    "action": "UPDATE_PAID_API_KEY",
+    "target": "paid_key",
+    "details": {
+      "configured": true,
+      "vipRoutingEnabled": true
+    },
+    "ip": "internal"
+  },
+  {
     "id": "audit_1794102524633_kp2a",
     "timestamp": 1794102524633,
     "adminEmail": "breakingnewswala.com@gmail.com",

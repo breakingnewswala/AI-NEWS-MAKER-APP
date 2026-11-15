@@ -325,7 +325,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
       // 3. Fallback: Controlled exchange if valid candidate ID token is stored
       let googleIdToken = '';
       try {
-        const storedGId = localStorage.getItem('google_id_token') || '';
+        const storedGId = localStorage.getItem('google_id_token') || localStorage.getItem('google_access_token') || '';
         if (storedGId && !isTokenExpired(storedGId)) {
           googleIdToken = storedGId;
         }

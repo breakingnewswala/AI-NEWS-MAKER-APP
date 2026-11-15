@@ -1499,18 +1499,26 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     ? visiblePosts.filter((p) => p.breaking)
     : visiblePosts.slice(0, 6);
 
-  // Identify highlights (Phase 14: Prioritize Admin Selected Approved News for Notification Board)
+  // Identify highlights (Strict: Only Admin-Selected Approved & Published News on Notification Board)
   const highlightPosts = useMemo(() => {
+    if (!adminNotificationBoardIds || adminNotificationBoardIds.size === 0) return [];
+    const isStrictlyApproved = (p: any): boolean => {
+      if (!p) return false;
+      if (p.approvalStatus === 'REJECTED' || p.status === 'REJECTED' || p.status === 'rejected' || p.status === 'draft' || p.isApproved === false) return false;
+      if (p.approvalStatus === 'PENDING_APPROVAL' || p.status === 'PENDING_APPROVAL' || p.status === 'pending') return false;
+      return Boolean(
+        p.approvalStatus === 'APPROVED' ||
+        p.status === 'APPROVED' ||
+        p.status === 'published' ||
+        p.publicationStatus === 'PUBLISHED' ||
+        p.isApproved === true ||
+        p.isPrePublished === true
+      );
+    };
     const unremovedFiltered = filteredPosts.filter((p) => !removedHighlightIds.has(p.id));
-    // If admin explicitly selected news for notification board, show those approved news
-    const adminSelected = unremovedFiltered.filter((p) => adminNotificationBoardIds.has(p.id));
-    if (adminSelected.length > 0) return adminSelected.slice(0, 9);
-
-    const exclusiveOrBreaking = unremovedFiltered.filter((p) => p.isExclusive || p.breaking);
-    if (exclusiveOrBreaking.length > 0) return exclusiveOrBreaking.slice(0, 9);
-    if (unremovedFiltered.length > 0) return unremovedFiltered.slice(0, 9);
-    return visiblePosts.filter((p) => !removedHighlightIds.has(p.id)).slice(0, 9);
-  }, [filteredPosts, visiblePosts, removedHighlightIds, adminNotificationBoardIds]);
+    const adminSelectedApproved = unremovedFiltered.filter((p) => adminNotificationBoardIds.has(p.id) && isStrictlyApproved(p));
+    return adminSelectedApproved.slice(0, 9);
+  }, [filteredPosts, removedHighlightIds, adminNotificationBoardIds]);
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
   const [currentTickerIndex, setCurrentTickerIndex] = useState<number>(0);
@@ -2545,7 +2553,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 अभी कोई खबर उपलब्ध नहीं है।
               </h4>
               <p className="text-sm text-slate-400 max-w-lg leading-relaxed">
-                Master Admin द्वारा अधिकृत स्रोत जोड़ने या नई खबर प्रकाशित करने के बाद खबरें यहाँ दिखाई देंगी।
+                एडमिन द्वारा नई खबरें जोड़ने के बाद यहाँ दिखाई देंगी।
               </p>
             </div>
           ) : (

@@ -342,7 +342,7 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
             </div>
             <div className="flex items-center gap-2 text-emerald-400 font-bold">
               <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              <span>{plan.hasWatermark ? 'वॉटरमार्क रहेगा' : 'वॉटरमार्क पूरी तरह मुक्त (No Watermark)'}</span>
+              <span>{plan.id === 'basic' ? 'मास्टर ब्रांडिंग अनिवार्य' : 'फुल एचडी व प्रीमियम फ़ीचर्स सक्रिय'}</span>
             </div>
           </div>
         </div>

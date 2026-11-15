@@ -1,0 +1,18 @@
+{
+  "channelNameHi": "ब्रेकिंग न्यूज़ वाला",
+  "channelNameEn": "BREAKING NEWS WALA",
+  "channelLogoUrl": "/assets/breaking_news_wala_logo.png",
+  "channelLogoPngUrl": "/assets/breaking_news_wala_logo.png",
+  "websiteUrl": "breakingnewswala.com",
+  "mobileNumber": "9669802408",
+  "showMobileNumber": true,
+  "activeSocialIcons": [
+    "youtube",
+    "facebook",
+    "instagram",
+    "twitter",
+    "x",
+    "linkedin"
+  ],
+  "updatedAt": 1794721800000
+}

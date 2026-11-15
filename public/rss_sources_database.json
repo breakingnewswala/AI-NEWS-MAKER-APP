@@ -1,16 +1,18 @@
 [
   {
-    "id": "src_1794071001048_maoy",
+    "id": "src_1794723745678_no6i",
+    "docId": "src_1794723745678_no6i",
     "name": "नई दुनिया",
-    "url": "https://www.naidunia.com/madhya-pradesh",
-    "originalWebUrl": "https://www.naidunia.com/madhya-pradesh",
-    "type": "rss",
     "category": "📍 मध्यप्रदेश",
+    "lastFetchedAt": 1794724377999,
+    "lastSyncStatus": "success",
+    "url": "https://ainewsmakerapp-401033199805.asia-east1.run.app/api/rss/web-feed?feedId=wf_1794723744929_81f0a3",
+    "itemsFetchedCount": 56,
+    "addedAt": 1794723745678,
+    "updatedAt": 1794724366379,
+    "type": "rss",
+    "addedDateFormatted": "15 नवंबर 2026",
     "isActive": true,
-    "createdAt": 1794071001048,
-    "addedAt": 1794071001048,
-    "lastFetchedAt": 1794480060253,
-    "itemsFetchedCount": 71,
-    "lastSyncStatus": "success"
+    "createdAt": 1794723745678
   }
 ]

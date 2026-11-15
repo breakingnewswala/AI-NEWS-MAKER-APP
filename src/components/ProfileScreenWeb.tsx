@@ -110,9 +110,9 @@ export const DEFAULT_SOCIAL_ICONS = {
   youtube: true,
   facebook: true,
   instagram: true,
-  twitter: false,
-  x: false,
-  linkedin: false,
+  twitter: true,
+  x: true,
+  linkedin: true,
 };
 
 export const DEFAULT_SOCIAL_LINKS = {
@@ -257,7 +257,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         if (data && data.success && data.profile) {
           const cloudP = data.profile;
           if (cloudP.district || cloudP.location) {
-            setReporterDistrict(cloudP.district || cloudP.location);
+            const rawDist = (cloudP.district || cloudP.location || '').trim();
+            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
+            setReporterDistrict(cleanDist);
           }
           setChannelProfile((prev) => {
             const resolvedLogo = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || defaultAdminLogo;
@@ -275,8 +277,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               whatsappNumber: cloudP.whatsappNumber || cloudP.mobileNumber || prev.whatsappNumber || prev.mobileNumber || '',
               whatsappDisplayNumber: cloudP.whatsappDisplayNumber || prev.whatsappDisplayNumber || cloudP.whatsappNumber || prev.whatsappNumber || '',
               websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
-              district: cloudP.district || cloudP.location || prev.district || '',
-              location: cloudP.location || cloudP.district || prev.location || '',
+              district: (() => {
+                const rawDist = (cloudP.district || cloudP.location || prev.district || '').trim();
+                return (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
+              })(),
+              location: (() => {
+                const rawLoc = (cloudP.location || cloudP.district || prev.location || '').trim();
+                return (rawLoc === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawLoc === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawLoc || 'भोपाल');
+              })(),
               state: cloudP.state || prev.state || '',
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
@@ -1231,6 +1239,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     return (raw && raw !== 'सेंट्रल डेस्क / भोपाल') ? raw : 'भोपाल';
   });
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState<boolean>(false);
+  const [isSavingBranding, setIsSavingBranding] = useState<boolean>(false);
 
   // Sync profile when updated externally (e.g. from ChannelOnboardingModal)
   useEffect(() => {
@@ -1747,204 +1756,212 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   };
 
   const handleSaveChannelBranding = async () => {
-    // Check account uniqueness and restricted brands
-    const uniqCheck = checkAccountUniqueness({
-      username: channelProfile.username,
-      websiteUrl: channelProfile.websiteUrl,
-      channelName: channelProfile.channelNameHi,
-      currentEmail: effectiveUser?.email || currentUser?.email,
-    });
-    if (!uniqCheck.valid) {
-      alert(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
-      return;
-    }
-
-    const isProOrVipUser = subscription.tier === 'professional' || subscription.tier === 'ultra' || isAdmin;
-    const effectiveHeaderPng = isProOrVipUser ? customHeaderPng : '';
-    const effectiveFooterPng = isProOrVipUser ? customFooterPng : '';
-
-    const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
-    const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
-    const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isAdmin ? '/assets/ai_news_maker_logo.png' : ''));
-
-    const primaryPngLogo = isBnwAdmin
-      ? '/assets/breaking_news_wala_logo.png'
-      : isAinewsAdmin
-        ? '/assets/ai_news_maker_logo.png'
-        : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo);
-    const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
-
-    const finalDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
-    const finalWhatsappDisplay = (channelProfile.whatsappDisplayNumber !== undefined && channelProfile.whatsappDisplayNumber.trim())
-      ? channelProfile.whatsappDisplayNumber.trim()
-      : finalPhone;
-
-    const syncedIcons = {
-      ...(channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS),
-      twitter: Boolean(channelProfile.socialIcons?.twitter ?? channelProfile.socialIcons?.x),
-      x: Boolean(channelProfile.socialIcons?.x ?? channelProfile.socialIcons?.twitter),
-      linkedin: Boolean(channelProfile.socialIcons?.linkedin),
-    };
-
-    const updatedProfile = {
-      ...channelProfile,
-      district: finalDistrict,
-      location: finalDistrict,
-      whatsappNumber: finalPhone,
-      whatsappDisplayNumber: finalWhatsappDisplay,
-      mobileNumber: finalPhone || channelProfile.mobileNumber,
-      showWebsite: channelProfile.showWebsite !== false,
-      showMobileNumber: channelProfile.showMobileNumber !== false,
-      channelLogoUrl: channelProfile.channelLogoType === 'gif' && channelProfile.channelLogoGifUrl ? channelProfile.channelLogoGifUrl : primaryPngLogo,
-      channelLogoPngUrl: primaryPngLogo,
-      channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
-      channelLogoType: channelProfile.channelLogoType || (channelProfile.channelLogoGifUrl ? 'gif' : 'png'),
-      customHeaderPng: effectiveHeaderPng,
-      customFooterPng: effectiveFooterPng,
-      socialIcons: syncedIcons,
-      socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
-    };
-
-    localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfile));
-    localStorage.setItem('app_channel_name', channelProfile.channelNameHi);
-    localStorage.setItem('app_channel_name_en', channelProfile.channelNameEn);
-    localStorage.setItem('user_profile_data', JSON.stringify(updatedProfile));
-
-    const cleanEmail = (effectiveUser?.email || currentUser?.email || '').toLowerCase().trim();
-    if (cleanEmail) {
-      localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updatedProfile));
-    }
-
-    // Save into centralized profile_header_footer_json (Always PNG Primary Logo for Graphics)
-    const headerFooterConfig = {
-      applyToAll: true,
-      customHeaderPng: effectiveHeaderPng,
-      customFooterPng: effectiveFooterPng,
-      templates: {
-        graphic_001: {
-          templateId: 'graphic_001',
-          brandName: channelProfile.channelNameHi,
-          brandTagline: channelProfile.channelNameEn,
-          customLogoUrl: primaryPngLogo,
-          customHeaderPng: effectiveHeaderPng,
-          customFooterPng: effectiveFooterPng,
-          socialHandle: channelProfile.username ? (channelProfile.username.startsWith('@') ? channelProfile.username : `@${channelProfile.username}`) : '',
-          whatsappNumber: finalPhone,
-          showWebsite: channelProfile.showWebsite !== false,
-          showMobileNumber: channelProfile.showMobileNumber !== false,
-          isConfigured: true,
-        },
-      },
-    };
-    localStorage.setItem('profile_header_footer_json', JSON.stringify(headerFooterConfig));
-
-    // For non-admin users, lock profile status user-specifically
-    if (!isAdmin && cleanEmail) {
-      localStorage.setItem(`channel_profile_locked_${cleanEmail}`, 'true');
-      localStorage.removeItem('is_channel_profile_locked');
-    }
-
-    // Register or sync user profile record in system database
-    registerOrUpdateUser({
-      name: channelProfile.fullName || currentUser?.name || 'संपादक',
-      email: cleanEmail || 'user@ainewsmaker.online',
-      channelName: channelProfile.channelNameHi,
-      channelLogoUrl: primaryPngLogo,
-      mobile: finalPhone || channelProfile.mobileNumber,
-      username: channelProfile.username,
-      district: finalDistrict,
-      isLocked: !isAdmin,
-    });
-
-    // Sync to backend cloud server API so cloud domain retains updated branding & logo across refreshes
+    setIsSavingBranding(true);
     try {
-      const serverPayload = {
-        ...updatedProfile,
-        userId: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
-        uid: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
-        email: cleanEmail,
-        fullName: channelProfile.fullName || currentUser?.name || 'संपादक',
+      // Check account uniqueness and restricted brands
+      const uniqCheck = checkAccountUniqueness({
         username: channelProfile.username,
         websiteUrl: channelProfile.websiteUrl,
+        channelName: channelProfile.channelNameHi,
+        currentEmail: effectiveUser?.email || currentUser?.email,
+      });
+      if (!uniqCheck.valid) {
+        alert(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+        return;
+      }
+
+      const isProOrVipUser = subscription.tier === 'professional' || subscription.tier === 'ultra' || isAdmin;
+      const effectiveHeaderPng = isProOrVipUser ? customHeaderPng : '';
+      const effectiveFooterPng = isProOrVipUser ? customFooterPng : '';
+
+      const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+      const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+      const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isAdmin ? '/assets/ai_news_maker_logo.png' : ''));
+
+      const primaryPngLogo = isBnwAdmin
+        ? '/assets/breaking_news_wala_logo.png'
+        : isAinewsAdmin
+          ? '/assets/ai_news_maker_logo.png'
+          : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo);
+      const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
+
+      const rawDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
+      const finalDistrict = (rawDistrict === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDistrict === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDistrict || 'भोपाल');
+      const finalWhatsappDisplay = (channelProfile.whatsappDisplayNumber !== undefined && channelProfile.whatsappDisplayNumber.trim())
+        ? channelProfile.whatsappDisplayNumber.trim()
+        : finalPhone;
+
+      const syncedIcons = {
+        ...(channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS),
+        twitter: Boolean(channelProfile.socialIcons?.twitter ?? channelProfile.socialIcons?.x),
+        x: Boolean(channelProfile.socialIcons?.x ?? channelProfile.socialIcons?.twitter),
+        linkedin: Boolean(channelProfile.socialIcons?.linkedin),
+      };
+
+      const updatedProfile = {
+        ...channelProfile,
+        district: finalDistrict,
+        location: finalDistrict,
         whatsappNumber: finalPhone,
         whatsappDisplayNumber: finalWhatsappDisplay,
         mobileNumber: finalPhone || channelProfile.mobileNumber,
         showWebsite: channelProfile.showWebsite !== false,
         showMobileNumber: channelProfile.showMobileNumber !== false,
-        channelNameHi: channelProfile.channelNameHi,
-        channelNameEn: channelProfile.channelNameEn,
         channelLogoUrl: channelProfile.channelLogoType === 'gif' && channelProfile.channelLogoGifUrl ? channelProfile.channelLogoGifUrl : primaryPngLogo,
         channelLogoPngUrl: primaryPngLogo,
         channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
         channelLogoType: channelProfile.channelLogoType || (channelProfile.channelLogoGifUrl ? 'gif' : 'png'),
-        district: finalDistrict,
-        location: finalDistrict,
-        state: channelProfile.state || '',
-        address: channelProfile.address || '',
-        pincode: channelProfile.pincode || '',
+        customHeaderPng: effectiveHeaderPng,
+        customFooterPng: effectiveFooterPng,
         socialIcons: syncedIcons,
         socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
-        whatsappMarketingConsent: Boolean(channelProfile.whatsappMarketingConsent),
-        whatsappMarketingConsentAt: channelProfile.whatsappMarketingConsent ? (channelProfile.whatsappMarketingConsentAt || new Date().toISOString()) : null,
-        whatsappMarketingConsentSource: 'profile_settings',
-        whatsappMarketingConsentPhone: finalPhone,
-        whatsappMarketingConsentUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
       };
-      const res = await fetch(getApiUrl('/api/user-profile'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-          'x-admin-key': 'master-admin',
-          'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
-          'x-admin-email': cleanEmail,
-          'x-user-email': cleanEmail,
-        },
-        body: JSON.stringify(serverPayload),
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || 'सर्वर पर प्रोफाइल सहेजने में समस्या आई');
-      }
-      const data = await res.json();
-      if (data && data.profile) {
-        const savedProf = data.profile;
-        setChannelProfile((p) => ({
-          ...p,
-          ...savedProf,
-          district: savedProf.district || savedProf.location || p.district,
-          location: savedProf.location || savedProf.district || p.location,
-          socialIcons: savedProf.socialIcons || p.socialIcons,
-          socialLinks: savedProf.socialLinks || p.socialLinks,
-        }));
-        if (savedProf.district || savedProf.location) {
-          setReporterDistrict(savedProf.district || savedProf.location);
-        }
-      }
-    } catch (err: any) {
-      console.error('Cloud server sync error:', err);
-      alert(`प्रोफाइल सहेजने में विफल: ${err.message || 'सर्वर पर सहेजने में समस्या आई'}`);
-      return;
-    }
 
-    // Dispatch update event for active studio card
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('channel_profile_updated', {
-          detail: {
-            ...updatedProfile,
-            channelLogoUrl: primaryPngLogo,
-            channelLogoPngUrl: primaryPngLogo,
-            channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
+      localStorage.setItem('user_channel_profile', JSON.stringify(updatedProfile));
+      localStorage.setItem('app_channel_name', channelProfile.channelNameHi);
+      localStorage.setItem('app_channel_name_en', channelProfile.channelNameEn);
+      localStorage.setItem('user_profile_data', JSON.stringify(updatedProfile));
+
+      const cleanEmail = (effectiveUser?.email || currentUser?.email || '').toLowerCase().trim();
+      if (cleanEmail) {
+        localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updatedProfile));
+      }
+
+      // Save into centralized profile_header_footer_json (Always PNG Primary Logo for Graphics)
+      const headerFooterConfig = {
+        applyToAll: true,
+        customHeaderPng: effectiveHeaderPng,
+        customFooterPng: effectiveFooterPng,
+        templates: {
+          graphic_001: {
+            templateId: 'graphic_001',
+            brandName: channelProfile.channelNameHi,
+            brandTagline: channelProfile.channelNameEn,
+            customLogoUrl: primaryPngLogo,
             customHeaderPng: effectiveHeaderPng,
             customFooterPng: effectiveFooterPng,
+            socialHandle: channelProfile.username ? (channelProfile.username.startsWith('@') ? channelProfile.username : `@${channelProfile.username}`) : '',
+            whatsappNumber: finalPhone,
+            showWebsite: channelProfile.showWebsite !== false,
+            showMobileNumber: channelProfile.showMobileNumber !== false,
+            isConfigured: true,
           },
-        })
-      );
-    }
+        },
+      };
+      localStorage.setItem('profile_header_footer_json', JSON.stringify(headerFooterConfig));
 
-    setSaveSettingsSuccess(true);
-    setTimeout(() => setSaveSettingsSuccess(false), 3000);
+      // For non-admin users, lock profile status user-specifically
+      if (!isAdmin && cleanEmail) {
+        localStorage.setItem(`channel_profile_locked_${cleanEmail}`, 'true');
+        localStorage.removeItem('is_channel_profile_locked');
+      }
+
+      // Register or sync user profile record in system database
+      registerOrUpdateUser({
+        name: channelProfile.fullName || currentUser?.name || 'संपादक',
+        email: cleanEmail || 'user@ainewsmaker.online',
+        channelName: channelProfile.channelNameHi,
+        channelLogoUrl: primaryPngLogo,
+        mobile: finalPhone || channelProfile.mobileNumber,
+        username: channelProfile.username,
+        district: finalDistrict,
+        isLocked: !isAdmin,
+      });
+
+      // Sync to backend cloud server API so cloud domain retains updated branding & logo across refreshes
+      try {
+        const serverPayload = {
+          ...updatedProfile,
+          userId: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
+          uid: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
+          email: cleanEmail,
+          fullName: channelProfile.fullName || currentUser?.name || 'संपादक',
+          username: channelProfile.username,
+          websiteUrl: channelProfile.websiteUrl,
+          whatsappNumber: finalPhone,
+          whatsappDisplayNumber: finalWhatsappDisplay,
+          mobileNumber: finalPhone || channelProfile.mobileNumber,
+          showWebsite: channelProfile.showWebsite !== false,
+          showMobileNumber: channelProfile.showMobileNumber !== false,
+          channelNameHi: channelProfile.channelNameHi,
+          channelNameEn: channelProfile.channelNameEn,
+          channelLogoUrl: channelProfile.channelLogoType === 'gif' && channelProfile.channelLogoGifUrl ? channelProfile.channelLogoGifUrl : primaryPngLogo,
+          channelLogoPngUrl: primaryPngLogo,
+          channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
+          channelLogoType: channelProfile.channelLogoType || (channelProfile.channelLogoGifUrl ? 'gif' : 'png'),
+          district: finalDistrict,
+          location: finalDistrict,
+          state: channelProfile.state || '',
+          address: channelProfile.address || '',
+          pincode: channelProfile.pincode || '',
+          socialIcons: syncedIcons,
+          socialLinks: channelProfile.socialLinks || DEFAULT_SOCIAL_LINKS,
+          whatsappMarketingConsent: Boolean(channelProfile.whatsappMarketingConsent),
+          whatsappMarketingConsentAt: channelProfile.whatsappMarketingConsent ? (channelProfile.whatsappMarketingConsentAt || new Date().toISOString()) : null,
+          whatsappMarketingConsentSource: 'profile_settings',
+          whatsappMarketingConsentPhone: finalPhone,
+          whatsappMarketingConsentUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        };
+        const res = await fetch(getApiUrl('/api/user-profile'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+            'x-admin-key': 'master-admin',
+            'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
+            'x-admin-email': cleanEmail,
+            'x-user-email': cleanEmail,
+          },
+          body: JSON.stringify(serverPayload),
+        });
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error || 'सर्वर पर प्रोफाइल सहेजने में समस्या आई');
+        }
+        const data = await res.json();
+        if (data && data.profile) {
+          const savedProf = data.profile;
+          setChannelProfile((p) => ({
+            ...p,
+            ...savedProf,
+            district: savedProf.district || savedProf.location || p.district,
+            location: savedProf.location || savedProf.district || p.location,
+            socialIcons: savedProf.socialIcons || p.socialIcons,
+            socialLinks: savedProf.socialLinks || p.socialLinks,
+          }));
+          if (savedProf.district || savedProf.location) {
+            const rawDist = (savedProf.district || savedProf.location || '').trim();
+            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
+            setReporterDistrict(cleanDist);
+          }
+        }
+      } catch (err: any) {
+        console.error('Cloud server sync error:', err);
+        alert(`प्रोफाइल सहेजने में विफल: ${err.message || 'सर्वर पर सहेजने में समस्या आई'}`);
+        return;
+      }
+
+      // Dispatch update event for active studio card
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('channel_profile_updated', {
+            detail: {
+              ...updatedProfile,
+              channelLogoUrl: primaryPngLogo,
+              channelLogoPngUrl: primaryPngLogo,
+              channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
+              customHeaderPng: effectiveHeaderPng,
+              customFooterPng: effectiveFooterPng,
+            },
+          })
+        );
+      }
+
+      setSaveSettingsSuccess(true);
+      setTimeout(() => setSaveSettingsSuccess(false), 3000);
+    } finally {
+      setIsSavingBranding(false);
+    }
   };
 
   // New Category input (inside Dashboard tab)
@@ -2068,7 +2085,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         </span>
                       </h3>
                       <p className="text-xs text-slate-400">
-                        बेसिक में 7 दिन फ्री ट्रायल व वॉटरमार्क, एडवांस/प्रो में वॉटरमार्क रहित फुल एचडी
+                        बेसिक में 7 दिन फ्री ट्रायल व मास्टर ब्रांडिंग, एडवांस/प्रो में 1080p फुल एचडी व अधिक डाउनलोड्स
                       </p>
                     </div>
                   </div>
@@ -2081,7 +2098,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* Watermark Status Alert Banner (User Only) */}
+              {/* Master Branding / Plan Status Alert Banner (User Only) */}
               {!isAdmin && (
                 subscription.tier === 'basic' ? (
                   <div className="p-4 bg-amber-950/60 border border-amber-600/70 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -2094,7 +2111,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           बेसिक यूजर: 7 दिन का फ्री ट्रायल सक्रिय ({subscription.daysRemaining} दिन शेष)
                         </div>
                         <div className="text-xs text-slate-300 mt-0.5">
-                          बेसिक प्लान में आपके द्वारा बनाए गए सभी ग्राफिक पर <b>"AI News Maker App" वॉटरमार्क</b> रहेगा। वॉटरमार्क हटाने व 1080p Full HD के लिए कृपया नीचे दिए गए किसी भी प्लान में अपग्रेड करें।
+                          बेसिक प्लान में आपके द्वारा बनाए गए सभी ग्राफिक पर <b>मास्टर ब्रांडिंग अनिवार्य</b> रहेगी। 1080p Full HD व अधिक डाउनलोड सीमा के लिए कृपया नीचे दिए गए किसी भी प्लान में अपग्रेड करें।
                         </div>
                       </div>
                     </div>
@@ -2102,7 +2119,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       onClick={() => handleUpgradePlan('advanced')}
                       className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-xl shrink-0 shadow-lg cursor-pointer transition"
                     >
-                      वॉटरमार्क हटाएं (अपग्रेड)
+                      प्लान अपग्रेड करें
                     </button>
                   </div>
                 ) : (
@@ -2113,7 +2130,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         ✅ प्रीमियम सक्रिय ({activePlanDetail.nameHi})
                       </div>
                       <div className="text-xs text-emerald-100/90 mt-0.5">
-                        आपके सभी कार्ड्स और वीडियो <b>100% वॉटरमार्क रहित (No Watermark)</b> व अल्ट्रा-शार्प क्वालिटी में रेंडर हो रहे हैं।
+                        आपके सभी कार्ड्स और वीडियो <b>अल्ट्रा-शार्प क्वालिटी</b> में रेंडर हो रहे हैं।
                       </div>
                     </div>
                   </div>
@@ -2147,13 +2164,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           {isCurrent ? 'सक्रिय (Active)' : plan.badge}
                         </span>
 
-                        {plan.hasWatermark ? (
+                        {plan.id === 'basic' ? (
                           <span className="text-[9px] text-amber-400 font-bold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800">
-                            वॉटरमार्क रहेगा
+                            मास्टर ब्रांडिंग अनिवार्य
                           </span>
                         ) : (
                           <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800">
-                            वॉटरमार्क रहित
+                            फुल एचडी
                           </span>
                         )}
                       </div>
@@ -3259,11 +3276,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveChannelBranding}
-                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95"
+                  disabled={isSavingBranding}
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Save className="w-4 h-4" />
                   <span>
-                    {saveSettingsSuccess
+                    {isSavingBranding
+                      ? '⏳ सहेजा जा रहा है...'
+                      : saveSettingsSuccess
                       ? '✅ ब्रांडिंग सुरक्षित हो गई!'
                       : 'ब्रांडिंग सेव करें'}
                   </span>

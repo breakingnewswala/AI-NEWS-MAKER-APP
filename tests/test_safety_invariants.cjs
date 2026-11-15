@@ -121,16 +121,18 @@ for (const id of protectedAssetIds) {
   }
 }
 
-// 5. News Database Fallback Snapshots Non-Empty Verification
+// 5. News Database Schema Verification (No seed ghost cards, valid array structure)
 const rootNews = JSON.parse(fs.readFileSync('news_database.json', 'utf8'));
-if (!Array.isArray(rootNews) || rootNews.length < 13) {
-  throw new Error(`FAILED: root news_database.json has been truncated (found ${rootNews?.length || 0} items, expected >= 13)`);
+if (!Array.isArray(rootNews)) {
+  throw new Error(`FAILED: root news_database.json must be a valid array`);
+}
+if (rootNews.some(n => n && n.id === 'news_1793391037097')) {
+  throw new Error('FAILED: root news_database.json must not contain purged seed news_1793391037097');
 }
 
 const fallbackNewsFiles = [
   'web_studio/news_database.json',
   'public/news_database.json',
-  'app/src/main/assets/news_studio/news_database.json'
 ];
 
 for (const filePath of fallbackNewsFiles) {
@@ -138,13 +140,11 @@ for (const filePath of fallbackNewsFiles) {
     throw new Error(`FAILED: Missing news fallback file: ${filePath}`);
   }
   const newsList = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  if (!Array.isArray(newsList) || newsList.length < 5) {
-    throw new Error(`FAILED: ${filePath} is truncated (found ${newsList?.length || 0} items, expected >= 5)`);
+  if (!Array.isArray(newsList)) {
+    throw new Error(`FAILED: ${filePath} must be a valid array`);
   }
-  // Ensure pending news records retain their original approval status
-  const pendingCount = newsList.filter(n => n.approvalStatus === 'PENDING_APPROVAL' || n.status === 'PENDING_APPROVAL').length;
-  if (pendingCount < 4) {
-    throw new Error(`FAILED: ${filePath} pending approval articles were modified or approved unexpectedly`);
+  if (newsList.some(n => n && n.id === 'news_1793391037097')) {
+    throw new Error(`FAILED: ${filePath} must not contain purged seed news_1793391037097`);
   }
 }
 

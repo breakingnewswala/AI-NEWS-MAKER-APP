@@ -2163,8 +2163,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           className="absolute inset-x-0 bottom-0 top-[58px] sm:top-[74px] z-20 flex flex-col justify-between pointer-events-none"
           style={{ backgroundColor: epaperPaperBg }}
         >
-          {/* Subtle Universal Watermark overlay in preview */}
-          {(card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) && (
+          {/* Universal Watermark overlay permanently eliminated */}
+          {false && (card.showWatermark || card.showSuperBreakingWatermark || shouldShowAppWatermark()) && (
             <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden flex flex-col justify-around select-none">
               <div className="w-[200%] -ml-[50%] flex flex-col gap-8 -rotate-20">
                 {[...Array(8)].map((_, rIdx) => (

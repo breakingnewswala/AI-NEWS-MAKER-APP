@@ -975,7 +975,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     { step: 1, id: 'step-frame', label: '1. टेम्पलेट्स', shortLabel: 'टेम्पलेट्स', icon: '🖼️' },
     { step: 2, id: 'step-ai', label: '2. AI टूल्स', shortLabel: 'AI टूल्स', icon: '🤖' },
     { step: 3, id: 'step-headline', label: '3. हेडलाइन', shortLabel: 'हेडलाइन', icon: '✍️' },
-    { step: 4, id: 'step-photo', label: '4. फोटो एवं वॉटरमार्क', shortLabel: 'फोटो-वॉटरमार्क', icon: '📷' },
+    { step: 4, id: 'step-photo', label: '4. फोटो एवं लेआउट', shortLabel: 'फोटो-लेआउट', icon: '📷' },
     { step: 5, id: 'step-location', label: '5. स्थान', shortLabel: 'स्थान', icon: '📍' },
     { step: 6, id: 'step-header-footer', label: '6. हेडर एवं फुटर', shortLabel: 'हेडर-फुटर', icon: '📜' },
     { step: 7, id: 'step-download', label: '7. डाउनलोड एवं कैप्शन', shortLabel: 'डाउनलोड-कैप्शन', icon: '⬇️' },
@@ -3083,7 +3083,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <span className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-mono font-black">4</span>
                 <LayoutGrid className="w-3.5 h-3.5 text-rose-400" />
-                स्टेप 4: फोटो एवं वॉटरमार्क
+                स्टेप 4: फोटो एवं लेआउट
               </span>
           <span className="text-xs text-yellow-400 font-medium">
             {(card.frameDesign as string) === 'jacket-morning'
@@ -3867,12 +3867,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             />
           </div>
 
-          {/* वॉटरमार्क व प्रतीकात्मक फोटो Section (Step 4 के सबसे लास्ट में) */}
+          {/* प्रतीकात्मक फोटो टैग Section (Step 4 के सबसे लास्ट में) */}
           <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs text-amber-400 font-bold flex items-center gap-1.5">
                 <span>🏷️</span>
-                <span>वॉटरमार्क व प्रतीकात्मक फोटो (Watermark):</span>
+                <span>प्रतीकात्मक फोटो टैग (Photo Tag):</span>
               </label>
               <span className="text-[10px] text-neutral-400">
                 50/50 लेआउट • प्रतीकात्मक फोटो व AI Generated
@@ -3882,7 +3882,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             {effectiveTier === 'basic' && !effectiveAdmin ? (
               <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-800 text-[11px] text-amber-300 flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>🔒 वॉटरमार्क विकल्प केवल एडवांस, प्रो और वीआईपी डेस्क में उपलब्ध हैं।</span>
+                <span>🔒 फोटो टैग विकल्प केवल एडवांस, प्रो और वीआईपी डेस्क में उपलब्ध हैं।</span>
               </div>
             ) : (
             <div className="grid grid-cols-3 gap-2">
@@ -3940,7 +3940,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 }`}
               >
                 <span>🚫 OFF (कोई नहीं)</span>
-                <span className="text-[9px] opacity-75 font-normal">वॉटरमार्क बंद</span>
+                <span className="text-[9px] opacity-75 font-normal">टैग बंद</span>
               </button>
             </div>
             )}
@@ -5829,27 +5829,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         </>
       )}
 
-      {/* Global Full-Screen Preview Modal with AI NEWS MAKER Watermark Protection (Part 4) */}
+      {/* Global Full-Screen Preview Modal */}
       {isPreviewModalOpen && (
         <div
-          id="fullscreen-watermarked-preview-modal"
+          id="fullscreen-preview-modal"
           className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-5 overflow-hidden select-none"
         >
-          {/* Full-Screen Repeating Semi-Transparent AI NEWS MAKER Watermark Overlay (Preview-Only, Never in Exported JPG) */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none fixed inset-0 z-[115] overflow-hidden flex flex-wrap items-center justify-center gap-x-10 gap-y-12 p-4 opacity-25"
-          >
-            {Array.from({ length: 24 }).map((_, idx) => (
-              <div
-                key={idx}
-                className="-rotate-24 text-white/75 font-black text-xs sm:text-sm md:text-base tracking-[0.22em] uppercase whitespace-nowrap drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]"
-              >
-                AI NEWS MAKER • PREVIEW ONLY
-              </div>
-            ))}
-          </div>
-
           {/* Top Bar with Top-Centre Large AI NEWS MAKER Brand Logo & Close (×) Button */}
           <div className="relative z-[120] flex items-center justify-between pb-2.5 border-b border-neutral-800/90">
             <div className="flex items-center gap-1.5">

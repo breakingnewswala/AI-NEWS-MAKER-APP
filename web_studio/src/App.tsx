@@ -790,6 +790,7 @@ export default function App() {
           const clean = parsed.filter((p: any) => {
             if (!p || !p.id) return false;
             if (deletedSet.has(p.id)) return false;
+            if (p.id === 'news_1793391037097') return false;
             if (String(p.id).startsWith('live-post-') || String(p.id).startsWith('editorial-seed-')) return false;
             return true;
           });
@@ -863,7 +864,7 @@ export default function App() {
         const data = await res.json();
         const apiPosts = Array.isArray(data) ? data : (data?.posts || []);
         if (Array.isArray(apiPosts)) {
-          const cleanApi = apiPosts.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+          const cleanApi = apiPosts.filter((p: NewsFeedPost) => p && p.id !== 'news_1793391037097' && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
           if (cleanApi.length > 0) {
             cleanApi.sort((a: NewsFeedPost, b: NewsFeedPost) => {
               const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
@@ -908,20 +909,14 @@ export default function App() {
             } catch {}
             loaded = true;
           } else {
-            // Preserve valid existing news if server temporarily returns 0
-            const hasExisting = posts.length > 0;
-            if (!hasExisting) {
-              try {
-                const cachedStr = localStorage.getItem('app_news_posts_v2');
-                if (cachedStr) {
-                  const cached = JSON.parse(cachedStr);
-                  if (Array.isArray(cached) && cached.length > 0) {
-                    setPosts(cached);
-                    loaded = true;
-                  }
-                }
-              } catch {}
-            }
+            // Authoritative Zero-News: When API successfully returns 0 posts, empty the feed and do not resurrect old cached news
+            setPosts([]);
+            try {
+              localStorage.removeItem('app_news_posts_v2');
+            } catch {}
+            seenNewsIdsRef.current = new Set();
+            isInitialNewsLoadRef.current = false;
+            loaded = true;
           }
         }
       }
@@ -936,7 +931,7 @@ export default function App() {
         if (fbRes.ok) {
           const data = await fbRes.json();
           if (Array.isArray(data)) {
-            const clean = data.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+            const clean = data.filter((p: NewsFeedPost) => p && p.id !== 'news_1793391037097' && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
             clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
               const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
               const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
@@ -990,7 +985,7 @@ export default function App() {
         if (staticRes.ok) {
           const data = await staticRes.json();
           if (Array.isArray(data)) {
-            const clean = data.filter((p: NewsFeedPost) => p && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
+            const clean = data.filter((p: NewsFeedPost) => p && p.id !== 'news_1793391037097' && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
             clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
               const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
               const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();

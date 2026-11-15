@@ -6751,11 +6751,13 @@ function drawQuoteVectorIcon(
 
 // Render Subtle Watermark across canvas/photo area with Text or uploaded PNG Image Logo
 async function drawUniversalWatermark(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  card: NewsCardData
+  _ctx: CanvasRenderingContext2D,
+  _width: number,
+  _height: number,
+  _card: NewsCardData
 ) {
+  // Watermark overlays permanently eliminated across exports (Master Branding enforced instead)
+  return;
   const isImageWatermark = card.watermarkType === 'image' && !!card.watermarkImage;
   const opacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? (card.breakingWatermarkOpacity ?? 0.15);
   const color = card.textWatermarkColor || card.watermarkColor || (card.breakingWatermarkColor ?? 'white');

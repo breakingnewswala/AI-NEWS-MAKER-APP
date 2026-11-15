@@ -14125,61 +14125,15 @@ function loadNewsDatabase() {
   } catch (err) {
     console.error("Error reading news_database.json:", err);
   }
-  if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.news.size > 0) {
+  if (centralDb && centralDb.useFirestore && centralDb.isInitialized) {
     if (!centralDb.isCacheValid("news")) {
       centralDb.getNewsPosts({ forceRemote: true }).catch(() => {
       });
     }
     const list = Array.from(centralDb.cache.news.values());
     const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
-    if (diskPosts.length > 0) {
-      const deletedSourceIds = loadDeletedRssSourceIds();
-      const activeSources = loadRssSourcesDatabase().filter((s) => s.isActive && !deletedSourceIds.has(s.id));
-      const activeSourceIds = new Set(activeSources.map((s) => s.id));
-      const activeSourceUrls = /* @__PURE__ */ new Set([
-        ...activeSources.map((s) => (s.url || "").trim().toLowerCase()).filter(Boolean),
-        ...activeSources.map((s) => (s.originalWebUrl || "").trim().toLowerCase()).filter(Boolean)
-      ]);
-      for (const dp of diskPosts) {
-        if (!dp || !dp.id) continue;
-        const isFeed = String(dp.id).startsWith("rss-") || String(dp.id).startsWith("web-");
-        if (isFeed) {
-          if (activeSources.length === 0) continue;
-          const parts = String(dp.id).split("-");
-          const srcId = dp.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
-          const cleanSrcId = srcId.replace(/^src_/, "");
-          if (srcId && (deletedSourceIds.has(srcId) || deletedSourceIds.has(`src_${srcId}`) || deletedSourceIds.has(cleanSrcId))) {
-            continue;
-          }
-          const matchesId = Boolean(
-            srcId && (activeSourceIds.has(srcId) || activeSourceIds.has(`src_${srcId}`) || activeSourceIds.has(cleanSrcId) || activeSources.some(
-              (s) => dp.id.startsWith(`rss-${s.id}-`) || dp.id.startsWith(`web-${s.id}-`) || s.id.startsWith("src_") && (dp.id.startsWith(`rss-${s.id.replace(/^src_/, "")}-`) || dp.id.startsWith(`web-${s.id.replace(/^src_/, "")}-`))
-            ))
-          );
-          const matchesUrl = Boolean(dp.sourceUrl && (activeSourceUrls.has(dp.sourceUrl.trim().toLowerCase()) || Array.from(activeSourceUrls).some((u) => {
-            try {
-              const feedHost = new URL(u).hostname.replace(/^www\./, "").toLowerCase();
-              const postHost = new URL(dp.sourceUrl).hostname.replace(/^www\./, "").toLowerCase();
-              return feedHost === postHost || postHost.endsWith("." + feedHost);
-            } catch {
-              return false;
-            }
-          })));
-          const isApproved = dp.status === "APPROVED" || dp.status === "published" || Boolean(dp.isApproved) || Boolean(dp.isPrePublished);
-          if (!matchesId && !matchesUrl && !isApproved) continue;
-        }
-        if (!centralDb.cache.news.has(dp.id)) {
-          centralDb.cache.news.set(dp.id, dp);
-          cleaned.unshift(dp);
-          centralDb.saveNewsPost(dp.id, dp).catch(() => {
-          });
-        }
-      }
-    }
-    if (cleaned.length > 0) {
-      const deletedIds2 = loadDeletedNewsIds();
-      return deletedIds2.size > 0 ? cleaned.filter((p) => !deletedIds2.has(p.id)) : cleaned;
-    }
+    const deletedIds2 = loadDeletedNewsIds();
+    return deletedIds2.size > 0 ? cleaned.filter((p) => !deletedIds2.has(p.id)) : cleaned;
   }
   const deletedIds = loadDeletedNewsIds();
   return deletedIds.size > 0 ? diskPosts.filter((p) => !deletedIds.has(p.id)) : diskPosts;
@@ -14201,7 +14155,6 @@ function saveNewsDatabase(posts) {
         }
       }
     }
-    return true;
   }
   try {
     const locations = resolveAllDatabaseLocations("news_database.json");
@@ -17696,9 +17649,30 @@ function reconcileAllUsers() {
       mobileNumber: adminProf?.mobileNumber && adminProf.mobileNumber.trim() ? adminProf.mobileNumber : existingAdmin?.mobileNumber || "9669802408",
       whatsappNumber: adminProf?.whatsappNumber && adminProf.whatsappNumber.trim() ? adminProf.whatsappNumber : existingAdmin?.whatsappNumber || "9669802408",
       whatsappDisplayNumber: adminProf?.whatsappDisplayNumber && String(adminProf.whatsappDisplayNumber).trim() ? String(adminProf.whatsappDisplayNumber).trim() : adminProf?.whatsappNumber || existingAdmin?.whatsappDisplayNumber || existingAdmin?.whatsappNumber || "9669802408",
-      district: adminProf?.district && adminProf.district.trim() ? adminProf.district : existingAdmin?.district && existingAdmin.district.trim() ? existingAdmin.district : "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932",
+      district: (() => {
+        const raw = adminProf?.district && adminProf.district.trim() ? adminProf.district.trim() : existingAdmin?.district && existingAdmin.district.trim() ? existingAdmin.district.trim() : "\u092D\u094B\u092A\u093E\u0932";
+        return raw === "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" || raw === "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? "\u092D\u094B\u092A\u093E\u0932" : raw;
+      })(),
+      location: (() => {
+        const raw = adminProf?.location && adminProf.location.trim() ? adminProf.location.trim() : existingAdmin?.location && existingAdmin.location.trim() ? existingAdmin.location.trim() : "\u092D\u094B\u092A\u093E\u0932";
+        return raw === "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" ? "\u092D\u094B\u092A\u093E\u0932" : raw;
+      })(),
       websiteUrl: adminProf?.websiteUrl || existingAdmin?.websiteUrl || "breakingnewswala.com",
-      socialIcons: adminProf?.socialIcons || existingAdmin?.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: false, x: false, linkedin: false },
+      socialIcons: (() => {
+        const currentIcons = adminProf?.socialIcons || existingAdmin?.socialIcons;
+        if (currentIcons && typeof currentIcons === "object") {
+          const hasTw = currentIcons.twitter !== void 0 ? Boolean(currentIcons.twitter) : currentIcons.x !== void 0 ? Boolean(currentIcons.x) : true;
+          return {
+            youtube: currentIcons.youtube !== void 0 ? Boolean(currentIcons.youtube) : true,
+            facebook: currentIcons.facebook !== void 0 ? Boolean(currentIcons.facebook) : true,
+            instagram: currentIcons.instagram !== void 0 ? Boolean(currentIcons.instagram) : true,
+            twitter: hasTw,
+            x: hasTw,
+            linkedin: currentIcons.linkedin !== void 0 ? Boolean(currentIcons.linkedin) : true
+          };
+        }
+        return { youtube: true, facebook: true, instagram: true, twitter: true, x: true, linkedin: true };
+      })(),
       isBlocked: false,
       isProfileLocked: false,
       createdAt: existingAdmin?.createdAt || 1791792137805,
@@ -21284,7 +21258,6 @@ function saveProfilesDatabase(data) {
       const docId = (profile.uid || profile.userId || profile.email || key).toLowerCase().trim();
       centralDb.saveUser(docId, profile).catch((e) => console.warn("[Firestore Profile Sync Error]", e.message));
     }
-    return true;
   }
   try {
     const locations = resolveAllDatabaseLocations("user_profiles_db.json");
@@ -21822,21 +21795,24 @@ function loadAdminBranding() {
     return centralDb.cache.systemConfig.get("admin_branding");
   }
   try {
-    if (import_fs2.default.existsSync(ADMIN_BRANDING_FILE)) {
-      const raw = import_fs2.default.readFileSync(ADMIN_BRANDING_FILE, "utf-8");
-      return JSON.parse(raw);
+    const locations = resolveAllDatabaseLocations("admin_branding_db.json");
+    for (const loc of locations) {
+      if (import_fs2.default.existsSync(loc)) {
+        const raw = import_fs2.default.readFileSync(loc, "utf-8");
+        return JSON.parse(raw);
+      }
     }
   } catch (e) {
     console.error("Error reading admin_branding_db.json:", e);
   }
   return {
-    channelNameHi: "",
-    channelNameEn: "",
-    channelLogoUrl: "",
-    websiteUrl: "",
-    mobileNumber: "",
-    showMobileNumber: false,
-    activeSocialIcons: [],
+    channelNameHi: "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u095B \u0935\u093E\u0932\u093E",
+    channelNameEn: "BREAKING NEWS WALA",
+    channelLogoUrl: "/assets/breaking_news_wala_logo.png",
+    websiteUrl: "breakingnewswala.com",
+    mobileNumber: "9669802408",
+    showMobileNumber: true,
+    activeSocialIcons: ["youtube", "facebook", "instagram", "twitter", "x", "linkedin"],
     updatedAt: Date.now()
   };
 }
@@ -21847,10 +21823,18 @@ function saveAdminBranding(data) {
     }
     centralDb.saveAdminBranding(data).catch(() => {
     });
-    return true;
   }
   try {
-    import_fs2.default.writeFileSync(ADMIN_BRANDING_FILE, JSON.stringify(data, null, 2), "utf-8");
+    const locations = resolveAllDatabaseLocations("admin_branding_db.json");
+    const jsonStr = JSON.stringify(data, null, 2);
+    for (const loc of locations) {
+      try {
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
     return true;
   } catch (e) {
     console.error("Error saving admin_branding_db.json:", e);
@@ -23380,6 +23364,18 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+function isPostApprovedAndPublished(p) {
+  if (!p) return false;
+  if (p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "rejected" || p.status === "draft" || p.isApproved === false) {
+    return false;
+  }
+  if (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending") {
+    return false;
+  }
+  return Boolean(
+    p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || p.isApproved === true || p.isPrePublished === true
+  );
+}
 async function getDurableNotificationBoardIds() {
   const idsSet = /* @__PURE__ */ new Set();
   try {
@@ -23412,16 +23408,13 @@ async function getDurableNotificationBoardIds() {
     const validIds = [];
     for (const id of idsSet) {
       const post = newsMap.get(id);
-      if (post) {
-        if (post.status === "draft" || post.isApproved === false) {
-          continue;
-        }
+      if (post && isPostApprovedAndPublished(post)) {
+        validIds.push(id);
       }
-      validIds.push(id);
     }
     return validIds;
   } catch {
-    return Array.from(idsSet);
+    return [];
   }
 }
 async function saveDurableNotificationBoardIds(ids) {
@@ -23464,6 +23457,14 @@ app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, asy
     const currentIds = await getDurableNotificationBoardIds();
     const idSet = new Set(currentIds);
     if (selected) {
+      const allNews = loadNewsDatabase();
+      const targetPost = allNews.find((p) => p.id === id);
+      if (!targetPost) {
+        return res.status(404).json({ error: "News post not found" });
+      }
+      if (!isPostApprovedAndPublished(targetPost)) {
+        return res.status(400).json({ error: "Only approved and published news can be added to the Special Notification Board" });
+      }
       idSet.add(id);
     } else {
       idSet.delete(id);
@@ -32718,7 +32719,7 @@ var DEFAULT_PLANS_CATALOG = [
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
     badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 67% OFF",
     tagline: "\u092C\u0947\u0938\u093F\u0915 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u094D\u0930\u093F\u090F\u091F\u0930 (10 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928)",
-    hasWatermark: true,
+    hasWatermark: false,
     graphicExportResolution: "720p",
     maxGraphicsPerDay: 10,
     hasVideoStudio: false,
@@ -32749,7 +32750,7 @@ var DEFAULT_PLANS_CATALOG = [
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
     badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 50% OFF",
     popular: true,
-    tagline: "25 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 5 \u092B\u0949\u0928\u094D\u091F, 2-\u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F \u0935 AI \u0938\u093F\u092E\u094D\u092C\u0949\u0932\u093F\u0915 \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915",
+    tagline: "25 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 5 \u092B\u0949\u0928\u094D\u091F, 2-\u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F \u0935 AI \u0938\u093F\u092E\u094D\u092C\u0949\u0932\u093F\u0915 \u092B\u094B\u091F\u094B \u091F\u0948\u0917",
     hasWatermark: false,
     graphicExportResolution: "1080p",
     maxGraphicsPerDay: 25,
@@ -32762,7 +32763,7 @@ var DEFAULT_PLANS_CATALOG = [
       "\u{1F524} 5 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092B\u0949\u0928\u094D\u091F (Hind, \u0916\u0902\u0921, \u0938\u093E\u0939\u093F\u0924\u094D\u092F, \u092C\u093E\u0932\u0942, \u0905\u0928\u0947\u0915 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940)",
       "\u{1F3A8} 5 \u0939\u093E\u0908\u0932\u093E\u0907\u091F \u0915\u0932\u0930\u094D\u0938 \u0935 5 \u092B\u0942\u091F\u0930 \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0915\u0932\u0930\u094D\u0938",
       "\u{1F5BC}\uFE0F 1 \u0935 2 \u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F \u0938\u092A\u094B\u0930\u094D\u091F",
-      "\u2728 AI / \u092A\u094D\u0930\u0924\u0940\u0915\u093E\u0924\u094D\u092E\u0915 \u092B\u094B\u091F\u094B \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0938\u092A\u094B\u0930\u094D\u091F",
+      "\u2728 AI / \u092A\u094D\u0930\u0924\u0940\u0915\u093E\u0924\u094D\u092E\u0915 \u092B\u094B\u091F\u094B \u091F\u0948\u0917 \u0938\u092A\u094B\u0930\u094D\u091F",
       "\u{1F310} \u092B\u0942\u091F\u0930 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0939\u093E\u0907\u0921 \u091F\u0949\u0917\u0932 (WhatsApp \u0911\u0928)"
     ]
   },
@@ -32780,7 +32781,7 @@ var DEFAULT_PLANS_CATALOG = [
     validityLabel: "30 \u0926\u093F\u0928 (\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930)",
     period: "\u092A\u094D\u0930\u0924\u093F \u092E\u093E\u0939",
     badge: "\u0932\u0949\u0928\u094D\u091A\u093F\u0902\u0917 \u0911\u092B\u0930 40% OFF",
-    tagline: "40 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F, \u0915\u0938\u094D\u091F\u092E \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A",
+    tagline: "40 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u2014 \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F, \u092A\u094D\u0930\u0940\u092E\u093F\u092F\u092E \u0938\u094D\u091F\u093E\u0907\u0932\u093F\u0902\u0917 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A",
     hasWatermark: false,
     graphicExportResolution: "1080p",
     maxGraphicsPerDay: 40,
@@ -32791,7 +32792,7 @@ var DEFAULT_PLANS_CATALOG = [
     features: [
       "\u26A1 40 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u094D\u0930\u0924\u093F\u0926\u093F\u0928 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E",
       "\u{1F524} \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F \u0915\u0932\u0947\u0915\u094D\u0936\u0928 \u0935 \u0915\u0932\u0930 \u0939\u093E\u0908\u0932\u093E\u0907\u091F\u094D\u0938 (\u092A\u094D\u0930\u093E\u0907\u092E\u0930\u0940 \u0915\u0932\u0930 \u0938\u093F\u0932\u0947\u0915\u094D\u0936\u0928)",
-      "\u{1F3F7}\uFE0F \u0915\u0938\u094D\u091F\u092E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915 \u0935 AI \u0938\u093F\u092E\u094D\u092C\u0949\u0932\u093F\u0915 \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915",
+      "\u{1F3F7}\uFE0F \u092A\u094D\u0930\u0940\u092E\u093F\u092F\u092E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0938\u094D\u091F\u093E\u0907\u0932\u093F\u0902\u0917 \u0935 AI \u0938\u093F\u092E\u094D\u092C\u0949\u0932\u093F\u0915 \u092B\u094B\u091F\u094B \u091F\u0948\u0917",
       "\u{1F5BC}\uFE0F \u0938\u092D\u0940 \u092E\u0932\u094D\u091F\u0940-\u092B\u094B\u091F\u094B \u0917\u094D\u0930\u093F\u0921 \u0932\u0947\u0906\u0909\u091F\u094D\u0938 \u0935 \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0907\u092E\u0947\u091C \u0938\u0930\u094D\u091A",
       "\u{1F3A8} \u0938\u092D\u0940 \u092B\u0942\u091F\u0930 \u092C\u0948\u0915\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0935 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930\u094D\u0938",
       "\u{1F310} \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0935 WhatsApp \u0926\u094B\u0928\u094B\u0902 \u0911\u0928/\u0911\u092B \u091F\u0949\u0917\u0932",
@@ -32825,7 +32826,7 @@ var DEFAULT_PLANS_CATALOG = [
       "\u{1F524} \u0938\u092D\u0940 \u092E\u093E\u0928\u0915 \u092B\u0949\u0928\u094D\u091F + \u0915\u0938\u094D\u091F\u092E \u092B\u0949\u0928\u094D\u091F (.ttf/.otf) \u0905\u092A\u0932\u094B\u0921",
       "\u{1F3A8} \u0915\u0938\u094D\u091F\u092E \u0939\u093E\u0908\u0932\u093E\u0907\u091F \u0915\u0932\u0930, \u092B\u0942\u091F\u0930 \u0915\u0932\u0930 \u0935 \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0915\u0932\u0930 \u092A\u093F\u0915\u0930",
       "\u{1F4F1} \u092A\u094D\u0930\u0924\u093F-\u0917\u094D\u0930\u093E\u092B\u093F\u0915 WhatsApp \u0928\u0902\u092C\u0930 \u0913\u0935\u0930\u0930\u093E\u0907\u0921 \u0907\u0928\u092A\u0941\u091F",
-      "\u{1F5BC}\uFE0F \u0938\u092D\u0940 \u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F\u094D\u0938, \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A \u0935 \u0915\u0938\u094D\u091F\u092E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0935\u0949\u091F\u0930\u092E\u093E\u0930\u094D\u0915",
+      "\u{1F5BC}\uFE0F \u0938\u092D\u0940 \u092B\u094B\u091F\u094B \u0932\u0947\u0906\u0909\u091F\u094D\u0938, \u0907\u0902\u091F\u0930\u0928\u0947\u091F \u0938\u0930\u094D\u091A \u0935 \u092A\u094D\u0930\u0940\u092E\u093F\u092F\u092E \u091F\u0947\u0915\u094D\u0938\u094D\u091F \u0938\u094D\u091F\u093E\u0907\u0932\u093F\u0902\u0917",
       "\u2B50 VIP DESK \u0935\u093F\u0936\u0947\u0937 \u092B\u094D\u0930\u0947\u092E\u094D\u0938 \u0935 \u0915\u0938\u094D\u091F\u092E \u092B\u094D\u0930\u0947\u092E \u0938\u092A\u094B\u0930\u094D\u091F"
     ]
   }

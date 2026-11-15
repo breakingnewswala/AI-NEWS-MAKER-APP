@@ -83,7 +83,7 @@ const DEFAULT_ACCOUNTS: Record<string, { pass: string; user: ReporterUser }> = {
       username: 'breakingnewswala',
       name: 'मुख्य संपादक (Chief Editor)',
       role: 'superadmin' as any,
-      district: 'सेंट्रल डेस्क / भोपाल',
+      district: 'भोपाल',
       email: 'breakingnewswala.com@gmail.com',
       planTier: 'ultra',
     },
@@ -191,7 +191,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
         role: isSuper ? 'superadmin' : (isAdmin ? 'superadmin' : 'reporter'),
         email: cleanEmail,
-        district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'सेंट्रल डेस्क / भोपाल' : 'डिजिटल डेस्क'),
+        district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'भोपाल' : 'डिजिटल डेस्क'),
         planTier: isSuper || isAdmin ? 'ultra' : 'basic',
       };
 
