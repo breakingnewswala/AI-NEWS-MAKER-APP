@@ -1579,7 +1579,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       if (deletedIds.has(p.id)) return false;
       if (p.approvalStatus === 'REJECTED' || p.status === 'REJECTED' || p.status === 'rejected' || p.status === 'draft' || p.isApproved === false) return false;
       if (p.approvalStatus === 'PENDING_APPROVAL' || p.status === 'PENDING_APPROVAL' || p.status === 'pending') return false;
-      const isApproved = p.approvalStatus === 'APPROVED' || p.status === 'APPROVED' || p.isApproved === true || (approvedRssIds && approvedRssIds.has(p.id));
+      const isApproved = p.approvalStatus === 'APPROVED' || p.status === 'APPROVED' || p.isApproved === true || (approvedRssIds && approvedRssIds.has(p.id) && p.status !== 'pending' && p.approvalStatus !== 'pending');
       const isPublished = p.publicationStatus === 'PUBLISHED' || p.publicationStatus === 'published' || p.status === 'published' || p.status === 'APPROVED' || p.isPublished === true;
       return Boolean(isApproved && isPublished);
     };
@@ -2339,10 +2339,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         {canModerate && (post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                           <button
                             type="button"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
-                              approveRssPost(post.id, post);
-                              setApprovedRssIds(getApprovedRssIds());
+                              const ok = await approveRssPost(post.id, post);
+                              if (ok) {
+                                setApprovedRssIds(getApprovedRssIds());
+                                alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
+                              } else {
+                                alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
+                              }
                             }}
                             className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 shadow animate-pulse"
                             title="इस RSS खबर को स्वीकृत करें"
@@ -2723,10 +2728,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            approveRssPost(post.id);
-                            setApprovedRssIds(getApprovedRssIds());
+                            const ok = await approveRssPost(post.id, post);
+                            if (ok) {
+                              setApprovedRssIds(getApprovedRssIds());
+                              alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
+                            } else {
+                              alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
+                            }
                           }}
                           className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
                           title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
@@ -2883,10 +2893,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     <div className="px-4 pb-2 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          approveRssPost(post.id, post);
-                          setApprovedRssIds(getApprovedRssIds());
+                          const ok = await approveRssPost(post.id, post);
+                          if (ok) {
+                            setApprovedRssIds(getApprovedRssIds());
+                            alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
+                          } else {
+                            alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
+                          }
                         }}
                         className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
                         title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"

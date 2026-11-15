@@ -684,9 +684,19 @@ export async function requestAiFrameAnalysis(
 
     const data = await res.json();
     if (res.ok && data.success && data.result) {
-      return { success: true, result: data.result };
+      return {
+        success: true,
+        result: data.result,
+        isFallback: Boolean(data.isFallback),
+        warning: data.warning,
+      };
     }
-    return { success: false, error: data.error || 'AI विश्लेषण में असमर्थ' };
+    return {
+      success: false,
+      error: data.error || data.warning || 'AI विश्लेषण में असमर्थ',
+      isFallback: Boolean(data.isFallback),
+      warning: data.warning,
+    };
   } catch (err: any) {
     return { success: false, error: err.message || 'AI विश्लेषण सर्वर से कनेक्ट नहीं हो सका' };
   }

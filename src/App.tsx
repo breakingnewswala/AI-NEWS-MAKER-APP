@@ -815,10 +815,9 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Cloud Live Data URLs (Firebase Storage for ai-news-maker-app)
-  const CLOUD_STORAGE_NEWS_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o/news_database.json?alt=media';
   const CLOUD_STORAGE_UPLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o?name=news_database.json';
 
-  // Sync news posts with cloud database (Firebase Storage + Backend API + Static fallback)
+  // Sync news posts with server authoritative database (/api/news-posts)
   const fetchLiveNews = async () => {
     setIsSyncingNews(true);
     let loaded = false;
@@ -938,64 +937,11 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.warn('API news fetch failed:', err);
+      console.warn('Authoritative backend news fetch failed:', err);
     }
 
-    // 2. Try Firebase Storage cloud live database fallback if API didn't load
-    if (!loaded) {
-      try {
-        const fbRes = await fetch(`${CLOUD_STORAGE_NEWS_URL}&_t=${Date.now()}`, { cache: 'no-cache' });
-        if (fbRes.ok) {
-          const data = await fbRes.json();
-          if (Array.isArray(data)) {
-            const clean = data.filter((p: NewsFeedPost) => p && p.id !== 'news_1793391037097' && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
-            clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
-              const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
-              const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
-              if ((timeB || 0) !== (timeA || 0)) {
-                return (timeB || 0) - (timeA || 0);
-              }
-              return String(b.id).localeCompare(String(a.id));
-            });
-            if (isInitialNewsLoadRef.current) {
-              seenNewsIdsRef.current = new Set(clean.map((p: any) => String(p.id)));
-              isInitialNewsLoadRef.current = false;
-            } else {
-              const newItems = clean.filter((p: any) => !seenNewsIdsRef.current.has(String(p.id)));
-              if (newItems.length > 0) {
-                newItems.forEach((p: any) => {
-                  seenNewsIdsRef.current.add(String(p.id));
-                  addNotification({
-                    id: `approved_news_${p.id}`,
-                    title: p.breaking ? `🚨 ब्रेकिंग न्यूज़: ${p.title}` : `📰 ताज़ा खबर: ${p.title}`,
-                    message: p.summary || p.title,
-                    time: 'अभी-अभी',
-                    type: 'news',
-                    linkTab: 'home',
-                  });
-                });
-                const hasBreaking = newItems.some((p: any) => Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़'));
-                if (hasBreaking) playBreakingNewsAlertSound();
-                else playNormalNotificationSound();
-                if (typeof navigator !== 'undefined' && navigator.vibrate) {
-                  try { navigator.vibrate([120, 60, 120]); } catch {}
-                }
-                setToastMessage(hasBreaking ? '🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!' : '📰 नई खबर स्वीकृत और होम फ़ीड में जोड़ी गई!');
-              }
-            }
-            setPosts(clean);
-            try {
-              localStorage.setItem('app_news_posts_v2', JSON.stringify(clean));
-            } catch {}
-            loaded = true;
-          }
-        }
-      } catch (err) {
-        console.warn('Cloud storage news fetch failed:', err);
-      }
-    }
-
-    // Step 3 (static /news_database.json fallback) removed: Deleted news must never resurrect on network error/refresh.
+    // Direct client fallback from Firebase Cloud Storage and static files removed:
+    // Backend API (/api/news-posts) is the single authoritative source. Deleted news never resurrects.
     setIsSyncingNews(false);
   };
 

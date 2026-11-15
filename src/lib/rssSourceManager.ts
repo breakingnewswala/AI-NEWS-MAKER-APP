@@ -344,7 +344,7 @@ export function getApprovedRssIds(): Set<string> {
 
 export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
   if (!post || !post.id) return false;
-  // If rejected, draft, or pending, reject immediately unless explicit admin approval
+  // If rejected, draft, or pending, reject immediately unless explicit server-verified approval
   if (
     post.status === 'REJECTED' ||
     (post as any).status === 'rejected' ||
@@ -355,8 +355,12 @@ export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>)
   ) {
     return false;
   }
-  if (post.status === 'PENDING_APPROVAL' || (post as any).status === 'pending' || (post as any).approvalStatus === 'PENDING_APPROVAL' || (post as any).approvalStatus === 'pending') {
-    if (approvedIds && approvedIds.has(post.id)) return true;
+  if (
+    post.status === 'PENDING_APPROVAL' ||
+    (post as any).status === 'pending' ||
+    (post as any).approvalStatus === 'PENDING_APPROVAL' ||
+    (post as any).approvalStatus === 'pending'
+  ) {
     return false;
   }
   const isExplicitApproved =
@@ -364,7 +368,7 @@ export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>)
     (post as any).status === 'approved' ||
     (post as any).approvalStatus === 'APPROVED' ||
     (post as any).isApproved === true ||
-    Boolean(approvedIds && approvedIds.has(post.id));
+    Boolean(approvedIds && approvedIds.has(post.id) && (post as any).status !== 'pending' && (post as any).approvalStatus !== 'pending');
 
   const isExplicitPublished =
     (post as any).status === 'published' ||
@@ -379,33 +383,68 @@ export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>)
 export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   try {
-    const approved = getApprovedRssIds();
-    approved.add(postId);
-    localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
-
-    // Update locally cached synced RSS posts
     const cached = getActiveRssNewsPosts();
     const target = postData || cached.find((p) => p.id === postId);
-    const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'APPROVED' as const } : p));
-    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
 
-    // Call server with verified API URL, Admin headers and full post data
+    // 1. Call server API FIRST with authoritative credentials before touching local storage
     const url = getApiUrl(`/api/admin/approve-news/${encodeURIComponent(postId)}`);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...getAdminAuthHeaders(),
     };
-    const res = await fetch(url, {
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token) token = getAuthToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let res = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(target || {}),
     });
 
+    if (res.status === 401 || res.status === 403) {
+      token = await ensureAuthToken(true).catch(() => '');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(target || {}),
+        });
+      }
+    }
+
+    if (!res.ok) {
+      console.error(`[Server-Authoritative Approval] Failed with HTTP ${res.status}`);
+      return false;
+    }
+
+    const resData = await res.json().catch(() => null);
+    if (resData && resData.success === false) {
+      console.error('[Server-Authoritative Approval] Server rejected:', resData.error);
+      return false;
+    }
+
+    // 2. ONLY upon confirmed server success, record approval in local state
+    const approved = getApprovedRssIds();
+    approved.add(postId);
+    localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+
+    const updated = cached.map((p) => (p.id === postId ? {
+      ...p,
+      status: 'APPROVED' as const,
+      approvalStatus: 'APPROVED' as const,
+      publicationStatus: 'PUBLISHED' as const,
+      isApproved: true,
+      isPublished: true,
+    } : p));
+    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
+
     window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-    return res.ok;
+    return true;
   } catch (e) {
-    console.error('Error approving RSS post:', e);
+    console.error('[Server-Authoritative Approval] Network/execution error:', e);
     return false;
   }
 }
@@ -413,70 +452,83 @@ export async function approveRssPost(postId: string, postData?: any): Promise<bo
 export async function rejectRssPost(postId: string): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   try {
+    const url = getApiUrl(`/api/admin/reject-news/${encodeURIComponent(postId)}`);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...getAdminAuthHeaders(),
+    };
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token) token = getAuthToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let res = await fetch(url, {
+      method: 'POST',
+      headers,
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      token = await ensureAuthToken(true).catch(() => '');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        res = await fetch(url, {
+          method: 'POST',
+          headers,
+        });
+      }
+    }
+
+    if (!res.ok) {
+      console.error(`[Server-Authoritative Rejection] Failed with HTTP ${res.status}`);
+      return false;
+    }
+
     const approved = getApprovedRssIds();
     approved.delete(postId);
     localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
 
     const cached = getActiveRssNewsPosts();
-    const updated = cached.map((p) => (p.id === postId ? { ...p, status: 'REJECTED' as const } : p));
+    const updated = cached.map((p) => (p.id === postId ? {
+      ...p,
+      status: 'REJECTED' as const,
+      approvalStatus: 'REJECTED' as const,
+      isApproved: false,
+      isPublished: false,
+    } : p));
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
-
-    const url = getApiUrl(`/api/admin/reject-news/${encodeURIComponent(postId)}`);
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: getAdminAuthHeaders(),
-    });
 
     window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-    return res.ok;
+    return true;
   } catch (e) {
-    console.error('Error rejecting RSS post:', e);
+    console.error('[Server-Authoritative Rejection] Network/execution error:', e);
     return false;
   }
 }
 
 export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
   if (typeof window === 'undefined') return new Set();
-  const localApproved = getApprovedRssIds();
   const adminHeaders = getAdminAuthHeaders();
 
-  // If client has local approved IDs and admin Bearer token, migrate them safely to server
-  if (localApproved.size > 0 && adminHeaders['Authorization']) {
-    try {
-      const url = getApiUrl('/api/admin/migrate-approvals');
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: adminHeaders,
-        body: JSON.stringify({ approvedIds: Array.from(localApproved) }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.approvedIds)) {
-          const authoritative = new Set<string>(data.approvedIds);
-          localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(authoritative)));
-          return authoritative;
-        }
-      }
-    } catch {}
-  }
-
-  // Fetch authoritative approved IDs from server
+  // If client has admin credentials, fetch authoritative approved IDs directly from server
   try {
     const url = getApiUrl('/api/admin/approved-news-ids');
-    const res = await fetch(url);
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token) token = getAuthToken();
+    const reqHeaders: Record<string, string> = { ...adminHeaders };
+    if (token) reqHeaders['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(url, { headers: reqHeaders });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.approvedIds)) {
         const authoritative = new Set<string>(data.approvedIds);
-        localApproved.forEach((id) => authoritative.add(id));
         localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(authoritative)));
         return authoritative;
       }
     }
   } catch {}
 
-  return localApproved;
+  return getApprovedRssIds();
 }
 
 export function getActiveRssNewsPosts(): NewsFeedPost[] {
@@ -516,7 +568,6 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
 export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
   if (typeof window === 'undefined') return;
   try {
-    const approvedSet = getApprovedRssIds();
     const normalized = posts.map((p) => {
       const isFeed = Boolean(p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')));
       if (isFeed) {
@@ -525,8 +576,7 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
           p.status === 'APPROVED' ||
           (p as any).status === 'approved' ||
           (p as any).approvalStatus === 'APPROVED' ||
-          (p as any).isApproved === true ||
-          approvedSet.has(p.id)
+          (p as any).isApproved === true
         );
         const isExplicitPublished = (p as any).status === 'published' || (p as any).publicationStatus === 'published' || (p as any).publicationStatus === 'PUBLISHED' || (p as any).isPublished === true || p.status === 'APPROVED';
         const finalApproved = isExplicitApproved && isExplicitPublished;

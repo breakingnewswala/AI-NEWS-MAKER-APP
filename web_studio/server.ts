@@ -3433,7 +3433,9 @@ app.post("/api/admin/add-news", requireAdminMiddleware, (req, res) => {
 app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();
-    const approvedIds = posts.filter(p => p.status === 'APPROVED' || !p.status).map(p => p.id);
+    const approvedIds = posts
+      .filter((p) => (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true) && p.status !== 'pending' && (p as any).approvalStatus !== 'pending' && (p as any).publicationStatus !== 'draft')
+      .map((p) => p.id);
     return res.json({ success: true, approvedIds });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -10495,6 +10497,28 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
               if (items.length === 0 && (xmlText.includes("<html") || xmlText.includes("<!DOCTYPE") || xmlText.includes("<article"))) {
                 items = await fetchAndParseWebLink(src);
               }
+              // Pagination / batch fetch: If fewer than 50 items and a rel="next" link exists, fetch next page
+              if (items.length < 50) {
+                const nextMatch = xmlText.match(/<[^>]+rel=["']next["'][^>]+href=["']([^"']+)["']/i) ||
+                                  xmlText.match(/<[^>]+href=["']([^"']+)["'][^>]+rel=["']next["']/i);
+                if (nextMatch && nextMatch[1]) {
+                  try {
+                    const nextUrl = resolveUrl(nextMatch[1], src.url);
+                    const nextResp = await fetch(nextUrl, {
+                      headers: {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
+                        Accept: "application/rss+xml, application/xml, text/xml, */*",
+                      },
+                      signal: AbortSignal.timeout(10000),
+                    });
+                    if (nextResp.ok) {
+                      const nextXml = await nextResp.text();
+                      const moreItems = await parseRssItemsFromXml(nextXml, src, knownFilter);
+                      items = [...items, ...moreItems].slice(0, 50);
+                    }
+                  } catch {}
+                }
+              }
               if (items.length > 0) {
                 src.lastFetchedAt = Date.now();
                 src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
@@ -13927,7 +13951,7 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
   try {
     const rawRatio = req.body?.selectedRatio || req.body?.aspectRatio || "9:16";
     const rawBase64 = req.body?.sampleBase64 || req.body?.sampleImage || "";
-    const rawPngFrame = req.body?.pngFrameBase64 || req.body?.framePng || "";
+    const rawPngFrame = req.body?.pngFrameBase64 || req.body?.framePng || req.body?.primaryBackgroundAsset || "";
     const selectedRatio = (rawRatio === "4:5" || rawRatio === "1:1" || rawRatio === "9:16" || rawRatio === "16:9") ? rawRatio : "9:16";
     const sampleBase64 = typeof rawBase64 === "string" ? rawBase64 : "";
     const pngFrameBase64 = typeof rawPngFrame === "string" ? rawPngFrame : "";
@@ -13961,7 +13985,12 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
     };
 
     if (!sampleBase64 || typeof sampleBase64 !== "string") {
-      return res.json({ success: true, result: fallbackLayout });
+      return res.json({
+        success: true,
+        result: fallbackLayout,
+        isFallback: true,
+        warning: "सैंपल ग्राफिक उपलब्ध नहीं है। कैलिब्रेटेड डिफ़ॉल्ट लेआउट सक्रिय किया गया है।",
+      });
     }
 
     try {
