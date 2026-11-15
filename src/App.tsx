@@ -347,10 +347,10 @@ function getSavedChannelProfile(): ChannelProfile | null {
               showWebsite: parsed.showWebsite !== false,
               socialIcons: {
                 youtube: parsed.socialIcons?.youtube ?? true,
-                facebook: true,
-                instagram: true,
-                twitter: parsed.socialIcons?.twitter ?? false,
-                linkedin: parsed.socialIcons?.linkedin ?? false,
+                facebook: parsed.socialIcons?.facebook ?? true,
+                instagram: parsed.socialIcons?.instagram ?? true,
+                twitter: Boolean(parsed.socialIcons?.twitter ?? parsed.socialIcons?.x),
+                linkedin: Boolean(parsed.socialIcons?.linkedin),
               },
             };
           }
@@ -371,10 +371,10 @@ function getSavedChannelProfile(): ChannelProfile | null {
             showWebsite: parsed.showWebsite !== false,
             socialIcons: {
               youtube: parsed.socialIcons?.youtube ?? true,
-              facebook: true,
-              instagram: true,
-              twitter: parsed.socialIcons?.twitter ?? false,
-              linkedin: parsed.socialIcons?.linkedin ?? false,
+              facebook: parsed.socialIcons?.facebook ?? true,
+              instagram: parsed.socialIcons?.instagram ?? true,
+              twitter: Boolean(parsed.socialIcons?.twitter ?? parsed.socialIcons?.x),
+              linkedin: Boolean(parsed.socialIcons?.linkedin),
             },
           };
         }

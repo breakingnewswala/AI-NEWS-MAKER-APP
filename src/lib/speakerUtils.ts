@@ -272,10 +272,10 @@ export function cleanHeadlineText(text: any): string {
     .replace(/\s*[,।;:\-–—]?\s*प्रशासनिक\s+स्तर\s+पर\s+आवश्यक\s+संज्ञान\s+लिया\s+गया(?:\s+है)?.*$/u, '')
     .replace(/\s*[,।;:\-–—\/]?\s*(?:विशेष\s*डेस्क|विशेष\s*डैश|विशेष\s*संवाददाता|सेंट्रल\s*डेस्क|न्यूज़\s*डेस्क|ब्यूरो\s*डेस्क)\s*/gu, ' ');
 
-  // 15. Single-word canonical normalization for state/location names (Part 5)
+  // 15. Canonical normalization for state/location names
   cleaned = cleaned
-    .replace(/मध्य\s+प्रदेश/g, 'मध्यप्रदेश')
-    .replace(/उत्तर\s+प्रदेश/g, 'उत्तरप्रदेश');
+    .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
+    .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश');
 
   // 16. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation or quotes
   cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, '').trim();

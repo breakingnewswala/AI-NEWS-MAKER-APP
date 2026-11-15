@@ -1335,9 +1335,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           serverIds.add(p.id);
         }
       });
-      setApprovedRssIds(serverIds);
-    } else if (Array.isArray(posts) && posts.length === 0) {
-      setApprovedRssIds(new Set<string>());
+      if (serverIds.size > 0) {
+        setApprovedRssIds((prev) => {
+          const next = new Set(prev);
+          serverIds.forEach((id) => next.add(id));
+          return next;
+        });
+      }
     }
   }, [posts]);
 

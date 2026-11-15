@@ -3427,9 +3427,12 @@ app.get("/api/approved-news-ids", (_req, res) => {
   try {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
-    const approvedIds = posts
+    const approvedFromPosts = posts
       .filter((p) => isServerApprovedAndPublished(p, editorialDb))
       .map((p) => p.id);
+    const approvedFromEditorial = Object.keys(editorialDb)
+      .filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || editorialDb[k].isPublished === true));
+    const approvedIds = Array.from(new Set([...approvedFromPosts, ...approvedFromEditorial]));
     return res.json({ success: true, approvedIds });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -3441,9 +3444,12 @@ app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
-    const approvedIds = posts
+    const approvedFromPosts = posts
       .filter((p) => isServerApprovedAndPublished(p, editorialDb))
       .map((p) => p.id);
+    const approvedFromEditorial = Object.keys(editorialDb)
+      .filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || editorialDb[k].isPublished === true));
+    const approvedIds = Array.from(new Set([...approvedFromPosts, ...approvedFromEditorial]));
     return res.json({ success: true, approvedIds });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -3530,6 +3536,10 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         sourceUrl: postData.sourceUrl !== undefined ? postData.sourceUrl : (edDb[id]?.sourceUrl || ""),
         additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : (edDb[id]?.additionalPhotos || []),
         status: "APPROVED",
+        approvalStatus: "APPROVED",
+        publicationStatus: "PUBLISHED",
+        isApproved: true,
+        isPublished: true,
         isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : true,
         approvedAt: Date.now(),
         approvedBy: ((req as any).user?.email || "admin").toString(),
@@ -3561,6 +3571,12 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         district: postData.district || postData.location || "",
         timestamp: Date.now(),
         status: "APPROVED",
+        approvalStatus: "APPROVED",
+        publicationStatus: "PUBLISHED",
+        isApproved: true,
+        isPublished: true,
+        isPrePublished: true,
+        editorialApproved: true,
         isBonus: explicitBonus,
         rewardCoins: explicitBonus ? Number(postData.rewardCoins || 100) : 0,
       } as any;
@@ -12591,7 +12607,7 @@ const FORBIDDEN_DYNAMIC_FRAME_IDS = new Set([
 ]);
 
 const PROTECTED_PRODUCTION_FRAME_IDS = new Set([
-  'df_1794406067554_albmw' // Authoritative production template - MUST NEVER BE TOMBSTONED OR DELETED
+  'graphic_001'
 ]);
 
 const DELETED_FRAMES_TOMBSTONE_FILE = process.env.DELETED_FRAMES_TOMBSTONE_FILE || path.join(process.cwd(), "deleted_frames_tombstone.json");
@@ -12937,7 +12953,7 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
           }
           const validProdFrames = frames.filter(f => !f.isTestFrame && f.designCategory !== 'TEST_FRAMES' && !f.id.startsWith('df_test_') && f.id !== 'df_1794544360478_6ptot');
           const hasAlbmw = validProdFrames.some(f => f.id === 'df_1794406067554_albmw');
-          if (!hasAlbmw) {
+          if (!hasAlbmw && !tombstones.has('df_1794406067554_albmw')) {
             const albmwFromDisk = existingProd.find(f => f.id === 'df_1794406067554_albmw');
             if (albmwFromDisk) {
               validProdFrames.unshift(albmwFromDisk);
@@ -13010,9 +13026,9 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
       if (Array.isArray(parsed)) frames = parsed;
     } catch {}
   } else if (fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
-    // Ensure production template df_1794406067554_albmw is always preserved
+    // Ensure production template df_1794406067554_albmw is preserved unless deleted/tombstoned
     const hasAlbmw = frames.some(f => f.id === 'df_1794406067554_albmw');
-    if (!hasAlbmw) {
+    if (!hasAlbmw && !tombstones.has('df_1794406067554_albmw')) {
       try {
         const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
@@ -13024,9 +13040,9 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
     }
   }
 
-  // Always ensure protected production frame df_1794406067554_albmw is included
+  // Ensure production template df_1794406067554_albmw is included unless deleted/tombstoned
   const hasProdFrame = frames.some(f => f.id === 'df_1794406067554_albmw');
-  if (!hasProdFrame && fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+  if (!hasProdFrame && !tombstones.has('df_1794406067554_albmw') && fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
     try {
       const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
@@ -22493,7 +22509,17 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
     }
 
     if (rawLink && !isInternalPlatformUrl) {
-      if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
+      const explicitCardTitle = String(req.body.title || req.body.headline || "").trim();
+      const explicitCardSummary = String(req.body.summary || req.body.fullNews || effectiveInput || "").trim();
+      const isCardProvided = Boolean((req.body.fromHomeCard || requestedNewsId) && explicitCardTitle && explicitCardSummary);
+
+      if (isCardProvided) {
+        effectiveArticleTitle = cleanHeadlineText(explicitCardTitle);
+        effectiveArticleDesc = explicitCardSummary;
+        articleBodySnippets = `${effectiveArticleTitle}\n${explicitCardSummary}`;
+        effectiveInput = articleBodySnippets;
+        fetchedArticleSnippet = `Title: ${effectiveArticleTitle}\nDescription: ${effectiveArticleDesc}\nContent: ${explicitCardSummary}`;
+      } else if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
         const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
         let scrapedStatus: "success" | "failed" = "failed";
         let scrapedReason = "";
@@ -28688,6 +28714,10 @@ async function startServer() {
             },
           })
         );
+        const assetsSubdir = path.join(staticDir, "assets");
+        if (fs.existsSync(assetsSubdir)) {
+          app.use(["/studio/assets", "/admin/assets"], express.static(assetsSubdir));
+        }
       }
 
       // Permanent 301 Redirect: Complete eradication of Lite Version routes
@@ -28916,6 +28946,7 @@ async function startServer() {
               }
             }
           }
+          html = html.replace(/(src|href)=["']\.\/assets\//g, '$1="/assets/');
           html = injectServerSeoMeta(html, req);
           return res.status(200).set({ "Content-Type": "text/html" }).send(html);
         } catch {
@@ -28925,11 +28956,19 @@ async function startServer() {
 
       // Canonical React Admin Control Room Route: All /admin requests route directly to canonical SPA
       app.get(["/admin", "/admin/*"], (req, res) => {
+        const ext = path.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
         return renderSpaIndexHtml(req, res);
       });
 
       // Canonical React Studio Route: All /studio requests route directly to canonical SPA
       app.get(["/studio", "/studio/*"], (req, res) => {
+        const ext = path.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
         return renderSpaIndexHtml(req, res);
       });
 

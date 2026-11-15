@@ -14693,7 +14693,9 @@ app.get("/api/approved-news-ids", (_req, res) => {
   try {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
-    const approvedIds = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
+    const approvedFromPosts = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
+    const approvedFromEditorial = Object.keys(editorialDb).filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || editorialDb[k].isPublished === true));
+    const approvedIds = Array.from(/* @__PURE__ */ new Set([...approvedFromPosts, ...approvedFromEditorial]));
     return res.json({ success: true, approvedIds });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -14703,7 +14705,9 @@ app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
-    const approvedIds = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
+    const approvedFromPosts = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
+    const approvedFromEditorial = Object.keys(editorialDb).filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || editorialDb[k].isPublished === true));
+    const approvedIds = Array.from(/* @__PURE__ */ new Set([...approvedFromPosts, ...approvedFromEditorial]));
     return res.json({ success: true, approvedIds });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -14779,6 +14783,10 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         sourceUrl: postData.sourceUrl !== void 0 ? postData.sourceUrl : edDb[id]?.sourceUrl || "",
         additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : edDb[id]?.additionalPhotos || [],
         status: "APPROVED",
+        approvalStatus: "APPROVED",
+        publicationStatus: "PUBLISHED",
+        isApproved: true,
+        isPublished: true,
         isPrePublished: postData.isPrePublished !== void 0 ? Boolean(postData.isPrePublished) : true,
         approvedAt: Date.now(),
         approvedBy: (req.user?.email || "admin").toString()
@@ -14809,6 +14817,12 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         district: postData.district || postData.location || "",
         timestamp: Date.now(),
         status: "APPROVED",
+        approvalStatus: "APPROVED",
+        publicationStatus: "PUBLISHED",
+        isApproved: true,
+        isPublished: true,
+        isPrePublished: true,
+        editorialApproved: true,
         isBonus: explicitBonus,
         rewardCoins: explicitBonus ? Number(postData.rewardCoins || 100) : 0
       };
@@ -22363,8 +22377,7 @@ var FORBIDDEN_DYNAMIC_FRAME_IDS = /* @__PURE__ */ new Set([
   "df_story_9_16_breaking"
 ]);
 var PROTECTED_PRODUCTION_FRAME_IDS = /* @__PURE__ */ new Set([
-  "df_1794406067554_albmw"
-  // Authoritative production template - MUST NEVER BE TOMBSTONED OR DELETED
+  "graphic_001"
 ]);
 var DELETED_FRAMES_TOMBSTONE_FILE = process.env.DELETED_FRAMES_TOMBSTONE_FILE || import_path2.default.join(process.cwd(), "deleted_frames_tombstone.json");
 var memoryFrameTombstones = null;
@@ -22680,7 +22693,7 @@ async function loadDynamicFramesDatabaseAsync() {
           }
           const validProdFrames = frames.filter((f) => !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.id.startsWith("df_test_") && f.id !== "df_1794544360478_6ptot");
           const hasAlbmw = validProdFrames.some((f) => f.id === "df_1794406067554_albmw");
-          if (!hasAlbmw) {
+          if (!hasAlbmw && !tombstones.has("df_1794406067554_albmw")) {
             const albmwFromDisk = existingProd.find((f) => f.id === "df_1794406067554_albmw");
             if (albmwFromDisk) {
               validProdFrames.unshift(albmwFromDisk);
@@ -22748,7 +22761,7 @@ async function loadDynamicFramesDatabaseAsync() {
     }
   } else if (import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
     const hasAlbmw = frames.some((f) => f.id === "df_1794406067554_albmw");
-    if (!hasAlbmw) {
+    if (!hasAlbmw && !tombstones.has("df_1794406067554_albmw")) {
       try {
         const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
         const parsed = JSON.parse(raw);
@@ -22761,7 +22774,7 @@ async function loadDynamicFramesDatabaseAsync() {
     }
   }
   const hasProdFrame = frames.some((f) => f.id === "df_1794406067554_albmw");
-  if (!hasProdFrame && import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+  if (!hasProdFrame && !tombstones.has("df_1794406067554_albmw") && import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
     try {
       const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
       const parsed = JSON.parse(raw);
@@ -29996,7 +30009,19 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
       });
     }
     if (rawLink && !isInternalPlatformUrl) {
-      if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
+      const explicitCardTitle = String(req.body.title || req.body.headline || "").trim();
+      const explicitCardSummary = String(req.body.summary || req.body.fullNews || effectiveInput || "").trim();
+      const isCardProvided = Boolean((req.body.fromHomeCard || requestedNewsId) && explicitCardTitle && explicitCardSummary);
+      if (isCardProvided) {
+        effectiveArticleTitle = cleanHeadlineText(explicitCardTitle);
+        effectiveArticleDesc = explicitCardSummary;
+        articleBodySnippets = `${effectiveArticleTitle}
+${explicitCardSummary}`;
+        effectiveInput = articleBodySnippets;
+        fetchedArticleSnippet = `Title: ${effectiveArticleTitle}
+Description: ${effectiveArticleDesc}
+Content: ${explicitCardSummary}`;
+      } else if (rawLink.startsWith("http://") || rawLink.startsWith("https://") || /^[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}/.test(rawLink)) {
         const normalizedUrl = rawLink.startsWith("http://") || rawLink.startsWith("https://") ? rawLink : `https://${rawLink}`;
         let scrapedStatus = "failed";
         let scrapedReason = "";
@@ -30029,21 +30054,21 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           scrapedReason = fetchErr?.message || "Failed to fetch";
           isNetworkFetchFailure = true;
         }
-        const explicitCardTitle = String(req.body.title || req.body.headline || "").trim();
-        const explicitCardSummary = String(req.body.summary || "").trim();
-        const hasExplicitCardArticle = explicitCardTitle.length >= 12 && explicitCardSummary.length >= 60;
+        const explicitCardTitle2 = String(req.body.title || req.body.headline || "").trim();
+        const explicitCardSummary2 = String(req.body.summary || "").trim();
+        const hasExplicitCardArticle = explicitCardTitle2.length >= 12 && explicitCardSummary2.length >= 60;
         if (hasExplicitCardArticle) {
-          const isScrapedMatchingCard = effectiveArticleTitle && calculateHeadlineSimilarityInternal(cleanHeadlineText(explicitCardTitle), cleanHeadlineText(effectiveArticleTitle)) >= 0.25;
+          const isScrapedMatchingCard = effectiveArticleTitle && calculateHeadlineSimilarityInternal(cleanHeadlineText(explicitCardTitle2), cleanHeadlineText(effectiveArticleTitle)) >= 0.25;
           if (scrapedStatus === "failed" || !isScrapedMatchingCard) {
-            effectiveArticleTitle = cleanHeadlineText(explicitCardTitle);
-            effectiveArticleDesc = explicitCardSummary;
+            effectiveArticleTitle = cleanHeadlineText(explicitCardTitle2);
+            effectiveArticleDesc = explicitCardSummary2;
             articleBodySnippets = `${effectiveArticleTitle}
-${explicitCardSummary}`;
+${explicitCardSummary2}`;
             effectiveInput = articleBodySnippets;
             fetchedArticleSnippet = `URL: ${normalizedUrl}
 Title: ${effectiveArticleTitle}
 Description: ${effectiveArticleDesc}
-Content: ${explicitCardSummary}`;
+Content: ${explicitCardSummary2}`;
             scrapedStatus = "success";
           }
         }
@@ -30052,12 +30077,12 @@ Content: ${explicitCardSummary}`;
           articleBodySnippets && articleBodySnippets.trim().length >= 80 || combinedArticleLength >= 80 && effectiveArticleTitle && effectiveArticleTitle.trim().length >= 12 || effectiveInput && effectiveInput.trim().length >= 60
         );
         if ((scrapedStatus === "failed" || !hasRealFacts) && (!effectiveInput || effectiveInput.trim().length < 60)) {
-          const explicitCardContent = `${explicitCardTitle}
-${explicitCardSummary}`.trim();
+          const explicitCardContent = `${explicitCardTitle2}
+${explicitCardSummary2}`.trim();
           if (explicitCardContent.length >= 60) {
             effectiveInput = explicitCardContent;
             articleBodySnippets = explicitCardContent;
-            effectiveArticleTitle = explicitCardTitle || effectiveArticleTitle || "";
+            effectiveArticleTitle = explicitCardTitle2 || effectiveArticleTitle || "";
           } else {
             if (isNetworkFetchFailure || /timeout|abort|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed/i.test(scrapedReason)) {
               return res.status(504).json({
@@ -35194,6 +35219,10 @@ async function startServer() {
             }
           })
         );
+        const assetsSubdir = import_path2.default.join(staticDir, "assets");
+        if (import_fs2.default.existsSync(assetsSubdir)) {
+          app.use(["/studio/assets", "/admin/assets"], import_express.default.static(assetsSubdir));
+        }
       }
       app.get(["/lite", "/lite/*"], (_req, res) => {
         res.redirect(301, "/");
@@ -35396,6 +35425,7 @@ async function startServer() {
               }
             }
           }
+          html = html.replace(/(src|href)=["']\.\/assets\//g, '$1="/assets/');
           html = injectServerSeoMeta(html, req);
           return res.status(200).set({ "Content-Type": "text/html" }).send(html);
         } catch {
@@ -35403,9 +35433,17 @@ async function startServer() {
         }
       };
       app.get(["/admin", "/admin/*"], (req, res) => {
+        const ext = import_path2.default.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
         return renderSpaIndexHtml(req, res);
       });
       app.get(["/studio", "/studio/*"], (req, res) => {
+        const ext = import_path2.default.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
         return renderSpaIndexHtml(req, res);
       });
       app.get("*", (req, res) => {

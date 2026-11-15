@@ -263,6 +263,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
             setReporterDistrict(cleanDist);
           }
+          if (cloudP.state) {
+            setReporterState(cloudP.state);
+          } else if (cloudP.district || cloudP.location) {
+            const rawDist = (cloudP.district || cloudP.location || '').trim();
+            const inf = inferStateFromDistrict(rawDist);
+            if (inf) setReporterState(inf);
+          }
           setChannelProfile((prev) => {
             const resolvedLogo = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || defaultAdminLogo;
             const merged = {
@@ -1265,6 +1272,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           setChannelProfile(normalized);
           if (parsed.customHeaderPng !== undefined) setCustomHeaderPng(parsed.customHeaderPng);
           if (parsed.customFooterPng !== undefined) setCustomFooterPng(parsed.customFooterPng);
+          if (parsed.state) setReporterState(parsed.state);
+          if (parsed.district || parsed.location) {
+            const rawDist = (parsed.district || parsed.location || '').trim();
+            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल') ? 'भोपाल' : (rawDist || 'भोपाल');
+            setReporterDistrict(cleanDist);
+            if (!parsed.state) {
+              const inf = inferStateFromDistrict(cleanDist);
+              if (inf) setReporterState(inf);
+            }
+          }
         } catch {}
       }
     };

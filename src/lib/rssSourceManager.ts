@@ -371,6 +371,16 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
     return false;
   }
 
+  const authoritativeSet = serverApprovedIds || memoryServerApprovedIds;
+
+  // 2b. Authoritative Server Confirmation:
+  // If the server confirms this post ID is approved and it carries approved status:
+  if (authoritativeSet && authoritativeSet.has(post.id)) {
+    if (status === 'APPROVED' || approvalStatus === 'APPROVED' || (post as any).isApproved === true) {
+      return true;
+    }
+  }
+
   // 3. Pending items are never approved
   if (
     status === 'PENDING_APPROVAL' ||
@@ -400,7 +410,6 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   // 5. P0 INVARIANT: Server-Authoritative Verification against LocalStorage Tampering
   // For any post, a forged status in localStorage (e.g. status: 'APPROVED') CANNOT grant approval.
   // It MUST be confirmed by the server's approved IDs set!
-  const authoritativeSet = serverApprovedIds || memoryServerApprovedIds;
   if (authoritativeSet && authoritativeSet.size > 0) {
     return authoritativeSet.has(post.id);
   }
@@ -614,9 +623,10 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
           p.status === 'APPROVED' ||
           (p as any).status === 'approved' ||
           (p as any).approvalStatus === 'APPROVED' ||
-          (p as any).isApproved === true
+          (p as any).isApproved === true ||
+          Boolean(memoryServerApprovedIds && memoryServerApprovedIds.has(p.id))
         );
-        const isExplicitPublished = (p as any).status === 'published' || (p as any).publicationStatus === 'published' || (p as any).publicationStatus === 'PUBLISHED' || (p as any).isPublished === true || p.status === 'APPROVED';
+        const isExplicitPublished = (p as any).status === 'published' || (p as any).publicationStatus === 'published' || (p as any).publicationStatus === 'PUBLISHED' || (p as any).isPublished === true || p.status === 'APPROVED' || Boolean(memoryServerApprovedIds && memoryServerApprovedIds.has(p.id));
         const finalApproved = isExplicitApproved && isExplicitPublished;
         return {
           ...p,
@@ -695,7 +705,7 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
             // Authoritative server status (strictly preserve pending/approved/rejected)
             const syncedWithStatus = rssAndWebOnly.map((p: any) => {
               const isRejected = p.status === 'REJECTED' || (p as any).approvalStatus === 'REJECTED';
-              const isApproved = !isRejected && (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true);
+              const isApproved = !isRejected && (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true || Boolean(memoryServerApprovedIds && memoryServerApprovedIds.has(p.id)));
               return {
                 ...p,
                 status: isApproved ? 'APPROVED' : isRejected ? 'REJECTED' : 'PENDING_APPROVAL',

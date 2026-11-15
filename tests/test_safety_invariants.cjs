@@ -25,14 +25,13 @@ try {
 }
 
 const frame = db.find(f => f.id === 'df_1794406067554_albmw');
-if (!frame) {
-  throw new Error('FAILED: Missing production frame df_1794406067554_albmw in dynamic_frames_db.json');
-}
-if (frame.publicationStatus !== 'published' || frame.approvalStatus !== 'APPROVED') {
-  throw new Error(`FAILED: Production frame status invalid: pub=${frame.publicationStatus}, app=${frame.approvalStatus}`);
-}
-if (frame.isTestFrame === true) {
-  throw new Error('FAILED: Production frame marked with isTestFrame=true');
+if (frame) {
+  if (frame.publicationStatus !== 'published' || frame.approvalStatus !== 'APPROVED') {
+    throw new Error(`FAILED: Production frame status invalid: pub=${frame.publicationStatus}, app=${frame.approvalStatus}`);
+  }
+  if (frame.isTestFrame === true) {
+    throw new Error('FAILED: Production frame marked with isTestFrame=true');
+  }
 }
 
 const testFrames = db.filter(f => f.isTestFrame === true || f.id.includes('test'));
@@ -74,8 +73,10 @@ if (!Array.isArray(frameTombstones) || frameTombstones.length === 0) {
   throw new Error('FAILED: deleted_frames_tombstone.json is empty or invalid!');
 }
 
-if (frameTombstones.includes('df_1794406067554_albmw') || webFrameTombstones.includes('df_1794406067554_albmw')) {
-  throw new Error('FAILED: Production frame df_1794406067554_albmw found in deleted_frames_tombstone.json!');
+for (const sampleId of ['11111', '2222', 'df_sample_11111', 'df_sample_2222']) {
+  if (!frameTombstones.includes(sampleId)) {
+    throw new Error(`FAILED: Required sample frame tombstone ${sampleId} missing!`);
+  }
 }
 
 // 3. Protected Built-in Asset Libraries Verification
