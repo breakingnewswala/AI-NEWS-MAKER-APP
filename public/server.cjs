@@ -14130,13 +14130,13 @@ function loadNewsDatabase() {
       centralDb.getNewsPosts({ forceRemote: true }).catch(() => {
       });
     }
-    const list = Array.from(centralDb.cache.news.values());
-    const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
     const deletedIds2 = loadDeletedNewsIds();
-    return deletedIds2.size > 0 ? cleaned.filter((p) => !deletedIds2.has(p.id)) : cleaned;
+    const list = Array.from(centralDb.cache.news.values());
+    const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-") && p.id !== "news_1793391037097" && p.id !== "post-1794408875881" && !deletedIds2.has(p.id));
+    return cleaned;
   }
   const deletedIds = loadDeletedNewsIds();
-  return deletedIds.size > 0 ? diskPosts.filter((p) => !deletedIds.has(p.id)) : diskPosts;
+  return diskPosts.filter((p) => p && p.id && p.id !== "news_1793391037097" && p.id !== "post-1794408875881" && !deletedIds.has(p.id));
 }
 function saveNewsDatabase(posts) {
   const cleaned = posts.filter((p) => p && p.id);
