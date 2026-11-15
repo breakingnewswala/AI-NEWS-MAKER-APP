@@ -1902,7 +1902,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           channelLogoType: channelProfile.channelLogoType || (channelProfile.channelLogoGifUrl ? 'gif' : 'png'),
           district: finalDistrict,
           location: finalDistrict,
-          state: channelProfile.state || '',
+          state: reporterState || channelProfile.state || '',
           address: channelProfile.address || '',
           pincode: channelProfile.pincode || '',
           socialIcons: syncedIcons,

@@ -2921,6 +2921,16 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
   }
 }
 
+// 0b. GET deleted news IDs (Enables cross-device synchronization of deleted news)
+app.get("/api/deleted-news-ids", (_req, res) => {
+  try {
+    const deletedSet = loadDeletedNewsIds();
+    return res.json({ success: true, deletedIds: Array.from(deletedSet) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err), deletedIds: [] });
+  }
+});
+
 // 1. GET all news posts (Applies strict publication state machine, server-side approval filtering & 3-day expiry)
 app.get("/api/news-posts", async (req, res) => {
   const user = await resolveAuthenticatedUser(req);
@@ -3038,19 +3048,33 @@ app.get("/api/news-posts", async (req, res) => {
         return false;
       }
 
-      // Mandatory Rule: Check approval status
-      const hasExplicitAdminApproval =
+      // Mandatory Rule: Check approval status (Requires BOTH explicit Admin approval AND published status; isPrePublished alone never grants approval)
+      const isExplicitApproved =
         p.approvalStatus === "APPROVED" ||
         p.status === "APPROVED" ||
-        p.publicationStatus === "PUBLISHED" ||
-        p.isPublished === true ||
         p.isApproved === true ||
-        p.isPrePublished === true ||
-        Boolean(
-          editorialDb[p.id] &&
-          editorialDb[p.id].status === "APPROVED" &&
-          (editorialDb[p.id].isPublished === true || editorialDb[p.id].isPrePublished === true)
-        );
+        Boolean(editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
+
+      const isExplicitPublished =
+        p.publicationStatus === "PUBLISHED" ||
+        p.publicationStatus === "published" ||
+        p.isPublished === true ||
+        p.status === "published" ||
+        p.status === "APPROVED" ||
+        Boolean(editorialDb[p.id] && editorialDb[p.id].isPublished === true);
+
+      const isPendingOrDraft =
+        p.approvalStatus === "pending" ||
+        p.approvalStatus === "PENDING_APPROVAL" ||
+        p.status === "pending" ||
+        p.status === "PENDING_APPROVAL" ||
+        p.status === "draft" ||
+        p.publicationStatus === "draft" ||
+        p.visibility === "draft" ||
+        p.approvalStatus === "REJECTED" ||
+        p.status === "REJECTED";
+
+      const hasExplicitAdminApproval = isExplicitApproved && isExplicitPublished && !isPendingOrDraft;
 
       if (!hasExplicitAdminApproval) {
         if (!includePending) {
@@ -3062,8 +3086,10 @@ app.get("/api/news-posts", async (req, res) => {
       }
     } else {
       // Manual/Custom news: check approval / pending status
-      const isManualApproved = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved) || Boolean(p.isPrePublished);
-      if (!isManualApproved && (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || (p as any).status === "pending")) {
+      const isManualApproved =
+        (p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved)) &&
+        !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "draft" || p.publicationStatus === "draft");
+      if (!isManualApproved && (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || (p as any).status === "pending" || p.status === "draft" || p.publicationStatus === "draft")) {
         if (!includePending) {
           return false;
         }
@@ -3161,11 +3187,13 @@ app.get("/api/news-posts", async (req, res) => {
         }
 
         const hasExplicitAdminApproval =
-          (p.approvalStatus === "APPROVED" && (p.publicationStatus === "PUBLISHED" || p.isPublished === true)) ||
+          ((p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.isApproved === true) &&
+           (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.status === "published" || p.status === "APPROVED") &&
+           !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.approvalStatus === "pending" || p.status === "pending" || p.status === "draft")) ||
           Boolean(
             editorialDb[p.id] &&
             editorialDb[p.id].status === "APPROVED" &&
-            (editorialDb[p.id].isPublished === true || editorialDb[p.id].isPrePublished === true) &&
+            editorialDb[p.id].isPublished === true &&
             editorialDb[p.id].approvedBy &&
             editorialDb[p.id].approvedBy !== "editorial-desk"
           );
@@ -3174,7 +3202,9 @@ app.get("/api/news-posts", async (req, res) => {
         if (hasExplicitAdminApproval) return true;
       }
 
-      const isManualApproved = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved);
+      const isManualApproved =
+        (p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved)) &&
+        !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "pending" || p.status === "draft");
       if (isManualApproved) return true;
 
       // Ensure pending and rejected posts are NEVER used for backfill for regular users
@@ -10717,16 +10747,16 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
           continue;
         }
 
-        // Active Authorized Web Sources: Newly scraped web feed items are approved by default so they display in Home Feed
+        // Strict Editorial Approval Queue: Newly scraped web feed items land in Admin Editorial Queue (PENDING)
         p.ingestionStatus = "IMPORTED";
-        p.approvalStatus = "APPROVED";
-        p.publicationStatus = "PUBLISHED";
-        p.status = "APPROVED";
-        p.isApproved = true;
-        p.isPrePublished = true;
-        p.isPublished = true;
-        p.editorialApproved = true;
-        p.visibility = "public";
+        p.approvalStatus = "pending";
+        p.publicationStatus = "draft";
+        p.status = "pending";
+        p.isApproved = false;
+        p.isPrePublished = false;
+        p.isPublished = false;
+        p.editorialApproved = false;
+        p.visibility = "draft";
         (p as any).pendingCreatedAt = Date.now();
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
@@ -10740,21 +10770,7 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
           newArticlesCount++;
         } else {
           skippedDuplicatesCount++;
-          const match = existingPosts.find(
-            (ep) =>
-              ep.id === p.id ||
-              (normUrl && ep.sourceUrl && ep.sourceUrl.trim().toLowerCase() === normUrl) ||
-              ep.title.trim().toLowerCase().slice(0, 40) === titleKey
-          );
-          if (match) {
-            match.status = "APPROVED";
-            match.approvalStatus = "APPROVED";
-            match.publicationStatus = "PUBLISHED";
-            match.isApproved = true;
-            match.isPublished = true;
-            match.isPrePublished = true;
-            match.editorialApproved = true;
-          }
+          // Preserve existing article status and admin decisions intact; do NOT overwrite to APPROVED
         }
       }
 
@@ -14919,8 +14935,10 @@ app.post("/api/remove-gif-logo", enforceUserAccessMiddleware, (req, res) => {
 // ============================================================================
 
 // 1. GET /api/logo-change-requests - List requests (filtered by user or all for admin)
-app.get("/api/logo-change-requests", (req, res) => {
+app.get("/api/logo-change-requests", async (req, res) => {
   try {
+    const user = await resolveAuthenticatedUser(req);
+    const isAdmin = Boolean(user && (user.role === "admin" || user.role === "superadmin" || isAuthorizedAdmin(req)));
     const emailFilter = (req.query.email as string || "").trim().toLowerCase();
     const allRequests = loadLogoRequestsDatabase();
 
@@ -14928,8 +14946,19 @@ app.get("/api/logo-change-requests", (req, res) => {
     allRequests.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
 
     if (emailFilter) {
+      if (!isAdmin && user && user.email && emailFilter !== user.email.toLowerCase()) {
+        return res.status(403).json({ error: "Unauthorized access to other users' requests" });
+      }
       const userReqs = allRequests.filter((r) => r.userEmail === emailFilter);
       return res.json({ success: true, requests: userReqs });
+    }
+
+    if (!isAdmin) {
+      if (user && user.email) {
+        const userReqs = allRequests.filter((r) => r.userEmail === user.email.toLowerCase());
+        return res.json({ success: true, requests: userReqs });
+      }
+      return res.json({ success: true, requests: [] });
     }
 
     return res.json({ success: true, requests: allRequests });

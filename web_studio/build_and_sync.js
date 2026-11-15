@@ -156,6 +156,10 @@ targets.forEach((target) => {
       'asset_libraries_db.json',
       'user_story_preferences_db.json',
       'registered_users.json',
+      'rewards_database.json',
+      'analytics_database.json',
+      'admin_branding_db.json',
+      'news_database.json',
       'server.cjs.map',
     ]);
 
@@ -202,24 +206,18 @@ if (fs.existsSync(distServerCjs)) {
   }
 }
 
-// 4. Ensure published public news_database.json is synchronized across client bundles
+// 4. Ensure public news_database.json is initialized to empty array so deleted news never resurrects from client bundles
+const emptyNewsJson = '[]';
 const pubDbPath = path.resolve(rootDir, 'public', 'news_database.json');
-if (fs.existsSync(pubDbPath)) {
-  const rawDb = fs.readFileSync(pubDbPath, 'utf-8');
+try { fs.writeFileSync(pubDbPath, emptyNewsJson, 'utf-8'); } catch {}
+targets.forEach((target) => {
   try {
-    const list = JSON.parse(rawDb);
-    if (Array.isArray(list) && list.length >= 5) {
-      fs.writeFileSync(path.resolve(__dirname, 'news_database.json'), rawDb, 'utf-8');
-      targets.forEach((target) => {
-        try {
-          fs.writeFileSync(path.join(target, 'news_database.json'), rawDb, 'utf-8');
-        } catch {}
-      });
-      console.log(' ✅ Synchronized published news_database.json across all bundles');
-    }
+    fs.writeFileSync(path.join(target, 'news_database.json'), emptyNewsJson, 'utf-8');
   } catch {}
+});
+console.log(' ✅ Ensured client news_database.json is zero-state clean across all bundles');
 
-  // 4b. Ensure latest rss_sources_database.json is everywhere and sanitized
+// 4b. Ensure latest rss_sources_database.json is everywhere and sanitized
   const rssPath = path.resolve(rootDir, 'rss_sources_database.json');
   if (fs.existsSync(rssPath)) {
     try {
@@ -317,6 +315,9 @@ if (fs.existsSync(pubDbPath)) {
   syncServerOnlyDatabaseFile('dynamic_frames_db.json');
   syncServerOnlyDatabaseFile('asset_libraries_db.json');
   syncServerOnlyDatabaseFile('user_story_preferences_db.json');
+  syncServerOnlyDatabaseFile('rewards_database.json');
+  syncServerOnlyDatabaseFile('admin_branding_db.json');
+  syncServerOnlyDatabaseFile('news_database.json');
   // NOTE: gemini_api_keys_vault.json and api_keys_database.json are EXCLUDED entirely from public sync!
 
   // 6. Ensure persistent uploads directory is synced
@@ -333,9 +334,9 @@ if (fs.existsSync(pubDbPath)) {
     });
   }
 
-  // 7. Generate and synchronize RSS 2.0 Feed (rss.xml) from published news in public/news_database.json
+  // 7. Generate and synchronize RSS 2.0 Feed (rss.xml) from published news in root news_database.json
   try {
-    const pubNewsPath = path.resolve(rootDir, 'public', 'news_database.json');
+    const pubNewsPath = path.resolve(rootDir, 'news_database.json');
     if (fs.existsSync(pubNewsPath)) {
       const posts = JSON.parse(fs.readFileSync(pubNewsPath, 'utf-8'));
       if (Array.isArray(posts) && posts.length > 0) {
@@ -412,8 +413,11 @@ ${itemsXml}
   console.log('\n🔒 Step 8: Executing security purge of sensitive files in public and distribution directories...');
   const purgeDirectories = [
     path.resolve(rootDir, 'public'),
+    path.resolve(rootDir, 'public/web_studio'),
     path.resolve(rootDir, 'dist'),
+    path.resolve(rootDir, 'dist/web_studio'),
     path.resolve(rootDir, 'app/src/main/assets/news_studio'),
+    path.resolve(rootDir, 'app/src/main/assets/news_studio/web_studio'),
     path.resolve(__dirname, 'public'),
     path.resolve(__dirname, 'dist'),
   ];
@@ -431,6 +435,9 @@ ${itemsXml}
     'asset_libraries_db.json',
     'user_story_preferences_db.json',
     'registered_users.json',
+    'rewards_database.json',
+    'analytics_database.json',
+    'admin_branding_db.json',
     'server.cjs.map',
   ];
   let purgedCount = 0;
@@ -464,7 +471,6 @@ ${itemsXml}
     }
   });
   console.log(` 🛡️ Security purge finished: ${purgedCount} sensitive files removed from public bundles.`);
-}
 
 console.log('\n====================================================');
 console.log('✨ Build & Sync complete! All changes are packaged.');

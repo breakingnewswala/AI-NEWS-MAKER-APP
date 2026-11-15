@@ -1382,8 +1382,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Merge active RSS/Web posts with database news posts seamlessly & filter out items older than 7 days
   const combinedPosts = useMemo(() => {
     const deletedIds = getDeletedIds();
+    const approvedRssIds = getApprovedRssIds();
     const safeLocalPosts = Array.isArray(localPosts) ? localPosts.filter(Boolean) : [];
-    const safeRssPosts = Array.isArray(activeRssPosts) ? activeRssPosts.filter(Boolean) : [];
+    const safeRssPosts = Array.isArray(activeRssPosts) ? activeRssPosts.filter((p) => p && isRssPostApproved(p, approvedRssIds)) : [];
     const existingIds = new Set(safeLocalPosts.map((p) => p.id));
     const normalizeUrl = (u?: string) => (u || '').toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/+$/, '').split('?')[0];
     const existingUrls = new Set(safeLocalPosts.map((p) => normalizeUrl(p.sourceUrl)).filter((u) => u.length > 8));
@@ -1571,18 +1572,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Identify highlights (Strict: Only Admin-Selected Approved & Published News on Notification Board)
   const highlightPosts = useMemo(() => {
     if (!adminNotificationBoardIds || adminNotificationBoardIds.size === 0) return [];
+    const deletedIds = getDeletedIds();
+    const approvedRssIds = getApprovedRssIds();
     const isStrictlyApproved = (p: any): boolean => {
-      if (!p) return false;
+      if (!p || !p.id) return false;
+      if (deletedIds.has(p.id)) return false;
       if (p.approvalStatus === 'REJECTED' || p.status === 'REJECTED' || p.status === 'rejected' || p.status === 'draft' || p.isApproved === false) return false;
       if (p.approvalStatus === 'PENDING_APPROVAL' || p.status === 'PENDING_APPROVAL' || p.status === 'pending') return false;
-      return Boolean(
-        p.approvalStatus === 'APPROVED' ||
-        p.status === 'APPROVED' ||
-        p.status === 'published' ||
-        p.publicationStatus === 'PUBLISHED' ||
-        p.isApproved === true ||
-        p.isPrePublished === true
-      );
+      const isApproved = p.approvalStatus === 'APPROVED' || p.status === 'APPROVED' || p.isApproved === true || (approvedRssIds && approvedRssIds.has(p.id));
+      const isPublished = p.publicationStatus === 'PUBLISHED' || p.publicationStatus === 'published' || p.status === 'published' || p.status === 'APPROVED' || p.isPublished === true;
+      return Boolean(isApproved && isPublished);
     };
     const unremovedFiltered = filteredPosts.filter((p) => !removedHighlightIds.has(p.id));
     const adminSelectedApproved = unremovedFiltered.filter((p) => adminNotificationBoardIds.has(p.id) && isStrictlyApproved(p));

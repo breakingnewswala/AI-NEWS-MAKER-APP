@@ -1658,14 +1658,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       let token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
       const res = await requestAiFrameAnalysis(sampleImage, selectedRatio, token, primaryBackgroundAsset || undefined);
-      if (res.warning) {
-        setAnalysisStatusText(res.warning);
-      }
       if (res.success && res.result) {
         setAnalysisResult(res.result);
-        setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
+        if (res.isFallback || res.warning) {
+          setAnalysisStatusText(res.warning || 'कैलिब्रेटेड ज्यामितीय लेआउट सक्रिय किया गया है।');
+        } else {
+          setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
+        }
       } else {
-        setAnalysisStatusText(res.error || 'AI विश्लेषण में असमर्थ');
+        setAnalysisStatusText(res.warning || res.error || 'AI विश्लेषण में असमर्थ');
       }
     } catch (err: any) {
       setAnalysisStatusText('AI विश्लेषण में त्रुटि आई। डिफ़ॉल्ट लेआउट सक्रिय किया जा रहा है।');

@@ -826,14 +826,31 @@ export default function App() {
     // Migrate any legacy local approvals safely to the server
     syncAndMigrateLocalApprovals().catch(() => {});
 
-    const getDeletedIds = (): Set<string> => {
+    const getDeletedIds = async (): Promise<Set<string>> => {
+      const ids = new Set<string>();
       try {
         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
-        if (raw) return new Set(JSON.parse(raw));
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) list.forEach((id: string) => ids.add(id));
+        }
       } catch {}
-      return new Set();
+      try {
+        const baseUrl = getApiBaseUrl();
+        const res = await fetch(`${baseUrl}/api/deleted-news-ids?_t=${Date.now()}`, { cache: 'no-cache' });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data?.deletedIds)) {
+            data.deletedIds.forEach((id: string) => ids.add(id));
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('app_deleted_news_ids_v1', JSON.stringify(Array.from(ids)));
+            }
+          }
+        }
+      } catch {}
+      return ids;
     };
-    const deletedIds = getDeletedIds();
+    const deletedIds = await getDeletedIds();
 
     // 1. Fetch backend API (/api/news-posts) to sync live RSS, Web Links & Raw News posts
     try {
@@ -978,33 +995,7 @@ export default function App() {
       }
     }
 
-    // 3. Try local static /news_database.json fallback if still not loaded
-    if (!loaded) {
-      try {
-        const staticRes = await fetch(`/news_database.json?_t=${Date.now()}`, { cache: 'no-cache' });
-        if (staticRes.ok) {
-          const data = await staticRes.json();
-          if (Array.isArray(data)) {
-            const clean = data.filter((p: NewsFeedPost) => p && p.id !== 'news_1793391037097' && !deletedIds.has(p.id) && !String(p.id).startsWith('live-post-'));
-            clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
-              const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
-              const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
-              if ((timeB || 0) !== (timeA || 0)) {
-                return (timeB || 0) - (timeA || 0);
-              }
-              return String(b.id).localeCompare(String(a.id));
-            });
-            setPosts(clean);
-            try {
-              localStorage.setItem('app_news_posts_v2', JSON.stringify(clean));
-            } catch {}
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
+    // Step 3 (static /news_database.json fallback) removed: Deleted news must never resurrect on network error/refresh.
     setIsSyncingNews(false);
   };
 

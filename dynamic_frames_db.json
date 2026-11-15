@@ -162,7 +162,7 @@
     ],
     "name": "TEST 2",
     "approvedAt": 1794411110643,
-    "publicationStatus": "published",
+    "publicationStatus": "PUBLISHED",
     "calloutAssetUrl": "https://storage.googleapis.com/ai-news-maker-app.firebasestorage.app/uploads/frames/callout_df_1794406067554_albmw_1794406072447_ab4314e3.png",
     "isTestFrame": false,
     "allowedPlans": [
@@ -581,6 +581,9 @@
     },
     "approvedBy": null,
     "primaryFooterColor": "#FFFFFF",
-    "version": 2
+    "version": 2,
+    "status": "APPROVED",
+    "isApproved": true,
+    "isPublished": true
   }
 ]

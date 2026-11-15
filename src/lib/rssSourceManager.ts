@@ -343,20 +343,37 @@ export function getApprovedRssIds(): Set<string> {
 }
 
 export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
-  if (!post) return false;
-  if (post.status === 'REJECTED' || (post as any).status === 'rejected') return false;
-  if (post.status === 'APPROVED' || (post as any).status === 'approved' || (post as any).status === 'published' || (post as any).isApproved === true || (post as any).isPrePublished === true) return true;
-  if (approvedIds && post.id && approvedIds.has(post.id)) return true;
-  if (post.status === 'PENDING_APPROVAL' || (post as any).status === 'pending') {
-    if (approvedIds && post.id && approvedIds.has(post.id)) return true;
+  if (!post || !post.id) return false;
+  // If rejected, draft, or pending, reject immediately unless explicit admin approval
+  if (
+    post.status === 'REJECTED' ||
+    (post as any).status === 'rejected' ||
+    (post as any).approvalStatus === 'REJECTED' ||
+    post.status === 'draft' ||
+    (post as any).publicationStatus === 'draft' ||
+    (post as any).isApproved === false
+  ) {
     return false;
   }
-  const isFeedSource = Boolean(post.id && (post.id.startsWith('rss-') || post.id.startsWith('web-')));
-  if (isFeedSource) {
-    // Authorized feed source items default to visible in Home Feed unless explicitly rejected
-    return true;
+  if (post.status === 'PENDING_APPROVAL' || (post as any).status === 'pending' || (post as any).approvalStatus === 'PENDING_APPROVAL' || (post as any).approvalStatus === 'pending') {
+    if (approvedIds && approvedIds.has(post.id)) return true;
+    return false;
   }
-  return true;
+  const isExplicitApproved =
+    post.status === 'APPROVED' ||
+    (post as any).status === 'approved' ||
+    (post as any).approvalStatus === 'APPROVED' ||
+    (post as any).isApproved === true ||
+    Boolean(approvedIds && approvedIds.has(post.id));
+
+  const isExplicitPublished =
+    (post as any).status === 'published' ||
+    (post as any).publicationStatus === 'published' ||
+    (post as any).publicationStatus === 'PUBLISHED' ||
+    (post as any).isPublished === true ||
+    post.status === 'APPROVED';
+
+  return Boolean(isExplicitApproved && isExplicitPublished);
 }
 
 export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
@@ -478,8 +495,10 @@ export function getActiveRssNewsPosts(): NewsFeedPost[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
+        const approvedSet = getApprovedRssIds();
         return parsed.filter((p: any) => {
           if (!p || !p.id) return false;
+          if (!isRssPostApproved(p, approvedSet)) return false;
           if (p.sourceId && activeIds.has(p.sourceId)) return true;
           if (p.sourceFeedUrl && activeUrls.has(p.sourceFeedUrl.trim().toLowerCase())) return true;
           const parts = String(p.id).split('-');
@@ -501,13 +520,22 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
     const normalized = posts.map((p) => {
       const isFeed = Boolean(p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')));
       if (isFeed) {
-        const isRejected = p.status === 'REJECTED' || (p as any).status === 'rejected';
-        const isApproved = !isRejected && (p.status === 'APPROVED' || p.status === 'published' || p.isApproved || approvedSet.has(p.id) || p.status !== 'PENDING_APPROVAL');
+        const isRejected = p.status === 'REJECTED' || (p as any).status === 'rejected' || (p as any).approvalStatus === 'REJECTED';
+        const isExplicitApproved = !isRejected && (
+          p.status === 'APPROVED' ||
+          (p as any).status === 'approved' ||
+          (p as any).approvalStatus === 'APPROVED' ||
+          (p as any).isApproved === true ||
+          approvedSet.has(p.id)
+        );
+        const isExplicitPublished = (p as any).status === 'published' || (p as any).publicationStatus === 'published' || (p as any).publicationStatus === 'PUBLISHED' || (p as any).isPublished === true || p.status === 'APPROVED';
+        const finalApproved = isExplicitApproved && isExplicitPublished;
         return {
           ...p,
-          status: isApproved ? ('APPROVED' as const) : isRejected ? ('REJECTED' as const) : ('PENDING_APPROVAL' as const),
-          isApproved,
-          isPrePublished: isApproved,
+          status: finalApproved ? ('APPROVED' as const) : isRejected ? ('REJECTED' as const) : ('PENDING_APPROVAL' as const),
+          isApproved: finalApproved,
+          isPrePublished: false,
+          isPublished: finalApproved,
         };
       }
       return {
@@ -576,24 +604,19 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
             const rssAndWebOnly = postsList.filter(
               (p: any) => p && p.id && (String(p.id).startsWith('rss-') || String(p.id).startsWith('web-'))
             );
-            // Authoritative server status (default to APPROVED if active and not REJECTED)
-            const syncedWithStatus = rssAndWebOnly.map((p: any) => ({
-              ...p,
-              status: p.status === 'REJECTED' ? 'REJECTED' : 'APPROVED',
-              isApproved: p.status !== 'REJECTED',
-              isPrePublished: p.status !== 'REJECTED',
-            }));
+            // Authoritative server status (strictly preserve pending/approved/rejected)
+            const syncedWithStatus = rssAndWebOnly.map((p: any) => {
+              const isRejected = p.status === 'REJECTED' || (p as any).approvalStatus === 'REJECTED';
+              const isApproved = !isRejected && (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true);
+              return {
+                ...p,
+                status: isApproved ? 'APPROVED' : isRejected ? 'REJECTED' : 'PENDING_APPROVAL',
+                isApproved,
+                isPrePublished: false,
+                isPublished: isApproved,
+              };
+            });
             setSyncedRssNewsPosts(syncedWithStatus);
-
-            // Re-activate newly synced items by removing them from app_deleted_news_ids_v1
-            try {
-              const rawDel = localStorage.getItem('app_deleted_news_ids_v1');
-              if (rawDel) {
-                const delSet = new Set<string>(JSON.parse(rawDel));
-                syncedWithStatus.forEach((p: any) => delSet.delete(p.id));
-                localStorage.setItem('app_deleted_news_ids_v1', JSON.stringify(Array.from(delSet)));
-              }
-            } catch {}
           }
         }
       } catch {}
