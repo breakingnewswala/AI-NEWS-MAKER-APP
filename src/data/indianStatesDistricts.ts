@@ -29,6 +29,7 @@ export const INDIAN_STATES_AND_DISTRICTS: Record<string, string[]> = {
     "धार",
     "नरसिंहपुर",
     "नीमच",
+    "निवाड़ी",
     "पन्ना",
     "बड़वानी",
     "बालाघाट",
