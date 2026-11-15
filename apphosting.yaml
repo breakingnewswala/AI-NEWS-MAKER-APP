@@ -35,6 +35,10 @@ env:
     secret: SESSION_SECRET
     availability:
       - RUNTIME
+  - variable: LEGACY_AUTH_SECRETS
+    secret: LEGACY_AUTH_SECRETS
+    availability:
+      - RUNTIME
   - variable: CASHFREE_APP_ID
     secret: CASHFREE_APP_ID
     availability:

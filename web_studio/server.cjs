@@ -6479,6 +6479,7 @@ __export(server_exports, {
   HEADLINE_MAX_CHARACTER_LIMIT: () => HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES: () => HEADLINE_TIER_RANGES,
   PROTECTED_BUILTIN_ASSET_IDS: () => PROTECTED_BUILTIN_ASSET_IDS,
+  buildAuthDiagnostic: () => buildAuthDiagnostic,
   buildMasterNewsEditorialPrompt: () => buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString: () => buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity: () => calculateHeadlineSimilarity,
@@ -6505,9 +6506,11 @@ __export(server_exports, {
   generateVideoHeadlinesInternal: () => generateVideoHeadlinesInternal,
   getAiFeaturesConfig: () => getAiFeaturesConfig,
   getHeadlineRegenCoinCost: () => getHeadlineRegenCoinCost,
+  isAuthTokenExpired: () => isAuthTokenExpired,
   isRegenerateAllowed: () => isRegenerateAllowed,
   isTierAllowedForOpenAI: () => isTierAllowedForOpenAI,
   isTierAllowedForUrlGeneration: () => isTierAllowedForUrlGeneration,
+  logAuthDiagnostic: () => logAuthDiagnostic,
   matchDistrictAlias: () => matchDistrictAlias,
   requireAdminMiddleware: () => requireAdminMiddleware,
   requireAuthMiddleware: () => requireAuthMiddleware,
@@ -12332,6 +12335,62 @@ function generateAuthToken(user) {
   const signature = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
+function logAuthDiagnostic(record) {
+  const safeEmail = record.verifiedEmail ? record.verifiedEmail.replace(/(.{2})(.*)(@.*)/, "$1***$3") : "anonymous";
+  console.log(`[AUTH_DIAGNOSTIC] ${record.correlationId} | ${record.method} ${record.endpoint} | Mech:${record.authMechanism} Type:${record.tokenType} Exp:${record.tokenExpired} Sig:${record.signatureValid} | User:${safeEmail} Role:${record.resolvedRole} | ${record.decision} (${record.rejectionReason})`);
+}
+function isAuthTokenExpired(tokenStr) {
+  if (!tokenStr || typeof tokenStr !== "string") return true;
+  const parts = tokenStr.trim().split(".");
+  if (parts.length !== 3) return true;
+  try {
+    const payloadJson = Buffer.from(parts[1], "base64url").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1e3)) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+function buildAuthDiagnostic(req, user, decision, rejectionReason) {
+  const rawTok = extractTokenFromRequest(req);
+  const tokenPresent = Boolean(rawTok);
+  let tokenType = "NONE";
+  let authMechanism = "none";
+  let tokenExpired = false;
+  if (rawTok) {
+    if (rawTok.startsWith("ya29.")) {
+      tokenType = "GOOGLE_OAUTH";
+      authMechanism = "oauth_access";
+    } else {
+      const parts = rawTok.split(".");
+      if (parts.length === 3) {
+        tokenType = user?.authType === "firebase" ? "RS256_FIREBASE" : "HS256_HMAC";
+        authMechanism = user?.authType === "firebase" ? "firebase" : "hmac";
+        tokenExpired = isAuthTokenExpired(rawTok);
+      } else {
+        tokenType = "UNKNOWN";
+      }
+    }
+  }
+  return {
+    correlationId: req.headers["x-correlation-id"] || Math.random().toString(36).substring(2, 9),
+    endpoint: req.originalUrl || req.url,
+    method: req.method,
+    authMechanism: user ? user.authType === "firebase" ? "firebase" : "hmac" : authMechanism,
+    tokenPresent,
+    tokenType: user ? user.authType === "firebase" ? "RS256_FIREBASE" : "HS256_HMAC" : tokenType,
+    tokenExpired,
+    signatureValid: Boolean(user),
+    verifiedEmail: user?.email || "",
+    verifiedUserId: user?.userId || "",
+    resolvedRole: user?.role || "none",
+    decision,
+    rejectionReason
+  };
+}
 var LEGACY_AUTH_SECRETS = (process.env.LEGACY_AUTH_SECRETS || "").split(",").map((s) => s.trim()).filter((s) => s.length >= 16);
 function verifyAuthToken(tokenStr) {
   if (!tokenStr || typeof tokenStr !== "string") return null;
@@ -12418,7 +12477,7 @@ var MASTER_ADMIN_ALT_EMAIL = "breakingnewsvala.com@gmail.com";
 var REGULAR_ADMIN_EMAIL = "admin.ainewsmaker@gmail.com";
 var UNAUTHORIZED_ADMIN_EMAILS = ["editor.bnwtv@gmail.com", "editor@ainewsmaker.online"];
 function extractTokenFromRequest(req) {
-  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || req.cookies?.reporter_auth_token || req.cookies?.auth_token || req.body && (req.body.authToken || req.body.token) || req.query && (req.query.authToken || req.query.token) || "").toString().trim();
+  const authHeader = (req.headers.authorization || req.headers["x-auth-token"] || req.headers["x-admin-token"] || req.cookies?.reporter_auth_token || req.cookies?.auth_token || req.body && (req.body.authToken || req.body.token) || req.query && (req.query.authToken || req.query.token) || "").toString().trim();
   if (authHeader.startsWith("Bearer ")) {
     return authHeader.slice(7).trim();
   }
@@ -12549,6 +12608,14 @@ async function resolveAuthenticatedUser(req, res) {
           isBlocked
         };
         req.user = verified;
+        if (res && typeof res.setHeader === "function" && !res.headersSent) {
+          try {
+            const freshToken = generateAuthToken(verified);
+            res.setHeader("X-Refreshed-Token", freshToken);
+            res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
+          } catch {
+          }
+        }
         return verified;
       }
     } catch {
@@ -12753,6 +12820,7 @@ async function requireAuthMiddleware(req, res, next) {
 async function requireAdminMiddleware(req, res, next) {
   const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, null, "REJECT_401", "Missing or invalid admin authentication token"));
     return res.status(401).json({
       success: false,
       error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
@@ -12760,6 +12828,7 @@ async function requireAdminMiddleware(req, res, next) {
   }
   req.user = user;
   if (!isAuthorizedAdmin(req)) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, user, "REJECT_403", `Role '${user.role}' lacks admin privileges`));
     return res.status(403).json({
       success: false,
       error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0907\u0938 \u0915\u093E\u0930\u094D\u092F \u0915\u0947 \u0932\u093F\u090F \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0905\u0927\u093F\u0915\u093E\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964"
@@ -12770,6 +12839,7 @@ async function requireAdminMiddleware(req, res, next) {
 async function requireMasterAdminMiddleware(req, res, next) {
   const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, null, "REJECT_401", "Missing or invalid master admin authentication token"));
     return res.status(401).json({
       success: false,
       error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
@@ -12777,6 +12847,7 @@ async function requireMasterAdminMiddleware(req, res, next) {
   }
   req.user = user;
   if (!isAuthorizedMasterAdmin(req)) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, user, "REJECT_403", `User '${user.email}' is not authorized master admin`));
     return res.status(403).json({
       success: false,
       error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u092F\u0939 \u0915\u093E\u0930\u094D\u092F \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0915\u0947 \u0932\u093F\u090F \u0906\u0930\u0915\u094D\u0937\u093F\u0924 \u0939\u0948\u0964"
@@ -13237,8 +13308,9 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
         authType = "session";
       }
     }
-    if (!verifiedEmail && (identityToken || accessToken || rawToken && rawToken.startsWith("ya29."))) {
-      const tok = identityToken || accessToken || rawToken;
+    const candidateIdentity = identityToken || accessToken || rawToken;
+    if (!verifiedEmail && candidateIdentity) {
+      const tok = candidateIdentity;
       if (firebaseAdminAuth) {
         try {
           const decoded = await firebaseAdminAuth.verifyIdToken(tok, false);
@@ -13248,7 +13320,6 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
             authType = "firebase";
           }
         } catch (fbErr) {
-          console.warn("[AUTH] refresh-session Firebase token verification failed:", fbErr?.message);
         }
       }
       if (!verifiedEmail && googleOAuthClient) {
@@ -13264,13 +13335,13 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
             authType = "google";
           }
         } catch (gErr) {
-          console.warn("[AUTH] refresh-session Google token verification failed:", gErr?.message);
         }
       }
       if (!verifiedEmail && (tok.startsWith("ya29.") || accessToken)) {
         try {
+          const accessTok = accessToken || tok;
           const gRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${tok}` },
+            headers: { Authorization: `Bearer ${accessTok}` },
             signal: AbortSignal.timeout(6e3)
           });
           if (gRes.ok) {
@@ -13344,6 +13415,7 @@ app.use("/api/admin", async (req, res, next) => {
   }
   const user = req.user || await resolveAuthenticatedUser(req, res);
   if (!user) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, null, "REJECT_401", "Perimeter Guard: Invalid or missing token"));
     return res.status(401).json({
       success: false,
       error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948 (401 Unauthorized): \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u090F\u0902\u0921\u092A\u0949\u0907\u0902\u091F\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u092E\u093E\u0928\u094D\u092F \u0911\u0925\u0947\u0902\u091F\u093F\u0915\u0947\u0936\u0928 \u091F\u094B\u0915\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964"
@@ -13351,11 +13423,13 @@ app.use("/api/admin", async (req, res, next) => {
   }
   req.user = user;
   if (!isAuthorizedAdmin(req)) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, user, "REJECT_403", `Perimeter Guard: User '${user.email}' lacks admin privileges`));
     return res.status(403).json({
       success: false,
       error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924 (403 Forbidden): \u0907\u0938 \u0915\u093E\u0930\u094D\u092F \u0915\u0947 \u0932\u093F\u090F \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 (Admin) \u0905\u0927\u093F\u0915\u093E\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0902\u0964"
     });
   }
+  logAuthDiagnostic(buildAuthDiagnostic(req, user, "ALLOW", "Perimeter Guard: Authorized admin"));
   next();
 });
 app.get("/api/admin/audit-logs", (req, res) => {
@@ -23567,7 +23641,8 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
     const { identifier, password, googleUid, firebaseToken, idToken, accessToken, authToken, token: bodyToken, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
-    if (googleUid || firebaseToken || idToken || accessToken || authToken || bodyToken || req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+    const hasPassword = Boolean(password && typeof password === "string" && password.trim().length > 0);
+    if (!hasPassword && (googleUid || firebaseToken || idToken || accessToken || authToken || bodyToken || req.headers.authorization && req.headers.authorization.startsWith("Bearer "))) {
       const candidateToken = firebaseToken || idToken || accessToken || authToken || bodyToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7).trim() : "");
       if (!candidateToken) {
         return res.status(401).json({
@@ -23636,11 +23711,16 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           error: "\u0905\u0935\u0948\u0927 \u092F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u091F\u094B\u0915\u0928\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964"
         });
       }
-      if (cleanId && cleanId !== verifiedEmail) {
-        return res.status(401).json({
-          success: false,
-          error: "\u091F\u094B\u0915\u0928 \u092A\u0939\u091A\u093E\u0928\u0915\u0930\u094D\u0924\u093E \u092E\u0947\u0932 \u0928\u0939\u0940\u0902 \u0916\u093E\u0924\u093E\u0964"
-        });
+      if (cleanId) {
+        const isEmailMatch = cleanId === verifiedEmail;
+        const isPrefixMatch = cleanId === verifiedEmail.split("@")[0];
+        const isKnownUserMatch = cleanId === "breakingnewswala" && (verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL);
+        if (!isEmailMatch && !isPrefixMatch && !isKnownUserMatch) {
+          return res.status(401).json({
+            success: false,
+            error: "\u091F\u094B\u0915\u0928 \u092A\u0939\u091A\u093E\u0928\u0915\u0930\u094D\u0924\u093E \u092E\u0947\u0932 \u0928\u0939\u0940\u0902 \u0916\u093E\u0924\u093E\u0964"
+          });
+        }
       }
       const masterUsers = loadUsersMasterDatabase();
       const registeredUser = masterUsers.find(
@@ -35241,6 +35321,7 @@ startServer().catch((err) => {
   HEADLINE_MAX_CHARACTER_LIMIT,
   HEADLINE_TIER_RANGES,
   PROTECTED_BUILTIN_ASSET_IDS,
+  buildAuthDiagnostic,
   buildMasterNewsEditorialPrompt,
   buildMasterNewsEditorialPromptString,
   calculateHeadlineSimilarity,
@@ -35267,9 +35348,11 @@ startServer().catch((err) => {
   generateVideoHeadlinesInternal,
   getAiFeaturesConfig,
   getHeadlineRegenCoinCost,
+  isAuthTokenExpired,
   isRegenerateAllowed,
   isTierAllowedForOpenAI,
   isTierAllowedForUrlGeneration,
+  logAuthDiagnostic,
   matchDistrictAlias,
   requireAdminMiddleware,
   requireAuthMiddleware,

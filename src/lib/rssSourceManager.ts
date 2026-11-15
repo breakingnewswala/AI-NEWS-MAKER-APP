@@ -2,6 +2,7 @@
 // Flow: ADMIN -> Add Source -> Active -> News Fetch -> Home Feed -> Users
 
 import { getApiUrl, getAuthHeaders, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders, getAdminAuthHeadersAsync, isTokenExpired } from './apiConfig';
+import type { NewsFeedPost } from '../data/newsFeedData';
 
 export interface AdminRssSource {
   id: string;
@@ -324,9 +325,6 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
   }
   return list;
 }
-
-import { getApiUrl, getAuthHeaders, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders } from './apiConfig';
-import type { NewsFeedPost } from '../data/newsFeedData';
 
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';
 const STORAGE_KEY_APPROVED_RSS_IDS = 'ai_news_approved_rss_post_ids_v1';

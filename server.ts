@@ -253,6 +253,89 @@ function generateAuthToken(user: { userId?: string; email?: string; role?: strin
   return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
+export interface AuthDiagnosticRecord {
+  correlationId: string;
+  endpoint: string;
+  method: string;
+  authMechanism: "hmac" | "firebase" | "google_gis" | "oauth_access" | "none";
+  tokenPresent: boolean;
+  tokenType: "HS256_HMAC" | "RS256_FIREBASE" | "GOOGLE_OAUTH" | "UNKNOWN" | "NONE";
+  tokenExpired: boolean;
+  signatureValid: boolean;
+  verifiedEmail: string;
+  verifiedUserId: string;
+  resolvedRole: "superadmin" | "admin" | "reporter" | "user" | "none";
+  decision: "ALLOW" | "REJECT_401" | "REJECT_403";
+  rejectionReason: string;
+}
+
+export function logAuthDiagnostic(record: AuthDiagnosticRecord): void {
+  // Safe diagnostic: NEVER logs complete tokens, passwords, API keys, SESSION_SECRET or other credentials
+  const safeEmail = record.verifiedEmail ? record.verifiedEmail.replace(/(.{2})(.*)(@.*)/, "$1***$3") : "anonymous";
+  console.log(`[AUTH_DIAGNOSTIC] ${record.correlationId} | ${record.method} ${record.endpoint} | Mech:${record.authMechanism} Type:${record.tokenType} Exp:${record.tokenExpired} Sig:${record.signatureValid} | User:${safeEmail} Role:${record.resolvedRole} | ${record.decision} (${record.rejectionReason})`);
+}
+
+export function isAuthTokenExpired(tokenStr: string): boolean {
+  if (!tokenStr || typeof tokenStr !== "string") return true;
+  const parts = tokenStr.trim().split(".");
+  if (parts.length !== 3) return true;
+  try {
+    const payloadJson = Buffer.from(parts[1], "base64url").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+export function buildAuthDiagnostic(
+  req: express.Request,
+  user: VerifiedUser | null,
+  decision: "ALLOW" | "REJECT_401" | "REJECT_403",
+  rejectionReason: string
+): AuthDiagnosticRecord {
+  const rawTok = extractTokenFromRequest(req);
+  const tokenPresent = Boolean(rawTok);
+  let tokenType: "HS256_HMAC" | "RS256_FIREBASE" | "GOOGLE_OAUTH" | "UNKNOWN" | "NONE" = "NONE";
+  let authMechanism: "hmac" | "firebase" | "google_gis" | "oauth_access" | "none" = "none";
+  let tokenExpired = false;
+
+  if (rawTok) {
+    if (rawTok.startsWith("ya29.")) {
+      tokenType = "GOOGLE_OAUTH";
+      authMechanism = "oauth_access";
+    } else {
+      const parts = rawTok.split(".");
+      if (parts.length === 3) {
+        tokenType = user?.authType === "firebase" ? "RS256_FIREBASE" : "HS256_HMAC";
+        authMechanism = user?.authType === "firebase" ? "firebase" : "hmac";
+        tokenExpired = isAuthTokenExpired(rawTok);
+      } else {
+        tokenType = "UNKNOWN";
+      }
+    }
+  }
+
+  return {
+    correlationId: (req.headers["x-correlation-id"] || Math.random().toString(36).substring(2, 9)) as string,
+    endpoint: req.originalUrl || req.url,
+    method: req.method,
+    authMechanism: user ? (user.authType === "firebase" ? "firebase" : "hmac") : authMechanism,
+    tokenPresent,
+    tokenType: user ? (user.authType === "firebase" ? "RS256_FIREBASE" : "HS256_HMAC") : tokenType,
+    tokenExpired,
+    signatureValid: Boolean(user),
+    verifiedEmail: user?.email || "",
+    verifiedUserId: user?.userId || "",
+    resolvedRole: (user?.role as any) || "none",
+    decision,
+    rejectionReason,
+  };
+}
+
 const LEGACY_AUTH_SECRETS: string[] = (process.env.LEGACY_AUTH_SECRETS || "")
   .split(",")
   .map((s) => s.trim())
@@ -388,6 +471,7 @@ function extractTokenFromRequest(req: express.Request): string {
   const authHeader = (
     req.headers.authorization ||
     req.headers["x-auth-token"] ||
+    req.headers["x-admin-token"] ||
     (req as any).cookies?.reporter_auth_token ||
     (req as any).cookies?.auth_token ||
     (req.body && (req.body.authToken || req.body.token)) ||
@@ -546,6 +630,16 @@ export async function resolveAuthenticatedUser(req: express.Request, res?: expre
           isBlocked,
         };
         (req as any).user = verified;
+
+        // Auto-emit fresh HMAC session token in header so frontend seamlessly upgrades to durable 14-day session
+        if (res && typeof res.setHeader === "function" && !res.headersSent) {
+          try {
+            const freshToken = generateAuthToken(verified);
+            res.setHeader("X-Refreshed-Token", freshToken);
+            res.setHeader("Access-Control-Expose-Headers", "X-Refreshed-Token");
+          } catch {}
+        }
+
         return verified;
       }
     } catch {
@@ -783,6 +877,7 @@ export async function requireAuthMiddleware(req: express.Request, res: express.R
 export async function requireAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, null, "REJECT_401", "Missing or invalid admin authentication token"));
     return res.status(401).json({
       success: false,
       error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
@@ -790,6 +885,7 @@ export async function requireAdminMiddleware(req: express.Request, res: express.
   }
   (req as any).user = user;
   if (!isAuthorizedAdmin(req)) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, user, "REJECT_403", `Role '${user.role}' lacks admin privileges`));
     return res.status(403).json({
       success: false,
       error: "अनधिकृत (403 Forbidden): इस कार्य के लिए व्यवस्थापक (Admin) अधिकार आवश्यक हैं।",
@@ -801,6 +897,7 @@ export async function requireAdminMiddleware(req: express.Request, res: express.
 export async function requireMasterAdminMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   const user = await resolveAuthenticatedUser(req, res);
   if (!user) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, null, "REJECT_401", "Missing or invalid master admin authentication token"));
     return res.status(401).json({
       success: false,
       error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): मास्टर एडमिन एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
@@ -808,6 +905,7 @@ export async function requireMasterAdminMiddleware(req: express.Request, res: ex
   }
   (req as any).user = user;
   if (!isAuthorizedMasterAdmin(req)) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, user, "REJECT_403", `User '${user.email}' is not authorized master admin`));
     return res.status(403).json({
       success: false,
       error: "अनधिकृत (403 Forbidden): यह कार्य केवल अधिकृत मास्टर एडमिन (breakingnewswala.com@gmail.com) के लिए आरक्षित है।",
@@ -1439,8 +1537,9 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
     }
 
     // 2. If no valid active application token, caller MUST prove identity via Firebase / Google ID token or Google OAuth access token
-    if (!verifiedEmail && (identityToken || accessToken || (rawToken && rawToken.startsWith("ya29.")))) {
-      const tok = identityToken || accessToken || rawToken;
+    const candidateIdentity = identityToken || accessToken || rawToken;
+    if (!verifiedEmail && candidateIdentity) {
+      const tok = candidateIdentity;
       // 2a. Check Firebase Admin SDK
       if (firebaseAdminAuth) {
         try {
@@ -1451,7 +1550,7 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
             authType = "firebase";
           }
         } catch (fbErr: any) {
-          console.warn("[AUTH] refresh-session Firebase token verification failed:", fbErr?.message);
+          // Continue to Google OAuth Client check
         }
       }
       // 2b. Check Google OAuth Client
@@ -1468,14 +1567,15 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
             authType = "google";
           }
         } catch (gErr: any) {
-          console.warn("[AUTH] refresh-session Google token verification failed:", gErr?.message);
+          // Continue to Google Access Token check
         }
       }
       // 2c. Check Google OAuth Access Token (starts with ya29.)
       if (!verifiedEmail && (tok.startsWith("ya29.") || accessToken)) {
         try {
+          const accessTok = accessToken || tok;
           const gRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${tok}` },
+            headers: { Authorization: `Bearer ${accessTok}` },
             signal: AbortSignal.timeout(6000),
           });
           if (gRes.ok) {
@@ -1566,6 +1666,7 @@ app.use("/api/admin", async (req, res, next) => {
   }
   const user = (req as any).user || await resolveAuthenticatedUser(req, res);
   if (!user) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, null, "REJECT_401", "Perimeter Guard: Invalid or missing token"));
     return res.status(401).json({
       success: false,
       error: "प्रमाणीकरण आवश्यक है (401 Unauthorized): व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।",
@@ -1573,11 +1674,13 @@ app.use("/api/admin", async (req, res, next) => {
   }
   (req as any).user = user;
   if (!isAuthorizedAdmin(req)) {
+    logAuthDiagnostic(buildAuthDiagnostic(req, user, "REJECT_403", `Perimeter Guard: User '${user.email}' lacks admin privileges`));
     return res.status(403).json({
       success: false,
       error: "अनधिकृत (403 Forbidden): इस कार्य के लिए व्यवस्थापक (Admin) अधिकार आवश्यक हैं।",
     });
   }
+  logAuthDiagnostic(buildAuthDiagnostic(req, user, "ALLOW", "Perimeter Guard: Authorized admin"));
   next();
 });
 
@@ -13994,9 +14097,10 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
   try {
     const { identifier, password, googleUid, firebaseToken, idToken, accessToken, authToken, token: bodyToken, profileData } = req.body;
     const cleanId = (identifier || "").replace(/\s+/g, "").toLowerCase().trim();
+    const hasPassword = Boolean(password && typeof password === "string" && password.trim().length > 0);
 
-    // 1. Google OAuth / Firebase ID Token / Session Token Authentication
-    if (googleUid || firebaseToken || idToken || accessToken || authToken || bodyToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer "))) {
+    // 1. Google OAuth / Firebase ID Token / Session Token Authentication (Only when not logging in with explicit credentials)
+    if (!hasPassword && (googleUid || firebaseToken || idToken || accessToken || authToken || bodyToken || (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")))) {
       // FIX 1: Never trust user-supplied googleUid or mock string. Require cryptographic token verification.
       const candidateToken = firebaseToken || idToken || accessToken || authToken || bodyToken || (
         req.headers.authorization && req.headers.authorization.startsWith("Bearer ")
@@ -14084,12 +14188,17 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         });
       }
 
-      // Reject token if identifier was supplied and differs from the verified token email
-      if (cleanId && cleanId !== verifiedEmail) {
-        return res.status(401).json({
-          success: false,
-          error: "टोकन पहचानकर्ता मेल नहीं खाता।",
-        });
+      // Reject token if identifier was supplied and differs from verified token email or username
+      if (cleanId) {
+        const isEmailMatch = cleanId === verifiedEmail;
+        const isPrefixMatch = cleanId === verifiedEmail.split('@')[0];
+        const isKnownUserMatch = cleanId === "breakingnewswala" && (verifiedEmail === MASTER_ADMIN_EMAIL || verifiedEmail === MASTER_ADMIN_ALT_EMAIL);
+        if (!isEmailMatch && !isPrefixMatch && !isKnownUserMatch) {
+          return res.status(401).json({
+            success: false,
+            error: "टोकन पहचानकर्ता मेल नहीं खाता।",
+          });
+        }
       }
 
       // Validate administrative privileges against server-side registered accounts

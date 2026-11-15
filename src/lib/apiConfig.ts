@@ -114,7 +114,8 @@ export function isTokenExpired(token: string): boolean {
           .join('')
       );
       const payload = JSON.parse(jsonStr);
-      if (payload.exp && payload.exp * 1000 <= Date.now()) {
+      // 60-second safety buffer before expiry to refresh before timeout
+      if (payload.exp && (payload.exp * 1000 - 60000) <= Date.now()) {
         return true;
       }
       return false;
@@ -186,6 +187,24 @@ export function clearAuthTokens(): void {
     localStorage.removeItem('reporter_auth_token');
     localStorage.removeItem('auth_token');
     localStorage.removeItem('token');
+    sessionStorage.removeItem('reporter_auth_token');
+    sessionStorage.removeItem('auth_token');
+    sessionStorage.removeItem('token');
+    const sessionKeys = ['reporter_auth_session', 'ai_news_user'];
+    for (const key of sessionKeys) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            delete parsed.token;
+            delete parsed.authToken;
+            delete parsed.idToken;
+            localStorage.setItem(key, JSON.stringify(parsed));
+          }
+        }
+      } catch {}
+    }
   } catch {}
 }
 
@@ -231,10 +250,13 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         const { auth } = await import('./firebaseConfig');
         if (auth) {
           if (typeof (auth as any).authStateReady === 'function') {
-            await (auth as any).authStateReady().catch(() => {});
+            await Promise.race([
+              (auth as any).authStateReady(),
+              new Promise((r) => setTimeout(r, 1500)),
+            ]).catch(() => {});
           }
           if (auth.currentUser) {
-            const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh);
+            const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh).catch(() => '');
             if (firebaseIdToken && !isTokenExpired(firebaseIdToken)) {
               setAuthToken(firebaseIdToken);
               // Controlled exchange with server /api/auth/login to obtain durable 14-day session token
@@ -282,6 +304,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
               email,
               token: existingToken,
               authToken: existingToken,
+              idToken: existingToken,
             }),
           });
           if (refRes.ok) {
@@ -290,6 +313,9 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
               setAuthToken(refData.token);
               return refData.token;
             }
+          } else if (refRes.status === 401 || refRes.status === 403) {
+            // Server rejected this token; clear it to prevent deadlock
+            clearAuthTokens();
           }
         } catch (refErr) {
           console.warn('[AUTH] refresh-session attempt notice:', refErr);
@@ -337,7 +363,8 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
       ongoingAuthPromise = null;
     }
     // Never knowingly return an expired token; return empty string if no valid token could be acquired
-    return getAuthToken();
+    const finalToken = getAuthToken();
+    return finalToken && !isTokenExpired(finalToken) ? finalToken : '';
   })();
 
   return ongoingAuthPromise;
@@ -415,6 +442,9 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
     const customFetch = async function (this: any, input: RequestInfo | URL, init?: RequestInit) {
       const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
       const isProtectedApi = isProtectedApiUrl(urlStr);
+      const isAuthRoute = urlStr.includes('/api/auth/login') || urlStr.includes('/api/auth/refresh-session');
+      const isPasswordLogin = isAuthRoute && typeof init?.body === 'string' && init.body.includes('"password"');
+
       if (urlStr.includes('/api/')) {
         let token = getAuthToken();
 
@@ -430,36 +460,50 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
             existingAuth = (init.headers as any)?.Authorization || (init.headers as any)?.authorization || '';
           }
         }
-        if (existingAuth && existingAuth.startsWith('Bearer ')) {
-          const cand = existingAuth.slice(7).trim();
-          if (isTokenExpired(cand)) {
-            if (init!.headers instanceof Headers) {
-              init!.headers.delete('Authorization');
-            } else if (Array.isArray(init!.headers)) {
-              init!.headers = init!.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
-            } else {
-              delete (init!.headers as any).Authorization;
-              delete (init!.headers as any).authorization;
+
+        // If explicit credentials/password login, never send Authorization header
+        if (isPasswordLogin) {
+          if (init?.headers instanceof Headers) {
+            init.headers.delete('Authorization');
+          } else if (Array.isArray(init?.headers)) {
+            init.headers = init.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
+          } else if (init?.headers) {
+            delete (init.headers as any).Authorization;
+            delete (init.headers as any).authorization;
+          }
+        } else {
+          // If caller provided an expired bearer token, remove it
+          if (existingAuth && existingAuth.startsWith('Bearer ')) {
+            const cand = existingAuth.slice(7).trim();
+            if (isTokenExpired(cand)) {
+              if (init!.headers instanceof Headers) {
+                init!.headers.delete('Authorization');
+              } else if (Array.isArray(init!.headers)) {
+                init!.headers = init!.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
+              } else {
+                delete (init!.headers as any).Authorization;
+                delete (init!.headers as any).authorization;
+              }
             }
           }
-        }
 
-        if ((!token || isTokenExpired(token)) && isProtectedApi) {
-          try {
-            token = await ensureAuthToken();
-          } catch {}
-        }
-        if (token && !isTokenExpired(token)) {
-          init = init || {};
-          if (init.headers instanceof Headers) {
-            init.headers.set('Authorization', `Bearer ${token}`);
-          } else if (Array.isArray(init.headers)) {
-            init.headers = init.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
-            init.headers.push(['Authorization', `Bearer ${token}`]);
-          } else {
-            const h = { ...(init.headers || {}) } as any;
-            h.Authorization = `Bearer ${token}`;
-            init.headers = h;
+          if ((!token || isTokenExpired(token)) && isProtectedApi) {
+            try {
+              token = await ensureAuthToken();
+            } catch {}
+          }
+          if (token && !isTokenExpired(token) && !isAuthRoute) {
+            init = init || {};
+            if (init.headers instanceof Headers) {
+              init.headers.set('Authorization', `Bearer ${token}`);
+            } else if (Array.isArray(init.headers)) {
+              init.headers = init.headers.filter(([k]) => k.toLowerCase() !== 'authorization');
+              init.headers.push(['Authorization', `Bearer ${token}`]);
+            } else {
+              const h = { ...(init.headers || {}) } as any;
+              h.Authorization = `Bearer ${token}`;
+              init.headers = h;
+            }
           }
         }
       }
@@ -486,6 +530,7 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           }
         } catch {}
         if (response.status === 401) {
+          clearAuthTokens();
           try {
             const now = Date.now();
             if (now - lastAdminAuthEventDispatched > 8000) {
