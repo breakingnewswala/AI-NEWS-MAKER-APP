@@ -204,6 +204,7 @@ const filesToCompare = [
   'src/components/AdminApiKeysManager.tsx',
   'src/components/ProfileScreenWeb.tsx',
   'src/components/LoginModal.tsx',
+  'src/components/AuthWelcomeScreen.tsx',
   'src/components/HomeScreenWeb.tsx',
   'src/components/AppTopBarWeb.tsx',
   'src/App.tsx',

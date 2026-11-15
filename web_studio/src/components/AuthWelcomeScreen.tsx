@@ -335,6 +335,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           }
           if (data.token) {
             safeLocalStorageSet('reporter_auth_token', data.token);
+            setAuthToken(data.token);
           }
           safeLocalStorageSet('reporter_auth_session', JSON.stringify(authUser));
           onLoginSuccess(authUser);
@@ -376,8 +377,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 try {
                   setIsLoggingIn(true);
                   safeLocalStorageSet('google_id_token', response.credential);
-                  safeLocalStorageSet('reporter_auth_token', response.credential);
-                  setAuthToken(response.credential);
                   try {
                     const cred = GoogleAuthProvider.credential(response.credential);
                     await signInWithCredential(auth, cred);
@@ -1184,7 +1183,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         try {
           idToken = (await userCredential.user.getIdToken()) || '';
           if (idToken) {
-            safeLocalStorageSet('reporter_auth_token', idToken);
+            safeLocalStorageSet('firebase_id_token', idToken);
           }
         } catch (tokenErr) {
           console.warn('Could not retrieve Firebase ID token:', tokenErr);
@@ -1225,7 +1224,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 });
                 const userData = await res.json();
                 if (userData?.email) {
-                  await handleGoogleUserSuccess(userData.email, userData.name, userData.picture);
+                  await handleGoogleUserSuccess(userData.email, userData.name, userData.picture, tokenResponse.access_token);
                   return;
                 }
               } catch (fetchErr) {
@@ -1262,7 +1261,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
                 const decoded = JSON.parse(decodedJson);
                 if (decoded?.email) {
-                  await handleGoogleUserSuccess(decoded.email, decoded.name);
+                  await handleGoogleUserSuccess(decoded.email, decoded.name, undefined, response.credential);
                   return;
                 }
               } catch (decErr) {

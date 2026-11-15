@@ -132,7 +132,6 @@ export function getAuthToken(): string {
       localStorage.getItem('reporter_auth_token'),
       localStorage.getItem('auth_token'),
       localStorage.getItem('token'),
-      localStorage.getItem('firebase_token'),
       sessionStorage.getItem('reporter_auth_token'),
       sessionStorage.getItem('auth_token'),
       sessionStorage.getItem('token'),
@@ -148,7 +147,7 @@ export function getAuthToken(): string {
       if (sessionStr) {
         const u = JSON.parse(sessionStr);
         if (u) {
-          const t = u.token || u.authToken || u.idToken || u.firebaseToken;
+          const t = u.token || u.authToken;
           if (t && typeof t === 'string' && !isTokenExpired(t)) return t.trim();
         }
       }
@@ -258,8 +257,8 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
           if (auth.currentUser) {
             const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh).catch(() => '');
             if (firebaseIdToken && !isTokenExpired(firebaseIdToken)) {
-              setAuthToken(firebaseIdToken);
-              // Controlled exchange with server /api/auth/login to obtain durable 14-day session token
+              // Controlled exchange with server /api/auth/login to obtain durable 14-day session token.
+              // Note: Never set raw 1-hour Firebase ID token as the application session token.
               try {
                 const exRes = await fetch(getApiUrl('/api/auth/login'), {
                   method: 'POST',
@@ -281,8 +280,9 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
                     return exData.token;
                   }
                 }
-              } catch {}
-              return firebaseIdToken;
+              } catch (exErr) {
+                console.warn('[AUTH] Firebase token exchange notice:', exErr);
+              }
             }
           }
         }

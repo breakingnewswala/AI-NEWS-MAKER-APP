@@ -348,7 +348,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           try {
             idToken = (await userCredential.user.getIdToken()) || '';
             if (idToken) {
-              safeLocalStorageSet('reporter_auth_token', idToken);
+              safeLocalStorageSet('firebase_id_token', idToken);
             }
           } catch (tokenErr) {
             console.warn('Could not retrieve Firebase ID token:', tokenErr);
@@ -425,7 +425,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   const decodedJson = atob(payloadBase64.replace(/-/g, '+').replace(/_/g, '/'));
                   const decoded = JSON.parse(decodedJson);
                   if (decoded?.email) {
-                    processGoogleUser(decoded.email, decoded.name);
+                    processGoogleUser(decoded.email, decoded.name, response.credential);
                     return;
                   }
                 } catch (decErr) {

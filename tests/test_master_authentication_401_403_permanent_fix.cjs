@@ -10,11 +10,11 @@ const crypto = require('crypto');
 const assert = require('assert');
 
 console.log('========================================================================');
-console.log('🧪 MASTER AUTHENTICATION 401/403 PERMANENT FIX — 35 SCENARIO TEST SUITE');
+console.log('🧪 MASTER AUTHENTICATION 401/403 PERMANENT FIX — 38 SCENARIO TEST SUITE');
 console.log('========================================================================\n');
 
 let passedCount = 0;
-const totalScenarios = 35;
+const totalScenarios = 38;
 
 function runScenario(num, name, fn) {
   try {
@@ -273,6 +273,7 @@ runScenario(35, '100% byte parity maintained across all mirrored files between r
     ['src/components/AdminApiKeysManager.tsx', 'web_studio/src/components/AdminApiKeysManager.tsx'],
     ['src/components/ProfileScreenWeb.tsx', 'web_studio/src/components/ProfileScreenWeb.tsx'],
     ['src/components/LoginModal.tsx', 'web_studio/src/components/LoginModal.tsx'],
+    ['src/components/AuthWelcomeScreen.tsx', 'web_studio/src/components/AuthWelcomeScreen.tsx'],
     ['src/components/HomeScreenWeb.tsx', 'web_studio/src/components/HomeScreenWeb.tsx'],
     ['src/components/AppTopBarWeb.tsx', 'web_studio/src/components/AppTopBarWeb.tsx'],
     ['src/App.tsx', 'web_studio/src/App.tsx'],
@@ -283,6 +284,28 @@ runScenario(35, '100% byte parity maintained across all mirrored files between r
     const webBuf = fs.readFileSync(webF);
     assert(rootBuf.equals(webBuf), `Byte parity mismatch between ${rootF} and ${webF}`);
   }
+});
+
+runScenario(36, 'ensureAuthToken() never stores or returns an unexchanged raw Firebase ID token as session token', () => {
+  const freshApiConfig = fs.readFileSync('src/lib/apiConfig.ts', 'utf8').replace(/\r\n/g, '\n');
+  assert(!freshApiConfig.includes('setAuthToken(firebaseIdToken)'), 'Must not setAuthToken with raw firebaseIdToken');
+  assert(!freshApiConfig.includes('return firebaseIdToken;'), 'Must not return raw firebaseIdToken as session token fallback');
+  assert(freshApiConfig.includes('setAuthToken(exData.token);'), 'Must setAuthToken only with exchanged backend token');
+});
+
+runScenario(37, 'getAuthToken() extracts only backend session tokens and ignores raw ID tokens or firebase_token', () => {
+  const freshApiConfig = fs.readFileSync('src/lib/apiConfig.ts', 'utf8').replace(/\r\n/g, '\n');
+  assert(!freshApiConfig.includes("localStorage.getItem('firebase_token')"), 'directCandidates must not read firebase_token');
+  assert(!freshApiConfig.includes('u.idToken || u.firebaseToken'), 'sessionKeys must not extract u.idToken or u.firebaseToken as session token');
+  assert(freshApiConfig.includes('const t = u.token || u.authToken;'), 'sessionKeys must extract only u.token or u.authToken');
+});
+
+runScenario(38, 'LoginModal and AuthWelcomeScreen never write raw ID tokens into reporter_auth_token before exchange', () => {
+  const freshLoginModal = fs.readFileSync('src/components/LoginModal.tsx', 'utf8').replace(/\r\n/g, '\n');
+  const freshAuthWelcome = fs.readFileSync('src/components/AuthWelcomeScreen.tsx', 'utf8').replace(/\r\n/g, '\n');
+  assert(!freshLoginModal.includes("safeLocalStorageSet('reporter_auth_token', idToken)"), 'LoginModal must not write raw idToken to reporter_auth_token');
+  assert(!freshAuthWelcome.includes("safeLocalStorageSet('reporter_auth_token', idToken)"), 'AuthWelcomeScreen must not write raw idToken to reporter_auth_token');
+  assert(!freshAuthWelcome.includes("safeLocalStorageSet('reporter_auth_token', response.credential)"), 'AuthWelcomeScreen must not write raw response.credential to reporter_auth_token');
 });
 
 console.log('\n========================================================================');
