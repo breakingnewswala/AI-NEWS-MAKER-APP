@@ -237,6 +237,29 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
             const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh);
             if (firebaseIdToken && !isTokenExpired(firebaseIdToken)) {
               setAuthToken(firebaseIdToken);
+              // Controlled exchange with server /api/auth/login to obtain durable 14-day session token
+              try {
+                const exRes = await fetch(getApiUrl('/api/auth/login'), {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${firebaseIdToken}`,
+                  },
+                  body: JSON.stringify({
+                    identifier: email || auth.currentUser.email || undefined,
+                    firebaseToken: firebaseIdToken,
+                    idToken: firebaseIdToken,
+                    profileData: { email: email || auth.currentUser.email, name, username },
+                  }),
+                });
+                if (exRes.ok) {
+                  const exData = await exRes.json();
+                  if (exData.success && exData.token && !isTokenExpired(exData.token)) {
+                    setAuthToken(exData.token);
+                    return exData.token;
+                  }
+                }
+              } catch {}
               return firebaseIdToken;
             }
           }
@@ -366,22 +389,31 @@ export async function getAdminAuthHeadersAsync(): Promise<Record<string, string>
   return headers;
 }
 
+export function isProtectedApiUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  return (
+    url.includes('/api/admin') ||
+    url.includes('/api/dynamic-frames') ||
+    url.includes('/api/ai/') ||
+    url.includes('/api/user-payments') ||
+    url.includes('/api/process-news') ||
+    url.includes('/api/generate-video') ||
+    url.includes('/api/rss-sync') ||
+    url.includes('/api/scheduler/rss-sync') ||
+    url.includes('/api/user-profile') ||
+    url.includes('/api/convert-web-to-rss')
+  );
+}
+
 // Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated
 if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
   try {
     const originalFetch = window.fetch.bind(window);
     const customFetch = async function (this: any, input: RequestInfo | URL, init?: RequestInit) {
       const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : ((input as any)?.url || ''));
+      const isProtectedApi = isProtectedApiUrl(urlStr);
       if (urlStr.includes('/api/')) {
         let token = getAuthToken();
-        const isProtectedApi =
-          urlStr.includes('/api/admin') ||
-          urlStr.includes('/api/dynamic-frames') ||
-          urlStr.includes('/api/process-news') ||
-          urlStr.includes('/api/generate-video') ||
-          urlStr.includes('/api/rss-sync') ||
-          urlStr.includes('/api/scheduler/rss-sync') ||
-          urlStr.includes('/api/user-profile');
 
         // Check and sanitize caller-supplied Authorization header
         let existingAuth = '';
@@ -450,6 +482,11 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
             response = await originalFetch(input, retryInit);
           }
         } catch {}
+        if (response.status === 401) {
+          try {
+            window.dispatchEvent(new CustomEvent('ai_news_admin_auth_required', { detail: { url: urlStr } }));
+          } catch {}
+        }
       }
       // Auto-capture and persist refreshed token from server header
       try {

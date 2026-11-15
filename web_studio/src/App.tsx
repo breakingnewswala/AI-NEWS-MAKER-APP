@@ -1905,9 +1905,10 @@ export default function App() {
     };
 
     const handleOpenAdminLogin = () => {
-      // If user is already authenticated as admin or superadmin, do not interrupt routine workflow with login modal
+      // If user is already authenticated as admin or superadmin with a valid, unexpired token, do not interrupt routine workflow with login modal
+      const token = getAuthToken();
       const rawUser = typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_session') : null;
-      if (rawUser) {
+      if (rawUser && token && !isTokenExpired(token)) {
         try {
           const parsed = JSON.parse(rawUser);
           if (parsed && (parsed.role === 'admin' || parsed.role === 'superadmin' || parsed.email === 'breakingnewswala.com@gmail.com' || parsed.email === 'admin.ainewsmaker@gmail.com')) {
@@ -1915,6 +1916,13 @@ export default function App() {
           }
         } catch {}
       }
+      setLoginModalMode('admin');
+      setIsLoginModalOpen(true);
+    };
+
+    const handleAdminAuthRequired = () => {
+      // Non-intrusive notification and prompt when a protected admin API requires authentication
+      showToast('⚠️ व्यवस्थापक सत्र प्रमाणीकरण आवश्यक है। कृपया लॉगिन करें।');
       setLoginModalMode('admin');
       setIsLoginModalOpen(true);
     };
@@ -1928,6 +1936,7 @@ export default function App() {
     window.addEventListener('user_account_blocked', handleBlocked);
     window.addEventListener('user_trial_expired', handleExpired);
     window.addEventListener('ai_news_session_expired', handleSessionExpired);
+    window.addEventListener('ai_news_admin_auth_required', handleAdminAuthRequired);
     window.addEventListener('open_login_modal', handleOpenAdminLogin);
     window.addEventListener('open_admin_login', handleOpenAdminLogin);
 
@@ -1936,6 +1945,7 @@ export default function App() {
       window.removeEventListener('user_account_blocked', handleBlocked);
       window.removeEventListener('user_trial_expired', handleExpired);
       window.removeEventListener('ai_news_session_expired', handleSessionExpired);
+      window.removeEventListener('ai_news_admin_auth_required', handleAdminAuthRequired);
       window.removeEventListener('open_login_modal', handleOpenAdminLogin);
       window.removeEventListener('open_admin_login', handleOpenAdminLogin);
     };

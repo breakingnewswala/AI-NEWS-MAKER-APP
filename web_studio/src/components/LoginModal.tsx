@@ -478,7 +478,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     // 1. First attempt Cloud Backend /api/auth/login
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(getApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: cleanUser, password: cleanPass }),
@@ -515,7 +515,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           onLoginSuccess(authUser);
           return;
         }
-      } else if (res.status === 401 || res.status === 400) {
+      } else if (res.status === 401 || res.status === 400 || res.status === 403) {
         const errData = await res.json().catch(() => ({}));
         setLoading(false);
         setErrorMessage(errData.error || 'गलत यूज़रनेम या पासवर्ड! कृपया सही क्रेडेंशियल्स दर्ज करें।');
@@ -525,7 +525,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       console.warn('Backend login connection error, checking local:', e);
     }
 
-    // 2. Check local accounts fallback
+    // Admin accounts MUST strictly authenticate via server to obtain cryptographic session tokens
+    const isAdminAccount = cleanUser === 'breakingnewswala.com@gmail.com' || cleanUser === 'admin.ainewsmaker@gmail.com' || cleanUser === 'admin';
+    if (isAdminAccount) {
+      setLoading(false);
+      setErrorMessage('सर्वर से संपर्क नहीं हो सका या प्रमाणीकरण विफल रहा। कृपया वैध इंटरनेट कनेक्शन व अधिकृत पासवर्ड के साथ पुनः प्रयास करें।');
+      return;
+    }
+
+    // 2. Check local reporter accounts fallback
     let customAccounts: Record<string, { pass: string; user: ReporterUser }> = {};
     try {
       const stored = localStorage.getItem('reporter_custom_accounts');
@@ -539,7 +547,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const allAccounts = { ...DEFAULT_ACCOUNTS, ...customAccounts };
     const matched = allAccounts[cleanUser];
 
-    if (matched && matched.pass && matched.pass === cleanPass) {
+    if (matched && matched.pass && cleanPass && matched.pass === cleanPass && cleanPass.length >= 6) {
       localStorage.setItem('reporter_auth_session', JSON.stringify(matched.user));
       setLoading(false);
       onLoginSuccess(matched.user);
