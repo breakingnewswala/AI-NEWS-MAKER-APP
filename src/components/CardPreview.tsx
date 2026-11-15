@@ -3200,8 +3200,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 <div />
               )}
 
-              {/* Callout Tag: "🔴 पूरी खबर डिस्क्रिप्शन में" (Right) */}
-              {card.showCallout && (
+              {/* Callout Tag: "🔴 पूरी खबर..." (Right) */}
+              {card.showCallout && card.calloutTag?.replace('🔴', '').trim() && (
                 <div
                   className="bg-white border-2 border-yellow-400 rounded px-2 sm:px-2.5 shadow-md flex items-center gap-1 shrink-0 whitespace-nowrap max-w-[48%] overflow-hidden"
                   style={{
@@ -3211,7 +3211,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 >
                   <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse shrink-0" />
                   <span className="text-neutral-950 font-black font-['Baloo_2'] truncate">
-                    {card.calloutTag.replace('🔴', '').trim() || 'पूरी खबर डिस्क्रिप्शन में'}
+                    {card.calloutTag.replace('🔴', '').trim()}
                   </span>
                 </div>
               )}
@@ -3258,7 +3258,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             )}
 
             {/* Callout Tag (Right) */}
-            {card.showCallout && (
+            {card.showCallout && card.calloutTag?.replace('🔴', '').trim() && (
               <div
                 className="bg-white border-2 border-yellow-400 rounded px-2 sm:px-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.6)] flex items-center gap-1 shrink-0 whitespace-nowrap max-w-[48%] overflow-hidden pointer-events-auto"
                 style={{
@@ -3268,7 +3268,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               >
                 <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse shrink-0" />
                 <span className="text-neutral-950 font-black font-['Baloo_2'] truncate">
-                  {card.calloutTag.replace('🔴', '').trim() || 'पूरी खबर डिस्क्रिप्शन में'}
+                  {card.calloutTag.replace('🔴', '').trim()}
                 </span>
               </div>
             )}
@@ -3355,7 +3355,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   <div />
                 )}
 
-                {card.showCallout && card.calloutTag ? (
+                {card.showCallout && card.calloutTag?.replace('🔴', '').trim() ? (
                   <div
                     className="bg-white border-2 border-yellow-400 rounded px-2 sm:px-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.6)] flex items-center gap-1 shrink-0 whitespace-nowrap max-w-[48%] overflow-hidden"
                     style={{
@@ -3365,7 +3365,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   >
                     <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse shrink-0" />
                     <span className="text-neutral-950 font-black font-['Baloo_2'] truncate">
-                      {card.calloutTag.replace('🔴', '').trim() || 'पूरी खबर डिस्क्रिप्शन में'}
+                      {card.calloutTag.replace('🔴', '').trim()}
                     </span>
                   </div>
                 ) : null}
@@ -3675,6 +3675,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               {df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && card.showCallout !== false && (
                 (() => {
                   const calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
+                  const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
+                  if (!calloutUrl && !effectiveCalloutText) return null;
+
                   return (calloutUrl && !calloutImgError) ? (
                     <div
                       className="absolute pointer-events-auto flex items-center justify-center"
@@ -3694,7 +3697,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         onError={() => setCalloutImgError(true)}
                       />
                     </div>
-                  ) : (
+                  ) : effectiveCalloutText ? (
                     <div
                       className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
                       style={{
@@ -3714,9 +3717,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       {df.fullStoryCalloutConfig.showIcon !== false && (
                         <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse mr-1 inline-block" />
                       )}
-                      <span className="truncate">{df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में'}</span>
+                      <span className="truncate">{effectiveCalloutText.replace('🔴', '').trim()}</span>
                     </div>
-                  );
+                  ) : null;
                 })()
               )}
 
@@ -3817,8 +3820,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               <div />
             )}
 
-            {/* Callout Tag: "🔴 पूरी खबर डिस्क्रिप्शन में" */}
-            {card.showCallout && (
+            {/* Callout Tag: "🔴 पूरी खबर..." */}
+            {card.showCallout && card.calloutTag?.replace('🔴', '').trim() && (
               <div
                 className="bg-white border-2 border-yellow-400 rounded px-2 sm:px-2.5 shadow-md flex items-center gap-1 shrink-0 whitespace-nowrap max-w-[48%] overflow-hidden"
                 style={{
@@ -3828,7 +3831,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               >
                 <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse shrink-0" />
                 <span className="text-neutral-950 font-black font-['Baloo_2'] truncate">
-                  {card.calloutTag.replace('🔴', '').trim() || 'पूरी खबर डिस्क्रिप्शन में'}
+                  {card.calloutTag.replace('🔴', '').trim()}
                 </span>
               </div>
             )}

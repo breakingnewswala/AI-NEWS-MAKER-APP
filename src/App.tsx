@@ -2314,7 +2314,14 @@ export default function App() {
   };
 
   const handleResetCard = () => resetPhotoNewsStudioWorkspace();
-  const handleRefreshPreview = () => resetPhotoNewsStudioWorkspace({ skipConfirm: true });
+  const handleRefreshPreview = () => {
+    // Safely re-render / redraw preview canvas without wiping user content
+    setAiResetKey((k) => k + 1);
+    try {
+      window.dispatchEvent(new CustomEvent('ai_news_studio_refresh_preview'));
+    } catch {}
+    showToast('🔄 प्रीव्यू रिफ्रेश किया गया');
+  };
 
   useEffect(() => {
     const handleResetRequest = () => {
@@ -2322,25 +2329,34 @@ export default function App() {
     };
     window.addEventListener('ai_news_studio_reset_request', handleResetRequest);
 
-    // Global Shortcut: Ctrl + Alt + F (Studio Safe Reset & Failsafe Loader Dismiss)
-    let isResetting = false;
+    // Global Shortcut: Ctrl + Alt + F (Studio Safe Failsafe Recovery - Non-Destructive)
+    let isRecovering = false;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
         e.preventDefault();
         e.stopPropagation();
-        if (isResetting) return;
-        isResetting = true;
+        if (isRecovering) return;
+        isRecovering = true;
         try {
           setIsAIAnalyzeOpen(false);
           setIsCommandModalOpen(false);
           setIsCaptionModalOpen(false);
+          setIsDraftsModalOpen(false);
+          setIsDynamicModalOpen(false);
           setDownloading(false);
-          resetPhotoNewsStudioWorkspace({ skipConfirm: true });
+          setIsSyncingNews(false);
+          setAiResetKey((k) => k + 1);
+          try {
+            window.dispatchEvent(new CustomEvent('ai_news_studio_refresh_preview'));
+            window.dispatchEvent(new CustomEvent('template_plans_updated'));
+            window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+          } catch {}
+          showToast('🔄 स्टूडियो रिकवर हो गया (आपका डेटा व सेटिंग्स सुरक्षित हैं)!');
         } catch (err) {
-          console.error('Error during studio shortcut reset:', err);
+          console.error('Error during studio shortcut recovery:', err);
         } finally {
           setTimeout(() => {
-            isResetting = false;
+            isRecovering = false;
           }, 500);
         }
       }

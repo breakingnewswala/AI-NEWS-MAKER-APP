@@ -24,17 +24,21 @@ function runTest(name, fn) {
 // -------------------------------------------------------------
 // Section 1: AI Photo Frame Generator & Server Vision API
 // -------------------------------------------------------------
-runTest('Section 1.1: server.ts /api/dynamic-frames/ai-analyze uses executeGeminiWithKeyPool and fallback models', () => {
+runTest('Section 1.1: server.ts /api/dynamic-frames/ai-analyze uses executeGeminiWithKeyPool and modern vision models', () => {
   const server = fs.readFileSync('server.ts', 'utf8');
   assert(server.includes('executeGeminiWithKeyPool'), 'server.ts must use executeGeminiWithKeyPool');
-  assert(server.includes('gemini-2.5-flash'), 'server.ts must include gemini-2.5-flash');
+  assert(server.includes('gemini-3.8-flash'), 'server.ts must include gemini-3.8-flash');
+  assert(server.includes('gemini-3.5-flash-lite'), 'server.ts must include gemini-3.5-flash-lite');
+  assert(!server.includes('gemini-2.0-flash'), 'server.ts must not include deprecated gemini-2.0-flash');
+  assert(!server.includes('gemini-1.5-flash'), 'server.ts must not include deprecated gemini-1.5-flash');
   assert(server.includes('generateWithFallbackAndRetry'), 'server.ts must use fallback and retry');
   assert(server.includes('canRetry: true'), 'server.ts must indicate retryable errors on failure');
 });
 
-runTest('Section 1.2: DynamicFrameGeneratorModal includes Gemini Vision label, retry button, and duplicate click guard', () => {
+runTest('Section 1.2: DynamicFrameGeneratorModal includes Gemini Vision label, retry button, auto-applies layout and duplicate click guard', () => {
   const modal = fs.readFileSync('src/components/DynamicFrameGeneratorModal.tsx', 'utf8');
   assert(modal.includes('Gemini विज़न AI से सैंपल लेआउट का विश्लेषण हो रहा है'), 'Modal must show Hindi Gemini Vision status');
+  assert(modal.includes('applyAiAnalysisLayout'), 'Modal must auto-apply AI analysis layout for immediate live preview');
   assert(modal.includes('पुनः प्रयास करें') || modal.includes('handleRetry'), 'Modal must offer explicit retry button');
   assert(modal.includes('isAnalyzing'), 'Modal must have duplicate click prevention');
 });
@@ -124,13 +128,21 @@ runTest('Section 4.4: CardEditor places My Frames first, renames tab to Hindi �
 });
 
 // -------------------------------------------------------------
-// Section 5: Global Shortcut Ctrl + Alt + F
+// Section 5: Global Shortcut Ctrl + Alt + F & Callout Fallback Elimination
 // -------------------------------------------------------------
-runTest('Section 5.1: App.tsx implements global Ctrl + Alt + F shortcut for clean workspace reset', () => {
+runTest('Section 5.1: App.tsx implements global Ctrl + Alt + F shortcut for safe failsafe recovery without wiping workspace', () => {
   const app = fs.readFileSync('src/App.tsx', 'utf8');
   assert(app.includes("e.ctrlKey || e.metaKey") && app.includes("e.altKey") && app.includes("KeyF"), 'App.tsx must register Ctrl + Alt + F shortcut');
-  assert(app.includes("resetPhotoNewsStudioWorkspace({ skipConfirm: true })"), 'Shortcut must trigger safe studio reset');
+  assert(!app.includes("Ctrl + Alt + F (Studio Safe Reset & Failsafe Loader Dismiss)"), 'Shortcut should not do full destructive reset');
   assert(app.includes("setIsAIAnalyzeOpen(false)"), 'Shortcut must dismiss stuck AI modal');
+  assert(app.includes("ai_news_studio_refresh_preview"), 'Shortcut must refresh preview');
+  assert(app.includes("स्टूडियो रिकवर हो गया"), 'Shortcut must reassure user that data is safe');
+});
+
+runTest('Section 5.2: CanvasExporter eliminates hardcoded fallback callout and respects admin/user configuration', () => {
+  const exporter = fs.readFileSync('src/lib/CanvasExporter.ts', 'utf8');
+  assert(!exporter.includes("'पूरी खबर नीचे विवरण में पढ़ें'"), 'CanvasExporter must not force hardcoded fallback callout');
+  assert(exporter.includes('card.calloutTag') && exporter.includes('fullStoryCalloutConfig.text'), 'CanvasExporter must support admin and user callouts');
 });
 
 // -------------------------------------------------------------

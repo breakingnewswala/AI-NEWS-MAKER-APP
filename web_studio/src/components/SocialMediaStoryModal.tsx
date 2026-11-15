@@ -444,7 +444,7 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
       }
 
       // 7. Full Story Callout (Independent Element)
-      if (frame.fullStoryCalloutConfig?.enabled && frame.fullStoryCalloutConfig.rect) {
+      if (frame.fullStoryCalloutConfig?.enabled && frame.fullStoryCalloutConfig.rect && frame.fullStoryCalloutConfig.text) {
         const callRect = frame.fullStoryCalloutConfig.rect;
         const cx = (callRect.x / 100) * 1080;
         const cy = (callRect.y / 100) * 1920;

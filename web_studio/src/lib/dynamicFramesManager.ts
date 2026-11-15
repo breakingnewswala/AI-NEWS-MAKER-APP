@@ -122,7 +122,7 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
   const rawC = raw.fullStoryCalloutConfig || {};
   const fullStoryCalloutConfig: FullStoryCalloutConfig = {
     enabled: Boolean(rawC.enabled),
-    text: rawC.text || 'पूरी खबर डिस्क्रिप्शन में...',
+    text: rawC.text || '',
     rect: rawC.rect || (isStory ? { x: 8, y: 88, width: 84, height: 4.5 } : { x: 8, y: 86, width: 84, height: 5 }),
     fontSize: typeof rawC.fontSize === 'number' ? rawC.fontSize : 22,
     bgColor: rawC.bgColor || 'rgba(0,0,0,0.7)',

@@ -23678,7 +23678,7 @@ Return ONLY a valid JSON object matching this schema without any markdown format
       const parsed = await executeGeminiWithKeyPool(async (ai) => {
         const aiResponse = await generateWithFallbackAndRetry(
           ai,
-          ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
+          ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"],
           {
             contents: [
               {
@@ -25960,12 +25960,9 @@ function resolveUserTierAndRole(req) {
   return { tier: explicitTier || "basic", role: explicitRole || "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-3-flash-preview",
-  "gemini-flash-latest",
-  "gemini-3.1-flash-lite"
+  "gemini-3.8-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-flash-latest"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;

@@ -1537,11 +1537,14 @@ function drawCalloutTag(
   y: number,
   text: string
 ) {
+  const cleanText = (text || '').replace('🔴', '').trim();
+  if (!cleanText) {
+    return;
+  }
   ctx.save();
   ctx.font = '800 22px "Baloo 2", "Noto Sans Devanagari", sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  const cleanText = text.replace('🔴', '').trim() || 'पूरी खबर डिस्क्रिप्शन में';
   const textWidth = ctx.measureText(cleanText).width;
   const pillW = textWidth + 56;
   const pillH = 40;
@@ -1953,64 +1956,68 @@ async function drawAuthoritativeDynamicFrameCanvas(
 
   // 5. FULL STORY CALLOUT
   if (df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && card.showCallout !== false) {
-    const cRect = df.fullStoryCalloutConfig.rect || { x: 10, y: 88, width: 80, height: 3.5 };
-    const cx = (cRect.x / 100) * width;
-    const cy = (cRect.y / 100) * height;
-    const cw = (cRect.width / 100) * width;
-    const ch = (cRect.height / 100) * height;
-    const cRot = df.fullStoryCalloutConfig.rotation || 0;
     const calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
-    const userScale = Math.max(0.6, Math.min(2.0, card.calloutScale ?? 1.0));
+    const calloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
 
-    ctx.save();
-    ctx.translate(cx + cw / 2, cy + ch / 2);
-    if (cRot !== 0) {
-      ctx.rotate((cRot * Math.PI) / 180);
-    }
-    if (userScale !== 1.0) {
-      ctx.scale(userScale, userScale);
-    }
-    ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
+    // If neither custom asset nor callout text is configured, do not force-draw any fallback callout
+    if (calloutAsset || calloutText) {
+      const cRect = df.fullStoryCalloutConfig.rect || { x: 10, y: 88, width: 80, height: 3.5 };
+      const cx = (cRect.x / 100) * width;
+      const cy = (cRect.y / 100) * height;
+      const cw = (cRect.width / 100) * width;
+      const ch = (cRect.height / 100) * height;
+      const cRot = df.fullStoryCalloutConfig.rotation || 0;
+      const userScale = Math.max(0.6, Math.min(2.0, card.calloutScale ?? 1.0));
 
-    let cImg: HTMLImageElement | null = null;
-    if (calloutAsset) {
-      try {
-        cImg = await loadImage(calloutAsset);
-      } catch (e) {
-        console.warn('Callout asset load warning, falling back to vector banner:', e);
+      ctx.save();
+      ctx.translate(cx + cw / 2, cy + ch / 2);
+      if (cRot !== 0) {
+        ctx.rotate((cRot * Math.PI) / 180);
       }
-    }
+      if (userScale !== 1.0) {
+        ctx.scale(userScale, userScale);
+      }
+      ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
 
-    if (cImg && cImg.naturalWidth > 1 && cImg.naturalHeight > 1) {
-      const origW = cImg.naturalWidth || cImg.width || 480;
-      const origH = cImg.naturalHeight || cImg.height || 72;
-      const scale = Math.min(cw / origW, ch / origH);
-      const drawW = Math.round(origW * scale);
-      const drawH = Math.round(origH * scale);
-      const drawX = Math.round(cx + (cw - drawW) / 2);
-      const drawY = Math.round(cy + (ch - drawH) / 2);
-      ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
-    } else {
-      ctx.fillStyle = df.fullStoryCalloutConfig.bgColor || '#DC2626';
-      ctx.strokeStyle = df.fullStoryCalloutConfig.borderColor || '#FACC15';
-      ctx.lineWidth = df.fullStoryCalloutConfig.borderWidth ?? 2;
-      ctx.beginPath();
-      ctx.roundRect(cx, cy, cw, ch, 6);
-      ctx.fill();
-      ctx.stroke();
+      let cImg: HTMLImageElement | null = null;
+      if (calloutAsset) {
+        try {
+          cImg = await loadImage(calloutAsset);
+        } catch (e) {
+          console.warn('Callout asset load warning, falling back to vector banner if configured:', e);
+        }
+      }
 
-      ctx.fillStyle = df.fullStoryCalloutConfig.textColor || '#FFFFFF';
-      const fontSize = Math.round((df.fullStoryCalloutConfig.fontSize || 22) * (width / 1080));
-      ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
-      const align = df.fullStoryCalloutConfig.align || 'center';
-      ctx.textAlign = align as CanvasTextAlign;
-      ctx.textBaseline = 'middle';
-      const calloutText = card.calloutTag || df.fullStoryCalloutConfig.text || 'पूरी खबर नीचे विवरण में पढ़ें';
-      const cleanCallout = calloutText.replace('🔴', '').trim();
-      const textX = align === 'left' ? cx + 24 : align === 'right' ? cx + cw - 24 : cx + cw / 2;
-      ctx.fillText(cleanCallout, textX, cy + ch / 2);
+      if (cImg && cImg.naturalWidth > 1 && cImg.naturalHeight > 1) {
+        const origW = cImg.naturalWidth || cImg.width || 480;
+        const origH = cImg.naturalHeight || cImg.height || 72;
+        const scale = Math.min(cw / origW, ch / origH);
+        const drawW = Math.round(origW * scale);
+        const drawH = Math.round(origH * scale);
+        const drawX = Math.round(cx + (cw - drawW) / 2);
+        const drawY = Math.round(cy + (ch - drawH) / 2);
+        ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
+      } else if (calloutText) {
+        ctx.fillStyle = df.fullStoryCalloutConfig.bgColor || '#DC2626';
+        ctx.strokeStyle = df.fullStoryCalloutConfig.borderColor || '#FACC15';
+        ctx.lineWidth = df.fullStoryCalloutConfig.borderWidth ?? 2;
+        ctx.beginPath();
+        ctx.roundRect(cx, cy, cw, ch, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = df.fullStoryCalloutConfig.textColor || '#FFFFFF';
+        const fontSize = Math.round((df.fullStoryCalloutConfig.fontSize || 22) * (width / 1080));
+        ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+        const align = df.fullStoryCalloutConfig.align || 'center';
+        ctx.textAlign = align as CanvasTextAlign;
+        ctx.textBaseline = 'middle';
+        const cleanCallout = calloutText.replace('🔴', '').trim();
+        const textX = align === 'left' ? cx + 24 : align === 'right' ? cx + cw - 24 : cx + cw / 2;
+        ctx.fillText(cleanCallout, textX, cy + ch / 2);
+      }
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   // 5.5 WATERMARK (Part 10 & 12: Dynamic User Mode Sync, Rotation, Position & Type Controls)

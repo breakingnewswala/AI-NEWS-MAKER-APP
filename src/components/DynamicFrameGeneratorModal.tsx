@@ -1646,6 +1646,67 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     reader.readAsDataURL(file);
   };
 
+  const applyAiAnalysisLayout = (layout: AiFrameAnalysisResult) => {
+    const hRect = layout.headlineRect || (layout as any).headlineArea;
+    if (hRect) {
+      setTextSlots((prev) => [
+        {
+          ...prev[0],
+          rect: hRect,
+          fontSize: (layout as any).headlineMaxLines === 2 ? 74 : 64,
+          maxLines: (layout as any).headlineMaxLines || 3,
+        },
+      ]);
+    }
+    const pRect = layout.recommendedPhotoSlots?.[0]?.rect || (layout as any).photoSlotArea;
+    if (pRect) {
+      setPhotoSlots((prev) => [
+        {
+          ...prev[0],
+          rect: pRect,
+        },
+      ]);
+    }
+    const lRect = layout.logoRect || (layout as any).logoArea;
+    if (lRect) {
+      setHeaderConfig((prev) => ({
+        ...prev,
+        showLogo: true,
+        logoRect: lRect,
+      }));
+    }
+    const locRect = layout.locationRect || (layout as any).locationArea;
+    if (locRect) {
+      setHeaderConfig((prev) => ({
+        ...prev,
+        showLocation: true,
+        locationRect: locRect,
+      }));
+    }
+    if (layout.dateRect) {
+      setHeaderConfig((prev) => ({
+        ...prev,
+        showDate: true,
+        dateRect: layout.dateRect,
+      }));
+    }
+    if (layout.watermarkRect) {
+      setWatermarkConfig((prev) => ({
+        ...prev,
+        enabled: true,
+        rect: layout.watermarkRect,
+      }));
+    }
+    if (layout.footerRect) {
+      const fH = Math.min(15, Math.max(5, layout.footerRect.height || 8));
+      setFooterConfig((prev) => ({
+        ...prev,
+        footerHeightRatio: fH / 100,
+        footerWidthPct: layout.footerRect.width || 100,
+      }));
+    }
+  };
+
   // Stage 2: AI Gemini Multimodal Analysis
   const handleRunAiAnalysis = async () => {
     if (isAnalyzing) return;
@@ -1661,10 +1722,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       const res = await requestAiFrameAnalysis(sampleImage, selectedRatio, token, primaryBackgroundAsset || undefined);
       if (res.success && res.result) {
         setAnalysisResult(res.result);
+        applyAiAnalysisLayout(res.result);
         if (res.isFallback || res.warning) {
           setAnalysisStatusText(res.warning || 'कैलिब्रेटेड ज्यामितीय लेआउट सक्रिय किया गया है।');
         } else {
-          setAnalysisStatusText('✅ विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
+          setAnalysisStatusText('✅ विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर लाइव प्रीव्यू में लागू कर दिया गया है।');
         }
       } else {
         setAnalysisStatusText(`❌ ${res.error || res.warning || 'AI विज़न विश्लेषण असफल रहा। कृपया पुनः प्रयास करें।'}`);
@@ -1678,64 +1740,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
   const handleApplyAiAnalysis = () => {
     if (!analysisResult) return;
-    const hRect = analysisResult.headlineRect || (analysisResult as any).headlineArea;
-    if (hRect) {
-      setTextSlots((prev) => [
-        {
-          ...prev[0],
-          rect: hRect,
-          fontSize: (analysisResult as any).headlineMaxLines === 2 ? 74 : 64,
-          maxLines: (analysisResult as any).headlineMaxLines || 3,
-        },
-      ]);
-    }
-    const pRect = analysisResult.recommendedPhotoSlots?.[0]?.rect || (analysisResult as any).photoSlotArea;
-    if (pRect) {
-      setPhotoSlots((prev) => [
-        {
-          ...prev[0],
-          rect: pRect,
-        },
-      ]);
-    }
-    const lRect = analysisResult.logoRect || (analysisResult as any).logoArea;
-    if (lRect) {
-      setHeaderConfig((prev) => ({
-        ...prev,
-        showLogo: true,
-        logoRect: lRect,
-      }));
-    }
-    const locRect = analysisResult.locationRect || (analysisResult as any).locationArea;
-    if (locRect) {
-      setHeaderConfig((prev) => ({
-        ...prev,
-        showLocation: true,
-        locationRect: locRect,
-      }));
-    }
-    if (analysisResult.dateRect) {
-      setHeaderConfig((prev) => ({
-        ...prev,
-        showDate: true,
-        dateRect: analysisResult.dateRect,
-      }));
-    }
-    if (analysisResult.watermarkRect) {
-      setWatermarkConfig((prev) => ({
-        ...prev,
-        enabled: true,
-        rect: analysisResult.watermarkRect,
-      }));
-    }
-    if (analysisResult.footerRect) {
-      const fH = Math.min(15, Math.max(5, analysisResult.footerRect.height || 8));
-      setFooterConfig((prev) => ({
-        ...prev,
-        footerHeightRatio: fH / 100,
-        footerWidthPct: analysisResult.footerRect.width || 100,
-      }));
-    }
+    applyAiAnalysisLayout(analysisResult);
     setFeedbackMsg({ type: 'success', text: 'AI लेआउट निर्देशांक सफलतापूर्वक लागू किए गए!' });
     setCurrentStage('ribbon_header_footer');
   };
@@ -7287,7 +7292,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                               }}
                             >
                               <span>📢</span>
-                              <span>{dummyCalloutText || fullStoryCalloutConfig.text || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
+                              <span>{dummyCalloutText || fullStoryCalloutConfig.text || ''}</span>
                             </div>
                           )}
                         </div>
