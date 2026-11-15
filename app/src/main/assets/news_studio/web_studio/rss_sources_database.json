@@ -1,18 +1,20 @@
 [
   {
-    "id": "src_1794723745678_no6i",
-    "docId": "src_1794723745678_no6i",
-    "name": "नई दुनिया",
-    "lastFetchedAt": 1794725140581,
-    "type": "rss",
-    "addedAt": 1794723745678,
-    "itemsFetchedCount": 44,
+    "id": "src_1794763273176_ty2e",
+    "docId": "src_1794763273176_ty2e",
+    "url": "https://ainewsmakerapp-401033199805.asia-east1.run.app/api/rss/web-feed?feedId=wf_1794763271574_f49947",
+    "truncated": false,
     "lastSyncStatus": "success",
-    "isActive": true,
-    "updatedAt": 1794725090887,
-    "createdAt": 1794723745678,
+    "addedAt": 1794763273176,
+    "pagesFetched": 1,
     "category": "📍 मध्यप्रदेश",
+    "itemsFetchedCount": 217,
+    "isActive": true,
+    "name": "नई दुनिया",
+    "createdAt": 1794763273176,
+    "updatedAt": 1794769736679,
     "addedDateFormatted": "15 नवंबर 2026",
-    "url": "https://ainewsmakerapp-401033199805.asia-east1.run.app/api/rss/web-feed?feedId=wf_1794723744929_81f0a3"
+    "type": "rss",
+    "lastFetchedAt": 1794769903480
   }
 ]

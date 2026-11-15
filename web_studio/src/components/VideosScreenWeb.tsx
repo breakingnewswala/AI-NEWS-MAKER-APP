@@ -729,7 +729,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       caption: adminCaption.trim(),
       aspectRatio: adminRatio,
       createdAt: Date.now(),
-      duration: adminDuration ? formatExactDuration(adminDuration) : '01:30',
+      duration: adminDuration ? formatExactDuration(adminDuration) : '--:--',
       channel: adminChannel || currentUser?.channelName || 'एडमिन वायरल डेस्क',
       views: '1K देखा गया',
       videoUrl: adminVideoUrl.trim(),
@@ -1022,7 +1022,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
                 <div className="absolute bottom-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded text-[11px] font-bold text-white flex items-center gap-1 font-mono">
                   <Clock className="w-3 h-3 text-amber-400" />
-                  {formatExactDuration(vid.duration || extractedDurations[vid.id])}
+                  {(() => {
+                    const isFake = !vid.duration || vid.duration === '00:30' || vid.duration === '01:30' || vid.duration === '--:--';
+                    const eff = extractedDurations[vid.id]
+                      ? extractedDurations[vid.id]
+                      : (!isFake ? vid.duration : '--:--');
+                    return formatExactDuration(eff);
+                  })()}
                 </div>
 
                 <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">

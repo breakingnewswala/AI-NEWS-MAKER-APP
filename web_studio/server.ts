@@ -3584,7 +3584,7 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     }
 
     saveNewsDatabase(existing);
-    broadcastNewsPublishedNotification(id, approvedTitle);
+    broadcastNewsPublishedNotification(id, approvedTitle, postData.location || postData.district, postData.category);
     const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "खबर स्वीकृत हो गई", id, posts: existing });
@@ -6328,7 +6328,7 @@ function saveNotificationsDatabase(notifs: StoredNotification[]): boolean {
   return true;
 }
 
-function broadcastNewsPublishedNotification(newsId: string, title: string) {
+function broadcastNewsPublishedNotification(newsId: string, title: string, location?: string, category?: string) {
   try {
     const notifs = loadNotificationsDatabase();
     const notifId = `notif_news_${newsId}`;
@@ -6343,9 +6343,63 @@ function broadcastNewsPublishedNotification(newsId: string, title: string) {
         type: 'news',
         targetUserEmail: 'all',
         linkTab: 'home',
+        newsId,
+        postId: newsId,
       } as any);
       if (notifs.length > 200) notifs.length = 200;
       saveNotificationsDatabase(notifs);
+    }
+
+    // Local Alert Personalized Notifications per Requirement 9
+    try {
+      const localAlertsDb = loadUserLocalAlertsDatabase();
+      const profiles = loadProfilesDatabase();
+      const cleanLoc = (location || '').toLowerCase();
+      const cleanCat = (category || '').toLowerCase();
+      const cleanTitle = (title || '').toLowerCase();
+
+      for (const [userEmail, pref] of Object.entries(localAlertsDb) as [string, any][]) {
+        if (!userEmail || !pref) continue;
+        const prof = profiles[userEmail] || {};
+        const userDist = (pref.district || prof.district || '').toLowerCase().trim();
+        const userSt = (pref.state || prof.state || '').toLowerCase().trim();
+        const userCats = Array.isArray(pref.categories) ? pref.categories.map((c: string) => c.toLowerCase()) : [];
+        const userTopics = Array.isArray(pref.topics) ? pref.topics.map((t: string) => t.toLowerCase()) : [];
+
+        let matchType = '';
+        if (pref.notifyDistrict !== false && userDist && cleanLoc.includes(userDist)) {
+          matchType = `जिला ${pref.district || prof.district}`;
+        } else if (pref.notifyState !== false && userSt && cleanLoc.includes(userSt)) {
+          matchType = `राज्य ${pref.state || prof.state}`;
+        } else if (userCats.some((c: string) => cleanCat.includes(c) || c.includes(cleanCat))) {
+          matchType = `श्रेणी ${category || ''}`;
+        } else if (pref.notifyTopics !== false && userTopics.some((t: string) => cleanTitle.includes(t))) {
+          matchType = `टॉपिक अलर्ट`;
+        }
+
+        if (matchType) {
+          const userNotifId = `notif_local_${userEmail}_${newsId}`;
+          if (!notifs.some(n => n.id === userNotifId)) {
+            notifs.unshift({
+              id: userNotifId,
+              title: `📍 लोकल अलर्ट: ${matchType}`,
+              message: title.slice(0, 100),
+              time: 'अभी',
+              timestamp: Date.now(),
+              unread: true,
+              type: 'local_alert',
+              targetUserEmail: userEmail,
+              linkTab: 'home',
+              newsId,
+              postId: newsId,
+            } as any);
+          }
+        }
+      }
+      if (notifs.length > 300) notifs.length = 300;
+      saveNotificationsDatabase(notifs);
+    } catch (e) {
+      console.warn('Local alerts notification error:', e);
     }
   } catch (e) {
     console.error('Error broadcasting news notification:', e);
@@ -8538,6 +8592,66 @@ app.post("/api/user-favorites", (req, res) => {
       isFavorite,
       favorites: db[rawEmail],
     });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// --- USER LOCAL ALERTS PREFERENCES (Requirement 9) ---
+const USER_LOCAL_ALERTS_DB_FILE = path.join(process.cwd(), "user_local_alerts_db.json");
+
+function loadUserLocalAlertsDatabase(): Record<string, { district?: string; state?: string; categories?: string[]; topics?: string[]; notifyDistrict?: boolean; notifyState?: boolean; notifyTopics?: boolean }> {
+  try {
+    if (fs.existsSync(USER_LOCAL_ALERTS_DB_FILE)) {
+      return JSON.parse(fs.readFileSync(USER_LOCAL_ALERTS_DB_FILE, "utf-8"));
+    }
+  } catch {}
+  return {};
+}
+
+function saveUserLocalAlertsDatabase(data: any): void {
+  try {
+    fs.writeFileSync(USER_LOCAL_ALERTS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error saving user_local_alerts_db:", e);
+  }
+}
+
+// GET /api/user-local-alerts-preferences
+app.get("/api/user-local-alerts-preferences", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.json({ success: true, preferences: { categories: [], topics: [] } });
+    }
+    const db = loadUserLocalAlertsDatabase();
+    const prefs = db[rawEmail] || { categories: [], topics: [] };
+    return res.json({ success: true, preferences: prefs });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// POST /api/user-local-alerts-preferences
+app.post("/api/user-local-alerts-preferences", (req, res) => {
+  try {
+    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.status(400).json({ error: "उपयोगकर्ता ईमेल आवश्यक है।" });
+    }
+    const { district, state, categories = [], topics = [], notifyDistrict = true, notifyState = true, notifyTopics = true } = req.body || {};
+    const db = loadUserLocalAlertsDatabase();
+    db[rawEmail] = {
+      district: district ? String(district).trim() : undefined,
+      state: state ? String(state).trim() : undefined,
+      categories: Array.isArray(categories) ? categories.map((c: any) => String(c).trim()).filter(Boolean) : [],
+      topics: Array.isArray(topics) ? topics.map((t: any) => String(t).trim()).filter(Boolean) : [],
+      notifyDistrict: Boolean(notifyDistrict),
+      notifyState: Boolean(notifyState),
+      notifyTopics: Boolean(notifyTopics),
+    };
+    saveUserLocalAlertsDatabase(db);
+    return res.json({ success: true, preferences: db[rawEmail], message: "लोकल अलर्ट प्राथमिकताएं सुरक्षित हो गईं।" });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -27538,15 +27652,33 @@ app.get("/api/user-payments", async (req, res) => {
   const user = (req as any).user || await resolveAuthenticatedUser(req);
   const targetEmail = (req.query.email || "").toString().trim().toLowerCase();
   const allPayments = loadPaymentsDatabase();
+  const masterUsers = loadUsersMasterDatabase();
+
+  const enrichPayments = (list: any[]) => {
+    return list.map((p) => {
+      const isGraphicPack = p.planId === 'GRAPHIC_PACK_20_7D' || p.planKey === 'GRAPHIC_PACK_20_7D' || (p.planName && p.planName.includes('₹99'));
+      if (!isGraphicPack) return p;
+      const targetUser = masterUsers.find((u: any) => u.email && u.email.toLowerCase().trim() === (p.customerEmail || '').toLowerCase().trim());
+      const pack = targetUser?.graphicPacks?.find((pk: any) => pk.orderId === p.orderId);
+      return {
+        ...p,
+        isGraphicPack: true,
+        graphicsRemaining: pack?.graphicsRemaining !== undefined ? pack.graphicsRemaining : (p.orderStatus === 'PAID' ? 20 : 0),
+        graphicsTotal: pack?.graphicsTotal || 20,
+        expiresAt: pack?.expiresAt || (p.createdAt ? p.createdAt + 7 * 86400000 : null),
+        activatedAt: pack?.activatedAt || p.paidAt || p.createdAt,
+      };
+    });
+  };
 
   if (user && isAuthorizedAdmin(req)) {
     const payments = targetEmail ? allPayments.filter((p) => p.customerEmail === targetEmail) : allPayments.slice(-50);
-    return res.json({ success: true, payments });
+    return res.json({ success: true, payments: enrichPayments(payments) });
   }
 
   if (user && user.email) {
     const userPayments = allPayments.filter((p) => p.customerEmail === user.email.toLowerCase().trim());
-    return res.json({ success: true, payments: userPayments });
+    return res.json({ success: true, payments: enrichPayments(userPayments) });
   }
 
   return res.status(401).json({ success: false, error: "प्रमाणीकरण आवश्यक है", payments: [] });
@@ -28441,53 +28573,6 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
       }
     }
 
-    if (downloadsToday >= maxAllowed) {
-      const userPacks = (matchedUser?.graphicPacks || []).filter(
-        (p: any) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
-      );
-      if (userPacks.length > 0) {
-        // FIFO: earliest expiry first
-        userPacks.sort((a: any, b: any) => a.expiresAt - b.expiresAt);
-        const activePack = userPacks[0];
-
-        const cardIdStr = card?.id ? String(card.id) : (req.body?.cardId ? String(req.body.cardId) : "");
-        const downloadToken = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr);
-
-        if (!checkOnly) {
-          activePack.graphicsRemaining = Math.max(0, activePack.graphicsRemaining - 1);
-          const masterUsers = loadUsersMasterDatabase();
-          const mIdx = masterUsers.findIndex((u: any) => u.email && u.email.toLowerCase().trim() === cleanEmail);
-          if (mIdx >= 0) {
-            masterUsers[mIdx].graphicPacks = matchedUser.graphicPacks;
-            saveUsersMasterDatabase(masterUsers);
-          }
-        }
-
-        const totalRemaining = userPacks.reduce((sum: number, p: any) => sum + (p.graphicsRemaining || 0), 0);
-        return res.json({
-          allowed: true,
-          plan: tier,
-          maxAllowed,
-          downloadsToday,
-          remainingToday: totalRemaining,
-          downloadToken,
-          unlimited: false,
-          usedGraphicPack: true,
-          packRemaining: totalRemaining,
-          packExpiresAt: activePack.expiresAt,
-        });
-      }
-
-      return res.status(403).json({
-        error: "आपकी आज की ग्राफिक डाउनलोड सीमा पूरी हो चुकी है। कृपया अगली दैनिक सीमा रीसेट होने तक प्रतीक्षा करें या ₹99 में 20 अतिरिक्त ग्राफिक अनलॉक करें।",
-        message: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है।",
-        quotaExceeded: true,
-        maxAllowed,
-        downloadsToday,
-        canBuyGraphicPack: true,
-      });
-    }
-
     // 5.1 Idempotency & double-click protection for download quota
     const downloadRequestId = req.body?.downloadRequestId || (card?.id ? `${userKey}_${card.id}_${dateStr}` : null);
     let isAlreadyProcessed = false;
@@ -28503,6 +28588,60 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
           recentDownloadRequests.set(downloadRequestId, Date.now());
         }
       }
+    }
+
+    if (downloadsToday >= maxAllowed) {
+      const userPacks = (matchedUser?.graphicPacks || []).filter(
+        (p: any) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
+      );
+      if (userPacks.length > 0) {
+        // FIFO: earliest expiry first
+        userPacks.sort((a: any, b: any) => a.expiresAt - b.expiresAt);
+        const activePack = userPacks[0];
+
+        const cardIdStr = card?.id ? String(card.id) : (req.body?.cardId ? String(req.body.cardId) : "");
+        const downloadToken = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr);
+
+        if (!checkOnly) {
+          if (!isAlreadyProcessed) {
+            activePack.graphicsRemaining = Math.max(0, activePack.graphicsRemaining - 1);
+            const masterUsers = loadUsersMasterDatabase();
+            const mIdx = masterUsers.findIndex((u: any) => u.email && u.email.toLowerCase().trim() === cleanEmail);
+            if (mIdx >= 0) {
+              masterUsers[mIdx].graphicPacks = matchedUser.graphicPacks;
+              saveUsersMasterDatabase(masterUsers);
+              syncUserToProfiles(masterUsers[mIdx]);
+            }
+            if (downloadRequestId) {
+              recentDownloadRequests.set(downloadRequestId, Date.now());
+            }
+          }
+        }
+
+        const totalRemaining = userPacks.reduce((sum: number, p: any) => sum + (p.graphicsRemaining || 0), 0);
+        return res.json({
+          allowed: true,
+          plan: tier,
+          maxAllowed,
+          downloadsToday,
+          remainingToday: totalRemaining,
+          downloadToken,
+          unlimited: false,
+          usedGraphicPack: true,
+          packRemaining: totalRemaining,
+          packExpiresAt: activePack.expiresAt,
+          idempotent: isAlreadyProcessed,
+        });
+      }
+
+      return res.status(403).json({
+        error: "आपकी आज की ग्राफिक डाउनलोड सीमा पूरी हो चुकी है। कृपया अगली दैनिक सीमा रीसेट होने तक प्रतीक्षा करें या ₹99 में 20 अतिरिक्त ग्राफिक अनलॉक करें।",
+        message: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है।",
+        quotaExceeded: true,
+        maxAllowed,
+        downloadsToday,
+        canBuyGraphicPack: true,
+      });
     }
 
     // Issue verified download token for complete-download-export lifecycle (Phase 3.0B-S/T)

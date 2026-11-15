@@ -1,12 +1,15 @@
-import React from 'react';
-import { Sparkles, X, MapPin, Clock, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, X, MapPin, Clock, ExternalLink, Heart, Loader2 } from 'lucide-react';
 import { NewsFeedPost } from '../data/newsFeedData';
 
-interface NewsDetailModalProps {
+export interface NewsDetailModalProps {
   post: NewsFeedPost | null;
   currentUser?: any;
   onClose: () => void;
   onOpenStudio?: (post: NewsFeedPost) => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (postId: string) => void;
+  onSetReminder?: (post: NewsFeedPost, minutes: number) => void;
 }
 
 function formatDynamicTime(timestamp?: any, publishedTime?: string): string {
@@ -56,8 +59,46 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
   currentUser,
   onClose,
   onOpenStudio,
+  isFavorite = false,
+  onToggleFavorite,
+  onSetReminder,
 }) => {
   if (!post) return null;
+
+  const [scrapedData, setScrapedData] = useState<{
+    content?: string;
+    description?: string;
+    photos?: string[];
+    loading: boolean;
+  } | null>(null);
+  const [showReminderMenu, setShowReminderMenu] = useState(false);
+
+  useEffect(() => {
+    if (post.sourceUrl && /^https?:\/\//i.test(post.sourceUrl)) {
+      setScrapedData({ loading: true });
+      fetch('/api/scrape-news-article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: post.sourceUrl }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d && d.success) {
+            setScrapedData({
+              content: d.content,
+              description: d.description,
+              photos: d.photos,
+              loading: false,
+            });
+          } else {
+            setScrapedData(null);
+          }
+        })
+        .catch(() => setScrapedData(null));
+    } else {
+      setScrapedData(null);
+    }
+  }, [post.id, post.sourceUrl]);
 
   const isAdmin = Boolean(
     currentUser &&
@@ -72,6 +113,10 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
   const thumbnailUrl = getPostThumbnail(post);
   const timeDisplay = formatDynamicTime(post.timestamp, post.publishedTime);
 
+  const allPhotos = Array.from(
+    new Set([...(post.additionalPhotos || []), ...(scrapedData?.photos || [])])
+  ).filter(Boolean);
+
   return (
     <div
       className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
@@ -82,7 +127,7 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800 gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="px-2.5 py-1 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/30">
               {post.categoryName || post.category || 'समाचार'}
@@ -103,14 +148,69 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
               </span>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Heart / Favorite Button */}
+            {onToggleFavorite && (
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(post.id)}
+                title={isFavorite ? 'पसंदीदा से हटाएं' : 'पसंदीदा में जोड़ें'}
+                className={`p-2 rounded-xl border transition cursor-pointer ${
+                  isFavorite
+                    ? 'bg-rose-500/20 border-rose-500 text-rose-400'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-rose-400'
+                }`}
+              >
+                <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-500 text-rose-500' : ''}`} />
+              </button>
+            )}
+
+            {/* Reminder Clock Button */}
+            {onSetReminder && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowReminderMenu((prev) => !prev)}
+                  title="ग्राफिक बनाने के लिए रिमाइंडर सेट करें"
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-amber-300 transition cursor-pointer"
+                >
+                  <Clock className="w-4 h-4" />
+                </button>
+
+                {showReminderMenu && (
+                  <div className="absolute right-0 top-full mt-1.5 w-36 bg-slate-950 border border-amber-500/40 rounded-xl shadow-2xl py-1 z-30 font-sans text-xs">
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-amber-400 border-b border-slate-800">
+                      रिमाइंडर समय:
+                    </div>
+                    {[5, 10, 20, 30].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => {
+                          onSetReminder(post, mins);
+                          setShowReminderMenu(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 hover:bg-slate-800 text-slate-200 hover:text-amber-300 transition"
+                      >
+                        {mins} मिनट बाद
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Main Image */}
@@ -126,15 +226,17 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
           />
         </div>
 
-        {/* Headline */}
-        <h2 className="text-lg sm:text-xl font-black text-white leading-snug">
+        {/* Headline - Preserving complete text, wrapping, line-height */}
+        <h2 className="text-lg sm:text-2xl font-black text-white leading-relaxed break-words">
           {headline}
         </h2>
 
         {/* Reporter / Source metadata */}
-        {(post.sourceChannel || post.reporterName) && (
-          <div className="text-xs text-slate-400 flex items-center gap-2">
-            <span>स्रोत: <strong className="text-slate-200">{post.sourceChannel || post.reporterName}</strong></span>
+        {(post.sourceChannel || post.reporterName || post.sourceUrl) && (
+          <div className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
+            {(post.sourceChannel || post.reporterName) && (
+              <span>स्रोत: <strong className="text-slate-200">{post.sourceChannel || post.reporterName}</strong></span>
+            )}
             {post.sourceUrl && (
               <a
                 href={post.sourceUrl}
@@ -149,17 +251,27 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
           </div>
         )}
 
-        {/* Full Story Description / Content */}
-        <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800/80 text-sm text-slate-200 leading-relaxed whitespace-pre-line max-h-60 overflow-y-auto">
-          {cleanDescription || 'इस समाचार के लिए कोई विस्तृत विवरण उपलब्ध नहीं है।'}
+        {/* Full Story Description / Content with Scraper Integration */}
+        <div className="p-4 bg-slate-950/70 rounded-xl border border-slate-800/80 text-sm text-slate-200 leading-relaxed whitespace-pre-line max-h-64 overflow-y-auto">
+          {scrapedData?.loading ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-xs text-amber-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>विस्तृत समाचार लेख लोड हो रहा है...</span>
+            </div>
+          ) : (
+            scrapedData?.content ||
+            scrapedData?.description ||
+            cleanDescription ||
+            'इस समाचार के लिए कोई विस्तृत विवरण उपलब्ध नहीं है।'
+          )}
         </div>
 
         {/* Additional Photos Gallery (if available) */}
-        {Array.isArray(post.additionalPhotos) && post.additionalPhotos.length > 0 && (
+        {allPhotos.length > 0 && (
           <div className="space-y-1.5">
             <span className="text-xs font-bold text-slate-400">अतिरिक्त तस्वीरें:</span>
             <div className="grid grid-cols-3 gap-2">
-              {post.additionalPhotos.map((photo, i) => (
+              {allPhotos.map((photo, i) => (
                 <div
                   key={i}
                   className="aspect-video rounded-lg overflow-hidden border border-slate-800 bg-slate-950"

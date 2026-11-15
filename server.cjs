@@ -2285,11 +2285,11 @@ var require_firestore_database_service = __commonJS({
           return this._loadLocalJson("news_database.json", []);
         }
       }
-      async saveNewsPost(postId, postData) {
+      async saveNewsPost(postId, postData2) {
         if (!postId) return { success: false, error: "News post ID required" };
         const cleanId = String(postId).trim();
         const payload = {
-          ...postData,
+          ...postData2,
           id: cleanId,
           docId: cleanId,
           updatedAt: Date.now()
@@ -4638,11 +4638,11 @@ var require_firestore_database_service2 = __commonJS({
           return this._loadLocalJson("news_database.json", []);
         }
       }
-      async saveNewsPost(postId, postData) {
+      async saveNewsPost(postId, postData2) {
         if (!postId) return { success: false, error: "News post ID required" };
         const cleanId = String(postId).trim();
         const payload = {
-          ...postData,
+          ...postData2,
           id: cleanId,
           docId: cleanId,
           updatedAt: Date.now()
@@ -14722,16 +14722,16 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     existing = existing.map((p) => {
       if (p.id === id) {
         found = true;
-        const postData = req.body || {};
-        const updatedTitle = postData.title || p.title;
+        const postData2 = req.body || {};
+        const updatedTitle = postData2.title || p.title;
         approvedTitle = updatedTitle;
-        const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0 ? postData.approvedHeadlines : Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : p.headlineOptions || [updatedTitle];
-        const cDetailed = postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || p.summary;
-        const cBullets = postData.captionBullets || postData.approvedCaptionBullets || p.captionBullets || "";
-        const cShort = postData.captionShort || postData.approvedCaptionShort || p.captionShort || "";
+        const hList = Array.isArray(postData2.approvedHeadlines) && postData2.approvedHeadlines.length > 0 ? postData2.approvedHeadlines : Array.isArray(postData2.headlineOptions) && postData2.headlineOptions.length > 0 ? postData2.headlineOptions : p.headlineOptions || [updatedTitle];
+        const cDetailed = postData2.captionDetailed || postData2.approvedCaptionDetailed || postData2.summary || p.summary;
+        const cBullets = postData2.captionBullets || postData2.approvedCaptionBullets || p.captionBullets || "";
+        const cShort = postData2.captionShort || postData2.approvedCaptionShort || p.captionShort || "";
         return {
           ...p,
-          ...postData,
+          ...postData2,
           title: updatedTitle,
           summary: cDetailed || p.summary,
           captionDetailed: cDetailed,
@@ -14742,25 +14742,25 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
           approvedCaptionShort: cShort,
           headlineOptions: hList,
           approvedHeadlines: hList,
-          approvedHeadline: postData.approvedHeadline || hList[0] || updatedTitle,
-          imageUrl: postData.imageUrl || p.imageUrl,
-          imageSource: postData.imageSource || p.imageSource || "source",
-          manualThumbnailUrl: postData.manualThumbnailUrl !== void 0 ? postData.manualThumbnailUrl : p.manualThumbnailUrl,
-          sourceChannel: postData.sourceChannel || p.sourceChannel,
-          sourceUrl: postData.sourceUrl !== void 0 ? postData.sourceUrl : p.sourceUrl,
-          additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : p.additionalPhotos || [],
-          approvedPhotos: Array.isArray(postData.approvedPhotos) ? postData.approvedPhotos : p.approvedPhotos || p.additionalPhotos || [],
+          approvedHeadline: postData2.approvedHeadline || hList[0] || updatedTitle,
+          imageUrl: postData2.imageUrl || p.imageUrl,
+          imageSource: postData2.imageSource || p.imageSource || "source",
+          manualThumbnailUrl: postData2.manualThumbnailUrl !== void 0 ? postData2.manualThumbnailUrl : p.manualThumbnailUrl,
+          sourceChannel: postData2.sourceChannel || p.sourceChannel,
+          sourceUrl: postData2.sourceUrl !== void 0 ? postData2.sourceUrl : p.sourceUrl,
+          additionalPhotos: Array.isArray(postData2.additionalPhotos) ? postData2.additionalPhotos : p.additionalPhotos || [],
+          approvedPhotos: Array.isArray(postData2.approvedPhotos) ? postData2.approvedPhotos : p.approvedPhotos || p.additionalPhotos || [],
           status: "APPROVED",
           approvalStatus: "APPROVED",
           publicationStatus: "PUBLISHED",
           isApproved: true,
           isPublished: true,
           isPrePublished: true,
-          editorialApproved: postData.editorialApproved !== void 0 ? postData.editorialApproved : true,
-          breaking: postData.breaking !== void 0 ? postData.breaking : p.breaking,
-          isExclusive: postData.isExclusive !== void 0 ? postData.isExclusive : p.isExclusive,
-          isBonus: postData.isBonus !== void 0 ? Boolean(postData.isBonus) : Boolean(p.isBonus === true),
-          rewardCoins: (postData.isBonus !== void 0 ? Boolean(postData.isBonus) : Boolean(p.isBonus === true)) ? Number(postData.rewardCoins || p.rewardCoins || 100) : 0,
+          editorialApproved: postData2.editorialApproved !== void 0 ? postData2.editorialApproved : true,
+          breaking: postData2.breaking !== void 0 ? postData2.breaking : p.breaking,
+          isExclusive: postData2.isExclusive !== void 0 ? postData2.isExclusive : p.isExclusive,
+          isBonus: postData2.isBonus !== void 0 ? Boolean(postData2.isBonus) : Boolean(p.isBonus === true),
+          rewardCoins: (postData2.isBonus !== void 0 ? Boolean(postData2.isBonus) : Boolean(p.isBonus === true)) ? Number(postData2.rewardCoins || p.rewardCoins || 100) : 0,
           timestamp: Date.now()
         };
       }
@@ -14768,26 +14768,26 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     });
     try {
       const edDb = loadApprovedEditorialDatabase();
-      const postData = req.body || {};
-      const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0 ? postData.approvedHeadlines : Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : [approvedTitle];
+      const postData2 = req.body || {};
+      const hList = Array.isArray(postData2.approvedHeadlines) && postData2.approvedHeadlines.length > 0 ? postData2.approvedHeadlines : Array.isArray(postData2.headlineOptions) && postData2.headlineOptions.length > 0 ? postData2.headlineOptions : [approvedTitle];
       edDb[id] = {
         ...edDb[id] || {},
         newsId: id,
         title: approvedTitle,
         headlines: hList.slice(0, 10),
         headlineOptions: hList.slice(0, 10),
-        approvedHeadline: postData.approvedHeadline || hList[0] || approvedTitle,
-        captionDetailed: postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || "",
-        captionBullets: postData.captionBullets || postData.approvedCaptionBullets || "",
-        captionShort: postData.captionShort || postData.approvedCaptionShort || "",
-        sourceUrl: postData.sourceUrl !== void 0 ? postData.sourceUrl : edDb[id]?.sourceUrl || "",
-        additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : edDb[id]?.additionalPhotos || [],
+        approvedHeadline: postData2.approvedHeadline || hList[0] || approvedTitle,
+        captionDetailed: postData2.captionDetailed || postData2.approvedCaptionDetailed || postData2.summary || "",
+        captionBullets: postData2.captionBullets || postData2.approvedCaptionBullets || "",
+        captionShort: postData2.captionShort || postData2.approvedCaptionShort || "",
+        sourceUrl: postData2.sourceUrl !== void 0 ? postData2.sourceUrl : edDb[id]?.sourceUrl || "",
+        additionalPhotos: Array.isArray(postData2.additionalPhotos) ? postData2.additionalPhotos : edDb[id]?.additionalPhotos || [],
         status: "APPROVED",
         approvalStatus: "APPROVED",
         publicationStatus: "PUBLISHED",
         isApproved: true,
         isPublished: true,
-        isPrePublished: postData.isPrePublished !== void 0 ? Boolean(postData.isPrePublished) : true,
+        isPrePublished: postData2.isPrePublished !== void 0 ? Boolean(postData2.isPrePublished) : true,
         approvedAt: Date.now(),
         approvedBy: (req.user?.email || "admin").toString()
       };
@@ -14796,25 +14796,25 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
       console.warn("Could not sync editorial db:", e);
     }
     if (!found) {
-      const postData = req.body || {};
-      approvedTitle = postData.title || postData.headline || "\u0938\u092E\u093E\u091A\u093E\u0930";
-      const explicitBonus = postData.isBonus === true;
+      const postData2 = req.body || {};
+      approvedTitle = postData2.title || postData2.headline || "\u0938\u092E\u093E\u091A\u093E\u0930";
+      const explicitBonus = postData2.isBonus === true;
       const newApprovedPost = {
         id,
         title: approvedTitle,
-        summary: postData.summary || postData.shortDescription || "",
-        sourceChannel: postData.sourceChannel || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
-        sourceUrl: postData.sourceUrl || "",
-        category: postData.category || "breaking",
-        categoryName: postData.categoryName || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
-        publishedTime: postData.publishedTime || "\u0905\u092D\u0940-\u0905\u092D\u0940",
-        imageUrl: postData.imageUrl || postData.thumbnailPhoto || getCategoryFallbackImage("general"),
-        additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : [],
-        breaking: postData.breaking !== void 0 ? postData.breaking : true,
-        isExclusive: postData.isExclusive || false,
-        fullContent: postData.fullContent || postData.summary || "",
-        location: postData.location || postData.district || "",
-        district: postData.district || postData.location || "",
+        summary: postData2.summary || postData2.shortDescription || "",
+        sourceChannel: postData2.sourceChannel || "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930",
+        sourceUrl: postData2.sourceUrl || "",
+        category: postData2.category || "breaking",
+        categoryName: postData2.categoryName || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
+        publishedTime: postData2.publishedTime || "\u0905\u092D\u0940-\u0905\u092D\u0940",
+        imageUrl: postData2.imageUrl || postData2.thumbnailPhoto || getCategoryFallbackImage("general"),
+        additionalPhotos: Array.isArray(postData2.additionalPhotos) ? postData2.additionalPhotos : [],
+        breaking: postData2.breaking !== void 0 ? postData2.breaking : true,
+        isExclusive: postData2.isExclusive || false,
+        fullContent: postData2.fullContent || postData2.summary || "",
+        location: postData2.location || postData2.district || "",
+        district: postData2.district || postData2.location || "",
         timestamp: Date.now(),
         status: "APPROVED",
         approvalStatus: "APPROVED",
@@ -14824,12 +14824,12 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         isPrePublished: true,
         editorialApproved: true,
         isBonus: explicitBonus,
-        rewardCoins: explicitBonus ? Number(postData.rewardCoins || 100) : 0
+        rewardCoins: explicitBonus ? Number(postData2.rewardCoins || 100) : 0
       };
       existing.unshift(newApprovedPost);
     }
     saveNewsDatabase(existing);
-    broadcastNewsPublishedNotification(id, approvedTitle);
+    broadcastNewsPublishedNotification(id, approvedTitle, postData.location || postData.district, postData.category);
     const adminEmail = (req.user?.email || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
     return res.json({ success: true, message: "\u0916\u092C\u0930 \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0939\u094B \u0917\u0908", id, posts: existing });
@@ -17084,7 +17084,7 @@ function saveNotificationsDatabase(notifs) {
   }
   return true;
 }
-function broadcastNewsPublishedNotification(newsId, title) {
+function broadcastNewsPublishedNotification(newsId, title, location, category) {
   try {
     const notifs = loadNotificationsDatabase();
     const notifId = `notif_news_${newsId}`;
@@ -17098,10 +17098,59 @@ function broadcastNewsPublishedNotification(newsId, title) {
         unread: true,
         type: "news",
         targetUserEmail: "all",
-        linkTab: "home"
+        linkTab: "home",
+        newsId,
+        postId: newsId
       });
       if (notifs.length > 200) notifs.length = 200;
       saveNotificationsDatabase(notifs);
+    }
+    try {
+      const localAlertsDb = loadUserLocalAlertsDatabase();
+      const profiles = loadProfilesDatabase();
+      const cleanLoc = (location || "").toLowerCase();
+      const cleanCat = (category || "").toLowerCase();
+      const cleanTitle = (title || "").toLowerCase();
+      for (const [userEmail, pref] of Object.entries(localAlertsDb)) {
+        if (!userEmail || !pref) continue;
+        const prof = profiles[userEmail] || {};
+        const userDist = (pref.district || prof.district || "").toLowerCase().trim();
+        const userSt = (pref.state || prof.state || "").toLowerCase().trim();
+        const userCats = Array.isArray(pref.categories) ? pref.categories.map((c) => c.toLowerCase()) : [];
+        const userTopics = Array.isArray(pref.topics) ? pref.topics.map((t) => t.toLowerCase()) : [];
+        let matchType = "";
+        if (pref.notifyDistrict !== false && userDist && cleanLoc.includes(userDist)) {
+          matchType = `\u091C\u093F\u0932\u093E ${pref.district || prof.district}`;
+        } else if (pref.notifyState !== false && userSt && cleanLoc.includes(userSt)) {
+          matchType = `\u0930\u093E\u091C\u094D\u092F ${pref.state || prof.state}`;
+        } else if (userCats.some((c) => cleanCat.includes(c) || c.includes(cleanCat))) {
+          matchType = `\u0936\u094D\u0930\u0947\u0923\u0940 ${category || ""}`;
+        } else if (pref.notifyTopics !== false && userTopics.some((t) => cleanTitle.includes(t))) {
+          matchType = `\u091F\u0949\u092A\u093F\u0915 \u0905\u0932\u0930\u094D\u091F`;
+        }
+        if (matchType) {
+          const userNotifId = `notif_local_${userEmail}_${newsId}`;
+          if (!notifs.some((n) => n.id === userNotifId)) {
+            notifs.unshift({
+              id: userNotifId,
+              title: `\u{1F4CD} \u0932\u094B\u0915\u0932 \u0905\u0932\u0930\u094D\u091F: ${matchType}`,
+              message: title.slice(0, 100),
+              time: "\u0905\u092D\u0940",
+              timestamp: Date.now(),
+              unread: true,
+              type: "local_alert",
+              targetUserEmail: userEmail,
+              linkTab: "home",
+              newsId,
+              postId: newsId
+            });
+          }
+        }
+      }
+      if (notifs.length > 300) notifs.length = 300;
+      saveNotificationsDatabase(notifs);
+    } catch (e) {
+      console.warn("Local alerts notification error:", e);
     }
   } catch (e) {
     console.error("Error broadcasting news notification:", e);
@@ -18972,6 +19021,59 @@ app.post("/api/user-favorites", (req, res) => {
       isFavorite,
       favorites: db[rawEmail]
     });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+var USER_LOCAL_ALERTS_DB_FILE = import_path2.default.join(process.cwd(), "user_local_alerts_db.json");
+function loadUserLocalAlertsDatabase() {
+  try {
+    if (import_fs2.default.existsSync(USER_LOCAL_ALERTS_DB_FILE)) {
+      return JSON.parse(import_fs2.default.readFileSync(USER_LOCAL_ALERTS_DB_FILE, "utf-8"));
+    }
+  } catch {
+  }
+  return {};
+}
+function saveUserLocalAlertsDatabase(data) {
+  try {
+    import_fs2.default.writeFileSync(USER_LOCAL_ALERTS_DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error saving user_local_alerts_db:", e);
+  }
+}
+app.get("/api/user-local-alerts-preferences", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.json({ success: true, preferences: { categories: [], topics: [] } });
+    }
+    const db = loadUserLocalAlertsDatabase();
+    const prefs = db[rawEmail] || { categories: [], topics: [] };
+    return res.json({ success: true, preferences: prefs });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/user-local-alerts-preferences", (req, res) => {
+  try {
+    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    const { district, state, categories = [], topics = [], notifyDistrict = true, notifyState = true, notifyTopics = true } = req.body || {};
+    const db = loadUserLocalAlertsDatabase();
+    db[rawEmail] = {
+      district: district ? String(district).trim() : void 0,
+      state: state ? String(state).trim() : void 0,
+      categories: Array.isArray(categories) ? categories.map((c) => String(c).trim()).filter(Boolean) : [],
+      topics: Array.isArray(topics) ? topics.map((t) => String(t).trim()).filter(Boolean) : [],
+      notifyDistrict: Boolean(notifyDistrict),
+      notifyState: Boolean(notifyState),
+      notifyTopics: Boolean(notifyTopics)
+    };
+    saveUserLocalAlertsDatabase(db);
+    return res.json({ success: true, preferences: db[rawEmail], message: "\u0932\u094B\u0915\u0932 \u0905\u0932\u0930\u094D\u091F \u092A\u094D\u0930\u093E\u0925\u092E\u093F\u0915\u0924\u093E\u090F\u0902 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0939\u094B \u0917\u0908\u0902\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -34259,13 +34361,30 @@ app.get("/api/user-payments", async (req, res) => {
   const user = req.user || await resolveAuthenticatedUser(req);
   const targetEmail = (req.query.email || "").toString().trim().toLowerCase();
   const allPayments = loadPaymentsDatabase();
+  const masterUsers = loadUsersMasterDatabase();
+  const enrichPayments = (list) => {
+    return list.map((p) => {
+      const isGraphicPack = p.planId === "GRAPHIC_PACK_20_7D" || p.planKey === "GRAPHIC_PACK_20_7D" || p.planName && p.planName.includes("\u20B999");
+      if (!isGraphicPack) return p;
+      const targetUser = masterUsers.find((u) => u.email && u.email.toLowerCase().trim() === (p.customerEmail || "").toLowerCase().trim());
+      const pack = targetUser?.graphicPacks?.find((pk) => pk.orderId === p.orderId);
+      return {
+        ...p,
+        isGraphicPack: true,
+        graphicsRemaining: pack?.graphicsRemaining !== void 0 ? pack.graphicsRemaining : p.orderStatus === "PAID" ? 20 : 0,
+        graphicsTotal: pack?.graphicsTotal || 20,
+        expiresAt: pack?.expiresAt || (p.createdAt ? p.createdAt + 7 * 864e5 : null),
+        activatedAt: pack?.activatedAt || p.paidAt || p.createdAt
+      };
+    });
+  };
   if (user && isAuthorizedAdmin(req)) {
     const payments = targetEmail ? allPayments.filter((p) => p.customerEmail === targetEmail) : allPayments.slice(-50);
-    return res.json({ success: true, payments });
+    return res.json({ success: true, payments: enrichPayments(payments) });
   }
   if (user && user.email) {
     const userPayments = allPayments.filter((p) => p.customerEmail === user.email.toLowerCase().trim());
-    return res.json({ success: true, payments: userPayments });
+    return res.json({ success: true, payments: enrichPayments(userPayments) });
   }
   return res.status(401).json({ success: false, error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948", payments: [] });
 });
@@ -34946,47 +35065,6 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
         dailyDownloadsTracker.set(userKey, { date: dateStr, count: 0 });
       }
     }
-    if (downloadsToday >= maxAllowed) {
-      const userPacks = (matchedUser?.graphicPacks || []).filter(
-        (p) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
-      );
-      if (userPacks.length > 0) {
-        userPacks.sort((a, b) => a.expiresAt - b.expiresAt);
-        const activePack = userPacks[0];
-        const cardIdStr2 = card?.id ? String(card.id) : req.body?.cardId ? String(req.body.cardId) : "";
-        const downloadToken2 = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr2);
-        if (!checkOnly) {
-          activePack.graphicsRemaining = Math.max(0, activePack.graphicsRemaining - 1);
-          const masterUsers = loadUsersMasterDatabase();
-          const mIdx = masterUsers.findIndex((u) => u.email && u.email.toLowerCase().trim() === cleanEmail);
-          if (mIdx >= 0) {
-            masterUsers[mIdx].graphicPacks = matchedUser.graphicPacks;
-            saveUsersMasterDatabase(masterUsers);
-          }
-        }
-        const totalRemaining = userPacks.reduce((sum, p) => sum + (p.graphicsRemaining || 0), 0);
-        return res.json({
-          allowed: true,
-          plan: tier,
-          maxAllowed,
-          downloadsToday,
-          remainingToday: totalRemaining,
-          downloadToken: downloadToken2,
-          unlimited: false,
-          usedGraphicPack: true,
-          packRemaining: totalRemaining,
-          packExpiresAt: activePack.expiresAt
-        });
-      }
-      return res.status(403).json({
-        error: "\u0906\u092A\u0915\u0940 \u0906\u091C \u0915\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0940 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E \u0930\u0940\u0938\u0947\u091F \u0939\u094B\u0928\u0947 \u0924\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902 \u092F\u093E \u20B999 \u092E\u0947\u0902 20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0905\u0928\u0932\u0949\u0915 \u0915\u0930\u0947\u0902\u0964",
-        message: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964",
-        quotaExceeded: true,
-        maxAllowed,
-        downloadsToday,
-        canBuyGraphicPack: true
-      });
-    }
     const downloadRequestId = req.body?.downloadRequestId || (card?.id ? `${userKey}_${card.id}_${dateStr}` : null);
     let isAlreadyProcessed = false;
     if (downloadRequestId) {
@@ -35000,6 +35078,54 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
           recentDownloadRequests.set(downloadRequestId, Date.now());
         }
       }
+    }
+    if (downloadsToday >= maxAllowed) {
+      const userPacks = (matchedUser?.graphicPacks || []).filter(
+        (p) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
+      );
+      if (userPacks.length > 0) {
+        userPacks.sort((a, b) => a.expiresAt - b.expiresAt);
+        const activePack = userPacks[0];
+        const cardIdStr2 = card?.id ? String(card.id) : req.body?.cardId ? String(req.body.cardId) : "";
+        const downloadToken2 = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr2);
+        if (!checkOnly) {
+          if (!isAlreadyProcessed) {
+            activePack.graphicsRemaining = Math.max(0, activePack.graphicsRemaining - 1);
+            const masterUsers = loadUsersMasterDatabase();
+            const mIdx = masterUsers.findIndex((u) => u.email && u.email.toLowerCase().trim() === cleanEmail);
+            if (mIdx >= 0) {
+              masterUsers[mIdx].graphicPacks = matchedUser.graphicPacks;
+              saveUsersMasterDatabase(masterUsers);
+              syncUserToProfiles(masterUsers[mIdx]);
+            }
+            if (downloadRequestId) {
+              recentDownloadRequests.set(downloadRequestId, Date.now());
+            }
+          }
+        }
+        const totalRemaining = userPacks.reduce((sum, p) => sum + (p.graphicsRemaining || 0), 0);
+        return res.json({
+          allowed: true,
+          plan: tier,
+          maxAllowed,
+          downloadsToday,
+          remainingToday: totalRemaining,
+          downloadToken: downloadToken2,
+          unlimited: false,
+          usedGraphicPack: true,
+          packRemaining: totalRemaining,
+          packExpiresAt: activePack.expiresAt,
+          idempotent: isAlreadyProcessed
+        });
+      }
+      return res.status(403).json({
+        error: "\u0906\u092A\u0915\u0940 \u0906\u091C \u0915\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0940 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E \u0930\u0940\u0938\u0947\u091F \u0939\u094B\u0928\u0947 \u0924\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902 \u092F\u093E \u20B999 \u092E\u0947\u0902 20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0905\u0928\u0932\u0949\u0915 \u0915\u0930\u0947\u0902\u0964",
+        message: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964",
+        quotaExceeded: true,
+        maxAllowed,
+        downloadsToday,
+        canBuyGraphicPack: true
+      });
     }
     const cardIdStr = card?.id ? String(card.id) : req.body?.cardId ? String(req.body.cardId) : "";
     const downloadToken = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr);

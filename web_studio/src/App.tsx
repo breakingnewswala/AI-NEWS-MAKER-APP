@@ -2651,7 +2651,7 @@ export default function App() {
         location: draft.videoData?.location || draft.location || '',
         compatibleFrameIds: draft.videoData?.selectedFrameId ? [draft.videoData.selectedFrameId] : undefined,
         channel: draft.videoData?.channelName || '',
-        duration: '00:30',
+        duration: draft.videoData?.duration ? String(draft.videoData.duration) : '--:--',
         views: '1',
         createdAt: draft.createdAt || Date.now(),
         category: draft.category || 'वीडियो',

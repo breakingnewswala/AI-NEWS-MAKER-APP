@@ -64,6 +64,7 @@ import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterMod
 import { WebNotificationModal } from './WebNotificationModal';
 import { SocialMediaStoryModal } from './SocialMediaStoryModal';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
+import { NewsDetailModal } from './NewsDetailModal';
 import { addNotification } from '../lib/notificationManager';
 
 const GRAPHIC_PACK_20_7D_PLAN: any = {
@@ -379,17 +380,47 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Cashfree Modal Plan for Graphic Pack (Component 8)
   const [cashfreeModalPlan, setCashfreeModalPlan] = useState<any>(null);
 
-  // Sync favorites & reminders on user change or mount
+  // Local Alerts Preferences (Requirement 9)
+  const [localAlertPrefs, setLocalAlertPrefs] = useState<{ categories?: string[]; topics?: string[]; district?: string; state?: string } | null>(null);
+  const [isLocalAlertModalOpen, setIsLocalAlertModalOpen] = useState<boolean>(false);
+  const [localAlertTopicInput, setLocalAlertTopicInput] = useState<string>('');
+
+  // Sync favorites & reminders & local alerts preferences on user change or mount
   useEffect(() => {
     fetchUserFavorites(currentUser?.email).then((favs) => {
       setUserFavorites(new Set(favs));
     });
     setActiveReminders(getUserRemindersLocal(currentUser?.email));
 
+    if (currentUser?.email) {
+      fetch(`/api/user-local-alerts-preferences?email=${encodeURIComponent(currentUser.email)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d && d.success && d.preferences) {
+            setLocalAlertPrefs(d.preferences);
+          }
+        })
+        .catch(() => {});
+    }
+
     const handleOutsideClick = () => setActiveReminderMenuPostId(null);
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
   }, [currentUser?.email]);
+
+  const handleSaveLocalAlertPrefs = async (newPrefs: any) => {
+    setLocalAlertPrefs(newPrefs);
+    if (currentUser?.email) {
+      try {
+        await fetch('/api/user-local-alerts-preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: currentUser.email, ...newPrefs }),
+        });
+        showToast('📍 लोकल अलर्ट प्राथमिकताएं सुरक्षित हो गईं');
+      } catch {}
+    }
+  };
 
   // Fetch detailed scraped article when detail modal is opened with a sourceUrl
   useEffect(() => {
@@ -1754,16 +1785,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
 
-    // Part 18: Local News Personalization & Local Alerts Ranking
+    // Part 18: Local News Personalization & Local Alerts Ranking (Requirement 9)
     if (selectedCategory === 'local_alerts' || userDistrict || userState) {
-      const cleanDist = userDistrict.toLowerCase();
-      const cleanSt = userState.toLowerCase();
+      const cleanDist = (userDistrict || localAlertPrefs?.district || '').toLowerCase();
+      const cleanSt = (userState || localAlertPrefs?.state || '').toLowerCase();
+      const prefCats = (localAlertPrefs?.categories || []).map((c: string) => c.toLowerCase());
+      const prefTopics = (localAlertPrefs?.topics || []).map((t: string) => t.toLowerCase());
 
       return baseFiltered.sort((a, b) => {
         const getPriorityScore = (post: any): number => {
           const loc = (post.location || post.district || '').toLowerCase();
           const title = (post.title || '').toLowerCase();
           const desc = (post.summary || post.description || '').toLowerCase();
+          const cat = (post.category || post.categoryName || '').toLowerCase();
 
           // Priority 1: User's District (Score 300)
           if (cleanDist && (loc.includes(cleanDist) || title.includes(cleanDist) || desc.includes(cleanDist))) {
@@ -1773,7 +1807,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           if (cleanSt && (loc.includes(cleanSt) || title.includes(cleanSt) || desc.includes(cleanSt))) {
             return 200;
           }
-          // Priority 3: National / General
+          // Priority 3: Selected Category / Topic match (Score 100)
+          if (prefCats.length > 0 && prefCats.some((c: string) => cat.includes(c) || c.includes(cat))) {
+            return 100;
+          }
+          if (prefTopics.length > 0 && prefTopics.some((t: string) => title.includes(t) || desc.includes(t))) {
+            return 100;
+          }
+          // Priority 4: Other eligible news (Score 0)
           return 0;
         };
 
@@ -2859,6 +2900,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {selectedCategory === 'local_alerts' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsLocalAlertModalOpen(true)}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                      <span>⚙️ प्राथमिकताएं</span>
+                    </button>
+                  )}
                   {selectedCategory !== 'all' && (
                     <button
                       type="button"
@@ -5558,111 +5609,153 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         />
       )}
 
-      {/* News Detail Popup Modal (Phase 15) */}
+      {/* Consolidated News Detail Modal (Requirement 5) */}
       {detailModalPost && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 space-y-4 shadow-2xl animate-in fade-in max-h-[90vh] flex flex-col justify-between">
-            <div className="overflow-y-auto pr-1 space-y-4 scrollbar-thin">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                    {detailModalPost.categoryName || 'समाचार'}
-                  </span>
-                  {detailModalPost.location && (
-                    <span className="text-xs text-slate-300 font-bold flex items-center gap-1">
-                      📍 {detailModalPost.location}
-                    </span>
-                  )}
-                  <span className="text-xs text-slate-400">
-                    • {formatDynamicTime(detailModalPost.timestamp, detailModalPost.publishedTime)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {renderCardActions(detailModalPost)}
-                  <button
-                    type="button"
-                    onClick={() => setDetailModalPost(null)}
-                    className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
+        <NewsDetailModal
+          post={detailModalPost}
+          currentUser={currentUser}
+          isFavorite={userFavorites.has(detailModalPost.id)}
+          onToggleFavorite={handleToggleFavorite}
+          onSetReminder={handleSetReminder}
+          onClose={() => setDetailModalPost(null)}
+          onOpenStudio={(post) => {
+            setDetailModalPost(null);
+            handleOpenStudioSafe(post);
+          }}
+        />
+      )}
+
+      {/* Local Alerts Preferences Modal (Requirement 9) */}
+      {isLocalAlertModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl text-left">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                <MapPin className="w-4 h-4" />
+                <span>लोकल अलर्ट प्राथमिकताएं (Local Alerts)</span>
               </div>
-
-              {/* Main Thumbnail Image */}
-              <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md">
-                <img
-                  src={getPostThumbnail(detailModalPost)}
-                  alt={detailModalPost.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              {/* Headline */}
-              <h3 className="text-lg sm:text-xl font-black text-white leading-relaxed break-words">
-                {cleanViewerHeadline(detailModalPost.title)}
-              </h3>
-
-              {/* Full Description / Summary with Scraped Details */}
-              {scrapedArticleData?.loading ? (
-                <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-center gap-2 text-xs text-amber-300">
-                  <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                  <span>वेब से विस्तृत समाचार विवरण प्राप्त किया जा रहा है...</span>
-                </div>
-              ) : (
-                <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm text-slate-200 leading-relaxed whitespace-pre-line">
-                  {scrapedArticleData?.content || scrapedArticleData?.description || decodeHtmlEntities(detailModalPost.approvedCaptionDetailed || detailModalPost.summary || '')}
-                  {detailModalPost.sourceUrl && (
-                    <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                      <span>स्रोत: {cleanViewerChannel(detailModalPost.sourceChannel) || 'वेब'}</span>
-                      <a
-                        href={detailModalPost.sourceUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-amber-400 hover:text-amber-300 underline flex items-center gap-1 font-bold"
-                      >
-                        🔗 मूल समाचार लिंक
-                      </a>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Additional Photos if available */}
-              {((detailModalPost.additionalPhotos && detailModalPost.additionalPhotos.length > 0) || (scrapedArticleData?.photos && scrapedArticleData.photos.length > 0)) && (
-                <div className="space-y-1.5">
-                  <span className="text-xs font-bold text-slate-400">अतिरिक्त तस्वीरें:</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {Array.from(new Set([...(detailModalPost.additionalPhotos || []), ...(scrapedArticleData?.photos || [])])).map((photo, i) => (
-                      <div key={i} className="aspect-video rounded-lg overflow-hidden border border-slate-800 bg-slate-950">
-                        <img src={photo} alt="" className="w-full h-full object-cover" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsLocalAlertModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
 
-            {/* Modal Actions */}
-            <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
+            <div className="space-y-3 text-xs text-slate-300">
+              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-slate-400">आपकी प्रोफ़ाइल लोकेशन:</div>
+                <div className="font-bold text-white text-sm">
+                  {userDistrict ? `जिला: ${userDistrict}` : 'जिला: सेट नहीं'} {userState ? `| राज्य: ${userState}` : '| राज्य: सेट नहीं'}
+                </div>
+                {(!userDistrict || !userState) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLocalAlertModalOpen(false);
+                      onNavigateToTab?.('profile');
+                    }}
+                    className="text-amber-400 hover:underline text-[11px] mt-1 block cursor-pointer"
+                  >
+                    प्रोफ़ाइल में जिला व राज्य सेट करें ➔
+                  </button>
+                )}
+              </div>
+
+              <div>
+                <div className="font-bold text-slate-200 mb-1.5">पसंदीदा श्रेणियां चुनें:</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {feedCategories.filter((c) => c.id !== 'all' && c.id !== 'favorites' && c.id !== 'local_alerts').map((cat) => {
+                    const isSelected = (localAlertPrefs?.categories || []).includes(cat.name);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          const current = new Set(localAlertPrefs?.categories || []);
+                          if (isSelected) current.delete(cat.name);
+                          else current.add(cat.name);
+                          handleSaveLocalAlertPrefs({
+                            ...localAlertPrefs,
+                            categories: Array.from(current),
+                          });
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg border text-left truncate transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : ''}{cat.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="font-bold text-slate-200 mb-1.5">टॉपिक / कीवर्ड जोड़ें (उदा. चुनाव, बारिश, सड़क):</div>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={localAlertTopicInput}
+                    onChange={(e) => setLocalAlertTopicInput(e.target.value)}
+                    placeholder="नया कीवर्ड टाइप करें..."
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && localAlertTopicInput.trim()) {
+                        e.preventDefault();
+                        const current = Array.from(new Set([...(localAlertPrefs?.topics || []), localAlertTopicInput.trim()]));
+                        handleSaveLocalAlertPrefs({ ...localAlertPrefs, topics: current });
+                        setLocalAlertTopicInput('');
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (localAlertTopicInput.trim()) {
+                        const current = Array.from(new Set([...(localAlertPrefs?.topics || []), localAlertTopicInput.trim()]));
+                        handleSaveLocalAlertPrefs({ ...localAlertPrefs, topics: current });
+                        setLocalAlertTopicInput('');
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 cursor-pointer"
+                  >
+                    जोड़ें
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(localAlertPrefs?.topics || []).map((topic: string) => (
+                    <span
+                      key={topic}
+                      className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-amber-300 text-[11px] flex items-center gap-1"
+                    >
+                      <span>#{topic}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = (localAlertPrefs?.topics || []).filter((t: string) => t !== topic);
+                          handleSaveLocalAlertPrefs({ ...localAlertPrefs, topics: updated });
+                        }}
+                        className="hover:text-rose-400 ml-0.5 cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex justify-end">
               <button
                 type="button"
-                onClick={() => setDetailModalPost(null)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer"
+                onClick={() => setIsLocalAlertModalOpen(false)}
+                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black text-xs rounded-xl shadow hover:from-amber-400 hover:to-yellow-400 cursor-pointer"
               >
-                बंद करें
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const post = detailModalPost;
-                  setDetailModalPost(null);
-                  handleOpenStudioSafe(post);
-                }}
-                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>इस खबर से ग्राफिक बनाएं</span>
+                पूर्ण (Done)
               </button>
             </div>
           </div>

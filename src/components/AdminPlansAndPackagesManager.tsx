@@ -2157,6 +2157,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 <option value="ADVANCE">ADVANCE (एडवांस)</option>
                 <option value="PRO">PRO (प्रो)</option>
                 <option value="VIP">VIP DESK (अल्ट्रा)</option>
+                <option value="GRAPHIC_PACK">₹99 ग्राफिक पैक (Graphic Pack 20/7D)</option>
               </select>
               <select
                 value={paymentStatusFilter}
@@ -2233,7 +2234,15 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               <div className="text-[11px] text-slate-400 font-mono truncate max-w-[180px]">{p.customerEmail || ''}</div>
                               {p.customerPhone && <div className="text-[10px] text-slate-500 font-mono">{p.customerPhone}</div>}
                             </td>
-                            <td className="py-2.5 px-3 font-bold text-amber-300 font-sans">{p.planName || p.planKey || 'ADVANCE'}</td>
+                            <td className="py-2.5 px-3 font-bold text-amber-300 font-sans">
+                              <div>{p.planName || p.planKey || 'ADVANCE'}</div>
+                              {(p.isGraphicPack || (p.planKey && p.planKey.includes('GRAPHIC_PACK')) || (p.planId && p.planId.includes('GRAPHIC_PACK'))) && (
+                                <div className="text-[10px] text-emerald-400 font-mono font-medium mt-0.5">
+                                  {p.graphicsRemaining !== undefined ? `${p.graphicsRemaining}/${p.graphicsTotal || 20} शेष` : '20/20 शेष'}
+                                  {p.expiresAt ? ` (वैध: ${new Date(p.expiresAt).toLocaleDateString('hi-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short' })})` : ''}
+                                </div>
+                              )}
+                            </td>
                             <td className="py-2.5 px-3 font-bold text-white whitespace-nowrap">₹{p.orderAmount || 0}</td>
                             <td className="py-2.5 px-3 text-[11px] text-slate-400 truncate max-w-[150px]">{p.orderId}</td>
                             <td className="py-2.5 px-3">

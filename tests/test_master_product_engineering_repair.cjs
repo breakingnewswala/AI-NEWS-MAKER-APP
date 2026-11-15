@@ -70,10 +70,13 @@ runTest('Area 3: VideoStudioWeb.tsx handleResetTask performs complete state tear
 // -----------------------------------------------------------------------------
 runTest('Area 4: VideosScreenWeb.tsx extracts exact duration without fake 30s/60s', () => {
   const videosScreen = fs.readFileSync('src/components/VideosScreenWeb.tsx', 'utf8');
+  const app = fs.readFileSync('src/App.tsx', 'utf8');
   assert(videosScreen.includes('formatExactDuration'), 'VideosScreen must implement formatExactDuration');
   assert(videosScreen.includes('Math.floor(dur / 3600)') || videosScreen.includes('Math.floor(num / 3600)'), 'formatExactDuration must support hh:mm:ss');
   assert(videosScreen.includes("'--:--'"), 'formatExactDuration must return --:-- on invalid duration');
   assert(!videosScreen.includes("duration: '00:30'"), 'VideosScreen must not hardcode 00:30');
+  assert(!videosScreen.includes("duration: adminDuration ? formatExactDuration(adminDuration) : '01:30'"), 'VideosScreen must not default to 01:30');
+  assert(!app.includes("duration: '00:30'"), 'App.tsx must not hardcode 00:30 duration');
   assert(videosScreen.includes("preload = 'metadata'"), 'VideosScreen must use preload=metadata for remote videos');
 });
 
@@ -82,9 +85,11 @@ runTest('Area 4: VideosScreenWeb.tsx extracts exact duration without fake 30s/60
 // -----------------------------------------------------------------------------
 runTest('Area 5: HomeScreenWeb.tsx has full wrapping and server.ts has /api/scrape-news-article', () => {
   const homeScreen = fs.readFileSync('src/components/HomeScreenWeb.tsx', 'utf8');
+  const newsDetail = fs.readFileSync('src/components/NewsDetailModal.tsx', 'utf8');
   const server = fs.readFileSync('server.ts', 'utf8');
-  assert(homeScreen.includes('leading-relaxed break-words'), 'Detail headline must have leading-relaxed break-words');
-  assert(homeScreen.includes('/api/scrape-news-article'), 'HomeScreen must query /api/scrape-news-article');
+  assert(newsDetail.includes('leading-relaxed break-words'), 'Detail headline must have leading-relaxed break-words');
+  assert(newsDetail.includes('/api/scrape-news-article'), 'NewsDetailModal must query /api/scrape-news-article');
+  assert(homeScreen.includes('<NewsDetailModal'), 'HomeScreen must render consolidated NewsDetailModal');
   assert(server.includes('/api/scrape-news-article'), 'Server must declare /api/scrape-news-article');
   assert(server.includes('scraped_articles_cache_db.json'), 'Server must use persistent cache for scraped articles');
 });
@@ -124,11 +129,14 @@ runTest('Area 7: Reminder system supports scheduling, background ticker, and not
 runTest('Area 8: ₹99 Graphic Pack enforces 99 INR, 20 credits, 7 days, and FIFO consumption', () => {
   const server = fs.readFileSync('server.ts', 'utf8');
   const homeScreen = fs.readFileSync('src/components/HomeScreenWeb.tsx', 'utf8');
+  const adminPlans = fs.readFileSync('src/components/AdminPlansAndPackagesManager.tsx', 'utf8');
   assert(server.includes('GRAPHIC_PACK_20_7D'), 'Server must recognize GRAPHIC_PACK_20_7D');
   assert(server.includes('isGraphicPack ? 99'), 'Server must enforce fixed 99 INR price');
   assert(server.includes('graphicsTotal: 20'), 'Server must credit 20 balance on purchase');
   assert(server.includes('7 * 86400000') || server.includes('7 * 24 * 60 * 60 * 1000'), 'Server must calculate 7 days validity');
   assert(server.includes('activePack.graphicsRemaining'), 'Server verify-download-entitlement must consume from graphicPacks');
+  assert(server.includes('enrichPayments'), 'Server must enrich payments with graphic pack credits and expiry');
+  assert(adminPlans.includes('GRAPHIC_PACK'), 'AdminPlans must filter for GRAPHIC_PACK');
   assert(homeScreen.includes('₹99 में 20 अतिरिक्त ग्राफिक अनलॉक करें'), 'HomeScreen must prompt to unlock 20 graphics for ₹99');
 });
 
@@ -137,10 +145,14 @@ runTest('Area 8: ₹99 Graphic Pack enforces 99 INR, 20 credits, 7 days, and FIF
 // -----------------------------------------------------------------------------
 runTest('Area 9: Local Alerts feed scores district 300, state 200, category 100 and prompts unconfigured users', () => {
   const homeScreen = fs.readFileSync('src/components/HomeScreenWeb.tsx', 'utf8');
+  const server = fs.readFileSync('server.ts', 'utf8');
   assert(homeScreen.includes('📍 लोकल अलर्ट'), 'HomeScreen must have 📍 लोकल अलर्ट option');
   assert(homeScreen.includes('return 300'), 'District match must award 300 score');
   assert(homeScreen.includes('return 200'), 'State match must award 200 score');
+  assert(homeScreen.includes('return 100'), 'Category/topic match must award 100 score');
   assert(homeScreen.includes('लोकल अलर्ट के लिए जिला व राज्य सेट करें'), 'HomeScreen must prompt users to set district/state');
+  assert(server.includes('/api/user-local-alerts-preferences'), 'Server must provide /api/user-local-alerts-preferences');
+  assert(server.includes('notif_local_'), 'Server must broadcast personalized local alerts');
 });
 
 // -----------------------------------------------------------------------------
