@@ -52,6 +52,7 @@ import {
   MessageSquare,
   MessageCircle,
   Bell,
+  AlertCircle,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { inferStateFromDistrict } from '../data/indianStatesDistricts';
@@ -268,8 +269,12 @@ export function cleanUserFacingFullContent(text?: string): string {
     .trim();
 }
 
+export type FeedStatus = 'loading' | 'verified' | 'empty' | 'error';
+
 interface HomeScreenWebProps {
   posts: NewsFeedPost[];
+  feedStatus?: FeedStatus;
+  onRetryNews?: () => void;
   currentUser?: ReporterUser | null;
   onOpenStudioWithNews: (post: NewsFeedPost) => void;
   onOpenAddPostModal: () => void;
@@ -284,6 +289,8 @@ interface HomeScreenWebProps {
 
 export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   posts,
+  feedStatus = 'verified',
+  onRetryNews,
   currentUser,
   onOpenStudioWithNews,
   onOpenAddPostModal,
@@ -1577,10 +1584,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const isStrictlyApproved = (p: any): boolean => {
       if (!p || !p.id) return false;
       if (deletedIds.has(p.id)) return false;
-      if (p.approvalStatus === 'REJECTED' || p.status === 'REJECTED' || p.status === 'rejected' || p.status === 'draft' || p.isApproved === false) return false;
-      if (p.approvalStatus === 'PENDING_APPROVAL' || p.status === 'PENDING_APPROVAL' || p.status === 'pending') return false;
-      const isApproved = p.approvalStatus === 'APPROVED' || p.status === 'APPROVED' || p.isApproved === true || (approvedRssIds && approvedRssIds.has(p.id) && p.status !== 'pending' && p.approvalStatus !== 'pending');
-      const isPublished = p.publicationStatus === 'PUBLISHED' || p.publicationStatus === 'published' || p.status === 'published' || p.status === 'APPROVED' || p.isPublished === true;
+      const status = (p.status || '').toUpperCase();
+      const approvalStatus = (p.approvalStatus || '').toUpperCase();
+      const publicationStatus = (p.publicationStatus || '').toUpperCase();
+
+      // P0 Invariant: Missing approval status is always hidden
+      if (!status && !approvalStatus) return false;
+      if (status === 'REJECTED' || approvalStatus === 'REJECTED' || status === 'DRAFT' || publicationStatus === 'DRAFT' || p.isApproved === false) return false;
+      if (status === 'PENDING_APPROVAL' || status === 'PENDING' || approvalStatus === 'PENDING_APPROVAL' || approvalStatus === 'PENDING') return false;
+
+      // P0 Invariant: Must be server-verified APPROVED + PUBLISHED; local storage IDs alone cannot promote unapproved posts
+      const isApproved = status === 'APPROVED' || approvalStatus === 'APPROVED' || p.isApproved === true;
+      const isPublished = publicationStatus === 'PUBLISHED' || status === 'PUBLISHED' || p.isPublished === true || status === 'APPROVED';
       return Boolean(isApproved && isPublished);
     };
     const unremovedFiltered = filteredPosts.filter((p) => !removedHighlightIds.has(p.id));
@@ -2617,7 +2632,39 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </h3>
           </div>
 
-          {filteredPosts.length === 0 ? (
+          {feedStatus === 'loading' ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center bg-slate-900/60 border border-slate-800/80 rounded-2xl shadow-inner my-4">
+              <Loader2 className="w-10 h-10 text-amber-400 animate-spin mb-4" />
+              <h4 className="text-base sm:text-lg font-bold text-slate-200 mb-2">
+                ताज़ा समाचार लोड हो रहे हैं...
+              </h4>
+              <p className="text-sm text-slate-400 max-w-md">
+                सर्वर से प्राधिकृत समाचार प्राप्त किए जा रहे हैं।
+              </p>
+            </div>
+          ) : feedStatus === 'error' ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center bg-rose-950/20 border border-rose-800/40 rounded-2xl shadow-inner my-4">
+              <div className="w-16 h-16 rounded-full bg-rose-900/30 border border-rose-700/50 flex items-center justify-center mb-4 text-rose-400">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <h4 className="text-base sm:text-lg font-bold text-slate-200 mb-2">
+                समाचार लोड करने में असमर्थ
+              </h4>
+              <p className="text-sm text-slate-400 max-w-md mb-5 leading-relaxed">
+                सर्वर से संपर्क नहीं हो सका। कृपया अपना नेटवर्क कनेक्शन जांचें या पुनः प्रयास करें।
+              </p>
+              {onRetryNews && (
+                <button
+                  type="button"
+                  onClick={onRetryNews}
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-sm rounded-xl flex items-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>पुनः प्रयास करें (Retry)</span>
+                </button>
+              )}
+            </div>
+          ) : filteredPosts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-6 text-center bg-slate-900/60 border border-slate-800/80 rounded-2xl shadow-inner my-4">
               <div className="w-16 h-16 rounded-full bg-slate-800/80 flex items-center justify-center mb-4 text-slate-400">
                 <TrendingUp className="w-8 h-8 opacity-40" />

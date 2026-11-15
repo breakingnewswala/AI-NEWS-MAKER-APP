@@ -342,42 +342,53 @@ export function getApprovedRssIds(): Set<string> {
   return new Set();
 }
 
-export function isRssPostApproved(post: NewsFeedPost, approvedIds?: Set<string>): boolean {
+export function isRssPostApproved(post: NewsFeedPost, _serverApprovedIds?: Set<string>): boolean {
   if (!post || !post.id) return false;
-  // If rejected, draft, or pending, reject immediately unless explicit server-verified approval
+
+  const status = (post.status || '').toUpperCase();
+  const approvalStatus = ((post as any).approvalStatus || '').toUpperCase();
+  const publicationStatus = ((post as any).publicationStatus || '').toUpperCase();
+
+  // 1. P0 Invariant: Missing approval status is always hidden for public feeds
+  if (!status && !approvalStatus) {
+    return false;
+  }
+
+  // 2. Explicit rejections or drafts are never approved
   if (
-    post.status === 'REJECTED' ||
-    (post as any).status === 'rejected' ||
-    (post as any).approvalStatus === 'REJECTED' ||
-    post.status === 'draft' ||
-    (post as any).publicationStatus === 'draft' ||
+    status === 'REJECTED' ||
+    approvalStatus === 'REJECTED' ||
+    status === 'DRAFT' ||
+    publicationStatus === 'DRAFT' ||
     (post as any).isApproved === false
   ) {
     return false;
   }
+
+  // 3. Pending items are never approved
   if (
-    post.status === 'PENDING_APPROVAL' ||
-    (post as any).status === 'pending' ||
-    (post as any).approvalStatus === 'PENDING_APPROVAL' ||
-    (post as any).approvalStatus === 'pending'
+    status === 'PENDING_APPROVAL' ||
+    status === 'PENDING' ||
+    approvalStatus === 'PENDING_APPROVAL' ||
+    approvalStatus === 'PENDING'
   ) {
     return false;
   }
-  const isExplicitApproved =
-    post.status === 'APPROVED' ||
-    (post as any).status === 'approved' ||
-    (post as any).approvalStatus === 'APPROVED' ||
-    (post as any).isApproved === true ||
-    Boolean(approvedIds && approvedIds.has(post.id) && (post as any).status !== 'pending' && (post as any).approvalStatus !== 'pending');
 
-  const isExplicitPublished =
-    (post as any).status === 'published' ||
-    (post as any).publicationStatus === 'published' ||
-    (post as any).publicationStatus === 'PUBLISHED' ||
+  // 4. P0 Invariant: Must have explicit server-authoritative approval.
+  // Manually adding an ID in browser localStorage CANNOT promote an unapproved item to approved.
+  const isServerApproved =
+    status === 'APPROVED' ||
+    approvalStatus === 'APPROVED' ||
+    (post as any).isApproved === true;
+
+  const isServerPublished =
+    publicationStatus === 'PUBLISHED' ||
+    status === 'PUBLISHED' ||
     (post as any).isPublished === true ||
-    post.status === 'APPROVED';
+    status === 'APPROVED';
 
-  return Boolean(isExplicitApproved && isExplicitPublished);
+  return Boolean(isServerApproved && isServerPublished);
 }
 
 export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
@@ -528,7 +539,8 @@ export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
     }
   } catch {}
 
-  return getApprovedRssIds();
+  // P0 Invariant: If server request fails, return empty set; never treat unverified localStorage cache as authoritative
+  return new Set<string>();
 }
 
 export function getActiveRssNewsPosts(): NewsFeedPost[] {

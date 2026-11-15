@@ -407,6 +407,8 @@ function getSavedChannelProfile(): ChannelProfile | null {
   }
 }
 
+export type FeedStatus = 'loading' | 'verified' | 'empty' | 'error';
+
 export default function App() {
   // Only true in native Android APK WebView (via AndroidBridge, file:///android_asset or appassets domain)
   const isAndroidEnvironment = typeof window !== 'undefined' && (
@@ -774,48 +776,13 @@ export default function App() {
     }
   }, [currentTab]);
 
-  // News feed posts state - auto-migrates from v1 and validates live format (no dummy seeds)
-  // Part N: Filter deleted items on initial mount to prevent deleted news from flashing after refresh
-  // Part M: Sort newest first
-  const [posts, setPosts] = useState<NewsFeedPost[]>(() => {
-    try {
-      localStorage.removeItem('app_news_posts_v1');
-      const rawDel = typeof localStorage !== 'undefined' ? localStorage.getItem('app_deleted_news_ids_v1') : null;
-      const deletedSet = new Set<string>(rawDel ? JSON.parse(rawDel) : []);
-      const saved = localStorage.getItem('app_news_posts_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Strictly purge any deleted or obsolete dummy live-post seed records
-          const clean = parsed.filter((p: any) => {
-            if (!p || !p.id) return false;
-            if (deletedSet.has(p.id)) return false;
-            if (p.id === 'news_1793391037097') return false;
-            if (String(p.id).startsWith('live-post-') || String(p.id).startsWith('editorial-seed-')) return false;
-            return true;
-          });
-          clean.sort((a: NewsFeedPost, b: NewsFeedPost) => {
-            const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp || 0).getTime();
-            const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp || 0).getTime();
-            if ((timeB || 0) !== (timeA || 0)) {
-              return (timeB || 0) - (timeA || 0);
-            }
-            return String(b.id).localeCompare(String(a.id));
-          });
-          if (clean.length > 0) return clean;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return (INITIAL_NEWS_POSTS && INITIAL_NEWS_POSTS.length > 0) ? INITIAL_NEWS_POSTS : [];
-  });
+  // News feed posts state: starts empty; authoritative state is populated only by server verification
+  // P0 Invariant: Never render stale localStorage cache or dummy seeds before server confirmation
+  const [posts, setPosts] = useState<NewsFeedPost[]>([]);
+  const [feedStatus, setFeedStatus] = useState<FeedStatus>('loading');
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Cloud Live Data URLs (Firebase Storage for ai-news-maker-app)
-  const CLOUD_STORAGE_UPLOAD_URL = 'https://firebasestorage.googleapis.com/v0/b/ai-news-maker-app.firebasestorage.app/o?name=news_database.json';
 
   // Sync news posts with server authoritative database (/api/news-posts)
   const fetchLiveNews = async () => {
@@ -920,6 +887,7 @@ export default function App() {
               }
             }
             setPosts(cleanApi);
+            setFeedStatus('verified');
             try {
               localStorage.setItem('app_news_posts_v2', JSON.stringify(cleanApi));
             } catch {}
@@ -927,6 +895,7 @@ export default function App() {
           } else {
             // Authoritative Zero-News: When API successfully returns 0 posts, empty the feed and do not resurrect old cached news
             setPosts([]);
+            setFeedStatus('empty');
             try {
               localStorage.removeItem('app_news_posts_v2');
             } catch {}
@@ -935,9 +904,20 @@ export default function App() {
             loaded = true;
           }
         }
+      } else {
+        // P0 Invariant: Do NOT treat API failure as zero-news success; set explicit error state
+        if (!loaded) {
+          setPosts([]);
+          setFeedStatus('error');
+        }
       }
     } catch (err) {
       console.warn('Authoritative backend news fetch failed:', err);
+      // P0 Invariant: Network failure sets explicit error state without resurrecting stale cached news
+      if (!loaded) {
+        setPosts([]);
+        setFeedStatus('error');
+      }
     }
 
     // Direct client fallback from Firebase Cloud Storage and static files removed:
@@ -973,16 +953,7 @@ export default function App() {
   }, []);
 
   const syncPostsToServer = (updatedPosts: NewsFeedPost[]) => {
-    // 1. Sync to Cloud Storage (Firebase) for ainewsmaker.online
-    try {
-      fetch(CLOUD_STORAGE_UPLOAD_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedPosts),
-      }).catch((err) => console.warn('Sync to Firebase Storage failed:', err));
-    } catch {}
-
-    // 2. Sync to local backend API
+    // Authoritative backend API sync (Firebase dual-write removed to prevent divergence)
     try {
       const baseUrl = getApiBaseUrl();
       fetch(`${baseUrl}/api/news-posts`, {
@@ -4018,6 +3989,8 @@ export default function App() {
           )}
           <HomeScreenWeb
           posts={posts}
+          feedStatus={feedStatus}
+          onRetryNews={fetchLiveNews}
           currentUser={currentUser}
           onOpenStudioWithNews={handleOpenStudioWithNews}
           onOpenAddPostModal={() => {

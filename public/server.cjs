@@ -19835,7 +19835,9 @@ function decodeHtmlEntities(str) {
     }
   }).replace(/\uFFFD+/g, " ").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/\s+/g, " ").trim();
 }
-async function parseRssItemsFromXml(xmlText, source, knownFilter) {
+var MAX_RSS_ITEMS_PER_SOURCE = parseInt(process.env.MAX_RSS_ITEMS_PER_SOURCE || "200", 10);
+var MAX_PAGES_PER_SOURCE = parseInt(process.env.MAX_PAGES_PER_SOURCE || "10", 10);
+async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX_RSS_ITEMS_PER_SOURCE) {
   const posts = [];
   const itemRegex = /<item[\s\S]*?<\/item>/gi;
   let items = xmlText.match(itemRegex) || [];
@@ -19866,7 +19868,9 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter) {
     }
     items = syntheticItems;
   }
-  const candidateXmls = items.slice(0, 50);
+  let encounteredOlderThanCutoff = false;
+  const twelveHoursAgo = Date.now() - 12 * 3600 * 1e3;
+  const candidateXmls = items.slice(0, maxItems);
   const parsedPromises = candidateXmls.map(async (itemXml) => {
     try {
       const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
@@ -19883,8 +19887,8 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter) {
         const parsedTime = Date.parse(pubDateStr);
         if (!isNaN(parsedTime)) timestamp = parsedTime;
       }
-      const twelveHoursAgo = Date.now() - 12 * 3600 * 1e3;
       if (timestamp < twelveHoursAgo) {
+        encounteredOlderThanCutoff = true;
         return null;
       }
       if (knownFilter) {
@@ -19967,7 +19971,11 @@ ${editorial.summary}
       posts.push(s.value);
     }
   }
-  return posts;
+  return Object.assign(posts, {
+    items: posts,
+    encounteredOlderThanCutoff,
+    rawCount: items.length
+  });
 }
 async function fetchAndParseWebLink(source) {
   try {
@@ -20556,7 +20564,9 @@ async function executeRssSynchronization() {
       skippedDuplicatesCount: 0,
       failedSourcesCount: 0,
       durationMs: 0,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      truncated: false,
+      moreAvailable: false
     };
   }
   isRssSyncRunning = true;
@@ -20565,6 +20575,7 @@ async function executeRssSynchronization() {
   let updatedArticlesCount = 0;
   let skippedDuplicatesCount = 0;
   let failedSourcesCount = 0;
+  let anySourceTruncated = false;
   try {
     const sources = loadRssSourcesDatabase();
     const activeSources = sources.filter((s) => s.isActive);
@@ -20578,7 +20589,9 @@ async function executeRssSynchronization() {
         skippedDuplicatesCount: 0,
         failedSourcesCount: 0,
         durationMs: Date.now() - startTime,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        truncated: false,
+        moreAvailable: false
       };
       lastRssSyncResult = res;
       return res;
@@ -20597,48 +20610,82 @@ async function executeRssSynchronization() {
       activeSources.map(async (src) => {
         try {
           if (src.type === "rss" || !src.type) {
-            const resp = await fetch(src.url, {
-              headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
-                Accept: "application/rss+xml, application/xml, text/xml, */*"
-              },
-              signal: AbortSignal.timeout(12e3)
-            });
-            if (resp.ok) {
+            let pageUrl = src.url;
+            let pageIndex = 0;
+            const visitedPageUrls = /* @__PURE__ */ new Set();
+            let sourceItems = [];
+            let sourceTruncated = false;
+            let firstPageFailed = false;
+            let firstPageStatus = 200;
+            while (pageUrl && pageIndex < MAX_PAGES_PER_SOURCE && sourceItems.length < MAX_RSS_ITEMS_PER_SOURCE) {
+              if (visitedPageUrls.has(pageUrl)) {
+                console.log(`[RSS Sync] Detected visited page loop for ${src.name}: ${pageUrl}`);
+                break;
+              }
+              visitedPageUrls.add(pageUrl);
+              pageIndex++;
+              let resp;
+              try {
+                resp = await fetch(pageUrl, {
+                  headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
+                    Accept: "application/rss+xml, application/xml, text/xml, */*"
+                  },
+                  signal: AbortSignal.timeout(12e3)
+                });
+              } catch (fetchErr) {
+                if (pageIndex === 1) {
+                  firstPageFailed = true;
+                  firstPageStatus = 500;
+                }
+                break;
+              }
+              if (!resp.ok) {
+                if (pageIndex === 1) {
+                  firstPageFailed = true;
+                  firstPageStatus = resp.status;
+                }
+                break;
+              }
               const xmlText = await resp.text();
-              let items = await parseRssItemsFromXml(xmlText, src, knownFilter);
-              if (items.length === 0 && (xmlText.includes("<html") || xmlText.includes("<!DOCTYPE") || xmlText.includes("<article"))) {
+              const remainingQuota = MAX_RSS_ITEMS_PER_SOURCE - sourceItems.length;
+              const parseResult = await parseRssItemsFromXml(xmlText, src, knownFilter, remainingQuota);
+              let items = parseResult.items || parseResult;
+              if (items.length === 0 && sourceItems.length === 0 && (xmlText.includes("<html") || xmlText.includes("<!DOCTYPE") || xmlText.includes("<article"))) {
                 items = await fetchAndParseWebLink(src);
               }
-              if (items.length < 50) {
-                const nextMatch = xmlText.match(/<[^>]+rel=["']next["'][^>]+href=["']([^"']+)["']/i) || xmlText.match(/<[^>]+href=["']([^"']+)["'][^>]+rel=["']next["']/i);
-                if (nextMatch && nextMatch[1]) {
-                  try {
-                    const nextUrl = resolveUrl(nextMatch[1], src.url);
-                    const nextResp = await fetch(nextUrl, {
-                      headers: {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
-                        Accept: "application/rss+xml, application/xml, text/xml, */*"
-                      },
-                      signal: AbortSignal.timeout(1e4)
-                    });
-                    if (nextResp.ok) {
-                      const nextXml = await nextResp.text();
-                      const moreItems = await parseRssItemsFromXml(nextXml, src, knownFilter);
-                      items = [...items, ...moreItems].slice(0, 50);
-                    }
-                  } catch {
-                  }
+              sourceItems.push(...items);
+              if (parseResult.encounteredOlderThanCutoff) {
+                console.log(`[RSS Sync] Source ${src.name}: 12-hour freshness cutoff reached on page ${pageIndex}`);
+                break;
+              }
+              if (sourceItems.length >= MAX_RSS_ITEMS_PER_SOURCE) {
+                sourceTruncated = true;
+                break;
+              }
+              const nextMatch = xmlText.match(/<[^>]+rel=["']next["'][^>]+href=["']([^"']+)["']/i) || xmlText.match(/<[^>]+href=["']([^"']+)["'][^>]+rel=["']next["']/i) || xmlText.match(/<link[^>]+rel=["']next["'][^>]*>([\s\S]*?)<\/link>/i) || xmlText.match(/<atom:link[^>]+rel=["']next["'][^>]+href=["']([^"']+)["']/i);
+              if (nextMatch && (nextMatch[1] || nextMatch[2])) {
+                const rawNext = (nextMatch[1] || nextMatch[2] || "").trim();
+                const resolvedNext = resolveUrl(rawNext, pageUrl);
+                if (resolvedNext && !visitedPageUrls.has(resolvedNext)) {
+                  pageUrl = resolvedNext;
+                  continue;
                 }
               }
-              if (items.length > 0) {
-                src.lastFetchedAt = Date.now();
-                src.itemsFetchedCount = (src.itemsFetchedCount || 0) + items.length;
-                src.lastSyncStatus = "success";
-                src.lastError = void 0;
-                fetchedPosts.push(...items);
-              }
-            } else if (src.originalWebUrl || src.webUrl) {
+              pageUrl = "";
+            }
+            if (sourceTruncated) {
+              anySourceTruncated = true;
+            }
+            if (sourceItems.length > 0) {
+              src.lastFetchedAt = Date.now();
+              src.itemsFetchedCount = (src.itemsFetchedCount || 0) + sourceItems.length;
+              src.lastSyncStatus = "success";
+              src.lastError = void 0;
+              src.truncated = sourceTruncated;
+              src.pagesFetched = pageIndex;
+              fetchedPosts.push(...sourceItems);
+            } else if (firstPageFailed && (src.originalWebUrl || src.webUrl)) {
               const fallbackUrl = src.originalWebUrl || src.webUrl;
               const items = await fetchAndParseWebLink({ ...src, url: fallbackUrl });
               if (items.length > 0) {
@@ -20650,12 +20697,12 @@ async function executeRssSynchronization() {
               } else {
                 failedSourcesCount++;
                 src.lastSyncStatus = "error";
-                src.lastError = `HTTP ${resp.status}`;
+                src.lastError = `HTTP ${firstPageStatus}`;
               }
-            } else {
+            } else if (firstPageFailed) {
               failedSourcesCount++;
               src.lastSyncStatus = "error";
-              src.lastError = `HTTP ${resp.status}`;
+              src.lastError = `HTTP ${firstPageStatus}`;
             }
           } else {
             const items = await fetchAndParseWebLink(src);
@@ -20748,7 +20795,9 @@ async function executeRssSynchronization() {
       skippedDuplicatesCount,
       failedSourcesCount,
       durationMs,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      truncated: anySourceTruncated,
+      moreAvailable: anySourceTruncated
     };
     lastRssSyncResult = result;
     if (newArticlesCount > 0 || failedSourcesCount > 0) {
@@ -20769,7 +20818,9 @@ async function executeRssSynchronization() {
       failedSourcesCount: 0,
       durationMs,
       timestamp: Date.now(),
-      error: cleanErrorMessage(err)
+      error: cleanErrorMessage(err),
+      truncated: false,
+      moreAvailable: false
     };
     lastRssSyncResult = result;
     return result;
