@@ -398,21 +398,14 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   }
 
   // 5. P0 INVARIANT: Server-Authoritative Verification against LocalStorage Tampering
-  // If the post is an RSS or Web feed item (or untrusted local record), a forged status
-  // in localStorage (e.g. status: 'APPROVED') CANNOT grant approval.
+  // For any post, a forged status in localStorage (e.g. status: 'APPROVED') CANNOT grant approval.
   // It MUST be confirmed by the server's approved IDs set!
-  const isFeedItem = Boolean(String(post.id).startsWith('rss-') || String(post.id).startsWith('web-'));
-  if (isFeedItem) {
-    const authoritativeSet = serverApprovedIds || memoryServerApprovedIds;
-    if (authoritativeSet && authoritativeSet.size > 0) {
-      return authoritativeSet.has(post.id);
-    }
-    // If no server set is passed and memory set is not yet populated:
-    // Untrusted feed posts from localStorage CANNOT be promoted to approved without server confirmation!
-    return false;
+  const authoritativeSet = serverApprovedIds || memoryServerApprovedIds;
+  if (authoritativeSet && authoritativeSet.size > 0) {
+    return authoritativeSet.has(post.id);
   }
-
-  return true;
+  // If no server set is passed or server set is empty: fail closed!
+  return false;
 }
 
 export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
@@ -460,10 +453,13 @@ export async function approveRssPost(postId: string, postData?: any): Promise<bo
       return false;
     }
 
-    // 2. ONLY upon confirmed server success, record approval in local state
-    const approved = getApprovedRssIds();
+    // 2. ONLY upon confirmed server success, record approval in authoritative memory state
+    const approved = memoryServerApprovedIds ? new Set(memoryServerApprovedIds) : new Set<string>();
     approved.add(postId);
-    localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+    memoryServerApprovedIds = approved;
+    try {
+      localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+    } catch {}
 
     const updated = cached.map((p) => (p.id === postId ? {
       ...p,
@@ -517,9 +513,12 @@ export async function rejectRssPost(postId: string): Promise<boolean> {
       return false;
     }
 
-    const approved = getApprovedRssIds();
+    const approved = memoryServerApprovedIds ? new Set(memoryServerApprovedIds) : new Set<string>();
     approved.delete(postId);
-    localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+    memoryServerApprovedIds = approved;
+    try {
+      localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
+    } catch {}
 
     const cached = getActiveRssNewsPosts();
     const updated = cached.map((p) => (p.id === postId ? {
@@ -564,7 +563,8 @@ export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
     }
   } catch {}
 
-  // P0 Invariant: If server request fails, return empty set; never treat unverified localStorage cache as authoritative
+  // P0 Invariant: If server request fails, return empty set and fail closed; never treat unverified localStorage cache as authoritative
+  memoryServerApprovedIds = new Set<string>();
   return new Set<string>();
 }
 

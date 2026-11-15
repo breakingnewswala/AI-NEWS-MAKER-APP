@@ -160,11 +160,11 @@ export function decodeHtmlEntities(str?: string): string {
 import {
   getActiveRssNewsPosts,
   getSavedNewsChannels,
-  getApprovedRssIds,
   approveRssPost,
   isRssPostApproved,
   fetchAdminRssSourcesFromBackend,
   syncAllSourcesLive,
+  syncAndMigrateLocalApprovals,
 } from '../lib/rssSourceManager';
 import { fetchRemoteRestrictedChannels, RestrictedChannel } from '../lib/restrictedChannelsManager';
 import { getActiveCategories, CategoryItem } from '../lib/categoryManager';
@@ -1037,7 +1037,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   };
 
-  const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => getApprovedRssIds());
+  const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => new Set<string>());
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
 
   const [localPosts, setLocalPosts] = useState<NewsFeedPost[]>(() => posts);
@@ -1318,12 +1318,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
 
   useEffect(() => {
-    // Synchronize server-authoritative approved IDs on mount
+    // Synchronize server-authoritative approved IDs on mount: replace state with exact server response (fail closed to empty Set)
     syncAndMigrateLocalApprovals().then((serverSet) => {
-      if (serverSet && serverSet.size > 0) {
-        setApprovedRssIds((prev) => new Set([...Array.from(prev), ...Array.from(serverSet)]));
-      }
-    }).catch(() => {});
+      setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
+    }).catch(() => {
+      setApprovedRssIds(new Set<string>());
+    });
   }, []);
 
   useEffect(() => {
@@ -1335,9 +1335,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           serverIds.add(p.id);
         }
       });
-      if (serverIds.size > 0) {
-        setApprovedRssIds((prev) => new Set([...Array.from(prev), ...Array.from(serverIds)]));
-      }
+      setApprovedRssIds(serverIds);
+    } else if (Array.isArray(posts) && posts.length === 0) {
+      setApprovedRssIds(new Set<string>());
     }
   }, [posts]);
 
@@ -1349,11 +1349,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
     const handleRssUpdate = () => {
       setActiveRssPosts(getActiveRssNewsPosts());
-      setApprovedRssIds(getApprovedRssIds());
+      syncAndMigrateLocalApprovals().then((serverSet) => {
+        setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
+      }).catch(() => {});
     };
     const handleFeedRefresh = () => {
       setActiveRssPosts(getActiveRssNewsPosts());
-      setApprovedRssIds(getApprovedRssIds());
+      syncAndMigrateLocalApprovals().then((serverSet) => {
+        setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
+      }).catch(() => {});
     };
     const handleCategoriesUpdate = () => {
       setFeedCategories(getActiveCategories());
@@ -1376,8 +1380,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const handleChannelsUpdate = () => {
       loadChannels();
     };
-    const handleApprovedUpdate = () => {
-      setApprovedRssIds(getApprovedRssIds());
+    const handleApprovedUpdate = (e: any) => {
+      const newId = e?.detail;
+      if (typeof newId === 'string' && newId) {
+        setApprovedRssIds((prev) => new Set([...Array.from(prev), newId]));
+      } else {
+        syncAndMigrateLocalApprovals().then((serverSet) => {
+          setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
+        }).catch(() => {});
+      }
     };
 
     window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdate);
@@ -2399,7 +2410,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               e.stopPropagation();
                               const ok = await approveRssPost(post.id, post);
                               if (ok) {
-                                setApprovedRssIds(getApprovedRssIds());
+                                setApprovedRssIds((prev) => new Set([...Array.from(prev), post.id]));
                                 alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
                               } else {
                                 alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
@@ -2820,7 +2831,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             e.stopPropagation();
                             const ok = await approveRssPost(post.id, post);
                             if (ok) {
-                              setApprovedRssIds(getApprovedRssIds());
+                              setApprovedRssIds((prev) => new Set([...Array.from(prev), post.id]));
                               alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
                             } else {
                               alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
@@ -2985,7 +2996,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           e.stopPropagation();
                           const ok = await approveRssPost(post.id, post);
                           if (ok) {
-                            setApprovedRssIds(getApprovedRssIds());
+                            setApprovedRssIds((prev) => new Set([...Array.from(prev), post.id]));
                             alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
                           } else {
                             alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');

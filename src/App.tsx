@@ -45,7 +45,7 @@ import { formatCleanLocationText } from './lib/locationUtils';
 import { getDynamicFrameById } from './lib/dynamicFramesManager';
 
 export const CANONICAL_DEFAULT_HEADLINE = 'कृपया स्टेप 3 (हेडलाइन) में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...';
-import { syncAllSourcesLive, syncAndMigrateLocalApprovals, getApprovedRssIds } from './lib/rssSourceManager';
+import { syncAllSourcesLive, syncAndMigrateLocalApprovals } from './lib/rssSourceManager';
 import { trackSpaPageView, trackEvent } from './lib/analyticsTracker';
 import { FolderClockIcon } from './icons/FolderClockIcon';
 import {

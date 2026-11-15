@@ -2931,6 +2931,44 @@ app.get("/api/deleted-news-ids", (_req, res) => {
   }
 });
 
+// Canonical Server-Authoritative Approval & Publication Verifier
+export function isServerApprovedAndPublished(p: any, editorialDb?: Record<string, any>): boolean {
+  if (!p || !p.id) return false;
+
+  const status = String(p.status || "").trim().toUpperCase();
+  const approvalStatus = String(p.approvalStatus || "").trim().toUpperCase();
+  const publicationStatus = String(p.publicationStatus || "").trim().toUpperCase();
+  const visibility = String(p.visibility || "").trim().toLowerCase();
+
+  // 1. Explicit Rejection, Pending, Draft, or False flags immediately disqualify
+  if (
+    status === "REJECTED" || approvalStatus === "REJECTED" ||
+    status === "PENDING" || approvalStatus === "PENDING" ||
+    status === "PENDING_APPROVAL" || approvalStatus === "PENDING_APPROVAL" ||
+    status === "DRAFT" || publicationStatus === "DRAFT" || visibility === "draft" ||
+    p.isApproved === false || p.isPublished === false
+  ) {
+    return false;
+  }
+
+  // 2. Must be explicitly approved
+  const isApproved =
+    status === "APPROVED" ||
+    approvalStatus === "APPROVED" ||
+    p.isApproved === true ||
+    Boolean(editorialDb && editorialDb[p.id] && String(editorialDb[p.id].status).trim().toUpperCase() === "APPROVED");
+
+  // 3. Must be explicitly published
+  const isPublished =
+    publicationStatus === "PUBLISHED" ||
+    status === "PUBLISHED" ||
+    status === "APPROVED" ||
+    p.isPublished === true ||
+    Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].isPublished === true);
+
+  return Boolean(isApproved && isPublished);
+}
+
 // 1. GET all news posts (Applies strict publication state machine, server-side approval filtering & 3-day expiry)
 app.get("/api/news-posts", async (req, res) => {
   const user = await resolveAuthenticatedUser(req);
@@ -3048,33 +3086,8 @@ app.get("/api/news-posts", async (req, res) => {
         return false;
       }
 
-      // Mandatory Rule: Check approval status (Requires BOTH explicit Admin approval AND published status; isPrePublished alone never grants approval)
-      const isExplicitApproved =
-        p.approvalStatus === "APPROVED" ||
-        p.status === "APPROVED" ||
-        p.isApproved === true ||
-        Boolean(editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
-
-      const isExplicitPublished =
-        p.publicationStatus === "PUBLISHED" ||
-        p.publicationStatus === "published" ||
-        p.isPublished === true ||
-        p.status === "published" ||
-        p.status === "APPROVED" ||
-        Boolean(editorialDb[p.id] && editorialDb[p.id].isPublished === true);
-
-      const isPendingOrDraft =
-        p.approvalStatus === "pending" ||
-        p.approvalStatus === "PENDING_APPROVAL" ||
-        p.status === "pending" ||
-        p.status === "PENDING_APPROVAL" ||
-        p.status === "draft" ||
-        p.publicationStatus === "draft" ||
-        p.visibility === "draft" ||
-        p.approvalStatus === "REJECTED" ||
-        p.status === "REJECTED";
-
-      const hasExplicitAdminApproval = isExplicitApproved && isExplicitPublished && !isPendingOrDraft;
+      // Mandatory Rule: Check approval status (Requires BOTH explicit Admin approval AND published status)
+      const hasExplicitAdminApproval = isServerApprovedAndPublished(p, editorialDb);
 
       if (!hasExplicitAdminApproval) {
         if (!includePending) {
@@ -3086,13 +3099,9 @@ app.get("/api/news-posts", async (req, res) => {
       }
     } else {
       // Manual/Custom news: check approval / pending status
-      const isManualApproved =
-        (p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved)) &&
-        !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "draft" || p.publicationStatus === "draft");
-      if (!isManualApproved && (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || (p as any).status === "pending" || p.status === "draft" || p.publicationStatus === "draft")) {
-        if (!includePending) {
-          return false;
-        }
+      const isManualApproved = isServerApprovedAndPublished(p, editorialDb);
+      if (!isManualApproved && !includePending) {
+        return false;
       }
     }
 
@@ -3186,31 +3195,15 @@ app.get("/api/news-posts", async (req, res) => {
           return false;
         }
 
-        const hasExplicitAdminApproval =
-          ((p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.isApproved === true) &&
-           (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.status === "published" || p.status === "APPROVED") &&
-           !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.approvalStatus === "pending" || p.status === "pending" || p.status === "draft")) ||
-          Boolean(
-            editorialDb[p.id] &&
-            editorialDb[p.id].status === "APPROVED" &&
-            editorialDb[p.id].isPublished === true &&
-            editorialDb[p.id].approvedBy &&
-            editorialDb[p.id].approvedBy !== "editorial-desk"
-          );
-
+        const hasExplicitAdminApproval = isServerApprovedAndPublished(p, editorialDb);
         if (!hasExplicitAdminApproval && !includePending) return false;
         if (hasExplicitAdminApproval) return true;
       }
 
-      const isManualApproved =
-        (p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved)) &&
-        !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "pending" || p.status === "draft");
+      const isManualApproved = isServerApprovedAndPublished(p, editorialDb);
       if (isManualApproved) return true;
+      if (!includePending) return false;
 
-      // Ensure pending and rejected posts are NEVER used for backfill for regular users
-      if ((p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || (p as any).status === "pending") && !includePending) {
-        return false;
-      }
       if ((p.approvalStatus === "REJECTED" || p.status === "REJECTED" || (p as any).status === "rejected") && !isAdmin) {
         return false;
       }
@@ -3435,30 +3428,7 @@ app.get("/api/approved-news-ids", (_req, res) => {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
     const approvedIds = posts
-      .filter((p) => {
-        const isExplicitApproved =
-          p.status === 'APPROVED' ||
-          (p as any).approvalStatus === 'APPROVED' ||
-          p.isApproved === true ||
-          Boolean(editorialDb[p.id] && editorialDb[p.id].status === 'APPROVED');
-        const isExplicitPublished =
-          (p as any).publicationStatus === 'PUBLISHED' ||
-          (p as any).publicationStatus === 'published' ||
-          p.isPublished === true ||
-          p.status === 'published' ||
-          p.status === 'APPROVED' ||
-          Boolean(editorialDb[p.id] && editorialDb[p.id].isPublished === true);
-        const isPendingOrDraft =
-          p.status === 'pending' ||
-          (p as any).approvalStatus === 'pending' ||
-          p.status === 'PENDING_APPROVAL' ||
-          (p as any).approvalStatus === 'PENDING_APPROVAL' ||
-          p.status === 'draft' ||
-          (p as any).publicationStatus === 'draft' ||
-          p.status === 'REJECTED' ||
-          (p as any).approvalStatus === 'REJECTED';
-        return isExplicitApproved && isExplicitPublished && !isPendingOrDraft;
-      })
+      .filter((p) => isServerApprovedAndPublished(p, editorialDb))
       .map((p) => p.id);
     return res.json({ success: true, approvedIds });
   } catch (err: any) {
@@ -3470,8 +3440,9 @@ app.get("/api/approved-news-ids", (_req, res) => {
 app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();
+    const editorialDb = loadApprovedEditorialDatabase();
     const approvedIds = posts
-      .filter((p) => (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true) && p.status !== 'pending' && (p as any).approvalStatus !== 'pending' && (p as any).publicationStatus !== 'draft')
+      .filter((p) => isServerApprovedAndPublished(p, editorialDb))
       .map((p) => p.id);
     return res.json({ success: true, approvedIds });
   } catch (err: any) {
@@ -13937,21 +13908,7 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
 });
 
 function isPostApprovedAndPublished(p: any): boolean {
-  if (!p) return false;
-  if (p.approvalStatus === "REJECTED" || p.status === "REJECTED" || (p as any).status === "rejected" || p.status === "draft" || p.isApproved === false) {
-    return false;
-  }
-  if (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || (p as any).status === "pending") {
-    return false;
-  }
-  return Boolean(
-    p.approvalStatus === "APPROVED" ||
-    p.status === "APPROVED" ||
-    p.status === "published" ||
-    p.publicationStatus === "PUBLISHED" ||
-    p.isApproved === true ||
-    p.isPrePublished === true
-  );
+  return isServerApprovedAndPublished(p);
 }
 
 // Durable Special Notification Board Helpers

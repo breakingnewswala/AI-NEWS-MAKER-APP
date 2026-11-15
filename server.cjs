@@ -6508,6 +6508,7 @@ __export(server_exports, {
   getHeadlineRegenCoinCost: () => getHeadlineRegenCoinCost,
   isAuthTokenExpired: () => isAuthTokenExpired,
   isRegenerateAllowed: () => isRegenerateAllowed,
+  isServerApprovedAndPublished: () => isServerApprovedAndPublished,
   isTierAllowedForOpenAI: () => isTierAllowedForOpenAI,
   isTierAllowedForUrlGeneration: () => isTierAllowedForUrlGeneration,
   logAuthDiagnostic: () => logAuthDiagnostic,
@@ -14341,6 +14342,19 @@ app.get("/api/deleted-news-ids", (_req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err), deletedIds: [] });
   }
 });
+function isServerApprovedAndPublished(p, editorialDb) {
+  if (!p || !p.id) return false;
+  const status = String(p.status || "").trim().toUpperCase();
+  const approvalStatus = String(p.approvalStatus || "").trim().toUpperCase();
+  const publicationStatus = String(p.publicationStatus || "").trim().toUpperCase();
+  const visibility = String(p.visibility || "").trim().toLowerCase();
+  if (status === "REJECTED" || approvalStatus === "REJECTED" || status === "PENDING" || approvalStatus === "PENDING" || status === "PENDING_APPROVAL" || approvalStatus === "PENDING_APPROVAL" || status === "DRAFT" || publicationStatus === "DRAFT" || visibility === "draft" || p.isApproved === false || p.isPublished === false) {
+    return false;
+  }
+  const isApproved = status === "APPROVED" || approvalStatus === "APPROVED" || p.isApproved === true || Boolean(editorialDb && editorialDb[p.id] && String(editorialDb[p.id].status).trim().toUpperCase() === "APPROVED");
+  const isPublished = publicationStatus === "PUBLISHED" || status === "PUBLISHED" || status === "APPROVED" || p.isPublished === true || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].isPublished === true);
+  return Boolean(isApproved && isPublished);
+}
 app.get("/api/news-posts", async (req, res) => {
   const user = await resolveAuthenticatedUser(req);
   if (user) req.user = user;
@@ -14415,10 +14429,7 @@ app.get("/api/news-posts", async (req, res) => {
       if (!hasActiveSource && !isAdmin) {
         return false;
       }
-      const isExplicitApproved = p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.isApproved === true || Boolean(editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
-      const isExplicitPublished = p.publicationStatus === "PUBLISHED" || p.publicationStatus === "published" || p.isPublished === true || p.status === "published" || p.status === "APPROVED" || Boolean(editorialDb[p.id] && editorialDb[p.id].isPublished === true);
-      const isPendingOrDraft = p.approvalStatus === "pending" || p.approvalStatus === "PENDING_APPROVAL" || p.status === "pending" || p.status === "PENDING_APPROVAL" || p.status === "draft" || p.publicationStatus === "draft" || p.visibility === "draft" || p.approvalStatus === "REJECTED" || p.status === "REJECTED";
-      const hasExplicitAdminApproval = isExplicitApproved && isExplicitPublished && !isPendingOrDraft;
+      const hasExplicitAdminApproval = isServerApprovedAndPublished(p, editorialDb);
       if (!hasExplicitAdminApproval) {
         if (!includePending) {
           return false;
@@ -14427,11 +14438,9 @@ app.get("/api/news-posts", async (req, res) => {
         return true;
       }
     } else {
-      const isManualApproved = (p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved)) && !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "draft" || p.publicationStatus === "draft");
-      if (!isManualApproved && (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending" || p.status === "draft" || p.publicationStatus === "draft")) {
-        if (!includePending) {
-          return false;
-        }
+      const isManualApproved = isServerApprovedAndPublished(p, editorialDb);
+      if (!isManualApproved && !includePending) {
+        return false;
       }
     }
     const postTime = p.timestamp || now;
@@ -14493,17 +14502,13 @@ app.get("/api/news-posts", async (req, res) => {
         if (!hasActiveSource) {
           return false;
         }
-        const hasExplicitAdminApproval = (p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.isApproved === true) && (p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.status === "published" || p.status === "APPROVED") && !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.approvalStatus === "pending" || p.status === "pending" || p.status === "draft") || Boolean(
-          editorialDb[p.id] && editorialDb[p.id].status === "APPROVED" && editorialDb[p.id].isPublished === true && editorialDb[p.id].approvedBy && editorialDb[p.id].approvedBy !== "editorial-desk"
-        );
+        const hasExplicitAdminApproval = isServerApprovedAndPublished(p, editorialDb);
         if (!hasExplicitAdminApproval && !includePending) return false;
         if (hasExplicitAdminApproval) return true;
       }
-      const isManualApproved = (p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || Boolean(p.isApproved)) && !(p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "pending" || p.status === "draft");
+      const isManualApproved = isServerApprovedAndPublished(p, editorialDb);
       if (isManualApproved) return true;
-      if ((p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
-        return false;
-      }
+      if (!includePending) return false;
       if ((p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "rejected") && !isAdmin) {
         return false;
       }
@@ -14688,12 +14693,7 @@ app.get("/api/approved-news-ids", (_req, res) => {
   try {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
-    const approvedIds = posts.filter((p) => {
-      const isExplicitApproved = p.status === "APPROVED" || p.approvalStatus === "APPROVED" || p.isApproved === true || Boolean(editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
-      const isExplicitPublished = p.publicationStatus === "PUBLISHED" || p.publicationStatus === "published" || p.isPublished === true || p.status === "published" || p.status === "APPROVED" || Boolean(editorialDb[p.id] && editorialDb[p.id].isPublished === true);
-      const isPendingOrDraft = p.status === "pending" || p.approvalStatus === "pending" || p.status === "PENDING_APPROVAL" || p.approvalStatus === "PENDING_APPROVAL" || p.status === "draft" || p.publicationStatus === "draft" || p.status === "REJECTED" || p.approvalStatus === "REJECTED";
-      return isExplicitApproved && isExplicitPublished && !isPendingOrDraft;
-    }).map((p) => p.id);
+    const approvedIds = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
     return res.json({ success: true, approvedIds });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -14702,7 +14702,8 @@ app.get("/api/approved-news-ids", (_req, res) => {
 app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
   try {
     const posts = loadNewsDatabase();
-    const approvedIds = posts.filter((p) => (p.status === "APPROVED" || p.approvalStatus === "APPROVED" || p.isApproved === true) && p.status !== "pending" && p.approvalStatus !== "pending" && p.publicationStatus !== "draft").map((p) => p.id);
+    const editorialDb = loadApprovedEditorialDatabase();
+    const approvedIds = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
     return res.json({ success: true, approvedIds });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -23465,16 +23466,7 @@ app.delete("/api/admin/asset-libraries/:id", requireAdminMiddleware, async (req,
   }
 });
 function isPostApprovedAndPublished(p) {
-  if (!p) return false;
-  if (p.approvalStatus === "REJECTED" || p.status === "REJECTED" || p.status === "rejected" || p.status === "draft" || p.isApproved === false) {
-    return false;
-  }
-  if (p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending") {
-    return false;
-  }
-  return Boolean(
-    p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || p.publicationStatus === "PUBLISHED" || p.isApproved === true || p.isPrePublished === true
-  );
+  return isServerApprovedAndPublished(p);
 }
 async function getDurableNotificationBoardIds() {
   const idsSet = /* @__PURE__ */ new Set();
@@ -35543,6 +35535,7 @@ startServer().catch((err) => {
   getHeadlineRegenCoinCost,
   isAuthTokenExpired,
   isRegenerateAllowed,
+  isServerApprovedAndPublished,
   isTierAllowedForOpenAI,
   isTierAllowedForUrlGeneration,
   logAuthDiagnostic,
