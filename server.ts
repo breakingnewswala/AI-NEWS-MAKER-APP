@@ -12823,7 +12823,10 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
           const hasAlbmw = validProdFrames.some(f => f.id === 'df_1794406067554_albmw');
           if (!hasAlbmw) {
             const albmwFromDisk = existingProd.find(f => f.id === 'df_1794406067554_albmw');
-            if (albmwFromDisk) validProdFrames.unshift(albmwFromDisk);
+            if (albmwFromDisk) {
+              validProdFrames.unshift(albmwFromDisk);
+              frames.unshift(albmwFromDisk);
+            }
           }
           if (validProdFrames.length > 0) {
             try {
@@ -12903,6 +12906,19 @@ async function loadDynamicFramesDatabaseAsync(): Promise<any[]> {
         }
       } catch {}
     }
+  }
+
+  // Always ensure protected production frame df_1794406067554_albmw is included
+  const hasProdFrame = frames.some(f => f.id === 'df_1794406067554_albmw');
+  if (!hasProdFrame && fs.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    try {
+      const raw = fs.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const albmw = parsed.find((f: any) => f.id === 'df_1794406067554_albmw');
+        if (albmw) frames.unshift(albmw);
+      }
+    } catch {}
   }
 
   return frames.filter(f =>
@@ -13138,8 +13154,8 @@ app.get("/api/dynamic-frames", async (req, res) => {
       ? frames
       : frames.filter(
           (f) =>
-            f.publicationStatus === "published" &&
-            f.approvalStatus === "APPROVED" &&
+            (f.publicationStatus === "published" || f.publicationStatus === "PUBLISHED" || f.isPublished === true) &&
+            (f.approvalStatus === "APPROVED" || f.status === "APPROVED" || f.isApproved === true) &&
             !f.isTestFrame &&
             f.designCategory !== "TEST_FRAMES" &&
             !f.isSampleTestTemplate &&

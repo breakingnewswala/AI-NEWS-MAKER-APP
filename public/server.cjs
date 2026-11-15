@@ -22594,7 +22594,10 @@ async function loadDynamicFramesDatabaseAsync() {
           const hasAlbmw = validProdFrames.some((f) => f.id === "df_1794406067554_albmw");
           if (!hasAlbmw) {
             const albmwFromDisk = existingProd.find((f) => f.id === "df_1794406067554_albmw");
-            if (albmwFromDisk) validProdFrames.unshift(albmwFromDisk);
+            if (albmwFromDisk) {
+              validProdFrames.unshift(albmwFromDisk);
+              frames.unshift(albmwFromDisk);
+            }
           }
           if (validProdFrames.length > 0) {
             try {
@@ -22667,6 +22670,18 @@ async function loadDynamicFramesDatabaseAsync() {
         }
       } catch {
       }
+    }
+  }
+  const hasProdFrame = frames.some((f) => f.id === "df_1794406067554_albmw");
+  if (!hasProdFrame && import_fs2.default.existsSync(DYNAMIC_FRAMES_DB_FILE)) {
+    try {
+      const raw = import_fs2.default.readFileSync(DYNAMIC_FRAMES_DB_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const albmw = parsed.find((f) => f.id === "df_1794406067554_albmw");
+        if (albmw) frames.unshift(albmw);
+      }
+    } catch {
     }
   }
   return frames.filter(
@@ -22852,7 +22867,7 @@ app.get("/api/dynamic-frames", async (req, res) => {
     const isMaster = isAuthorizedMasterAdmin(req);
     let frames = await loadDynamicFramesDatabaseAsync();
     let filtered = isMaster ? frames : frames.filter(
-      (f) => f.publicationStatus === "published" && f.approvalStatus === "APPROVED" && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
+      (f) => (f.publicationStatus === "published" || f.publicationStatus === "PUBLISHED" || f.isPublished === true) && (f.approvalStatus === "APPROVED" || f.status === "APPROVED" || f.isApproved === true) && !f.isTestFrame && f.designCategory !== "TEST_FRAMES" && !f.isSampleTestTemplate && !f.isSample && f.name !== "11111" && f.name !== "2222" && !f.id.startsWith("df_sample_") && !f.id.startsWith("df_test_") && f.designCategory !== "Sample Frames"
     );
     const { frameType, frameMode } = req.query;
     if (frameType) {
