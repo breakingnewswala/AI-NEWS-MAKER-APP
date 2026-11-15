@@ -41,6 +41,7 @@ export interface ReporterUser {
   username: string;
   name: string;
   role: 'reporter' | 'admin' | 'superadmin' | 'bureau' | 'user';
+  state?: string;
   district?: string;
   email?: string;
   channelName?: string;
@@ -115,7 +116,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [signupUsername, setSignupUsername] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupRole, setSignupRole] = useState<'admin' | 'reporter' | 'bureau'>('reporter');
-  const [signupDistrict, setSignupDistrict] = useState('');
+  const [signupState, setSignupState] = useState('मध्य प्रदेश');
+  const [signupDistrict, setSignupDistrict] = useState('भोपाल');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -873,19 +875,55 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 />
               </div>
 
+              {/* State Selection (Cascading Dropdowns per Part 17) */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 mb-1 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-yellow-400" />
+                  <span>राज्य / केंद्र शासित प्रदेश (State):</span>
+                </label>
+                <select
+                  value={signupState}
+                  onChange={(e) => {
+                    const st = e.target.value;
+                    setSignupState(st);
+                    const dists = getDistrictsForState(st);
+                    setSignupDistrict(dists[0] || '');
+                  }}
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 py-2 text-sm text-white focus:border-yellow-400 focus:outline-none transition-colors cursor-pointer"
+                >
+                  <option value="">-- राज्य चुनें --</option>
+                  {getAllIndianStates().map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* District / City */}
               <div>
                 <label className="block text-xs font-semibold text-neutral-300 mb-1 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-yellow-400" />
-                  <span>जिला / ब्यूरो क्षेत्र (District):</span>
+                  <span>ज़िला / ब्यूरो क्षेत्र (District):</span>
                 </label>
-                <input
-                  type="text"
+                <select
                   value={signupDistrict}
                   onChange={(e) => setSignupDistrict(e.target.value)}
-                  placeholder="उदा. भोपाल, रीवा, शहडोल, इंदौर..."
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 py-2 text-sm text-white placeholder-neutral-500 focus:border-yellow-400 focus:outline-none transition-colors"
-                />
+                  disabled={!signupState}
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 py-2 text-sm text-white focus:border-yellow-400 focus:outline-none transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {!signupState && <option value="">पहले राज्य चुनें</option>}
+                  {signupState && (
+                    <>
+                      <option value="">-- ज़िला चुनें --</option>
+                      {getDistrictsForState(signupState).map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
               </div>
 
               {/* Password */}

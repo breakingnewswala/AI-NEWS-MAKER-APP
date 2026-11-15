@@ -54,6 +54,7 @@ import {
   Bell,
 } from 'lucide-react';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
+import { inferStateFromDistrict } from '../data/indianStatesDistricts';
 import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
 import { WebNotificationModal } from './WebNotificationModal';
 import { SocialMediaStoryModal } from './SocialMediaStoryModal';
@@ -294,6 +295,38 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   onOpenAdminLogin,
   onNavigateToTab,
 }) => {
+  // User location for local news personalization (Part 18)
+  const userDistrict = useMemo(() => {
+    const raw = (currentUser?.district || '').trim();
+    if (raw && raw !== 'सेंट्रल डेस्क / भोपाल' && raw !== 'डिजिटल डेस्क' && raw !== 'हेडक्वार्टर सेंट्रल डेस्क') {
+      return raw;
+    }
+    try {
+      const saved = localStorage.getItem('user_channel_profile') || localStorage.getItem('user_profile_data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const d = (parsed.district || parsed.location || '').trim();
+        if (d && d !== 'सेंट्रल डेस्क / भोपाल' && d !== 'डिजिटल डेस्क' && d !== 'हेडक्वार्टर सेंट्रल डेस्क') return d;
+      }
+    } catch {}
+    return '';
+  }, [currentUser]);
+
+  const userState = useMemo(() => {
+    if (currentUser?.state) return currentUser.state.trim();
+    try {
+      const saved = localStorage.getItem('user_channel_profile') || localStorage.getItem('user_profile_data');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.state) return parsed.state.trim();
+      }
+    } catch {}
+    if (userDistrict) {
+      return inferStateFromDistrict(userDistrict) || '';
+    }
+    return '';
+  }, [currentUser, userDistrict]);
+
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState<boolean>(false);
   const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
@@ -1448,7 +1481,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   // Filter posts from combined feed (Admin Date, Channel, Pending News, Published News, Bonus News & Dynamic Category Filters)
   const filteredPosts = useMemo(() => {
-    return combinedPosts.filter((p) => {
+    const baseFiltered = combinedPosts.filter((p) => {
       // 1. Normal users cannot see unapproved RSS/Web feed items
       if (!canModerate && !isRssPostApproved(p, approvedRssIds)) {
         return false;
@@ -1493,7 +1526,43 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       const postCatName = (p.categoryName || '').toLowerCase();
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
-  }, [combinedPosts, canModerate, adminPendingOnly, adminPublishedOnly, adminBonusOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds]);
+
+    // Part 18: Local News Personalization (District P1 -> State P2 -> National/General P3)
+    if (userDistrict || userState) {
+      const cleanDist = userDistrict.toLowerCase();
+      const cleanSt = userState.toLowerCase();
+
+      return baseFiltered.sort((a, b) => {
+        const getPriorityScore = (post: any): number => {
+          const loc = (post.location || post.district || '').toLowerCase();
+          const title = (post.title || '').toLowerCase();
+          const desc = (post.summary || post.description || '').toLowerCase();
+
+          // Priority 1: User's District (Score 200)
+          if (cleanDist && (loc.includes(cleanDist) || title.includes(cleanDist) || desc.includes(cleanDist))) {
+            return 200;
+          }
+          // Priority 2: User's State (Score 100)
+          if (cleanSt && (loc.includes(cleanSt) || title.includes(cleanSt) || desc.includes(cleanSt))) {
+            return 100;
+          }
+          // Priority 3: National / General
+          return 0;
+        };
+
+        const scoreA = getPriorityScore(a);
+        const scoreB = getPriorityScore(b);
+
+        if (scoreA !== scoreB) {
+          return scoreB - scoreA;
+        }
+
+        return (b.timestamp || 0) - (a.timestamp || 0);
+      });
+    }
+
+    return baseFiltered;
+  }, [combinedPosts, canModerate, adminPendingOnly, adminPublishedOnly, adminBonusOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds, userDistrict, userState]);
 
   const breakingPosts = visiblePosts.filter((p) => p.breaking).length > 0
     ? visiblePosts.filter((p) => p.breaking)

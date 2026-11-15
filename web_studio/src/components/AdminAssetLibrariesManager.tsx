@@ -16,6 +16,7 @@ import {
   Palette,
   CheckCircle2,
   AlertTriangle,
+  Copy,
 } from 'lucide-react';
 import { AssetLibraryItem } from '../types/dynamicFrame';
 import {
@@ -59,7 +60,13 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
   const [footerElementSpacing, setFooterElementSpacing] = useState<number>(12);
   const [footerPaddingX, setFooterPaddingX] = useState<number>(16);
   const [footerSeparator, setFooterSeparator] = useState<string>('|');
-  const [footerAllowedPlans, setFooterAllowedPlans] = useState<DynamicPlanTier[]>(['BASIC', 'ADVANCED', 'PRO', 'VIP DESK']);
+  const [footerSeparatorStyle, setFooterSeparatorStyle] = useState<'solid' | 'dotted' | 'dashed' | 'none'>('solid');
+  const [footerSeparatorThickness, setFooterSeparatorThickness] = useState<number>(2);
+  const [footerSeparatorColor, setFooterSeparatorColor] = useState<string>('#CBD5E1');
+  const [footerSeparatorHeight, setFooterSeparatorHeight] = useState<number>(60);
+  const [footerSeparatorSpacing, setFooterSeparatorSpacing] = useState<number>(12);
+  const [editingFooterId, setEditingFooterId] = useState<string | null>(null);
+  const [footerAllowedPlans, setFooterAllowedPlans] = useState<DynamicPlanTier[]>(['PRO', 'VIP DESK']);
 
   // New Upload State
   const [isUploading, setIsUploading] = useState(false);
@@ -237,6 +244,56 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
     reader.readAsDataURL(file);
   };
 
+  const handleDuplicateFooter = async (item: AssetLibraryItem) => {
+    try {
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
+      const dupItem: Partial<AssetLibraryItem> = {
+        name: `${item.name} (कॉपी)`,
+        type: 'custom_footer',
+        category: item.category || 'custom',
+        enabled: true,
+        allowedPlans: ['PRO', 'VIP DESK'],
+        footerConfig: item.footerConfig ? { ...item.footerConfig } : undefined,
+      };
+      const res = await saveAssetLibraryItem(dupItem, token || undefined);
+      if (res.success && res.item) {
+        setItems((prev) => [res.item!, ...prev]);
+        showToast('कस्टम फ़ुटर सफलतापूर्वक डुप्लीकेट किया गया!');
+      }
+    } catch (err: any) {
+      setUploadError(`डुप्लीकेशन विफल: ${err.message || 'त्रुटि'}`);
+    }
+  };
+
+  const handleEditFooter = (item: AssetLibraryItem) => {
+    setActiveTab('custom_footer');
+    setIsUploading(true);
+    setEditingFooterId(item.id);
+    setNewName(item.name);
+    if (item.footerConfig) {
+      const fc = item.footerConfig;
+      if (fc.footerBgColor) setFooterBgColor(fc.footerBgColor);
+      if (fc.footerTextColor) setFooterTextColor(fc.footerTextColor);
+      if (fc.footerHeightPct) setFooterHeightPct(fc.footerHeightPct);
+      if (fc.elements) setFooterElements(fc.elements);
+      if (fc.alignment) setFooterAlignment(fc.alignment);
+      if (fc.channelNameAlign) setFooterChannelNameAlign(fc.channelNameAlign);
+      if (fc.websiteAlign) setFooterWebsiteAlign(fc.websiteAlign);
+      if (fc.socialIconsAlign) setFooterSocialIconsAlign(fc.socialIconsAlign);
+      if (fc.phoneAlign) setFooterPhoneAlign(fc.phoneAlign);
+      if (fc.iconSize) setFooterIconSize(fc.iconSize);
+      if (fc.elementSpacing) setFooterElementSpacing(fc.elementSpacing);
+      if (fc.paddingX) setFooterPaddingX(fc.paddingX);
+      if (fc.separator) setFooterSeparator(fc.separator);
+      if (fc.separatorStyle) setFooterSeparatorStyle(fc.separatorStyle);
+      if (fc.separatorThickness) setFooterSeparatorThickness(fc.separatorThickness);
+      if (fc.separatorColor) setFooterSeparatorColor(fc.separatorColor);
+      if (fc.separatorHeight) setFooterSeparatorHeight(fc.separatorHeight);
+      if (fc.separatorSpacing) setFooterSeparatorSpacing(fc.separatorSpacing);
+    }
+  };
+
   const handleCreateAsset = async () => {
     if (!newName.trim()) {
       setUploadError('कृपया एसेट का नाम दर्ज करें।');
@@ -277,7 +334,12 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
               elementSpacing: footerElementSpacing,
               paddingX: footerPaddingX,
               separator: footerSeparator,
-              allowedPlans: footerAllowedPlans,
+              separatorStyle: footerSeparatorStyle,
+              separatorThickness: footerSeparatorThickness,
+              separatorColor: footerSeparatorColor,
+              separatorHeight: footerSeparatorHeight,
+              separatorSpacing: footerSeparatorSpacing,
+              allowedPlans: ['PRO', 'VIP DESK'],
             },
           }
         : {
@@ -288,7 +350,22 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
             enabled: true,
           };
 
-      const res = await saveAssetLibraryItem(payload, token || undefined);
+      let res;
+      if (editingFooterId) {
+        res = await updateAssetLibraryItem(editingFooterId, payload, token || undefined);
+        if (res.success && res.item) {
+          setItems((prev) => prev.map((it) => (it.id === editingFooterId ? res.item! : it)));
+          setIsUploading(false);
+          setEditingFooterId(null);
+          setNewName('');
+          setNewFileData('');
+          setNewFileName('');
+          showToast('✅ कस्टम फ़ुटर सफलतापूर्वक अपडेट हुआ!');
+          return;
+        }
+      } else {
+        res = await saveAssetLibraryItem(payload, token || undefined);
+      }
 
       if (res.success && res.item) {
         setItems((prev) => [res.item!, ...prev]);
@@ -746,46 +823,91 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
                 </div>
               </div>
 
-              {/* Separator and Plan Permissions */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-300 block mb-1">सेपरेटर चिन्ह (Separator):</label>
-                  <select
-                    value={footerSeparator}
-                    onChange={(e) => setFooterSeparator(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
-                  >
-                    <option value="|">| (पाइप)</option>
-                    <option value="•">• (बुलेट)</option>
-                    <option value="—">— (डैश)</option>
-                    <option value="/">/ (स्लैश)</option>
-                    <option value="none">कोई नहीं (None)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-300 block mb-1">अनुमत पैकेज प्लांस:</label>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {(['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'] as DynamicPlanTier[]).map((tier) => {
-                      const isChecked = footerAllowedPlans.includes(tier);
-                      return (
-                        <label key={tier} className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer bg-slate-900/80 px-2 py-1 rounded border border-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFooterAllowedPlans([...footerAllowedPlans, tier]);
-                              } else {
-                                setFooterAllowedPlans(footerAllowedPlans.filter((p) => p !== tier));
-                              }
-                            }}
-                            className="accent-amber-500 rounded"
-                          />
-                          <span>{tier}</span>
-                        </label>
-                      );
-                    })}
+              {/* Separator and Partition Line Controls (Part 13) */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3">
+                <h5 className="text-[11px] font-bold text-amber-400">विभाजक / पार्टीशन लाइन सेटिंग्स (Separator & Partition):</h5>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">सेपरेटर प्रकार:</label>
+                    <select
+                      value={footerSeparator}
+                      onChange={(e) => setFooterSeparator(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                    >
+                      <option value="|">| (पाइप / Pipe)</option>
+                      <option value="•">• (बुलेट / Bullet)</option>
+                      <option value="—">— (डैश / Dash)</option>
+                      <option value="/">/ (स्लैश / Slash)</option>
+                      <option value="line">लाइन (Partition Line)</option>
+                      <option value="none">कोई नहीं (None)</option>
+                    </select>
                   </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">लाइन स्टाइल:</label>
+                    <select
+                      value={footerSeparatorStyle}
+                      onChange={(e: any) => setFooterSeparatorStyle(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white"
+                    >
+                      <option value="solid">सॉलिड (Solid)</option>
+                      <option value="dotted">डॉटेड (Dotted)</option>
+                      <option value="dashed">डैशड (Dashed)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">सेपरेटर रंग:</label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="color"
+                        value={footerSeparatorColor}
+                        onChange={(e) => setFooterSeparatorColor(e.target.value)}
+                        className="w-7 h-7 rounded border border-slate-700 bg-transparent cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={footerSeparatorColor}
+                        onChange={(e) => setFooterSeparatorColor(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-300 block mb-1">मोटाई (Thickness): {footerSeparatorThickness}px</label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="6"
+                      value={footerSeparatorThickness}
+                      onChange={(e) => setFooterSeparatorThickness(Number(e.target.value))}
+                      className="w-full accent-amber-500 mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* Plan Permissions */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2">
+                <label className="text-[11px] font-bold text-slate-300 block mb-1">अनुमत पैकेज प्लांस:</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {(['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'] as DynamicPlanTier[]).map((tier) => {
+                    const isChecked = footerAllowedPlans.includes(tier);
+                    return (
+                      <label key={tier} className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer bg-slate-900/80 px-2 py-1 rounded border border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFooterAllowedPlans([...footerAllowedPlans, tier]);
+                            } else {
+                              setFooterAllowedPlans(footerAllowedPlans.filter((p) => p !== tier));
+                            }
+                          }}
+                          className="accent-amber-500 rounded"
+                        />
+                        <span>{tier}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1096,6 +1218,28 @@ export const AdminAssetLibrariesManager: React.FC<AdminAssetLibrariesManagerProp
                 </button>
 
                 <div className="flex items-center gap-1">
+                  {item.type === 'custom_footer' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleEditFooter(item)}
+                        className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 rounded text-[9px] font-bold transition cursor-pointer flex items-center gap-1"
+                        title="फ़ुटर सेटिंग्स एडिट करें"
+                      >
+                        <Edit2 className="w-2.5 h-2.5" />
+                        <span>एडिट</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicateFooter(item)}
+                        className="px-2 py-0.5 bg-indigo-500/20 hover:bg-indigo-500 text-indigo-300 hover:text-white rounded text-[9px] font-bold transition cursor-pointer flex items-center gap-1"
+                        title="फ़ुटर कॉपी करें"
+                      >
+                        <Copy className="w-2.5 h-2.5" />
+                        <span>कॉपी</span>
+                      </button>
+                    </>
+                  )}
                   {item.type === 'location_badge' && (
                     <button
                       type="button"

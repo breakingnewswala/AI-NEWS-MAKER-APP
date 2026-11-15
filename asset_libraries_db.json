@@ -1,5 +1,329 @@
 [
   {
+    "id": "loc_style_classic_ribbon_pin",
+    "name": "Classic Ribbon Pin (क्लासिक रिबन पिन)",
+    "type": "location_badge",
+    "category": "ribbon",
+    "styleKey": "classic_ribbon",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='crpGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='70%' stop-color='%23B91C1C'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='12' fill='url(%23crpGrad)' stroke='%23FACC15' stroke-width='2.5'/><circle cx='38' cy='36' r='18' fill='%23FACC15'/><path d='M38 23 C32 23 27 28 27 34 C27 41 38 50 38 50 C38 50 49 41 49 34 C49 28 44 23 38 23 Z' fill='%23DC2626'/><circle cx='38' cy='33' r='4' fill='%23FFFFFF'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FACC15' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_glassmorphism_pill",
+    "name": "Glassmorphism Pill (ग्लासमॉर्फिज्म पिल)",
+    "type": "location_badge",
+    "category": "modern",
+    "styleKey": "glass_pill",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%230F172AE6' stroke='%2306B6D4' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%2306B6D4'/><path d='M38 25 C33 25 29 29 29 34 C29 40 38 47 38 47 C38 47 47 40 47 34 C47 29 43 25 38 25 Z' fill='%230F172A'/><circle cx='38' cy='33' r='3.5' fill='%23FFFFFF'/><line x1='64' y1='16' x2='64' y2='56' stroke='%2306B6D4' stroke-width='1.5' stroke-dasharray='3 3'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#38BDF8",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.1,
+      "centerMinPct": 0.68
+    }
+  },
+  {
+    "id": "loc_style_3d_bevel_plate",
+    "name": "3D Bevel Plate (3D बेवेल प्लेट)",
+    "type": "location_badge",
+    "category": "3d",
+    "styleKey": "3d_bevel",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='bevelGrad' x1='0%' y1='0%' x2='0%' y2='100%'><stop offset='0%' stop-color='%23334155'/><stop offset='50%' stop-color='%231E293B'/><stop offset='100%' stop-color='%230F172A'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='10' fill='url(%23bevelGrad)' stroke='%2364748B' stroke-width='3'/><polygon points='16,36 34,18 52,36 34,54' fill='%23E2E8F0'/><circle cx='34' cy='36' r='6' fill='%23DC2626'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23F59E0B' stroke-width='2.5'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_minimal_tag",
+    "name": "Minimal Tag (मिनिमल टैग)",
+    "type": "location_badge",
+    "category": "minimal",
+    "styleKey": "minimal_tag",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='6' width='354' height='60' rx='8' fill='%23000000' stroke='%23E2E8F0' stroke-width='1.5'/><circle cx='36' cy='36' r='14' fill='%23EF4444'/><circle cx='36' cy='36' r='5' fill='%23FFFFFF'/><line x1='60' y1='18' x2='60' y2='54' stroke='%23475569' stroke-width='1.5'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 20,
+      "y": 15,
+      "width": 76,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.2,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.72
+    }
+  },
+  {
+    "id": "loc_style_gradient_flare",
+    "name": "Gradient Flare (ग्रेडिएंट फ्लेयर)",
+    "type": "location_badge",
+    "category": "vibrant",
+    "styleKey": "gradient_flare",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='flareGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23EA580C'/><stop offset='50%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%237F1D1D'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='16' fill='url(%23flareGrad)' stroke='%23FED7AA' stroke-width='2'/><circle cx='38' cy='36' r='17' fill='%23FFF7ED'/><path d='M38 24 C33 24 28 29 28 35 C28 42 38 49 38 49 C38 49 48 42 48 35 C48 29 43 24 38 24 Z' fill='%23EA580C'/><circle cx='38' cy='34' r='3.5' fill='%23FFFFFF'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FED7AA' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_dark_neon_outline",
+    "name": "Dark Neon Outline (डार्क नियॉन आउटलाइन)",
+    "type": "location_badge",
+    "category": "neon",
+    "styleKey": "dark_neon",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='14' fill='%23050811' stroke='%2322D3EE' stroke-width='3'/><rect x='16' y='18' width='36' height='36' rx='8' fill='%2322D3EE22' stroke='%2322D3EE' stroke-width='2'/><circle cx='34' cy='36' r='7' fill='%2322D3EE'/><line x1='64' y1='14' x2='64' y2='58' stroke='%2322D3EE' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#22D3EE",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_dual_tone_split",
+    "name": "Dual Tone Split (ड्यूअल टोन स्प्लिट)",
+    "type": "location_badge",
+    "category": "dualtone",
+    "styleKey": "dual_tone",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='12' fill='%231E3A8A' stroke='%23FACC15' stroke-width='2'/><path d='M3 16 C3 9.4 8.4 4 15 4 L72 4 L56 68 L15 68 C8.4 68 3 62.6 3 56 Z' fill='%23DC2626'/><circle cx='32' cy='36' r='14' fill='%23FACC15'/><circle cx='32' cy='36' r='6' fill='%23DC2626'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_vintage_stamp",
+    "name": "Vintage Stamp (विंटेज स्टैम्प)",
+    "type": "location_badge",
+    "category": "vintage",
+    "styleKey": "vintage_stamp",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='4' y='5' width='352' height='62' rx='6' fill='%23450A0A' stroke='%23FBBF24' stroke-width='2' stroke-dasharray='6 3'/><rect x='10' y='11' width='340' height='50' rx='4' fill='none' stroke='%23FBBF24' stroke-width='1'/><circle cx='38' cy='36' r='16' fill='%23FBBF24'/><circle cx='38' cy='36' r='12' fill='none' stroke='%23450A0A' stroke-width='2'/><circle cx='38' cy='36' r='4' fill='%23450A0A'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FBBF24' stroke-width='1.5'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FDE68A",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_modern_floating_capsule",
+    "name": "Modern Floating Capsule (मॉडर्न फ्लोटिंग कैप्सूल)",
+    "type": "location_badge",
+    "category": "modern",
+    "styleKey": "floating_capsule",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%23111827' stroke='%2310B981' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%2310B981'/><circle cx='38' cy='36' r='6' fill='%23111827'/><line x1='64' y1='16' x2='64' y2='56' stroke='%2310B981' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.1,
+      "centerMinPct": 0.68
+    }
+  },
+  {
+    "id": "loc_style_metallic_badge",
+    "name": "Metallic Badge (मेटैलिक बैज)",
+    "type": "location_badge",
+    "category": "metallic",
+    "styleKey": "metallic_badge",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='metalGrad' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%23CBD5E1'/><stop offset='50%' stop-color='%2394A3B8'/><stop offset='100%' stop-color='%2364748B'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='10' fill='url(%23metalGrad)' stroke='%23F1F5F9' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%230F172A'/><circle cx='38' cy='36' r='7' fill='%23EF4444'/><line x1='66' y1='14' x2='66' y2='58' stroke='%230F172A' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#0F172A",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_compact_chip",
+    "name": "Compact Chip (कॉम्पैक्ट चिप)",
+    "type": "location_badge",
+    "category": "compact",
+    "styleKey": "compact_chip",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='6' width='354' height='60' rx='14' fill='%2318181B' stroke='%23E4E4E7' stroke-width='2'/><circle cx='36' cy='36' r='14' fill='%23F59E0B'/><polygon points='36,26 44,42 28,42' fill='%2318181B'/><line x1='60' y1='16' x2='60' y2='56' stroke='%2352525B' stroke-width='1.5'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 20,
+      "y": 15,
+      "width": 76,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FAFAFA",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.2,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.72
+    }
+  },
+  {
+    "id": "loc_style_elegant_outline_pill",
+    "name": "Elegant Outline Pill (एलिगेंट आउटलाइन पिल)",
+    "type": "location_badge",
+    "category": "elegant",
+    "styleKey": "elegant_pill",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%23172554' stroke='%23EAB308' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='none' stroke='%23EAB308' stroke-width='2.5'/><circle cx='38' cy='36' r='6' fill='%23EAB308'/><line x1='64' y1='16' x2='64' y2='56' stroke='%23EAB308' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FEF08A",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.1,
+      "centerMinPct": 0.68
+    }
+  },
+  {
     "id": "asset_1794132101671_u0g9s",
     "name": "Red Map Pin Badge with Divider",
     "type": "location_badge",
@@ -44,8 +368,6 @@
     "category": "regular",
     "enabled": true,
     "allowedPlans": [
-      "BASIC",
-      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
@@ -79,7 +401,6 @@
     "category": "branding",
     "enabled": true,
     "allowedPlans": [
-      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
@@ -113,8 +434,6 @@
     "category": "social",
     "enabled": true,
     "allowedPlans": [
-      "BASIC",
-      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
@@ -181,6 +500,7 @@
     "category": "special",
     "enabled": true,
     "allowedPlans": [
+      "PRO",
       "VIP DESK"
     ],
     "footerConfig": {

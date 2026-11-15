@@ -238,6 +238,7 @@ export interface AssetLibraryItem {
     weight?: string | number;
   };
   footerConfig?: CustomFooterConfig;
+  allowedPlans?: DynamicPlanTier[];
 }
 
 export interface CustomFooterConfig {
@@ -264,6 +265,11 @@ export interface CustomFooterConfig {
   paddingX?: number; // 8 to 48, default 16
   paddingY?: number; // 4 to 24, default 8
   separator?: string; // '|' | '•' | '—' | '/' | 'none'
+  separatorStyle?: 'solid' | 'dotted' | 'dashed' | 'none';
+  separatorThickness?: number;
+  separatorColor?: string;
+  separatorHeight?: number;
+  separatorSpacing?: number;
   elementOrder?: string[]; // e.g. ['channelName', 'website', 'socialIcons', 'phone', 'tagline', 'customText']
   allowedPlans?: DynamicPlanTier[];
 }
@@ -533,6 +539,13 @@ export interface FooterConfig {
   footerInset?: number; // Inset %
   primaryFooterColor?: string; // Default footer background color for users
   bannedFooterColor?: string; // Banned footer color that users can never select
+  bannedFooterColors?: string[]; // Multiple banned footer colors for template (Part 12)
+  footerMode?: 'branding' | 'custom_footer'; // Mutually exclusive Mode A vs Mode B (Part 10)
+  separatorStyle?: 'solid' | 'dotted' | 'dashed' | 'none';
+  separatorThickness?: number;
+  separatorColor?: string;
+  separatorHeight?: number;
+  separatorSpacing?: number;
 }
 
 export interface RibbonConfig {
@@ -638,9 +651,11 @@ export interface DynamicFrameTemplate {
   isStatementFrame?: boolean;
   statementOptions?: StatementOptions;
 
-  // Footer primary & banned color policy (Part 7)
+  // Footer primary & banned color policy (Part 7 & Part 12)
   primaryFooterColor?: string;
   bannedFooterColor?: string;
+  bannedFooterColors?: string[];
+  footerMode?: 'branding' | 'custom_footer';
 
   // Layout lock state (Part 8)
   isLayoutLocked?: boolean;

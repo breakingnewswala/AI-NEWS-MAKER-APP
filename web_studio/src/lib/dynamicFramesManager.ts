@@ -371,6 +371,12 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     typographyConfig,
     samplePhotoUrl: raw.samplePhotoUrl,
     sampleVideoUrl: raw.sampleVideoUrl,
+    primaryFooterColor: raw.primaryFooterColor || raw.footerConfig?.primaryFooterColor,
+    bannedFooterColor: raw.bannedFooterColor || raw.footerConfig?.bannedFooterColor,
+    bannedFooterColors: Array.isArray(raw.bannedFooterColors)
+      ? raw.bannedFooterColors
+      : (raw.bannedFooterColor ? [raw.bannedFooterColor] : []),
+    footerMode: raw.footerMode || (raw.customFooterId ? 'custom_footer' : 'branding'),
     layers: rawLayers.length > 0 ? rawLayers : layers,
   };
 }
@@ -641,8 +647,9 @@ export interface AiFrameAnalysisResult {
 export async function requestAiFrameAnalysis(
   sampleBase64: string,
   selectedRatio: DynamicAspectRatio,
-  authToken?: string
-): Promise<{ success: boolean; result?: AiFrameAnalysisResult; error?: string }> {
+  authToken?: string,
+  pngFrameBase64?: string
+): Promise<{ success: boolean; result?: AiFrameAnalysisResult; error?: string; isFallback?: boolean; warning?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
     let token = authToken && !isTokenExpired(authToken) ? authToken : '';
@@ -660,7 +667,7 @@ export async function requestAiFrameAnalysis(
     let res = await fetch(`${baseUrl}/api/dynamic-frames/ai-analyze`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ sampleBase64, selectedRatio }),
+      body: JSON.stringify({ sampleBase64, selectedRatio, pngFrameBase64 }),
     });
 
     if (res.status === 401 || res.status === 403) {
@@ -670,7 +677,7 @@ export async function requestAiFrameAnalysis(
         res = await fetch(`${baseUrl}/api/dynamic-frames/ai-analyze`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ sampleBase64, selectedRatio }),
+          body: JSON.stringify({ sampleBase64, selectedRatio, pngFrameBase64 }),
         });
       }
     }

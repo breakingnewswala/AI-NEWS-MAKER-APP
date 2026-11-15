@@ -19835,7 +19835,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter) {
     const seenUrls = /* @__PURE__ */ new Set();
     const anchorMatches = xmlText.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi);
     for (const m of anchorMatches) {
-      if (syntheticItems.length >= 12) break;
+      if (syntheticItems.length >= 30) break;
       const href = resolveUrl(m[1] || "", source.url);
       if (!href || !href.startsWith("http") || seenUrls.has(href)) continue;
       if (href === source.url || href.endsWith("/entertainment") || href.endsWith("/madhya-pradesh")) continue;
@@ -19857,7 +19857,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter) {
     }
     items = syntheticItems;
   }
-  const candidateXmls = items.slice(0, 10);
+  const candidateXmls = items.slice(0, 50);
   const parsedPromises = candidateXmls.map(async (itemXml) => {
     try {
       const titleMatch = itemXml.match(/<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
@@ -19873,6 +19873,10 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter) {
       if (pubDateStr) {
         const parsedTime = Date.parse(pubDateStr);
         if (!isNaN(parsedTime)) timestamp = parsedTime;
+      }
+      const twelveHoursAgo = Date.now() - 12 * 3600 * 1e3;
+      if (timestamp < twelveHoursAgo) {
+        return null;
       }
       if (knownFilter) {
         const normLink = (link || "").trim().toLowerCase();
@@ -19935,14 +19939,14 @@ ${editorial.summary}
 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.name} (${link})` : editorial.title,
         location: editorial.location || "",
         ingestionStatus: "PARSED",
-        approvalStatus: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
-        publicationStatus: source.isActive !== false && source.enabled !== false ? "PUBLISHED" : "UNPUBLISHED",
-        status: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
-        isApproved: source.isActive !== false && source.enabled !== false,
-        isPrePublished: source.isActive !== false && source.enabled !== false,
-        isPublished: source.isActive !== false && source.enabled !== false,
-        editorialApproved: source.isActive !== false && source.enabled !== false,
-        visibility: "public"
+        approvalStatus: "pending",
+        publicationStatus: "draft",
+        status: "pending",
+        isApproved: false,
+        isPrePublished: false,
+        isPublished: false,
+        editorialApproved: false,
+        visibility: "draft"
       };
     } catch {
       return null;
@@ -20059,14 +20063,14 @@ ${editorial.summary}
 \u0935\u0947\u092C \u0932\u093F\u0902\u0915 \u0938\u094D\u0930\u094B\u0924\u0903 ${source.url}`,
       location: editorial.location || "\u0935\u0947\u092C \u0921\u0947\u0938\u094D\u0915",
       ingestionStatus: "PARSED",
-      approvalStatus: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
-      publicationStatus: source.isActive !== false && source.enabled !== false ? "PUBLISHED" : "UNPUBLISHED",
-      status: source.isActive !== false && source.enabled !== false ? "APPROVED" : "PENDING_APPROVAL",
-      isApproved: source.isActive !== false && source.enabled !== false,
-      isPrePublished: source.isActive !== false && source.enabled !== false,
-      isPublished: source.isActive !== false && source.enabled !== false,
-      editorialApproved: source.isActive !== false && source.enabled !== false,
-      visibility: "public"
+      approvalStatus: "pending",
+      publicationStatus: "draft",
+      status: "pending",
+      isApproved: false,
+      isPrePublished: false,
+      isPublished: false,
+      editorialApproved: false,
+      visibility: "draft"
     }];
   } catch (err) {
     console.error(`Error fetching web link ${source.url}:`, err.message);
@@ -20670,14 +20674,14 @@ async function executeRssSynchronization() {
           continue;
         }
         p.ingestionStatus = "IMPORTED";
-        p.approvalStatus = "APPROVED";
-        p.publicationStatus = "PUBLISHED";
-        p.status = "APPROVED";
-        p.isApproved = true;
-        p.isPrePublished = true;
-        p.isPublished = true;
-        p.editorialApproved = true;
-        p.visibility = "public";
+        p.approvalStatus = "pending";
+        p.publicationStatus = "draft";
+        p.status = "pending";
+        p.isApproved = false;
+        p.isPrePublished = false;
+        p.isPublished = false;
+        p.editorialApproved = false;
+        p.visibility = "draft";
         p.pendingCreatedAt = Date.now();
         const titleKey = p.title.trim().toLowerCase().slice(0, 40);
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
@@ -20694,13 +20698,8 @@ async function executeRssSynchronization() {
             (ep) => ep.id === p.id || normUrl && ep.sourceUrl && ep.sourceUrl.trim().toLowerCase() === normUrl || ep.title.trim().toLowerCase().slice(0, 40) === titleKey
           );
           if (match) {
-            match.status = "APPROVED";
-            match.approvalStatus = "APPROVED";
-            match.publicationStatus = "PUBLISHED";
-            match.isApproved = true;
-            match.isPublished = true;
-            match.isPrePublished = true;
-            match.editorialApproved = true;
+            match.sourceFeedUrl = p.sourceFeedUrl || match.sourceFeedUrl;
+            match.sourceChannel = p.sourceChannel || match.sourceChannel;
           }
         }
       }
@@ -21622,6 +21621,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       isProfileComplete: isMasterAdminEmail || isSubAdminEmail ? true : isProfileComplete,
       profileStatus: isMasterAdminEmail || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
       email: profile.email || existing.email || "",
+      state: profile.state !== void 0 && profile.state !== null && String(profile.state).trim() !== "" ? String(profile.state).trim() : existing.state || "",
       district: profile.district !== void 0 && profile.district !== null && String(profile.district).trim() !== "" ? String(profile.district).trim() : existing.district || "",
       location: profile.location !== void 0 && profile.location !== null && String(profile.location).trim() !== "" ? String(profile.location).trim() : existing.location || "",
       channelNameHi: (() => {
@@ -21738,6 +21738,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
           username: updated.username || users[uIdx].username,
           mobile: updated.mobileNumber || users[uIdx].mobile,
           mobileNumber: updated.mobileNumber || users[uIdx].mobileNumber,
+          state: updated.state || users[uIdx].state || "",
           district: updated.district || updated.location || users[uIdx].district || "",
           location: updated.location || updated.district || users[uIdx].location || "",
           websiteUrl: updated.websiteUrl || users[uIdx].websiteUrl,
@@ -23480,8 +23481,10 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
   try {
     const rawRatio = req.body?.selectedRatio || req.body?.aspectRatio || "9:16";
     const rawBase64 = req.body?.sampleBase64 || req.body?.sampleImage || "";
+    const rawPngFrame = req.body?.pngFrameBase64 || req.body?.framePng || "";
     const selectedRatio = rawRatio === "4:5" || rawRatio === "1:1" || rawRatio === "9:16" || rawRatio === "16:9" ? rawRatio : "9:16";
     const sampleBase64 = typeof rawBase64 === "string" ? rawBase64 : "";
+    const pngFrameBase64 = typeof rawPngFrame === "string" ? rawPngFrame : "";
     const isStory = selectedRatio === "9:16";
     const isSquare = selectedRatio === "1:1";
     const fallbackLayout = {
@@ -23548,20 +23551,70 @@ Return ONLY a valid JSON object matching this schema without any markdown format
   "ribbonRect": { "x": 12, "y": 62, "width": 76, "height": 8 },
   "footerRect": { "x": 0, "y": 92, "width": 100, "height": 8 }
 }`;
+      const promptParts = [
+        {
+          text: `Analyze this news graphic / jacket template design for creating an automated news frame template in AI News Maker.
+The target aspect ratio is ${selectedRatio} (${isStory ? "1080x1920 Story" : "1080x1350 Portrait"}).
+You are provided:
+1. Primary Sample Graphic: Reference news graphic showing full layout, headline placement, sample photo boundaries, location tag, and branding.
+${pngFrameBase64 ? "2. Clean PNG Frame Asset: Overlay asset showing transparent cutouts, frame borders, header/footer container bounds." : ""}
+
+Detect bounding boxes for layout elements as percentages (0-100) of the canvas:
+- Logo placement
+- Location tag placement
+- Photo slot boundaries (normal photo, cutout/speaker photo, collages)
+- Headline text area
+- Statement / Quote text area (if a statement/bayaan design)
+- Breaking Ribbon (if any ribbon exists)
+- Permanent bottom footer region
+
+Return ONLY a valid JSON object matching this schema without any markdown formatting or code blocks:
+{
+  "detectedRatio": "${selectedRatio}",
+  "headerRect": { "x": 5, "y": 3, "width": 90, "height": 14 },
+  "logoRect": { "x": 5, "y": 3, "width": 22, "height": 8 },
+  "locationRect": { "x": 5, "y": 12, "width": 26, "height": 4 },
+  "headlineRect": { "x": 6, "y": 64, "width": 88, "height": 26 },
+  "recommendedPhotoSlots": [
+    { "name": "Main Photo", "slotType": "normal", "rect": { "x": 0, "y": 0, "width": 100, "height": 62 } }
+  ],
+  "statementDetected": false,
+  "quoteRect": { "x": 8, "y": 20, "width": 84, "height": 28 },
+  "speakerNameRect": { "x": 8, "y": 72, "width": 42, "height": 6 },
+  "speakerDesigRect": { "x": 8, "y": 79, "width": 42, "height": 5 },
+  "ribbonDetected": false,
+  "ribbonRect": { "x": 12, "y": 62, "width": 76, "height": 8 },
+  "footerRect": { "x": 0, "y": 92, "width": 100, "height": 8 }
+}`
+        },
+        {
+          inlineData: {
+            mimeType,
+            data: cleanBase64
+          }
+        }
+      ];
+      if (pngFrameBase64) {
+        let frameClean = pngFrameBase64;
+        let frameMime = "image/png";
+        const fMatch = pngFrameBase64.match(/^data:([^;]+);base64,(.+)$/);
+        if (fMatch) {
+          frameMime = fMatch[1];
+          frameClean = fMatch[2];
+        }
+        promptParts.push({
+          inlineData: {
+            mimeType: frameMime,
+            data: frameClean
+          }
+        });
+      }
       const aiResponse = await gemini.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [
           {
             role: "user",
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType,
-                  data: cleanBase64
-                }
-              }
-            ]
+            parts: promptParts
           }
         ]
       });
@@ -23573,12 +23626,18 @@ Return ONLY a valid JSON object matching this schema without any markdown format
           parsed.footerRect.y = isStory ? 93.5 : 92;
           parsed.footerRect.height = isStory ? 6.5 : 8;
         }
-        return res.json({ success: true, result: { ...fallbackLayout, ...parsed } });
+        return res.json({ success: true, result: { ...fallbackLayout, ...parsed }, isFallback: false });
       }
     } catch (aiErr) {
-      console.warn("Gemini vision analysis error, using calibrated geometric fallback:", aiErr);
+      console.warn("Gemini vision analysis error, using calibrated geometric fallback:", aiErr?.message || aiErr);
+      return res.json({
+        success: true,
+        result: fallbackLayout,
+        isFallback: true,
+        warning: `AI \u0935\u093F\u091C\u093C\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E (${aiErr?.message || "\u0924\u094D\u0930\u0941\u091F\u093F"})\u0964 \u0915\u0948\u0932\u093F\u092C\u094D\u0930\u0947\u091F\u0947\u0921 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u0932\u0947\u0906\u0909\u091F \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964`
+      });
     }
-    return res.json({ success: true, result: fallbackLayout });
+    return res.json({ success: true, result: fallbackLayout, isFallback: true });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

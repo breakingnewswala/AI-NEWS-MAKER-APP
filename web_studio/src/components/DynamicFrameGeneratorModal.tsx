@@ -107,11 +107,14 @@ function loadImageSafe(src: string): Promise<HTMLImageElement> {
     }
     img.onload = () => resolve(img);
     img.onerror = () => {
-      if (img.crossOrigin) {
-        const retry = new Image();
-        retry.onload = () => resolve(retry);
-        retry.onerror = (e) => reject(e);
-        retry.src = src;
+      // If external image fails with CORS, route through /api/proxy-image to guarantee clean canvas without tainting
+      if (src.startsWith('http://') || src.startsWith('https://')) {
+        const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(src)}`;
+        const proxyImg = new Image();
+        proxyImg.crossOrigin = 'anonymous';
+        proxyImg.onload = () => resolve(proxyImg);
+        proxyImg.onerror = () => reject(new Error(`Failed to load image via proxy: ${src.substring(0, 50)}`));
+        proxyImg.src = proxyUrl;
       } else {
         reject(new Error(`Failed to load image: ${src.substring(0, 50)}`));
       }
@@ -171,6 +174,18 @@ function removeFakeCheckerboardFromCanvas(
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
 import { getAuthToken } from '../lib/apiConfig';
+
+export const HIGHLIGHT_COLOR_PRESETS = [
+  { label: 'डिफ़ॉल्ट पीला (Yellow)', value: '#FFE600' },
+  { label: 'लाल (Red)', value: '#EF4444' },
+  { label: 'सफेद (White)', value: '#FFFFFF' },
+  { label: 'सियान (Cyan)', value: '#06B6D4' },
+  { label: 'लाइम (Lime)', value: '#84CC16' },
+  { label: 'नारंगी (Orange)', value: '#F97316' },
+  { label: 'बैंगनी (Purple)', value: '#A855F7' },
+  { label: 'गुलाबी (Pink)', value: '#EC4899' },
+  { label: 'एमराल्ड (Emerald)', value: '#10B981' },
+];
 
 interface DynamicFrameGeneratorModalProps {
   isOpen: boolean;
@@ -514,17 +529,330 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   // Central Approved Built-in Fallbacks for Location Badge & Story Callout
   const FALLBACK_LOCATION_BADGES = [
     {
-      id: 'asset_1794132101671_u0g9s',
-      name: 'Red Map Pin Badge with Divider',
-      category: 'general',
-      type: 'location_badge',
-      url: '/assets/location_white_icon.png',
-      assetUrl: '/assets/location_white_icon.png',
-      enabled: true,
-      textRegion: { x: 32, y: 24, width: 58, height: 55 },
-      typographyConfig: { fontFamily: 'Mukta', fontSize: 50, fontWeight: 'bold', textColor: '#000000', textAlign: 'center' },
+        "id": "loc_style_classic_ribbon_pin",
+        "name": "Classic Ribbon Pin (क्लासिक रिबन पिन)",
+        "type": "location_badge",
+        "category": "ribbon",
+        "styleKey": "classic_ribbon",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='crpGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='70%' stop-color='%23B91C1C'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='12' fill='url(%23crpGrad)' stroke='%23FACC15' stroke-width='2.5'/><circle cx='38' cy='36' r='18' fill='%23FACC15'/><path d='M38 23 C32 23 27 28 27 34 C27 41 38 50 38 50 C38 50 49 41 49 34 C49 28 44 23 38 23 Z' fill='%23DC2626'/><circle cx='38' cy='33' r='4' fill='%23FFFFFF'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FACC15' stroke-width='2'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FFFFFF",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.7
+        }
     },
-  ];
+    {
+        "id": "loc_style_glassmorphism_pill",
+        "name": "Glassmorphism Pill (ग्लासमॉर्फिज्म पिल)",
+        "type": "location_badge",
+        "category": "modern",
+        "styleKey": "glass_pill",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%230F172AE6' stroke='%2306B6D4' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%2306B6D4'/><path d='M38 25 C33 25 29 29 29 34 C29 40 38 47 38 47 C38 47 47 40 47 34 C47 29 43 25 38 25 Z' fill='%230F172A'/><circle cx='38' cy='33' r='3.5' fill='%23FFFFFF'/><line x1='64' y1='16' x2='64' y2='56' stroke='%2306B6D4' stroke-width='1.5' stroke-dasharray='3 3'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#38BDF8",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.1,
+            "centerMinPct": 0.68
+        }
+    },
+    {
+        "id": "loc_style_3d_bevel_plate",
+        "name": "3D Bevel Plate (3D बेवेल प्लेट)",
+        "type": "location_badge",
+        "category": "3d",
+        "styleKey": "3d_bevel",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='bevelGrad' x1='0%' y1='0%' x2='0%' y2='100%'><stop offset='0%' stop-color='%23334155'/><stop offset='50%' stop-color='%231E293B'/><stop offset='100%' stop-color='%230F172A'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='10' fill='url(%23bevelGrad)' stroke='%2364748B' stroke-width='3'/><polygon points='16,36 34,18 52,36 34,54' fill='%23E2E8F0'/><circle cx='34' cy='36' r='6' fill='%23DC2626'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23F59E0B' stroke-width='2.5'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FFFFFF",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.7
+        }
+    },
+    {
+        "id": "loc_style_minimal_tag",
+        "name": "Minimal Tag (मिनिमल टैग)",
+        "type": "location_badge",
+        "category": "minimal",
+        "styleKey": "minimal_tag",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='6' width='354' height='60' rx='8' fill='%23000000' stroke='%23E2E8F0' stroke-width='1.5'/><circle cx='36' cy='36' r='14' fill='%23EF4444'/><circle cx='36' cy='36' r='5' fill='%23FFFFFF'/><line x1='60' y1='18' x2='60' y2='54' stroke='%23475569' stroke-width='1.5'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 20,
+            "y": 15,
+            "width": 76,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FFFFFF",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.2,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.72
+        }
+    },
+    {
+        "id": "loc_style_gradient_flare",
+        "name": "Gradient Flare (ग्रेडिएंट फ्लेयर)",
+        "type": "location_badge",
+        "category": "vibrant",
+        "styleKey": "gradient_flare",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='flareGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23EA580C'/><stop offset='50%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%237F1D1D'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='16' fill='url(%23flareGrad)' stroke='%23FED7AA' stroke-width='2'/><circle cx='38' cy='36' r='17' fill='%23FFF7ED'/><path d='M38 24 C33 24 28 29 28 35 C28 42 38 49 38 49 C38 49 48 42 48 35 C48 29 43 24 38 24 Z' fill='%23EA580C'/><circle cx='38' cy='34' r='3.5' fill='%23FFFFFF'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FED7AA' stroke-width='2'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FFFFFF",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.7
+        }
+    },
+    {
+        "id": "loc_style_dark_neon_outline",
+        "name": "Dark Neon Outline (डार्क नियॉन आउटलाइन)",
+        "type": "location_badge",
+        "category": "neon",
+        "styleKey": "dark_neon",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='14' fill='%23050811' stroke='%2322D3EE' stroke-width='3'/><rect x='16' y='18' width='36' height='36' rx='8' fill='%2322D3EE22' stroke='%2322D3EE' stroke-width='2'/><circle cx='34' cy='36' r='7' fill='%2322D3EE'/><line x1='64' y1='14' x2='64' y2='58' stroke='%2322D3EE' stroke-width='2'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#22D3EE",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.7
+        }
+    },
+    {
+        "id": "loc_style_dual_tone_split",
+        "name": "Dual Tone Split (ड्यूअल टोन स्प्लिट)",
+        "type": "location_badge",
+        "category": "dualtone",
+        "styleKey": "dual_tone",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='12' fill='%231E3A8A' stroke='%23FACC15' stroke-width='2'/><path d='M3 16 C3 9.4 8.4 4 15 4 L72 4 L56 68 L15 68 C8.4 68 3 62.6 3 56 Z' fill='%23DC2626'/><circle cx='32' cy='36' r='14' fill='%23FACC15'/><circle cx='32' cy='36' r='6' fill='%23DC2626'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FFFFFF",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.7
+        }
+    },
+    {
+        "id": "loc_style_vintage_stamp",
+        "name": "Vintage Stamp (विंटेज स्टैम्प)",
+        "type": "location_badge",
+        "category": "vintage",
+        "styleKey": "vintage_stamp",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='4' y='5' width='352' height='62' rx='6' fill='%23450A0A' stroke='%23FBBF24' stroke-width='2' stroke-dasharray='6 3'/><rect x='10' y='11' width='340' height='50' rx='4' fill='none' stroke='%23FBBF24' stroke-width='1'/><circle cx='38' cy='36' r='16' fill='%23FBBF24'/><circle cx='38' cy='36' r='12' fill='none' stroke='%23450A0A' stroke-width='2'/><circle cx='38' cy='36' r='4' fill='%23450A0A'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FBBF24' stroke-width='1.5'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FDE68A",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.7
+        }
+    },
+    {
+        "id": "loc_style_modern_floating_capsule",
+        "name": "Modern Floating Capsule (मॉडर्न फ्लोटिंग कैप्सूल)",
+        "type": "location_badge",
+        "category": "modern",
+        "styleKey": "floating_capsule",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%23111827' stroke='%2310B981' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%2310B981'/><circle cx='38' cy='36' r='6' fill='%23111827'/><line x1='64' y1='16' x2='64' y2='56' stroke='%2310B981' stroke-width='2'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FFFFFF",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.1,
+            "centerMinPct": 0.68
+        }
+    },
+    {
+        "id": "loc_style_metallic_badge",
+        "name": "Metallic Badge (मेटैलिक बैज)",
+        "type": "location_badge",
+        "category": "metallic",
+        "styleKey": "metallic_badge",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='metalGrad' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%23CBD5E1'/><stop offset='50%' stop-color='%2394A3B8'/><stop offset='100%' stop-color='%2364748B'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='10' fill='url(%23metalGrad)' stroke='%23F1F5F9' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%230F172A'/><circle cx='38' cy='36' r='7' fill='%23EF4444'/><line x1='66' y1='14' x2='66' y2='58' stroke='%230F172A' stroke-width='2'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#0F172A",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.7
+        }
+    },
+    {
+        "id": "loc_style_compact_chip",
+        "name": "Compact Chip (कॉम्पैक्ट चिप)",
+        "type": "location_badge",
+        "category": "compact",
+        "styleKey": "compact_chip",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='6' width='354' height='60' rx='14' fill='%2318181B' stroke='%23E4E4E7' stroke-width='2'/><circle cx='36' cy='36' r='14' fill='%23F59E0B'/><polygon points='36,26 44,42 28,42' fill='%2318181B'/><line x1='60' y1='16' x2='60' y2='56' stroke='%2352525B' stroke-width='1.5'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 20,
+            "y": 15,
+            "width": 76,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FAFAFA",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.2,
+            "rightWidthPct": 0.08,
+            "centerMinPct": 0.72
+        }
+    },
+    {
+        "id": "loc_style_elegant_outline_pill",
+        "name": "Elegant Outline Pill (एलिगेंट आउटलाइन पिल)",
+        "type": "location_badge",
+        "category": "elegant",
+        "styleKey": "elegant_pill",
+        "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%23172554' stroke='%23EAB308' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='none' stroke='%23EAB308' stroke-width='2.5'/><circle cx='38' cy='36' r='6' fill='%23EAB308'/><line x1='64' y1='16' x2='64' y2='56' stroke='%23EAB308' stroke-width='2'/></svg>",
+        "enabled": true,
+        "textRegion": {
+            "x": 22,
+            "y": 15,
+            "width": 74,
+            "height": 70
+        },
+        "typographyConfig": {
+            "fontFamily": "Mukta",
+            "fontSize": 48,
+            "fontWeight": "bold",
+            "textColor": "#FEF08A",
+            "textAlign": "center"
+        },
+        "sliceConfig": {
+            "leftWidthPct": 0.22,
+            "rightWidthPct": 0.1,
+            "centerMinPct": 0.68
+        }
+    }
+];
 
   const FALLBACK_CALLOUTS = [
     {
@@ -541,6 +869,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   // Central Asset Libraries for Location Badge & Story Callout (Part 1 & 2: Expandable List UI)
   const [locationBadgeLibrary, setLocationBadgeLibrary] = useState<any[]>(FALLBACK_LOCATION_BADGES);
   const [calloutLibrary, setCalloutLibrary] = useState<any[]>(FALLBACK_CALLOUTS);
+  const [customFootersLibrary, setCustomFootersLibrary] = useState<any[]>([]);
+  const [footerMode, setFooterMode] = useState<'branding' | 'custom_footer'>(
+    initialFrame?.footerMode || (initialFrame?.customFooterId ? 'custom_footer' : 'branding')
+  );
+  const [selectedCustomFooterId, setSelectedCustomFooterId] = useState<string>(
+    initialFrame?.customFooterId || ''
+  );
+  const [testDownloadFormat, setTestDownloadFormat] = useState<'jpg' | 'png'>('jpg');
+  const [testVersionMode, setTestVersionMode] = useState<'v1' | 'v2'>('v1');
   const [isCalloutListExpanded, setIsCalloutListExpanded] = useState<boolean>(true);
   const [isLocationBadgeListExpanded, setIsLocationBadgeListExpanded] = useState<boolean>(true);
 
@@ -550,12 +887,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       .then((r) => r.json())
       .then((d) => {
         if (d.success && Array.isArray(d.items)) {
+          // Strictly separate Location Badges from Story Callouts (Part 2)
           const badges = d.items.filter((it: any) =>
-            it.type === 'location_badge' ||
-            it.category === 'location_badge' ||
-            it.type === 'location' ||
-            it.type === 'badge' ||
-            (it.name && /badge|बैज|location|लोकेशन|pin|पिंन/i.test(it.name))
+            it.type === 'location_badge' || it.category === 'location_badge'
           ).map((it: any) => ({
             ...it,
             url: it.url || it.assetUrl || '',
@@ -568,13 +902,17 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             it.type === 'callout' ||
             it.type === 'story_callout' ||
             it.type === 'full_story' ||
-            it.type === 'description_callout' ||
-            (it.name && /callout|कॉलआउट|विवरण|डिस्क्रिप्शन|story|bully|forward/i.test(it.name))
+            it.type === 'description_callout'
           ).map((it: any) => ({
             ...it,
             url: it.url || it.assetUrl || '',
             assetUrl: it.assetUrl || it.url || '',
           }));
+
+          const footers = d.items.filter((it: any) =>
+            it.type === 'custom_footer'
+          );
+          if (footers.length > 0) setCustomFootersLibrary(footers);
 
           if (badges.length > 0) setLocationBadgeLibrary(badges);
           if (callouts.length > 0) setCalloutLibrary(callouts);
@@ -662,6 +1000,22 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           },
         ]
   );
+
+  const userTier = (currentUser?.tier || 'basic').toLowerCase();
+  const userRole = (currentUser?.role || '').toLowerCase();
+  const userEmail = (currentUser?.email || '').toLowerCase();
+  const isMasterOrAdmin =
+    userRole === 'admin' ||
+    userRole === 'superadmin' ||
+    userEmail === 'breakingnewswala.com@gmail.com' ||
+    userEmail === 'admin.ainewsmaker@gmail.com';
+  const isProOrVipUser =
+    isMasterOrAdmin ||
+    userTier === 'pro' ||
+    userTier === 'professional' ||
+    userTier === 'vip' ||
+    userTier === 'vip desk' ||
+    userTier === 'ultra';
 
   // Statement / Bayaanbaazi settings
   const [isStatementFrame, setIsStatementFrame] = useState<boolean>(initialFrame?.isStatementFrame || false);
@@ -803,14 +1157,20 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const [primaryFooterColor, setPrimaryFooterColor] = useState<string>(
     initialFrame?.footerConfig?.primaryFooterColor || initialFrame?.primaryFooterColor || initialFrame?.footerConfig?.footerBgColor || '#FFFFFF'
   );
-  const [bannedFooterColor, setBannedFooterColor] = useState<string>(
-    initialFrame?.footerConfig?.bannedFooterColor || initialFrame?.bannedFooterColor || ''
-  );
+  const [bannedFooterColors, setBannedFooterColors] = useState<string[]>(() => {
+    if (Array.isArray(initialFrame?.bannedFooterColors) && initialFrame.bannedFooterColors.length > 0) {
+      return initialFrame.bannedFooterColors;
+    }
+    const single = initialFrame?.footerConfig?.bannedFooterColor || initialFrame?.bannedFooterColor;
+    return single ? [single] : [];
+  });
+  const bannedFooterColor = bannedFooterColors[0] || '';
 
   const isFooterColorConflict = useMemo(() => {
-    if (!primaryFooterColor || !bannedFooterColor) return false;
-    return primaryFooterColor.trim().toLowerCase() === bannedFooterColor.trim().toLowerCase();
-  }, [primaryFooterColor, bannedFooterColor]);
+    if (!primaryFooterColor || bannedFooterColors.length === 0) return false;
+    const pClean = primaryFooterColor.trim().toLowerCase();
+    return bannedFooterColors.some((c) => c.trim().toLowerCase() === pClean);
+  }, [primaryFooterColor, bannedFooterColors]);
 
   // Ribbon
   const [ribbonConfig, setRibbonConfig] = useState<RibbonConfig>(
@@ -1297,7 +1657,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     try {
       let token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
-      const res = await requestAiFrameAnalysis(sampleImage, selectedRatio, token);
+      const res = await requestAiFrameAnalysis(sampleImage, selectedRatio, token, primaryBackgroundAsset || undefined);
+      if (res.warning) {
+        setAnalysisStatusText(res.warning);
+      }
       if (res.success && res.result) {
         setAnalysisResult(res.result);
         setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
@@ -1708,8 +2071,16 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   };
 
   // Step 7: Full Resolution Authoritative Canonical Test Preview Download
-  const handleDownloadTestPreview = async () => {
+  const handleDownloadTestPreview = async (formatOverride?: 'jpg' | 'png') => {
+    const fmt = formatOverride || testDownloadFormat || 'jpg';
     try {
+      // Ensure all Hindi Devanagari fonts are loaded before measuring/rendering (Part 6)
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+        try {
+          await document.fonts.ready;
+        } catch {}
+      }
+
       const canvas = document.createElement('canvas');
       const w = 1080;
       const h = selectedRatio === '4:5' ? 1350 : selectedRatio === '9:16' ? 1920 : 1080;
@@ -2193,14 +2564,18 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         true
       );
 
-      // Trigger direct download
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      // Trigger direct download (Part 7: Supports both JPG and lossless PNG)
+      const isPng = fmt === 'png';
+      const dataUrl = isPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.95);
+      const ext = isPng ? 'png' : 'jpg';
       const link = document.createElement('a');
-      link.download = `Test_Frame_${frameName ? frameName.replace(/\s+/g, '_') : 'Preview'}_${Date.now()}.jpg`;
+      link.download = `Test_Frame_${frameName ? frameName.replace(/\s+/g, '_') : 'Preview'}_${Date.now()}.${ext}`;
       link.href = dataUrl;
       link.click();
-    } catch (err) {
+      setFeedbackMsg({ type: 'success', text: `टेस्ट प्रीव्यू (${ext.toUpperCase()}) सफलतापूर्वक डाउनलोड हो गया!` });
+    } catch (err: any) {
       console.error('Download test preview error:', err);
+      setFeedbackMsg({ type: 'error', text: `डाउनलोड त्रुटि: ${err.message || 'कैनवास डाउनलोड विफल'}` });
     }
   };
 
@@ -2238,7 +2613,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       primaryBackgroundHex,
       previewImageUrl: primaryBackgroundAsset || sampleImage,
       primaryFooterColor,
-      bannedFooterColor,
+      bannedFooterColor: bannedFooterColors[0] || '',
+      bannedFooterColors,
+      footerMode,
+      customFooterId: footerMode === 'custom_footer' ? selectedCustomFooterId : undefined,
       isTestFrame: initialFrame?.id ? (initialFrame.isTestFrame ?? (designCategory === 'TEST_FRAMES')) : (designCategory === 'TEST_FRAMES'),
       approvalStatus: initialFrame?.id ? (initialFrame.approvalStatus || (designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : 'APPROVED')) : (designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : 'APPROVED'),
       designCategory: isVideo ? 'Special Frames' : (designCategory || 'Regular Frames'),
@@ -3396,7 +3774,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           {isCalloutListExpanded && (
                             <>
                               {calloutLibrary.length > 0 ? (
-                                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-60 overflow-y-auto p-2 bg-slate-900/60 rounded-xl border border-slate-800">
                                   {calloutLibrary.map((item) => {
                                     const assetUrl = item.url || item.assetUrl;
                                     const isSelected = manualCalloutAssetUrl === assetUrl || fullStoryCalloutConfig.manualCalloutAsset === assetUrl || fullStoryCalloutConfig.calloutAssetId === item.id;
@@ -3786,115 +4164,236 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   </div>
                 )}
 
-                {/* Primary Footer Colour & Banned Footer Colour Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Primary Footer Colour (Default for users) */}
-                  <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
-                    <label className="text-[11px] font-bold text-white block">
-                      प्राइमरी फुटर रंग (Default Footer Colour) *
-                    </label>
-                    <p className="text-[10px] text-slate-400">
-                      यूज़र्स के लिए डिफ़ॉल्ट फुटर बैकग्राउंड रंग।
-                    </p>
-                    <div className="flex items-center gap-2.5">
-                      <input
-                        type="color"
-                        value={primaryFooterColor}
-                        onChange={(e) => {
-                          setPrimaryFooterColor(e.target.value);
-                          setFooterConfig((prev) => ({
-                            ...prev,
-                            primaryFooterColor: e.target.value,
-                            footerBgColor: e.target.value,
-                          }));
-                        }}
-                        className="w-10 h-8 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={primaryFooterColor}
-                        onChange={(e) => {
-                          setPrimaryFooterColor(e.target.value);
-                          setFooterConfig((prev) => ({
-                            ...prev,
-                            primaryFooterColor: e.target.value,
-                            footerBgColor: e.target.value,
-                          }));
-                        }}
-                        className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono text-xs w-28 uppercase"
-                      />
-                    </div>
-                    {/* Presets */}
-                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                      {['#FFFFFF', '#0F172A', '#FFE600', '#DC2626', '#000000', '#1E3A8A', '#047857'].map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => {
-                            setPrimaryFooterColor(c);
-                            setFooterConfig((prev) => ({
-                              ...prev,
-                              primaryFooterColor: c,
-                              footerBgColor: c,
-                            }));
-                          }}
-                          className={`w-6 h-6 rounded-md border transition cursor-pointer ${
-                            primaryFooterColor.toLowerCase() === c.toLowerCase()
-                              ? 'ring-2 ring-amber-400 border-white'
-                              : 'border-white/20 hover:scale-105'
-                          }`}
-                          style={{ backgroundColor: c }}
-                          title={c}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                {/* Mode A vs Mode B Mutual Exclusivity Switcher (Part 10 & 11) */}
+                <div className="flex flex-col sm:flex-row rounded-xl bg-slate-900 p-1 border border-slate-800 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFooterMode('branding')}
+                    className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                      footerMode === 'branding'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <span>Mode A: फुटर ब्रांडिंग एवं बैकग्राउंड</span>
+                    {footerMode === 'branding' && <Check className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isProOrVipUser) {
+                        setFeedbackMsg({
+                          type: 'error',
+                          text: 'कस्टम फ़ुटर सुविधा केवल Pro और VIP Desk प्लान यूज़र्स के लिए उपलब्ध है।',
+                        });
+                        return;
+                      }
+                      setFooterMode('custom_footer');
+                    }}
+                    className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                      footerMode === 'custom_footer'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    <span>Mode B: कस्टम फ़ुटर (Custom Footer)</span>
+                    {!isProOrVipUser ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-950 text-red-300 border border-red-800">
+                        🔒 Pro/VIP Only
+                      </span>
+                    ) : footerMode === 'custom_footer' ? (
+                      <Check className="w-3.5 h-3.5" />
+                    ) : null}
+                  </button>
+                </div>
 
-                  {/* Banned Footer Colour (Forbidden for users) */}
-                  <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
-                    <label className="text-[11px] font-bold text-white block">
-                      प्रतिबंधित फुटर रंग (Banned Footer Colour)
-                    </label>
-                    <p className="text-[10px] text-slate-400">
-                      एडमिन द्वारा प्रतिबंधित रंग जिसे यूज़र स्टूडियो में नहीं चुन सकता।
-                    </p>
-                    <select
-                      value={bannedFooterColor}
-                      onChange={(e) => {
-                        setBannedFooterColor(e.target.value);
-                        setFooterConfig((prev) => ({
-                          ...prev,
-                          bannedFooterColor: e.target.value,
-                        }));
-                      }}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-bold"
-                    >
-                      <option value="">-- कोई नहीं (None) --</option>
-                      <option value="#FFFFFF">सफेद (White #FFFFFF)</option>
-                      <option value="#000000">काला (Black #000000)</option>
-                      <option value="#DC2626">लाल (Red #DC2626)</option>
-                      <option value="#FFE600">पीला (Yellow #FFE600)</option>
-                      <option value="#0F172A">नेवी डार्क (#0F172A)</option>
-                    </select>
-
-                    {bannedFooterColor && (
-                      <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-300">
-                        <span className="w-4 h-4 rounded border border-white/20 inline-block" style={{ backgroundColor: bannedFooterColor }} />
-                        <span className="font-mono text-[10px]">{bannedFooterColor}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBannedFooterColor('');
-                            setFooterConfig((prev) => ({ ...prev, bannedFooterColor: '' }));
-                          }}
-                          className="text-[10px] text-red-400 hover:text-red-300 ml-auto"
-                        >
-                          हटाएँ
-                        </button>
+                {footerMode === 'custom_footer' ? (
+                  <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-amber-300 block">
+                        कस्टम फ़ुटर लाइब्रेरी से चुनें (Custom Footer Library):
+                      </label>
+                      <span className="text-[9px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                        Mode B सक्रिय
+                      </span>
+                    </div>
+                    {customFootersLibrary.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
+                        {customFootersLibrary.map((cf) => {
+                          const isSel = selectedCustomFooterId === cf.id;
+                          return (
+                            <button
+                              key={cf.id}
+                              type="button"
+                              onClick={() => setSelectedCustomFooterId(cf.id)}
+                              className={`p-2.5 rounded-lg border text-left transition cursor-pointer flex flex-col gap-1.5 ${
+                                isSel
+                                  ? 'border-amber-400 bg-amber-500/20 ring-1 ring-amber-400'
+                                  : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white truncate">{cf.name}</span>
+                                {isSel && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2.5 h-2.5 rounded-full border border-white/20" style={{ backgroundColor: cf.footerConfig?.footerBgColor || '#FFFFFF' }} />
+                                  <span>BG</span>
+                                </span>
+                                <span>|</span>
+                                <span>ऊंचाई: {cf.footerConfig?.footerHeightPct || 8}%</span>
+                                <span>|</span>
+                                <span>सेपरेटर: {cf.footerConfig?.separator || '|'}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 p-2">
+                        कोई कस्टम फ़ुटर उपलब्ध नहीं है। कृपया कंट्रोल रूम के Asset Library में फ़ुटर डिज़ाइन करें।
+                      </p>
                     )}
                   </div>
-                </div>
+                ) : (
+                  /* Mode A: Standard Footer Colour & Multi-Color Banned Settings */
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Primary Footer Colour (Default for users) */}
+                    <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
+                      <label className="text-[11px] font-bold text-white block">
+                        प्राइमरी फुटर रंग (Default Footer Colour) *
+                      </label>
+                      <p className="text-[10px] text-slate-400">
+                        यूज़र्स के लिए डिफ़ॉल्ट फुटर बैकग्राउंड रंग।
+                      </p>
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="color"
+                          value={primaryFooterColor}
+                          onChange={(e) => {
+                            setPrimaryFooterColor(e.target.value);
+                            setFooterConfig((prev) => ({
+                              ...prev,
+                              primaryFooterColor: e.target.value,
+                              footerBgColor: e.target.value,
+                            }));
+                          }}
+                          className="w-10 h-8 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={primaryFooterColor}
+                          onChange={(e) => {
+                            setPrimaryFooterColor(e.target.value);
+                            setFooterConfig((prev) => ({
+                              ...prev,
+                              primaryFooterColor: e.target.value,
+                              footerBgColor: e.target.value,
+                            }));
+                          }}
+                          className="px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono text-xs w-28 uppercase"
+                        />
+                      </div>
+                      {/* Presets with Banned Tooltip */}
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        {['#FFFFFF', '#0F172A', '#FFE600', '#DC2626', '#000000', '#1E3A8A', '#047857'].map((c) => {
+                          const isBanned = bannedFooterColors.some((bc) => bc.toLowerCase() === c.toLowerCase());
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              disabled={isBanned}
+                              onClick={() => {
+                                if (isBanned) return;
+                                setPrimaryFooterColor(c);
+                                setFooterConfig((prev) => ({
+                                  ...prev,
+                                  primaryFooterColor: c,
+                                  footerBgColor: c,
+                                }));
+                              }}
+                              className={`w-6 h-6 rounded-md border transition ${
+                                isBanned
+                                  ? 'opacity-30 cursor-not-allowed border-red-500 line-through'
+                                  : primaryFooterColor.toLowerCase() === c.toLowerCase()
+                                  ? 'ring-2 ring-amber-400 border-white cursor-pointer'
+                                  : 'border-white/20 hover:scale-105 cursor-pointer'
+                              }`}
+                              style={{ backgroundColor: c }}
+                              title={isBanned ? 'यह रंग इस Template के लिए Master Admin द्वारा प्रतिबंधित है।' : c}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Banned Footer Colours (Part 12: Multi-Color Selection) */}
+                    <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-bold text-white block">
+                          प्रतिबंधित फुटर रंग (Banned Footer Colours)
+                        </label>
+                        <span className="text-[9px] text-amber-400 font-bold">
+                          {bannedFooterColors.length} रंग प्रतिबंधित
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        एडमिन द्वारा प्रतिबंधित रंग जिन्हें यूज़र स्टूडियो में नहीं चुन सकते।
+                      </p>
+
+                      {bannedFooterColors.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 p-1.5 bg-slate-950 rounded-lg border border-slate-800">
+                          {bannedFooterColors.map((c) => (
+                            <span
+                              key={c}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-red-950/80 border border-red-700/60 text-red-200"
+                            >
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c }} />
+                              <span>{c}</span>
+                              <button
+                                type="button"
+                                onClick={() => setBannedFooterColors((prev) => prev.filter((bc) => bc.toLowerCase() !== c.toLowerCase()))}
+                                className="text-red-400 hover:text-white ml-0.5 cursor-pointer font-bold"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        <span className="text-[9px] text-slate-400">क्विक टॉगल:</span>
+                        {['#FFFFFF', '#000000', '#DC2626', '#FFE600', '#0F172A', '#16A34A', '#2563EB', '#EA580C', '#7C3AED'].map((c) => {
+                          const isBanned = bannedFooterColors.some((bc) => bc.toLowerCase() === c.toLowerCase());
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => {
+                                if (isBanned) {
+                                  setBannedFooterColors((prev) => prev.filter((bc) => bc.toLowerCase() !== c.toLowerCase()));
+                                } else {
+                                  setBannedFooterColors((prev) => [...prev, c.toUpperCase()]);
+                                }
+                              }}
+                              className={`w-6 h-6 rounded-md border flex items-center justify-center transition cursor-pointer ${
+                                isBanned
+                                  ? 'ring-2 ring-red-500 border-white relative'
+                                  : 'border-white/20 hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: c }}
+                              title={isBanned ? `${c} (प्रतिबंधित - हटाने के लिए क्लिक करें)` : `${c} (प्रतिबंधित करने के लिए क्लिक करें)`}
+                            >
+                              {isBanned && <span className="text-[9px] font-black text-red-500 bg-white/90 rounded-full px-0.5">✕</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
                   <div>
@@ -4374,6 +4873,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           {[
                             { deg: 270, label: '270° (लेफ्ट वर्टिकल)' },
                             { deg: 0, label: '0° (हॉरिज़ॉन्टल)' },
+                            { deg: 45, label: '45° (तिरछा/Diagonal)' },
                             { deg: 90, label: '90° (राइट वर्टिकल)' },
                             { deg: 180, label: '180° (उल्टा)' },
                           ].map((item) => (
@@ -4433,6 +4933,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           {[
                             { deg: 270, label: '270° (लेफ्ट वर्टिकल)' },
                             { deg: 0, label: '0° (हॉरिज़ॉन्टल)' },
+                            { deg: 45, label: '45° (तिरछा/Diagonal)' },
                             { deg: 90, label: '90° (राइट वर्टिकल)' },
                             { deg: 180, label: '180° (उल्टा)' },
                           ].map((item) => (
@@ -5618,11 +6119,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                               }}
                               className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-xs"
                             >
-                              <option value="Noto Sans Devanagari">Noto Sans Devanagari</option>
+                              <option value="Noto Sans Devanagari">Noto Sans Devanagari (क्लीन)</option>
                               <option value="Baloo 2">Baloo 2 (बोल्ड हेडिंग)</option>
-                              <option value="Hind">Hind</option>
-                              <option value="Rozha One">Rozha One</option>
-                              <option value="Yatra One">Yatra One</option>
+                              <option value="Kalam">Kalam (कलम - हस्तलिखित स्टाइल)</option>
+                              <option value="Poppins">Poppins (पॉपिन्स)</option>
+                              <option value="Hind">Hind (हिंद)</option>
+                              <option value="Rozha One">Rozha One (रोज़ा वन - क्लासिक)</option>
+                              <option value="Yatra One">Yatra One (यात्रा वन - विशिष्ट)</option>
                             </select>
                           </div>
 
@@ -5701,6 +6204,25 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 onChange={(e) => setTextSlots((prev) => prev.map((s, i) => (i === 0 ? { ...s, highlightColor: e.target.value } : s)))}
                                 className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-xs"
                               />
+                            </div>
+                            {/* Centralized Highlight Color Chips (Part 5) */}
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {HIGHLIGHT_COLOR_PRESETS.map((p) => (
+                                <button
+                                  key={p.value}
+                                  type="button"
+                                  onClick={() => setTextSlots((prev) => prev.map((s, i) => (i === 0 ? { ...s, highlightColor: p.value } : s)))}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 border transition cursor-pointer ${
+                                    (textSlots[0]?.highlightColor || '#FFE600').toLowerCase() === p.value.toLowerCase()
+                                      ? 'border-amber-400 bg-amber-400/20 text-white font-black shadow'
+                                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
+                                  }`}
+                                  title={p.label}
+                                >
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.value }} />
+                                  <span>{p.label.split(' ')[0]}</span>
+                                </button>
+                              ))}
                             </div>
                           </div>
                           <div>
@@ -6013,14 +6535,55 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleDownloadTestPreview}
-                    className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer transition transform active:scale-95"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>⚡ टेस्ट प्रीव्यू डाउनलोड करें (No Coins)</span>
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* TEST V1 / TEST V2 Version Parity Selector (Part 8) */}
+                    <div className="flex items-center rounded-lg bg-slate-900 p-0.5 border border-slate-700">
+                      <button
+                        type="button"
+                        onClick={() => setTestVersionMode('v1')}
+                        className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                          testVersionMode === 'v1'
+                            ? 'bg-amber-400 text-slate-950 font-black shadow'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        TEST V1 (स्टैंडर्ड)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTestVersionMode('v2')}
+                        className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                          testVersionMode === 'v2'
+                            ? 'bg-amber-400 text-slate-950 font-black shadow'
+                            : 'text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        TEST V2 (ऑल लेयर्स)
+                      </button>
+                    </div>
+
+                    {/* Format Toggle & Download Buttons (Part 7) */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadTestPreview('jpg')}
+                        className="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-lg shadow flex items-center gap-1 cursor-pointer transition transform active:scale-95"
+                        title="JPG फॉर्मेट में टेस्ट प्रीव्यू डाउनलोड करें"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>JPG</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadTestPreview('png')}
+                        className="px-3 py-1.5 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs rounded-lg shadow flex items-center gap-1 cursor-pointer transition transform active:scale-95"
+                        title="उच्च गुणवत्ता PNG फॉर्मेट में डाउनलोड करें"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>PNG</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Part 2: Dedicated Sample Test Mode (Dummy Text Input) Panel */}

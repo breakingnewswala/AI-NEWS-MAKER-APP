@@ -42,7 +42,9 @@ import {
   Image as ImageIcon,
   Loader2,
   CreditCard,
+  X,
 } from 'lucide-react';
+import { getAllIndianStates, getDistrictsForState, inferStateFromDistrict } from '../data/indianStatesDistricts';
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
 import { getApiUrl, getAuthHeaders, getAuthToken, ensureAuthToken, isTokenExpired } from '../lib/apiConfig';
@@ -568,10 +570,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           }),
         }).catch(() => {});
 
-        if (cleanEmail) {
+        if (cleanEmail && (isAdmin || isUserSuperAdmin(cleanEmail))) {
           fetch(getApiUrl('/api/admin/update-user'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
               userId: cleanEmail,
               updates: {
@@ -1238,6 +1240,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const raw = (currentUser?.district || channelProfile.district || channelProfile.location || '').trim();
     return (raw && raw !== 'सेंट्रल डेस्क / भोपाल') ? raw : 'भोपाल';
   });
+  const [reporterState, setReporterState] = useState<string>(() => {
+    const rawState = (channelProfile.state || currentUser?.state || '').trim();
+    if (rawState) return rawState;
+    const rawDist = (currentUser?.district || channelProfile.district || channelProfile.location || '').trim();
+    return inferStateFromDistrict(rawDist) || 'मध्य प्रदेश';
+  });
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState<boolean>(false);
   const [isSavingBranding, setIsSavingBranding] = useState<boolean>(false);
 
@@ -1458,10 +1466,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               }),
             }).catch(() => {});
 
-            if (cleanEmail) {
+            if (cleanEmail && (isAdmin || isUserSuperAdmin(cleanEmail))) {
               fetch(getApiUrl('/api/admin/update-user'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({
                   userId: cleanEmail,
                   updates: {
@@ -1734,13 +1742,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       channelLogoGifUrl: undefined,
       channelLogoType: 'png',
     }));
-    try {
-      await fetch('/api/admin/reset-user-logo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUsername: channelProfile.username || currentUser?.username || 'admin' }),
-      });
-    } catch {}
+    if (isAdmin || isUserSuperAdmin(cleanEmail)) {
+      try {
+        await fetch('/api/admin/reset-user-logo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ targetUsername: channelProfile.username || currentUser?.username || 'admin' }),
+        });
+      } catch {}
+    }
     setLogoResetSuccess('लोगो सफलतापूर्वक रीसेट कर दिया गया!');
     setTimeout(() => setLogoResetSuccess(''), 3000);
   };
@@ -1800,6 +1810,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
       const updatedProfile = {
         ...channelProfile,
+        state: reporterState || channelProfile.state || '',
         district: finalDistrict,
         location: finalDistrict,
         whatsappNumber: finalPhone,
@@ -1907,10 +1918,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           headers: {
             'Content-Type': 'application/json',
             ...getAuthHeaders(),
-            'x-admin-key': 'master-admin',
-            'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
-            'x-admin-email': cleanEmail,
-            'x-user-email': cleanEmail,
+            ...(isAdmin || isUserSuperAdmin(cleanEmail) ? {
+              'x-admin-key': 'master-admin',
+              'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : 'admin',
+              'x-admin-email': cleanEmail,
+            } : {
+              'x-user-role': 'reporter',
+              'x-user-email': cleanEmail,
+            }),
           },
           body: JSON.stringify(serverPayload),
         });
@@ -1929,6 +1944,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             socialIcons: savedProf.socialIcons || p.socialIcons,
             socialLinks: savedProf.socialLinks || p.socialLinks,
           }));
+          if (savedProf.state) {
+            setReporterState(savedProf.state);
+          } else if (savedProf.district) {
+            const inf = inferStateFromDistrict(savedProf.district);
+            if (inf) setReporterState(inf);
+          }
           if (savedProf.district || savedProf.location) {
             const rawDist = (savedProf.district || savedProf.location || '').trim();
             const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
@@ -2449,9 +2470,12 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       <div className="flex items-center gap-3">
                         <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
                           <img
-                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo}
+                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo || '/assets/ai_news_maker_logo.png'}
                             alt="PNG Logo"
                             className="w-full h-full object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = defaultAdminLogo || '/assets/ai_news_maker_logo.png';
+                            }}
                           />
                         </div>
                         <div className="flex-1 min-w-0 space-y-1.5">
@@ -3062,27 +3086,73 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* District & Username */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              {/* State, District & Username (Cascading Dropdowns per Part 17) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    संपादक / रिपोर्टर का जिला / शहर
+                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                    <span>राज्य / यूटी (State) *</span>
                   </label>
-                    <input
-                      type="text"
-                      value={reporterDistrict}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setReporterDistrict(val);
-                        setChannelProfile((p) => ({
-                          ...p,
-                          district: val,
-                          location: val,
-                        }));
-                      }}
-                      placeholder="भोपाल / सेंट्रल डेस्क"
-                      className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
-                    />
+                  <select
+                    value={reporterState}
+                    onChange={(e) => {
+                      const newState = e.target.value;
+                      setReporterState(newState);
+                      const availDistricts = getDistrictsForState(newState);
+                      const firstDist = availDistricts[0] || '';
+                      setReporterDistrict(firstDist);
+                      setChannelProfile((p) => ({
+                        ...p,
+                        state: newState,
+                        district: firstDist,
+                        location: firstDist,
+                      }));
+                    }}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="">-- राज्य चुनें --</option>
+                    {getAllIndianStates().map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                    <span>ज़िला / क्षेत्र (District) *</span>
+                  </label>
+                  <select
+                    value={reporterDistrict}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setReporterDistrict(val);
+                      setChannelProfile((p) => ({
+                        ...p,
+                        district: val,
+                        location: val,
+                      }));
+                    }}
+                    disabled={!reporterState}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden disabled:opacity-50 cursor-pointer"
+                  >
+                    {!reporterState && <option value="">पहले राज्य चुनें</option>}
+                    {reporterState && (
+                      <>
+                        <option value="">-- ज़िला चुनें --</option>
+                        {getDistrictsForState(reporterState).map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                        {reporterDistrict && !getDistrictsForState(reporterState).includes(reporterDistrict) && (
+                          <option value={reporterDistrict}>{reporterDistrict} (मौजूदा)</option>
+                        )}
+                      </>
+                    )}
+                  </select>
                 </div>
 
                 <div>
@@ -3203,7 +3273,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   />
                   <div className="text-xs text-slate-300 leading-relaxed">
                     <span className="font-bold text-white block">
-                      हाँ, मैं AI NEWS MAKER / BREAKING NEWS WALA से WhatsApp पर समाचार अपडेट, मार्केटिंग और प्रमोशनल सामग्री प्राप्त करना चाहता/चाहती हूँ।
+                      हाँ, मैं AI NEWS MAKER से WhatsApp पर समाचार अपडेट, मार्केटिंग और प्रमोशनल सामग्री प्राप्त करना चाहता/चाहती हूँ।
                     </span>
                     <span className="text-[11px] text-slate-400 block mt-0.5">
                       यह वैकल्पिक है। आप इसे किसी भी समय अपनी प्रोफ़ाइल सेटिंग से बदल सकते हैं। इससे आपका खाता या सेवा प्रभावित नहीं होगी।

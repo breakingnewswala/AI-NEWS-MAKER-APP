@@ -441,6 +441,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const [reportingDistrict, setReportingDistrict] = useState<string>(
     currentUser?.district || initialProfile.district || ''
   );
+  const [reportingState, setReportingState] = useState<string>(() => {
+    const rawState = (currentUser?.state || initialProfile.state || '').trim();
+    if (rawState) return rawState;
+    const rawDist = (currentUser?.district || initialProfile.district || '').trim();
+    return inferStateFromDistrict(rawDist) || 'मध्य प्रदेश';
+  });
 
   // Permanent Primary Mobile Number
   const [primaryMobileNumber, setPrimaryMobileNumber] = useState<string>(
@@ -2049,18 +2055,57 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      2. ज़िला / शहर / डेस्क (District / City) *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={reportingDistrict}
-                      onChange={(e) => setReportingDistrict(e.target.value)}
-                      placeholder="यहाँ अपना जिला / शहर दर्ज करें (उदा. भोपाल, रीवा, इंदौर)"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
-                    />
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        2. राज्य / केंद्र शासित प्रदेश (State / UT) *
+                      </label>
+                      <select
+                        value={reportingState}
+                        onChange={(e) => {
+                          const newState = e.target.value;
+                          setReportingState(newState);
+                          const availDistricts = getDistrictsForState(newState);
+                          const firstDist = availDistricts[0] || '';
+                          setReportingDistrict(firstDist);
+                        }}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                      >
+                        <option value="">-- राज्य चुनें --</option>
+                        {getAllIndianStates().map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        3. ज़िला / ब्यूरो क्षेत्र (District / City) *
+                      </label>
+                      <select
+                        value={reportingDistrict}
+                        onChange={(e) => setReportingDistrict(e.target.value)}
+                        disabled={!reportingState}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden disabled:opacity-50 cursor-pointer"
+                      >
+                        {!reportingState && <option value="">पहले राज्य चुनें</option>}
+                        {reportingState && (
+                          <>
+                            <option value="">-- ज़िला चुनें --</option>
+                            {getDistrictsForState(reportingState).map((d) => (
+                              <option key={d} value={d}>
+                                {d}
+                              </option>
+                            ))}
+                            {reportingDistrict && !getDistrictsForState(reportingState).includes(reportingDistrict) && (
+                              <option value={reportingDistrict}>{reportingDistrict} (कस्टम)</option>
+                            )}
+                          </>
+                        )}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -2679,7 +2724,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   />
                   <div className="text-xs text-slate-300 leading-relaxed">
                     <span className="font-bold text-white block">
-                      हाँ, मैं AI NEWS MAKER / BREAKING NEWS WALA से WhatsApp पर समाचार अपडेट, मार्केटिंग और प्रमोशनल सामग्री प्राप्त करना चाहता/चाहती हूँ।
+                      हाँ, मैं AI NEWS MAKER से WhatsApp पर समाचार अपडेट, मार्केटिंग और प्रमोशनल सामग्री प्राप्त करना चाहता/चाहती हूँ।
                     </span>
                     <span className="text-[11px] text-slate-400 block mt-0.5">
                       यह वैकल्पिक है। आप इसे किसी भी समय अपनी प्रोफ़ाइल सेटिंग से बदल सकते हैं। इससे आपका खाता या सेवा प्रभावित नहीं होगी।

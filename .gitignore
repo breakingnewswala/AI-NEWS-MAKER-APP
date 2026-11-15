@@ -109,6 +109,7 @@ scripts/search_repo.*
 scripts/setup_search.*
 scripts/validate-*
 public/assets/aistudio/
+app/src/main/assets/news_studio/assets/aistudio/
 phase4_backups/
 *.bak
 
