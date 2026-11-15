@@ -463,12 +463,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [adminCategory, setAdminCategory] = useState<string>('breaking');
   const [adminIsBonus, setAdminIsBonus] = useState(false);
   const [adminRewardCoins, setAdminRewardCoins] = useState(50);
+  const [adminDuration, setAdminDuration] = useState<number | string>('');
 
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
 
-  // Helper to generate a video thumbnail from the first frame
-  const generateVideoThumbnail = (fileOrUrl: File | string): Promise<string> => {
+  // Helper to generate a video thumbnail from the first frame and extract exact duration
+  const generateVideoThumbnail = (fileOrUrl: File | string): Promise<{ thumbnail: string; duration: number }> => {
     return new Promise((resolve) => {
       try {
         const video = document.createElement('video');
@@ -480,7 +481,10 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         const objectUrl = typeof fileOrUrl === 'string' ? fileOrUrl : URL.createObjectURL(fileOrUrl);
         video.src = objectUrl;
 
+        let capturedDuration = 0;
+
         video.onloadedmetadata = () => {
+          capturedDuration = video.duration && isFinite(video.duration) ? video.duration : 0;
           video.currentTime = Math.min(1.0, video.duration > 1 ? 1.0 : 0.1);
         };
 
@@ -494,22 +498,22 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
               const thumb = canvas.toDataURL('image/jpeg', 0.85);
               if (typeof fileOrUrl !== 'string') URL.revokeObjectURL(objectUrl);
-              resolve(thumb);
+              resolve({ thumbnail: thumb, duration: capturedDuration });
               return;
             }
           } catch (e) {
             console.warn('Canvas frame capture fallback:', e);
           }
           if (typeof fileOrUrl !== 'string') URL.revokeObjectURL(objectUrl);
-          resolve('');
+          resolve({ thumbnail: '', duration: capturedDuration });
         };
 
         video.onerror = () => {
           if (typeof fileOrUrl !== 'string') URL.revokeObjectURL(objectUrl);
-          resolve('');
+          resolve({ thumbnail: '', duration: 0 });
         };
       } catch {
-        resolve('');
+        resolve({ thumbnail: '', duration: 0 });
       }
     });
   };
@@ -533,11 +537,14 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     setIsUploadingVideo(true);
     setUploadProgress(20);
 
-    // Auto capture frame for thumbnail
+    // Auto capture frame for thumbnail and extract exact duration
     try {
-      generateVideoThumbnail(file).then((frame) => {
-        if (frame && !adminThumbnailUrl) {
-          setAdminThumbnailUrl(frame);
+      generateVideoThumbnail(file).then((res) => {
+        if (res.thumbnail && !adminThumbnailUrl) {
+          setAdminThumbnailUrl(res.thumbnail);
+        }
+        if (res.duration > 0) {
+          setAdminDuration(res.duration);
         }
       });
     } catch {}
@@ -722,7 +729,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
       caption: adminCaption.trim(),
       aspectRatio: adminRatio,
       createdAt: Date.now(),
-      duration: '01:30',
+      duration: adminDuration ? formatExactDuration(adminDuration) : '01:30',
       channel: adminChannel || currentUser?.channelName || 'एडमिन वायरल डेस्क',
       views: '1K देखा गया',
       videoUrl: adminVideoUrl.trim(),
@@ -824,27 +831,55 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   const [isRatioDropdownOpen, setIsRatioDropdownOpen] = useState<boolean>(false);
   const [inlinePlayingId, setInlinePlayingId] = useState<string | null>(null);
   const [expandedDescIds, setExpandedDescIds] = useState<Set<string>>(new Set());
+  const [extractedDurations, setExtractedDurations] = useState<Record<string, number>>({});
 
-  // Exact MM:SS video duration formatter (Part 5.C)
+  // Lightweight metadata duration extraction for remote videos
+  useEffect(() => {
+    videos.forEach((v) => {
+      if ((!v.duration || v.duration === '00:30' || v.duration === '01:30' || v.duration === '--:--') && v.videoUrl && !extractedDurations[v.id]) {
+        try {
+          const temp = document.createElement('video');
+          temp.preload = 'metadata';
+          temp.src = v.videoUrl;
+          temp.onloadedmetadata = () => {
+            if (temp.duration && isFinite(temp.duration) && temp.duration > 0) {
+              setExtractedDurations((prev) => ({ ...prev, [v.id]: temp.duration }));
+            }
+          };
+        } catch {}
+      }
+    });
+  }, [videos]);
+
+  // Exact MM:SS or HH:MM:SS video duration formatter (Part 4)
   const formatExactDuration = (dur: string | number | undefined): string => {
-    if (dur === undefined || dur === null || dur === '') return '00:30';
+    if (dur === undefined || dur === null || dur === '') return '--:--';
     if (typeof dur === 'number') {
-      const mins = Math.floor(dur / 60);
+      if (isNaN(dur) || dur <= 0) return '--:--';
+      const hours = Math.floor(dur / 3600);
+      const mins = Math.floor((dur % 3600) / 60);
       const secs = Math.floor(dur % 60);
+      if (hours > 0) {
+        return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }
       return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
     const clean = String(dur).trim();
-    if (/^\d{1,2}:\d{2}$/.test(clean)) {
-      const parts = clean.split(':');
-      return `${parts[0].padStart(2, '0')}:${parts[1]}`;
+    if (!clean || clean === '00:00' || clean === '0:00') return '--:--';
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(clean)) {
+      return clean;
     }
-    const num = parseInt(clean.replace(/[^\d.]/g, ''), 10);
-    if (!isNaN(num)) {
-      const mins = Math.floor(num / 60);
+    const num = parseFloat(clean.replace(/[^\d.]/g, ''));
+    if (!isNaN(num) && num > 0) {
+      const hours = Math.floor(num / 3600);
+      const mins = Math.floor((num % 3600) / 60);
       const secs = Math.floor(num % 60);
+      if (hours > 0) {
+        return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }
       return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
-    return clean;
+    return clean || '--:--';
   };
 
   const toggleDescription = (id: string, e: React.MouseEvent) => {
@@ -987,7 +1022,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
                 <div className="absolute bottom-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded text-[11px] font-bold text-white flex items-center gap-1 font-mono">
                   <Clock className="w-3 h-3 text-amber-400" />
-                  {formatExactDuration(vid.duration)}
+                  {formatExactDuration(vid.duration || extractedDurations[vid.id])}
                 </div>
 
                 <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap">

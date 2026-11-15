@@ -78,6 +78,7 @@ import {
   fetchDynamicFramesFromApi,
   getLocalDynamicFrames,
   getDynamicFrameById,
+  normalizeDynamicFrame,
 } from '../lib/dynamicFramesManager';
 import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
@@ -379,10 +380,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   const [dynamicFramesRaw, setDynamicFramesRaw] = React.useState<DynamicFrameTemplate[]>(() => getLocalDynamicFrames());
   const currentDynamicFrame = React.useMemo(() => {
-    return card.customDynamicFrame ||
+    const raw = card.customDynamicFrame ||
       getDynamicFrameById(card.frameDesign || '') ||
       dynamicFramesRaw.find((d) => d.id === card.frameDesign || d.name === card.frameDesign) ||
       null;
+    return raw ? normalizeDynamicFrame(raw) : null;
   }, [card.customDynamicFrame, card.frameDesign, dynamicFramesRaw]);
   const [currentFrameOptions, setCurrentFrameOptions] = React.useState<FrameOption[]>(() => {
     return buildUnifiedFrameOptions(getLocalDynamicFrames(), isEffectiveAdmin(currentUser?.email || currentUser?.username), isMaster);
@@ -402,9 +404,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         setDynamicFramesRaw(dfs);
         setCurrentFrameOptions(buildUnifiedFrameOptions(dfs, isEffectiveAdmin(currentUser?.email || currentUser?.username), isMaster));
         if (card.frameDesign && !card.customDynamicFrame) {
-          const match = dfs.find((d) => d.id === card.frameDesign || d.name === card.frameDesign);
+          const match = dfs.find((d) => d.id === card.frameDesign || d.name === card.frameDesign) || getDynamicFrameById(card.frameDesign);
           if (match) {
-            onChange({ customDynamicFrame: match });
+            onChange({ customDynamicFrame: normalizeDynamicFrame(match) });
           }
         }
       }
@@ -457,7 +459,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   // Auto-select custom footer if dynamic frame specifies customFooterId
   React.useEffect(() => {
-    const activeDf = getDynamicFrameById(card.frameDesign || '');
+    const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
     if (!activeDf) return;
 
     const updates: Partial<NewsCardData> = {};
@@ -1086,7 +1088,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   }
 
   // Dynamic frame multi-slot photos support (Bug Group D)
-  const currentDfForCrop = getDynamicFrameById(card.frameDesign || '');
+  const currentDfForCrop = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
   if (currentDfForCrop && currentDfForCrop.photoSlots && currentDfForCrop.photoSlots.length > 1) {
     currentDfForCrop.photoSlots.forEach((slot, idx) => {
       if (idx === 0) return; // already in main
@@ -1797,7 +1799,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <div
                       key={f.id}
                       onClick={() => {
-                        const match = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
+                        const rawMatch = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
+                        const match = rawMatch ? normalizeDynamicFrame(rawMatch) : undefined;
                         const updates: any = {
                           frameDesign: f.id,
                           customDynamicFrame: match || undefined,
@@ -2071,7 +2074,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <div
                       key={`fav_${f.id}`}
                       onClick={() => {
-                        const match = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
+                        const rawMatch = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
+                        const match = rawMatch ? normalizeDynamicFrame(rawMatch) : undefined;
                         const updates: any = {
                           frameDesign: f.id,
                           customDynamicFrame: match || undefined,
@@ -4308,7 +4312,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
           {/* Word count display and Bug Group C3 limit validation */}
           {(() => {
-            const activeDf = getDynamicFrameById(card.frameDesign || '');
+            const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
             const maxWords = activeDf?.headerConfig?.maxLocationWords || (activeDf as any)?.maxLocationWords || 3;
             const words = (card.location || '').trim().split(/\s+/).filter(Boolean);
             const wordCount = words.length;
@@ -4340,7 +4344,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
           {/* Location Box Soft Color Selector (Bug Group C4: Conditional only if supported) */}
           {(() => {
-            const activeDf = getDynamicFrameById(card.frameDesign || '');
+            const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
             const isStaticImage = activeDf?.headerConfig?.locationBadgeMode === 'static_image' || (activeDf?.headerConfig as any)?.locationStyle === 'static_image';
             const supportsBg = activeDf
               ? (!isStaticImage && activeDf?.headerConfig?.supportsLocationBadgeBackgroundColor !== false && (activeDf as any)?.supportsLocationBadgeBackgroundColor !== false)
@@ -5478,7 +5482,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                         {FOOTER_BG_PRIMARY_PRESETS.map((p) => {
                           const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
-                          const activeDf = getDynamicFrameById(card.frameDesign || '');
+                          const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
                           const isColorBanned = Boolean(
                             activeDf && (
                               (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
@@ -5526,7 +5530,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                           {FOOTER_BG_SECONDARY_PRESETS.map((p) => {
                             const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
-                            const activeDf = getDynamicFrameById(card.frameDesign || '');
+                            const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
                             const isColorBanned = Boolean(
                               activeDf && (
                                 (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
@@ -5576,7 +5580,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         </span>
                         <div className="flex items-center gap-2">
                           {(() => {
-                            const activeDf = getDynamicFrameById(card.frameDesign || '');
+                            const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
                             const bannedFooterColor = activeDf?.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
                             return (
                               <>

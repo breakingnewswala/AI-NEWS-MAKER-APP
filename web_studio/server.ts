@@ -8429,6 +8429,231 @@ function saveAdminReadNotificationIds(ids: Set<string>): void {
   } catch {}
 }
 
+// ==========================================
+// USER FAVORITES & REMINDERS PERSISTENCE (Components 6 & 7)
+// ==========================================
+const USER_FAVORITES_FILE = path.join(process.cwd(), "user_favorites_db.json");
+const USER_REMINDERS_FILE = path.join(process.cwd(), "user_reminders_db.json");
+
+function loadUserFavoritesDatabase(): Record<string, string[]> {
+  try {
+    if (fs.existsSync(USER_FAVORITES_FILE)) {
+      return JSON.parse(fs.readFileSync(USER_FAVORITES_FILE, "utf-8"));
+    }
+  } catch {}
+  return {};
+}
+
+function saveUserFavoritesDatabase(data: Record<string, string[]>) {
+  try {
+    fs.writeFileSync(USER_FAVORITES_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed saving user favorites database:", err);
+  }
+}
+
+interface StoredReminder {
+  id: string;
+  userEmail: string;
+  newsId: string;
+  newsTitle: string;
+  minutes: number;
+  dueAt: number;
+  createdAt: number;
+  status: 'pending' | 'sent' | 'cancelled';
+}
+
+function loadUserRemindersDatabase(): StoredReminder[] {
+  try {
+    if (fs.existsSync(USER_REMINDERS_FILE)) {
+      return JSON.parse(fs.readFileSync(USER_REMINDERS_FILE, "utf-8"));
+    }
+  } catch {}
+  return [];
+}
+
+function saveUserRemindersDatabase(reminders: StoredReminder[]) {
+  try {
+    fs.writeFileSync(USER_REMINDERS_FILE, JSON.stringify(reminders, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed saving user reminders database:", err);
+  }
+}
+
+// GET /api/user-favorites
+app.get("/api/user-favorites", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.json({ success: true, favorites: [] });
+    }
+    const db = loadUserFavoritesDatabase();
+    const list = db[rawEmail] || [];
+    return res.json({ success: true, favorites: list });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// POST /api/user-favorites
+app.post("/api/user-favorites", (req, res) => {
+  try {
+    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const newsId = (req.body.newsId || "").toString().trim();
+    const action = req.body.action || "toggle"; // toggle, add, remove
+
+    if (!rawEmail) {
+      return res.status(400).json({ error: "उपयोगकर्ता ईमेल आवश्यक है।" });
+    }
+    if (!newsId) {
+      return res.status(400).json({ error: "न्यूज़ आईडी आवश्यक है।" });
+    }
+
+    const db = loadUserFavoritesDatabase();
+    const userFavs = new Set(db[rawEmail] || []);
+    let isFavorite = false;
+
+    if (action === "add") {
+      userFavs.add(newsId);
+      isFavorite = true;
+    } else if (action === "remove") {
+      userFavs.delete(newsId);
+      isFavorite = false;
+    } else {
+      if (userFavs.has(newsId)) {
+        userFavs.delete(newsId);
+        isFavorite = false;
+      } else {
+        userFavs.add(newsId);
+        isFavorite = true;
+      }
+    }
+
+    db[rawEmail] = Array.from(userFavs);
+    saveUserFavoritesDatabase(db);
+
+    return res.json({
+      success: true,
+      newsId,
+      isFavorite,
+      favorites: db[rawEmail],
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// GET /api/reminders
+app.get("/api/reminders", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const reminders = loadUserRemindersDatabase();
+    const userReminders = rawEmail
+      ? reminders.filter((r) => r.userEmail === rawEmail && r.status === 'pending')
+      : reminders.filter((r) => r.status === 'pending');
+    return res.json({ success: true, reminders: userReminders });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// POST /api/reminders
+app.post("/api/reminders", (req, res) => {
+  try {
+    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const { newsId, newsTitle, minutes = 5, action = 'create', id } = req.body || {};
+
+    if (!rawEmail) {
+      return res.status(400).json({ error: "उपयोगकर्ता ईमेल आवश्यक है।" });
+    }
+
+    let reminders = loadUserRemindersDatabase();
+
+    if (action === 'cancel') {
+      reminders = reminders.map((r) => {
+        if ((id && r.id === id) || (newsId && r.newsId === newsId && r.userEmail === rawEmail)) {
+          return { ...r, status: 'cancelled' as const };
+        }
+        return r;
+      });
+      saveUserRemindersDatabase(reminders);
+      return res.json({ success: true, message: "रिमाइंडर रद्द कर दिया गया।" });
+    }
+
+    if (!newsId) {
+      return res.status(400).json({ error: "न्यूज़ आईडी आवश्यक है।" });
+    }
+
+    const mins = [5, 10, 20, 30].includes(Number(minutes)) ? Number(minutes) : 5;
+    const dueAt = Date.now() + mins * 60 * 1000;
+
+    // Prevent duplicate pending reminder for same user and newsId
+    reminders = reminders.filter((r) => !(r.userEmail === rawEmail && r.newsId === newsId && r.status === 'pending'));
+
+    const newReminder: StoredReminder = {
+      id: `rem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userEmail: rawEmail,
+      newsId,
+      newsTitle: String(newsTitle || "").trim() || "समाचार",
+      minutes: mins,
+      dueAt,
+      createdAt: Date.now(),
+      status: 'pending',
+    };
+
+    reminders.push(newReminder);
+    saveUserRemindersDatabase(reminders);
+
+    return res.json({
+      success: true,
+      reminder: newReminder,
+      message: `${mins} मिनट बाद का रिमाइंडर सेट हो गया है।`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Background Scheduler for Due Reminders (runs every 30 seconds)
+setInterval(() => {
+  try {
+    const reminders = loadUserRemindersDatabase();
+    const now = Date.now();
+    let hasChanges = false;
+
+    for (const r of reminders) {
+      if (r.status === 'pending' && r.dueAt <= now) {
+        r.status = 'sent';
+        hasChanges = true;
+
+        const notifTitle = `⏰ न्यूज़ ग्राफिक रिमाइंडर (${r.minutes} मिनट)`;
+        const notifMsg = `आपने यह खबर ग्राफिक बनाने के लिए रिमाइंडर में रखी थी। अब इस खबर से ग्राफिक बनाएँ: "${r.newsTitle.slice(0, 70)}"`;
+        const newNotif: StoredNotification = {
+          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          title: notifTitle,
+          message: notifMsg,
+          time: new Date().toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+          unread: true,
+          newsId: r.newsId,
+          postId: r.newsId,
+          linkTab: "studio",
+          targetUserEmail: r.userEmail,
+          createdAt: Date.now(),
+        };
+
+        const notifs = loadNotificationsDatabase();
+        saveNotificationsDatabase([newNotif, ...notifs]);
+      }
+    }
+
+    if (hasChanges) {
+      saveUserRemindersDatabase(reminders);
+    }
+  } catch (e) {
+    console.warn("[Reminder Scheduler] error:", e);
+  }
+}, 30000);
+
 app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
@@ -22360,6 +22585,71 @@ Content: ${extracted.content ? extracted.content.slice(0, 2000) : ""}
   };
 }
 
+// Scraped Articles Cache & Endpoint (Component 5)
+const SCRAPED_ARTICLES_CACHE_FILE = path.join(process.cwd(), "scraped_articles_cache_db.json");
+const inMemoryArticleScrapeCache = new Map<string, any>();
+
+function getArticleCacheKey(url: string): string {
+  try {
+    return crypto.createHash("sha256").update(url.trim().toLowerCase()).digest("hex");
+  } catch {
+    return encodeURIComponent(url.trim().toLowerCase()).slice(0, 64);
+  }
+}
+
+app.post("/api/scrape-news-article", async (req, res) => {
+  try {
+    const rawUrl = String(req.body?.url || "").trim();
+    if (!rawUrl || !(/^https?:\/\//i.test(rawUrl))) {
+      return res.status(400).json({ success: false, error: "मान्य URL अनिवार्य है।" });
+    }
+
+    const cacheKey = getArticleCacheKey(rawUrl);
+    if (inMemoryArticleScrapeCache.has(cacheKey)) {
+      const cached = inMemoryArticleScrapeCache.get(cacheKey);
+      return res.json({ success: true, ...cached, cached: true });
+    }
+
+    try {
+      if (fs.existsSync(SCRAPED_ARTICLES_CACHE_FILE)) {
+        const diskCache = JSON.parse(fs.readFileSync(SCRAPED_ARTICLES_CACHE_FILE, "utf-8"));
+        if (diskCache[cacheKey]) {
+          inMemoryArticleScrapeCache.set(cacheKey, diskCache[cacheKey]);
+          return res.json({ success: true, ...diskCache[cacheKey], cached: true });
+        }
+      }
+    } catch {}
+
+    const scraped = await scrapeNewsFromUrl(rawUrl);
+    const meta = scraped.extractedMeta;
+    const resultData = {
+      success: scraped.extractionStatus === "success" || Boolean(meta?.content || meta?.description),
+      title: meta?.title || "",
+      description: meta?.description || "",
+      content: meta?.content || meta?.description || "",
+      photos: meta?.images || [],
+      sourceUrl: rawUrl,
+      extractionStatus: scraped.extractionStatus,
+    };
+
+    if (resultData.content && resultData.content.length > 50) {
+      inMemoryArticleScrapeCache.set(cacheKey, resultData);
+      try {
+        let diskCache: Record<string, any> = {};
+        if (fs.existsSync(SCRAPED_ARTICLES_CACHE_FILE)) {
+          diskCache = JSON.parse(fs.readFileSync(SCRAPED_ARTICLES_CACHE_FILE, "utf-8"));
+        }
+        diskCache[cacheKey] = resultData;
+        fs.writeFileSync(SCRAPED_ARTICLES_CACHE_FILE, JSON.stringify(diskCache, null, 2), "utf-8");
+      } catch {}
+    }
+
+    return res.json(resultData);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
 // Process News Link or Natural Language Command / Text into News Graphic structure
 app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
   const {
@@ -26596,15 +26886,16 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       return res.status(400).json({ error: "प्लान आईडी आवश्यक है।" });
     }
 
+    const isGraphicPack = planId === 'GRAPHIC_PACK_20_7D' || planKey === 'GRAPHIC_PACK_20_7D';
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    let orderAmount = Number(amount) || targetPlan?.priceNum || 999;
-    const planName = targetPlan?.nameHi || planKey || planId;
+    let orderAmount = isGraphicPack ? 99 : (Number(amount) || targetPlan?.priceNum || 999);
+    const planName = isGraphicPack ? '₹99 में 20 अतिरिक्त ग्राफिक (7 दिन)' : (targetPlan?.nameHi || planKey || planId);
 
     let appliedCouponCode: string | null = null;
     let discountAmount = 0;
 
-    if (couponCode && String(couponCode).trim()) {
+    if (!isGraphicPack && couponCode && String(couponCode).trim()) {
       const cleanCode = String(couponCode).trim().toUpperCase();
       const allCoupons = loadPackageCouponsDatabase();
       const cp = allCoupons.find((c: any) => c.code.toUpperCase() === cleanCode && c.isActive);
@@ -26623,8 +26914,8 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       }
     }
 
-    // Enforce downgrade prevention and server-side proration on plan upgrade
-    if (customerEmail) {
+    // Enforce downgrade prevention and server-side proration on plan upgrade (skip for one-time graphic packs)
+    if (customerEmail && !isGraphicPack) {
       const cleanCustomerEmail = customerEmail.toLowerCase().trim();
       const masterUsers = loadUsersMasterDatabase();
       const existingUser = masterUsers.find(u => u.email && u.email.toLowerCase().trim() === cleanCustomerEmail);
@@ -26830,6 +27121,57 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
 
     if (isPaid) {
       const rawPlanKey = String(existingOrder?.planKey || existingOrder?.planId || "basic").toLowerCase().trim();
+      const isGraphicPack = rawPlanKey === 'graphic_pack_20_7d' || existingOrder?.planId === 'GRAPHIC_PACK_20_7D';
+
+      if (isGraphicPack) {
+        const targetEmail = (userEmail || existingOrder?.customerEmail || "").trim().toLowerCase();
+        if (targetEmail) {
+          const masterUsers = loadUsersMasterDatabase();
+          let mIdx = masterUsers.findIndex((u: any) =>
+            (u.email && u.email.toLowerCase().trim() === targetEmail) ||
+            (u.email && u.email.toLowerCase().replace(/\s+/g, '') === targetEmail.replace(/\s+/g, ''))
+          );
+          if (mIdx < 0) {
+            registerOrUpdateUserAuthoritative({ email: targetEmail, tier: 'basic', planName: 'BASIC' });
+            mIdx = masterUsers.findIndex((u: any) => u.email && u.email.toLowerCase().trim() === targetEmail);
+          }
+          if (mIdx >= 0) {
+            if (!masterUsers[mIdx].graphicPacks) masterUsers[mIdx].graphicPacks = [];
+            const alreadyCredited = masterUsers[mIdx].graphicPacks.some((p: any) => p.orderId === orderId);
+            if (!alreadyCredited) {
+              const now = Date.now();
+              masterUsers[mIdx].graphicPacks.push({
+                packId: `gp_${now}_${Math.random().toString(36).slice(2, 7)}`,
+                orderId,
+                paymentReference: existingOrder?.orderId || orderId,
+                planId: 'GRAPHIC_PACK_20_7D',
+                graphicsTotal: 20,
+                graphicsRemaining: 20,
+                activatedAt: now,
+                expiresAt: now + 7 * 86400000,
+              });
+              saveUsersMasterDatabase(masterUsers);
+              syncUserToProfiles(masterUsers[mIdx]);
+            }
+          }
+        }
+
+        if (existingOrder) {
+          existingOrder.orderStatus = "PAID";
+          existingOrder.paidAt = Date.now();
+          savePaymentsDatabase(allPayments);
+        }
+
+        return res.json({
+          success: true,
+          status: "PAID",
+          orderId,
+          planId: "GRAPHIC_PACK_20_7D",
+          amount: 99,
+          message: "₹99 ग्राफिक पैक (20 अतिरिक्त ग्राफिक, 7 दिन वैधता) सफलतापूर्वक अनलॉक हो गया!",
+        });
+      }
+
       let effectiveTier = "advanced";
       let effectivePlanName = "ADVANCE";
 
@@ -26980,6 +27322,33 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
     });
   } catch (err: any) {
     console.error("Error verifying Cashfree order:", err);
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// Master Admin Graphic Pack Purchases Inspector (Component 8)
+app.get("/api/admin/graphic-pack-purchases", requireAdminMiddleware, (req, res) => {
+  try {
+    const masterUsers = loadUsersMasterDatabase();
+    const payments = loadPaymentsDatabase();
+    const packRecords: any[] = [];
+
+    for (const u of masterUsers) {
+      if (Array.isArray(u.graphicPacks)) {
+        for (const p of u.graphicPacks) {
+          const matchedPayment = payments.find((pm: any) => pm.orderId === p.orderId);
+          packRecords.push({
+            ...p,
+            userEmail: u.email,
+            userName: u.name || u.channelName || "",
+            paymentStatus: matchedPayment?.orderStatus || "PAID",
+            orderAmount: matchedPayment?.orderAmount || 99,
+          });
+        }
+      }
+    }
+    return res.json({ success: true, purchases: packRecords });
+  } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
@@ -27862,8 +28231,14 @@ app.get("/api/user-download-status", (req, res) => {
         }
       }
     }
-    const isExhausted = downloadsToday >= maxAllowed;
-    const remainingCount = Math.max(0, maxAllowed - downloadsToday);
+    const userPacks = (matchedUser?.graphicPacks || []).filter(
+      (p: any) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
+    );
+    const totalPackRemaining = userPacks.reduce((sum: number, p: any) => sum + (p.graphicsRemaining || 0), 0);
+    const nearestPackExpiry = userPacks.length > 0 ? Math.min(...userPacks.map((p: any) => p.expiresAt)) : null;
+
+    const isExhausted = downloadsToday >= maxAllowed && totalPackRemaining === 0;
+    const remainingCount = Math.max(0, maxAllowed - downloadsToday) + totalPackRemaining;
     return res.json({
       success: true,
       plan: tier,
@@ -27875,6 +28250,12 @@ app.get("/api/user-download-status", (req, res) => {
       isExhausted,
       unlimited: false,
       dateStr,
+      graphicPacks: {
+        activeCount: userPacks.length,
+        creditsRemaining: totalPackRemaining,
+        nearestExpiry: nearestPackExpiry,
+        packs: userPacks,
+      },
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -28061,12 +28442,49 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
     }
 
     if (downloadsToday >= maxAllowed) {
+      const userPacks = (matchedUser?.graphicPacks || []).filter(
+        (p: any) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
+      );
+      if (userPacks.length > 0) {
+        // FIFO: earliest expiry first
+        userPacks.sort((a: any, b: any) => a.expiresAt - b.expiresAt);
+        const activePack = userPacks[0];
+
+        const cardIdStr = card?.id ? String(card.id) : (req.body?.cardId ? String(req.body.cardId) : "");
+        const downloadToken = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr);
+
+        if (!checkOnly) {
+          activePack.graphicsRemaining = Math.max(0, activePack.graphicsRemaining - 1);
+          const masterUsers = loadUsersMasterDatabase();
+          const mIdx = masterUsers.findIndex((u: any) => u.email && u.email.toLowerCase().trim() === cleanEmail);
+          if (mIdx >= 0) {
+            masterUsers[mIdx].graphicPacks = matchedUser.graphicPacks;
+            saveUsersMasterDatabase(masterUsers);
+          }
+        }
+
+        const totalRemaining = userPacks.reduce((sum: number, p: any) => sum + (p.graphicsRemaining || 0), 0);
+        return res.json({
+          allowed: true,
+          plan: tier,
+          maxAllowed,
+          downloadsToday,
+          remainingToday: totalRemaining,
+          downloadToken,
+          unlimited: false,
+          usedGraphicPack: true,
+          packRemaining: totalRemaining,
+          packExpiresAt: activePack.expiresAt,
+        });
+      }
+
       return res.status(403).json({
-        error: "आपकी आज की ग्राफिक डाउनलोड सीमा पूरी हो चुकी है। कृपया अगली दैनिक सीमा रीसेट होने तक प्रतीक्षा करें।",
-        message: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है। नया कोटा कल पुनः उपलब्ध होगा।",
+        error: "आपकी आज की ग्राफिक डाउनलोड सीमा पूरी हो चुकी है। कृपया अगली दैनिक सीमा रीसेट होने तक प्रतीक्षा करें या ₹99 में 20 अतिरिक्त ग्राफिक अनलॉक करें।",
+        message: "आज का आपका दैनिक ग्राफिक डाउनलोड कोटा समाप्त हो गया है।",
         quotaExceeded: true,
         maxAllowed,
         downloadsToday,
+        canBuyGraphicPack: true,
       });
     }
 

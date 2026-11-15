@@ -18888,6 +18888,183 @@ function saveAdminReadNotificationIds(ids) {
   } catch {
   }
 }
+var USER_FAVORITES_FILE = import_path2.default.join(process.cwd(), "user_favorites_db.json");
+var USER_REMINDERS_FILE = import_path2.default.join(process.cwd(), "user_reminders_db.json");
+function loadUserFavoritesDatabase() {
+  try {
+    if (import_fs2.default.existsSync(USER_FAVORITES_FILE)) {
+      return JSON.parse(import_fs2.default.readFileSync(USER_FAVORITES_FILE, "utf-8"));
+    }
+  } catch {
+  }
+  return {};
+}
+function saveUserFavoritesDatabase(data) {
+  try {
+    import_fs2.default.writeFileSync(USER_FAVORITES_FILE, JSON.stringify(data, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed saving user favorites database:", err);
+  }
+}
+function loadUserRemindersDatabase() {
+  try {
+    if (import_fs2.default.existsSync(USER_REMINDERS_FILE)) {
+      return JSON.parse(import_fs2.default.readFileSync(USER_REMINDERS_FILE, "utf-8"));
+    }
+  } catch {
+  }
+  return [];
+}
+function saveUserRemindersDatabase(reminders) {
+  try {
+    import_fs2.default.writeFileSync(USER_REMINDERS_FILE, JSON.stringify(reminders, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed saving user reminders database:", err);
+  }
+}
+app.get("/api/user-favorites", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    if (!rawEmail) {
+      return res.json({ success: true, favorites: [] });
+    }
+    const db = loadUserFavoritesDatabase();
+    const list = db[rawEmail] || [];
+    return res.json({ success: true, favorites: list });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/user-favorites", (req, res) => {
+  try {
+    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const newsId = (req.body.newsId || "").toString().trim();
+    const action = req.body.action || "toggle";
+    if (!rawEmail) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    if (!newsId) {
+      return res.status(400).json({ error: "\u0928\u094D\u092F\u0942\u091C\u093C \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    const db = loadUserFavoritesDatabase();
+    const userFavs = new Set(db[rawEmail] || []);
+    let isFavorite = false;
+    if (action === "add") {
+      userFavs.add(newsId);
+      isFavorite = true;
+    } else if (action === "remove") {
+      userFavs.delete(newsId);
+      isFavorite = false;
+    } else {
+      if (userFavs.has(newsId)) {
+        userFavs.delete(newsId);
+        isFavorite = false;
+      } else {
+        userFavs.add(newsId);
+        isFavorite = true;
+      }
+    }
+    db[rawEmail] = Array.from(userFavs);
+    saveUserFavoritesDatabase(db);
+    return res.json({
+      success: true,
+      newsId,
+      isFavorite,
+      favorites: db[rawEmail]
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/reminders", (req, res) => {
+  try {
+    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const reminders = loadUserRemindersDatabase();
+    const userReminders = rawEmail ? reminders.filter((r) => r.userEmail === rawEmail && r.status === "pending") : reminders.filter((r) => r.status === "pending");
+    return res.json({ success: true, reminders: userReminders });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/reminders", (req, res) => {
+  try {
+    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const { newsId, newsTitle, minutes = 5, action = "create", id } = req.body || {};
+    if (!rawEmail) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    let reminders = loadUserRemindersDatabase();
+    if (action === "cancel") {
+      reminders = reminders.map((r) => {
+        if (id && r.id === id || newsId && r.newsId === newsId && r.userEmail === rawEmail) {
+          return { ...r, status: "cancelled" };
+        }
+        return r;
+      });
+      saveUserRemindersDatabase(reminders);
+      return res.json({ success: true, message: "\u0930\u093F\u092E\u093E\u0907\u0902\u0921\u0930 \u0930\u0926\u094D\u0926 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964" });
+    }
+    if (!newsId) {
+      return res.status(400).json({ error: "\u0928\u094D\u092F\u0942\u091C\u093C \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
+    }
+    const mins = [5, 10, 20, 30].includes(Number(minutes)) ? Number(minutes) : 5;
+    const dueAt = Date.now() + mins * 60 * 1e3;
+    reminders = reminders.filter((r) => !(r.userEmail === rawEmail && r.newsId === newsId && r.status === "pending"));
+    const newReminder = {
+      id: `rem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      userEmail: rawEmail,
+      newsId,
+      newsTitle: String(newsTitle || "").trim() || "\u0938\u092E\u093E\u091A\u093E\u0930",
+      minutes: mins,
+      dueAt,
+      createdAt: Date.now(),
+      status: "pending"
+    };
+    reminders.push(newReminder);
+    saveUserRemindersDatabase(reminders);
+    return res.json({
+      success: true,
+      reminder: newReminder,
+      message: `${mins} \u092E\u093F\u0928\u091F \u092C\u093E\u0926 \u0915\u093E \u0930\u093F\u092E\u093E\u0907\u0902\u0921\u0930 \u0938\u0947\u091F \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+setInterval(() => {
+  try {
+    const reminders = loadUserRemindersDatabase();
+    const now = Date.now();
+    let hasChanges = false;
+    for (const r of reminders) {
+      if (r.status === "pending" && r.dueAt <= now) {
+        r.status = "sent";
+        hasChanges = true;
+        const notifTitle = `\u23F0 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0930\u093F\u092E\u093E\u0907\u0902\u0921\u0930 (${r.minutes} \u092E\u093F\u0928\u091F)`;
+        const notifMsg = `\u0906\u092A\u0928\u0947 \u092F\u0939 \u0916\u092C\u0930 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0930\u093F\u092E\u093E\u0907\u0902\u0921\u0930 \u092E\u0947\u0902 \u0930\u0916\u0940 \u0925\u0940\u0964 \u0905\u092C \u0907\u0938 \u0916\u092C\u0930 \u0938\u0947 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092C\u0928\u093E\u090F\u0901: "${r.newsTitle.slice(0, 70)}"`;
+        const newNotif = {
+          id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          title: notifTitle,
+          message: notifMsg,
+          time: (/* @__PURE__ */ new Date()).toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
+          unread: true,
+          newsId: r.newsId,
+          postId: r.newsId,
+          linkTab: "studio",
+          targetUserEmail: r.userEmail,
+          createdAt: Date.now()
+        };
+        const notifs = loadNotificationsDatabase();
+        saveNotificationsDatabase([newNotif, ...notifs]);
+      }
+    }
+    if (hasChanges) {
+      saveUserRemindersDatabase(reminders);
+    }
+  } catch (e) {
+    console.warn("[Reminder Scheduler] error:", e);
+  }
+}, 3e4);
 app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
@@ -29892,6 +30069,64 @@ Content: ${extracted.content ? extracted.content.slice(0, 2e3) : ""}
     inaccessibleReason: extracted.inaccessibleReason
   };
 }
+var SCRAPED_ARTICLES_CACHE_FILE = import_path2.default.join(process.cwd(), "scraped_articles_cache_db.json");
+var inMemoryArticleScrapeCache = /* @__PURE__ */ new Map();
+function getArticleCacheKey(url) {
+  try {
+    return import_crypto2.default.createHash("sha256").update(url.trim().toLowerCase()).digest("hex");
+  } catch {
+    return encodeURIComponent(url.trim().toLowerCase()).slice(0, 64);
+  }
+}
+app.post("/api/scrape-news-article", async (req, res) => {
+  try {
+    const rawUrl = String(req.body?.url || "").trim();
+    if (!rawUrl || !/^https?:\/\//i.test(rawUrl)) {
+      return res.status(400).json({ success: false, error: "\u092E\u093E\u0928\u094D\u092F URL \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    const cacheKey = getArticleCacheKey(rawUrl);
+    if (inMemoryArticleScrapeCache.has(cacheKey)) {
+      const cached = inMemoryArticleScrapeCache.get(cacheKey);
+      return res.json({ success: true, ...cached, cached: true });
+    }
+    try {
+      if (import_fs2.default.existsSync(SCRAPED_ARTICLES_CACHE_FILE)) {
+        const diskCache = JSON.parse(import_fs2.default.readFileSync(SCRAPED_ARTICLES_CACHE_FILE, "utf-8"));
+        if (diskCache[cacheKey]) {
+          inMemoryArticleScrapeCache.set(cacheKey, diskCache[cacheKey]);
+          return res.json({ success: true, ...diskCache[cacheKey], cached: true });
+        }
+      }
+    } catch {
+    }
+    const scraped = await scrapeNewsFromUrl(rawUrl);
+    const meta = scraped.extractedMeta;
+    const resultData = {
+      success: scraped.extractionStatus === "success" || Boolean(meta?.content || meta?.description),
+      title: meta?.title || "",
+      description: meta?.description || "",
+      content: meta?.content || meta?.description || "",
+      photos: meta?.images || [],
+      sourceUrl: rawUrl,
+      extractionStatus: scraped.extractionStatus
+    };
+    if (resultData.content && resultData.content.length > 50) {
+      inMemoryArticleScrapeCache.set(cacheKey, resultData);
+      try {
+        let diskCache = {};
+        if (import_fs2.default.existsSync(SCRAPED_ARTICLES_CACHE_FILE)) {
+          diskCache = JSON.parse(import_fs2.default.readFileSync(SCRAPED_ARTICLES_CACHE_FILE, "utf-8"));
+        }
+        diskCache[cacheKey] = resultData;
+        import_fs2.default.writeFileSync(SCRAPED_ARTICLES_CACHE_FILE, JSON.stringify(diskCache, null, 2), "utf-8");
+      } catch {
+      }
+    }
+    return res.json(resultData);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, res) => {
   const {
     input,
@@ -33437,13 +33672,14 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     if (!planId) {
       return res.status(400).json({ error: "\u092A\u094D\u0932\u093E\u0928 \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
+    const isGraphicPack = planId === "GRAPHIC_PACK_20_7D" || planKey === "GRAPHIC_PACK_20_7D";
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    let orderAmount = Number(amount) || targetPlan?.priceNum || 999;
-    const planName = targetPlan?.nameHi || planKey || planId;
+    let orderAmount = isGraphicPack ? 99 : Number(amount) || targetPlan?.priceNum || 999;
+    const planName = isGraphicPack ? "\u20B999 \u092E\u0947\u0902 20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 (7 \u0926\u093F\u0928)" : targetPlan?.nameHi || planKey || planId;
     let appliedCouponCode = null;
     let discountAmount = 0;
-    if (couponCode && String(couponCode).trim()) {
+    if (!isGraphicPack && couponCode && String(couponCode).trim()) {
       const cleanCode = String(couponCode).trim().toUpperCase();
       const allCoupons = loadPackageCouponsDatabase();
       const cp = allCoupons.find((c) => c.code.toUpperCase() === cleanCode && c.isActive);
@@ -33460,7 +33696,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
         }
       }
     }
-    if (customerEmail) {
+    if (customerEmail && !isGraphicPack) {
       const cleanCustomerEmail = customerEmail.toLowerCase().trim();
       const masterUsers = loadUsersMasterDatabase();
       const existingUser = masterUsers.find((u) => u.email && u.email.toLowerCase().trim() === cleanCustomerEmail);
@@ -33649,6 +33885,52 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
     }
     if (isPaid) {
       const rawPlanKey = String(existingOrder?.planKey || existingOrder?.planId || "basic").toLowerCase().trim();
+      const isGraphicPack = rawPlanKey === "graphic_pack_20_7d" || existingOrder?.planId === "GRAPHIC_PACK_20_7D";
+      if (isGraphicPack) {
+        const targetEmail2 = (userEmail || existingOrder?.customerEmail || "").trim().toLowerCase();
+        if (targetEmail2) {
+          const masterUsers = loadUsersMasterDatabase();
+          let mIdx = masterUsers.findIndex(
+            (u) => u.email && u.email.toLowerCase().trim() === targetEmail2 || u.email && u.email.toLowerCase().replace(/\s+/g, "") === targetEmail2.replace(/\s+/g, "")
+          );
+          if (mIdx < 0) {
+            registerOrUpdateUserAuthoritative({ email: targetEmail2, tier: "basic", planName: "BASIC" });
+            mIdx = masterUsers.findIndex((u) => u.email && u.email.toLowerCase().trim() === targetEmail2);
+          }
+          if (mIdx >= 0) {
+            if (!masterUsers[mIdx].graphicPacks) masterUsers[mIdx].graphicPacks = [];
+            const alreadyCredited = masterUsers[mIdx].graphicPacks.some((p) => p.orderId === orderId);
+            if (!alreadyCredited) {
+              const now = Date.now();
+              masterUsers[mIdx].graphicPacks.push({
+                packId: `gp_${now}_${Math.random().toString(36).slice(2, 7)}`,
+                orderId,
+                paymentReference: existingOrder?.orderId || orderId,
+                planId: "GRAPHIC_PACK_20_7D",
+                graphicsTotal: 20,
+                graphicsRemaining: 20,
+                activatedAt: now,
+                expiresAt: now + 7 * 864e5
+              });
+              saveUsersMasterDatabase(masterUsers);
+              syncUserToProfiles(masterUsers[mIdx]);
+            }
+          }
+        }
+        if (existingOrder) {
+          existingOrder.orderStatus = "PAID";
+          existingOrder.paidAt = Date.now();
+          savePaymentsDatabase(allPayments);
+        }
+        return res.json({
+          success: true,
+          status: "PAID",
+          orderId,
+          planId: "GRAPHIC_PACK_20_7D",
+          amount: 99,
+          message: "\u20B999 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u0948\u0915 (20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915, 7 \u0926\u093F\u0928 \u0935\u0948\u0927\u0924\u093E) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u0928\u0932\u0949\u0915 \u0939\u094B \u0917\u092F\u093E!"
+        });
+      }
       let effectiveTier = "advanced";
       let effectivePlanName = "ADVANCE";
       if (rawPlanKey.includes("pro") || rawPlanKey.includes("professional")) {
@@ -33789,6 +34071,30 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
     });
   } catch (err) {
     console.error("Error verifying Cashfree order:", err);
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/graphic-pack-purchases", requireAdminMiddleware, (req, res) => {
+  try {
+    const masterUsers = loadUsersMasterDatabase();
+    const payments = loadPaymentsDatabase();
+    const packRecords = [];
+    for (const u of masterUsers) {
+      if (Array.isArray(u.graphicPacks)) {
+        for (const p of u.graphicPacks) {
+          const matchedPayment = payments.find((pm) => pm.orderId === p.orderId);
+          packRecords.push({
+            ...p,
+            userEmail: u.email,
+            userName: u.name || u.channelName || "",
+            paymentStatus: matchedPayment?.orderStatus || "PAID",
+            orderAmount: matchedPayment?.orderAmount || 99
+          });
+        }
+      }
+    }
+    return res.json({ success: true, purchases: packRecords });
+  } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
@@ -34465,8 +34771,13 @@ app.get("/api/user-download-status", (req, res) => {
         }
       }
     }
-    const isExhausted = downloadsToday >= maxAllowed;
-    const remainingCount = Math.max(0, maxAllowed - downloadsToday);
+    const userPacks = (matchedUser?.graphicPacks || []).filter(
+      (p) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
+    );
+    const totalPackRemaining = userPacks.reduce((sum, p) => sum + (p.graphicsRemaining || 0), 0);
+    const nearestPackExpiry = userPacks.length > 0 ? Math.min(...userPacks.map((p) => p.expiresAt)) : null;
+    const isExhausted = downloadsToday >= maxAllowed && totalPackRemaining === 0;
+    const remainingCount = Math.max(0, maxAllowed - downloadsToday) + totalPackRemaining;
     return res.json({
       success: true,
       plan: tier,
@@ -34477,7 +34788,13 @@ app.get("/api/user-download-status", (req, res) => {
       remainingDownloads: remainingCount,
       isExhausted,
       unlimited: false,
-      dateStr
+      dateStr,
+      graphicPacks: {
+        activeCount: userPacks.length,
+        creditsRemaining: totalPackRemaining,
+        nearestExpiry: nearestPackExpiry,
+        packs: userPacks
+      }
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -34630,12 +34947,44 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
       }
     }
     if (downloadsToday >= maxAllowed) {
+      const userPacks = (matchedUser?.graphicPacks || []).filter(
+        (p) => p.expiresAt > Date.now() && p.graphicsRemaining > 0
+      );
+      if (userPacks.length > 0) {
+        userPacks.sort((a, b) => a.expiresAt - b.expiresAt);
+        const activePack = userPacks[0];
+        const cardIdStr2 = card?.id ? String(card.id) : req.body?.cardId ? String(req.body.cardId) : "";
+        const downloadToken2 = generateDownloadToken(userKey, dateStr, downloadRequestId || "", cardIdStr2);
+        if (!checkOnly) {
+          activePack.graphicsRemaining = Math.max(0, activePack.graphicsRemaining - 1);
+          const masterUsers = loadUsersMasterDatabase();
+          const mIdx = masterUsers.findIndex((u) => u.email && u.email.toLowerCase().trim() === cleanEmail);
+          if (mIdx >= 0) {
+            masterUsers[mIdx].graphicPacks = matchedUser.graphicPacks;
+            saveUsersMasterDatabase(masterUsers);
+          }
+        }
+        const totalRemaining = userPacks.reduce((sum, p) => sum + (p.graphicsRemaining || 0), 0);
+        return res.json({
+          allowed: true,
+          plan: tier,
+          maxAllowed,
+          downloadsToday,
+          remainingToday: totalRemaining,
+          downloadToken: downloadToken2,
+          unlimited: false,
+          usedGraphicPack: true,
+          packRemaining: totalRemaining,
+          packExpiresAt: activePack.expiresAt
+        });
+      }
       return res.status(403).json({
-        error: "\u0906\u092A\u0915\u0940 \u0906\u091C \u0915\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0940 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E \u0930\u0940\u0938\u0947\u091F \u0939\u094B\u0928\u0947 \u0924\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902\u0964",
-        message: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964 \u0928\u092F\u093E \u0915\u094B\u091F\u093E \u0915\u0932 \u092A\u0941\u0928\u0903 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u094B\u0917\u093E\u0964",
+        error: "\u0906\u092A\u0915\u0940 \u0906\u091C \u0915\u0940 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u0917\u0932\u0940 \u0926\u0948\u0928\u093F\u0915 \u0938\u0940\u092E\u093E \u0930\u0940\u0938\u0947\u091F \u0939\u094B\u0928\u0947 \u0924\u0915 \u092A\u094D\u0930\u0924\u0940\u0915\u094D\u0937\u093E \u0915\u0930\u0947\u0902 \u092F\u093E \u20B999 \u092E\u0947\u0902 20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0905\u0928\u0932\u0949\u0915 \u0915\u0930\u0947\u0902\u0964",
+        message: "\u0906\u091C \u0915\u093E \u0906\u092A\u0915\u093E \u0926\u0948\u0928\u093F\u0915 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u0915\u094B\u091F\u093E \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0917\u092F\u093E \u0939\u0948\u0964",
         quotaExceeded: true,
         maxAllowed,
-        downloadsToday
+        downloadsToday,
+        canBuyGraphicPack: true
       });
     }
     const downloadRequestId = req.body?.downloadRequestId || (card?.id ? `${userKey}_${card.id}_${dateStr}` : null);

@@ -283,6 +283,12 @@ export interface UserDailyDownloadStatus {
   isExhausted: boolean;
   unlimited: boolean;
   dateStr: string;
+  graphicPacks?: {
+    activeCount: number;
+    creditsRemaining: number;
+    nearestExpiry: number | null;
+    packs: any[];
+  };
 }
 
 let cachedDownloadStatus: UserDailyDownloadStatus | null = null;

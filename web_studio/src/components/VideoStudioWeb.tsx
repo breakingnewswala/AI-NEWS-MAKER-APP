@@ -1809,28 +1809,101 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     };
   }, [videoUrl, clips, aspect, selectedFrameId, compatibleFrames, audioOption, headline, location, socialHandle, channelTag, mobileNumber]);
 
+  // Render interactive empty-state video placeholder per Part 2
+  const renderVideoPlaceholder = (customClass?: string) => (
+    <div
+      className={`absolute inset-0 z-10 flex flex-col items-center justify-center p-4 text-center select-none bg-gradient-to-b from-neutral-900/95 via-neutral-950/95 to-black/95 backdrop-blur-xs cursor-pointer border border-dashed border-amber-500/30 hover:border-amber-400 transition-colors ${customClass || ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        setQuickStep(1);
+        if (fileInputRef.current) {
+          fileInputRef.current.click();
+        }
+      }}
+    >
+      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-3 shadow-lg group-hover:scale-105 transition-transform">
+        <Film className="w-6 h-6 sm:w-7 sm:h-7" />
+      </div>
+      <p className="text-xs sm:text-sm font-bold text-amber-300 max-w-xs leading-relaxed">
+        वीडियो न्यूज़ स्टूडियो के स्टेप 1 में जाकर पहले अपने कंप्यूटर या फोन से वीडियो चुनें।
+      </p>
+      <span className="mt-2 text-[10px] sm:text-[11px] text-neutral-400 bg-neutral-800/80 px-2.5 py-1 rounded-full border border-neutral-700/60 font-medium">
+        📁 वीडियो चुनने के लिए यहाँ क्लिक करें (Step 1)
+      </span>
+    </div>
+  );
+
   // Reset Task Handler (Section 5)
   const handleResetTask = () => {
-    if (headline.trim() || videoUrl || location.trim()) {
+    if (headline.trim() || videoUrl || location.trim() || (clips && clips.length > 0)) {
       if (!window.confirm('क्या आप वर्तमान संपादन को रीसेट करना चाहते हैं? इससे सभी अनसेव्ड बदलाव हट जाएंगे।')) {
         return;
       }
     }
+    // Safely stop playback
+    if (videoRef.current) {
+      try {
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
+      } catch {}
+    }
+    setIsPlaying(false);
+
+    // Safely stop export if active
+    if (isExportingRef.current || isExporting) {
+      cancelExportRef.current = true;
+      activeExportIdRef.current = null;
+      setIsExporting(false);
+      isExportingRef.current = false;
+      setVideoExportStatus('');
+      setVideoExportProgress(0);
+    }
+
+    // Clear video source, clips, and preview references
+    setVideoUrl('');
+    setClips([]);
+    setActiveClipIndex(0);
+    setCompletedDownloadUrl(null);
+
+    // Reset duration and playback time
+    setDuration(0);
+    setCurrentTime(0);
+    setTrimStart(0);
+    setTrimEnd(0);
+
+    // Clear headlines
     setHeadline('');
     setSubHeadline('');
+    setScheduledHeadlines(['', '', '', '', '']);
+
+    // Reset location, ticker, zoom, crop and offsets
     setLocation('');
     setTickerText('');
     setZoomScale(1.0);
     setOffsetY(0);
-    setTrimStart(0);
-    setTrimEnd(Math.floor(duration) || 60);
+    setCropRegion(null);
+
+    // Reset audio and watermark settings
     setAudioOption('original');
     setBgmTrack('none');
     setBgmVolume(0);
     setVideoVolume(100);
+    setCustomAudioUrl('');
+    setCustomAudioTitle('');
+    setVoiceoverUrl('');
     setShowWatermark(false);
     setWatermarkOffsetY(0);
     setTaskGifLogo('');
+    setVideoColorFilter('original');
+
+    // Reset file-input values so the same file can be reselected
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (additionalClipInputRef.current) additionalClipInputRef.current.value = '';
+    if (voiceoverFileInputRef.current) voiceoverFileInputRef.current.value = '';
+    if (audioFileInputRef.current) audioFileInputRef.current.value = '';
+    if (logoInputRef.current) logoInputRef.current.value = '';
+
+    // Return to Step 1
     setQuickStep(1);
     showToast('🔄 वर्तमान वीडियो प्रोजेक्ट रीसेट हो गया');
   };
@@ -2127,17 +2200,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setCompletedDownloadUrl(null);
       setIsPlaying(false);
       setTrimStart(0);
-      setClips((prev) => {
-        const newClip: VideoClipItem = {
-          id: `clip-${Date.now()}`,
-          name: file.name.slice(0, 24),
-          url: localUrl,
-          duration: 60,
-          trimStart: 0,
-          trimEnd: 60,
-        };
-        return prev.length === 0 ? [newClip] : [newClip, ...prev.slice(1)];
-      });
+
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      tempVideo.src = localUrl;
+      tempVideo.onloadedmetadata = () => {
+        const realDur = tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0 ? tempVideo.duration : 60;
+        setDuration(realDur);
+        setTrimEnd(Math.floor(realDur));
+        setClips((prev) => {
+          const newClip: VideoClipItem = {
+            id: `clip-${Date.now()}`,
+            name: file.name.slice(0, 24),
+            url: localUrl,
+            duration: realDur,
+            trimStart: 0,
+            trimEnd: Math.floor(realDur),
+          };
+          return prev.length === 0 ? [newClip] : [newClip, ...prev.slice(1)];
+        });
+      };
       showToast('✅ आपका वीडियो लोड हो गया है!');
     }
   };
@@ -2146,16 +2228,22 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       const localUrl = URL.createObjectURL(file);
-      const newClip: VideoClipItem = {
-        id: `clip-${Date.now()}`,
-        name: file.name.slice(0, 24),
-        url: localUrl,
-        duration: 60,
-        trimStart: 0,
-        trimEnd: 60,
+      const tempVideo = document.createElement('video');
+      tempVideo.preload = 'metadata';
+      tempVideo.src = localUrl;
+      tempVideo.onloadedmetadata = () => {
+        const realDur = tempVideo.duration && isFinite(tempVideo.duration) && tempVideo.duration > 0 ? tempVideo.duration : 60;
+        const newClip: VideoClipItem = {
+          id: `clip-${Date.now()}`,
+          name: file.name.slice(0, 24),
+          url: localUrl,
+          duration: realDur,
+          trimStart: 0,
+          trimEnd: Math.floor(realDur),
+        };
+        setClips((prev) => [...prev, newClip]);
       };
-      setClips((prev) => [...prev, newClip]);
-      showToast(`✅ क्लिप ${clips.length + 1} जोड़ी गई!`);
+      showToast(`✅ क्लिप जोड़ी जा रही है...`);
     }
   };
 
@@ -3391,33 +3479,39 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
                   {/* Middle 4:5 Video Window (renders real video cropped to safe region, NO green chroma) */}
                   <div className="relative w-full flex-1 min-h-0 bg-neutral-950 overflow-hidden flex items-center justify-center">
-                    <video
-                      ref={videoRef}
-                      src={videoUrl}
-                      playsInline
-                      loop
-                      muted={isMuted}
-                      crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
-                      className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
-                      style={{
-                        objectPosition: cropRegion ? `center ${cropRegion.y * 100}%` : `center ${Math.min(100, Math.max(0, 50 + offsetY))}%`,
-                        transform: `scale(${zoomScale})`,
-                        filter: getVideoFilterCss(videoColorFilter),
-                      }}
-                    />
+                    {videoUrl && videoUrl.trim() ? (
+                      <>
+                        <video
+                          ref={videoRef}
+                          src={videoUrl}
+                          playsInline
+                          loop
+                          muted={isMuted}
+                          crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
+                          className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
+                          style={{
+                            objectPosition: cropRegion ? `center ${cropRegion.y * 100}%` : `center ${Math.min(100, Math.max(0, 50 + offsetY))}%`,
+                            transform: `scale(${zoomScale})`,
+                            filter: getVideoFilterCss(videoColorFilter),
+                          }}
+                        />
 
-                    {/* Transition simulation overlay */}
-                    {isTransitionActive && transitionType !== 'none' && (
-                      <div className="absolute inset-0 pointer-events-none z-20 bg-white/80 animate-ping" />
-                    )}
+                        {/* Transition simulation overlay */}
+                        {isTransitionActive && transitionType !== 'none' && (
+                          <div className="absolute inset-0 pointer-events-none z-20 bg-white/80 animate-ping" />
+                        )}
 
-                    {/* Play indicator */}
-                    {!isPlaying && (
-                      <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none z-10">
-                        <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 scale-100 group-hover:scale-110 transition-transform">
-                          <Play className="w-6 h-6 fill-white ml-0.5" />
-                        </div>
-                      </div>
+                        {/* Play indicator */}
+                        {!isPlaying && (
+                          <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none z-10">
+                            <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 scale-100 group-hover:scale-110 transition-transform">
+                              <Play className="w-6 h-6 fill-white ml-0.5" />
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      renderVideoPlaceholder()
                     )}
                   </div>
 
@@ -3453,33 +3547,39 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 // FRAME 2: Full 9:16 Video Visibility
                 // ==========================================
                 <div className="relative w-full h-full overflow-hidden bg-black select-none">
-                  {/* Full-Bleed Video in Background */}
-                  <video
-                    ref={videoRef}
-                    src={videoUrl}
-                    playsInline
-                    loop
-                    muted={isMuted}
-                    crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
-                    className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
-                    style={{
-                      transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
-                      filter: getVideoFilterCss(videoColorFilter),
-                    }}
-                  />
+                  {videoUrl && videoUrl.trim() ? (
+                    <>
+                      {/* Full-Bleed Video in Background */}
+                      <video
+                        ref={videoRef}
+                        src={videoUrl}
+                        playsInline
+                        loop
+                        muted={isMuted}
+                        crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
+                        className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
+                        style={{
+                          transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
+                          filter: getVideoFilterCss(videoColorFilter),
+                        }}
+                      />
 
-                  {/* Transition Simulation */}
-                  {isTransitionActive && transitionType !== 'none' && (
-                    <div className="absolute inset-0 pointer-events-none z-20 bg-white/80 animate-ping" />
-                  )}
+                      {/* Transition Simulation */}
+                      {isTransitionActive && transitionType !== 'none' && (
+                        <div className="absolute inset-0 pointer-events-none z-20 bg-white/80 animate-ping" />
+                      )}
 
-                  {/* Play/Pause Center Indicator */}
-                  {!isPlaying && (
-                    <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none z-10">
-                      <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 scale-100 group-hover:scale-110 transition-transform">
-                        <Play className="w-6 h-6 fill-white ml-0.5" />
-                      </div>
-                    </div>
+                      {/* Play/Pause Center Indicator */}
+                      {!isPlaying && (
+                        <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none z-10">
+                          <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 scale-100 group-hover:scale-110 transition-transform">
+                            <Play className="w-6 h-6 fill-white ml-0.5" />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    renderVideoPlaceholder()
                   )}
 
                   {/* Floating White Social Pill Banner (Top or Bottom based on socialPosition) */}
@@ -3587,27 +3687,31 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           height: `${vRect.height}%`,
                         }}
                       >
-                        <video
-                          ref={videoRef}
-                          src={videoUrl}
-                          playsInline
-                          loop
-                          muted={isMuted}
-                          crossOrigin="anonymous"
-                          onError={(e) => {
-                            const el = e.currentTarget;
-                            if (el.crossOrigin) {
-                              el.removeAttribute("crossOrigin");
-                              el.load();
-                            }
-                          }}
-                          className="w-full h-full transition-transform duration-100 cursor-pointer"
-                          style={{
-                            objectFit: isCrop ? 'cover' : 'contain',
-                            transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
-                            filter: getVideoFilterCss(videoColorFilter),
-                          }}
-                        />
+                        {videoUrl && videoUrl.trim() ? (
+                          <video
+                            ref={videoRef}
+                            src={videoUrl}
+                            playsInline
+                            loop
+                            muted={isMuted}
+                            crossOrigin="anonymous"
+                            onError={(e) => {
+                              const el = e.currentTarget;
+                              if (el.crossOrigin) {
+                                el.removeAttribute("crossOrigin");
+                                el.load();
+                              }
+                            }}
+                            className="w-full h-full transition-transform duration-100 cursor-pointer"
+                            style={{
+                              objectFit: isCrop ? 'cover' : 'contain',
+                              transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
+                              filter: getVideoFilterCss(videoColorFilter),
+                            }}
+                          />
+                        ) : (
+                          renderVideoPlaceholder()
+                        )}
                       </div>
 
                       {/* Transition Simulation */}
@@ -3616,7 +3720,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       )}
 
                       {/* Play/Pause Center Indicator */}
-                      {!isPlaying && (
+                      {!isPlaying && videoUrl && videoUrl.trim() && (
                         <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none z-10">
                           <div className="w-12 h-12 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 scale-100 group-hover:scale-110 transition-transform">
                             <Play className="w-6 h-6 fill-white ml-0.5" />
@@ -3828,45 +3932,51 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 // ==========================================
                 <>
                   {/* The Video Element */}
-                  <video
-                    ref={videoRef}
-                    src={videoUrl}
-                    playsInline
-                    loop
-                    muted={isMuted}
-                    crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
-                    className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
-                    style={{
-                      transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
-                      filter: getVideoFilterCss(videoColorFilter),
-                    }}
-                  />
+                  {videoUrl && videoUrl.trim() ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        src={videoUrl}
+                        playsInline
+                        loop
+                        muted={isMuted}
+                        crossOrigin="anonymous" onError={(e) => { const el = e.currentTarget; if (el.crossOrigin) { el.removeAttribute("crossOrigin"); el.load(); } }}
+                        className="w-full h-full object-cover transition-transform duration-100 cursor-pointer"
+                        style={{
+                          transform: `scale(${zoomScale}) translateY(${offsetY}px)`,
+                          filter: getVideoFilterCss(videoColorFilter),
+                        }}
+                      />
 
-                  {/* Transition Effect Simulation Overlay */}
-                  {isTransitionActive && transitionType !== 'none' && (
-                    <div
-                      className={`absolute inset-0 pointer-events-none z-20 transition-all ${
-                        transitionType === 'fade'
-                          ? 'bg-black animate-pulse opacity-95'
-                          : transitionType === 'flash'
-                          ? 'bg-white opacity-95 animate-ping'
-                          : transitionType === 'zoom'
-                          ? 'bg-black/50 backdrop-blur-sm'
-                          : transitionType === 'slide'
-                          ? 'bg-gradient-to-r from-red-600/80 via-yellow-400/80 to-transparent animate-pulse'
-                          : 'bg-emerald-950/70'
-                      }`}
-                      style={{ transitionDuration: `${transitionDuration}s` }}
-                    />
-                  )}
+                      {/* Transition Effect Simulation Overlay */}
+                      {isTransitionActive && transitionType !== 'none' && (
+                        <div
+                          className={`absolute inset-0 pointer-events-none z-20 transition-all ${
+                            transitionType === 'fade'
+                              ? 'bg-black animate-pulse opacity-95'
+                              : transitionType === 'flash'
+                              ? 'bg-white opacity-95 animate-ping'
+                              : transitionType === 'zoom'
+                              ? 'bg-black/50 backdrop-blur-sm'
+                              : transitionType === 'slide'
+                              ? 'bg-gradient-to-r from-red-600/80 via-yellow-400/80 to-transparent animate-pulse'
+                              : 'bg-emerald-950/70'
+                          }`}
+                          style={{ transitionDuration: `${transitionDuration}s` }}
+                        />
+                      )}
 
-                  {/* Play/Pause Center Indicator */}
-                  {!isPlaying && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
-                      <div className="w-14 h-14 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 backdrop-blur-xs scale-100 group-hover:scale-110 transition-transform">
-                        <Play className="w-7 h-7 fill-white ml-1" />
-                      </div>
-                    </div>
+                      {/* Play/Pause Center Indicator */}
+                      {!isPlaying && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
+                          <div className="w-14 h-14 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-2xl border border-amber-400/50 backdrop-blur-xs scale-100 group-hover:scale-110 transition-transform">
+                            <Play className="w-7 h-7 fill-white ml-1" />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    renderVideoPlaceholder()
                   )}
 
                   {/* Top Branding Overlay */}

@@ -53,13 +53,34 @@ import {
   MessageCircle,
   Bell,
   AlertCircle,
+  Heart,
+  MapPin,
 } from 'lucide-react';
+import { fetchUserFavorites, toggleUserFavorite, getUserFavoritesLocal } from '../lib/userFavoritesManager';
+import { scheduleNewsReminder, cancelNewsReminder, getUserRemindersLocal, UserReminderItem } from '../lib/reminderManager';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
 import { inferStateFromDistrict } from '../data/indianStatesDistricts';
 import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
 import { WebNotificationModal } from './WebNotificationModal';
 import { SocialMediaStoryModal } from './SocialMediaStoryModal';
+import { CashfreePaymentModal } from './CashfreePaymentModal';
 import { addNotification } from '../lib/notificationManager';
+
+const GRAPHIC_PACK_20_7D_PLAN: any = {
+  id: 'GRAPHIC_PACK_20_7D',
+  planKey: 'GRAPHIC_PACK_20_7D',
+  nameHi: '₹99 में 20 अतिरिक्त ग्राफिक',
+  price: '₹99',
+  priceNum: 99,
+  period: '7 दिन वैधता',
+  description: '20 अतिरिक्त ग्राफिक डाउनलोड (7 दिन तक वैध)',
+  features: [
+    '20 अतिरिक्त ग्राफिक डाउनलोड',
+    '7 दिनों की वैधता',
+    'दैनिक कोटा समाप्त होने के बाद उपयोग',
+    'वर्तमान सब्सक्रिप्शन अप्रभावित',
+  ],
+};
 import {
   isEffectiveAdmin,
   getUserSubscription,
@@ -346,6 +367,151 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
   const [selectedStoryPost, setSelectedStoryPost] = useState<NewsFeedPost | null>(null);
   const [isStoryModalOpen, setIsStoryModalOpen] = useState<boolean>(false);
+
+  // User Favorites & Reminders (Components 6 & 7)
+  const [userFavorites, setUserFavorites] = useState<Set<string>>(() => new Set(getUserFavoritesLocal(currentUser?.email)));
+  const [activeReminders, setActiveReminders] = useState<UserReminderItem[]>(() => getUserRemindersLocal(currentUser?.email));
+  const [activeReminderMenuPostId, setActiveReminderMenuPostId] = useState<string | null>(null);
+
+  // Scraped Article Data for Detail Modal (Component 5)
+  const [scrapedArticleData, setScrapedArticleData] = useState<{ content?: string; description?: string; photos?: string[]; loading?: boolean } | null>(null);
+
+  // Cashfree Modal Plan for Graphic Pack (Component 8)
+  const [cashfreeModalPlan, setCashfreeModalPlan] = useState<any>(null);
+
+  // Sync favorites & reminders on user change or mount
+  useEffect(() => {
+    fetchUserFavorites(currentUser?.email).then((favs) => {
+      setUserFavorites(new Set(favs));
+    });
+    setActiveReminders(getUserRemindersLocal(currentUser?.email));
+
+    const handleOutsideClick = () => setActiveReminderMenuPostId(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, [currentUser?.email]);
+
+  // Fetch detailed scraped article when detail modal is opened with a sourceUrl
+  useEffect(() => {
+    if (detailModalPost?.sourceUrl && (/^https?:\/\//i.test(detailModalPost.sourceUrl))) {
+      setScrapedArticleData({ loading: true });
+      fetch('/api/scrape-news-article', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: detailModalPost.sourceUrl }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.success) {
+            setScrapedArticleData({
+              content: data.content,
+              description: data.description,
+              photos: data.photos,
+              loading: false,
+            });
+          } else {
+            setScrapedArticleData(null);
+          }
+        })
+        .catch(() => setScrapedArticleData(null));
+    } else {
+      setScrapedArticleData(null);
+    }
+  }, [detailModalPost?.id, detailModalPost?.sourceUrl]);
+
+  const handleToggleFavorite = async (postId: string) => {
+    const res = await toggleUserFavorite(postId, currentUser?.email);
+    setUserFavorites(new Set(res.favorites));
+  };
+
+  const handleSetReminder = async (post: NewsFeedPost, minutes: number) => {
+    await scheduleNewsReminder(post.id, post.title, minutes, currentUser?.email);
+    setActiveReminders(getUserRemindersLocal(currentUser?.email));
+    setActiveReminderMenuPostId(null);
+  };
+
+  const handleCancelReminder = async (postId: string) => {
+    await cancelNewsReminder(postId, currentUser?.email);
+    setActiveReminders(getUserRemindersLocal(currentUser?.email));
+    setActiveReminderMenuPostId(null);
+  };
+
+  const renderCardActions = (post: NewsFeedPost) => {
+    const isFav = userFavorites.has(post.id);
+    const hasReminder = activeReminders.some((r) => r.newsId === post.id);
+    const isMenuOpen = activeReminderMenuPostId === post.id;
+
+    return (
+      <div className="relative flex items-center gap-1.5 z-20" onClick={(e) => e.stopPropagation()}>
+        {/* Favorite Heart Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleToggleFavorite(post.id);
+          }}
+          className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+            isFav
+              ? 'bg-red-600 text-white shadow-md'
+              : 'bg-black/60 hover:bg-black/85 text-white/90 hover:text-red-400 border border-white/20'
+          }`}
+          title={isFav ? 'पसंदीदा से हटाएं' : 'पसंदीदा में जोड़ें'}
+        >
+          <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-white text-white' : ''}`} />
+        </button>
+
+        {/* Reminder Clock Button */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveReminderMenuPostId(isMenuOpen ? null : post.id);
+            }}
+            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+              hasReminder
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                : 'bg-black/60 hover:bg-black/85 text-white/90 hover:text-amber-400 border border-white/20'
+            }`}
+            title={hasReminder ? 'रिमाइंडर सक्रिय है' : 'रिमाइंडर सेट करें'}
+          >
+            <Clock className={`w-3.5 h-3.5 ${hasReminder ? 'text-slate-950 font-bold' : ''}`} />
+          </button>
+
+          {isMenuOpen && (
+            <div
+              className="absolute right-0 top-8 w-44 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-[10px] font-bold text-amber-400 px-2 py-1 border-b border-slate-800">
+                रिमाइंडर समय चुनें
+              </div>
+              {[5, 10, 20, 30].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => handleSetReminder(post, m)}
+                  className="w-full text-left px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <span>{m} मिनट बाद</span>
+                  <span className="text-[10px] text-amber-400">⏰</span>
+                </button>
+              ))}
+              {hasReminder && (
+                <button
+                  type="button"
+                  onClick={() => handleCancelReminder(post.id)}
+                  className="w-full text-left px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 rounded-lg border-t border-slate-800 mt-1 cursor-pointer"
+                >
+                  रिमाइंडर हटाएं
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
   const [walletCoins, setWalletCoins] = useState<number | null>(() => {
@@ -800,6 +966,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     dailyQuota: number;
     todayCount: number;
     planTier: string;
+    graphicPacks?: any[];
+    extraGraphicCredits?: number;
   } | null>(null);
   const [showLimitExhaustedModal, setShowLimitExhaustedModal] = useState<boolean>(false);
   const [isRequestingLimitIncrease, setIsRequestingLimitIncrease] = useState<boolean>(false);
@@ -1571,6 +1739,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       }
 
       // 4. Category Filter
+      if (selectedCategory === 'favorites') {
+        return userFavorites.has(p.id);
+      }
+      if (selectedCategory === 'local_alerts') {
+        return true;
+      }
       if (selectedCategory === 'all') return true;
       if (selectedCategory === 'breaking') return p.breaking;
       const catObj = feedCategories.find((c) => c.id === selectedCategory);
@@ -1580,8 +1754,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
 
-    // Part 18: Local News Personalization (District P1 -> State P2 -> National/General P3)
-    if (userDistrict || userState) {
+    // Part 18: Local News Personalization & Local Alerts Ranking
+    if (selectedCategory === 'local_alerts' || userDistrict || userState) {
       const cleanDist = userDistrict.toLowerCase();
       const cleanSt = userState.toLowerCase();
 
@@ -1591,13 +1765,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           const title = (post.title || '').toLowerCase();
           const desc = (post.summary || post.description || '').toLowerCase();
 
-          // Priority 1: User's District (Score 200)
+          // Priority 1: User's District (Score 300)
           if (cleanDist && (loc.includes(cleanDist) || title.includes(cleanDist) || desc.includes(cleanDist))) {
-            return 200;
+            return 300;
           }
-          // Priority 2: User's State (Score 100)
+          // Priority 2: User's State (Score 200)
           if (cleanSt && (loc.includes(cleanSt) || title.includes(cleanSt) || desc.includes(cleanSt))) {
-            return 100;
+            return 200;
           }
           // Priority 3: National / General
           return 0;
@@ -1615,7 +1789,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
 
     return baseFiltered;
-  }, [combinedPosts, canModerate, adminPendingOnly, adminPublishedOnly, adminBonusOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds, userDistrict, userState]);
+  }, [combinedPosts, canModerate, adminPendingOnly, adminPublishedOnly, adminBonusOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds, userDistrict, userState, userFavorites]);
 
   const breakingPosts = visiblePosts.filter((p) => p.breaking).length > 0
     ? visiblePosts.filter((p) => p.breaking)
@@ -2033,7 +2207,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         </div>
 
         {/* User Mobile Category Strip (below the 3 cards) */}
-        {!canModerate && feedCategories.length > 0 && (
+        {!canModerate && (
           <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"
@@ -2045,6 +2219,30 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               }`}
             >
               सभी खबरें
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('favorites')}
+              className={`px-3 py-1 rounded-full text-[11px] font-bold shrink-0 transition cursor-pointer flex items-center gap-1 ${
+                selectedCategory === 'favorites'
+                  ? 'bg-red-600 text-white font-black shadow-xs'
+                  : 'bg-white dark:bg-slate-900 text-red-500 dark:text-red-400 border border-red-500/30'
+              }`}
+            >
+              <span>❤️</span>
+              <span>पसंदीदा</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('local_alerts')}
+              className={`px-3 py-1 rounded-full text-[11px] font-bold shrink-0 transition cursor-pointer flex items-center gap-1 ${
+                selectedCategory === 'local_alerts'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                  : 'bg-white dark:bg-slate-900 text-amber-500 dark:text-amber-400 border border-amber-500/30'
+              }`}
+            >
+              <span>📍</span>
+              <span>लोकल अलर्ट</span>
             </button>
             {feedCategories.slice(0, 10).map((cat) => (
               <button
@@ -2329,7 +2527,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
 
                       {/* Top Tag on Image */}
-                      <div className="absolute top-2 right-2 flex flex-col items-end gap-1 z-10">
+                      <div className="absolute top-2 right-2 flex flex-col items-end gap-1.5 z-10">
+                        <div className="flex items-center gap-1">
+                          {renderCardActions(post)}
+                        </div>
                         {isPaid && (
                           isUnlocked ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 shadow flex items-center gap-1 backdrop-blur-sm">
@@ -2635,42 +2836,94 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 {/* 4. Category Selector Bar (Replaced horizontal scroll with clean Popup Selector) */}
         {(() => {
           const selectedCatObj = selectedCategory === 'all' ? null : feedCategories.find((c) => c.id === selectedCategory || c.name === selectedCategory);
-          const selectedCatName = selectedCatObj ? selectedCatObj.name : 'सभी खबरें (समस्त श्रेणियाँ)';
+          const selectedCatName = selectedCategory === 'favorites'
+            ? '❤️ पसंदीदा खबरें (केवल आपकी सहेजी गई खबरें)'
+            : selectedCategory === 'local_alerts'
+            ? '📍 लोकल अलर्ट (जिला व राज्य प्राथमिकता)'
+            : selectedCatObj ? selectedCatObj.name : 'सभी खबरें (समस्त श्रेणियाँ)';
           return (
-            <div className="flex items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-sm">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
-                  <FolderTree className="w-5 h-5" />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-sm">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+                    <FolderTree className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
+                      सक्रिय श्रेणी (Active Category)
+                    </div>
+                    <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
+                      {selectedCategory === 'all' ? 'सभी खबरें (समस्त श्रेणियाँ)' : selectedCatName}
+                    </div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-                    सक्रिय श्रेणी (Active Category)
-                  </div>
-                  <div className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
-                    {selectedCategory === 'all' ? 'सभी खबरें (समस्त श्रेणियाँ)' : selectedCatName}
-                  </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {selectedCategory !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategory('all')}
+                      className="px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition cursor-pointer"
+                    >
+                      रीसेट (सभी)
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryModalOpen(true)}
+                    className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                  >
+                    <span>श्रेणी चुनें</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                {selectedCategory !== 'all' && (
+              {/* Local Alerts Configuration Reminder Banner */}
+              {selectedCategory === 'local_alerts' && !userDistrict && !userState && (
+                <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border-2 border-amber-500/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                      <MapPin className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm sm:text-base font-bold text-amber-300">
+                        लोकल अलर्ट के लिए जिला व राज्य सेट करें
+                      </h4>
+                      <p className="text-xs text-slate-300">
+                        अपनी प्रोफ़ाइल में जाकर जिला और राज्य चुनें ताकि आपको अपने क्षेत्र की खबरें सबसे पहले दिखाई दें।
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToTab?.('profile')}
+                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-xs font-black rounded-xl shadow cursor-pointer shrink-0 hover:from-amber-400 hover:to-yellow-400 transition"
+                  >
+                    प्रोफ़ाइल में सेट करें ➔
+                  </button>
+                </div>
+              )}
+
+              {/* Empty Favorites Banner */}
+              {selectedCategory === 'favorites' && visiblePosts.length === 0 && (
+                <div className="p-8 text-center bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto text-xl">
+                    ❤️
+                  </div>
+                  <h4 className="text-base font-bold text-white">आपकी कोई पसंदीदा खबर नहीं है</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    किसी भी खबर के ऊपर दिल (❤️) आइकन दबाकर उसे पसंदीदा में जोड़ें। वे सभी खबरें यहाँ सुरक्षित रहेंगी।
+                  </p>
                   <button
                     type="button"
                     onClick={() => setSelectedCategory('all')}
-                    className="px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white transition cursor-pointer"
+                    className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer"
                   >
-                    रीसेट (सभी)
+                    सभी खबरें देखें
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(true)}
-                  className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer transition active:scale-95"
-                >
-                  <span>श्रेणी चुनें</span>
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -2916,6 +3169,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             ⏳ लंबित फ़ीड/RSS
                           </span>
                         )}
+                      </div>
+
+                      {/* Top Right: Heart & Reminder Actions */}
+                      <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+                        {renderCardActions(post)}
                       </div>
 
                       <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded text-[10px] text-slate-300">
@@ -4849,57 +5107,77 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 आज की ग्राफिक डाउनलोड लिमिट समाप्त हो गई है
               </h3>
               <p className="text-xs text-neutral-300 leading-relaxed">
-                आपने आज के अपने <strong>{downloadStatus?.planTier || 'पैकेज'}</strong> की सभी दैनिक डाउनलोड सीमा ({downloadStatus?.todayCount || 0}/{downloadStatus?.dailyQuota || 0}) पूरी कर ली है। आप बोनस खबरें अभी भी निःशुल्क बना सकते हैं।
+                आपने आज के अपने <strong>{downloadStatus?.planTier || 'पैकेज'}</strong> की सभी दैनिक डाउनलोड सीमा ({downloadStatus?.todayCount || 0}/{downloadStatus?.dailyQuota || 0}) पूरी कर ली है।
               </p>
+              {typeof downloadStatus?.extraGraphicCredits === 'number' && (
+                <div className="p-2 bg-slate-950/80 rounded-xl border border-amber-500/30 text-xs text-amber-300 font-bold flex items-center justify-between">
+                  <span>अतिरिक्त ग्राफिक बैलेंस:</span>
+                  <span>{downloadStatus.extraGraphicCredits} ग्राफिक शेष</span>
+                </div>
+              )}
             </div>
 
-            <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5">
+            <div className="pt-2 flex flex-col gap-2.5">
               <button
                 type="button"
                 onClick={() => {
                   setShowLimitExhaustedModal(false);
-                  setAdminBonusOnly(true);
-                  const bonusSection = document.getElementById('bonus-news-section');
-                  if (bonusSection) {
-                    bonusSection.scrollIntoView({ behavior: 'smooth' });
-                  }
+                  setCashfreeModalPlan(GRAPHIC_PACK_20_7D_PLAN);
                 }}
-                className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                className="w-full py-3 px-4 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black rounded-xl text-sm transition-all shadow-lg hover:shadow-amber-500/25 cursor-pointer flex items-center justify-center gap-2 animate-pulse"
               >
-                <span>🎁</span>
-                <span>बोनस खबरें देखें</span>
+                <span>⚡</span>
+                <span>₹99 में 20 अतिरिक्त ग्राफिक अनलॉक करें (7 दिन वैध)</span>
               </button>
 
-              <button
-                type="button"
-                disabled={isRequestingLimitIncrease || limitIncreaseRequested}
-                onClick={async () => {
-                  if (!currentUser?.email) return;
-                  try {
-                    setIsRequestingLimitIncrease(true);
-                    const res = await fetch(getApiUrl('/api/request-limit-increase'), {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ email: currentUser.email, requestedLimit: 10 }),
-                    });
-                    const data = await res.json();
-                    if (res.ok) {
-                      setLimitIncreaseRequested(true);
-                      alert('लिमिट बढ़ाने का अनुरोध सफलतापूर्वक एडमिन को भेज दिया गया है!');
-                    } else {
-                      alert(data.error || 'अनुरोध भेजने में समस्या आई।');
+              <div className="flex flex-col sm:flex-row items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLimitExhaustedModal(false);
+                    setAdminBonusOnly(true);
+                    const bonusSection = document.getElementById('bonus-news-section');
+                    if (bonusSection) {
+                      bonusSection.scrollIntoView({ behavior: 'smooth' });
                     }
-                  } catch (err: any) {
-                    alert(err.message || 'नेटवर्क समस्या।');
-                  } finally {
-                    setIsRequestingLimitIncrease(false);
-                  }
-                }}
-                className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <span>🚀</span>
-                <span>{limitIncreaseRequested ? '✓ अनुरोध भेजा गया' : isRequestingLimitIncrease ? 'भेज रहे हैं...' : 'लिमिट बढ़ाने का अनुरोध'}</span>
-              </button>
+                  }}
+                  className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>🎁</span>
+                  <span>बोनस खबरें बनाएँ</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isRequestingLimitIncrease || limitIncreaseRequested}
+                  onClick={async () => {
+                    if (!currentUser?.email) return;
+                    try {
+                      setIsRequestingLimitIncrease(true);
+                      const res = await fetch(getApiUrl('/api/request-limit-increase'), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: currentUser.email, requestedLimit: 10 }),
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        setLimitIncreaseRequested(true);
+                        alert('लिमिट बढ़ाने का अनुरोध सफलतापूर्वक एडमिन को भेज दिया गया है!');
+                      } else {
+                        alert(data.error || 'अनुरोध भेजने में समस्या आई।');
+                      }
+                    } catch (err: any) {
+                      alert(err.message || 'नेटवर्क समस्या।');
+                    } finally {
+                      setIsRequestingLimitIncrease(false);
+                    }
+                  }}
+                  className="w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-slate-300 font-bold rounded-xl text-xs transition-all shadow border border-slate-700 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>🚀</span>
+                  <span>{limitIncreaseRequested ? '✓ अनुरोध भेजा गया' : isRequestingLimitIncrease ? 'भेज रहे हैं...' : 'लिमिट बढ़ाने का अनुरोध'}</span>
+                </button>
+              </div>
             </div>
 
             <button
@@ -5299,13 +5577,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     • {formatDynamicTime(detailModalPost.timestamp, detailModalPost.publishedTime)}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDetailModalPost(null)}
-                  className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  {renderCardActions(detailModalPost)}
+                  <button
+                    type="button"
+                    onClick={() => setDetailModalPost(null)}
+                    className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
               {/* Main Thumbnail Image */}
@@ -5318,21 +5599,41 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               </div>
 
               {/* Headline */}
-              <h3 className="text-lg sm:text-xl font-black text-white leading-snug">
+              <h3 className="text-lg sm:text-xl font-black text-white leading-relaxed break-words">
                 {cleanViewerHeadline(detailModalPost.title)}
               </h3>
 
-              {/* Full Description / Summary */}
-              <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm text-slate-200 leading-relaxed whitespace-pre-line">
-                {decodeHtmlEntities(detailModalPost.approvedCaptionDetailed || detailModalPost.summary || '')}
-              </div>
+              {/* Full Description / Summary with Scraped Details */}
+              {scrapedArticleData?.loading ? (
+                <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-center gap-2 text-xs text-amber-300">
+                  <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  <span>वेब से विस्तृत समाचार विवरण प्राप्त किया जा रहा है...</span>
+                </div>
+              ) : (
+                <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800/80 text-sm text-slate-200 leading-relaxed whitespace-pre-line">
+                  {scrapedArticleData?.content || scrapedArticleData?.description || decodeHtmlEntities(detailModalPost.approvedCaptionDetailed || detailModalPost.summary || '')}
+                  {detailModalPost.sourceUrl && (
+                    <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                      <span>स्रोत: {cleanViewerChannel(detailModalPost.sourceChannel) || 'वेब'}</span>
+                      <a
+                        href={detailModalPost.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-400 hover:text-amber-300 underline flex items-center gap-1 font-bold"
+                      >
+                        🔗 मूल समाचार लिंक
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Additional Photos if available */}
-              {detailModalPost.additionalPhotos && detailModalPost.additionalPhotos.length > 0 && (
+              {((detailModalPost.additionalPhotos && detailModalPost.additionalPhotos.length > 0) || (scrapedArticleData?.photos && scrapedArticleData.photos.length > 0)) && (
                 <div className="space-y-1.5">
                   <span className="text-xs font-bold text-slate-400">अतिरिक्त तस्वीरें:</span>
                   <div className="grid grid-cols-3 gap-2">
-                    {detailModalPost.additionalPhotos.map((photo, i) => (
+                    {Array.from(new Set([...(detailModalPost.additionalPhotos || []), ...(scrapedArticleData?.photos || [])])).map((photo, i) => (
                       <div key={i} className="aspect-video rounded-lg overflow-hidden border border-slate-800 bg-slate-950">
                         <img src={photo} alt="" className="w-full h-full object-cover" />
                       </div>
@@ -5366,6 +5667,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Cashfree Payment Modal for Graphic Pack (Component 8) */}
+      {cashfreeModalPlan && (
+        <CashfreePaymentModal
+          isOpen={Boolean(cashfreeModalPlan)}
+          plan={cashfreeModalPlan}
+          onClose={() => setCashfreeModalPlan(null)}
+          onSuccess={() => {
+            setCashfreeModalPlan(null);
+            fetchDownloadStatus();
+            alert('🎉 ₹99 ग्राफिक पैक सक्रिय हो गया है! आपको 20 अतिरिक्त ग्राफिक डाउनलोड (7 दिन वैध) मिल गए हैं।');
+          }}
+          currentUser={currentUser}
+        />
       )}
 
       {showBackToTop && (

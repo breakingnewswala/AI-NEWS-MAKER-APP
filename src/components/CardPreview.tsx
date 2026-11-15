@@ -10,7 +10,7 @@ import { getEffectiveSpeaker, cleanHeadlineText } from '../lib/speakerUtils';
 import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
-import { getDynamicFrameById } from '../lib/dynamicFramesManager';
+import { getDynamicFrameById, normalizeDynamicFrame } from '../lib/dynamicFramesManager';
 import { formatCleanLocationText, calculateDynamicLocationMetrics } from '../lib/locationUtils';
 import {
   computeCanonicalHeadlineLayout,
@@ -80,7 +80,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   }, []);
 
   const currentDynamicFrame = React.useMemo(() => {
-    return card.customDynamicFrame || (card.frameDesign ? getDynamicFrameById(card.frameDesign) : null);
+    const raw = card.customDynamicFrame || (card.frameDesign ? getDynamicFrameById(card.frameDesign) : null);
+    return raw ? normalizeDynamicFrame(raw) : null;
   }, [card.customDynamicFrame, card.frameDesign, dynamicFramesRevision]);
   const df = currentDynamicFrame;
 
@@ -3758,28 +3759,34 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               )}
 
               {/* Headline */}
-              <div
-                className={`absolute pointer-events-auto flex items-center px-2 ${df.textSlots[0]?.alignment === 'left' ? 'justify-start text-left' : df.textSlots[0]?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
-                style={{
-                  left: `${df.textSlots[0]?.rect?.x ?? 7}%`,
-                  top: `${df.textSlots[0]?.rect?.y ?? 63}%`,
-                  width: `${df.textSlots[0]?.rect?.width ?? 86}%`,
-                  height: `${df.textSlots[0]?.rect?.height ?? 27}%`,
-                  backgroundColor: df.textSlots[0]?.backgroundColor || 'transparent',
-                }}
-              >
-                <h1
-                  className="font-black leading-snug drop-shadow-md w-full pb-0.5"
-                  style={{
-                    color: df.textSlots[0]?.textColor || '#FFFFFF',
-                    fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || df.textSlots[0]?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
-                    fontSize: `${effectivePreviewFontSize}px`,
-                    textAlign: (df.textSlots[0]?.alignment as any) || 'center',
-                  }}
-                >
-                  {renderFormattedHeadline(df.textSlots[0]?.textColor || card.headlineTextColor || card.textColor)}
-                </h1>
-              </div>
+              {(() => {
+                const textSlots = df.textSlots && df.textSlots.length > 0 ? df.textSlots : [{ rect: { x: 7, y: 63, width: 86, height: 27 }, alignment: 'center', textColor: '#FFFFFF' }];
+                const slot0 = textSlots[0];
+                return (
+                  <div
+                    className={`absolute pointer-events-auto flex items-center px-2 ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
+                    style={{
+                      left: `${slot0?.rect?.x ?? 7}%`,
+                      top: `${slot0?.rect?.y ?? 63}%`,
+                      width: `${slot0?.rect?.width ?? 86}%`,
+                      height: `${slot0?.rect?.height ?? 27}%`,
+                      backgroundColor: slot0?.backgroundColor || 'transparent',
+                    }}
+                  >
+                    <h1
+                      className="font-black leading-snug drop-shadow-md w-full pb-0.5"
+                      style={{
+                        color: slot0?.textColor || '#FFFFFF',
+                        fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || slot0?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
+                        fontSize: `${effectivePreviewFontSize}px`,
+                        textAlign: (slot0?.alignment as any) || 'center',
+                      }}
+                    >
+                      {renderFormattedHeadline(slot0?.textColor || card.headlineTextColor || card.textColor)}
+                    </h1>
+                  </div>
+                );
+              })()}
 
               {/* Permanent Theme Footer */}
               <div
