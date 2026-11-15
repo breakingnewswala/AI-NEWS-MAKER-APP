@@ -704,7 +704,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [adminNotificationBoardIds, setAdminNotificationBoardIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetch(getApiUrl('/api/admin/notification-board-ids'), {
+    fetch(getApiUrl('/api/notification-board-ids'), {
       headers: getAuthHeaders(),
     })
       .then((r) => r.json())

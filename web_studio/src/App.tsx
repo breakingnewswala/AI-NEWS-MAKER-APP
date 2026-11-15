@@ -1247,18 +1247,7 @@ export default function App() {
   useEffect(() => {
     fetchLiveNews();
     ensureAuthToken().catch(() => {});
-    if (typeof window !== 'undefined') {
-      const path = (window.location.pathname || '').toLowerCase();
-      const hash = (window.location.hash || '').toLowerCase();
-      if (path === '/admin' || hash === '#admin') {
-        const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
-        const token = getAuthToken();
-        if (!isAdmin || !token || isTokenExpired(token)) {
-          setLoginModalMode('admin');
-          setIsLoginModalOpen(true);
-        }
-      }
-    }
+    // Routine mount/refresh must NEVER automatically open the Login Modal (Strict Rule A, B)
   }, [currentUser?.role, currentUser?.email]);
 
   // Onboarding completion status (Login -> Details setup -> App) - Strict Profile + Logo + WhatsApp OTP Gate (Part 10)
@@ -1314,30 +1303,13 @@ export default function App() {
   });
   const [isMobileFocusedEditing, setIsMobileFocusedEditing] = useState<boolean>(false);
 
-  // Welcome flow - show primary AuthWelcomeScreen with Google Login for unauthenticated visitors
+  // Welcome flow - default false to preserve public website access without modal interruptions (Rule A, E)
   const [showAuthWelcomeScreen, setShowAuthWelcomeScreen] = useState<boolean>(() => {
     try {
-      const rawUser = localStorage.getItem('reporter_auth_session');
-      if (rawUser) {
-        const parsedUser = JSON.parse(rawUser);
-        const cleanEmail = (parsedUser?.email || '').toLowerCase().trim();
-        const isAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com' || cleanEmail === 'breakingnewswala.com@gmail.com' || cleanEmail === 'breakingnewsvala.com@gmail.com' || parsedUser?.role === 'admin' || parsedUser?.role === 'superadmin';
-        if (isAdmin) {
-          try {
-            localStorage.removeItem('user_explicitly_logged_out');
-            localStorage.removeItem('show_auth_welcome_screen');
-          } catch {}
-          return false;
-        }
-      }
-      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
-      if (explicitLogout === 'true') return true;
-      if (!rawUser) return true;
-      const flag = localStorage.getItem('show_auth_welcome_screen');
-      if (flag === 'true') return true;
-      return false;
+      const explicitFlag = localStorage.getItem('show_auth_welcome_screen');
+      return explicitFlag === 'true';
     } catch {
-      return true;
+      return false;
     }
   });
 
@@ -1905,26 +1877,18 @@ export default function App() {
     };
 
     const handleOpenAdminLogin = () => {
-      // If user is already authenticated as admin or superadmin with a valid, unexpired token, do not interrupt routine workflow with login modal
-      const token = getAuthToken();
-      const rawUser = typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_session') : null;
-      if (rawUser && token && !isTokenExpired(token)) {
-        try {
-          const parsed = JSON.parse(rawUser);
-          if (parsed && (parsed.role === 'admin' || parsed.role === 'superadmin' || parsed.email === 'breakingnewswala.com@gmail.com' || parsed.email === 'admin.ainewsmaker@gmail.com')) {
-            return;
-          }
-        } catch {}
-      }
       setLoginModalMode('admin');
       setIsLoginModalOpen(true);
     };
 
+    let lastAdminAuthToastTime = 0;
     const handleAdminAuthRequired = () => {
-      // Non-intrusive notification and prompt when a protected admin API requires authentication
-      showToast('⚠️ व्यवस्थापक सत्र प्रमाणीकरण आवश्यक है। कृपया लॉगिन करें।');
-      setLoginModalMode('admin');
-      setIsLoginModalOpen(true);
+      // Strict Rule C & D: Background API 401s must NEVER automatically open the Login Modal
+      const now = Date.now();
+      if (now - lastAdminAuthToastTime > 10000) {
+        lastAdminAuthToastTime = now;
+        showToast('⚠️ व्यवस्थापक प्रमाणीकरण आवश्यक है।');
+      }
     };
 
     const handleSessionExpired = () => {
@@ -3548,7 +3512,8 @@ export default function App() {
   const isMasterAdminUser = Boolean(currentUser && isUserAdmin(currentUser));
 
   // Primary Screen with Google Login Steps is enforced for unauthenticated visitors unless on legal pages, studio or admin
-  if (!isPublicLegalPage && !isStudioTab && !isMasterAdminUser && (showAuthWelcomeScreen || !currentUser || !isOnboardingCompleted)) {
+  // Primary Screen with Google Login Steps is ONLY displayed when explicitly triggered by user action (Rule A, B, E)
+  if (!isPublicLegalPage && !isStudioTab && !isMasterAdminUser && showAuthWelcomeScreen) {
     return (
       <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (

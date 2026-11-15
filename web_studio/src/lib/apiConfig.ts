@@ -405,6 +405,9 @@ export function isProtectedApiUrl(url: string): boolean {
   );
 }
 
+// Throttled auth notification timestamp to prevent concurrent event flooding
+let lastAdminAuthEventDispatched = 0;
+
 // Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated
 if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
   try {
@@ -484,7 +487,11 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
         } catch {}
         if (response.status === 401) {
           try {
-            window.dispatchEvent(new CustomEvent('ai_news_admin_auth_required', { detail: { url: urlStr } }));
+            const now = Date.now();
+            if (now - lastAdminAuthEventDispatched > 8000) {
+              lastAdminAuthEventDispatched = now;
+              window.dispatchEvent(new CustomEvent('ai_news_admin_auth_required', { detail: { url: urlStr } }));
+            }
           } catch {}
         }
       }

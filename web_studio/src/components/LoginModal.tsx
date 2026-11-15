@@ -104,15 +104,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setIsAdminMode(initialMode === 'admin');
     setAuthMode(initialMode === 'signup' ? 'signup' : 'login');
   }, [initialMode, isOpen]);
-
-  useEffect(() => {
-    if (initialMode !== 'admin' && !isAdminMode && isOpen) {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('open_auth_welcome_screen'));
-      }
-      if (onClose) onClose();
-    }
-  }, [isAdminMode, isOpen, onClose, initialMode]);
   
   // Login fields
   const [username, setUsername] = useState('');

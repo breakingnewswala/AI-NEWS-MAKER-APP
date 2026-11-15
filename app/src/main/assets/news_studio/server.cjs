@@ -13339,6 +13339,9 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
 });
 app.use("/api/admin", async (req, res, next) => {
   if (req.method === "OPTIONS") return next();
+  if (req.method === "GET" && (req.path === "/notification-board-ids" || req.path === "/notification-board-ids/")) {
+    return next();
+  }
   const user = req.user || await resolveAuthenticatedUser(req, res);
   if (!user) {
     return res.status(401).json({
@@ -23355,7 +23358,7 @@ async function saveDurableNotificationBoardIds(ids) {
     }
   }
 }
-app.get("/api/admin/notification-board-ids", async (_req, res) => {
+app.get(["/api/notification-board-ids", "/api/admin/notification-board-ids"], async (_req, res) => {
   try {
     const validIds = await getDurableNotificationBoardIds();
     return res.json({ success: true, ids: validIds, selectedIds: validIds });

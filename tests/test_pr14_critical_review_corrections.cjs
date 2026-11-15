@@ -292,6 +292,8 @@ console.log('\n--- 100% Byte Parity Check Across All Modified Files ---');
     ['src/components/AdminApiKeysManager.tsx', 'web_studio/src/components/AdminApiKeysManager.tsx'],
     ['src/components/ProfileScreenWeb.tsx', 'web_studio/src/components/ProfileScreenWeb.tsx'],
     ['src/components/LoginModal.tsx', 'web_studio/src/components/LoginModal.tsx'],
+    ['src/components/HomeScreenWeb.tsx', 'web_studio/src/components/HomeScreenWeb.tsx'],
+    ['src/components/AppTopBarWeb.tsx', 'web_studio/src/components/AppTopBarWeb.tsx'],
     ['src/App.tsx', 'web_studio/src/App.tsx'],
   ];
 
