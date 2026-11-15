@@ -7074,8 +7074,8 @@ function reconcileAllUsers() {
         channelName: p3?.channelNameHi || 'अनमोल संदेश',
         channelNameHi: p3?.channelNameHi || 'अनमोल संदेश',
         channelNameEn: p3?.channelNameEn || 'Anmol Sandesh',
-        channelLogoUrl: p3?.channelLogoUrl || '/assets/ai_news_maker_logo.png',
-        channelLogoPngUrl: p3?.channelLogoPngUrl || '/assets/ai_news_maker_logo.png',
+        channelLogoUrl: p3?.channelLogoUrl || '',
+        channelLogoPngUrl: p3?.channelLogoPngUrl || '',
         channelLogoGifUrl: '',
         channelLogoType: 'png',
         mobile: p3?.mobileNumber || '9425000998',
@@ -11598,8 +11598,17 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req: any, re
 // 1. GET User Profile
 app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
-  const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
+  let idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const rawMobile = (req.query.mobile || req.query.phone || "").toString().replace(/[^0-9]/g, '').slice(-10);
+
+  if (!idOrEmail && !username && !rawMobile) {
+    const authHeaderUser = (req as any).user || getAuthenticatedUser(req);
+    if (authHeaderUser?.email) {
+      idOrEmail = authHeaderUser.email.toLowerCase().trim();
+    } else if (authHeaderUser?.userId) {
+      idOrEmail = authHeaderUser.userId.toLowerCase().trim();
+    }
+  }
 
   // If user account is tombstoned/deleted, strictly return profile: null to require new onboarding
   if ((idOrEmail && isUserTombstoned(idOrEmail)) || (username && isUserTombstoned(username))) {
@@ -11697,9 +11706,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
     const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
-    const reqKey = (req.headers["x-admin-key"] || "").toString();
-    const reqRole = (req.headers["x-user-role"] || "").toString().toLowerCase();
-    const reqEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const authUser = await resolveAuthenticatedUser(req, res);
 
     // Prevent regular user profiles from overwriting global admin master branding
     const isMasterAdminEmail = (profile.email && profile.email.toLowerCase() === 'breakingnewswala.com@gmail.com') ||
@@ -11711,9 +11718,39 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       cleanId === 'user-1791697518060';
 
     const isAdmin = isAuthorizedAdmin(req) ||
-      (reqKey === "master-admin") ||
-      (reqRole === "superadmin" || reqRole === "admin") ||
-      (reqEmail.includes("breakingnewswala") || reqEmail.includes("admin"));
+      (authUser && (authUser.role === "superadmin" || authUser.role === "admin")) ||
+      isAuthorizedMasterAdmin(req);
+
+    // 1. Unauthenticated protection: Non-admin updates require a verified session identity
+    if (!isAdmin && !authUser) {
+      return res.status(401).json({ success: false, error: "प्रमाणीकरण आवश्यक है। कृपया पुनः लॉगिन करें।" });
+    }
+
+    // 2. Ownership verification: A normal reporter/user can ONLY update their own profile
+    if (!isAdmin && authUser) {
+      const authEmail = (authUser.email || '').toLowerCase().trim();
+      const authUid = (authUser.userId || '').toLowerCase().trim();
+      const targetEmail = (profile.email || '').toLowerCase().trim();
+      const isSelf = (authEmail && cleanId === authEmail) ||
+        (authUid && cleanId === authUid) ||
+        (authEmail && targetEmail && authEmail === targetEmail);
+
+      if (!isSelf) {
+        return res.status(403).json({ success: false, error: "अनधिकृत: आप केवल अपनी स्वयं की प्रोफ़ाइल को अपडेट कर सकते हैं।" });
+      }
+
+      // Stripping unpermitted privilege fields from normal user payload
+      delete profile.role;
+      delete profile.tier;
+      delete profile.planName;
+      delete profile.isBlocked;
+      delete profile.isLocked;
+      delete profile.isProfileLocked;
+      delete profile.logoApprovalStatus;
+      delete profile.approvedLogoRequestId;
+      delete profile.logoApprovedAt;
+      delete profile.logoApprovedBy;
+    }
 
     if ((cleanId === 'admin' || isMasterAdminEmail || isSubAdminEmail) && !isAdmin) {
       return res.status(403).json({ error: "अनधिकृत: एडमिन प्रोफाइल केवल अधिकृत मास्टर एडमिन द्वारा ही संशोधित की जा सकती है" });
@@ -15035,10 +15072,11 @@ app.post("/api/remove-gif-logo", enforceUserAccessMiddleware, (req, res) => {
     if (targetKey && allProfiles[targetKey]) {
       delete allProfiles[targetKey].channelLogoGifUrl;
       allProfiles[targetKey].channelLogoType = "png";
+      const isSubAdmin = targetKey === 'admin.ainewsmaker@gmail.com' || targetKey === 'user-1791697518060';
       allProfiles[targetKey].channelLogoUrl =
         allProfiles[targetKey].channelLogoPngUrl ||
         (allProfiles[targetKey].channelLogoUrl?.endsWith(".gif") ? "" : allProfiles[targetKey].channelLogoUrl) ||
-        "/assets/ai_news_maker_logo.png";
+        (isSubAdmin ? "/assets/ai_news_maker_logo.png" : "");
       allProfiles[targetKey].updatedAt = Date.now();
       saveProfilesDatabase(allProfiles);
       try {
@@ -22245,7 +22283,7 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
    - सम्मानसूचक या चाटुकारिता वाले शब्द ('श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'आदरणीय', 'महोदय', 'जी', 'सम्माननीय', 'सम्मानीय', 'पूज्य') पूरी तरह हटा दें, किंतु व्यक्ति का वास्तविक नाम और आधिकारिक पद (जैसे मुख्यमंत्री, प्रधानमंत्री, कलेक्टर, पुलिस अधीक्षक, न्यायाधीश) सुरक्षित रखें।
    - किसी भी हेडलाइन के अंत में पूर्णविराम (। या .) या प्रश्नवाचक चिह्न न लगाएं। कोई इमोजी या हैशटैग हेडलाइन में न रखें।
    - हेडलाइन का अंत अर्थपूर्ण और स्वाभाविक वाक्य पर समाप्त हो। 'की', 'के', 'में', 'पर', 'से', 'कि', 'और', 'या', 'हुए', 'गया', 'कहा कि' जैसे अधूरे शब्दों पर हेडलाइन कभी समाप्त न करें।
-   - 'मध्यप्रदेश' और 'उत्तरप्रदेश' को अनिवार्य रूप से एक शब्द (Single Word) में लिखें (उदा. मध्यप्रदेश, उत्तरप्रदेश)।
+   - 'मध्य प्रदेश' और 'उत्तर प्रदेश' को उनके मानक रूप (स्थान/स्पेस सहित) में ही लिखें (उदा. 'मध्य प्रदेश', 'उत्तर प्रदेश')।
 4. तीन सोशल मीडिया कैप्शन और हैशटैग नियम (THREE CAPTIONS & HASHTAGS):
    - किसी भी कैप्शन में कोई वेबसाइट लिंक, URL या 'पूरी खबर पढ़ें' न लिखें और न ही हेडलाइन को पहली पंक्ति में दोहराएं।
    - विस्तृत कैप्शन (summary व captionDetailed): खबर के संपूर्ण तथ्यों और संदर्भ पर आधारित लगभग 3 विस्तृत पैराग्राफ।

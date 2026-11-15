@@ -499,7 +499,10 @@ export async function fetchDynamicFramesFromApi(
 
   try {
     const baseUrl = getApiBaseUrl();
-    const res = await fetch(`${baseUrl}/api/dynamic-frames${q}`);
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${baseUrl}/api/dynamic-frames${q}`, { headers });
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.frames)) {

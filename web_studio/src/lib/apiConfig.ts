@@ -530,14 +530,22 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           }
         } catch {}
         if (response.status === 401) {
-          clearAuthTokens();
-          try {
-            const now = Date.now();
-            if (now - lastAdminAuthEventDispatched > 8000) {
-              lastAdminAuthEventDispatched = now;
-              window.dispatchEvent(new CustomEvent('ai_news_admin_auth_required', { detail: { url: urlStr } }));
-            }
-          } catch {}
+          const isAdminEndpoint = urlStr.includes('/api/admin') || urlStr.includes('/api/master-admin');
+          if (isAdminEndpoint) {
+            clearAuthTokens();
+            try {
+              const now = Date.now();
+              if (now - lastAdminAuthEventDispatched > 8000) {
+                lastAdminAuthEventDispatched = now;
+                window.dispatchEvent(new CustomEvent('ai_news_admin_auth_required', { detail: { url: urlStr } }));
+              }
+            } catch {}
+          } else {
+            // For normal reporter/user endpoints, notify session status without triggering false admin auth errors
+            try {
+              window.dispatchEvent(new CustomEvent('ai_news_session_expired', { detail: { url: urlStr } }));
+            } catch {}
+          }
         }
       }
       // Auto-capture and persist refreshed token from server header

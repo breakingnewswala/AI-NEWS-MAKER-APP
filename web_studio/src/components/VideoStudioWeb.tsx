@@ -4365,54 +4365,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           100% ओरिजिनल साउंड
                         </span>
                       </div>
-
-                      {/* Color Filters (Part 8.C) */}
-                      <div className="space-y-2.5 pt-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                            <span>कलर फ़िल्टर्स (Color Filters)</span>
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            प्रीव्यू व एक्सपोर्ट पर तुरंत लागू
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {[
-                            { id: 'original', nameHi: 'ओरिजिनल', nameEn: 'Normal', icon: '✨' },
-                            { id: 'bright', nameHi: 'उज्ज्वल', nameEn: 'Bright', icon: '☀️' },
-                            { id: 'contrast', nameHi: 'कंट्रास्ट', nameEn: 'Contrast', icon: '🌗' },
-                            { id: 'warm', nameHi: 'वार्म टोन', nameEn: 'Warm', icon: '🌅' },
-                            { id: 'cool', nameHi: 'कूल टोन', nameEn: 'Cool', icon: '❄️' },
-                            { id: 'bw', nameHi: 'ब्लैक & व्हाइट', nameEn: 'B&W', icon: '📼' },
-                            { id: 'cinematic', nameHi: 'सिनेमैटिक', nameEn: 'Cinematic', icon: '🎬' },
-                          ].map((f) => {
-                            const isSel = videoColorFilter === f.id;
-                            return (
-                              <button
-                                key={f.id}
-                                type="button"
-                                onClick={() => {
-                                  setVideoColorFilter(f.id as any);
-                                  showToast(`फ़िल्टर: ${f.nameHi} (${f.nameEn}) लागू किया गया`);
-                                }}
-                                className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                                  isSel
-                                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-lg ring-2 ring-amber-300/60'
-                                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
-                                }`}
-                              >
-                                <span className="text-base">{f.icon}</span>
-                                <span className="text-xs font-black leading-tight">{f.nameHi}</span>
-                                <span className={`text-[9px] font-bold ${isSel ? 'text-slate-800' : 'text-slate-400'}`}>
-                                  {f.nameEn}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
                     </div>
                   )}
 

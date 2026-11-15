@@ -23,14 +23,21 @@ import {
   MapPin,
   CheckCircle2,
   Play,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   VideoFrameDefinition,
   VIDEO_FRAME_DEFINITIONS,
 } from '../lib/videoTemplatesRegistry';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
-import { fetchDynamicFramesFromApi, getLocalDynamicFrames } from '../lib/dynamicFramesManager';
-import { getApiUrl } from '../lib/apiConfig';
+import {
+  fetchDynamicFramesFromApi,
+  getLocalDynamicFrames,
+  saveDynamicFrameToApi,
+  deleteDynamicFrameFromApi,
+} from '../lib/dynamicFramesManager';
+import { getApiUrl, getAuthToken } from '../lib/apiConfig';
 
 interface AdminVideoTemplateControlProps {
   onOpenStudioWithVideoFrame?: (frameId: string) => void;
@@ -41,6 +48,7 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
   onOpenStudioWithVideoFrame,
   onEditFrame,
 }) => {
+  const [activeCategoryTab, setActiveCategoryTab] = useState<'published' | 'test_frames'>('published');
   const [selectedRatio, setSelectedRatio] = useState<'all' | '9:16' | '1:1' | '4:5' | '4:3'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [dynamicVideoFrames, setDynamicVideoFrames] = useState<DynamicFrameTemplate[]>([]);
@@ -63,8 +71,87 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
     coinPrice: number;
     isActive: boolean;
     version: number;
+    isTestFrame?: boolean;
+    approvalStatus?: string;
     rawDynamicFrame?: DynamicFrameTemplate;
   } | null>(null);
+
+  const handleApproveAndPublish = async (frameId: string, assignedPlan?: string) => {
+    try {
+      const existing = dynamicVideoFrames.find((f) => f.id === frameId);
+      if (!existing) {
+        showToast(frameId, '⚠️ फ्रेम नहीं मिला');
+        return;
+      }
+      const selectedPlan = assignedPlan || configs[frameId]?.selectedTier || existing.allowedPlans?.[0] || 'BASIC';
+      const updated: DynamicFrameTemplate = {
+        ...existing,
+        isTestFrame: false,
+        approvalStatus: 'APPROVED',
+        publicationStatus: 'published',
+        designCategory: 'Special Frames',
+        allowedPlans: [selectedPlan],
+        approvedAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      const token = getAuthToken();
+      const res = await saveDynamicFrameToApi(updated, token || undefined);
+      if (res.success) {
+        await handleSaveFrameConfig(frameId, { tierEligibility: selectedPlan, isActive: true });
+        showToast(frameId, `✅ वीडियो फ्रेम स्वीकृत कर '${selectedPlan}' प्लान में प्रकाशित किया गया!`);
+        refreshFrames();
+        window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+        if (previewFrame && previewFrame.id === frameId) {
+          setPreviewFrame(null);
+        }
+      } else {
+        showToast(frameId, `❌ प्रकाशन विफल: ${res.error || 'अज्ञात त्रुटि'}`);
+      }
+    } catch (err: any) {
+      showToast(frameId, `❌ त्रुटि: ${err?.message || 'अज्ञात'}`);
+    }
+  };
+
+  const handleRejectFrame = async (frameId: string) => {
+    try {
+      const existing = dynamicVideoFrames.find((f) => f.id === frameId);
+      if (!existing) return;
+      const updated: DynamicFrameTemplate = {
+        ...existing,
+        approvalStatus: 'REJECTED',
+        isTestFrame: true,
+        publicationStatus: 'draft',
+        updatedAt: Date.now(),
+      };
+      const token = getAuthToken();
+      const res = await saveDynamicFrameToApi(updated, token || undefined);
+      if (res.success) {
+        showToast(frameId, '⚠️ वीडियो फ्रेम अस्वीकृत कर दिया गया');
+        refreshFrames();
+        window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+      }
+    } catch (err: any) {
+      showToast(frameId, `❌ त्रुटि: ${err?.message || 'अज्ञात'}`);
+    }
+  };
+
+  const handleDeleteFrame = async (frameId: string) => {
+    if (!window.confirm('क्या आप वाकई इस टेस्ट वीडियो फ्रेम को हटाना चाहते हैं?')) return;
+    try {
+      const token = getAuthToken();
+      const ok = await deleteDynamicFrameFromApi(frameId, token || undefined);
+      if (ok) {
+        showToast(frameId, '🗑️ टेस्ट वीडियो फ्रेम हटाया गया');
+        refreshFrames();
+        window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+        if (previewFrame && previewFrame.id === frameId) {
+          setPreviewFrame(null);
+        }
+      }
+    } catch (err: any) {
+      showToast(frameId, `❌ त्रुटि: ${err?.message || 'अज्ञात'}`);
+    }
+  };
 
   const refreshFrames = () => {
     // 1. Fetch configs
@@ -140,10 +227,18 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
 
   // Canonical Video Frames List: Published Dynamic Video Frames + Video Frame Definitions
   const allVideoItems = useMemo(() => {
-    // 1. Dynamic published video frames
+    // 1. Dynamic video frames (both published and test frames)
     const dynamicItems = dynamicVideoFrames.map((df) => {
       const cfg = configs[df.id] || {};
       const ratio = df.aspectRatio || '9:16';
+      const isTest = Boolean(
+        df.isTestFrame ||
+        df.approvalStatus === 'PENDING_TEST' ||
+        df.approvalStatus === 'IN_TESTING' ||
+        df.designCategory === 'TEST_FRAMES' ||
+        df.publicationStatus === 'draft' ||
+        df.id.startsWith('df_test_')
+      );
       const vRect = df.videoConfig?.videoRect || {
         x: 0,
         y: df.videoConfig?.footerPosition === 'top' ? 20 : 12,
@@ -169,6 +264,8 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
         watermarkText: df.videoConfig?.watermarkTextEnabled ? df.videoConfig.watermarkText : undefined,
         watermarkLogoUrl: df.videoConfig?.watermarkLogoEnabled ? df.videoConfig.watermarkLogoUrl : undefined,
         headlineMaxLines: df.videoConfig?.headlineLineCount || 3,
+        isTestFrame: isTest,
+        approvalStatus: df.approvalStatus || (isTest ? 'PENDING_TEST' : 'APPROVED'),
         rawDynamicFrame: df,
       };
     });
@@ -203,6 +300,8 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
           watermarkText: 'AI NEWS MAKER',
           watermarkLogoUrl: undefined,
           headlineMaxLines: def.headline?.maxLines || 2,
+          isTestFrame: false,
+          approvalStatus: 'APPROVED' as const,
           rawDynamicFrame: undefined,
         };
       });
@@ -210,9 +309,23 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
     return [...dynamicItems, ...staticItems];
   }, [dynamicVideoFrames, configs]);
 
+  const publishedFrames = useMemo(() => {
+    return allVideoItems.filter(
+      (f) => !f.isTestFrame && f.approvalStatus !== 'PENDING_TEST' && f.approvalStatus !== 'REJECTED'
+    );
+  }, [allVideoItems]);
+
+  const testVideoFrames = useMemo(() => {
+    return allVideoItems.filter(
+      (f) => f.isTestFrame || f.approvalStatus === 'PENDING_TEST' || f.approvalStatus === 'REJECTED'
+    );
+  }, [allVideoItems]);
+
+  const currentCategoryFrames = activeCategoryTab === 'published' ? publishedFrames : testVideoFrames;
+
   // Filter video frames strictly by aspect ratio and search query
   const filteredFrames = useMemo(() => {
-    return allVideoItems.filter((f) => {
+    return currentCategoryFrames.filter((f) => {
       if (selectedRatio !== 'all' && f.aspectRatio !== selectedRatio) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -224,12 +337,12 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
       }
       return true;
     });
-  }, [allVideoItems, selectedRatio, searchQuery]);
+  }, [currentCategoryFrames, selectedRatio, searchQuery]);
 
-  const count9_16 = allVideoItems.filter((f) => f.aspectRatio === '9:16').length;
-  const count1_1 = allVideoItems.filter((f) => f.aspectRatio === '1:1').length;
-  const count4_5 = allVideoItems.filter((f) => f.aspectRatio === '4:5').length;
-  const count4_3 = allVideoItems.filter((f) => f.aspectRatio === '4:3').length;
+  const count9_16 = currentCategoryFrames.filter((f) => f.aspectRatio === '9:16').length;
+  const count1_1 = currentCategoryFrames.filter((f) => f.aspectRatio === '1:1').length;
+  const count4_5 = currentCategoryFrames.filter((f) => f.aspectRatio === '4:5').length;
+  const count4_3 = currentCategoryFrames.filter((f) => f.aspectRatio === '4:3').length;
 
   return (
     <div className="space-y-6">
@@ -240,6 +353,40 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
           <span>{successToast.msg}</span>
         </div>
       )}
+
+      {/* 0. Top Category Tabs: Published vs Test Frames */}
+      <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveCategoryTab('published')}
+          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black cursor-pointer transition flex items-center gap-2 ${
+            activeCategoryTab === 'published'
+              ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-950/50'
+              : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Film className="w-4 h-4 text-amber-300" />
+          <span>📹 प्रकाशित वीडियो फ्रेम्स ({publishedFrames.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveCategoryTab('test_frames')}
+          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black cursor-pointer transition flex items-center gap-2 ${
+            activeCategoryTab === 'test_frames'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-950/50'
+              : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          <span>🧪 टेस्ट वीडियो फ्रेम्स ({testVideoFrames.length})</span>
+          {testVideoFrames.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white ml-1">
+              {testVideoFrames.length} लंबित
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* Aspect Ratio Filter Tabs & Search Header */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl shadow-xl">
@@ -254,7 +401,7 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
             }`}
           >
             <Film className="w-3.5 h-3.5" />
-            <span>सभी वीडियो फ्रेम्स ({allVideoItems.length})</span>
+            <span>सभी ({currentCategoryFrames.length})</span>
           </button>
 
           <button
@@ -330,7 +477,9 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
             <div
               key={frame.id}
               className={`bg-slate-900/90 border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all shadow-md group ${
-                frame.isActive
+                frame.isTestFrame
+                  ? 'border-amber-500/40 bg-gradient-to-b from-slate-900 to-amber-950/20'
+                  : frame.isActive
                   ? 'border-slate-800 hover:border-amber-500/50'
                   : 'border-slate-800/40 opacity-70'
               }`}
@@ -350,6 +499,19 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
                     </span>
                   </div>
                 </div>
+
+                {/* Test frame status badge if applicable */}
+                {frame.isTestFrame && (
+                  <div className="px-2 py-1 bg-amber-500/15 border border-amber-500/30 rounded-lg text-[10px] font-bold text-amber-300 flex items-center justify-between mb-2">
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>टेस्ट वीडियो फ्रेम</span>
+                    </span>
+                    <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-200">
+                      {frame.approvalStatus === 'APPROVED' ? 'स्वीकृत' : frame.approvalStatus === 'REJECTED' ? 'अस्वीकृत' : 'परीक्षण लंबित'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Video Window Preview Box */}
                 <div
@@ -386,7 +548,9 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
                 {/* Controls: Tier & Coins */}
                 <div className="mt-3 pt-2.5 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">टियर एक्सेस:</label>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">
+                      {frame.isTestFrame ? 'मेंबरशिप प्लान आवंटन:' : 'टियर एक्सेस:'}
+                    </label>
                     <select
                       value={frame.allowedPlans[0] || 'BASIC'}
                       onChange={(e) => handleSaveFrameConfig(frame.id, { tierEligibility: e.target.value })}
@@ -415,79 +579,149 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
               </div>
 
               {/* Actions Row */}
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => handleSaveFrameConfig(frame.id, { isActive: !frame.isActive })}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                    frame.isActive
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      : 'bg-slate-800 text-slate-400 border border-slate-700'
-                  }`}
-                >
-                  {frame.isActive ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-slate-500" />}
-                  <span>{frame.isActive ? 'सक्रिय' : 'बंद'}</span>
-                </button>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setPreviewFrame(frame)}
-                    className="py-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <Eye className="w-3.5 h-3.5 text-amber-400" />
-                    <span>प्रीव्यू</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onEditFrame && frame.rawDynamicFrame) {
-                        onEditFrame(frame.rawDynamicFrame);
-                      } else if (onEditFrame) {
-                        // Virtual dynamic frame in video mode
-                        onEditFrame({
-                          id: frame.id,
-                          name: frame.nameHi || frame.name,
-                          aspectRatio: frame.aspectRatio,
-                          frameMode: 'video',
-                          frameType: 'video',
-                          canvasWidth: frame.aspectRatio === '4:3' ? 1440 : 1080,
-                          canvasHeight: frame.aspectRatio === '4:5' ? 1350 : frame.aspectRatio === '9:16' ? 1920 : 1080,
-                          designCategory: 'Special Frames',
-                          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-                          publicationStatus: 'published',
-                          createdBy: 'breakingnewswala.com@gmail.com',
-                          createdAt: Date.now(),
-                          updatedAt: Date.now(),
-                          version: frame.version,
-                          headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
-                          footerConfig: { footerHeightRatio: 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
-                          photoSlots: [],
-                          textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: frame.headlineMaxLines, backgroundColor: 'transparent' }],
-                          videoConfig: { displayMode: 'fit', videoRect: frame.videoRect, footerPosition: frame.footerPosition },
-                          layers: [],
-                        });
-                      }
-                    }}
-                    className="py-1 px-2.5 bg-amber-600/30 hover:bg-amber-600 text-amber-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-amber-500/40 cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>एडिट</span>
-                  </button>
-
-                  {onOpenStudioWithVideoFrame && (
+              {frame.isTestFrame ? (
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => onOpenStudioWithVideoFrame(frame.id)}
-                      className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition"
-                      title="वीडियो स्टूडियो में टेस्ट करें"
+                      onClick={() => handleApproveAndPublish(frame.id, frame.allowedPlans[0])}
+                      className="flex-1 py-1.5 px-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-black transition flex items-center justify-center gap-1 cursor-pointer shadow-md"
+                      title="इस फ्रेम को स्वीकृत कर पब्लिश करें"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
+                      <span>स्वीकृत व लाइव करें</span>
                     </button>
-                  )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleRejectFrame(frame.id)}
+                      className="py-1.5 px-2 bg-amber-950/60 hover:bg-amber-900 border border-amber-600/40 text-amber-200 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                      title="अस्वीकार करें"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>अस्वीकार</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFrame(frame.id)}
+                      className="p-1.5 bg-red-950/60 hover:bg-red-900 border border-red-600/40 text-red-300 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                      title="हटाएं"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFrame(frame)}
+                      className="py-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-amber-400" />
+                      <span>प्रीव्यू</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onEditFrame && frame.rawDynamicFrame) {
+                          onEditFrame(frame.rawDynamicFrame);
+                        }
+                      }}
+                      className="py-1 px-2.5 bg-amber-600/30 hover:bg-amber-600 text-amber-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-amber-500/40 cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>एडिट</span>
+                    </button>
+
+                    {onOpenStudioWithVideoFrame && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenStudioWithVideoFrame(frame.id)}
+                        className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition"
+                        title="वीडियो स्टूडियो में टेस्ट करें"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveFrameConfig(frame.id, { isActive: !frame.isActive })}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      frame.isActive
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}
+                  >
+                    {frame.isActive ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-slate-500" />}
+                    <span>{frame.isActive ? 'सक्रिय' : 'बंद'}</span>
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewFrame(frame)}
+                      className="py-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-amber-400" />
+                      <span>प्रीव्यू</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onEditFrame && frame.rawDynamicFrame) {
+                          onEditFrame(frame.rawDynamicFrame);
+                        } else if (onEditFrame) {
+                          // Virtual dynamic frame in video mode
+                          onEditFrame({
+                            id: frame.id,
+                            name: frame.nameHi || frame.name,
+                            aspectRatio: frame.aspectRatio,
+                            frameMode: 'video',
+                            frameType: 'video',
+                            canvasWidth: frame.aspectRatio === '4:3' ? 1440 : 1080,
+                            canvasHeight: frame.aspectRatio === '4:5' ? 1350 : frame.aspectRatio === '9:16' ? 1920 : 1080,
+                            designCategory: 'Special Frames',
+                            allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                            publicationStatus: 'published',
+                            createdBy: 'breakingnewswala.com@gmail.com',
+                            createdAt: Date.now(),
+                            updatedAt: Date.now(),
+                            version: frame.version,
+                            headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                            footerConfig: { footerHeightRatio: 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                            photoSlots: [],
+                            textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: frame.headlineMaxLines, backgroundColor: 'transparent' }],
+                            videoConfig: { displayMode: 'fit', videoRect: frame.videoRect, footerPosition: frame.footerPosition },
+                            layers: [],
+                          });
+                        }
+                      }}
+                      className="py-1 px-2.5 bg-amber-600/30 hover:bg-amber-600 text-amber-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-amber-500/40 cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>एडिट</span>
+                    </button>
+
+                    {onOpenStudioWithVideoFrame && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenStudioWithVideoFrame(frame.id)}
+                        className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition"
+                        title="वीडियो स्टूडियो में टेस्ट करें"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -496,8 +730,16 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
       {filteredFrames.length === 0 && (
         <div className="p-8 text-center bg-slate-950/50 rounded-2xl border border-slate-800 text-slate-400 text-xs space-y-2">
           <Film className="w-8 h-8 text-slate-600 mx-auto" />
-          <p className="font-bold text-slate-300">कोई वीडियो फ्रेम नहीं मिला</p>
-          <p className="text-[11px] text-slate-500">D. AI Frame Generator से नया वीडियो फ्रेम तैयार करें।</p>
+          <p className="font-bold text-slate-300">
+            {activeCategoryTab === 'test_frames'
+              ? 'कोई टेस्ट वीडियो फ्रेम लंबित नहीं है'
+              : 'कोई वीडियो फ्रेम नहीं मिला'}
+          </p>
+          <p className="text-[11px] text-slate-500">
+            {activeCategoryTab === 'test_frames'
+              ? 'AI Frame Generator (Video Mode) से नया वीडियो फ्रेम तैयार करने पर वह यहां परीक्षण हेतु प्रदर्शित होगा।'
+              : 'D. AI Frame Generator से नया वीडियो फ्रेम तैयार करें।'}
+          </p>
         </div>
       )}
 
@@ -651,9 +893,26 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
                   </div>
                 </div>
 
-                <div className="p-3 bg-red-950/30 border border-red-500/30 rounded-xl text-xs text-red-200">
-                  ℹ️ यह वीडियो फ्रेम पब्लिश हो चुका है। एडिट करने पर सुरक्षित वर्शनिंग के साथ नया वर्शन तैयार होगा।
-                </div>
+                {previewFrame.isTestFrame ? (
+                  <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl text-xs text-amber-200 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-bold">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>🧪 टेस्ट वीडियो फ्रेम (स्थिति: {previewFrame.approvalStatus === 'APPROVED' ? 'स्वीकृत' : previewFrame.approvalStatus === 'REJECTED' ? 'अस्वीकृत' : 'परीक्षण लंबित'})</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleApproveAndPublish(previewFrame.id, previewFrame.allowedPlans[0])}
+                      className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black rounded-lg text-xs cursor-pointer shadow-md flex items-center gap-1"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>स्वीकृत व लाइव करें</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-red-950/30 border border-red-500/30 rounded-xl text-xs text-red-200">
+                    ℹ️ यह वीडियो फ्रेम पब्लिश हो चुका है। एडिट करने पर सुरक्षित वर्शनिंग के साथ नया वर्शन तैयार होगा।
+                  </div>
+                )}
 
                 <div className="flex items-center gap-3 pt-2">
                   <button

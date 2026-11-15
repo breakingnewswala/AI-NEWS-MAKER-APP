@@ -180,7 +180,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
   const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
   const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
-  const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isAdmin ? '/assets/ai_news_maker_logo.png' : ''));
+  const isAuthoritativeAdmin = isUserSuperAdmin(cleanEmail) || isBnwAdmin || isAinewsAdmin;
+  const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : '');
+
   // Channel Profile State (Directly synced to Graphic Studio footer)
   const [channelProfile, setChannelProfile] = useState<ChannelProfile>(() => {
     try {
@@ -193,29 +195,52 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         const specific = localStorage.getItem(`user_profile_${cleanEmail}`);
         if (specific) {
           const parsed = JSON.parse(specific);
+          const rawLogo = parsed.channelLogoPngUrl || parsed.channelLogoUrl || '';
+          const safeLogo = (!isAinewsAdmin && rawLogo.includes('ai_news_maker_logo.png')) ? '' : (rawLogo || defaultAdminLogo);
           return {
             ...DEFAULT_PROFILE,
-            channelLogoUrl: parsed.channelLogoUrl || defaultAdminLogo,
-            channelLogoPngUrl: parsed.channelLogoPngUrl || parsed.channelLogoUrl || defaultAdminLogo,
+            ...parsed,
+            channelLogoUrl: safeLogo,
+            channelLogoPngUrl: safeLogo,
             channelNameHi: parsed.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : '')),
             channelNameEn: parsed.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
-            ...parsed,
-            socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+            socialIcons: parsed.socialIcons ? {
+              youtube: parsed.socialIcons.youtube !== undefined ? Boolean(parsed.socialIcons.youtube) : true,
+              facebook: parsed.socialIcons.facebook !== undefined ? Boolean(parsed.socialIcons.facebook) : true,
+              instagram: parsed.socialIcons.instagram !== undefined ? Boolean(parsed.socialIcons.instagram) : true,
+              twitter: Boolean(parsed.socialIcons.twitter ?? parsed.socialIcons.x ?? true),
+              x: Boolean(parsed.socialIcons.x ?? parsed.socialIcons.twitter ?? true),
+              linkedin: Boolean(parsed.socialIcons.linkedin),
+            } : DEFAULT_SOCIAL_ICONS,
           };
         }
       }
       const saved = localStorage.getItem('user_channel_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return {
-          ...DEFAULT_PROFILE,
-          channelLogoUrl: parsed.channelLogoUrl || defaultAdminLogo,
-          channelLogoPngUrl: parsed.channelLogoPngUrl || parsed.channelLogoUrl || defaultAdminLogo,
-          channelNameHi: parsed.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : '')),
-          channelNameEn: parsed.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
-          ...parsed,
-          socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
-        };
+        const parsedEmail = (parsed.email || '').toLowerCase().trim();
+        // Strict user isolation: never hydrate another user's or admin's channel profile
+        const isMatchingUser = !cleanEmail || !parsedEmail || parsedEmail === cleanEmail;
+        if (isMatchingUser) {
+          const rawLogo = parsed.channelLogoPngUrl || parsed.channelLogoUrl || '';
+          const safeLogo = (!isAinewsAdmin && rawLogo.includes('ai_news_maker_logo.png')) ? '' : (rawLogo || defaultAdminLogo);
+          return {
+            ...DEFAULT_PROFILE,
+            ...parsed,
+            channelLogoUrl: safeLogo,
+            channelLogoPngUrl: safeLogo,
+            channelNameHi: parsed.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : '')),
+            channelNameEn: parsed.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
+            socialIcons: parsed.socialIcons ? {
+              youtube: parsed.socialIcons.youtube !== undefined ? Boolean(parsed.socialIcons.youtube) : true,
+              facebook: parsed.socialIcons.facebook !== undefined ? Boolean(parsed.socialIcons.facebook) : true,
+              instagram: parsed.socialIcons.instagram !== undefined ? Boolean(parsed.socialIcons.instagram) : true,
+              twitter: Boolean(parsed.socialIcons.twitter ?? parsed.socialIcons.x ?? true),
+              x: Boolean(parsed.socialIcons.x ?? parsed.socialIcons.twitter ?? true),
+              linkedin: Boolean(parsed.socialIcons.linkedin),
+            } : DEFAULT_SOCIAL_ICONS,
+          };
+        }
       }
     } catch {}
     const cleanEmail = (currentUser?.email || effectiveUser?.email || '').toLowerCase().trim();
@@ -260,7 +285,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           const cloudP = data.profile;
           if (cloudP.district || cloudP.location) {
             const rawDist = (cloudP.district || cloudP.location || '').trim();
-            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
+            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDist;
             setReporterDistrict(cleanDist);
           }
           if (cloudP.state) {
@@ -271,7 +296,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             if (inf) setReporterState(inf);
           }
           setChannelProfile((prev) => {
-            const resolvedLogo = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || defaultAdminLogo;
+            const rawCandidate = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || '';
+            const resolvedLogo = (!isAinewsAdmin && rawCandidate.includes('ai_news_maker_logo.png')) ? '' : (rawCandidate || defaultAdminLogo);
             const merged = {
               ...prev,
               fullName: cloudP.fullName || cloudP.name || prev.fullName,
@@ -288,21 +314,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
               district: (() => {
                 const rawDist = (cloudP.district || cloudP.location || prev.district || '').trim();
-                return (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
+                return (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDist;
               })(),
               location: (() => {
                 const rawLoc = (cloudP.location || cloudP.district || prev.location || '').trim();
-                return (rawLoc === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawLoc === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawLoc || 'भोपाल');
+                return (rawLoc === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawLoc === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawLoc;
               })(),
               state: cloudP.state || prev.state || '',
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
               socialIcons: (cloudP.socialIcons && Object.keys(cloudP.socialIcons).length > 0)
                 ? {
-                    ...cloudP.socialIcons,
-                    twitter: Boolean(cloudP.socialIcons.twitter ?? cloudP.socialIcons.x),
-                    x: Boolean(cloudP.socialIcons.x ?? cloudP.socialIcons.twitter),
-                    linkedin: Boolean(cloudP.socialIcons.linkedin),
+                    youtube: cloudP.socialIcons.youtube !== undefined ? Boolean(cloudP.socialIcons.youtube) : (prev.socialIcons?.youtube ?? true),
+                    facebook: cloudP.socialIcons.facebook !== undefined ? Boolean(cloudP.socialIcons.facebook) : (prev.socialIcons?.facebook ?? true),
+                    instagram: cloudP.socialIcons.instagram !== undefined ? Boolean(cloudP.socialIcons.instagram) : (prev.socialIcons?.instagram ?? true),
+                    twitter: Boolean(cloudP.socialIcons.twitter ?? cloudP.socialIcons.x ?? prev.socialIcons?.twitter ?? true),
+                    x: Boolean(cloudP.socialIcons.x ?? cloudP.socialIcons.twitter ?? prev.socialIcons?.x ?? true),
+                    linkedin: Boolean(cloudP.socialIcons.linkedin ?? prev.socialIcons?.linkedin ?? false),
                   }
                 : (prev.socialIcons || DEFAULT_SOCIAL_ICONS),
               socialLinks: { ...DEFAULT_SOCIAL_LINKS, ...(cloudP.socialLinks || prev.socialLinks || {}) },
@@ -440,10 +468,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
-          'x-admin-key': 'master-admin',
-          'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : (isAdmin ? 'admin' : 'reporter'),
-          'x-admin-email': cleanEmail,
-          'x-user-email': cleanEmail,
+          ...(isAuthoritativeAdmin ? {
+            'x-admin-key': 'master-admin',
+            'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : 'admin',
+            'x-admin-email': cleanEmail,
+          } : {
+            'x-user-role': 'reporter',
+            'x-user-email': cleanEmail,
+          }),
         },
         body: JSON.stringify({
           ...updatedProfileData,
@@ -1245,13 +1277,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   const [reporterDistrict, setReporterDistrict] = useState<string>(() => {
     const raw = (currentUser?.district || channelProfile.district || channelProfile.location || '').trim();
-    return (raw && raw !== 'सेंट्रल डेस्क / भोपाल') ? raw : 'भोपाल';
+    return (raw && raw !== 'सेंट्रल डेस्क / भोपाल' && raw !== 'हेडक्वार्टर सेंट्रल डेस्क') ? raw : (isBnwAdmin ? 'भोपाल' : raw);
   });
   const [reporterState, setReporterState] = useState<string>(() => {
     const rawState = (channelProfile.state || currentUser?.state || '').trim();
     if (rawState) return rawState;
     const rawDist = (currentUser?.district || channelProfile.district || channelProfile.location || '').trim();
-    return inferStateFromDistrict(rawDist) || 'मध्य प्रदेश';
+    return inferStateFromDistrict(rawDist) || (isBnwAdmin ? 'मध्य प्रदेश' : '');
   });
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState<boolean>(false);
   const [isSavingBranding, setIsSavingBranding] = useState<boolean>(false);
@@ -1263,10 +1295,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          const parsedEmail = (parsed.email || '').toLowerCase().trim();
+          if (cleanEmail && parsedEmail && parsedEmail !== cleanEmail) return;
           const normalized: ChannelProfile = {
             ...DEFAULT_PROFILE,
             ...parsed,
-            socialIcons: { ...DEFAULT_SOCIAL_ICONS, ...(parsed.socialIcons || {}) },
+            socialIcons: parsed.socialIcons ? {
+              youtube: parsed.socialIcons.youtube !== undefined ? Boolean(parsed.socialIcons.youtube) : true,
+              facebook: parsed.socialIcons.facebook !== undefined ? Boolean(parsed.socialIcons.facebook) : true,
+              instagram: parsed.socialIcons.instagram !== undefined ? Boolean(parsed.socialIcons.instagram) : true,
+              twitter: Boolean(parsed.socialIcons.twitter ?? parsed.socialIcons.x ?? true),
+              x: Boolean(parsed.socialIcons.x ?? parsed.socialIcons.twitter ?? true),
+              linkedin: Boolean(parsed.socialIcons.linkedin),
+            } : DEFAULT_SOCIAL_ICONS,
             socialLinks: { ...DEFAULT_SOCIAL_LINKS, ...(parsed.socialLinks || {}) },
           };
           setChannelProfile(normalized);
@@ -1275,7 +1316,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           if (parsed.state) setReporterState(parsed.state);
           if (parsed.district || parsed.location) {
             const rawDist = (parsed.district || parsed.location || '').trim();
-            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल') ? 'भोपाल' : (rawDist || 'भोपाल');
+            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल') ? 'भोपाल' : rawDist;
             setReporterDistrict(cleanDist);
             if (!parsed.state) {
               const inf = inferStateFromDistrict(cleanDist);
@@ -1803,27 +1844,32 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
       const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
       const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
-      const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isAdmin ? '/assets/ai_news_maker_logo.png' : ''));
+      const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : '');
+
+      const userPngCandidate = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '';
+      const safeUserLogo = (!isAinewsAdmin && userPngCandidate.includes('ai_news_maker_logo.png')) ? '' : userPngCandidate;
 
       const primaryPngLogo = isBnwAdmin
         ? '/assets/breaking_news_wala_logo.png'
         : isAinewsAdmin
           ? '/assets/ai_news_maker_logo.png'
-          : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo);
+          : (safeUserLogo || defaultAdminLogo || '');
       const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
       const rawDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
-      const finalDistrict = (rawDistrict === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDistrict === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDistrict || 'भोपाल');
+      const finalDistrict = (rawDistrict === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDistrict === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDistrict;
       const finalWhatsappDisplay = (channelProfile.whatsappDisplayNumber !== undefined && channelProfile.whatsappDisplayNumber.trim())
         ? channelProfile.whatsappDisplayNumber.trim()
         : finalPhone;
 
-      const syncedIcons = {
-        ...(channelProfile.socialIcons || DEFAULT_SOCIAL_ICONS),
-        twitter: Boolean(channelProfile.socialIcons?.twitter ?? channelProfile.socialIcons?.x),
-        x: Boolean(channelProfile.socialIcons?.x ?? channelProfile.socialIcons?.twitter),
-        linkedin: Boolean(channelProfile.socialIcons?.linkedin),
-      };
+      const syncedIcons = channelProfile.socialIcons ? {
+        youtube: channelProfile.socialIcons.youtube !== undefined ? Boolean(channelProfile.socialIcons.youtube) : true,
+        facebook: channelProfile.socialIcons.facebook !== undefined ? Boolean(channelProfile.socialIcons.facebook) : true,
+        instagram: channelProfile.socialIcons.instagram !== undefined ? Boolean(channelProfile.socialIcons.instagram) : true,
+        twitter: Boolean(channelProfile.socialIcons.twitter ?? channelProfile.socialIcons.x ?? true),
+        x: Boolean(channelProfile.socialIcons.x ?? channelProfile.socialIcons.twitter ?? true),
+        linkedin: Boolean(channelProfile.socialIcons.linkedin),
+      } : DEFAULT_SOCIAL_ICONS;
 
       const updatedProfile = {
         ...channelProfile,
@@ -1935,7 +1981,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           headers: {
             'Content-Type': 'application/json',
             ...getAuthHeaders(),
-            ...(isAdmin || isUserSuperAdmin(cleanEmail) ? {
+            ...(isAuthoritativeAdmin ? {
               'x-admin-key': 'master-admin',
               'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : 'admin',
               'x-admin-email': cleanEmail,
@@ -1969,7 +2015,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           }
           if (savedProf.district || savedProf.location) {
             const rawDist = (savedProf.district || savedProf.location || '').trim();
-            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (rawDist || 'भोपाल');
+            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDist;
             setReporterDistrict(cleanDist);
           }
         }
@@ -2486,14 +2532,25 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
                       <div className="flex items-center gap-3">
                         <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-700 p-1 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                          <img
-                            src={channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo || '/assets/ai_news_maker_logo.png'}
-                            alt="PNG Logo"
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = defaultAdminLogo || '/assets/ai_news_maker_logo.png';
-                            }}
-                          />
+                          {(() => {
+                            const candidate = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '';
+                            const safeLogo = (!isAinewsAdmin && candidate.includes('ai_news_maker_logo.png')) ? '' : (candidate || defaultAdminLogo);
+                            return safeLogo ? (
+                              <img
+                                src={safeLogo}
+                                alt="PNG Logo"
+                                className="w-full h-full object-contain"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center text-slate-500 text-[8px] text-center p-0.5">
+                                <Upload className="w-4 h-4 mb-0.5 text-slate-600" />
+                                <span>लोगो नहीं है</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div className="flex-1 min-w-0 space-y-1.5">
                           {isLogoLocked ? (
@@ -2714,15 +2771,23 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             {logoReqType === 'gif' ? '1. वर्तमान चैनल GIF:' : '1. वर्तमान चैनल लोगो:'}
                           </span>
                           <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
-                            <img
-                              src={
-                                logoReqType === 'gif'
-                                  ? (channelProfile.channelLogoGifUrl || '/assets/ai_news_maker_logo.png')
-                                  : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || defaultAdminLogo)
-                              }
-                              alt="Current Asset"
-                              className="max-h-20 w-auto object-contain"
-                            />
+                            {(() => {
+                              const candidate = logoReqType === 'gif'
+                                ? (channelProfile.channelLogoGifUrl || '')
+                                : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '');
+                              const safeLogo = (!isAinewsAdmin && candidate.includes('ai_news_maker_logo.png')) ? '' : (candidate || defaultAdminLogo);
+                              return safeLogo ? (
+                                <img
+                                  src={safeLogo}
+                                  alt="Current Asset"
+                                  className="max-h-20 w-auto object-contain"
+                                />
+                              ) : (
+                                <div className="text-center text-slate-500 text-xs">
+                                  <span>कोई लोगो सेट नहीं है</span>
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="text-[11px] text-slate-300 font-bold truncate">
                             {channelProfile.channelNameHi || 'वर्तमान चैनल'}
@@ -3317,9 +3382,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     { id: 'twitter', label: 'X (Twitter)' },
                     { id: 'linkedin', label: 'LinkedIn' },
                   ].map((soc) => {
+                    const currentIcons = channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS;
                     const isChecked = (soc.id === 'twitter' || soc.id === 'x')
-                      ? Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)['twitter'] || ((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)['x'])
-                      : Boolean(((channelProfile?.socialIcons || DEFAULT_SOCIAL_ICONS) as any)[soc.id]);
+                      ? Boolean((currentIcons as any)['twitter'] ?? (currentIcons as any)['x'] ?? true)
+                      : ((currentIcons as any)[soc.id] !== undefined ? Boolean((currentIcons as any)[soc.id]) : (soc.id === 'linkedin' ? false : true));
                     return (
                       <button
                         key={soc.id}
@@ -3327,9 +3393,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         onClick={() => {
                           setChannelProfile((p) => {
                             const base = p || DEFAULT_PROFILE;
+                            const cur = base.socialIcons || DEFAULT_SOCIAL_ICONS;
                             const nextVal = !isChecked;
                             const newIcons = {
-                              ...(base?.socialIcons || DEFAULT_SOCIAL_ICONS),
+                              ...cur,
                               [soc.id]: nextVal,
                             };
                             if (soc.id === 'twitter' || soc.id === 'x') {

@@ -320,6 +320,26 @@ function getSavedChannelProfile(): ChannelProfile | null {
         }
       }
 
+      function sanitizeProfile(prof: any, email: string): ChannelProfile {
+        const isMaster = email === 'breakingnewswala.com@gmail.com' || email === 'admin.ainewsmaker@gmail.com';
+        let logo = prof.channelLogoUrl || '';
+        let pngLogo = prof.channelLogoPngUrl || '';
+        if (!isMaster) {
+          if (typeof logo === 'string' && (logo.includes('ai_news_maker_logo') || logo.includes('assets/ai_news_maker_logo'))) logo = '';
+          if (typeof pngLogo === 'string' && (pngLogo.includes('ai_news_maker_logo') || pngLogo.includes('assets/ai_news_maker_logo'))) pngLogo = '';
+        }
+        let channelNameHi = prof.channelNameHi || '';
+        if (email === 'khabridasnews@gmail.com' && (!channelNameHi || channelNameHi.toLowerCase().includes('khabri') || channelNameHi === 'Khabri Das News')) {
+          channelNameHi = 'खबरीदास न्यूज़';
+        }
+        return {
+          ...prof,
+          channelNameHi,
+          channelLogoUrl: logo,
+          channelLogoPngUrl: pngLogo,
+        };
+      }
+
       // 1. Signed-in User Profile by UID / Email (Permanent and Per-User Data Isolation)
       const userStr =
         localStorage.getItem('reporter_auth_session') ||
@@ -339,7 +359,7 @@ function getSavedChannelProfile(): ChannelProfile | null {
           const parsed = JSON.parse(specific);
           if (parsed) {
             const ph = (parsed.whatsappNumber || parsed.mobileNumber || '').trim();
-            return {
+            const prof = {
               ...parsed,
               whatsappNumber: ph,
               mobileNumber: ph || parsed.mobileNumber,
@@ -353,30 +373,34 @@ function getSavedChannelProfile(): ChannelProfile | null {
                 linkedin: Boolean(parsed.socialIcons?.linkedin),
               },
             };
+            return sanitizeProfile(prof, userEmail);
           }
         }
       }
 
-      // 2. Global Channel Profile
+      // 2. Global Channel Profile (Strictly prevent cross-account contamination)
       const saved = localStorage.getItem('user_channel_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed) {
-          const ph = (parsed.whatsappNumber || parsed.mobileNumber || '').trim();
-          return {
-            ...parsed,
-            whatsappNumber: ph,
-            mobileNumber: ph || parsed.mobileNumber,
-            showMobileNumber: parsed.showMobileNumber !== false,
-            showWebsite: parsed.showWebsite !== false,
-            socialIcons: {
-              youtube: parsed.socialIcons?.youtube ?? true,
-              facebook: parsed.socialIcons?.facebook ?? true,
-              instagram: parsed.socialIcons?.instagram ?? true,
-              twitter: Boolean(parsed.socialIcons?.twitter ?? parsed.socialIcons?.x),
-              linkedin: Boolean(parsed.socialIcons?.linkedin),
-            },
-          };
+          if (!userEmail || !parsed.email || parsed.email.toLowerCase().trim() === userEmail) {
+            const ph = (parsed.whatsappNumber || parsed.mobileNumber || '').trim();
+            const prof = {
+              ...parsed,
+              whatsappNumber: ph,
+              mobileNumber: ph || parsed.mobileNumber,
+              showMobileNumber: parsed.showMobileNumber !== false,
+              showWebsite: parsed.showWebsite !== false,
+              socialIcons: {
+                youtube: parsed.socialIcons?.youtube ?? true,
+                facebook: parsed.socialIcons?.facebook ?? true,
+                instagram: parsed.socialIcons?.instagram ?? true,
+                twitter: Boolean(parsed.socialIcons?.twitter ?? parsed.socialIcons?.x),
+                linkedin: Boolean(parsed.socialIcons?.linkedin),
+              },
+            };
+            return sanitizeProfile(prof, userEmail);
+          }
         }
       }
 
@@ -385,7 +409,7 @@ function getSavedChannelProfile(): ChannelProfile | null {
         const u = JSON.parse(userStr);
         if (u) {
           const ph = (u.whatsappNumber || u.mobileNumber || u.mobile || '').trim();
-          return {
+          const prof = {
             channelNameHi: u.channelNameHi || u.channelName || '',
             channelNameEn: u.channelNameEn || '',
             channelLogoUrl: u.channelLogoUrl || u.logoUrl || '',
@@ -398,7 +422,27 @@ function getSavedChannelProfile(): ChannelProfile | null {
             showWebsite: u.showWebsite !== false,
             socialIcons: { youtube: true, facebook: true, instagram: true, twitter: false, linkedin: false },
           };
+          return sanitizeProfile(prof, userEmail);
         }
+      }
+
+      if (userEmail && userEmail !== 'breakingnewswala.com@gmail.com' && userEmail !== 'admin.ainewsmaker@gmail.com') {
+        return {
+          channelNameHi: userEmail === 'khabridasnews@gmail.com' ? 'खबरीदास न्यूज़' : '',
+          channelNameEn: '',
+          channelLogoUrl: '',
+          channelLogoPngUrl: '',
+          channelLogoType: 'png',
+          username: userEmail.split('@')[0],
+          mobileNumber: '',
+          whatsappNumber: '',
+          websiteUrl: '',
+          showMobileNumber: true,
+          showWebsite: true,
+          district: '',
+          state: '',
+          socialIcons: { youtube: true, facebook: true, instagram: true, twitter: false, linkedin: false },
+        };
       }
     }
     return DEFAULT_CHANNEL_PROFILE;
@@ -488,6 +532,24 @@ export default function App() {
         path.startsWith('/generator') ||
         fullUrl.includes('tab=studio')
       ) {
+        if (!isAdmin) {
+          try {
+            const sess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('reporter_current_user');
+            if (sess) {
+              const u = JSON.parse(sess);
+              const prof = getSavedChannelProfile();
+              const hasName = Boolean(prof?.channelNameHi?.trim() || u?.channelNameHi?.trim());
+              const hasUser = Boolean(prof?.username?.trim() || u?.username?.trim());
+              const hasSt = Boolean((prof as any)?.state?.trim() || u?.state?.trim());
+              const hasDist = Boolean(prof?.district?.trim() || u?.district?.trim());
+              const logo = prof?.channelLogoPngUrl || prof?.channelLogoUrl || u?.channelLogoUrl || '';
+              const hasLogo = Boolean(logo && !logo.includes('ai_news_maker_logo'));
+              if (!hasName || !hasUser || !hasSt || !hasDist || !hasLogo) {
+                return 'profile';
+              }
+            }
+          } catch {}
+        }
         return 'studio';
       }
       if (hash === 'newsroom' || hash === 'epaper' || hash === 'drafts' || path === '/newsroom' || path === '/newsroom/' || path.startsWith('/newsroom') || fullUrl.includes('tab=newsroom')) {
@@ -500,10 +562,38 @@ export default function App() {
     return 'home';
   });
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const isStudio = currentTab === 'studio' || currentTab === 'generator';
 
   // Navigate to tab cleanly using HTML5 history without visible hashtags or ?fresh= accumulation
   const navigateToTab = useCallback((tab: AppTab) => {
+    // 0. Profile Completion Gate: Photo & Video Studio require complete channel profile for non-admin reporters
+    if (tab === 'studio' || tab === 'generator') {
+      try {
+        const sess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('reporter_current_user');
+        if (sess) {
+          const u = JSON.parse(sess);
+          const email = (u?.email || '').toLowerCase().trim();
+          const isMaster = email === 'breakingnewswala.com@gmail.com' || email === 'admin.ainewsmaker@gmail.com' || u?.role === 'superadmin';
+          if (!isMaster) {
+            const prof = getSavedChannelProfile();
+            const hasChannelName = Boolean(prof?.channelNameHi?.trim() || u?.channelNameHi?.trim());
+            const hasUsername = Boolean(prof?.username?.trim() || u?.username?.trim());
+            const hasState = Boolean((prof as any)?.state?.trim() || (prof as any)?.reporterState?.trim() || u?.state?.trim());
+            const hasDistrict = Boolean(prof?.district?.trim() || (prof as any)?.reporterDistrict?.trim() || u?.district?.trim() || u?.city?.trim());
+            const rawLogo = prof?.channelLogoPngUrl || prof?.channelLogoUrl || u?.channelLogoUrl || '';
+            const hasValidLogo = Boolean(rawLogo && !rawLogo.includes('ai_news_maker_logo') && !rawLogo.includes('assets/ai_news_maker_logo'));
+
+            if (!hasChannelName || !hasUsername || !hasState || !hasDistrict || !hasValidLogo) {
+              setToastMessage('⚠️ कृपया फोटो/वीडियो स्टूडियो का उपयोग करने से पहले अपनी प्रोफ़ाइल (चैनल नाम, राज्य, ज़िला, यूज़रनेम एवं लोगो) पूरी करें!');
+              setCurrentTab('profile');
+              return;
+            }
+          }
+        }
+      } catch {}
+    }
+
     const isCurrentlyBlocked = typeof window !== 'undefined' && (() => {
       try {
         const sess = localStorage.getItem('reporter_auth_session');
@@ -782,7 +872,6 @@ export default function App() {
   const [feedStatus, setFeedStatus] = useState<FeedStatus>('loading');
 
   const [isSyncingNews, setIsSyncingNews] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Sync news posts with server authoritative database (/api/news-posts)
   const fetchLiveNews = async () => {
@@ -1404,7 +1493,7 @@ export default function App() {
     const savedProfile = getSavedChannelProfile();
     let initial: NewsCardData = {
       ...INITIAL_PRESETS[0],
-      headlineFontSize: 20,
+      headlineFontSize: 48,
       showDate: true,
       dateStr: getFormattedHindiDate(),
     };
@@ -1424,7 +1513,7 @@ export default function App() {
         initial = {
           ...initial,
           ...parsed,
-          headlineFontSize: parsed.headlineFontSize || 20,
+          headlineFontSize: parsed.headlineFontSize || 48,
           showDate: parsed.showDate !== undefined ? parsed.showDate : false,
           dateStr: parsed.dateStr || getFormattedHindiDate(),
         };
@@ -2231,7 +2320,7 @@ export default function App() {
       formattedHeadline: CANONICAL_DEFAULT_HEADLINE,
       highlightWords: [],
       headlineAlign: 'center',
-      headlineFontSize: 20,
+      headlineFontSize: 48,
       location: formatCleanLocationText(savedProfile?.district || savedProfile?.city || savedProfile?.location || 'भोपाल'),
       summary: '',
       category: 'ताज़ा खबर',
@@ -3299,15 +3388,6 @@ export default function App() {
     setStudioInitialItem(vid);
     setStudioInitialVideo(vid.videoUrl || null);
     setStudioInitialHeadline(vid.title);
-    setCard((prev) => ({
-      ...prev,
-      headline: vid.title,
-      location: 'लाइव वीडियो डेस्क',
-      images: {
-        ...prev.images,
-        main: vid.thumbnailUrl || prev.images.main,
-      },
-    }));
     setBrandedLoader({
       isOpen: true,
       mode: 'video_render',

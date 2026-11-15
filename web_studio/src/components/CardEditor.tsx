@@ -378,6 +378,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const [editingTestFrame, setEditingTestFrame] = React.useState<any>(null);
 
   const [dynamicFramesRaw, setDynamicFramesRaw] = React.useState<DynamicFrameTemplate[]>(() => getLocalDynamicFrames());
+  const currentDynamicFrame = React.useMemo(() => {
+    return card.customDynamicFrame ||
+      getDynamicFrameById(card.frameDesign || '') ||
+      dynamicFramesRaw.find((d) => d.id === card.frameDesign || d.name === card.frameDesign) ||
+      null;
+  }, [card.customDynamicFrame, card.frameDesign, dynamicFramesRaw]);
   const [currentFrameOptions, setCurrentFrameOptions] = React.useState<FrameOption[]>(() => {
     return buildUnifiedFrameOptions(getLocalDynamicFrames(), isEffectiveAdmin(currentUser?.email || currentUser?.username), isMaster);
   });
@@ -2703,7 +2709,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   type="button"
                   onClick={() =>
                     onChange({
-                      headlineFontSize: Math.max(14, (card.headlineFontSize || 20) - 1),
+                      headlineFontSize: Math.max(14, (card.headlineFontSize || 48) - 1),
                     })
                   }
                   className="w-5 h-5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center justify-center cursor-pointer"
@@ -2712,13 +2718,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   -
                 </button>
                 <span className="text-yellow-400 font-mono text-[11px] font-bold px-1.5 py-0.5 bg-neutral-900 rounded border border-neutral-800">
-                  {card.headlineFontSize || 20}px
+                  {card.headlineFontSize || 48}px
                 </span>
                 <button
                   type="button"
                   onClick={() =>
                     onChange({
-                      headlineFontSize: Math.min(48, (card.headlineFontSize || 20) + 1),
+                      headlineFontSize: Math.min(120, (card.headlineFontSize || 48) + 1),
                     })
                   }
                   className="w-5 h-5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center justify-center cursor-pointer"
@@ -2732,17 +2738,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <input
                 type="range"
                 min="14"
-                max="48"
+                max="120"
                 step="1"
-                value={card.headlineFontSize || 20}
+                value={card.headlineFontSize || 48}
                 onChange={(e) => onChange({ headlineFontSize: Number(e.target.value) })}
                 className="flex-1 accent-yellow-400 cursor-pointer"
               />
             </div>
             <div className="flex justify-between text-[9px] text-neutral-500 font-mono">
               <span>छोटा (14px)</span>
-              <span className="text-amber-400 font-bold">डिफ़ॉल्ट (20px)</span>
-              <span>बड़ा (48px)</span>
+              <span className="text-amber-400 font-bold">डिफ़ॉल्ट (48px)</span>
+              <span>बड़ा (120px)</span>
             </div>
           </div>
 
@@ -2794,11 +2800,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
               <button
                 type="button"
-                onClick={() => onChange({ headlineFontSize: 20 })}
+                onClick={() => onChange({ headlineFontSize: 48 })}
                 className="px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-[10px] font-bold rounded-lg border border-neutral-800 cursor-pointer transition active:scale-95"
-                title="डिफ़ॉल्ट 20px पर रीसेट करें"
+                title="डिफ़ॉल्ट 48px पर रीसेट करें"
               >
-                20px रीसेट
+                48px रीसेट
               </button>
             </div>
 

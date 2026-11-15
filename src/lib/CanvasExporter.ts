@@ -376,6 +376,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
           try { await document.fonts.load(`${w} 48px "${fam}"`); } catch {}
           try { await document.fonts.load(`${w} 64px "${fam}"`); } catch {}
           try { await document.fonts.load(`${w} 72px "${fam}"`); } catch {}
+          try { await document.fonts.load(`${w} 96px "${fam}"`); } catch {}
+          try { await document.fonts.load(`${w} 120px "${fam}"`); } catch {}
         }
       }
     } catch (e) {

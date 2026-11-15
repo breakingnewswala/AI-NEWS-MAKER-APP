@@ -1568,12 +1568,14 @@ export function registerOrUpdateUser(userData: {
       }
     }).catch(() => {});
 
-    // Also register in admin DB endpoint
-    fetch(getApiUrl('/api/admin/register-user'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedRecord),
-    }).catch(() => {});
+    // Only authorized admins call admin registration endpoint; normal users sync via /api/user-profile
+    if (isSuper || cleanEmail === 'admin.ainewsmaker@gmail.com') {
+      fetch(getApiUrl('/api/admin/register-user'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedRecord),
+      }).catch(() => {});
+    }
 
     // Sync profile document as well
     fetch(getApiUrl('/api/user-profile'), {

@@ -17737,8 +17737,8 @@ function reconcileAllUsers() {
         channelName: p3?.channelNameHi || "\u0905\u0928\u092E\u094B\u0932 \u0938\u0902\u0926\u0947\u0936",
         channelNameHi: p3?.channelNameHi || "\u0905\u0928\u092E\u094B\u0932 \u0938\u0902\u0926\u0947\u0936",
         channelNameEn: p3?.channelNameEn || "Anmol Sandesh",
-        channelLogoUrl: p3?.channelLogoUrl || "/assets/ai_news_maker_logo.png",
-        channelLogoPngUrl: p3?.channelLogoPngUrl || "/assets/ai_news_maker_logo.png",
+        channelLogoUrl: p3?.channelLogoUrl || "",
+        channelLogoPngUrl: p3?.channelLogoPngUrl || "",
         channelLogoGifUrl: "",
         channelLogoType: "png",
         mobile: p3?.mobileNumber || "9425000998",
@@ -21521,8 +21521,16 @@ app.post("/api/whatsapp/link/unlink", requireAuthMiddleware, async (req, res) =>
 });
 app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
   const username = (req.query.username || "").toString().trim().toLowerCase();
-  const idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
+  let idOrEmail = (req.query.id || req.query.userId || req.query.uid || req.query.email || "").toString().trim().toLowerCase();
   const rawMobile = (req.query.mobile || req.query.phone || "").toString().replace(/[^0-9]/g, "").slice(-10);
+  if (!idOrEmail && !username && !rawMobile) {
+    const authHeaderUser = req.user || getAuthenticatedUser(req);
+    if (authHeaderUser?.email) {
+      idOrEmail = authHeaderUser.email.toLowerCase().trim();
+    } else if (authHeaderUser?.userId) {
+      idOrEmail = authHeaderUser.userId.toLowerCase().trim();
+    }
+  }
   if (idOrEmail && isUserTombstoned(idOrEmail) || username && isUserTombstoned(username)) {
     return res.json({ success: true, profile: null, isDeleted: true });
   }
@@ -21602,12 +21610,32 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
     const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
-    const reqKey = (req.headers["x-admin-key"] || "").toString();
-    const reqRole = (req.headers["x-user-role"] || "").toString().toLowerCase();
-    const reqEmail = (req.headers["x-user-email"] || req.headers["x-admin-email"] || "").toString().toLowerCase().trim();
+    const authUser = await resolveAuthenticatedUser(req, res);
     const isMasterAdminEmail = profile.email && profile.email.toLowerCase() === "breakingnewswala.com@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69";
     const isSubAdminEmail = profile.email && profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "user-1791697518060";
-    const isAdmin = isAuthorizedAdmin(req) || reqKey === "master-admin" || (reqRole === "superadmin" || reqRole === "admin") || (reqEmail.includes("breakingnewswala") || reqEmail.includes("admin"));
+    const isAdmin = isAuthorizedAdmin(req) || authUser && (authUser.role === "superadmin" || authUser.role === "admin") || isAuthorizedMasterAdmin(req);
+    if (!isAdmin && !authUser) {
+      return res.status(401).json({ success: false, error: "\u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u0932\u0949\u0917\u093F\u0928 \u0915\u0930\u0947\u0902\u0964" });
+    }
+    if (!isAdmin && authUser) {
+      const authEmail = (authUser.email || "").toLowerCase().trim();
+      const authUid = (authUser.userId || "").toLowerCase().trim();
+      const targetEmail = (profile.email || "").toLowerCase().trim();
+      const isSelf = authEmail && cleanId === authEmail || authUid && cleanId === authUid || authEmail && targetEmail && authEmail === targetEmail;
+      if (!isSelf) {
+        return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0940 \u0938\u094D\u0935\u092F\u0902 \u0915\u0940 \u092A\u094D\u0930\u094B\u092B\u093C\u093E\u0907\u0932 \u0915\u094B \u0905\u092A\u0921\u0947\u091F \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      }
+      delete profile.role;
+      delete profile.tier;
+      delete profile.planName;
+      delete profile.isBlocked;
+      delete profile.isLocked;
+      delete profile.isProfileLocked;
+      delete profile.logoApprovalStatus;
+      delete profile.approvedLogoRequestId;
+      delete profile.logoApprovedAt;
+      delete profile.logoApprovedBy;
+    }
     if ((cleanId === "admin" || isMasterAdminEmail || isSubAdminEmail) && !isAdmin) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
@@ -24399,7 +24427,8 @@ app.post("/api/remove-gif-logo", enforceUserAccessMiddleware, (req, res) => {
     if (targetKey && allProfiles[targetKey]) {
       delete allProfiles[targetKey].channelLogoGifUrl;
       allProfiles[targetKey].channelLogoType = "png";
-      allProfiles[targetKey].channelLogoUrl = allProfiles[targetKey].channelLogoPngUrl || (allProfiles[targetKey].channelLogoUrl?.endsWith(".gif") ? "" : allProfiles[targetKey].channelLogoUrl) || "/assets/ai_news_maker_logo.png";
+      const isSubAdmin = targetKey === "admin.ainewsmaker@gmail.com" || targetKey === "user-1791697518060";
+      allProfiles[targetKey].channelLogoUrl = allProfiles[targetKey].channelLogoPngUrl || (allProfiles[targetKey].channelLogoUrl?.endsWith(".gif") ? "" : allProfiles[targetKey].channelLogoUrl) || (isSubAdmin ? "/assets/ai_news_maker_logo.png" : "");
       allProfiles[targetKey].updatedAt = Date.now();
       saveProfilesDatabase(allProfiles);
       try {
@@ -29802,7 +29831,7 @@ ${customPrompt}
    - \u0938\u092E\u094D\u092E\u093E\u0928\u0938\u0942\u091A\u0915 \u092F\u093E \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0935\u093E\u0932\u0947 \u0936\u092C\u094D\u0926 ('\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u0938\u0941\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u091C\u0940', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u092A\u0942\u091C\u094D\u092F') \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0939\u091F\u093E \u0926\u0947\u0902, \u0915\u093F\u0902\u0924\u0941 \u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0928\u093E\u092E \u0914\u0930 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092A\u0926 (\u091C\u0948\u0938\u0947 \u092E\u0941\u0916\u094D\u092F\u092E\u0902\u0924\u094D\u0930\u0940, \u092A\u094D\u0930\u0927\u093E\u0928\u092E\u0902\u0924\u094D\u0930\u0940, \u0915\u0932\u0947\u0915\u094D\u091F\u0930, \u092A\u0941\u0932\u093F\u0938 \u0905\u0927\u0940\u0915\u094D\u0937\u0915, \u0928\u094D\u092F\u093E\u092F\u093E\u0927\u0940\u0936) \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0930\u0916\u0947\u0902\u0964
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (\u0964 \u092F\u093E .) \u092F\u093E \u092A\u094D\u0930\u0936\u094D\u0928\u0935\u093E\u091A\u0915 \u091A\u093F\u0939\u094D\u0928 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964 \u0915\u094B\u0908 \u0907\u092E\u094B\u091C\u0940 \u092F\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0928 \u0930\u0916\u0947\u0902\u0964
    - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0905\u0902\u0924 \u0905\u0930\u094D\u0925\u092A\u0942\u0930\u094D\u0923 \u0914\u0930 \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0935\u093E\u0915\u094D\u092F \u092A\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B\u0964 '\u0915\u0940', '\u0915\u0947', '\u092E\u0947\u0902', '\u092A\u0930', '\u0938\u0947', '\u0915\u093F', '\u0914\u0930', '\u092F\u093E', '\u0939\u0941\u090F', '\u0917\u092F\u093E', '\u0915\u0939\u093E \u0915\u093F' \u091C\u0948\u0938\u0947 \u0905\u0927\u0942\u0930\u0947 \u0936\u092C\u094D\u0926\u094B\u0902 \u092A\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u092D\u0940 \u0938\u092E\u093E\u092A\u094D\u0924 \u0928 \u0915\u0930\u0947\u0902\u0964
-   - '\u092E\u0927\u094D\u092F\u092A\u094D\u0930\u0926\u0947\u0936' \u0914\u0930 '\u0909\u0924\u094D\u0924\u0930\u092A\u094D\u0930\u0926\u0947\u0936' \u0915\u094B \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u090F\u0915 \u0936\u092C\u094D\u0926 (Single Word) \u092E\u0947\u0902 \u0932\u093F\u0916\u0947\u0902 (\u0909\u0926\u093E. \u092E\u0927\u094D\u092F\u092A\u094D\u0930\u0926\u0947\u0936, \u0909\u0924\u094D\u0924\u0930\u092A\u094D\u0930\u0926\u0947\u0936)\u0964
+   - '\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936' \u0914\u0930 '\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936' \u0915\u094B \u0909\u0928\u0915\u0947 \u092E\u093E\u0928\u0915 \u0930\u0942\u092A (\u0938\u094D\u0925\u093E\u0928/\u0938\u094D\u092A\u0947\u0938 \u0938\u0939\u093F\u0924) \u092E\u0947\u0902 \u0939\u0940 \u0932\u093F\u0916\u0947\u0902 (\u0909\u0926\u093E. '\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936', '\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936')\u0964
 4. \u0924\u0940\u0928 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0914\u0930 \u0939\u0948\u0936\u091F\u0948\u0917 \u0928\u093F\u092F\u092E (THREE CAPTIONS & HASHTAGS):
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0915\u0948\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u0932\u093F\u0902\u0915, URL \u092F\u093E '\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u092A\u0922\u093C\u0947\u0902' \u0928 \u0932\u093F\u0916\u0947\u0902 \u0914\u0930 \u0928 \u0939\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u094B \u092A\u0939\u0932\u0940 \u092A\u0902\u0915\u094D\u0924\u093F \u092E\u0947\u0902 \u0926\u094B\u0939\u0930\u093E\u090F\u0902\u0964
    - \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0915\u0948\u092A\u094D\u0936\u0928 (summary \u0935 captionDetailed): \u0916\u092C\u0930 \u0915\u0947 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0924\u0925\u094D\u092F\u094B\u0902 \u0914\u0930 \u0938\u0902\u0926\u0930\u094D\u092D \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0932\u0917\u092D\u0917 3 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B\u0964

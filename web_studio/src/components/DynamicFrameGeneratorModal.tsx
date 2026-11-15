@@ -173,7 +173,7 @@ function removeFakeCheckerboardFromCanvas(
 }
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
-import { getAuthToken } from '../lib/apiConfig';
+import { getAuthToken, ensureAuthToken } from '../lib/apiConfig';
 
 export const HIGHLIGHT_COLOR_PRESETS = [
   { label: 'डिफ़ॉल्ट पीला (Yellow)', value: '#FFE600' },
@@ -1542,6 +1542,46 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     const file = e.target.files?.[0];
     if (!file) return;
     setSampleFileName(file.name);
+
+    if (file.type.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name)) {
+      setFeedbackMsg({ type: 'success', text: 'वीडियो से फ्रेम निकाला जा रहा है...' });
+      const video = document.createElement('video');
+      video.preload = 'auto';
+      video.muted = true;
+      video.playsInline = true;
+      const objectUrl = URL.createObjectURL(file);
+      video.src = objectUrl;
+
+      video.onloadeddata = () => {
+        video.currentTime = Math.min(1.0, (video.duration || 1) / 2);
+      };
+
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth || 1080;
+          canvas.height = video.videoHeight || 1920;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frameDataUrl = canvas.toDataURL('image/png');
+            setSampleImage(frameDataUrl);
+            setFeedbackMsg({ type: 'success', text: '✅ वीडियो फ्रेम सफलतापूर्वक निकाला गया और AI विश्लेषण हेतु तैयार है!' });
+          }
+        } catch (vErr) {
+          console.warn('Video frame capture error:', vErr);
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+
+      video.onerror = () => {
+        setFeedbackMsg({ type: 'error', text: 'वीडियो लोड करने में समस्या आई। कृपया मान्य MP4/WebM वीडियो चुनें।' });
+        URL.revokeObjectURL(objectUrl);
+      };
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       if (ev.target?.result) {
@@ -2624,11 +2664,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       bannedFooterColors,
       footerMode,
       customFooterId: footerMode === 'custom_footer' ? selectedCustomFooterId : undefined,
-      isTestFrame: initialFrame?.id ? (initialFrame.isTestFrame ?? (designCategory === 'TEST_FRAMES')) : (designCategory === 'TEST_FRAMES'),
-      approvalStatus: initialFrame?.id ? (initialFrame.approvalStatus || (designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : 'APPROVED')) : (designCategory === 'TEST_FRAMES' ? 'PENDING_TEST' : 'APPROVED'),
-      designCategory: isVideo ? 'Special Frames' : (designCategory || 'Regular Frames'),
-      allowedPlans,
-      publicationStatus: initialFrame?.id ? (initialFrame.publicationStatus || (designCategory === 'TEST_FRAMES' ? 'draft' : 'published')) : (designCategory === 'TEST_FRAMES' ? 'draft' : 'published'),
+      isTestFrame: true,
+      approvalStatus: (initialFrame?.approvalStatus && initialFrame.approvalStatus !== 'PENDING_TEST') ? initialFrame.approvalStatus : 'PENDING_TEST',
+      designCategory: 'TEST_FRAMES',
+      allowedPlans: initialFrame?.allowedPlans || ['BASIC'],
+      publicationStatus: 'draft',
       createdBy: currentUser?.email || initialFrame?.createdBy || 'breakingnewswala.com@gmail.com',
       version: finalVersion,
       primaryHighlightColor: textSlots[0]?.highlightColor || '#FFE600',
@@ -3164,13 +3204,17 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   <div className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-xl p-5 text-center cursor-pointer relative bg-slate-900/50 transition-colors">
                     <input
                       type="file"
-                      accept="image/*"
+                      accept={generatorMode === 'video' ? 'image/*,video/*' : 'image/*'}
                       onChange={handleSampleUpload}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     />
                     <Upload className="w-7 h-7 text-slate-400 mx-auto mb-1.5" />
-                    <span className="text-xs font-bold text-white block">सैंपल ग्राफिक चुनें या यहाँ ड्रैग करें</span>
-                    <span className="text-[10px] text-slate-500 mt-0.5 block">PNG, JPG समर्थित</span>
+                    <span className="text-xs font-bold text-white block">
+                      {generatorMode === 'video' ? 'सैंपल वीडियो या ग्राफिक चुनें / ड्रैग करें' : 'सैंपल ग्राफिक चुनें या यहाँ ड्रैग करें'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      {generatorMode === 'video' ? 'MP4, WebM, PNG, JPG समर्थित' : 'PNG, JPG समर्थित'}
+                    </span>
                   </div>
                   {sampleFileName && (
                     <div className="text-xs text-emerald-400 font-bold flex items-center gap-1">
@@ -3287,7 +3331,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
                   <Sparkles className="w-6 h-6" />
                 </div>
-                <h4 className="font-black text-base text-white">Gemini 1.5 Pro विज़न एनालिसिस</h4>
+                <h4 className="font-black text-base text-white">Gemini AI विज़न एनालिसिस</h4>
                 <p className="text-xs text-slate-300 leading-relaxed">
                   सैंपल ग्राफिक को स्कैन करके हेडलाइन स्थिति, फोटो स्लॉट अनुपात, लोगो व लोकेशन बैज के निर्देशांक स्वतः पहचाने जाएंगे।
                 </p>
@@ -5104,6 +5148,104 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                               onChange={(e) => setFullStoryCalloutConfig((prev) => ({ ...prev, textColor: e.target.value }))}
                               className="w-full h-7 rounded border border-slate-700 cursor-pointer bg-slate-950 p-0.5"
                             />
+                          </div>
+                        </div>
+
+                        {/* Real-Time Size & Position Controls (Area 8) */}
+                        <div className="pt-2 border-t border-slate-800 space-y-2">
+                          <span className="text-[10px] text-amber-300 font-bold block">कॉलआउट साइज़ व पोज़ीशन (Real-time Resizing):</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                                <span>चौड़ाई (Width)</span>
+                                <span className="font-mono text-amber-400 font-bold">{Math.round(fullStoryCalloutConfig.rect?.width ?? 80)}%</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={20}
+                                max={100}
+                                step={1}
+                                disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                                value={Math.round(fullStoryCalloutConfig.rect?.width ?? 80)}
+                                onChange={(e) => {
+                                  const w = parseInt(e.target.value, 10);
+                                  const oldRect = fullStoryCalloutConfig.rect || { x: 10, y: 85, width: 80, height: 3.5 };
+                                  const newRect = { ...oldRect, width: w };
+                                  setFullStoryCalloutConfig((prev) => ({ ...prev, rect: newRect }));
+                                  setLayers((prev) => prev.map((l) => (l.type === 'callout' ? { ...l, rect: newRect } : l)));
+                                }}
+                                className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-950 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                                <span>ऊंचाई (Height)</span>
+                                <span className="font-mono text-amber-400 font-bold">{(fullStoryCalloutConfig.rect?.height ?? 3.5).toFixed(1)}%</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={2}
+                                max={15}
+                                step={0.5}
+                                disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                                value={fullStoryCalloutConfig.rect?.height ?? 3.5}
+                                onChange={(e) => {
+                                  const h = parseFloat(e.target.value);
+                                  const oldRect = fullStoryCalloutConfig.rect || { x: 10, y: 85, width: 80, height: 3.5 };
+                                  const newRect = { ...oldRect, height: h };
+                                  setFullStoryCalloutConfig((prev) => ({ ...prev, rect: newRect }));
+                                  setLayers((prev) => prev.map((l) => (l.type === 'callout' ? { ...l, rect: newRect } : l)));
+                                }}
+                                className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-950 rounded-lg"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                                <span>X पोज़ीशन (Left)</span>
+                                <span className="font-mono text-amber-400 font-bold">{Math.round(fullStoryCalloutConfig.rect?.x ?? 10)}%</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={90}
+                                step={1}
+                                disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                                value={Math.round(fullStoryCalloutConfig.rect?.x ?? 10)}
+                                onChange={(e) => {
+                                  const x = parseInt(e.target.value, 10);
+                                  const oldRect = fullStoryCalloutConfig.rect || { x: 10, y: 85, width: 80, height: 3.5 };
+                                  const newRect = { ...oldRect, x };
+                                  setFullStoryCalloutConfig((prev) => ({ ...prev, rect: newRect }));
+                                  setLayers((prev) => prev.map((l) => (l.type === 'callout' ? { ...l, rect: newRect } : l)));
+                                }}
+                                className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-950 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                                <span>Y पोज़ीशन (Top)</span>
+                                <span className="font-mono text-amber-400 font-bold">{Math.round(fullStoryCalloutConfig.rect?.y ?? 85)}%</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={50}
+                                max={98}
+                                step={0.5}
+                                disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
+                                value={fullStoryCalloutConfig.rect?.y ?? 85}
+                                onChange={(e) => {
+                                  const y = parseFloat(e.target.value);
+                                  const oldRect = fullStoryCalloutConfig.rect || { x: 10, y: 85, width: 80, height: 3.5 };
+                                  const newRect = { ...oldRect, y };
+                                  setFullStoryCalloutConfig((prev) => ({ ...prev, rect: newRect }));
+                                  setLayers((prev) => prev.map((l) => (l.type === 'callout' ? { ...l, rect: newRect } : l)));
+                                }}
+                                className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-950 rounded-lg"
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -7167,11 +7309,14 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         posStyle = { top: '50%', left: '50%' };
                         baseTranslate = 'translate(-50%, -50%)';
                       } else if (watermarkConfig.rect?.x !== undefined) {
+                        const wRect = watermarkConfig.rect;
                         posStyle = {
-                          left: `${watermarkConfig.rect.x}%`,
-                          top: `${watermarkConfig.rect.y}%`,
+                          left: `${wRect.x + (wRect.width || 10) / 2}%`,
+                          top: `${wRect.y + (wRect.height || 4) / 2}%`,
+                          width: `${wRect.width || 10}%`,
+                          height: `${wRect.height || 4}%`,
                         };
-                        baseTranslate = '';
+                        baseTranslate = 'translate(-50%, -50%)';
                       }
 
                       const transform = baseTranslate ? `${baseTranslate} rotate(${rot}deg)` : `rotate(${rot}deg)`;
@@ -7494,38 +7639,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                 </select>
               </div>
 
-              {/* Allowed Subscription Plans */}
-              <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1.5">
-                  अनुमत मेंबरशिप प्लान (Allowed Subscription Plans)
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  {DYNAMIC_PLAN_TIERS.map((tier) => {
-                    const isChecked = allowedPlans.includes(tier);
-                    return (
-                      <button
-                        key={tier}
-                        type="button"
-                        onClick={() => {
-                          if (isChecked) {
-                            if (allowedPlans.length > 1) {
-                              setAllowedPlans(allowedPlans.filter((p) => p !== tier));
-                            }
-                          } else {
-                            setAllowedPlans([...allowedPlans, tier]);
-                          }
-                        }}
-                        className={`p-3 rounded-xl border text-center transition cursor-pointer ${
-                          isChecked
-                            ? 'bg-amber-500/20 border-amber-400 text-white font-bold shadow-sm'
-                            : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
-                        }`}
-                      >
-                        <span className="text-xs">{tier}</span>
-                      </button>
-                    );
-                  })}
+              {/* Test Frame Workflow Notice (Area 12 & 13) */}
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>टेस्टिंग व पब्लिशिंग सुरक्षा नीति (Test Frame Workflow)</span>
                 </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  यह नया फ्रेम सीधे <strong>'टेस्ट फ्रेम्स' (TEST_FRAMES)</strong> में सुरक्षित होगा (स्थिति: <span className="text-amber-400 font-mono font-bold">PENDING_TEST</span>)। मास्टर एडमिन कंट्रोल रूम से जांच, अनुमोदन एवं मेंबरशिप प्लान आवंटन के बाद ही यह प्रोडक्शन में लाइव होगा।
+                </p>
               </div>
 
               {feedbackMsg && (

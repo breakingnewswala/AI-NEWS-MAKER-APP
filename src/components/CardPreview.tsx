@@ -3483,7 +3483,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
                       width: 'auto',
-                      minWidth: '84px',
                       maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundImage: `url(${badgeAsset})`,
@@ -3546,7 +3545,6 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
                       width: 'auto',
-                      minWidth: '84px',
                       maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: df.headerConfig.locationBgColor || '#1D4ED8',
@@ -3626,11 +3624,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   posStyle = { top: '50%', left: '50%' };
                   baseTranslate = 'translate(-50%, -50%)';
                 } else if (df.watermarkConfig.rect?.x !== undefined) {
+                  const wRect = df.watermarkConfig.rect;
                   posStyle = {
-                    left: `${df.watermarkConfig.rect.x}%`,
-                    top: `${df.watermarkConfig.rect.y}%`,
+                    left: `${wRect.x + (wRect.width || 10) / 2}%`,
+                    top: `${wRect.y + (wRect.height || 4) / 2}%`,
+                    width: `${wRect.width || 10}%`,
+                    height: `${wRect.height || 4}%`,
                   };
-                  baseTranslate = '';
+                  baseTranslate = 'translate(-50%, -50%)';
                 }
 
                 const transform = baseTranslate ? `${baseTranslate} rotate(${rot}deg)` : `rotate(${rot}deg)`;
