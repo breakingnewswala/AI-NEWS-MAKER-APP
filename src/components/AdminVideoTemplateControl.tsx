@@ -83,7 +83,8 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
         showToast(frameId, '⚠️ फ्रेम नहीं मिला');
         return;
       }
-      const selectedPlan = assignedPlan || configs[frameId]?.selectedTier || existing.allowedPlans?.[0] || 'BASIC';
+      const rawPlan = assignedPlan || configs[frameId]?.selectedTier || existing.allowedPlans?.[0] || 'BASIC';
+      const selectedPlan = (rawPlan === 'ADVANCE' ? 'ADVANCED' : rawPlan) as any;
       const updated: DynamicFrameTemplate = {
         ...existing,
         isTestFrame: false,
@@ -557,7 +558,7 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
                       className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-white font-bold"
                     >
                       <option value="BASIC">BASIC (All)</option>
-                      <option value="ADVANCE">ADVANCE+</option>
+                      <option value="ADVANCED">ADVANCED+</option>
                       <option value="PRO">PRO+</option>
                       <option value="VIP DESK">VIP DESK only</option>
                     </select>

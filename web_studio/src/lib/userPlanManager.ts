@@ -1,5 +1,5 @@
 // AI News Maker App - User Tier & Plan Management
-import { getApiUrl, ensureAuthToken, getAuthToken, getAdminAuthHeaders } from './apiConfig';
+import { getApiUrl, ensureAuthToken, getAuthToken, getAuthHeaders, getAdminAuthHeaders } from './apiConfig';
 
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
@@ -1541,7 +1541,10 @@ export function registerOrUpdateUser(userData: {
 
     fetch(getApiUrl('/api/users/sync'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify(syncPayload),
     }).then(async (res) => {
       if (res.ok) {
@@ -1580,7 +1583,10 @@ export function registerOrUpdateUser(userData: {
     // Sync profile document as well
     fetch(getApiUrl('/api/user-profile'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
       body: JSON.stringify(syncPayload),
     }).catch(() => {});
 

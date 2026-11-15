@@ -1551,12 +1551,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       video.playsInline = true;
       const objectUrl = URL.createObjectURL(file);
       video.src = objectUrl;
+      setSampleVideoPreview(objectUrl);
 
-      video.onloadeddata = () => {
-        video.currentTime = Math.min(1.0, (video.duration || 1) / 2);
-      };
-
-      video.onseeked = () => {
+      const captureFrame = () => {
         try {
           const canvas = document.createElement('canvas');
           canvas.width = video.videoWidth || 1080;
@@ -1568,17 +1565,35 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             setSampleImage(frameDataUrl);
             setFeedbackMsg({ type: 'success', text: '✅ वीडियो फ्रेम सफलतापूर्वक निकाला गया और AI विश्लेषण हेतु तैयार है!' });
           }
-        } catch (vErr) {
+        } catch (vErr: any) {
           console.warn('Video frame capture error:', vErr);
-        } finally {
-          URL.revokeObjectURL(objectUrl);
+          setFeedbackMsg({ type: 'error', text: `वीडियो फ्रेम निकालने में समस्या आई: ${vErr?.message || 'असमर्थित प्रारूप'}।` });
         }
+      };
+
+      video.onloadeddata = () => {
+        try {
+          if (video.duration && !isNaN(video.duration)) {
+            video.currentTime = Math.min(1.0, video.duration / 2);
+          } else {
+            captureFrame();
+          }
+        } catch {
+          captureFrame();
+        }
+      };
+
+      video.onseeked = () => {
+        captureFrame();
       };
 
       video.onerror = () => {
         setFeedbackMsg({ type: 'error', text: 'वीडियो लोड करने में समस्या आई। कृपया मान्य MP4/WebM वीडियो चुनें।' });
-        URL.revokeObjectURL(objectUrl);
       };
+
+      try {
+        video.load();
+      } catch {}
       return;
     }
 

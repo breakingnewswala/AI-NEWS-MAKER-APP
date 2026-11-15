@@ -30,10 +30,11 @@ runTest('Area 1: apiConfig.ts only triggers admin_auth_required for admin endpoi
   assert(content.includes("ai_news_session_expired"), 'Must use session expired event for normal endpoints');
 });
 
-runTest('Area 1: userPlanManager.ts avoids calling admin registration for normal users', () => {
+runTest('Area 1: userPlanManager.ts avoids calling admin registration for normal users and uses auth headers', () => {
   const content = fs.readFileSync('src/lib/userPlanManager.ts', 'utf8');
   assert(content.includes("if (isSuper || cleanEmail === 'admin.ainewsmaker@gmail.com')"), 'Must only call register-user endpoint for authorized admins');
   assert(content.includes("/api/user-profile"), 'Must sync normal user profile via /api/user-profile');
+  assert(content.includes("...getAuthHeaders()"), 'Must send authenticated headers with user-profile and user-sync calls');
 });
 
 runTest('Area 1 & 2: server.ts /api/user-profile authorizes authenticated users and strips privilege fields', () => {
@@ -60,6 +61,10 @@ runTest('Area 3: App.tsx getSavedChannelProfile never substitutes app logo for n
   assert(content.includes("khabridasnews@gmail.com"), 'Must handle khabridasnews profile');
   assert(content.includes("खबरीदास न्यूज़"), 'Must enforce Hindi channel name खबरीदास न्यूज़');
   assert(content.includes("sanitizeProfile"), 'Must sanitize profile against app logo substitution');
+
+  const db = JSON.parse(fs.readFileSync('user_profiles_db.json', 'utf8'));
+  assert.strictEqual(db['khabridasnews@gmail.com']?.channelNameHi, 'खबरीदास न्यूज़', 'user_profiles_db.json must use correct Devanagari spelling');
+  assert.strictEqual(db['khabridasnews@gmail.com']?.state, 'मध्य प्रदेश', 'user_profiles_db.json must persist state for khabridasnews');
 });
 
 runTest('Area 3: App.tsx Profile Completion Gate blocks studio entry when profile is incomplete', () => {
@@ -114,9 +119,14 @@ runTest('Area 8: DynamicFrameGeneratorModal.tsx provides callout resizing contro
 // -----------------------------------------------------------------------------
 // Area 9: Location Badge Dynamic Width & Space Preservation
 // -----------------------------------------------------------------------------
-runTest('Area 9: CardPreview.tsx location badge has no fixed 84px minWidth', () => {
+runTest('Area 9: CardPreview.tsx location badge has dynamic metrics and no fixed 84px minWidth', () => {
   const content = fs.readFileSync('src/components/CardPreview.tsx', 'utf8');
   assert(!content.includes("minWidth: '84px'"), 'Must remove minWidth 84px from location badge');
+  assert(content.includes("calculateDynamicLocationMetrics"), 'Must use calculateDynamicLocationMetrics');
+
+  const utilsContent = fs.readFileSync('src/lib/locationUtils.ts', 'utf8');
+  assert(utilsContent.includes("function calculateDynamicLocationMetrics"), 'locationUtils must export calculateDynamicLocationMetrics');
+  assert(utilsContent.includes("neededCenterW"), 'locationUtils must calculate neededCenterW based on text metrics');
 });
 
 runTest('Area 9: locationUtils.ts & server.ts preserve canonical space in Madhya Pradesh & Uttar Pradesh', () => {
@@ -129,15 +139,17 @@ runTest('Area 9: locationUtils.ts & server.ts preserve canonical space in Madhya
 // -----------------------------------------------------------------------------
 // Area 10: Headline Typography
 // -----------------------------------------------------------------------------
-runTest('Area 10: Headline typography has default 48px and range up to 120px', () => {
+runTest('Area 10: Headline typography has default 48px and range up to 120px without layout clamp', () => {
   const editorContent = fs.readFileSync('src/components/CardEditor.tsx', 'utf8');
   const appContent = fs.readFileSync('src/App.tsx', 'utf8');
   const exporterContent = fs.readFileSync('src/lib/CanvasExporter.ts', 'utf8');
+  const engineContent = fs.readFileSync('src/lib/canonicalLayoutEngine.ts', 'utf8');
 
   assert(editorContent.includes("card.headlineFontSize || 48"), 'CardEditor must default headline font size to 48');
   assert(editorContent.includes('max="120"'), 'CardEditor slider must allow up to 120px');
   assert(appContent.includes("headlineFontSize: 48"), 'App.tsx initial state must default headline font size to 48');
   assert(exporterContent.includes('120px "${fam}"'), 'CanvasExporter must preload font weights up to 120px');
+  assert(engineContent.includes('Math.min(120,'), 'canonicalLayoutEngine must allow font size up to 120px');
 });
 
 // -----------------------------------------------------------------------------
@@ -173,6 +185,7 @@ runTest('Area 14: AdminVideoTemplateControl.tsx provides dedicated Test Frames T
   assert(content.includes("handleRejectFrame"), 'Must provide handleRejectFrame');
   assert(content.includes("handleDeleteFrame"), 'Must provide handleDeleteFrame');
   assert(content.includes("मेंबरशिप प्लान आवंटन"), 'Must provide subscription plan assignment');
+  assert(content.includes('value="ADVANCED"'), 'Must provide ADVANCED plan option matching DynamicPlanTier');
 });
 
 // -----------------------------------------------------------------------------

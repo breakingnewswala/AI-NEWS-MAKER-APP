@@ -11,7 +11,7 @@ import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
 import { getDynamicFrameById } from '../lib/dynamicFramesManager';
-import { formatCleanLocationText } from '../lib/locationUtils';
+import { formatCleanLocationText, calculateDynamicLocationMetrics } from '../lib/locationUtils';
 import {
   computeCanonicalHeadlineLayout,
   getTemplateLayoutSpec,
@@ -3476,13 +3476,23 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 const cleanLoc = formatCleanLocationText(card.location);
                 const badgeAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
                 const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || df.headerConfig.locationTextColor || '#FFFFFF';
+                const dynamicLoc = calculateDynamicLocationMetrics({
+                  locationText: cleanLoc,
+                  locationRect: df.headerConfig.locationRect,
+                  sliceConfig: df.sliceConfig || df.headerConfig.sliceConfig,
+                  typographyConfig: df.headerConfig.typographyConfig,
+                  locationFontSize: df.headerConfig.locationFontSize,
+                  hasBadgeAsset: Boolean(badgeAsset),
+                });
+                const locWidth = `${dynamicLoc.widthPct}%` || `${df.headerConfig.locationRect?.width ?? 28}%`;
                 return badgeAsset ? (
                   <div
                     className="absolute pointer-events-auto flex items-center justify-center font-bold px-3"
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: 'auto',
+                      // width: `${df.headerConfig.locationRect?.width ?? 28}%`
+                      width: locWidth,
                       maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundImage: `url(${badgeAsset})`,
@@ -3544,7 +3554,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: 'auto',
+                      // width: `${df.headerConfig.locationRect?.width ?? 28}%`
+                      width: locWidth,
                       maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: df.headerConfig.locationBgColor || '#1D4ED8',

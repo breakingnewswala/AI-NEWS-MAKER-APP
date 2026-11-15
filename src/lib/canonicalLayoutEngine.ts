@@ -573,8 +573,8 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   const normalizedUserFontSize = options.userFontSize ? options.userFontSize : undefined;
 
   const maxAllowedFont = options.customBounds
-    ? Math.max(spec.headlineArea.maxFontSize, Math.min(100, Math.round(options.customBounds.height * 0.75)))
-    : spec.headlineArea.maxFontSize;
+    ? Math.max(spec.headlineArea.maxFontSize, Math.min(120, Math.round(options.customBounds.height * 0.75)))
+    : Math.max(120, spec.headlineArea.maxFontSize);
 
   const minAllowedFont = normalizedUserFontSize
     ? Math.min(20, normalizedUserFontSize)
