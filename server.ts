@@ -257,6 +257,7 @@ export interface AuthDiagnosticRecord {
   correlationId: string;
   endpoint: string;
   method: string;
+  diagnosticCode: "TOKEN_MISSING" | "TOKEN_EXPIRED" | "TOKEN_SIGNATURE_INVALID" | "SESSION_SECRET_MISMATCH" | "FIREBASE_VERIFICATION_FAILED" | "GOOGLE_TOKEN_VERIFICATION_FAILED" | "USER_NOT_FOUND" | "USER_BLOCKED" | "ROLE_NOT_AUTHORIZED" | "MASTER_ADMIN_REQUIRED" | "API_KEY_INVALID" | "GEMINI_QUOTA_EXCEEDED" | "ALLOW";
   authMechanism: "hmac" | "firebase" | "google_gis" | "oauth_access" | "none";
   tokenPresent: boolean;
   tokenType: "HS256_HMAC" | "RS256_FIREBASE" | "GOOGLE_OAUTH" | "UNKNOWN" | "NONE";
@@ -272,7 +273,7 @@ export interface AuthDiagnosticRecord {
 export function logAuthDiagnostic(record: AuthDiagnosticRecord): void {
   // Safe diagnostic: NEVER logs complete tokens, passwords, API keys, SESSION_SECRET or other credentials
   const safeEmail = record.verifiedEmail ? record.verifiedEmail.replace(/(.{2})(.*)(@.*)/, "$1***$3") : "anonymous";
-  console.log(`[AUTH_DIAGNOSTIC] ${record.correlationId} | ${record.method} ${record.endpoint} | Mech:${record.authMechanism} Type:${record.tokenType} Exp:${record.tokenExpired} Sig:${record.signatureValid} | User:${safeEmail} Role:${record.resolvedRole} | ${record.decision} (${record.rejectionReason})`);
+  console.log(`[AUTH_DIAGNOSTIC] ${record.correlationId} | Code:${record.diagnosticCode} | ${record.method} ${record.endpoint} | Mech:${record.authMechanism} Type:${record.tokenType} Exp:${record.tokenExpired} Sig:${record.signatureValid} | User:${safeEmail} Role:${record.resolvedRole} | ${record.decision} (${record.rejectionReason})`);
 }
 
 export function isAuthTokenExpired(tokenStr: string): boolean {
@@ -295,7 +296,8 @@ export function buildAuthDiagnostic(
   req: express.Request,
   user: VerifiedUser | null,
   decision: "ALLOW" | "REJECT_401" | "REJECT_403",
-  rejectionReason: string
+  rejectionReason: string,
+  diagnosticCodeOverride?: "TOKEN_MISSING" | "TOKEN_EXPIRED" | "TOKEN_SIGNATURE_INVALID" | "SESSION_SECRET_MISMATCH" | "FIREBASE_VERIFICATION_FAILED" | "GOOGLE_TOKEN_VERIFICATION_FAILED" | "USER_NOT_FOUND" | "USER_BLOCKED" | "ROLE_NOT_AUTHORIZED" | "MASTER_ADMIN_REQUIRED" | "API_KEY_INVALID" | "GEMINI_QUOTA_EXCEEDED" | "ALLOW"
 ): AuthDiagnosticRecord {
   const rawTok = extractTokenFromRequest(req);
   const tokenPresent = Boolean(rawTok);
@@ -319,10 +321,28 @@ export function buildAuthDiagnostic(
     }
   }
 
+  let code: "TOKEN_MISSING" | "TOKEN_EXPIRED" | "TOKEN_SIGNATURE_INVALID" | "SESSION_SECRET_MISMATCH" | "FIREBASE_VERIFICATION_FAILED" | "GOOGLE_TOKEN_VERIFICATION_FAILED" | "USER_NOT_FOUND" | "USER_BLOCKED" | "ROLE_NOT_AUTHORIZED" | "MASTER_ADMIN_REQUIRED" | "API_KEY_INVALID" | "GEMINI_QUOTA_EXCEEDED" | "ALLOW" = "ALLOW";
+  if (diagnosticCodeOverride) {
+    code = diagnosticCodeOverride;
+  } else if (decision === "ALLOW") {
+    code = "ALLOW";
+  } else if (!tokenPresent) {
+    code = "TOKEN_MISSING";
+  } else if (tokenExpired) {
+    code = "TOKEN_EXPIRED";
+  } else if (user?.isBlocked) {
+    code = "USER_BLOCKED";
+  } else if (decision === "REJECT_403") {
+    code = rejectionReason.toLowerCase().includes("master") ? "MASTER_ADMIN_REQUIRED" : "ROLE_NOT_AUTHORIZED";
+  } else {
+    code = "TOKEN_SIGNATURE_INVALID";
+  }
+
   return {
     correlationId: (req.headers["x-correlation-id"] || Math.random().toString(36).substring(2, 9)) as string,
     endpoint: req.originalUrl || req.url,
     method: req.method,
+    diagnosticCode: code,
     authMechanism: user ? (user.authType === "firebase" ? "firebase" : "hmac") : authMechanism,
     tokenPresent,
     tokenType: user ? (user.authType === "firebase" ? "RS256_FIREBASE" : "HS256_HMAC") : tokenType,
@@ -10652,7 +10672,7 @@ setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
 setTimeout(executeRssSynchronization, 15000);
 
 // 3. POST live sync RSS & Web links -> Production Database (Manual Sync API)
-app.post("/api/admin/rss-sync", requireAdminMiddleware, async (req, res) => {
+app.post(["/api/admin/rss-sync", "/api/rss-sync"], requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ success: false, error: "अनधिकृत: केवल एडमिन लाइव RSS सिंक चला सकते हैं।" });

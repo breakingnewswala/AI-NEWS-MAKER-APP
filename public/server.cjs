@@ -12337,7 +12337,7 @@ function generateAuthToken(user) {
 }
 function logAuthDiagnostic(record) {
   const safeEmail = record.verifiedEmail ? record.verifiedEmail.replace(/(.{2})(.*)(@.*)/, "$1***$3") : "anonymous";
-  console.log(`[AUTH_DIAGNOSTIC] ${record.correlationId} | ${record.method} ${record.endpoint} | Mech:${record.authMechanism} Type:${record.tokenType} Exp:${record.tokenExpired} Sig:${record.signatureValid} | User:${safeEmail} Role:${record.resolvedRole} | ${record.decision} (${record.rejectionReason})`);
+  console.log(`[AUTH_DIAGNOSTIC] ${record.correlationId} | Code:${record.diagnosticCode} | ${record.method} ${record.endpoint} | Mech:${record.authMechanism} Type:${record.tokenType} Exp:${record.tokenExpired} Sig:${record.signatureValid} | User:${safeEmail} Role:${record.resolvedRole} | ${record.decision} (${record.rejectionReason})`);
 }
 function isAuthTokenExpired(tokenStr) {
   if (!tokenStr || typeof tokenStr !== "string") return true;
@@ -12354,7 +12354,7 @@ function isAuthTokenExpired(tokenStr) {
     return true;
   }
 }
-function buildAuthDiagnostic(req, user, decision, rejectionReason) {
+function buildAuthDiagnostic(req, user, decision, rejectionReason, diagnosticCodeOverride) {
   const rawTok = extractTokenFromRequest(req);
   const tokenPresent = Boolean(rawTok);
   let tokenType = "NONE";
@@ -12375,10 +12375,27 @@ function buildAuthDiagnostic(req, user, decision, rejectionReason) {
       }
     }
   }
+  let code = "ALLOW";
+  if (diagnosticCodeOverride) {
+    code = diagnosticCodeOverride;
+  } else if (decision === "ALLOW") {
+    code = "ALLOW";
+  } else if (!tokenPresent) {
+    code = "TOKEN_MISSING";
+  } else if (tokenExpired) {
+    code = "TOKEN_EXPIRED";
+  } else if (user?.isBlocked) {
+    code = "USER_BLOCKED";
+  } else if (decision === "REJECT_403") {
+    code = rejectionReason.toLowerCase().includes("master") ? "MASTER_ADMIN_REQUIRED" : "ROLE_NOT_AUTHORIZED";
+  } else {
+    code = "TOKEN_SIGNATURE_INVALID";
+  }
   return {
     correlationId: req.headers["x-correlation-id"] || Math.random().toString(36).substring(2, 9),
     endpoint: req.originalUrl || req.url,
     method: req.method,
+    diagnosticCode: code,
     authMechanism: user ? user.authType === "firebase" ? "firebase" : "hmac" : authMechanism,
     tokenPresent,
     tokenType: user ? user.authType === "firebase" ? "RS256_FIREBASE" : "HS256_HMAC" : tokenType,
@@ -20759,7 +20776,7 @@ async function executeRssSynchronization() {
 }
 setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
 setTimeout(executeRssSynchronization, 15e3);
-app.post("/api/admin/rss-sync", requireAdminMiddleware, async (req, res) => {
+app.post(["/api/admin/rss-sync", "/api/rss-sync"], requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
       return res.status(403).json({ success: false, error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u0932\u093E\u0907\u0935 RSS \u0938\u093F\u0902\u0915 \u091A\u0932\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
