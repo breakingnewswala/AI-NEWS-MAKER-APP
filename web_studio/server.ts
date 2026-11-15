@@ -14072,7 +14072,6 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
     }
 
     try {
-      const gemini = getGeminiClient();
       let cleanBase64 = sampleBase64;
       let mimeType = "image/png";
       const match = sampleBase64.match(/^data:([^;]+);base64,(.+)$/);
@@ -14080,36 +14079,6 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
         mimeType = match[1];
         cleanBase64 = match[2];
       }
-
-      const prompt = `Analyze this news graphic / jacket template design for creating an automated news frame template in AI News Maker.
-The target aspect ratio is ${selectedRatio} (${isStory ? "1080x1920 Story" : "1080x1350 Portrait"}).
-Detect bounding boxes for layout elements as percentages (0-100) of the canvas:
-- Logo placement
-- Location tag placement
-- Photo slot boundaries (normal photo, cutout/speaker photo, collages)
-- Headline text area
-- Statement / Quote text area (if a statement/bayaan design)
-- Breaking Ribbon (if any ribbon exists)
-- Permanent bottom footer region
-
-Return ONLY a valid JSON object matching this schema without any markdown formatting or code blocks:
-{
-  "detectedRatio": "${selectedRatio}",
-  "headerRect": { "x": 5, "y": 3, "width": 90, "height": 14 },
-  "logoRect": { "x": 5, "y": 3, "width": 22, "height": 8 },
-  "locationRect": { "x": 5, "y": 12, "width": 26, "height": 4 },
-  "headlineRect": { "x": 6, "y": 64, "width": 88, "height": 26 },
-  "recommendedPhotoSlots": [
-    { "name": "Main Photo", "slotType": "normal", "rect": { "x": 0, "y": 0, "width": 100, "height": 62 } }
-  ],
-  "statementDetected": false,
-  "quoteRect": { "x": 8, "y": 20, "width": 84, "height": 28 },
-  "speakerNameRect": { "x": 8, "y": 72, "width": 42, "height": 6 },
-  "speakerDesigRect": { "x": 8, "y": 79, "width": 42, "height": 5 },
-  "ribbonDetected": false,
-  "ribbonRect": { "x": 12, "y": 62, "width": 76, "height": 8 },
-  "footerRect": { "x": 0, "y": 92, "width": 100, "height": 8 }
-}`;
 
       const promptParts: any[] = [
         {
@@ -14171,20 +14140,30 @@ Return ONLY a valid JSON object matching this schema without any markdown format
         });
       }
 
-      const aiResponse = await gemini.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: [
+      // Execute AI Vision Analysis using resilient Gemini Key Pool with multi-model fallback
+      const parsed = await executeGeminiWithKeyPool(async (ai) => {
+        const aiResponse = await generateWithFallbackAndRetry(
+          ai,
+          ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"],
           {
-            role: "user",
-            parts: promptParts,
-          },
-        ],
+            contents: [
+              {
+                role: "user",
+                parts: promptParts,
+              },
+            ],
+          }
+        );
+
+        const responseText = aiResponse.text || "";
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error("AI did not return a valid JSON structure");
+        }
+        return JSON.parse(jsonMatch[0]);
       });
 
-      const responseText = aiResponse.text || "";
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed) {
         // Validate footer position protection
         if (parsed.footerRect) {
           parsed.footerRect.y = isStory ? 93.5 : 92;
@@ -14193,16 +14172,21 @@ Return ONLY a valid JSON object matching this schema without any markdown format
         return res.json({ success: true, result: { ...fallbackLayout, ...parsed }, isFallback: false });
       }
     } catch (aiErr: any) {
-      console.warn("Gemini vision analysis error, using calibrated geometric fallback:", aiErr?.message || aiErr);
-      return res.json({
-        success: true,
-        result: fallbackLayout,
-        isFallback: true,
-        warning: `AI विज़न विश्लेषण उपलब्ध नहीं हो सका (${aiErr?.message || "त्रुटि"})। कैलिब्रेटेड डिफ़ॉल्ट लेआउट सक्रिय किया गया है।`,
+      console.error("[Dynamic Frames AI] Vision analysis error:", aiErr?.message || aiErr);
+      return res.status(502).json({
+        success: false,
+        error: `AI विज़न विश्लेषण उपलब्ध नहीं हो सका (${aiErr?.message || "त्रुटि"})। कृपया पुनः प्रयास करें।`,
+        canRetry: true,
+        fallbackLayout,
       });
     }
 
-    return res.json({ success: true, result: fallbackLayout, isFallback: true });
+    return res.status(502).json({
+      success: false,
+      error: "AI विज़न विश्लेषण से कोई वैध लेआउट प्राप्त नहीं हुआ।",
+      canRetry: true,
+      fallbackLayout,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -19646,7 +19630,7 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(new Error("Direct fetch timed out")), 7000);
       const res = await fetch(currentUrl, {
         headers: standardBrowserHeaders,
         signal: controller.signal,
@@ -19661,6 +19645,7 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
         if (locationHeader) {
           const resolved = resolveUrl(locationHeader.trim(), currentUrl);
           if (resolved && resolved !== currentUrl) {
+            console.log(`[URL Scraper] Redirecting (${res.status}): ${currentUrl} -> ${resolved}`);
             currentUrl = resolved;
             finalRedirectedUrl = currentUrl;
             redirectCount++;
@@ -19676,7 +19661,7 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
       if (!res.ok && [401, 403, 429, 503].includes(res.status)) {
         try {
           const botController = new AbortController();
-          const botTimeoutId = setTimeout(() => botController.abort(), 10000);
+          const botTimeoutId = setTimeout(() => botController.abort(new Error("Bot fetch timed out")), 6000);
           const botRes = await fetch(currentUrl, {
             headers: {
               "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
@@ -19691,7 +19676,9 @@ async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedArticleR
             response = botRes;
             lastStatus = botRes.status;
           }
-        } catch {}
+        } catch (botErr: any) {
+          console.warn(`[URL Scraper] Bot fallback error for ${currentUrl}:`, botErr?.message || botErr);
+        }
       }
 
       // Read response body safely with 5MB ceiling

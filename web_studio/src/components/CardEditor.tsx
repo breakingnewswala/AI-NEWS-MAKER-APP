@@ -45,6 +45,7 @@ import {
   AlertCircle,
   Info,
   X,
+  Heart,
 } from 'lucide-react';
 import {
   saveCustomFrame,
@@ -546,7 +547,30 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const [internalMobileViewMode, setInternalMobileViewMode] = React.useState<'steps' | 'all'>('steps');
   const mobileViewMode = propMobileViewMode !== undefined ? propMobileViewMode : internalMobileViewMode;
   const setMobileViewMode = onToggleMobileViewMode || setInternalMobileViewMode;
-  const [selectedFrameCategory, setSelectedFrameCategory] = React.useState<string>('Regular Frame');
+  const [selectedFrameCategory, setSelectedFrameCategory] = React.useState<string>('Custom Frame');
+  const [favoriteFrameIds, setFavoriteFrameIds] = React.useState<string[]>(() => {
+    try {
+      const storageKey = `ai_news_user_favorites_${currentUser?.email || 'guest'}`;
+      const saved = localStorage.getItem(storageKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavoriteFrame = (frameId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFavoriteFrameIds((prev) => {
+      const next = prev.includes(frameId) ? prev.filter((id) => id !== frameId) : [...prev, frameId];
+      try {
+        const storageKey = `ai_news_user_favorites_${currentUser?.email || 'guest'}`;
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch (err) {
+        console.warn('Failed to save favorites:', err);
+      }
+      return next;
+    });
+  };
   const [unlockedFrameIds, setUnlockedFrameIds] = React.useState<string[]>([]);
   const [isUnlockingFrame, setIsUnlockingFrame] = React.useState<string | null>(null);
   const [showSearchHelper, setShowSearchHelper] = React.useState<boolean>(false);
@@ -605,6 +629,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   
   const getCategoryLabelHi = (catName: string) => {
     const map: Record<string, string> = {
+      'My Frames': 'माई फ्रेम्स',
+      'Custom Frame': 'माई फ्रेम्स',
       'Regular Frame': 'रेगुलर फ्रेम',
       'Package Frame': 'पैकेज फ्रेम',
       'Super Breaking': 'सुपर ब्रेकिंग',
@@ -615,16 +641,20 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       'बयानबाज़ी फ्रेम': 'बयानबाज़ी',
       'Special Frame': 'स्पेशल फ्रेम',
       'Bonus Frame': 'बोनस फ्रेम',
-      'Custom Frame': 'कस्टम फ्रेम',
     };
     return map[catName] || catName;
   };
 
   const frameCategoryItems = React.useMemo(() => {
-    const list = FRAME_CATEGORIES.filter((c) => (c as string) !== 'TEST_FRAMES').map((catName) => {
+    const categoriesInOrder = [
+      'Custom Frame',
+      ...FRAME_CATEGORIES.filter((c) => (c as string) !== 'TEST_FRAMES' && (c as string) !== 'Custom Frame')
+    ];
+    const list = categoriesInOrder.map((catName) => {
       const normCatName = normalizeToCanonicalCategory(catName);
       if (catName === 'Custom Frame') {
         const savedCount = savedCustomFramesList.length;
+        const favCount = favoriteFrameIds.length;
         const customDynamicCount = currentFrameOptions.filter((f) => {
           const cfg = getTemplateConfig(f.id);
           if (!cfg.isActive) return false;
@@ -633,7 +663,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           const c = normalizeToCanonicalCategory(cfg.category || f.categoryLabel || 'Regular Frame');
           return c === 'Custom Frames';
         }).length;
-        return { id: catName, label: catName, badge: `${savedCount + customDynamicCount + 1}` };
+        return { id: catName, label: 'My Frames', badge: `${savedCount + customDynamicCount + favCount + 1}` };
       }
       const count = currentFrameOptions.filter((f) => {
         const cfg = getTemplateConfig(f.id);
@@ -651,7 +681,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       list.unshift({ id: 'TEST_FRAMES', label: 'TEST_FRAMES', badge: `${testCount}` });
     }
     return list;
-  }, [currentFrameOptions, savedCustomFramesList, isMaster, isAdmin]);
+  }, [currentFrameOptions, savedCustomFramesList, favoriteFrameIds, isMaster, isAdmin]);
 
   // Load Custom Header & Footer for eligible user or admin assignment
   React.useEffect(() => {
@@ -1781,15 +1811,37 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         if (match?.textSlots?.[0]?.textColor) {
                           updates.headlineTextColor = match.textSlots[0].textColor;
                         }
-                        // Bug F: Automatically enable callout & set assets if Master Admin enabled it
+                        // Section 4: Synchronize Master Admin's authoritative highlight color
+                        const adminHighlight = match?.primaryHighlightColor || (match as any)?.quoteHighlightColor || match?.textSlots?.[0]?.highlightColor;
+                        if (adminHighlight) {
+                          updates.highlightColor = adminHighlight;
+                        }
+                        // Section 9: Auto-load frame's sample photo if user hasn't uploaded one
+                        const frameSamplePhoto = match?.samplePhotoUrl || match?.photoSlots?.[0]?.defaultAssetUrl;
+                        if (frameSamplePhoto && (!card.images?.main || card.images.main.includes('placeholder_news_photo') || card.images.main.trim() === '')) {
+                          updates.images = {
+                            ...card.images,
+                            main: frameSamplePhoto,
+                          };
+                        }
+                        // Bug F & Section 8/12: Authoritative Callout settings
                         if (match?.fullStoryCalloutConfig?.enabled) {
                           updates.showCallout = true;
-                          if (match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl) {
-                            updates.customCalloutAssetUrl = match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl;
-                          }
+                          updates.customCalloutAssetUrl = match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl || match.calloutAssetUrl || undefined;
                           if (match.fullStoryCalloutConfig.text) {
                             updates.calloutTag = match.fullStoryCalloutConfig.text;
                           }
+                        } else if (match?.calloutAssetUrl) {
+                          updates.showCallout = true;
+                          updates.customCalloutAssetUrl = match.calloutAssetUrl;
+                          if ((match as any).calloutTag) {
+                            updates.calloutTag = (match as any).calloutTag;
+                          }
+                        } else {
+                          // Do not force legacy callout if admin has not configured one
+                          updates.showCallout = false;
+                          updates.customCalloutAssetUrl = undefined;
+                          updates.calloutTag = '';
                         }
                         // Bug C & D: Inherit frame-specific footer defaults and respect banned colors
                         const dfFooterBg = match?.footerConfig?.footerBgColor || (match?.footerConfig as any)?.primaryFooterBg || (match?.footerConfig as any)?.primaryFooterColor;
@@ -1823,6 +1875,16 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           {f.name}
                         </span>
                         <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavoriteFrame(f.id, e)}
+                            className={`p-1 rounded-full transition-transform hover:scale-110 cursor-pointer ${
+                              favoriteFrameIds.includes(f.id) ? 'text-red-500' : 'text-neutral-500 hover:text-red-400'
+                            }`}
+                            title={favoriteFrameIds.includes(f.id) ? 'पसंदीदा से हटाएं (Remove Favorite)' : 'पसंदीदा में जोड़ें (Add to Favorites)'}
+                          >
+                            <Heart className={`w-3.5 h-3.5 ${favoriteFrameIds.includes(f.id) ? 'fill-current' : ''}`} />
+                          </button>
                           {canUseCustomHF && (activeHeaderPng || activeFooterPng) && (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
                               Custom H/F
@@ -1981,6 +2043,123 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   );
                 });
               })()}
+
+            {/* List of Favorited Templates from any category */}
+            {selectedFrameCategory === 'Custom Frame' &&
+              currentFrameOptions
+                .filter((f) => favoriteFrameIds.includes(f.id))
+                .map((f) => {
+                  const isSelected = (card.frameDesign || 'graphic_001') === f.id;
+                  const isPlanAllowed = isTemplateAvailableForUserPlan(f.id, effectiveTier, effectiveAdmin);
+                  const isUnlocked = effectiveAdmin || isPlanAllowed || unlockedFrameIds.includes(f.id);
+                  const cfg = getTemplateConfig(f.id);
+                  const planDisplay = cfg.allowedPlans.includes('BASIC') 
+                    ? { name: 'BASIC', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' }
+                    : cfg.allowedPlans.includes('ADVANCED')
+                    ? { name: 'ADVANCE', color: 'bg-blue-500/20 text-blue-400 border-blue-500/40' }
+                    : cfg.allowedPlans.includes('PRO')
+                    ? { name: 'PRO', color: 'bg-purple-500/20 text-purple-400 border-purple-500/40' }
+                    : { name: 'VIP', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+
+                  return (
+                    <div
+                      key={`fav_${f.id}`}
+                      onClick={() => {
+                        const match = dynamicFramesRaw.find((d) => d.id === f.id || d.name === f.name) || getDynamicFrameById(f.id);
+                        const updates: any = {
+                          frameDesign: f.id,
+                          customDynamicFrame: match || undefined,
+                          aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
+                        };
+                        if (match?.typographyConfig?.primaryFontFamily) {
+                          updates.headlineFontFamily = match.typographyConfig.primaryFontFamily;
+                        } else if (match?.textSlots?.[0]?.fontFamily) {
+                          updates.headlineFontFamily = match.textSlots[0].fontFamily;
+                        }
+                        if (match?.typographyConfig?.primaryFontSize) {
+                          updates.headlineFontSize = match.typographyConfig.primaryFontSize;
+                        } else if (match?.textSlots?.[0]?.fontSize) {
+                          updates.headlineFontSize = match.textSlots[0].fontSize;
+                        }
+                        if (match?.textSlots?.[0]?.textColor) {
+                          updates.headlineTextColor = match.textSlots[0].textColor;
+                        }
+                        const adminHighlight = match?.primaryHighlightColor || (match as any)?.quoteHighlightColor || match?.textSlots?.[0]?.highlightColor;
+                        if (adminHighlight) {
+                          updates.highlightColor = adminHighlight;
+                        }
+                        const frameSamplePhoto = match?.samplePhotoUrl || match?.photoSlots?.[0]?.defaultAssetUrl;
+                        if (frameSamplePhoto && (!card.images?.main || card.images.main.includes('placeholder_news_photo') || card.images.main.trim() === '')) {
+                          updates.images = {
+                            ...card.images,
+                            main: frameSamplePhoto,
+                          };
+                        }
+                        if (match?.fullStoryCalloutConfig?.enabled) {
+                          updates.showCallout = true;
+                          updates.customCalloutAssetUrl = match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl || match.calloutAssetUrl || undefined;
+                          if (match.fullStoryCalloutConfig.text) {
+                            updates.calloutTag = match.fullStoryCalloutConfig.text;
+                          }
+                        } else if (match?.calloutAssetUrl) {
+                          updates.showCallout = true;
+                          updates.customCalloutAssetUrl = match.calloutAssetUrl;
+                          if ((match as any).calloutTag) {
+                            updates.calloutTag = (match as any).calloutTag;
+                          }
+                        } else {
+                          updates.showCallout = false;
+                          updates.customCalloutAssetUrl = undefined;
+                          updates.calloutTag = '';
+                        }
+                        onChange(updates);
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all relative overflow-hidden select-none cursor-pointer ${
+                        isSelected
+                          ? 'border-yellow-400 bg-yellow-500/15 text-white shadow-lg ring-2 ring-yellow-400/40'
+                          : isUnlocked
+                          ? 'border-neutral-800 bg-neutral-950/70 hover:border-neutral-700 text-neutral-300 hover:bg-neutral-900/60'
+                          : 'border-neutral-800/80 bg-neutral-950/40 text-neutral-400 hover:border-amber-500/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={`text-xs font-black tracking-wide truncate ${isUnlocked ? 'text-white' : 'text-neutral-400'}`}>
+                          {f.name}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => toggleFavoriteFrame(f.id, e)}
+                            className="p-1 rounded-full text-red-500 hover:scale-110 cursor-pointer"
+                            title="पसंदीदा से हटाएं (Remove Favorite)"
+                          >
+                            <Heart className="w-3.5 h-3.5 fill-current" />
+                          </button>
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 flex items-center gap-1 ${planDisplay.color}`}>
+                            {isUnlocked ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Lock className="w-2.5 h-2.5 text-amber-400" />}
+                            <span>{planDisplay.name}</span>
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
+                        {f.description}
+                      </p>
+                      <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
+                        <span className="text-[9px] text-amber-400 font-bold flex items-center gap-1">
+                          <Heart className="w-2.5 h-2.5 fill-current" />
+                          <span>पसंदीदा फ़्रेम (Favorite)</span>
+                        </span>
+                        {isUnlocked ? (
+                          <span className={`font-bold flex items-center gap-1 ${isSelected ? 'text-yellow-400' : 'text-emerald-400'}`}>
+                            {isSelected ? '✓ एक्टिव टेम्पलेट' : 'क्लिक करके चुनें'}
+                          </span>
+                        ) : (
+                          <span className="text-amber-400 font-bold">🔒 लॉक है</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
 
 
           </div>
@@ -2671,10 +2850,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 <span>हाइलाइट रंग:</span>
               </span>
               <div className="flex items-center gap-1.5 flex-wrap">
-                {(effectiveTier === 'advanced' && !effectiveAdmin
-                  ? HIGHLIGHT_COLOR_PRESETS.slice(0, 5)
-                  : HIGHLIGHT_COLOR_PRESETS
-                ).map((hc) => {
+                {HIGHLIGHT_COLOR_PRESETS.map((hc) => {
                   const isSel = (card.highlightColor || '#FFE600').toUpperCase() === hc.color.toUpperCase();
                   return (
                     <button
@@ -2690,18 +2866,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </button>
                   );
                 })}
-                {/* Custom Color Picker: strictly for VIP DESK and Admin */}
-                {(effectiveAdmin || effectiveTier === 'ultra') && (
-                  <label className="flex items-center gap-1 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-bold text-neutral-300 cursor-pointer hover:border-neutral-500" title="कस्टम रंग चुनें">
-                    <input
-                      type="color"
-                      value={card.highlightColor || '#FFE600'}
-                      onChange={(e) => onChange({ highlightColor: e.target.value })}
-                      className="w-3.5 h-3.5 rounded cursor-pointer border-0 p-0 bg-transparent"
-                    />
-                    <span>कस्टम</span>
-                  </label>
-                )}
                 {/* Pro & VIP Desk: Set as Primary Highlight Color button */}
                 {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') && (
                   <button
@@ -4871,7 +5035,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 {/* Default option */}
                 <button
                   type="button"
-                  onClick={() => onChange({ customCalloutAssetUrl: undefined })}
+                  onClick={() => onChange({ customCalloutAssetUrl: undefined, calloutTag: currentDynamicFrame?.fullStoryCalloutConfig?.text || undefined })}
                   className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 ${
                     !card.customCalloutAssetUrl
                       ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
@@ -4882,8 +5046,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     <span>डिफ़ॉल्ट कॉलआउट (Default)</span>
                     {!card.customCalloutAssetUrl && <span className="text-[10px] font-black text-amber-400">✓ चयनित</span>}
                   </div>
-                  <div className="h-6 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center px-2 text-[9px] text-amber-300 font-bold">
-                    🔴 पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें
+                  <div className="h-6 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center px-2 text-[9px] text-amber-300 font-bold truncate">
+                    {currentDynamicFrame?.fullStoryCalloutConfig?.text || 'फ़्रेम डिफ़ॉल्ट (कोई कस्टम कॉलआउट नहीं)'}
                   </div>
                 </button>
 

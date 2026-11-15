@@ -143,10 +143,14 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
     setResult(null);
     setGeneratedAiImageUrl(null);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error('Request timed out: 60s exceeded')), 60000);
+
     try {
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        signal: controller.signal,
         body: JSON.stringify({
           input: inputPayload || undefined,
           linkUrl: urlPayload || undefined,
@@ -156,6 +160,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           headline_max_lines: headlineMaxLines || undefined,
         }),
       });
+      clearTimeout(timeoutId);
 
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -200,8 +205,9 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       }
     } catch (err: any) {
       const rawMsg = err?.message || '';
-      const errorMsg = /AbortError|Failed to fetch|NetworkError/i.test(rawMsg)
-        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।'
+      const isTimeoutOrAbort = /AbortError|Failed to fetch|NetworkError|signal is aborted|timed out|timeout/i.test(rawMsg);
+      const errorMsg = isTimeoutOrAbort
+        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समय अधिक लगा (Timeout)। कृपया पुनः प्रयास करें।'
         : (rawMsg || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
       setError(errorMsg);
     } finally {

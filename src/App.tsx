@@ -2321,7 +2321,36 @@ export default function App() {
       handleResetCard();
     };
     window.addEventListener('ai_news_studio_reset_request', handleResetRequest);
-    return () => window.removeEventListener('ai_news_studio_reset_request', handleResetRequest);
+
+    // Global Shortcut: Ctrl + Alt + F (Studio Safe Reset & Failsafe Loader Dismiss)
+    let isResetting = false;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isResetting) return;
+        isResetting = true;
+        try {
+          setIsAIAnalyzeOpen(false);
+          setIsCommandModalOpen(false);
+          setIsCaptionModalOpen(false);
+          setDownloading(false);
+          resetPhotoNewsStudioWorkspace({ skipConfirm: true });
+        } catch (err) {
+          console.error('Error during studio shortcut reset:', err);
+        } finally {
+          setTimeout(() => {
+            isResetting = false;
+          }, 500);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('ai_news_studio_reset_request', handleResetRequest);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const handleSaveDraft = () => {

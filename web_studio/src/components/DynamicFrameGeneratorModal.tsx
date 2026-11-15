@@ -1648,12 +1648,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
   // Stage 2: AI Gemini Multimodal Analysis
   const handleRunAiAnalysis = async () => {
+    if (isAnalyzing) return;
     if (!sampleImage) {
       setFeedbackMsg({ type: 'error', text: 'कृपया पहले पैनल A में सैंपल ग्राफिक अपलोड करें।' });
       return;
     }
     setIsAnalyzing(true);
-    setAnalysisStatusText('Gemini 1.5 Pro विज़न से सैंपल लेआउट का विश्लेषण हो रहा है...');
+    setAnalysisStatusText('Gemini विज़न AI से सैंपल लेआउट का विश्लेषण हो रहा है...');
     try {
       let token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
@@ -1663,13 +1664,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         if (res.isFallback || res.warning) {
           setAnalysisStatusText(res.warning || 'कैलिब्रेटेड ज्यामितीय लेआउट सक्रिय किया गया है।');
         } else {
-          setAnalysisStatusText('विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
+          setAnalysisStatusText('✅ विज़न विश्लेषण पूर्ण! तत्वों की पहचान कर ली गई है।');
         }
       } else {
-        setAnalysisStatusText(res.warning || res.error || 'AI विश्लेषण में असमर्थ');
+        setAnalysisStatusText(`❌ ${res.error || res.warning || 'AI विज़न विश्लेषण असफल रहा। कृपया पुनः प्रयास करें।'}`);
       }
     } catch (err: any) {
-      setAnalysisStatusText('AI विश्लेषण में त्रुटि आई। डिफ़ॉल्ट लेआउट सक्रिय किया जा रहा है।');
+      setAnalysisStatusText(`❌ AI विश्लेषण में त्रुटि: ${err?.message || 'सर्वर से संपर्क नहीं हो सका'}। कृपया पुनः प्रयास करें।`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -3286,7 +3287,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   सैंपल ग्राफिक को स्कैन करके हेडलाइन स्थिति, फोटो स्लॉट अनुपात, लोगो व लोकेशन बैज के निर्देशांक स्वतः पहचाने जाएंगे।
                 </p>
 
-                <div className="pt-2">
+                <div className="pt-2 flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     disabled={isAnalyzing || !sampleImage}
@@ -3295,10 +3296,22 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   >
                     {isAnalyzing ? 'एनालिसिस चल रहा है...' : '🚀 विज़न एनालिसिस प्रारंभ करें'}
                   </button>
+                  {analysisStatusText && analysisStatusText.startsWith('❌') && (
+                    <button
+                      type="button"
+                      disabled={isAnalyzing || !sampleImage}
+                      onClick={handleRunAiAnalysis}
+                      className="px-4 py-2 bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      🔄 पुनः प्रयास करें
+                    </button>
+                  )}
                 </div>
 
                 {analysisStatusText && (
-                  <div className="text-xs text-amber-300 font-bold pt-2">{analysisStatusText}</div>
+                  <div className={`text-xs font-bold pt-2 ${analysisStatusText.startsWith('❌') ? 'text-rose-400' : analysisStatusText.startsWith('✅') ? 'text-emerald-400' : 'text-amber-300'}`}>
+                    {analysisStatusText}
+                  </div>
                 )}
               </div>
 

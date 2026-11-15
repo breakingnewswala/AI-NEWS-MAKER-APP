@@ -34,7 +34,7 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
   // 1. Primary: Try Jina Reader edge proxy (CORS-friendly, extracts clean markdown and metadata)
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(new Error("Jina reader timed out")), timeoutMs);
     const readerUrl = `https://r.jina.ai/${normalized}`;
 
     const res = await fetch(readerUrl, {
@@ -127,7 +127,7 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
   try {
     const corsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(normalized)}`;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(new Error("CORS proxy timed out")), 12000);
     const res = await fetch(corsUrl, { signal: controller.signal });
     clearTimeout(timeoutId);
 

@@ -3475,14 +3475,16 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               {df.headerConfig?.showLocation && card.location && card.showLocation !== false && (() => {
                 const cleanLoc = formatCleanLocationText(card.location);
                 const badgeAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
-                const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000');
+                const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || df.headerConfig.locationTextColor || '#FFFFFF';
                 return badgeAsset ? (
                   <div
                     className="absolute pointer-events-auto flex items-center justify-center font-bold px-3"
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      width: 'auto',
+                      minWidth: '84px',
+                      maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundImage: `url(${badgeAsset})`,
                       backgroundSize: '100% 100%',
@@ -3543,10 +3545,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                      width: 'auto',
+                      minWidth: '84px',
+                      maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
-                      color: df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || (df.headerConfig.locationTextColor && df.headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF' ? df.headerConfig.locationTextColor : '#000000'),
+                      backgroundColor: df.headerConfig.locationBgColor || '#1D4ED8',
+                      color: locColor,
                       borderRadius: df.headerConfig.locationStyle === 'pill' ? '9999px' : '6px',
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                     }}

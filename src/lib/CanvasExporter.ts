@@ -144,6 +144,12 @@ const loadImageSingle = async (
 ): Promise<HTMLImageElement> => {
   let effectiveSrc = src.trim();
 
+  // Unwrap any recursive or nested proxy calls to prevent double-proxying and self-referential SSRF
+  while (effectiveSrc.includes('/api/proxy-image?url=')) {
+    const parts = effectiveSrc.split('/api/proxy-image?url=');
+    effectiveSrc = decodeURIComponent(parts[parts.length - 1]);
+  }
+
   // If effectiveSrc starts with /api/proxy-image, resolve absolute API url
   if (effectiveSrc.startsWith('/api/proxy-image')) {
     effectiveSrc = getApiUrl(effectiveSrc);
@@ -399,16 +405,21 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   // 0. Pre-calculate Headline Lines in selected font early so we know the exact dimensions
   // For quote template, side margin is 90px (width - 180). For standard templates, 48px (width - 96).
   const maxHeadlineWidth = isQuote ? width - 180 : width - 96;
-  const scaleRatio = 2.15; // Maps ~30px editor font to ~65px canvas
-  let targetFontSize = Math.round((card.headlineFontSize || 20) * scaleRatio);
-  targetFontSize = Math.max(isQuote ? 44 : 52, Math.min(isQuote ? 64 : 80, targetFontSize));
+  const isExplicitFontSize = Boolean(card.headlineFontSize && card.headlineFontSize > 0);
+  let targetFontSize = isExplicitFontSize
+    ? (card.headlineFontSize as number)
+    : (isQuote ? 56 : 64);
+  if (!isExplicitFontSize) {
+    targetFontSize = Math.max(isQuote ? 44 : 52, Math.min(isQuote ? 64 : 80, targetFontSize));
+  }
 
   ctx.save();
   const effectiveHeadlineText = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
   const rawHeadline = cleanHeadlineText(effectiveHeadlineText || '');
   const manualLines = rawHeadline.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const minAllowedFontSize = Math.min(24, targetFontSize);
   if (manualLines.length >= 2) {
-    for (let s = targetFontSize; s >= 36; s -= 2) {
+    for (let s = targetFontSize; s >= minAllowedFontSize; s -= 2) {
       ctx.font = `800 ${s}px "${selectedFontFamily}", "Noto Sans Devanagari", sans-serif`;
       const allFit = manualLines.every((m) => {
         const cleanText = m.replace(/\[\/?(?:yellow|highlight)\]/g, '');
@@ -421,9 +432,9 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     }
   } else {
     // Auto-fit headline font size dynamically so entire headline fits cleanly in 3 lines without ellipsis
-    for (let s = targetFontSize; s >= 36; s -= 2) {
+    for (let s = targetFontSize; s >= minAllowedFontSize; s -= 2) {
       const testLines = getHeadlineLines(ctx, rawHeadline, card.highlightWords, maxHeadlineWidth, s, 0);
-      if (testLines.length <= 3 || s <= 38) {
+      if (testLines.length <= 3 || s <= minAllowedFontSize) {
         targetFontSize = s;
         break;
       }
@@ -1469,31 +1480,32 @@ function drawLogoBadge(
   ctx.restore();
 }
 
-// Top Location Badge (Above Headline)
+// Top Location Badge (Above Headline with dynamic width & configurable color)
 function drawLocationBadge(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  locationText: string
+  locationText: string,
+  bgColor?: string,
+  textColor: string = '#FFFFFF'
 ) {
   if (!locationText) return;
   const cleanLoc = formatCleanLocationText(locationText) || 'लोकेशन';
   ctx.save();
   ctx.font = '800 22px "Baloo 2", "Noto Sans Devanagari", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
   const textW = ctx.measureText(cleanLoc).width;
-  const badgeW = textW + 56;
+  const badgeW = Math.max(100, Math.round(textW + 52));
   const badgeH = 40;
 
-  // Red badge background
-  ctx.fillStyle = '#DC2626';
+  // Background color (Default: vibrant news blue or caller-specified badge color)
+  const finalBgColor = bgColor || '#1D4ED8';
+  ctx.fillStyle = finalBgColor;
   ctx.beginPath();
   ctx.roundRect(x, y, badgeW, badgeH, 6);
   ctx.fill();
 
-  // Highlight stroke
-  ctx.strokeStyle = '#EF4444';
+  // Subtle highlight border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
@@ -1509,11 +1521,11 @@ function drawLocationBadge(
   ctx.closePath();
   ctx.fill();
 
-  // Location text in Baloo 2
-  ctx.fillStyle = '#FFFFFF';
+  // Location text in crisp white, vertically centered
+  ctx.fillStyle = textColor || '#FFFFFF';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(cleanLoc, x + 34, y + badgeH / 2 + 3);
+  ctx.fillText(cleanLoc, x + 34, y + badgeH / 2 + 1);
 
   ctx.restore();
 }
@@ -1837,17 +1849,14 @@ async function drawAuthoritativeDynamicFrameCanvas(
         ctx.save();
         const typo = df.headerConfig.typographyConfig;
         let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
-        let locColor = typo?.color || typo?.textColor || df.headerConfig.locationTextColor || '#000000';
+        let locColor = typo?.color || typo?.textColor || df.headerConfig.locationTextColor || '#FFFFFF';
         const cleanLocText = formatCleanLocationText(card.location || '');
         ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
         const measuredTextW = ctx.measureText(cleanLocText).width;
 
-        // Dynamic horizontal expansion: adapt center destination width nicely to fit text + 24px padding (Bug Group C1)
-        const minCenterW = Math.max(10, measuredTextW + 24);
+        // Dynamic horizontal expansion: adapt width to actual text length (compact for Bhopal, wider for Bhopal, MP)
         const neededCenterW = Math.max(10, measuredTextW + 24);
-        const midDestW = Math.max(minCenterW, neededCenterW);
-        const maxBw = Math.max(bw, width - bx - 20);
-        const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
+        const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(leftDestW + neededCenterW + rightDestW)));
         const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
 
         // Draw background color if selected by user or frame config
@@ -1892,39 +1901,48 @@ async function drawAuthoritativeDynamicFrameCanvas(
       }
     } else {
       ctx.save();
-      ctx.fillStyle = df.headerConfig.locationBgColor || '#DC2626';
-      ctx.beginPath();
-      ctx.roundRect(bx, by, bw, bh, df.headerConfig.locationStyle === 'pill' ? bh / 2 : 6);
-      ctx.fill();
-
-      ctx.fillStyle = df.headerConfig.locationTextColor || '#FFFFFF';
+      const cleanLocText = formatCleanLocationText(card.location || '');
       const fontSize = Math.max(14, Math.min(32, Math.round(bh * 0.60)));
       ctx.font = `800 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+      const measuredTextW = ctx.measureText(cleanLocText).width;
+      const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(measuredTextW + 52)));
+
+      ctx.fillStyle = df.headerConfig.locationBgColor || '#1D4ED8';
+      ctx.beginPath();
+      ctx.roundRect(bx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'pill' ? bh / 2 : 6);
+      ctx.fill();
+
+      // Subtle stroke
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = df.headerConfig.locationTextColor || '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(card.location, bx + bw / 2, by + bh / 2);
+      ctx.fillText(cleanLocText, bx + dynamicBw / 2, by + bh / 2 + 1);
       ctx.restore();
     }
   }
 
   // 4.5 DYNAMIC DATE STAMP (Part 10 & 11: Position, Rotation, Center-Pivot parity & Visibility Toggle)
-  if (df.headerConfig?.showDate && card.showDate !== false) {
-    const dateRect = df.headerConfig.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 };
+  if (df.headerConfig?.showDate !== false && card.showDate !== false) {
+    const dateRect = df.headerConfig?.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 };
     const dx = (dateRect.x / 100) * width;
     const dy = (dateRect.y / 100) * height;
     const dw = (dateRect.width / 100) * width;
     const dh = (dateRect.height / 100) * height;
-    const rotDeg = card.dateRotation ?? df.headerConfig.dateRotation ?? 270;
-    const dateOpacity = card.dateOpacity ?? df.headerConfig.dateOpacity ?? 0.90;
+    const rotDeg = card.dateRotation ?? df.headerConfig?.dateRotation ?? 270;
+    const dateOpacity = card.dateOpacity ?? df.headerConfig?.dateOpacity ?? 0.90;
 
     ctx.save();
     ctx.globalAlpha = Math.max(0.15, Math.min(1.0, dateOpacity));
     ctx.translate(dx + dw / 2, dy + dh / 2);
     ctx.rotate((rotDeg * Math.PI) / 180);
 
-    const dateFontSize = Math.round((df.headerConfig.dateFontSize || 14) * (width / 1080) * 1.4);
+    const dateFontSize = Math.round((df.headerConfig?.dateFontSize || 14) * (width / 1080) * 1.4);
     ctx.font = `bold ${dateFontSize}px "Baloo 2", sans-serif`;
-    ctx.fillStyle = df.headerConfig.dateTextColor || '#CBD5E1';
+    ctx.fillStyle = df.headerConfig?.dateTextColor || '#CBD5E1';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
@@ -1942,13 +1960,17 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const ch = (cRect.height / 100) * height;
     const cRot = df.fullStoryCalloutConfig.rotation || 0;
     const calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
+    const userScale = Math.max(0.6, Math.min(2.0, card.calloutScale ?? 1.0));
 
     ctx.save();
+    ctx.translate(cx + cw / 2, cy + ch / 2);
     if (cRot !== 0) {
-      ctx.translate(cx + cw / 2, cy + ch / 2);
       ctx.rotate((cRot * Math.PI) / 180);
-      ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
     }
+    if (userScale !== 1.0) {
+      ctx.scale(userScale, userScale);
+    }
+    ctx.translate(-(cx + cw / 2), -(cy + ch / 2));
 
     let cImg: HTMLImageElement | null = null;
     if (calloutAsset) {
@@ -1962,8 +1984,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
     if (cImg && cImg.naturalWidth > 1 && cImg.naturalHeight > 1) {
       const origW = cImg.naturalWidth || cImg.width || 480;
       const origH = cImg.naturalHeight || cImg.height || 72;
-      const userScale = Math.max(0.8, Math.min(1.3, card.calloutScale ?? 1.0));
-      const scale = Math.min((cw * userScale) / origW, (ch * userScale) / origH);
+      const scale = Math.min(cw / origW, ch / origH);
       const drawW = Math.round(origW * scale);
       const drawH = Math.round(origH * scale);
       const drawX = Math.round(cx + (cw - drawW) / 2);
@@ -1984,8 +2005,10 @@ async function drawAuthoritativeDynamicFrameCanvas(
       const align = df.fullStoryCalloutConfig.align || 'center';
       ctx.textAlign = align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      const textX = align === 'left' ? cx + 16 : align === 'right' ? cx + cw - 16 : cx + cw / 2;
-      ctx.fillText(df.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में', textX, cy + ch / 2);
+      const calloutText = card.calloutTag || df.fullStoryCalloutConfig.text || 'पूरी खबर नीचे विवरण में पढ़ें';
+      const cleanCallout = calloutText.replace('🔴', '').trim();
+      const textX = align === 'left' ? cx + 24 : align === 'right' ? cx + cw - 24 : cx + cw / 2;
+      ctx.fillText(cleanCallout, textX, cy + ch / 2);
     }
     ctx.restore();
   }
@@ -2062,9 +2085,12 @@ async function drawAuthoritativeDynamicFrameCanvas(
 
     ctx.save();
     ctx.translate(width / 2, height * 0.40);
-    ctx.rotate((-20 * Math.PI) / 180);
-    const stepX = 280;
-    const stepY = 100;
+    const wmRotDeg = card.watermarkRotation ?? -20;
+    ctx.rotate((wmRotDeg * Math.PI) / 180);
+    const textMetrics = ctx.measureText(textContent.toUpperCase());
+    const measuredW = textMetrics ? textMetrics.width : (textContent.length * 16);
+    const stepX = Math.max(340, Math.round(measuredW + 120));
+    const stepY = 110;
     for (let row = -4; row <= 4; row++) {
       const offsetX = (row % 2) * (stepX / 2);
       for (let col = -3; col <= 3; col++) {

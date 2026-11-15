@@ -892,7 +892,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const controller = new AbortController();
       currentAbortControllerRef.current = controller;
       isResetRef.current = false;
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out: 60s exceeded")), 60000);
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -1099,8 +1099,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         return;
       }
       const rawMsg = err?.message || '';
-      const errorMsg = /AbortError|Failed to fetch|NetworkError/i.test(rawMsg)
-        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।'
+      const isTimeoutOrAbort = /AbortError|Failed to fetch|NetworkError|signal is aborted|timed out|timeout/i.test(rawMsg);
+      const errorMsg = isTimeoutOrAbort
+        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समय अधिक लगा (Timeout)। कृपया पुनः प्रयास करें।'
         : (rawMsg || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
       setError(errorMsg);
       setLoading(false);
@@ -1186,7 +1187,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       const controller = new AbortController();
       currentAbortControllerRef.current = controller;
       isResetRef.current = false;
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out: 60s exceeded")), 60000);
       const response = await fetch(getApiUrl('/api/process-news-command'), {
         method: 'POST',
         headers: getAuthHeaders(),
@@ -1332,8 +1333,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         return;
       }
       const rawMsg = err?.message || '';
-      const errorMsg = /AbortError|Failed to fetch|NetworkError/i.test(rawMsg)
-        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।'
+      const isTimeoutOrAbort = /AbortError|Failed to fetch|NetworkError|signal is aborted|timed out|timeout/i.test(rawMsg);
+      const errorMsg = isTimeoutOrAbort
+        ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समय अधिक लगा (Timeout)। कृपया पुनः प्रयास करें।'
         : (rawMsg || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
       setError(errorMsg);
     } finally {
