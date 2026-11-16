@@ -325,8 +325,8 @@ function getSavedChannelProfile(): ChannelProfile | null {
         let logo = prof.channelLogoUrl || '';
         let pngLogo = prof.channelLogoPngUrl || '';
         if (!isMaster) {
-          if (typeof logo === 'string' && (logo.includes('ai_news_maker_logo') || logo.includes('assets/ai_news_maker_logo'))) logo = '';
-          if (typeof pngLogo === 'string' && (pngLogo.includes('ai_news_maker_logo') || pngLogo.includes('assets/ai_news_maker_logo'))) pngLogo = '';
+          if (typeof logo === 'string' && (logo.includes('ai_news_maker_logo') || logo.includes('assets/ai_news_maker_logo') || logo.includes('breaking_news_wala_logo') || logo.includes('assets/breaking_news_wala_logo'))) logo = '';
+          if (typeof pngLogo === 'string' && (pngLogo.includes('ai_news_maker_logo') || pngLogo.includes('assets/ai_news_maker_logo') || pngLogo.includes('breaking_news_wala_logo') || pngLogo.includes('assets/breaking_news_wala_logo'))) pngLogo = '';
         }
         let channelNameHi = prof.channelNameHi || '';
         if (email === 'khabridasnews@gmail.com' && (!channelNameHi || channelNameHi.toLowerCase().includes('khabri') || channelNameHi === 'Khabri Das News')) {
@@ -427,20 +427,21 @@ function getSavedChannelProfile(): ChannelProfile | null {
       }
 
       if (userEmail && userEmail !== 'breakingnewswala.com@gmail.com' && userEmail !== 'admin.ainewsmaker@gmail.com') {
+        const isKhabri = userEmail === 'khabridasnews@gmail.com';
         return {
-          channelNameHi: userEmail === 'khabridasnews@gmail.com' ? 'खबरीदास न्यूज़' : '',
-          channelNameEn: '',
-          channelLogoUrl: '',
-          channelLogoPngUrl: '',
+          channelNameHi: isKhabri ? 'खबरीदास न्यूज़' : '',
+          channelNameEn: isKhabri ? 'Khabridas News' : '',
+          channelLogoUrl: isKhabri ? '/uploads/logos/req_1794754892218_bhzv2b.png' : '',
+          channelLogoPngUrl: isKhabri ? '/uploads/logos/req_1794754892218_bhzv2b.png' : '',
           channelLogoType: 'png',
           username: userEmail.split('@')[0],
-          mobileNumber: '',
-          whatsappNumber: '',
-          websiteUrl: '',
+          mobileNumber: isKhabri ? '9876543210' : '',
+          whatsappNumber: isKhabri ? '9876543210' : '',
+          websiteUrl: isKhabri ? 'https://khabridasnews.com' : '',
           showMobileNumber: true,
           showWebsite: true,
-          district: '',
-          state: '',
+          district: isKhabri ? 'ग्वालियर' : '',
+          state: isKhabri ? 'मध्य प्रदेश' : '',
           socialIcons: { youtube: true, facebook: true, instagram: true, twitter: false, linkedin: false },
         };
       }
@@ -582,7 +583,13 @@ export default function App() {
             const hasState = Boolean((prof as any)?.state?.trim() || (prof as any)?.reporterState?.trim() || u?.state?.trim());
             const hasDistrict = Boolean(prof?.district?.trim() || (prof as any)?.reporterDistrict?.trim() || u?.district?.trim() || u?.city?.trim());
             const rawLogo = prof?.channelLogoPngUrl || prof?.channelLogoUrl || u?.channelLogoUrl || '';
-            const hasValidLogo = Boolean(rawLogo && !rawLogo.includes('ai_news_maker_logo') && !rawLogo.includes('assets/ai_news_maker_logo'));
+            const hasValidLogo = Boolean(
+              rawLogo &&
+              !rawLogo.includes('ai_news_maker_logo') &&
+              !rawLogo.includes('assets/ai_news_maker_logo') &&
+              !rawLogo.includes('breaking_news_wala') &&
+              !rawLogo.includes('assets/breaking_news_wala')
+            );
 
             if (!hasChannelName || !hasUsername || !hasState || !hasDistrict || !hasValidLogo) {
               setToastMessage('⚠️ कृपया फोटो/वीडियो स्टूडियो का उपयोग करने से पहले अपनी प्रोफ़ाइल (चैनल नाम, राज्य, ज़िला, यूज़रनेम एवं लोगो) पूरी करें!');
@@ -1236,9 +1243,45 @@ export default function App() {
     }
   });
 
+  const hydrateCloudUserProfile = async (cleanEmail: string) => {
+    if (!cleanEmail) return;
+    try {
+      let token = await ensureAuthToken().catch(() => '');
+      if (!token) token = getAuthToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`), { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && data?.profile) {
+          const cloudP = data.profile;
+          localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(cloudP));
+          localStorage.setItem('user_channel_profile', JSON.stringify(cloudP));
+          setCurrentUser((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              district: cloudP.district || cloudP.location || prev.district,
+              state: cloudP.state || prev.state,
+              channelName: cloudP.channelNameHi || prev.channelName,
+              channelLogoUrl: cloudP.channelLogoUrl || prev.channelLogoUrl,
+              channelWebsite: cloudP.websiteUrl || prev.channelWebsite,
+              mobileNumber: cloudP.mobileNumber || prev.mobileNumber,
+            };
+          });
+          window.dispatchEvent(new CustomEvent('channel_profile_updated', { detail: cloudP }));
+        }
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     fetchLiveNews();
     ensureAuthToken().catch(() => {});
+    const cleanEmail = (currentUser?.email || '').toLowerCase().trim();
+    if (cleanEmail) {
+      hydrateCloudUserProfile(cleanEmail);
+    }
     // Routine mount/refresh must NEVER automatically open the Login Modal (Strict Rule A, B)
   }, [currentUser?.role, currentUser?.email]);
 
@@ -2538,6 +2581,9 @@ export default function App() {
     }
 
     setCurrentUser(user);
+    if (cleanEmail) {
+      hydrateCloudUserProfile(cleanEmail);
+    }
     setIsLoginModalOpen(false);
     showToast(`👋 स्वागत है, ${user.name}!`);
 

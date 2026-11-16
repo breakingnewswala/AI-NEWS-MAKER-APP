@@ -559,7 +559,8 @@ export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
     const reqHeaders: Record<string, string> = { ...adminHeaders };
     if (token) reqHeaders['Authorization'] = `Bearer ${token}`;
 
-    const url = getApiUrl(token ? '/api/admin/approved-news-ids' : '/api/approved-news-ids');
+    // Use the public authoritative endpoint for fetching approved news IDs
+    const url = getApiUrl('/api/approved-news-ids');
     const res = await fetch(url, { headers: reqHeaders });
     if (res.ok) {
       const data = await res.json();

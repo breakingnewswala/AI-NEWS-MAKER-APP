@@ -3460,13 +3460,13 @@ app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
 app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
+    const postData = req.body || {};
     let existing = loadNewsDatabase();
     let found = false;
     let approvedTitle = "";
     existing = existing.map((p) => {
       if (p.id === id) {
         found = true;
-        const postData = req.body || {};
         const updatedTitle = postData.title || p.title;
         approvedTitle = updatedTitle;
         const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0
@@ -6583,6 +6583,7 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       uid: u.userId,
       tier: u.tier,
       email: u.email,
+      state: (u.state && u.state.trim()) ? u.state : ((allProfiles[cleanKey] && allProfiles[cleanKey].state) || ''),
       district: (u.district && u.district.trim()) ? u.district : (u.location || (allProfiles[cleanKey] && allProfiles[cleanKey].district) || ''),
       location: (u.location && u.location.trim()) ? u.location : (u.district || (allProfiles[cleanKey] && allProfiles[cleanKey].location) || ''),
       channelNameHi: u.channelNameHi || u.channelName || '',
@@ -6994,6 +6995,7 @@ function reconcileAllUsers() {
           channelLogoType: p.channelLogoType || 'png',
           mobile: p.mobileNumber || '',
           mobileNumber: p.mobileNumber || '',
+          state: p.state || '',
           district: p.district || '',
           websiteUrl: p.websiteUrl || '',
           socialIcons: p.socialIcons,
@@ -7040,6 +7042,7 @@ function reconcileAllUsers() {
       channelLogoType: subProf?.channelLogoType || existingSub?.channelLogoType || 'png',
       mobile: subProf?.mobileNumber || existingSub?.mobile || '9669802408',
       mobileNumber: subProf?.mobileNumber || existingSub?.mobileNumber || '9669802408',
+      state: subProf?.state || existingSub?.state || '',
       district: subProf?.district || existingSub?.district || 'हेडक्वार्टर सेंट्रल डेस्क',
       websiteUrl: subProf?.websiteUrl || existingSub?.websiteUrl || 'ainewsmaker.online',
       isBlocked: false,
@@ -7076,6 +7079,7 @@ function reconcileAllUsers() {
       mobileNumber: (adminProf?.mobileNumber && adminProf.mobileNumber.trim()) ? adminProf.mobileNumber : (existingAdmin?.mobileNumber || '9669802408'),
       whatsappNumber: (adminProf?.whatsappNumber && adminProf.whatsappNumber.trim()) ? adminProf.whatsappNumber : (existingAdmin?.whatsappNumber || '9669802408'),
       whatsappDisplayNumber: ((adminProf as any)?.whatsappDisplayNumber && String((adminProf as any).whatsappDisplayNumber).trim()) ? String((adminProf as any).whatsappDisplayNumber).trim() : (adminProf?.whatsappNumber || (existingAdmin as any)?.whatsappDisplayNumber || existingAdmin?.whatsappNumber || '9669802408'),
+      state: adminProf?.state || existingAdmin?.state || '',
       district: (() => {
         const raw = (adminProf?.district && adminProf.district.trim()) ? adminProf.district.trim() : ((existingAdmin?.district && existingAdmin.district.trim()) ? existingAdmin.district.trim() : 'भोपाल');
         return (raw === 'सेंट्रल डेस्क / भोपाल' || raw === 'हेडक्वार्टर सेंट्रल डेस्क') ? 'भोपाल' : raw;
@@ -7134,6 +7138,7 @@ function reconcileAllUsers() {
         channelLogoType: 'png',
         mobile: p3?.mobileNumber || '9425000998',
         mobileNumber: p3?.mobileNumber || '9425000998',
+        state: p3?.state || '',
         district: p3?.district || 'सेंट्रल डेस्क',
         websiteUrl: p3?.websiteUrl || 'anmolsandesh.com',
         isBlocked: false,
@@ -11699,6 +11704,7 @@ interface StoredUserProfile {
   uid?: string;
   tier?: string;
   email?: string;
+  state?: string;
   district?: string;
   location?: string;
   channelNameHi: string;

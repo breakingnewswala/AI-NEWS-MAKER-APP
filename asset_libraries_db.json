@@ -368,6 +368,8 @@
     "category": "regular",
     "enabled": true,
     "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
@@ -401,6 +403,7 @@
     "category": "branding",
     "enabled": true,
     "allowedPlans": [
+      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
@@ -434,6 +437,8 @@
     "category": "social",
     "enabled": true,
     "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
       "PRO",
       "VIP DESK"
     ],
@@ -500,7 +505,6 @@
     "category": "special",
     "enabled": true,
     "allowedPlans": [
-      "PRO",
       "VIP DESK"
     ],
     "footerConfig": {

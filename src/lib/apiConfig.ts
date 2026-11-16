@@ -530,9 +530,9 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           }
         } catch {}
         if (response.status === 401) {
+          clearAuthTokens();
           const isAdminEndpoint = urlStr.includes('/api/admin') || urlStr.includes('/api/master-admin');
           if (isAdminEndpoint) {
-            clearAuthTokens();
             try {
               const now = Date.now();
               if (now - lastAdminAuthEventDispatched > 8000) {

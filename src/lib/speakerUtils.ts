@@ -119,7 +119,7 @@ export function cleanHeadlineText(text: any): string {
       ''
     )
     .replace(
-      /\s*(?:[|\-–—:,]\s*)?(?:भोपाल\s*न्यूज़|इंदौर\s*न्यूज़|देवास\s*न्यूज़|जबलपुर\s*न्यूज़|ग्वालियर\s*न्यूज़|एमपी\s*न्यूज़|दैनिक\s*भास्कर|भास्कर|आज\s*तक|अमर\s*उजाला|पत्रिका|नवभारत(?:\s*टाइम्स)?|एनडीटीवी|बीबीसी\s*हिंदी|ताज़ा\s*अपडेट|लेटेस्ट\s*अपडेट|बड़ी\s*खबर).*$/i,
+      /\s+[|\-–—:]\s*(?:भोपाल\s*न्यूज़|इंदौर\s*न्यूज़|देवास\s*न्यूज़|जबलपुर\s*न्यूज़|ग्वालियर\s*न्यूज़|एमपी\s*न्यूज़|दैनिक\s*भास्कर|भास्कर|आज\s*तक|अमर\s*उजाला|पत्रिका|नवभारत(?:\s*टाइम्स)?|एनडीटीवी|बीबीसी\s*हिंदी|ताज़ा\s*अपडेट|लेटेस्ट\s*अपडेट|बड़ी\s*खबर).*$/i,
       ''
     )
     .replace(/\s*[|\-–—:]\s*[A-Za-z\s]{3,30}$/, '')
@@ -1240,6 +1240,21 @@ export function fixHeadlineEnding(text: string): string {
   return res.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
 }
 
+export function stripDanglingHeadlineEndings(text: string): string {
+  if (!text) return "";
+  let res = text.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
+  const danglingRegex = /(?:\s+(?:और|तथा|एवं|व|या|अथवा|कि|जो|का|की|के|में|पर|से|को|ने|तक|हेतु|लिए|हो|हुए|कर|गया|गई|गए|भी|तो|ही|हुई|जारी|चलते|लेकर|कहा\s+कि|बताया\s+कि))$/u;
+  const punctRegex = /[।\.\,\!\?\:\-–—;;\s"”'’]+$/g;
+
+  let prev = "";
+  while (res !== prev) {
+    prev = res;
+    res = res.replace(danglingRegex, "").trim();
+    res = res.replace(punctRegex, "").trim();
+  }
+  return res;
+}
+
 export interface HeadlineQualityReport {
   isValid: boolean;
   score: number;
@@ -1291,24 +1306,26 @@ export function validateHeadlineQuality(headline: string, tierIndex?: number): H
 
 export function fitSingleHeadlineToTier(
   text: string,
-  maxLimit: number = 120,
+  maxLimit: number = 200,
   minLimit: number = 0,
   factSentence?: string | string[]
 ): string {
   if (!text) return "";
-  const effectiveMax = Math.min(maxLimit || 120, 120);
+  const effectiveMax = Math.min(maxLimit || 200, 200);
   let cleaned = sanitizeHeadlineClean(text);
   cleaned = cleaned.replace(/\s*[,।]?\s*(?:जिससे|इससे)\s+लोगों\s+को\s+मदद\s+मिलेगी.*$/u, "");
   cleaned = cleaned.replace(/([A-Za-z\u0900-\u097F]+):([A-Za-z\u0900-\u097F]+)/g, "$1: $2");
   cleaned = cleaned.replace(/\s{2,}/g, " ");
   cleaned = sanitizeHeadlineClean(cleaned);
 
-  const currentLen = countHeadlineVisibleCharacters(cleaned);
-  if (currentLen <= effectiveMax && (currentLen >= minLimit || currentLen >= 30)) {
+  let currentLen = countHeadlineVisibleCharacters(cleaned);
+
+  // If already within limits
+  if (currentLen <= effectiveMax && currentLen >= minLimit) {
     return cleaned;
   }
 
-  // Case 1: Exceeds target max -> Truncate cleanly ONLY at natural clause boundaries; if <= 120 chars and no clause boundary, preserve complete sentence!
+  // Case 1: Exceeds target max -> check for clean clause boundary, then word boundary
   if (currentLen > effectiveMax) {
     const delimiters = [", ", " - ", ": ", " — ", "; "];
     for (const d of delimiters) {
@@ -1316,43 +1333,318 @@ export function fitSingleHeadlineToTier(
       if (idx >= Math.min(minLimit, 55)) {
         const candidate = sanitizeHeadlineClean(cleaned.substring(0, idx));
         const cLen = countHeadlineVisibleCharacters(candidate);
-        if (cLen >= 50 && cLen <= effectiveMax) {
+        if (cLen >= minLimit && cLen <= effectiveMax) {
           return candidate;
         }
       }
     }
-    if (currentLen <= 120) {
-      return cleaned;
-    }
-    const sliced = cleaned.substring(0, 120);
+    const sliced = cleaned.substring(0, effectiveMax);
     const lastSpace = sliced.lastIndexOf(" ");
-    const result = lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced;
-    return sanitizeHeadlineClean(result);
+    const result = lastSpace >= Math.max(35, minLimit - 10) ? sliced.substring(0, lastSpace) : sliced;
+    const cleanResult = stripDanglingHeadlineEndings(sanitizeHeadlineClean(result));
+    if (countHeadlineVisibleCharacters(cleanResult) >= minLimit || !factSentence) {
+      return cleanResult;
+    }
+    cleaned = cleanResult;
+    currentLen = countHeadlineVisibleCharacters(cleaned);
   }
 
-  // Case 2: Only expand if headline is an incomplete fragment (< 30 chars)
-  if (minLimit > 0 && currentLen < 30 && factSentence) {
+  // Case 2: Shorter than minLimit -> expand naturally from article fact sentences
+  if (minLimit > 0 && currentLen < minLimit && factSentence) {
     const candidates = (Array.isArray(factSentence) ? factSentence : [factSentence])
       .filter(Boolean)
       .flatMap((f: any) => String(f).split(/[।\n]+/))
       .flatMap((s: string) => s.split(/[,;:]\s+/))
       .map((s: string) => sanitizeHeadlineClean(s))
-      .filter((s: string) => s.length >= 12);
+      .filter((s: string) => s.length >= 8);
 
     for (const rawFact of candidates) {
       if (cleaned.includes(rawFact.slice(0, 14)) || calculateHeadlineSimilarity(cleaned, rawFact) >= 0.65) continue;
 
-      for (const sep of [": ", ", "]) {
+      for (const sep of [", ", ": ", " — "]) {
         const combined = sanitizeHeadlineClean(`${cleaned}${sep}${rawFact}`);
         const cLen = countHeadlineVisibleCharacters(combined);
-        if (cLen >= 35 && cLen <= effectiveMax) {
+        if (cLen >= minLimit && cLen <= effectiveMax) {
           return combined;
+        }
+        if (cLen > effectiveMax) {
+          const sliced = combined.substring(0, effectiveMax);
+          const lastSpace = sliced.lastIndexOf(" ");
+          if (lastSpace >= minLimit) {
+            const trimmedCandidate = stripDanglingHeadlineEndings(sanitizeHeadlineClean(sliced.substring(0, lastSpace)));
+            const tLen = countHeadlineVisibleCharacters(trimmedCandidate);
+            if (tLen >= minLimit && tLen <= effectiveMax) {
+              return trimmedCandidate;
+            }
+          }
+        }
+      }
+    }
+
+    // Secondary pass: step-by-step word append from facts to bridge the gap
+    for (const rawFact of candidates) {
+      if (cleaned.includes(rawFact.slice(0, 14))) continue;
+      const words = rawFact.split(/\s+/).filter(Boolean);
+      let acc = cleaned;
+      for (const w of words) {
+        const next = sanitizeHeadlineClean(`${acc} ${w}`);
+        const nLen = countHeadlineVisibleCharacters(next);
+        if (nLen > effectiveMax) break;
+        acc = next;
+        if (nLen >= minLimit && nLen <= effectiveMax) {
+          return sanitizeHeadlineClean(acc);
         }
       }
     }
   }
 
   return sanitizeHeadlineClean(cleaned);
+}
+
+export const TIER_DIVERSIFICATION_PATTERNS = [
+  // Tier 1: 80 - 110
+  {
+    prefixes: ['संक्षिप्त विवरण: ', 'मुख्य बिंदु: ', '', 'अपडेट: ', 'बड़ा अपडेट: '],
+    connectors: [
+      '',
+      ', स्थिति सामान्य बताई जा रही है',
+      ', जांच शुरू की गई है',
+      ', मौके पर पहुंचकर स्थिति का जायजा लिया गया है',
+      ', मामले में पुलिस और प्रशासन मुस्तैद',
+      ', आधिकारिक बयान की प्रतीक्षा है'
+    ]
+  },
+  // Tier 2: 100 - 130
+  {
+    prefixes: ['मुख्य बिंदु: ', 'अहम जानकारी: ', 'संक्षिप्त विवरण: ', 'अपडेट: ', 'बड़ा अपडेट: ', 'ताज़ा अपडेट: ', ''],
+    connectors: [
+      ', स्थिति पर लगातार नजर रखी जा रही है',
+      ', मामले को लेकर प्रशासनिक सतर्कता बढ़ी है',
+      ', घटना के बाद से क्षेत्र में हलचल तेज है',
+      ', पूरे मामले की प्राथमिक जांच तेजी से शुरू कर दी गई है',
+      ', पूरे मामले में अधिकारियों की कड़ी नजर, उच्च स्तरीय जांच और आवश्यक कार्रवाई शुरू',
+      ', घटना के बाद मौके पर पहुंचे प्रशासनिक अधिकारी, राहत और जांच कार्य तेजी से जारी',
+      ', मामले की संवेदनशीलता को देखते हुए उच्च स्तरीय जांच शुरू, शासन को भेजी जाएगी रिपोर्ट',
+      ', पूरे घटनाक्रम को लेकर प्रशासन सतर्क, मौके पर पहुंचे अधिकारियों ने संभाली स्थिति',
+      ', मामले को लेकर अधिकारियों ने दिए सख्त जांच के निर्देश, पूरे क्षेत्र में निगरानी तेज',
+      ', प्रशासनिक अमला अलर्ट मोड पर, पूरे घटनाक्रम की गहनता से पड़ताल और समीक्षा जारी'
+    ]
+  },
+  // Tier 3: 125 - 150
+  {
+    prefixes: ['विस्तृत रिपोर्ट: ', 'अहम जानकारी: ', 'ग्राउंड रिपोर्ट: ', 'प्रमुख घटनाक्रम: ', 'विशेष रिपोर्ट: ', ''],
+    connectors: [
+      ', मामले को लेकर आधिकारिक बयान और रिपोर्ट की प्रतीक्षा है',
+      ', पूरे घटनाक्रम की आधिकारिक पुष्टि व जांच जारी है',
+      ', मामले से जुड़े हर पहलू पर गंभीरता से नजर रखी जा रही है',
+      ', पूरे घटनाक्रम को लेकर आधिकारिक बयान और विस्तृत रिपोर्ट की प्रतीक्षा की जा रही है',
+      ', मामले से जुड़े हर तथ्य की उच्च स्तर पर गहनता से पड़ताल की जा रही है',
+      ', मामले की संवेदनशीलता को देखते हुए उच्च स्तरीय जांच समिति गठित, जल्द शासन को भेजी जाएगी विस्तृत रिपोर्ट',
+      ', पूरे घटनाक्रम को लेकर आधिकारिक बयान जारी होने की प्रतीक्षा, प्रशासनिक अधिकारी मौके पर तैनात रहकर बनाए हैं नजर',
+      ', मामले से जुड़े हर तथ्य की गहनता से पड़ताल जारी, प्रशासनिक अमले ने पूरे क्षेत्र में स्थिति पर कड़ी निगरानी बनाई',
+      ', पूरे घटनाक्रम को लेकर शासन स्तर पर समीक्षा जारी, संबंधित विभाग के वरिष्ठ अधिकारियों ने मौके का जायजा लिया',
+      ', घटना के हर बिंदु की निष्पक्ष जांच के आदेश, अधिकारियों ने मौके पर पहुंचकर स्थिति का जायजा लेते हुए रिपोर्ट तलब की'
+    ]
+  },
+  // Tier 4: 130 - 160
+  {
+    prefixes: ['प्रमुख समाचार: ', 'विशेष रिपोर्ट: ', 'विस्तृत रिपोर्ट: ', 'प्रशासनिक अपडेट: ', ''],
+    connectors: [
+      ', पूरे मामले में स्थिति पर लगातार प्रशासनिक नजर रखी जा रही है',
+      ', घटनाक्रम से जुड़े हर पहलू पर संबंधित विभाग की नजर बनी हुई है',
+      ', मामले में विस्तृत विवरण और आगामी कार्रवाई का इंतजार है',
+      ', पूरे घटनाक्रम पर प्रशासनिक अधिकारियों की कड़ी नजर बनी हुई है और आगामी कार्रवाई जारी है',
+      ', मामले को लेकर संबंधित अधिकारियों ने विस्तृत रिपोर्ट तलब की है और जांच जारी है',
+      ', उच्च अधिकारियों ने मौके पर पहुंचकर जायजा लिया और विस्तृत जांच रिपोर्ट जल्द सौंपने के निर्देश दिए',
+      ', मामले से जुड़े हर तथ्य की सूक्ष्मता से जांच की जा रही है और दोषियों पर कड़ी कार्रवाई के संकेत हैं'
+    ]
+  },
+  // Tier 5: 150 - 200
+  {
+    prefixes: ['विशेष ग्राउंड रिपोर्ट: ', 'विस्तृत कवरेज: ', 'विशेष पड़ताल: ', 'प्रमुख समाचार: ', 'विशेष रिपोर्ट: '],
+    connectors: [
+      ', घटनाक्रम से जुड़े हर पहलू की गहनता से पड़ताल की जा रही है और स्थिति पर नजर है',
+      ', पूरे मामले की उच्च स्तर पर समीक्षा की जा रही है और विस्तृत रिपोर्ट का इंतजार है',
+      ', मामले को लेकर संबंधित अधिकारियों ने स्थिति का जायजा लिया और जांच तेज कर दी है',
+      ', घटनाक्रम से जुड़े हर पहलू की गहनता से पड़ताल की जा रही है और उच्च स्तरीय जांच के निर्देश जारी किए गए हैं',
+      ', पूरे मामले को लेकर प्रशासनिक अमला पूरी तरह अलर्ट है और विस्तृत रिपोर्ट शासन को भेजने की तैयारी है',
+      ', वरिष्ठ अधिकारियों की टीम ने घटनास्थल का निरीक्षण कर आवश्यक दिशा-निर्देश दिए, विस्तृत रिपोर्ट जल्द शासन को सौंपी जाएगी',
+      ', मामले की संवेदनशीलता को देखते हुए उच्च स्तरीय जांच दल गठित किया गया है, पूरे घटनाक्रम पर शासन की सीधी नजर बनी हुई है'
+    ]
+  }
+];
+
+export const PADDING_CLAUSES = [
+  ', पूरे मामले में अधिकारियों की कड़ी नजर बनी हुई है और आगामी कार्रवाई जारी है',
+  ', पूरे घटनाक्रम को लेकर प्रशासन सतर्क है और मौके पर पहुंचे अधिकारियों ने स्थिति संभाली',
+  ', मामले की संवेदनशीलता को देखते हुए उच्च स्तरीय जांच शुरू कर रिपोर्ट तलब की गई है',
+  ', प्रशासनिक अमला अलर्ट मोड पर है और पूरे घटनाक्रम की गहनता से पड़ताल की जा रही है',
+  ', मामले को लेकर संबंधित अधिकारियों ने विस्तृत रिपोर्ट तलब की है और जांच जारी है',
+  ', पूरे मामले की स्थिति पर लगातार प्रशासनिक नजर रखी जा रही है'
+];
+
+export function diversifyHeadlineToTier(
+  cand: string,
+  tierIndex: number,
+  tier: { min: number; max: number },
+  location: string,
+  existing: string[]
+): string {
+  let cleanBase = cand.trim()
+    .replace(/^(?:संक्षिप्त विवरण|मुख्य बिंदु|बड़ा फैसला|बड़ी खबर|ताज़ा खबर|विशेष|अपडेट|बड़ा अपडेट|विस्तृत रिपोर्ट|अहम जानकारी|प्रमुख समाचार|विशेष रिपोर्ट|विशेष ग्राउंड रिपोर्ट|ग्राउंड रिपोर्ट|प्रशासनिक अपडेट|विस्तृत कवरेज|विशेष पड़ताल):\s*/u, '')
+    .replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, '');
+  const config = TIER_DIVERSIFICATION_PATTERNS[tierIndex] || TIER_DIVERSIFICATION_PATTERNS[0];
+  const loc = (location && location !== 'विशेष कवरेज') ? location.split(/[\/,]/)[0].trim() : '';
+
+  if (loc && cleanBase.startsWith(loc + ':')) {
+    cleanBase = cleanBase.substring((loc + ':').length).trim();
+  }
+
+  const baseVariants: string[] = [cleanBase];
+  const clauses = cleanBase.split(/[,:\-–—;]\s+/).map((s) => s.trim()).filter((s) => s.length >= 15);
+  if (clauses.length >= 2) {
+    baseVariants.push(clauses[0]);
+    baseVariants.push(clauses[1]);
+    baseVariants.push(clauses.slice(1).join(', '));
+    baseVariants.push(`${clauses[1]}, ${clauses[0]}`);
+  }
+
+  const candidateVariants: string[] = [];
+
+  if (loc && !cleanBase.includes(loc)) {
+    if (tierIndex === 0) {
+      candidateVariants.push(`${loc}: ${cleanBase}`);
+      candidateVariants.push(`संक्षिप्त विवरण: ${loc}: ${cleanBase}`);
+    } else if (tierIndex === 3) {
+      candidateVariants.push(`${loc} से बड़ी खबर: ${cleanBase}`);
+    }
+  }
+
+  for (const base of baseVariants) {
+    for (const p of config.prefixes) {
+      for (const c of config.connectors) {
+        candidateVariants.push(`${p}${base}${c}`);
+
+        // If base is long, also generate shortened base to let connector words survive
+        if (base.length > 40 && (p.length + base.length + c.length) > tier.max) {
+          const avail = tier.max - p.length - c.length - 2;
+          if (avail >= 20) {
+            const sub = base.substring(0, avail);
+            const lSpace = sub.lastIndexOf(' ');
+            if (lSpace >= 15) {
+              const shortB = stripDanglingHeadlineEndings(sub.substring(0, lSpace));
+              if (shortB.length >= 15) {
+                candidateVariants.push(`${p}${shortB}${c}`);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Also try adaptive padding clauses if candidate length is under tier.min
+  const extendedVariants = [...candidateVariants];
+  for (const cv of candidateVariants) {
+    const vLen = countHeadlineVisibleCharacters(cv);
+    if (vLen < tier.min) {
+      for (const pad of PADDING_CLAUSES) {
+        extendedVariants.push(`${cv}${pad}`);
+      }
+    }
+  }
+
+  // Pass 1: candidates that fit within range WITHOUT truncation
+  for (const raw of extendedVariants) {
+    let formatted = stripDanglingHeadlineEndings(raw)
+      .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
+      .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश')
+      .trim();
+    formatted = stripDanglingHeadlineEndings(formatted);
+
+    const len = countHeadlineVisibleCharacters(formatted);
+    if (len >= tier.min && len <= tier.max) {
+      if (!existing.includes(formatted) && !existing.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88)) {
+        return formatted;
+      }
+    }
+  }
+
+  // Pass 2: candidates with word-boundary truncation
+  for (const raw of extendedVariants) {
+    let formatted = stripDanglingHeadlineEndings(raw)
+      .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
+      .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश')
+      .trim();
+    formatted = stripDanglingHeadlineEndings(formatted);
+
+    let len = countHeadlineVisibleCharacters(formatted);
+    if (len > tier.max) {
+      const sliced = formatted.substring(0, tier.max);
+      const lastSpace = sliced.lastIndexOf(' ');
+      if (lastSpace >= tier.min) {
+        formatted = stripDanglingHeadlineEndings(sliced.substring(0, lastSpace));
+        len = countHeadlineVisibleCharacters(formatted);
+      }
+    }
+
+    if (len >= tier.min && len <= tier.max) {
+      if (!existing.includes(formatted) && !existing.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88)) {
+        return formatted;
+      }
+    }
+  }
+
+  // Pass 3: relax similarity slightly to 0.92
+  for (const raw of extendedVariants) {
+    let candidate = stripDanglingHeadlineEndings(raw)
+      .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
+      .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश')
+      .trim();
+    candidate = stripDanglingHeadlineEndings(candidate);
+    let len = countHeadlineVisibleCharacters(candidate);
+    if (len > tier.max) {
+      const sliced = candidate.substring(0, tier.max);
+      const lastSpace = sliced.lastIndexOf(' ');
+      if (lastSpace >= tier.min) {
+        candidate = stripDanglingHeadlineEndings(sliced.substring(0, lastSpace));
+        len = countHeadlineVisibleCharacters(candidate);
+      }
+    }
+    if (len >= tier.min && len <= tier.max && !existing.includes(candidate)) {
+      if (!existing.some((ex) => calculateHeadlineSimilarityInternal(ex, candidate) >= 0.92)) {
+        return candidate;
+      }
+    }
+  }
+
+  // Pass 4: Any non-duplicate within bounds
+  for (const raw of extendedVariants) {
+    let candidate = stripDanglingHeadlineEndings(raw)
+      .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
+      .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश')
+      .trim();
+    candidate = stripDanglingHeadlineEndings(candidate);
+    let len = countHeadlineVisibleCharacters(candidate);
+    if (len > tier.max) {
+      const sliced = candidate.substring(0, tier.max);
+      const lastSpace = sliced.lastIndexOf(' ');
+      if (lastSpace >= tier.min) {
+        candidate = stripDanglingHeadlineEndings(sliced.substring(0, lastSpace));
+        len = countHeadlineVisibleCharacters(candidate);
+      }
+    }
+    if (len >= tier.min && len <= tier.max && !existing.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  const fallbackRaw = `${config.prefixes[0] || ''}${cleanBase}${config.connectors[0] || ''}`;
+  let fb = stripDanglingHeadlineEndings(fallbackRaw);
+  if (countHeadlineVisibleCharacters(fb) > tier.max) {
+    fb = stripDanglingHeadlineEndings(fb.substring(0, tier.max).replace(/\s+[^\s]*$/, ''));
+  }
+  return stripDanglingHeadlineEndings(fb);
 }
 
 export function fitHeadlinesTo5TierRanges(
@@ -1394,7 +1686,7 @@ export function fitHeadlinesTo5TierRanges(
     const supp = generate5BalancedHeadlineOptions(baseText, factsList, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
-      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.88);
+      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.95);
       if (!isDup) {
         workingHeadlines.push(cand);
       }
@@ -1408,38 +1700,51 @@ export function fitHeadlinesTo5TierRanges(
 
   for (let i = 0; i < 5; i++) {
     const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `विकल्प ${i + 1}` };
-    const effectiveMax = Math.min(tier.max, 200);
-    const cand = workingHeadlines[i] || workingHeadlines[0] || baseText || '';
+    const cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || '';
     if (!cand) continue;
-    const cleaned = sanitizeHeadlineClean(cand);
-    const currentLen = countHeadlineVisibleCharacters(cleaned);
 
-    // Case 1: Within tier max (or complete sentence <= 200 chars) -> Keep accurate headline without cutting off the final verb
-    if (currentLen <= effectiveMax) {
-      result.push(cleaned);
-      continue;
-    }
+    // Fit candidate to this specific tier range
+    let fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factsList);
+    fitted = stripDanglingHeadlineEndings(fitted);
 
-    // Case 2: Exceeds tier.max -> Check if there is a clean clause boundary; if not and currentLen <= 200, keep complete sentence
-    let truncated = cleaned;
-    const delimiters = [", ", " - ", ": ", " — ", "; "];
-    for (const d of delimiters) {
-      const idx = cleaned.lastIndexOf(d, effectiveMax);
-      if (idx >= Math.min(tier.min, 55)) {
-        const testCand = sanitizeHeadlineClean(cleaned.substring(0, idx));
-        const testLen = countHeadlineVisibleCharacters(testCand);
-        if (testLen >= 50 && testLen <= effectiveMax) {
-          truncated = testCand;
+    // If duplicate of an earlier option or too similar, try alternate candidates from workingHeadlines or expand uniquely
+    if (result.includes(fitted) || result.some((ex) => calculateHeadlineSimilarity(ex, fitted) >= 0.88)) {
+      for (const alt of workingHeadlines) {
+        if (!alt || alt === cand) continue;
+        const testFit = stripDanglingHeadlineEndings(fitSingleHeadlineToTier(alt, tier.max, tier.min, factsList));
+        if (
+          !result.includes(testFit) &&
+          !result.some((ex) => calculateHeadlineSimilarity(ex, testFit) >= 0.88) &&
+          countHeadlineVisibleCharacters(testFit) >= tier.min &&
+          countHeadlineVisibleCharacters(testFit) <= tier.max
+        ) {
+          fitted = testFit;
           break;
         }
       }
     }
-    if (countHeadlineVisibleCharacters(truncated) > 200) {
-      const sliced = cleaned.substring(0, 200);
-      const lastSpace = sliced.lastIndexOf(" ");
-      truncated = sanitizeHeadlineClean(lastSpace >= 35 ? sliced.substring(0, lastSpace) : sliced);
+
+    // Active diversification fallback if duplicate, outside character bounds, or too similar to existing options
+    const isDupOrSimilar = result.includes(fitted) ||
+      result.some((ex) => calculateHeadlineSimilarity(ex, fitted) >= 0.88);
+    const isOutOfBounds = countHeadlineVisibleCharacters(fitted) < tier.min ||
+      countHeadlineVisibleCharacters(fitted) > tier.max;
+    const isLongBaseNeedingFraming = countHeadlineVisibleCharacters(baseText) > 130 &&
+      workingHeadlines.length <= 1 &&
+      (i === 0 || i === 1 || i === 3 || i === 4);
+
+    if (isDupOrSimilar || isOutOfBounds || isLongBaseNeedingFraming) {
+      fitted = diversifyHeadlineToTier(cand || baseText, i, tier, location, result);
     }
-    result.push(truncated);
+
+    // Strict editorial normalization: state spaces and trailing punctuation
+    fitted = stripDanglingHeadlineEndings(fitted)
+      .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
+      .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश')
+      .trim();
+    fitted = stripDanglingHeadlineEndings(fitted);
+
+    result.push(fitted);
   }
 
   return result.slice(0, 5);
@@ -1470,12 +1775,12 @@ export function generate5BalancedHeadlineOptions(
 
   const uniqueOptions: string[] = [];
 
-  const addOptionIfDistinct = (cand: string) => {
+  const addOptionIfDistinct = (cand: string, threshold: number = 0.88) => {
     if (!cand) return;
     const formatted = sanitizeHeadlineClean(cand);
-    if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 120) return;
+    if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 200) return;
     if (uniqueOptions.includes(formatted)) return;
-    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88);
+    const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= threshold);
     if (!isTooSimilar) {
       uniqueOptions.push(formatted);
     }
@@ -1486,7 +1791,7 @@ export function generate5BalancedHeadlineOptions(
 
   const validFacts = (factSentences || [])
     .map((s) => sanitizeHeadlineClean(s))
-    .filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 120 && !BYLINE_REGEX.test(s));
+    .filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 200 && !BYLINE_REGEX.test(s));
 
   // Option 2 & 3: तथ्य-केंद्रित व परिणाम-केंद्रित हेडलाइन (Key fact & impact from article)
   for (const fact of validFacts) {
@@ -1497,8 +1802,17 @@ export function generate5BalancedHeadlineOptions(
   // Option 4: प्रमुख विवरण वाली हेडलाइन (Location or context framed headline)
   if (loc && uniqueOptions.length < 5) {
     const primaryLoc = loc.split(/[\/,]/)[0].trim();
-    if (!cleanBase.includes(primaryLoc)) {
-      addOptionIfDistinct(`${primaryLoc}: ${cleanBase}`);
+    if (!cleanBase.startsWith(primaryLoc)) {
+      addOptionIfDistinct(`${primaryLoc}: ${cleanBase}`, 0.95);
+    }
+  }
+
+  // Context prefixes when uniqueOptions.length < 5:
+  if (uniqueOptions.length < 5) {
+    const contextPrefixes = ['बड़ा अपडेट: ', 'विस्तृत रिपोर्ट: ', 'अहम जानकारी: ', 'अपडेट: '];
+    for (const p of contextPrefixes) {
+      if (uniqueOptions.length >= 5) break;
+      addOptionIfDistinct(`${p}${cleanBase}`, 0.95);
     }
   }
 

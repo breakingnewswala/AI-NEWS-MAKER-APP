@@ -22,7 +22,7 @@ import {
 } from './HeaderDesigns';
 import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 import { getApiUrl } from './apiConfig';
-import { getDynamicFrameById } from './dynamicFramesManager';
+import { getDynamicFrameById, normalizeDynamicFrame } from './dynamicFramesManager';
 import { formatCleanLocationText } from './locationUtils';
 import { DynamicFrame } from '../types/dynamicFrame';
 
@@ -204,7 +204,7 @@ const loadImageSingle = async (
       }
     };
 
-    const isOverlayOrFrame = /logo|badge|callout|ribbon|watermark|icon|frame|overlay|background|bg_|uploads/i.test(effectiveSrc);
+    const isOverlayOrFrame = /logo|badge|callout|ribbon|watermark|icon|frame|overlay|background|bg_/i.test(effectiveSrc);
     const transparentFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
     const photoFallback = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" fill="%231e293b"><rect width="800" height="600"/></svg>';
     const getFallbackSrc = () => isOverlayOrFrame ? transparentFallback : photoFallback;
@@ -513,8 +513,9 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   }
 
   // 1. Draw Authoritative Dynamic Frame if matched
-  const dynamicFrame = card.customDynamicFrame || getDynamicFrameById(card.frameDesign || '');
-  if (dynamicFrame) {
+  const rawDynamicFrame = card.customDynamicFrame || getDynamicFrameById(card.frameDesign || '');
+  if (rawDynamicFrame) {
+    const dynamicFrame = normalizeDynamicFrame(rawDynamicFrame);
     await drawAuthoritativeDynamicFrameCanvas(ctx, width, height, card, dynamicFrame, customLogoImg);
     return canvas;
   }
@@ -1699,6 +1700,24 @@ async function drawMorningJacketBackground(
 // GRAPHIC 1 — NEWS GRAPHIC TEMPLATE (graphic_001)
 // Aspect Ratio: STRICT 4:5 (1080 x 1350)
 // Plan: BASIC
+function isColorDark(hexColor?: string): boolean {
+  if (!hexColor || hexColor === 'transparent') return true;
+  const hex = hexColor.replace('#', '');
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16);
+    const g = parseInt(hex[1] + hex[1], 16);
+    const b = parseInt(hex[2] + hex[2], 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 140;
+  }
+  if (hex.length === 6) {
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 140;
+  }
+  return true;
+}
+
 // ============================================================================
 // AUTHORITATIVE DYNAMIC FRAME CANVAS EXPORTER
 // Single source of truth rendering identical to Studio preview:
@@ -1714,6 +1733,10 @@ async function drawAuthoritativeDynamicFrameCanvas(
   customLogoImg?: HTMLImageElement
 ) {
   ctx.save();
+
+  const canvasFilterStr = (card.imageFilter && card.imageFilter !== 'none')
+    ? card.imageFilter
+    : getCanvasFilterString(card.imageFilters);
 
   // 0. BASE CANVAS FILL
   ctx.fillStyle = df.primaryBackgroundHex || '#0B1329';
@@ -1860,8 +1883,11 @@ async function drawAuthoritativeDynamicFrameCanvas(
         const measuredTextW = ctx.measureText(cleanLocText).width;
 
         // Dynamic horizontal expansion: adapt width to actual text length (compact for Bhopal, wider for Bhopal, MP)
-        const neededCenterW = Math.max(10, measuredTextW + 24);
-        const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(leftDestW + neededCenterW + rightDestW)));
+        const maxBw = width - bx - 20;
+        const minCenterW = 10;
+        const neededCenterW = Math.max(minCenterW, measuredTextW + 24);
+        const midDestW = Math.max(minCenterW, neededCenterW);
+        const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
         const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
 
         // Draw background color if selected by user or frame config
@@ -1957,13 +1983,20 @@ async function drawAuthoritativeDynamicFrameCanvas(
   }
 
   // 5. FULL STORY CALLOUT
-  if (df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && card.showCallout !== false) {
-    const calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
+  const isCalloutEnabled = Boolean(
+    df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on' ||
+    ((df.fullStoryCalloutConfig?.enabled || Boolean(card.customCalloutAssetUrl)) &&
+      df.fullStoryCalloutConfig?.calloutVisibilityPolicy !== 'disabled' &&
+      card.showCallout !== false)
+  );
+  if (isCalloutEnabled) {
+    const calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
     const calloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
 
     // If neither custom asset nor callout text is configured, do not force-draw any fallback callout
     if (calloutAsset || calloutText) {
-      const cRect = df.fullStoryCalloutConfig.rect || { x: 10, y: 88, width: 80, height: 3.5 };
+      const cRectRaw = df.fullStoryCalloutConfig?.rect || { x: 10, y: 88, width: 80, height: 6.5 };
+      const cRect = { ...cRectRaw, height: Math.max(6.5, cRectRaw.height || 6.5) };
       const cx = (cRect.x / 100) * width;
       const cy = (cRect.y / 100) * height;
       const cw = (cRect.width / 100) * width;
@@ -2117,19 +2150,28 @@ async function drawAuthoritativeDynamicFrameCanvas(
   const hw = (textSlot.rect.width / 100) * width;
   const hh = (textSlot.rect.height / 100) * height;
 
+  const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
+  const textColor = card.headlineTextColor || card.textColor || (df as any).quoteTextColor || textSlot.textColor || '#FFFFFF';
+  const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black' || textColor.toLowerCase() === '#0f172a';
+
   if (textSlot.backgroundColor && textSlot.backgroundColor !== 'transparent') {
     ctx.save();
     ctx.fillStyle = textSlot.backgroundColor;
     ctx.fillRect(hx, hy, hw, hh);
     ctx.restore();
+  } else if (isBlack && isColorDark(df.primaryBackgroundHex || '#0B1329') && rawHeadline && rawHeadline.trim().length > 0) {
+    // High-contrast text slot backdrop to guarantee black text readability over dark background
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.beginPath();
+    ctx.roundRect(hx, hy, hw, hh, 8);
+    ctx.fill();
+    ctx.restore();
   }
 
-  const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
   if (rawHeadline && rawHeadline.trim().length > 0) {
     ctx.save();
     const fontFam = card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || textSlot.fontFamily || 'Baloo 2';
-    const textColor = card.headlineTextColor || card.textColor || (df as any).quoteTextColor || textSlot.textColor || '#FFFFFF';
-    const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black' || textColor.toLowerCase() === '#0f172a';
     const highlightColor = card.highlightColor || (df as any).primaryHighlightColor || (df as any).quoteHighlightColor || textSlot.highlightColor || (isBlack ? '#DC2626' : '#FFE600');
 
     const align = (textSlot.alignment || 'center') as CanvasTextAlign;
@@ -2164,8 +2206,9 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.shadowBlur = 10;
       ctx.shadowOffsetY = 3;
     } else {
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.85)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1;
     }
 
     lines.forEach((line, lIdx) => {
@@ -2197,6 +2240,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
         curX += tokenWidths[tIdx] + spaceWidth;
       });
     });
+    ctx.restore();
     ctx.restore();
   }
 

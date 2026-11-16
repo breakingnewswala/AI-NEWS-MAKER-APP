@@ -3685,9 +3685,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               })()}
 
               {/* Full Story Callout */}
-              {df.fullStoryCalloutConfig?.enabled && df.fullStoryCalloutConfig.calloutVisibilityPolicy !== 'disabled' && card.showCallout !== false && (
+              {(df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on' ||
+                ((df.fullStoryCalloutConfig?.enabled || Boolean(card.customCalloutAssetUrl)) &&
+                  df.fullStoryCalloutConfig?.calloutVisibilityPolicy !== 'disabled' &&
+                  card.showCallout !== false)) && (
                 (() => {
-                  const calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig.manualCalloutAsset;
+                  const calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
                   const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
                   if (!calloutUrl && !effectiveCalloutText) return null;
 
@@ -3695,11 +3698,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     <div
                       className="absolute pointer-events-auto flex items-center justify-center"
                       style={{
-                        left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                        top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
-                        width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
-                        height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
-                        transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
+                        left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
+                        top: `${df.fullStoryCalloutConfig?.rect?.y ?? 88}%`,
+                        width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
+                        height: `${Math.max(6.5, df.fullStoryCalloutConfig?.rect?.height ?? 6.5)}%`,
+                        transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
                         transformOrigin: 'center center',
                       }}
                     >
@@ -3714,10 +3717,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     <div
                       className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
                       style={{
-                        left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                        top: `${df.fullStoryCalloutConfig.rect?.y ?? 88}%`,
-                        width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
-                        height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                        left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
+                        top: `${df.fullStoryCalloutConfig?.rect?.y ?? 88}%`,
+                        width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
+                        height: `${Math.max(6.5, df.fullStoryCalloutConfig?.rect?.height ?? 6.5)}%`,
                         backgroundColor: df.fullStoryCalloutConfig.bgColor || '#DC2626',
                         color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
                         borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',

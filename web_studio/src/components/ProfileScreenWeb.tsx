@@ -285,7 +285,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           const cloudP = data.profile;
           if (cloudP.district || cloudP.location) {
             const rawDist = (cloudP.district || cloudP.location || '').trim();
-            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDist;
+            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (isBnwAdmin ? (rawDist || 'भोपाल') : rawDist);
             setReporterDistrict(cleanDist);
           }
           if (cloudP.state) {
@@ -1939,6 +1939,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         mobile: finalPhone || channelProfile.mobileNumber,
         username: channelProfile.username,
         district: finalDistrict,
+        state: reporterState,
         isLocked: !isAdmin,
       });
 

@@ -2285,11 +2285,11 @@ var require_firestore_database_service = __commonJS({
           return this._loadLocalJson("news_database.json", []);
         }
       }
-      async saveNewsPost(postId, postData2) {
+      async saveNewsPost(postId, postData) {
         if (!postId) return { success: false, error: "News post ID required" };
         const cleanId = String(postId).trim();
         const payload = {
-          ...postData2,
+          ...postData,
           id: cleanId,
           docId: cleanId,
           updatedAt: Date.now()
@@ -4638,11 +4638,11 @@ var require_firestore_database_service2 = __commonJS({
           return this._loadLocalJson("news_database.json", []);
         }
       }
-      async saveNewsPost(postId, postData2) {
+      async saveNewsPost(postId, postData) {
         if (!postId) return { success: false, error: "News post ID required" };
         const cleanId = String(postId).trim();
         const payload = {
-          ...postData2,
+          ...postData,
           id: cleanId,
           docId: cleanId,
           updatedAt: Date.now()
@@ -14716,22 +14716,22 @@ app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
 app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
+    const postData = req.body || {};
     let existing = loadNewsDatabase();
     let found = false;
     let approvedTitle = "";
     existing = existing.map((p) => {
       if (p.id === id) {
         found = true;
-        const postData2 = req.body || {};
-        const updatedTitle = postData2.title || p.title;
+        const updatedTitle = postData.title || p.title;
         approvedTitle = updatedTitle;
-        const hList = Array.isArray(postData2.approvedHeadlines) && postData2.approvedHeadlines.length > 0 ? postData2.approvedHeadlines : Array.isArray(postData2.headlineOptions) && postData2.headlineOptions.length > 0 ? postData2.headlineOptions : p.headlineOptions || [updatedTitle];
-        const cDetailed = postData2.captionDetailed || postData2.approvedCaptionDetailed || postData2.summary || p.summary;
-        const cBullets = postData2.captionBullets || postData2.approvedCaptionBullets || p.captionBullets || "";
-        const cShort = postData2.captionShort || postData2.approvedCaptionShort || p.captionShort || "";
+        const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0 ? postData.approvedHeadlines : Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : p.headlineOptions || [updatedTitle];
+        const cDetailed = postData.captionDetailed || postData.approvedCaptionDetailed || postData.summary || p.summary;
+        const cBullets = postData.captionBullets || postData.approvedCaptionBullets || p.captionBullets || "";
+        const cShort = postData.captionShort || postData.approvedCaptionShort || p.captionShort || "";
         return {
           ...p,
-          ...postData2,
+          ...postData,
           title: updatedTitle,
           summary: cDetailed || p.summary,
           captionDetailed: cDetailed,
@@ -14742,25 +14742,25 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
           approvedCaptionShort: cShort,
           headlineOptions: hList,
           approvedHeadlines: hList,
-          approvedHeadline: postData2.approvedHeadline || hList[0] || updatedTitle,
-          imageUrl: postData2.imageUrl || p.imageUrl,
-          imageSource: postData2.imageSource || p.imageSource || "source",
-          manualThumbnailUrl: postData2.manualThumbnailUrl !== void 0 ? postData2.manualThumbnailUrl : p.manualThumbnailUrl,
-          sourceChannel: postData2.sourceChannel || p.sourceChannel,
-          sourceUrl: postData2.sourceUrl !== void 0 ? postData2.sourceUrl : p.sourceUrl,
-          additionalPhotos: Array.isArray(postData2.additionalPhotos) ? postData2.additionalPhotos : p.additionalPhotos || [],
-          approvedPhotos: Array.isArray(postData2.approvedPhotos) ? postData2.approvedPhotos : p.approvedPhotos || p.additionalPhotos || [],
+          approvedHeadline: postData.approvedHeadline || hList[0] || updatedTitle,
+          imageUrl: postData.imageUrl || p.imageUrl,
+          imageSource: postData.imageSource || p.imageSource || "source",
+          manualThumbnailUrl: postData.manualThumbnailUrl !== void 0 ? postData.manualThumbnailUrl : p.manualThumbnailUrl,
+          sourceChannel: postData.sourceChannel || p.sourceChannel,
+          sourceUrl: postData.sourceUrl !== void 0 ? postData.sourceUrl : p.sourceUrl,
+          additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : p.additionalPhotos || [],
+          approvedPhotos: Array.isArray(postData.approvedPhotos) ? postData.approvedPhotos : p.approvedPhotos || p.additionalPhotos || [],
           status: "APPROVED",
           approvalStatus: "APPROVED",
           publicationStatus: "PUBLISHED",
           isApproved: true,
           isPublished: true,
           isPrePublished: true,
-          editorialApproved: postData2.editorialApproved !== void 0 ? postData2.editorialApproved : true,
-          breaking: postData2.breaking !== void 0 ? postData2.breaking : p.breaking,
-          isExclusive: postData2.isExclusive !== void 0 ? postData2.isExclusive : p.isExclusive,
-          isBonus: postData2.isBonus !== void 0 ? Boolean(postData2.isBonus) : Boolean(p.isBonus === true),
-          rewardCoins: (postData2.isBonus !== void 0 ? Boolean(postData2.isBonus) : Boolean(p.isBonus === true)) ? Number(postData2.rewardCoins || p.rewardCoins || 100) : 0,
+          editorialApproved: postData.editorialApproved !== void 0 ? postData.editorialApproved : true,
+          breaking: postData.breaking !== void 0 ? postData.breaking : p.breaking,
+          isExclusive: postData.isExclusive !== void 0 ? postData.isExclusive : p.isExclusive,
+          isBonus: postData.isBonus !== void 0 ? Boolean(postData.isBonus) : Boolean(p.isBonus === true),
+          rewardCoins: (postData.isBonus !== void 0 ? Boolean(postData.isBonus) : Boolean(p.isBonus === true)) ? Number(postData.rewardCoins || p.rewardCoins || 100) : 0,
           timestamp: Date.now()
         };
       }
@@ -17314,6 +17314,7 @@ function syncUserToProfiles(u) {
       uid: u.userId,
       tier: u.tier,
       email: u.email,
+      state: u.state && u.state.trim() ? u.state : allProfiles[cleanKey] && allProfiles[cleanKey].state || "",
       district: u.district && u.district.trim() ? u.district : u.location || allProfiles[cleanKey] && allProfiles[cleanKey].district || "",
       location: u.location && u.location.trim() ? u.location : u.district || allProfiles[cleanKey] && allProfiles[cleanKey].location || "",
       channelNameHi: u.channelNameHi || u.channelName || "",
@@ -17663,6 +17664,7 @@ function reconcileAllUsers() {
           channelLogoType: p.channelLogoType || "png",
           mobile: p.mobileNumber || "",
           mobileNumber: p.mobileNumber || "",
+          state: p.state || "",
           district: p.district || "",
           websiteUrl: p.websiteUrl || "",
           socialIcons: p.socialIcons,
@@ -17702,6 +17704,7 @@ function reconcileAllUsers() {
       channelLogoType: subProf?.channelLogoType || existingSub?.channelLogoType || "png",
       mobile: subProf?.mobileNumber || existingSub?.mobile || "9669802408",
       mobileNumber: subProf?.mobileNumber || existingSub?.mobileNumber || "9669802408",
+      state: subProf?.state || existingSub?.state || "",
       district: subProf?.district || existingSub?.district || "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
       websiteUrl: subProf?.websiteUrl || existingSub?.websiteUrl || "ainewsmaker.online",
       isBlocked: false,
@@ -17737,6 +17740,7 @@ function reconcileAllUsers() {
       mobileNumber: adminProf?.mobileNumber && adminProf.mobileNumber.trim() ? adminProf.mobileNumber : existingAdmin?.mobileNumber || "9669802408",
       whatsappNumber: adminProf?.whatsappNumber && adminProf.whatsappNumber.trim() ? adminProf.whatsappNumber : existingAdmin?.whatsappNumber || "9669802408",
       whatsappDisplayNumber: adminProf?.whatsappDisplayNumber && String(adminProf.whatsappDisplayNumber).trim() ? String(adminProf.whatsappDisplayNumber).trim() : adminProf?.whatsappNumber || existingAdmin?.whatsappDisplayNumber || existingAdmin?.whatsappNumber || "9669802408",
+      state: adminProf?.state || existingAdmin?.state || "",
       district: (() => {
         const raw = adminProf?.district && adminProf.district.trim() ? adminProf.district.trim() : existingAdmin?.district && existingAdmin.district.trim() ? existingAdmin.district.trim() : "\u092D\u094B\u092A\u093E\u0932";
         return raw === "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915 / \u092D\u094B\u092A\u093E\u0932" || raw === "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? "\u092D\u094B\u092A\u093E\u0932" : raw;
@@ -17792,6 +17796,7 @@ function reconcileAllUsers() {
         channelLogoType: "png",
         mobile: p3?.mobileNumber || "9425000998",
         mobileNumber: p3?.mobileNumber || "9425000998",
+        state: p3?.state || "",
         district: p3?.district || "\u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915",
         websiteUrl: p3?.websiteUrl || "anmolsandesh.com",
         isBlocked: false,

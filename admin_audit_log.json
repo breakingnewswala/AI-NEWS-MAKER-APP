@@ -1,5 +1,17 @@
 [
   {
+    "id": "audit_1794805967829_h732",
+    "timestamp": 1794805967829,
+    "adminEmail": "breakingnewswala.com@gmail.com",
+    "action": "UPDATE_PAID_API_KEY",
+    "target": "paid_key",
+    "details": {
+      "configured": true,
+      "vipRoutingEnabled": true
+    },
+    "ip": "internal"
+  },
+  {
     "id": "audit_1794724373713_oi1c",
     "timestamp": 1794724373713,
     "adminEmail": "breakingnewswala.com@gmail.com",

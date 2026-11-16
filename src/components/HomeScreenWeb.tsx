@@ -1515,10 +1515,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   }, [posts]);
 
   useEffect(() => {
-    // Automatically load backend RSS & Web link sources and perform live sync on mount
-    fetchAdminRssSourcesFromBackend().then(() => {
-      syncAllSourcesLive().catch(() => {});
-    }).catch(() => {});
+    // Automatically load backend RSS & Web link sources and perform live sync on mount (admin only)
+    if (canModerate) {
+      fetchAdminRssSourcesFromBackend().then(() => {
+        syncAllSourcesLive().catch(() => {});
+      }).catch(() => {});
+    }
 
     const handleRssUpdate = () => {
       setActiveRssPosts(getActiveRssNewsPosts());

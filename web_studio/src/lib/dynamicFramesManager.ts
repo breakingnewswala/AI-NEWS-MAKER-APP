@@ -123,7 +123,7 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
   const fullStoryCalloutConfig: FullStoryCalloutConfig = {
     enabled: Boolean(rawC.enabled),
     text: rawC.text || '',
-    rect: rawC.rect || (isStory ? { x: 8, y: 88, width: 84, height: 4.5 } : { x: 8, y: 86, width: 84, height: 5 }),
+    rect: rawC.rect ? { ...rawC.rect, height: Math.max(6.5, rawC.rect.height || 6.5) } : (isStory ? { x: 8, y: 88, width: 84, height: 6.5 } : { x: 8, y: 86, width: 84, height: 6.5 }),
     fontSize: typeof rawC.fontSize === 'number' ? rawC.fontSize : 22,
     bgColor: rawC.bgColor || 'rgba(0,0,0,0.7)',
     borderColor: rawC.borderColor || '#FFE600',

@@ -93,45 +93,69 @@ export function getProfileHeaderFooter(templateId: string): ProfileHeaderFooterC
 export function getPermanentUserLogo(): string {
   if (typeof window === 'undefined') return '';
   try {
+    const getCleanEmail = (): string => {
+      try {
+        const authSess = localStorage.getItem('reporter_auth_session') || localStorage.getItem('reporter_current_user');
+        if (authSess) {
+          const u = JSON.parse(authSess);
+          return (u?.email || '').toLowerCase().trim();
+        }
+      } catch {}
+      return '';
+    };
+
+    const currentEmail = getCleanEmail();
+    const isMaster = currentEmail === 'breakingnewswala.com@gmail.com' || currentEmail === 'admin.ainewsmaker@gmail.com';
+
+    const sanitizeLogo = (logoCandidate: string): string => {
+      if (!logoCandidate || typeof logoCandidate !== 'string') return '';
+      if (!isMaster) {
+        if (logoCandidate.includes('ai_news_maker_logo') || logoCandidate.includes('breaking_news_wala_logo')) {
+          return '';
+        }
+      }
+      return logoCandidate;
+    };
+
     // 1. Android Bridge
     if ((window as any).AndroidBridge?.getChannelProfile) {
       const nativeJson = (window as any).AndroidBridge.getChannelProfile();
       if (nativeJson && nativeJson !== '{}') {
         const parsed = JSON.parse(nativeJson);
-        if (parsed?.channelLogoUrl) return parsed.channelLogoUrl;
+        if (parsed?.channelLogoUrl) return sanitizeLogo(parsed.channelLogoUrl);
       }
     }
     // 2. user_channel_profile
     const userChan = localStorage.getItem('user_channel_profile');
     if (userChan) {
       const p = JSON.parse(userChan);
-      if (p?.channelLogoUrl) return p.channelLogoUrl;
-      if (p?.channelLogoPngUrl) return p.channelLogoPngUrl;
-      if (p?.channelLogoGifUrl) return p.channelLogoGifUrl;
+      if (p?.channelLogoUrl) return sanitizeLogo(p.channelLogoUrl);
+      if (p?.channelLogoPngUrl) return sanitizeLogo(p.channelLogoPngUrl);
+      if (p?.channelLogoGifUrl) return sanitizeLogo(p.channelLogoGifUrl);
     }
     // 3. user_profile_data
     const userProf = localStorage.getItem('user_profile_data');
     if (userProf) {
       const p = JSON.parse(userProf);
-      if (p?.channelLogoUrl) return p.channelLogoUrl;
-      if (p?.logoUrl) return p.logoUrl;
+      if (p?.channelLogoUrl) return sanitizeLogo(p.channelLogoUrl);
+      if (p?.logoUrl) return sanitizeLogo(p.logoUrl);
     }
     // 4. profile_header_footer_json
     const hf = localStorage.getItem('profile_header_footer_json');
     if (hf) {
       const p = JSON.parse(hf);
-      if (p?.templates?.graphic_001?.customLogoUrl) return p.templates.graphic_001.customLogoUrl;
+      if (p?.templates?.graphic_001?.customLogoUrl) return sanitizeLogo(p.templates.graphic_001.customLogoUrl);
     }
     // 5. reporter_auth_session
     const authSess = localStorage.getItem('reporter_auth_session');
     if (authSess) {
       const u = JSON.parse(authSess);
-      if (u?.channelLogoUrl) return u.channelLogoUrl;
+      if (u?.channelLogoUrl) return sanitizeLogo(u.channelLogoUrl);
       if (u?.email) {
         const uEmailProf = localStorage.getItem(`user_profile_${u.email.toLowerCase().trim()}`);
         if (uEmailProf) {
           const ep = JSON.parse(uEmailProf);
-          if (ep?.channelLogoUrl) return ep.channelLogoUrl;
+          if (ep?.channelLogoUrl) return sanitizeLogo(ep.channelLogoUrl);
         }
       }
     }
@@ -139,7 +163,7 @@ export function getPermanentUserLogo(): string {
     const repCurr = localStorage.getItem('reporter_current_user');
     if (repCurr) {
       const u = JSON.parse(repCurr);
-      if (u?.channelLogoUrl) return u.channelLogoUrl;
+      if (u?.channelLogoUrl) return sanitizeLogo(u.channelLogoUrl);
     }
   } catch {}
   return '';

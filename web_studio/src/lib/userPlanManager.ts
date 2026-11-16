@@ -1469,6 +1469,7 @@ export function registerOrUpdateUser(userData: {
   mobileNumber?: string;
   websiteUrl?: string;
   district?: string;
+  state?: string;
   socialIcons?: any;
   isLocked?: boolean;
   username?: string;
@@ -1542,6 +1543,7 @@ export function registerOrUpdateUser(userData: {
       channelLogoType: userData.channelLogoType || 'png',
       websiteUrl: userData.websiteUrl || '',
       district: userData.district || '',
+      state: userData.state || '',
       socialIcons: userData.socialIcons,
     };
 

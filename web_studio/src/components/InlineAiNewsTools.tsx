@@ -2315,7 +2315,13 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               maxLength={200}
               value={result.headline}
               onChange={(e) => {
-                const val = e.target.value.slice(0, 200);
+                const rawVal = e.target.value.slice(0, 200);
+                const val = rawVal.replace(/मध्यप्रदेश/g, 'मध्य प्रदेश').replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश');
+                setResult((prev) => (prev ? { ...prev, headline: val, formattedHeadline: val } : null));
+                onChange({ headline: val, formattedHeadline: val });
+              }}
+              onBlur={(e) => {
+                const val = e.target.value.replace(/मध्यप्रदेश/g, 'मध्य प्रदेश').replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश').replace(/[।\.\!\?]+$/g, '').trim();
                 setResult((prev) => (prev ? { ...prev, headline: val, formattedHeadline: val } : null));
                 onChange({ headline: val, formattedHeadline: val });
               }}

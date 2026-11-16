@@ -193,9 +193,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         name: defaultName.charAt(0).toUpperCase() + defaultName.slice(1),
         role: isSuper ? 'superadmin' : (isAdmin ? 'superadmin' : 'reporter'),
         email: cleanEmail,
-        district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'भोपाल' : 'डिजिटल डेस्क'),
+        district: isSuper ? 'हेडक्वार्टर सेंट्रल डेस्क' : (isAdmin ? 'भोपाल' : ''),
         planTier: isSuper || isAdmin ? 'ultra' : 'basic',
       };
+      if (isSuper || isAdmin) {
+        (user as any).state = 'मध्य प्रदेश';
+      }
 
       // Authenticate & sync with Cloud backend /api/auth/login
       try {
@@ -244,6 +247,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             user.role = data.user.role || user.role;
             user.planTier = data.user.tier || data.user.planTier || user.planTier;
             user.tier = data.user.tier || user.tier;
+            if (data.user.district || data.user.location) {
+              user.district = data.user.district || data.user.location;
+            }
+            if (data.user.state) {
+              (user as any).state = data.user.state;
+            }
             user.channelName = data.user.channelNameHi || user.channelName;
             user.channelLogoUrl = data.user.channelLogoUrl || user.channelLogoUrl;
             isServerProfileComplete = Boolean(data.isProfileComplete || data.user.isProfileComplete);
@@ -303,17 +312,39 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       // Persist to server user-profile endpoint
       try {
+        const profileSyncBody: any = {
+          username: user.username,
+          fullName: user.name,
+          email: user.email,
+          role: user.role,
+        };
+        if (user.district && user.district !== 'डिजिटल डेस्क' && user.district !== 'सेंट्रल डेस्क') {
+          profileSyncBody.district = user.district;
+        }
+        if ((user as any).state) {
+          profileSyncBody.state = (user as any).state;
+        }
         fetch(getApiUrl('/api/user-profile'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: user.username,
-            fullName: user.name,
-            email: user.email,
-            role: user.role,
-            district: user.district,
-          }),
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify(profileSyncBody),
         }).catch(() => {});
+
+        // Hydrate authoritative user profile into localStorage
+        fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`), {
+          headers: getAuthHeaders(),
+        })
+          .then((r) => r.json())
+          .then((profData) => {
+            if (profData?.success && profData?.profile) {
+              localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(profData.profile));
+              localStorage.setItem('user_channel_profile', JSON.stringify(profData.profile));
+            }
+          })
+          .catch(() => {});
       } catch {}
 
       setSuccessMessage(`🎉 खाता सत्यापित हो गया (${user.role === 'admin' || user.role === 'superadmin' ? '👑 एडमिन' : '👤 रिपोर्टर'})!`);
@@ -483,7 +514,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             username: data.user.username || cleanUser,
             name: data.user.fullName || data.user.name || cleanUser,
             role: data.user.role || 'reporter',
-            district: data.user.district || 'सेंट्रल डेस्क',
+            district: data.user.district || data.user.location || '',
             email: data.user.email || (cleanUser.includes('@') ? cleanUser : undefined),
             planTier: data.user.tier || 'basic',
             channelName: data.user.channelNameHi,
@@ -493,6 +524,23 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             token: data.token,
             isBlocked: Boolean(data.isBlocked || data.user.isBlocked),
           };
+          if (data.user.state) {
+            (authUser as any).state = data.user.state;
+          }
+          const cleanEmail = (authUser.email || cleanUser).toLowerCase().trim();
+          if (cleanEmail.includes('@')) {
+            fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`), {
+              headers: data.token ? { Authorization: `Bearer ${data.token}` } : {},
+            })
+              .then((r) => r.json())
+              .then((profData) => {
+                if (profData?.success && profData?.profile) {
+                  localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(profData.profile));
+                  localStorage.setItem('user_channel_profile', JSON.stringify(profData.profile));
+                }
+              })
+              .catch(() => {});
+          }
           if (data.isBlocked || data.user.isBlocked) {
             const cleanEm = (authUser.email || cleanUser).toLowerCase().trim();
             localStorage.setItem(`user_blocked_${cleanEm}`, 'true');

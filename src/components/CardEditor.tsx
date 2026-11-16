@@ -5084,7 +5084,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                             alert('यह प्रीमियम स्टोरी कॉलआउट केवल प्रो या वीआईपी डेस्क प्लान के लिए उपलब्ध है।');
                             return;
                           }
-                          onChange({ customCalloutAssetUrl: lc.url || lc.assetUrl });
+                          onChange({ customCalloutAssetUrl: lc.url || lc.assetUrl, showCallout: true });
                         }}
                         className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 relative ${
                           isSelected
