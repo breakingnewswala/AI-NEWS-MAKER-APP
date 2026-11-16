@@ -83,6 +83,48 @@ import {
 import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
+import {
+  registerCustomFont,
+  canUserUploadCustomFont,
+  isFontAllowedForTier,
+  getCustomUploadedFonts,
+  getTierForFont,
+} from '../lib/fontManager';
+import {
+  BUILTIN_RIBBONS,
+  loadSavedCustomRibbons,
+  saveCustomRibbon,
+  deleteCustomRibbon,
+  RibbonPreset,
+} from '../lib/ribbonPresets';
+import {
+  getActiveFooterPng,
+  setActiveFooterPng,
+  getFrameDesignLabel,
+} from '../lib/footerUtils';
+import { PhotoPositionControl } from './PhotoPositionControl';
+import {
+  getActiveHeaderPng,
+  setActiveHeaderPng,
+} from '../lib/headerUtils';
+import {
+  extractLeaderFromHeadline,
+  getEffectiveSpeaker,
+  stripAllUrlsAndHyperlinks,
+  cleanCaptionParagraphs,
+  generate5BalancedHeadlineOptions,
+  fitHeadlinesTo5TierRanges,
+  cleanHeadlineText,
+} from '../lib/speakerUtils';
+import { CardPreview } from './CardPreview';
+import { getUserFirstHashtag, buildHashtags } from './CaptionModal';
+import { VoiceInputButton } from './VoiceInputButton';
+import { getFormattedHindiDate } from '../lib/dateUtils';
+import { MorningJacketEditor } from './MorningJacketEditor';
+import { EPaperJacketEditor } from './EPaperJacketEditor';
+import { InlineAiNewsTools, AutoFillNewsData } from './InlineAiNewsTools';
+import { ReporterUser } from './LoginModal';
+import { scrollToStepById } from './StepNavigator';
 
 function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin: boolean = false, isMaster: boolean = false): FrameOption[] {
   const staticFrames = getEffectiveFrameOptions();
@@ -166,48 +208,6 @@ function buildUnifiedFrameOptions(dynamicFrames: DynamicFrameTemplate[], isAdmin
   }
   return combined;
 }
-import {
-  registerCustomFont,
-  canUserUploadCustomFont,
-  isFontAllowedForTier,
-  getCustomUploadedFonts,
-  getTierForFont,
-} from '../lib/fontManager';
-import {
-  BUILTIN_RIBBONS,
-  loadSavedCustomRibbons,
-  saveCustomRibbon,
-  deleteCustomRibbon,
-  RibbonPreset,
-} from '../lib/ribbonPresets';
-import {
-  getActiveFooterPng,
-  setActiveFooterPng,
-  getFrameDesignLabel,
-} from '../lib/footerUtils';
-import { PhotoPositionControl } from './PhotoPositionControl';
-import {
-  getActiveHeaderPng,
-  setActiveHeaderPng,
-} from '../lib/headerUtils';
-import {
-  extractLeaderFromHeadline,
-  getEffectiveSpeaker,
-  stripAllUrlsAndHyperlinks,
-  cleanCaptionParagraphs,
-  generate5BalancedHeadlineOptions,
-  fitHeadlinesTo5TierRanges,
-  cleanHeadlineText,
-} from '../lib/speakerUtils';
-import { CardPreview } from './CardPreview';
-import { getUserFirstHashtag, buildHashtags } from './CaptionModal';
-import { VoiceInputButton } from './VoiceInputButton';
-import { getFormattedHindiDate } from '../lib/dateUtils';
-import { MorningJacketEditor } from './MorningJacketEditor';
-import { EPaperJacketEditor } from './EPaperJacketEditor';
-import { InlineAiNewsTools, AutoFillNewsData } from './InlineAiNewsTools';
-import { ReporterUser } from './LoginModal';
-import { scrollToStepById } from './StepNavigator';
 
 export const HEADLINE_FONTS = [
   { id: 'Hind', label: 'हिंद (Hind - न्यूज़पेपर)', minTier: 'BASIC', badge: 'बेसिक' },

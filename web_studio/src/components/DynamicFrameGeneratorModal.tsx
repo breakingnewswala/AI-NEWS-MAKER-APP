@@ -93,6 +93,9 @@ import {
 } from '../lib/dynamicFramesManager';
 import { computeCanonicalHeadlineLayout, normalizeHeadlineText } from '../lib/canonicalLayoutEngine';
 import { drawThemeFooterBar } from '../lib/CanvasExporter';
+import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
+import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
+import { getAuthToken, ensureAuthToken } from '../lib/apiConfig';
 
 /**
  * Robust image loader that avoids setting crossOrigin on data: and blob: URLs
@@ -171,9 +174,6 @@ function removeFakeCheckerboardFromCanvas(
     console.warn('Checkerboard scan error:', err);
   }
 }
-import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
-import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
-import { getAuthToken, ensureAuthToken } from '../lib/apiConfig';
 
 export const HIGHLIGHT_COLOR_PRESETS = [
   { label: 'डिफ़ॉल्ट पीला (Yellow)', value: '#FFE600' },

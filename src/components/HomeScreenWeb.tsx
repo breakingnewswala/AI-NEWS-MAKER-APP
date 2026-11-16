@@ -66,6 +66,28 @@ import { SocialMediaStoryModal } from './SocialMediaStoryModal';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
 import { NewsDetailModal } from './NewsDetailModal';
 import { addNotification } from '../lib/notificationManager';
+import {
+  isEffectiveAdmin,
+  getUserSubscription,
+  fetchUserDailyDownloadStatus,
+  getCachedUserDailyDownloadStatus,
+  UserDailyDownloadStatus,
+} from '../lib/userPlanManager';
+import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
+import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
+import { ReporterUser } from './LoginModal';
+import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
+import {
+  getActiveRssNewsPosts,
+  getSavedNewsChannels,
+  approveRssPost,
+  isRssPostApproved,
+  fetchAdminRssSourcesFromBackend,
+  syncAllSourcesLive,
+  syncAndMigrateLocalApprovals,
+} from '../lib/rssSourceManager';
+import { fetchRemoteRestrictedChannels, RestrictedChannel } from '../lib/restrictedChannelsManager';
+import { getActiveCategories, CategoryItem } from '../lib/categoryManager';
 
 const GRAPHIC_PACK_20_7D_PLAN: any = {
   id: 'GRAPHIC_PACK_20_7D',
@@ -82,16 +104,6 @@ const GRAPHIC_PACK_20_7D_PLAN: any = {
     'वर्तमान सब्सक्रिप्शन अप्रभावित',
   ],
 };
-import {
-  isEffectiveAdmin,
-  getUserSubscription,
-  fetchUserDailyDownloadStatus,
-  getCachedUserDailyDownloadStatus,
-  UserDailyDownloadStatus,
-} from '../lib/userPlanManager';
-import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
-import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
-import { ReporterUser } from './LoginModal';
 
 // Social Media Brand Icons for Story Feature (Part H)
 export const FacebookIcon = () => (
@@ -132,7 +144,6 @@ export const WhatsAppIcon = () => (
     <path d="M256.1 92C165.5 92 92 165.5 92 256.1c0 31.6 8.9 61.1 24.5 86.3L92 420l80.2-24.1c24.2 14.2 52.4 22.4 83.9 22.4 90.6 0 164.1-73.5 164.1-164.1S346.7 92 256.1 92zm95.4 233.1c-4 11.2-23.2 21.6-32.3 22.9-8.4 1.2-19.1 1.7-61.9-15.6-51.5-20.9-84.6-73.4-87.2-76.9-2.5-3.5-20.8-27.7-20.8-52.8 0-25.1 13.1-37.4 17.7-42.5 4.6-5.1 10-6.4 13.4-6.4s6.7.3 9.6.5c3.1.2 7.3-.8 11.4 9.1 4.2 10.2 14.4 35.1 15.6 37.6 1.3 2.5 2.1 5.5.5 8.7-1.7 3.3-2.5 5.3-5 8.3-2.5 2.9-5.3 6.6-7.6 8.8-2.5 2.5-5.1 5.3-2.2 10.3 2.9 5 13 21.4 27.9 34.6 19.2 17.1 35.4 22.4 40.4 24.9 5.1 2.5 8 2.1 11-1.3 2.9-3.4 12.6-14.7 16-19.8 3.4-5.1 6.7-4.2 11.3-2.5 4.6 1.7 29.1 13.7 34.1 16.2 5 2.5 8.4 3.8 9.6 5.9 1.3 2 1.3 11.8-2.7 23z" fill="#FFFFFF"/>
   </svg>
 );
-import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 
 // Central HTML entity decoder for RSS and feed content (resolves &#039;, &quot;, &amp;, hex, numeric & strips \uFFFD replacement diamonds)
 export function decodeHtmlEntities(str?: string): string {
@@ -179,17 +190,6 @@ export function decodeHtmlEntities(str?: string): string {
 
   return res;
 }
-import {
-  getActiveRssNewsPosts,
-  getSavedNewsChannels,
-  approveRssPost,
-  isRssPostApproved,
-  fetchAdminRssSourcesFromBackend,
-  syncAllSourcesLive,
-  syncAndMigrateLocalApprovals,
-} from '../lib/rssSourceManager';
-import { fetchRemoteRestrictedChannels, RestrictedChannel } from '../lib/restrictedChannelsManager';
-import { getActiveCategories, CategoryItem } from '../lib/categoryManager';
 
 // Category visual differentiation helper: professional, subtle color coding per category
 export function getCategoryVisualTheme(category?: string, categoryName?: string) {
@@ -374,8 +374,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [activeReminders, setActiveReminders] = useState<UserReminderItem[]>(() => getUserRemindersLocal(currentUser?.email));
   const [activeReminderMenuPostId, setActiveReminderMenuPostId] = useState<string | null>(null);
 
-  // Scraped Article Data for Detail Modal (Component 5)
-  const [scrapedArticleData, setScrapedArticleData] = useState<{ content?: string; description?: string; photos?: string[]; loading?: boolean } | null>(null);
+  // News Detail Popup Modal (Phase 15) - Declared at top of state hooks to prevent TDZ
+  const [detailModalPost, setDetailModalPost] = useState<NewsFeedPost | null>(null);
 
   // Cashfree Modal Plan for Graphic Pack (Component 8)
   const [cashfreeModalPlan, setCashfreeModalPlan] = useState<any>(null);
@@ -421,34 +421,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       } catch {}
     }
   };
-
-  // Fetch detailed scraped article when detail modal is opened with a sourceUrl
-  useEffect(() => {
-    if (detailModalPost?.sourceUrl && (/^https?:\/\//i.test(detailModalPost.sourceUrl))) {
-      setScrapedArticleData({ loading: true });
-      fetch('/api/scrape-news-article', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: detailModalPost.sourceUrl }),
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data && data.success) {
-            setScrapedArticleData({
-              content: data.content,
-              description: data.description,
-              photos: data.photos,
-              loading: false,
-            });
-          } else {
-            setScrapedArticleData(null);
-          }
-        })
-        .catch(() => setScrapedArticleData(null));
-    } else {
-      setScrapedArticleData(null);
-    }
-  }, [detailModalPost?.id, detailModalPost?.sourceUrl]);
 
   const handleToggleFavorite = async (postId: string) => {
     const res = await toggleUserFavorite(postId, currentUser?.email);
@@ -934,8 +906,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   // Admin Coin Value Configuration state
   const [coinConfigPost, setCoinConfigPost] = useState<NewsFeedPost | null>(null);
-  // News Detail Popup Modal (Phase 15)
-  const [detailModalPost, setDetailModalPost] = useState<NewsFeedPost | null>(null);
 
   // Special Notification Board Admin IDs (Phase 14)
   const [adminNotificationBoardIds, setAdminNotificationBoardIds] = useState<Set<string>>(new Set());
