@@ -1721,6 +1721,7 @@ export default function App() {
   // Listen to profile updates from Profile / Control Panel tab in real-time
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
+      try {
         const detail = e?.detail || getSavedChannelProfile() || {};
         const ALLOWED_FOOTER_SOCIALS = ['youtube', 'facebook', 'instagram', 'twitter', 'linkedin'];
         const activeSocialKeys = detail?.socialIcons
@@ -1738,7 +1739,7 @@ export default function App() {
           channelNameHi: detail?.channelNameHi || prev.channelNameHi,
           channelNameEn: detail?.channelNameEn || prev.channelNameEn,
           customLogoUrl: primaryPngLogo || prev.customLogoUrl,
-      location: profile.district || profile.defaultLocation || profile.location || prev.location,
+          location: detail?.district || detail?.defaultLocation || detail?.location || prev.location,
           customHeaderPng: detail?.customHeaderPng !== undefined ? detail.customHeaderPng : prev.customHeaderPng,
           customFooterPng: detail?.customFooterPng !== undefined ? detail.customFooterPng : prev.customFooterPng,
           channelLogoType: 'png',
@@ -1749,6 +1750,9 @@ export default function App() {
           showMobileNumber: detail?.showMobileNumber !== undefined ? detail.showMobileNumber : prev.showMobileNumber,
           activeSocialIcons: activeSocialKeys !== undefined ? activeSocialKeys : prev.activeSocialIcons,
         }));
+      } catch (err) {
+        console.warn('Error in handleProfileUpdated:', err);
+      }
     };
     window.addEventListener('channel_profile_updated', handleProfileUpdated);
     return () => window.removeEventListener('channel_profile_updated', handleProfileUpdated);
@@ -1826,7 +1830,7 @@ export default function App() {
       channelNameHi: profile.channelNameHi,
       channelNameEn: profile.channelNameEn,
       customLogoUrl: primaryPngLogo || prev.customLogoUrl,
-      location: profile.district || profile.defaultLocation || profile.location || prev.location,
+      location: profile?.district || profile?.defaultLocation || profile?.location || prev.location,
       customHeaderPng: (profile as any).customHeaderPng !== undefined ? (profile as any).customHeaderPng : prev.customHeaderPng,
       customFooterPng: (profile as any).customFooterPng !== undefined ? (profile as any).customFooterPng : prev.customFooterPng,
       channelLogoType: 'png',

@@ -191,8 +191,9 @@ runTest('TC7: Graphic Maker Default Location Synchronization', () => {
   // Initial card location uses savedProfile district
   assert(appSrc.includes('savedProfile?.district'), 'Card initial location must inspect savedProfile.district');
 
-  // handleSaveProfile and handleProfileUpdated update card location
-  assert(appSrc.includes('location: profile.district || profile.defaultLocation || profile.location || prev.location'), 'handleProfileUpdated must sync card.location');
+  // handleSaveProfile and handleProfileUpdated update card location safely
+  assert(appSrc.includes('location: detail?.district || detail?.defaultLocation || detail?.location || prev.location'), 'handleProfileUpdated must sync card.location using detail');
+  assert(appSrc.includes('location: profile?.district || profile?.defaultLocation || profile?.location || prev.location'), 'handleSaveProfile must sync card.location using profile');
 
   // onCompleteDetails updates card.location
   assert(appSrc.includes('location: profile.district,'), 'onCompleteDetails must sync card.location to profile.district');
