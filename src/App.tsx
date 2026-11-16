@@ -25,6 +25,7 @@ import { NotificationPermissionModal } from './components/NotificationPermission
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
 import { NewsDetailModal } from './components/NewsDetailModal';
+import { AppNotificationModal } from './components/AppNotificationModal';
 import { getApiUrl, getApiBaseUrl, ensureAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
@@ -2020,8 +2021,8 @@ export default function App() {
     };
 
     const handleSessionExpired = () => {
-      // Resilient: Do NOT wipe reporter_auth_session or setCurrentUser(null) on routine checks
-      showToast('⚠️ सत्र नवीनीकरण सूचना: आपका सत्र सुरक्षित है।');
+      // Resilient: Silent routine token renewal. Never show persistent yellow banner.
+      console.log('[AUTH] Routine session check/renewal handled silently.');
     };
 
     window.addEventListener('ai_news_user_plan_updated', handleSubUpdate);
@@ -5388,6 +5389,9 @@ export default function App() {
           handleOpenStudioWithNews(selectedPost);
         }}
       />
+
+      {/* 15. Viewport-Centered Dark-Themed Application Notification Modal */}
+      <AppNotificationModal />
     </div>
   );
 }

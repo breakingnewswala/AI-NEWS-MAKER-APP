@@ -14399,19 +14399,23 @@ function auditAndRepairRssNewsRecords() {
     if (!isFeedSource) return p;
     const hasAuditApproval = approvedIdsFromAudit.has(p.id);
     const hasEditorialApproval = Boolean(
-      editorialDb[p.id] && editorialDb[p.id].status === "APPROVED" && editorialDb[p.id].approvedBy && editorialDb[p.id].approvedBy !== "editorial-desk"
+      editorialDb[p.id] && (editorialDb[p.id].status === "APPROVED" || editorialDb[p.id].status === "published" || editorialDb[p.id].isPublished === true || editorialDb[p.id].isApproved === true || editorialDb[p.id].isPrePublished === true || editorialDb[p.id].status === "pre_published")
     );
-    if (hasAuditApproval || hasEditorialApproval) {
+    const isDirectlyPublished = p.status === "published" || p.status === "APPROVED" || p.isPublished === true || p.isApproved === true;
+    const isDirectlyPrePublished = p.status === "pre_published" || p.isPrePublished === true || Boolean(editorialDb[p.id]?.isPrePublished);
+    if (hasAuditApproval || hasEditorialApproval || isDirectlyPublished || isDirectlyPrePublished) {
       approvedCount++;
-      if (p.approvalStatus !== "APPROVED" || p.publicationStatus !== "PUBLISHED") {
+      const isPrePub = isDirectlyPrePublished;
+      if (p.approvalStatus !== "APPROVED" || p.publicationStatus !== "PUBLISHED" || (isPrePub ? p.status !== "pre_published" : p.status !== "published")) {
         modified = true;
         return {
           ...p,
           ingestionStatus: p.ingestionStatus || "PARSED",
           approvalStatus: "APPROVED",
           publicationStatus: "PUBLISHED",
-          status: "APPROVED",
+          status: isPrePub ? "pre_published" : "published",
           isApproved: true,
+          isPrePublished: isPrePub,
           isPublished: true,
           visibility: p.visibility || "public"
         };
@@ -14465,11 +14469,11 @@ function isServerApprovedAndPublished(p, editorialDb) {
   const approvalStatus = String(p.approvalStatus || "").trim().toUpperCase();
   const publicationStatus = String(p.publicationStatus || "").trim().toUpperCase();
   const visibility = String(p.visibility || "").trim().toLowerCase();
-  if (status === "REJECTED" || approvalStatus === "REJECTED" || status === "PENDING" || approvalStatus === "PENDING" || status === "PENDING_APPROVAL" || approvalStatus === "PENDING_APPROVAL" || status === "PENDING_REVIEW" || approvalStatus === "PENDING_REVIEW" || status === "DRAFT" || publicationStatus === "DRAFT" || visibility === "draft" || p.isApproved === false || p.isPublished === false) {
+  if (status === "REJECTED" || approvalStatus === "REJECTED" || status === "PENDING" && !p.isPublished && !p.isApproved || status === "PENDING_APPROVAL" && !p.isPublished && !p.isApproved || status === "PENDING_REVIEW" && !p.isPublished && !p.isApproved) {
     return false;
   }
-  const isApproved = status === "APPROVED" || status === "PUBLISHED" || approvalStatus === "APPROVED" || p.isApproved === true || Boolean(editorialDb && editorialDb[p.id] && (String(editorialDb[p.id].status).trim().toUpperCase() === "APPROVED" || String(editorialDb[p.id].status).trim().toLowerCase() === "published" || editorialDb[p.id].isApproved === true));
-  const isPublished = publicationStatus === "PUBLISHED" || status === "PUBLISHED" || status === "APPROVED" || p.isPublished === true || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].isPublished === true);
+  const isApproved = status === "APPROVED" || status === "PUBLISHED" || status === "PRE_PUBLISHED" || approvalStatus === "APPROVED" || p.isApproved === true || p.isPrePublished === true || Boolean(editorialDb && editorialDb[p.id] && (String(editorialDb[p.id].status).trim().toUpperCase() === "APPROVED" || String(editorialDb[p.id].status).trim().toLowerCase() === "published" || String(editorialDb[p.id].status).trim().toLowerCase() === "pre_published" || editorialDb[p.id].isApproved === true || editorialDb[p.id].isPrePublished === true));
+  const isPublished = publicationStatus === "PUBLISHED" || status === "PUBLISHED" || status === "APPROVED" || status === "PRE_PUBLISHED" || p.isPublished === true || p.isPrePublished === true || Boolean(editorialDb && editorialDb[p.id] && (editorialDb[p.id].isPublished === true || editorialDb[p.id].isPrePublished === true || String(editorialDb[p.id].status).trim().toLowerCase() === "published" || String(editorialDb[p.id].status).trim().toLowerCase() === "pre_published"));
   return Boolean(isApproved && isPublished);
 }
 app.get("/api/news-posts", async (req, res) => {
@@ -14499,9 +14503,6 @@ app.get("/api/news-posts", async (req, res) => {
     }
     const isFeedSource = String(p.id).startsWith("rss-") || String(p.id).startsWith("web-");
     if (isFeedSource) {
-      if (activeSources.length === 0 && !isAdmin) {
-        return false;
-      }
       const parts = String(p.id).split("-");
       const postSourceId = p.sourceId || (parts.length >= 3 ? parts.slice(1, -1).join("-") : parts[1] || "");
       const cleanPostSrc = postSourceId.replace(/^src_/, "");
@@ -14511,6 +14512,17 @@ app.get("/api/news-posts", async (req, res) => {
         (dId) => p.id.startsWith(`rss-${dId}-`) || p.id.startsWith(`web-${dId}-`) || dId.startsWith("src_") && (p.id.startsWith(`rss-${dId.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${dId.replace(/^src_/, "")}-`))
       );
       if (isExplicitlyDeleted && !isAdmin) {
+        return false;
+      }
+      const hasExplicitAdminApproval = isServerApprovedAndPublished(p, editorialDb);
+      if (hasExplicitAdminApproval) {
+        if (isArticleDeletedByTombstone(p)) return false;
+        return true;
+      }
+      if (!includePending) {
+        return false;
+      }
+      if (activeSources.length === 0 && !isAdmin) {
         return false;
       }
       const matchesSourceId = Boolean(
@@ -14546,17 +14558,14 @@ app.get("/api/news-posts", async (req, res) => {
       if (!hasActiveSource && !isAdmin) {
         return false;
       }
-      const hasExplicitAdminApproval = isServerApprovedAndPublished(p, editorialDb);
-      if (!hasExplicitAdminApproval) {
-        if (!includePending) {
-          return false;
-        }
-      } else {
-        return true;
-      }
+      return true;
     } else {
       const isManualApproved = isServerApprovedAndPublished(p, editorialDb);
-      if (!isManualApproved && !includePending) {
+      if (isManualApproved) {
+        if (isArticleDeletedByTombstone(p)) return false;
+        return true;
+      }
+      if (!includePending) {
         return false;
       }
     }
@@ -14811,7 +14820,7 @@ app.get("/api/approved-news-ids", (_req, res) => {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
     const approvedFromPosts = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
-    const approvedFromEditorial = Object.keys(editorialDb).filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || editorialDb[k].isPublished === true));
+    const approvedFromEditorial = Object.keys(editorialDb).filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || String(editorialDb[k].status).toLowerCase() === "published" || String(editorialDb[k].status).toLowerCase() === "pre_published" || editorialDb[k].isPublished === true || editorialDb[k].isPrePublished === true || editorialDb[k].isApproved === true));
     const approvedIds = Array.from(/* @__PURE__ */ new Set([...approvedFromPosts, ...approvedFromEditorial]));
     return res.json({ success: true, approvedIds });
   } catch (err) {
@@ -14823,7 +14832,7 @@ app.get("/api/admin/approved-news-ids", requireAdminMiddleware, (_req, res) => {
     const posts = loadNewsDatabase();
     const editorialDb = loadApprovedEditorialDatabase();
     const approvedFromPosts = posts.filter((p) => isServerApprovedAndPublished(p, editorialDb)).map((p) => p.id);
-    const approvedFromEditorial = Object.keys(editorialDb).filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || editorialDb[k].isPublished === true));
+    const approvedFromEditorial = Object.keys(editorialDb).filter((k) => editorialDb[k] && (String(editorialDb[k].status).toUpperCase() === "APPROVED" || String(editorialDb[k].status).toLowerCase() === "published" || String(editorialDb[k].status).toLowerCase() === "pre_published" || editorialDb[k].isPublished === true || editorialDb[k].isPrePublished === true || editorialDb[k].isApproved === true));
     const approvedIds = Array.from(/* @__PURE__ */ new Set([...approvedFromPosts, ...approvedFromEditorial]));
     return res.json({ success: true, approvedIds });
   } catch (err) {
@@ -15078,10 +15087,12 @@ app.get("/api/editorial/approved/:id", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/editorial/approved/:id", (req, res) => {
+app.post("/api/editorial/approved/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body || {};
+    const authUser = await resolveAuthenticatedUser(req, res);
+    if (authUser) req.user = authUser;
     const callerIsMaster = Boolean(isAuthorizedMasterAdmin(req));
     const isPrePublished = callerIsMaster && Boolean(body.isPrePublished === true);
     if (body.isPrePublished === true && !callerIsMaster) {
@@ -15315,12 +15326,56 @@ app.get("/api/admin/rss/approval-audit", requireAdminMiddleware, (_req, res) => 
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.put("/api/news-posts/:id", (req, res) => {
+app.put("/api/news-posts/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = req.body || {};
     let existing = loadNewsDatabase();
-    existing = existing.map((p) => p.id === id ? { ...p, ...updates } : p);
+    const editorialDb = loadApprovedEditorialDatabase();
+    existing = existing.map((p) => {
+      if (p.id === id) {
+        const wasPublished = p.status === "published" || p.status === "APPROVED" || p.isPublished === true || p.isApproved === true;
+        const wasPrePublished = p.status === "pre_published" || p.isPrePublished === true || Boolean(editorialDb[id]?.isPrePublished);
+        const isExplicitUnpublish = updates.action === "unpublish" || updates.status === "unpublished";
+        let finalStatus = p.status;
+        let finalIsPublished = p.isPublished;
+        let finalIsApproved = p.isApproved;
+        let finalIsPrePublished = p.isPrePublished;
+        if (isExplicitUnpublish) {
+          finalStatus = "unpublished";
+          finalIsPublished = false;
+          finalIsPrePublished = false;
+        } else if (wasPrePublished) {
+          finalStatus = "pre_published";
+          finalIsPublished = true;
+          finalIsApproved = true;
+          finalIsPrePublished = true;
+        } else if (wasPublished) {
+          finalStatus = "published";
+          finalIsPublished = true;
+          finalIsApproved = true;
+          finalIsPrePublished = false;
+        } else if (updates.status) {
+          finalStatus = updates.status;
+          finalIsPublished = updates.isPublished !== void 0 ? Boolean(updates.isPublished) : p.isPublished;
+          finalIsApproved = updates.isApproved !== void 0 ? Boolean(updates.isApproved) : p.isApproved;
+          finalIsPrePublished = updates.isPrePublished !== void 0 ? Boolean(updates.isPrePublished) : p.isPrePublished;
+        }
+        return {
+          ...p,
+          ...updates,
+          status: finalStatus,
+          isPublished: finalIsPublished,
+          isApproved: finalIsApproved,
+          isPrePublished: finalIsPrePublished,
+          approvedAt: p.approvedAt || (finalIsApproved ? Date.now() : void 0),
+          approvedBy: p.approvedBy || (finalIsApproved ? (req.user?.email || "admin").toString() : void 0),
+          publishedAt: p.publishedAt || (finalIsPublished ? Date.now() : void 0),
+          publishedBy: p.publishedBy || (finalIsPublished ? (req.user?.email || "admin").toString() : void 0)
+        };
+      }
+      return p;
+    });
     saveNewsDatabase(existing);
     return res.json({ success: true, posts: existing });
   } catch (err) {

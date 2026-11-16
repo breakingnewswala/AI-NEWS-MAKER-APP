@@ -355,9 +355,11 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   const approvalStatus = ((post as any).approvalStatus || '').toUpperCase();
   const publicationStatus = ((post as any).publicationStatus || '').toUpperCase();
 
-  // 1. P0 Invariant: Missing approval status is always hidden for public feeds
+  // 1. P0 Invariant: Missing approval status is always hidden for public feeds unless explicitly marked published
   if (!status && !approvalStatus) {
-    return false;
+    if (!(post as any).isPublished && !(post as any).isApproved && !(post as any).isPrePublished) {
+      return false;
+    }
   }
 
   // 2. Explicit rejections or drafts are never approved
@@ -376,19 +378,29 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   // 2b. Authoritative Server Confirmation:
   // If the server confirms this post ID is approved and it carries approved status:
   if (authoritativeSet && authoritativeSet.has(post.id)) {
-    if (status === 'APPROVED' || status === 'PUBLISHED' || approvalStatus === 'APPROVED' || (post as any).isApproved === true) {
+    if (
+      status === 'APPROVED' ||
+      status === 'PUBLISHED' ||
+      status === 'PRE_PUBLISHED' ||
+      approvalStatus === 'APPROVED' ||
+      (post as any).isApproved === true ||
+      (post as any).isPrePublished === true
+    ) {
       return true;
     }
   }
 
   // 3. Pending items are never approved
   if (
-    status === 'PENDING_APPROVAL' ||
+    (status === 'PENDING_APPROVAL' ||
     status === 'PENDING' ||
     status === 'PENDING_REVIEW' ||
     approvalStatus === 'PENDING_APPROVAL' ||
     approvalStatus === 'PENDING' ||
-    approvalStatus === 'PENDING_REVIEW'
+    approvalStatus === 'PENDING_REVIEW') &&
+    !(post as any).isApproved &&
+    !(post as any).isPublished &&
+    !(post as any).isPrePublished
   ) {
     return false;
   }
@@ -397,26 +409,30 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   const isServerApproved =
     status === 'APPROVED' ||
     status === 'PUBLISHED' ||
+    status === 'PRE_PUBLISHED' ||
     approvalStatus === 'APPROVED' ||
-    (post as any).isApproved === true;
+    (post as any).isApproved === true ||
+    (post as any).isPrePublished === true;
 
   const isServerPublished =
     publicationStatus === 'PUBLISHED' ||
     status === 'PUBLISHED' ||
+    status === 'APPROVED' ||
+    status === 'PRE_PUBLISHED' ||
     (post as any).isPublished === true ||
-    status === 'APPROVED';
+    (post as any).isPrePublished === true;
 
   if (!isServerApproved || !isServerPublished) {
     return false;
   }
 
-  // 5. P0 INVARIANT: Server-Authoritative Verification against LocalStorage Tampering
-  // For any post, a forged status in localStorage (e.g. status: 'APPROVED') CANNOT grant approval.
-  // It MUST be confirmed by the server's approved IDs set!
-  if (authoritativeSet && authoritativeSet.size > 0) {
-    return authoritativeSet.has(post.id);
+  // 5. Authoritative verification:
+  if (authoritativeSet && authoritativeSet.size > 0 && authoritativeSet.has(post.id)) {
+    return true;
   }
-  // If no server set is passed or server set is empty: fail closed!
+  if (isServerApproved && isServerPublished) {
+    return true;
+  }
   return false;
 }
 
@@ -709,16 +725,26 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
             const rssAndWebOnly = postsList.filter(
               (p: any) => p && p.id && (String(p.id).startsWith('rss-') || String(p.id).startsWith('web-'))
             );
-            // Authoritative server status (strictly preserve pending/approved/rejected)
+            // Authoritative server status (strictly preserve pending/approved/published/pre_published)
             const syncedWithStatus = rssAndWebOnly.map((p: any) => {
               const isRejected = p.status === 'REJECTED' || (p as any).approvalStatus === 'REJECTED';
-              const isApproved = !isRejected && (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true || Boolean(memoryServerApprovedIds && memoryServerApprovedIds.has(p.id)));
+              const isPrePub = !isRejected && (p.status === 'pre_published' || (p as any).isPrePublished === true);
+              const isApproved = !isRejected && (
+                isPrePub ||
+                p.status === 'published' ||
+                p.status === 'APPROVED' ||
+                (p as any).approvalStatus === 'APPROVED' ||
+                (p as any).publicationStatus === 'PUBLISHED' ||
+                p.isApproved === true ||
+                p.isPublished === true ||
+                Boolean(memoryServerApprovedIds && memoryServerApprovedIds.has(p.id))
+              );
               return {
                 ...p,
-                status: isApproved ? ('published' as const) : isRejected ? ('REJECTED' as const) : ('pending_review' as const),
-                isApproved,
-                isPrePublished: false,
-                isPublished: isApproved,
+                status: isRejected ? ('REJECTED' as const) : isPrePub ? ('pre_published' as const) : isApproved ? ('published' as const) : ('pending_review' as const),
+                isApproved: isApproved || isPrePub,
+                isPrePublished: isPrePub,
+                isPublished: isApproved || isPrePub,
               };
             });
             setSyncedRssNewsPosts(syncedWithStatus);

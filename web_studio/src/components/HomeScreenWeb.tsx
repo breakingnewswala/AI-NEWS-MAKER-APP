@@ -76,7 +76,8 @@ import {
 import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 import { ReporterUser } from './LoginModal';
-import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders, ensureAuthToken, getAuthToken, getAdminAuthHeaders } from '../lib/apiConfig';
+import { showAppNotification, showAppSuccess, showAppError, showAppWarning, showAppConfirm } from '../lib/notificationService';
 import {
   getActiveRssNewsPosts,
   getSavedNewsChannels,
@@ -1018,7 +1019,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
       const data = await res.json();
       if (res.status === 403 || data.exhausted) {
-        alert(data.error || 'आज की ग्राफिक निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।');
+        showAppWarning(data.error || 'आज की ग्राफिक निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।', 'दैनिक सीमा');
         return;
       }
 
@@ -1127,7 +1128,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   const handleUnlockNewsPost = async (post: NewsFeedPost) => {
     if (!currentUser?.email) {
-      alert('कृपया पहले लॉगिन करें।');
+      showAppWarning('कृपया पहले लॉगिन करें।', 'लॉगिन आवश्यक');
       return;
     }
     const cost = post.coinCost || 0;
@@ -1135,43 +1136,48 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       onOpenStudioWithNews(post);
       return;
     }
-    const confirmUnlock = window.confirm(`क्या आप ${cost} कॉइन खर्च करके इस खबर से ग्राफिक बनाना चाहते हैं?`);
-    if (!confirmUnlock) return;
-
-    setIsUnlockingPostId(post.id);
-    try {
-      const res = await fetch(getApiUrl('/api/wallet/unlock-item'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: currentUser.email,
-          itemId: post.id,
-          itemType: 'news',
-          coinCost: cost,
-          title: post.title,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setUnlockedNewsIds((prev) => {
-          const updated = new Set(prev);
-          updated.add(post.id);
-          try {
-            localStorage.setItem(`app_unlocked_news_ids_${currentUser.email}`, JSON.stringify(Array.from(updated)));
-          } catch {}
-          return updated;
-        });
-        window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
-        alert(`🎉 बधाई! ${cost} कॉइन में यह खबर अनलॉक हो गई।`);
-        onOpenStudioWithNews(post);
-      } else {
-        alert(data.error || 'अनलॉक विफल रहा। कृपया पर्याप्त कॉइन बैलेंस सुनिश्चित करें।');
-      }
-    } catch {
-      alert('नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।');
-    } finally {
-      setIsUnlockingPostId(null);
-    }
+    showAppConfirm({
+      title: 'खबर अनलॉक करें',
+      message: `क्या आप ${cost} कॉइन खर्च करके इस खबर से ग्राफिक बनाना चाहते हैं?`,
+      confirmText: 'हाँ, अनलॉक करें',
+      cancelText: 'रद्द करें',
+      onConfirm: async () => {
+        setIsUnlockingPostId(post.id);
+        try {
+          const res = await fetch(getApiUrl('/api/wallet/unlock-item'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: currentUser.email,
+              itemId: post.id,
+              itemType: 'news',
+              coinCost: cost,
+              title: post.title,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setUnlockedNewsIds((prev) => {
+              const updated = new Set(prev);
+              updated.add(post.id);
+              try {
+                localStorage.setItem(`app_unlocked_news_ids_${currentUser.email}`, JSON.stringify(Array.from(updated)));
+              } catch {}
+              return updated;
+            });
+            window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+            showAppSuccess(`बधाई! ${cost} कॉइन में यह खबर अनलॉक हो गई।`, 'अनलॉक सफल');
+            onOpenStudioWithNews(post);
+          } else {
+            showAppError(data.error || 'अनलॉक विफल रहा। कृपया पर्याप्त कॉइन बैलेंस सुनिश्चित करें।', 'विफलता');
+          }
+        } catch {
+          showAppError('नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।', 'त्रुटि');
+        } finally {
+          setIsUnlockingPostId(null);
+        }
+      },
+    });
   };
 
   const handleSaveCoinConfig = async () => {
@@ -1197,10 +1203,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         }
         setCoinConfigPost(null);
       } else {
-        alert('कॉइन वैल्यू सेव करने में विफल।');
+        showAppError('कॉइन वैल्यू सेव करने में विफल।', 'विफलता');
       }
     } catch {
-      alert('नेटवर्क त्रुटि।');
+      showAppError('नेटवर्क त्रुटि। कृपया पुनः प्रयास करें।', 'त्रुटि');
     } finally {
       setCoinConfigSaving(false);
     }
@@ -1272,7 +1278,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   const handleSaveRawNews = async () => {
     if (!rawHeadline.trim() && !rawText.trim()) {
-      alert('कृपया कम से कम हेडलाइन या रॉ टेक्स्ट दर्ज करें।');
+      showAppWarning('कृपया कम से कम हेडलाइन या रॉ टेक्स्ट दर्ज करें।', 'अनिवार्य विवरण');
       return;
     }
     setRawSaving(true);
@@ -1334,14 +1340,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       if (onRefreshLiveNews) onRefreshLiveNews();
       window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
 
-      alert(
+      showAppSuccess(
         rawStatus === 'Published'
           ? 'रॉ न्यूज़ सफलतापूर्वक होम फ़ीड पर प्रकाशित की गई!'
-          : 'रॉ न्यूज़ सुरक्षित कर ली गई!'
+          : 'रॉ न्यूज़ सुरक्षित कर ली गई!',
+        'रॉ न्यूज़'
       );
     } catch (err) {
       console.error('Error saving raw news:', err);
-      alert('रॉ न्यूज़ सहेजने में त्रुटि हुई।');
+      showAppError('रॉ न्यूज़ सहेजने में त्रुटि हुई।', 'त्रुटि');
     } finally {
       setRawSaving(false);
     }
@@ -1603,7 +1610,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     // For regular users (!canModerate), the server response (safeLocalPosts) from /api/news-posts
     // is the SOLE AUTHORITATIVE feed. Untrusted posts from localStorage can NEVER be injected into the public feed!
     if (!canModerate) {
-      return safeLocalPosts.filter((p) => p && p.id && !deletedIds.has(p.id) && isRssPostApproved(p, approvedRssIds));
+      return safeLocalPosts.filter((p) => {
+        if (!p || !p.id || deletedIds.has(p.id)) return false;
+        const status = String(p.status || '').toLowerCase();
+        const isExplicitlyPublished =
+          status === 'published' ||
+          status === 'approved' ||
+          status === 'pre_published' ||
+          Boolean((p as any).isPublished) ||
+          Boolean((p as any).isPrePublished) ||
+          Boolean((p as any).isApproved);
+        if (isExplicitlyPublished) return true;
+        return isRssPostApproved(p, approvedRssIds);
+      });
     }
 
     // For admins (canModerate):
@@ -1668,10 +1687,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   const handleBulkDelete = () => {
     if (!onDeleteNews) return;
-    if (window.confirm(`क्या आप चुनी गई ${selectedNewsIds.length} खबरों को हटाना चाहते हैं?`)) {
-      selectedNewsIds.forEach((id) => onDeleteNews(id));
-      setSelectedNewsIds([]);
-    }
+    showAppConfirm({
+      title: 'खबरें हटाएं',
+      message: `क्या आप चुनी गई ${selectedNewsIds.length} खबरों को हटाना चाहते हैं?`,
+      confirmText: 'हाँ, हटाएं',
+      cancelText: 'रद्द करें',
+      isDestructive: true,
+      onConfirm: () => {
+        selectedNewsIds.forEach((id) => onDeleteNews(id));
+        setSelectedNewsIds([]);
+      },
+    });
   };
 
   // Thumbnail resolver supporting Source, Default, and Manual
@@ -2601,9 +2627,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       {/* Bottom Info on Image */}
                       {/* Bottom Info on Image: Location & Time */}
                       <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs text-white">
-                        <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md font-bold text-amber-300 border border-amber-500/30 truncate max-w-[55%] text-[11px]">
-                          {post.location ? `📍 ${post.location}` : post.categoryName}
-                        </span>
+                        <div className="flex items-center gap-1.5 truncate max-w-[70%]">
+                          <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md font-bold text-amber-300 border border-amber-500/30 truncate text-[11px]">
+                            {post.location ? `📍 ${post.location}` : post.categoryName}
+                          </span>
+                          {(post.status === 'pre_published' || (post as any).status === 'PRE_PUBLISHED' || Boolean((post as any).isPrePublished)) && (
+                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/60 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm shrink-0">
+                              <CheckCircle2 className="w-2.5 h-2.5 text-amber-400" />
+                              <span>PRE-PUBLISHED</span>
+                            </span>
+                          )}
+                        </div>
                         <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md text-[10px] text-slate-300">
                           {formatDynamicTime(post.timestamp, post.publishedTime)}
                         </span>
@@ -2625,9 +2659,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                               e.stopPropagation();
                               const ok = await approveRssPost(post.id, post);
                               if (ok) {
-                                alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
+                                showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
                               } else {
-                                alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
+                                showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
                               }
                             }}
                             className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 shadow animate-pulse"
@@ -3107,9 +3141,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             e.stopPropagation();
                             const ok = await approveRssPost(post.id, post);
                             if (ok) {
-                              alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
+                              showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
                             } else {
-                              alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
+                              showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
                             }
                           }}
                           className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
@@ -3178,11 +3212,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {post.categoryName}
                         </span>
 
-                        {/* Pre-Published Approved Editorial Badge (Admin-only per Part 2.2) */}
-                        {canModerate && Boolean((post as any).isPrePublished) && (
-                          <span className="px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
-                            <span>प्री-पब्लिश</span>
+                        {/* Pre-Published Approved Editorial Badge */}
+                        {(post.status === 'pre_published' || (post as any).status === 'PRE_PUBLISHED' || Boolean((post as any).isPrePublished)) && (
+                          <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/60 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-amber-400" />
+                            <span>PRE-PUBLISHED</span>
                           </span>
                         )}
 
@@ -3276,9 +3310,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           e.stopPropagation();
                           const ok = await approveRssPost(post.id, post);
                           if (ok) {
-                            alert('✅ यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!');
+                            showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
                           } else {
-                            alert('❌ खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।');
+                            showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
                           }
                         }}
                         className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
@@ -3549,9 +3583,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm('क्या आप इस खबर को हटाना चाहते हैं?')) {
-                                onDeleteNews && onDeleteNews(post.id);
-                              }
+                              showAppConfirm({
+                                title: 'खबर हटाएं',
+                                message: 'क्या आप इस खबर को हटाना चाहते हैं?',
+                                confirmText: 'हाँ, हटाएं',
+                                cancelText: 'रद्द करें',
+                                isDestructive: true,
+                                onConfirm: () => {
+                                  onDeleteNews && onDeleteNews(post.id);
+                                },
+                              });
                             }}
                             className="py-1.5 px-1.5 bg-red-950/60 hover:bg-red-900 border border-red-700 text-red-300 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer truncate"
                             title="खबर हटाएं"
@@ -3637,7 +3678,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   if (editingPost.imageSource === 'manual' && editingPost.manualThumbnailUrl && editingPost.manualThumbnailUrl.trim()) {
                     const photos = editingPost.additionalPhotos || (editingPost.additionalImages ? editingPost.additionalImages.map((i: any) => i.imageUrl) : []);
                     if (!photos || photos.length === 0) {
-                      alert('मैनुअल थंबनेल अपलोड करने पर कम से कम एक अतिरिक्त फोटो अपलोड करना अनिवार्य है।');
+                      showAppWarning('मैनुअल थंबनेल अपलोड करने पर कम से कम एक अतिरिक्त फोटो अपलोड करना अनिवार्य है।', 'फोटो अनिवार्य');
                       return;
                     }
                   }
@@ -4285,7 +4326,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     if (editingPost.imageSource === 'manual' && editingPost.manualThumbnailUrl && editingPost.manualThumbnailUrl.trim()) {
                       const photos = editingPost.additionalPhotos || (editingPost.additionalImages ? editingPost.additionalImages.map((i: any) => i.imageUrl) : []);
                       if (!photos || photos.length === 0) {
-                        alert('मैनुअल थंबनेल अपलोड करने पर कम से कम एक अतिरिक्त फोटो अपलोड करना अनिवार्य है।');
+                        showAppWarning('मैनुअल थंबनेल अपलोड करने पर कम से कम एक अतिरिक्त फोटो अपलोड करना अनिवार्य है।', 'फोटो अनिवार्य');
                         return;
                       }
                     }
@@ -4294,12 +4335,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         ? editingPost.approvedHeadlines
                         : ((editingPost as any).headlineOptions || [editingPost.title]);
                       const chosenH = editingPost.approvedHeadline || headlineList[0] || editingPost.title;
+
+                      let token = await ensureAuthToken().catch(() => '');
+                      if (!token) token = getAuthToken();
+                      const headers: Record<string, string> = {
+                        'Content-Type': 'application/json',
+                        'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
+                        ...getAdminAuthHeaders(),
+                      };
+                      if (token) headers['Authorization'] = `Bearer ${token}`;
+
                       const res = await fetch(getApiUrl(`/api/editorial/approved/${encodeURIComponent(editingPost.id)}`), {
                         method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'x-admin-email': currentUser?.email || 'admin@ainewsmaker.online',
-                        },
+                        headers,
                         body: JSON.stringify({
                           title: editingPost.title,
                           headlines: headlineList.slice(0, 5),
@@ -4318,19 +4366,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           additionalImages: editingPost.additionalImages || [],
                           featuredPhotoUrl: editingPost.featuredPhotoUrl || '',
                           isPrePublished: true,
-                          status: 'APPROVED',
+                          status: 'pre_published',
+                          isApproved: true,
+                          isPublished: true,
                         }),
                       });
                       if (res.ok) {
-                        alert('✅ यह खबर सफलतापूर्वक "प्री-पब्लिश" कर दी गई है!\nअब सभी यूज़र्स बिना अतिरिक्त AI कॉल के स्वीकृत हेडलाइन से तुरंत ग्राफिक बना सकेंगे।');
+                        showAppSuccess('यह खबर सफलतापूर्वक "प्री-पब्लिश" कर दी गई है!\nअब सभी यूज़र्स बिना अतिरिक्त AI कॉल के स्वीकृत हेडलाइन से तुरंत ग्राफिक बना सकेंगे।', 'प्री-पब्लिश सफल');
                         if (onRefreshLiveNews) onRefreshLiveNews();
                         setEditingPost(null);
                       } else {
-                        alert('प्री-पब्लिश करने में विफल रहा।');
+                        showAppError('प्री-पब्लिश करने में विफल रहा। कृपया पुनः प्रयास करें।', 'विफलता');
                       }
                     } catch (err) {
                       console.error('Pre-publish error:', err);
-                      alert('सर्वर से संपर्क नहीं हो सका।');
+                      showAppError('सर्वर से संपर्क नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें।', 'त्रुटि');
                     }
                   }}
                   className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer"
@@ -5185,12 +5235,12 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       const data = await res.json();
                       if (res.ok) {
                         setLimitIncreaseRequested(true);
-                        alert('लिमिट बढ़ाने का अनुरोध सफलतापूर्वक एडमिन को भेज दिया गया है!');
+                        showAppSuccess('लिमिट बढ़ाने का अनुरोध सफलतापूर्वक एडमिन को भेज दिया गया है!', 'अनुरोध भेजा गया');
                       } else {
-                        alert(data.error || 'अनुरोध भेजने में समस्या आई।');
+                        showAppError(data.error || 'अनुरोध भेजने में समस्या आई।', 'विफलता');
                       }
                     } catch (err: any) {
-                      alert(err.message || 'नेटवर्क समस्या।');
+                      showAppError(err.message || 'नेटवर्क समस्या।', 'त्रुटि');
                     } finally {
                       setIsRequestingLimitIncrease(false);
                     }
@@ -5743,7 +5793,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           onSuccess={() => {
             setCashfreeModalPlan(null);
             fetchDownloadStatus();
-            alert('🎉 ₹99 ग्राफिक पैक सक्रिय हो गया है! आपको 20 अतिरिक्त ग्राफिक डाउनलोड (7 दिन वैध) मिल गए हैं।');
+            showAppSuccess('₹99 ग्राफिक पैक सक्रिय हो गया है! आपको 20 अतिरिक्त ग्राफिक डाउनलोड (7 दिन वैध) मिल गए हैं।', 'पैक सक्रिय');
           }}
           currentUser={currentUser}
         />

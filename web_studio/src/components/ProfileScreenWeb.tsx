@@ -48,6 +48,7 @@ import { getAllIndianStates, getDistrictsForState, inferStateFromDistrict } from
 import { ReporterUser } from './LoginModal';
 import { NewsFeedPost } from '../data/newsFeedData';
 import { getApiUrl, getAuthHeaders, getAuthToken, ensureAuthToken, isTokenExpired } from '../lib/apiConfig';
+import { showAppNotification, showAppSuccess, showAppError, showAppWarning, showAppConfirm } from '../lib/notificationService';
 import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
 import { AdvancedLogoCropEditor, CropConfig } from './AdvancedLogoCropEditor';
@@ -522,10 +523,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         if (data.officialWhatsAppNumber) setWaOfficialNumber(data.officialWhatsAppNumber);
         setWaLinkMsg('✅ 6-अंकों का लिंकिंग कोड तैयार है! कृपया इसे आधिकारिक WhatsApp पर भेजें।');
       } else {
-        alert(data.error || 'कोड जनरेट करने में समस्या आई');
+        showAppError(data.error || 'कोड जनरेट करने में समस्या आई', 'लिंकिंग विफल');
       }
     } catch (err: any) {
-      alert('लिंकिंग कोड जनरेट करने में विफलता: ' + err.message);
+      showAppError('लिंकिंग कोड जनरेट करने में विफलता: ' + err.message, 'त्रुटि');
     } finally {
       setWaLinkLoading(false);
     }
@@ -533,29 +534,37 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   // Handle WhatsApp Unlink
   const handleUnlinkWhatsApp = async () => {
-    if (!confirm('क्या आप वाकई अपने AI NEWS MAKER अकाउंट से यह WhatsApp नंबर अनलिंक करना चाहते हैं?')) return;
-    setWaLinkLoading(true);
-    try {
-      const res = await fetch(getApiUrl('/api/whatsapp/link/unlink'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-      });
-      const data = await res.json();
-      if (data && data.success) {
-        setWaLinkStatus({ isLinked: false, linkedWhatsAppWaId: '' });
-        setWaGeneratedCode('');
-        alert('✅ WhatsApp अकाउंट सफलतापूर्वक अनलिंक कर दिया गया है।');
-      } else {
-        alert(data.error || 'अनलिंक करने में समस्या आई');
-      }
-    } catch (err: any) {
-      alert('त्रुटि: ' + err.message);
-    } finally {
-      setWaLinkLoading(false);
-    }
+    showAppConfirm({
+      title: 'WhatsApp अनलिंक करें',
+      message: 'क्या आप वाकई अपने AI NEWS MAKER अकाउंट से यह WhatsApp नंबर अनलिंक करना चाहते हैं?',
+      confirmText: 'हाँ, अनलिंक करें',
+      cancelText: 'रद्द करें',
+      isDestructive: true,
+      onConfirm: async () => {
+        setWaLinkLoading(true);
+        try {
+          const res = await fetch(getApiUrl('/api/whatsapp/link/unlink'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...getAuthHeaders(),
+            },
+          });
+          const data = await res.json();
+          if (data && data.success) {
+            setWaLinkStatus({ isLinked: false, linkedWhatsAppWaId: '' });
+            setWaGeneratedCode('');
+            showAppSuccess('WhatsApp अकाउंट सफलतापूर्वक अनलिंक कर दिया गया है।', 'अनलिंक सफल');
+          } else {
+            showAppError(data.error || 'अनलिंक करने में समस्या आई', 'त्रुटि');
+          }
+        } catch (err: any) {
+          showAppError('त्रुटि: ' + err.message, 'त्रुटि');
+        } finally {
+          setWaLinkLoading(false);
+        }
+      },
+    });
   };
 
   // Manual Username Creation state & handler (Google Email != Username)
@@ -658,7 +667,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
     setIsUsernameEditing(false);
     setUsernameError('');
-    alert(`✅ आपका मनपसंद यूज़रनेम '${formattedUsername}' सफलतापूर्वक सेट हो गया!`);
+    showAppSuccess(`आपका मनपसंद यूज़रनेम '${formattedUsername}' सफलतापूर्वक सेट हो गया!`, 'यूज़रनेम अपडेट');
   };
 
   const handleNewRequestedLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -667,13 +676,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
     if (logoReqType === 'gif') {
       if (!file.type.includes('gif') && !file.name.toLowerCase().endsWith('.gif')) {
-        alert('कृपया केवल मान्य एनिमेटेड GIF फ़ाइल (.gif) चुनें।');
+        showAppWarning('कृपया केवल मान्य एनिमेटेड GIF फ़ाइल (.gif) चुनें।', 'अमान्य फ़ाइल');
         return;
       }
     }
 
     if (file.size > 15 * 1024 * 1024) {
-      alert('फ़ाइल का आकार 15MB से अधिक नहीं होना चाहिए।');
+      showAppWarning('फ़ाइल का आकार 15MB से अधिक नहीं होना चाहिए।', 'फ़ाइल सीमा');
       return;
     }
 
@@ -919,13 +928,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       });
       const data = await res.json();
       if (data.success) {
-        showToast('सब-यूज़र हटा दिया गया');
+        showAppSuccess('सब-यूज़र हटा दिया गया', 'हटाया गया');
         fetchSubUsers();
       } else {
-        alert(data.error || 'सब-यूज़र हटाने में विफल');
+        showAppError(data.error || 'सब-यूज़र हटाने में विफल', 'त्रुटि');
       }
     } catch (err: any) {
-      alert(err.message || 'हटाने में त्रुटि');
+      showAppError(err.message || 'हटाने में त्रुटि', 'त्रुटि');
     }
   };
 
@@ -1836,7 +1845,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         currentEmail: effectiveUser?.email || currentUser?.email,
       });
       if (!uniqCheck.valid) {
-        alert(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+        showAppWarning(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!', 'अमान्य विवरण');
         return;
       }
 
@@ -1986,20 +1995,25 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           whatsappMarketingConsentPhone: finalPhone,
           whatsappMarketingConsentUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         };
+        let token = await ensureAuthToken().catch(() => '');
+        if (!token) token = getAuthToken();
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+          ...(isAuthoritativeAdmin ? {
+            'x-admin-key': 'master-admin',
+            'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : 'admin',
+            'x-admin-email': cleanEmail,
+          } : {
+            'x-user-role': 'reporter',
+            'x-user-email': cleanEmail,
+          }),
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const res = await fetch(getApiUrl('/api/user-profile'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-            ...(isAuthoritativeAdmin ? {
-              'x-admin-key': 'master-admin',
-              'x-user-role': isUserSuperAdmin(cleanEmail) ? 'superadmin' : 'admin',
-              'x-admin-email': cleanEmail,
-            } : {
-              'x-user-role': 'reporter',
-              'x-user-email': cleanEmail,
-            }),
-          },
+          headers,
           body: JSON.stringify(serverPayload),
         });
         if (!res.ok) {
@@ -2031,7 +2045,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         }
       } catch (err: any) {
         console.error('Cloud server sync error:', err);
-        alert(`प्रोफाइल सहेजने में विफल: ${err.message || 'सर्वर पर सहेजने में समस्या आई'}`);
+        showAppError(`प्रोफाइल सहेजने में विफल: ${err.message || 'सर्वर पर सहेजने में समस्या आई'}`, 'त्रुटि');
         return;
       }
 
@@ -2054,6 +2068,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       }
 
       setSaveSettingsSuccess(true);
+      showAppSuccess('ब्रांडिंग व प्रोफाइल सफलतापूर्वक सुरक्षित हो गई!', 'प्रोफाइल अपडेट');
       setTimeout(() => setSaveSettingsSuccess(false), 3000);
     } finally {
       setIsSavingBranding(false);
@@ -2081,7 +2096,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     if (success) {
       setSubscription(getUserSubscription());
       setMobileInput('');
-      alert('✅ आपका प्राइमरी मोबाइल नंबर स्थायी रूप से सुरक्षित कर लिया गया है। अब इसे बदला नहीं जा सकेगा।');
+      showAppSuccess('आपका प्राइमरी मोबाइल नंबर स्थायी रूप से सुरक्षित कर लिया गया है। अब इसे बदला नहीं जा सकेगा।', 'मोबाइल नंबर सुरक्षित');
     } else {
       setMobileError('प्राइमरी मोबाइल नंबर पहले से लॉक है अथवा अमान्य है।');
     }
@@ -2096,13 +2111,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const tgtRank = tierRankMap[(tier || '').toLowerCase()] || 1;
 
     if (tgtRank < curRank) {
-      alert('डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।');
+      showAppWarning('डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।', 'योजना परिवर्तन');
       return;
     }
 
     if (tier === 'basic') {
       if (curRank > 1) {
-        alert('डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।');
+        showAppWarning('डाउनग्रेड संभव नहीं है। आप केवल उच्चतर प्लान में अपग्रेड कर सकते हैं।', 'योजना परिवर्तन');
         return;
       }
       setUserPlanTier('basic');
@@ -2748,7 +2763,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               {/* लोगो / GIF बदलने हेतु एडमिन से अनुरोध Modal for Normal Users */}
               {isLogoReqModalOpen && (
                 <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-                  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
+                  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl sm:max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                       <div className="flex items-center gap-2.5">
                         <div className={`p-2 rounded-xl ${logoReqType === 'gif' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
@@ -2775,59 +2790,84 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
 
                     <div className="space-y-4">
-                      {/* Current & New Asset Preview Side-by-Side */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* 1. Current Asset */}
-                        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                          <span className="text-[11px] font-bold text-slate-400 block">
-                            {logoReqType === 'gif' ? '1. वर्तमान चैनल GIF:' : '1. वर्तमान चैनल लोगो:'}
+                      {/* Section 1: Current Asset (वर्तमान चैनल लोगो / GIF) */}
+                      <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{logoReqType === 'gif' ? '1. वर्तमान चैनल GIF (Current GIF):' : '1. वर्तमान चैनल लोगो (Current Logo):'}</span>
                           </span>
-                          <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
-                            {(() => {
-                              const candidate = logoReqType === 'gif'
-                                ? (channelProfile.channelLogoGifUrl || '')
-                                : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '');
-                              const safeLogo = (!isAinewsAdmin && candidate.includes('ai_news_maker_logo.png')) ? '' : (candidate || defaultAdminLogo);
-                              return safeLogo ? (
+                          <span className="text-[11px] text-amber-400/90 font-medium">
+                            {channelProfile.channelNameHi || 'वर्तमान चैनल'}
+                          </span>
+                        </div>
+                        <div className="w-full h-24 bg-slate-900 rounded-lg border border-slate-800 p-2 flex items-center justify-center overflow-hidden">
+                          {(() => {
+                            const candidate = logoReqType === 'gif'
+                              ? (channelProfile.channelLogoGifUrl || '')
+                              : (channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '');
+                            const safeLogo = (!isAinewsAdmin && candidate.includes('ai_news_maker_logo.png')) ? '' : (candidate || defaultAdminLogo);
+                            return safeLogo ? (
+                              <div className="relative flex items-center justify-center w-full h-full">
                                 <img
                                   src={safeLogo}
                                   alt="Current Asset"
-                                  className="max-h-20 w-auto object-contain"
+                                  className="max-h-20 max-w-full object-contain"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const fb = e.currentTarget.parentElement?.querySelector('.current-asset-fallback');
+                                    if (fb) fb.classList.remove('hidden');
+                                  }}
                                 />
-                              ) : (
-                                <div className="text-center text-slate-500 text-xs">
-                                  <span>कोई लोगो सेट नहीं है</span>
+                                <div className="current-asset-fallback hidden text-center text-slate-500 text-xs">
+                                  <span>लोगो लोड नहीं हुआ या सेट नहीं है</span>
                                 </div>
-                              );
-                            })()}
-                          </div>
-                          <div className="text-[11px] text-slate-300 font-bold truncate">
-                            {channelProfile.channelNameHi || 'वर्तमान चैनल'}
-                          </div>
+                              </div>
+                            ) : (
+                              <div className="text-center text-slate-500 text-xs">
+                                <span>कोई लोगो सेट नहीं है</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Section 2: New Asset Upload & Crop (नया लोगो / GIF) */}
+                      <div className={`p-3.5 bg-slate-950 rounded-xl border space-y-3 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-bold flex items-center gap-1.5 ${logoReqType === 'gif' ? 'text-red-300' : 'text-amber-300'}`}>
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो फ़ाइल (PNG, JPG, WebP - New Logo Upload):'}</span>
+                          </span>
+                          {newRequestedLogoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewRequestedLogoUrl('');
+                                setRawUploadedLogoUrl('');
+                                setLogoCropConfig(null);
+                                setShowCropEditor(false);
+                              }}
+                              className="text-xs text-red-400 hover:underline cursor-pointer"
+                            >
+                              हटाएं
+                            </button>
+                          )}
                         </div>
 
-                        {/* 2. New Asset Upload & Preview */}
-                        <div className={`p-3 bg-slate-950 rounded-xl border space-y-2.5 ${logoReqType === 'gif' ? 'border-red-500/40' : 'border-amber-500/40'}`}>
-                          <span className={`text-[11px] font-bold block flex items-center justify-between ${logoReqType === 'gif' ? 'text-red-300' : 'text-amber-300'}`}>
-                            <span>{logoReqType === 'gif' ? '2. नया GIF फ़ाइल (max 15MB):' : '2. नया लोगो (New Logo Upload - PNG, JPG, WebP):'}</span>
-                            {newRequestedLogoUrl && (
+                        {/* Full-Width Visual Advanced Crop Editor */}
+                        {logoReqType !== 'gif' && rawUploadedLogoUrl && showCropEditor ? (
+                          <div className="w-full bg-slate-900 border border-purple-500/40 rounded-xl p-3 sm:p-4">
+                            <div className="mb-2 flex items-center justify-between text-xs text-purple-300 font-bold border-b border-purple-900/50 pb-2">
+                              <span>फुल-स्क्रीन लोगो क्रॉप व ट्रांसपेरेंट एडिटर</span>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setNewRequestedLogoUrl('');
-                                  setRawUploadedLogoUrl('');
-                                  setLogoCropConfig(null);
-                                  setShowCropEditor(false);
-                                }}
-                                className="text-[10px] text-red-400 hover:underline cursor-pointer"
+                                onClick={() => setShowCropEditor(false)}
+                                className="text-slate-400 hover:text-white"
                               >
-                                हटाएं
+                                ✕ बंद करें
                               </button>
-                            )}
-                          </span>
-
-                          {/* Visual Advanced Crop Editor (In-place inside New Logo Box) */}
-                          {logoReqType !== 'gif' && rawUploadedLogoUrl && showCropEditor ? (
+                            </div>
                             <AdvancedLogoCropEditor
                               imageSrc={rawUploadedLogoUrl}
                               initialCrop={logoCropConfig || undefined}
@@ -2838,61 +2878,63 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                               }}
                               onCancel={() => setShowCropEditor(false)}
                             />
-                          ) : (
-                            <>
-                              <div className="w-full h-28 bg-slate-900 rounded-lg border border-slate-800 p-2 flex flex-col items-center justify-center overflow-hidden relative">
-                                {newRequestedLogoUrl ? (
-                                  <>
-                                    <img
-                                      src={newRequestedLogoUrl}
-                                      alt="New Asset Preview"
-                                      className="max-h-20 w-auto object-contain"
-                                    />
-                                    {logoCropConfig && (
-                                      <span className="absolute bottom-1 right-2 px-1.5 py-0.5 rounded bg-black/80 text-[9px] font-mono text-emerald-300 border border-emerald-500/30">
-                                        ✓ PNG Cropped ({logoCropConfig.width}×{logoCropConfig.height})
-                                      </span>
-                                    )}
-                                  </>
-                                ) : (
-                                  <div className="text-center text-slate-500 space-y-1">
-                                    {logoReqType === 'gif' ? <Film className="w-6 h-6 mx-auto opacity-60" /> : <ImageIcon className="w-6 h-6 mx-auto opacity-60" />}
-                                    <span className="text-[10px] block">{logoReqType === 'gif' ? 'GIF फ़ाइल चुनें' : 'लोगो फ़ाइल चुनें (PNG, JPG, WebP)'}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <label className={`flex-1 py-1.5 px-2.5 border text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition ${
-                                  logoReqType === 'gif'
-                                    ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/40 text-red-300'
-                                    : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
-                                }`}>
-                                  <Upload className="w-3.5 h-3.5" />
-                                  <span>{newRequestedLogoUrl ? (logoReqType === 'gif' ? 'GIF बदलें' : 'लोगो बदलें') : (logoReqType === 'gif' ? '📁 नया GIF चुनें' : '📁 नया लोगो चुनें')}</span>
-                                  <input
-                                    type="file"
-                                    accept={logoReqType === 'gif' ? 'image/gif,.gif' : 'image/png,image/jpeg,image/webp,image/*'}
-                                    onChange={handleNewRequestedLogoUpload}
-                                    className="hidden"
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="w-full min-h-[110px] bg-slate-900 rounded-lg border border-slate-800 p-2 flex flex-col items-center justify-center overflow-hidden relative">
+                              {newRequestedLogoUrl ? (
+                                <div className="flex flex-col items-center gap-2">
+                                  <img
+                                    src={newRequestedLogoUrl}
+                                    alt="New Asset Preview"
+                                    className="max-h-24 max-w-full object-contain"
                                   />
-                                </label>
+                                  {logoCropConfig && (
+                                    <span className="px-2 py-0.5 rounded bg-black/80 text-[9px] font-mono text-emerald-300 border border-emerald-500/30">
+                                      ✓ PNG Cropped ({logoCropConfig.width}×{logoCropConfig.height})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-center text-slate-500 space-y-1 py-3">
+                                  {logoReqType === 'gif' ? <Film className="w-7 h-7 mx-auto opacity-60 text-red-400" /> : <ImageIcon className="w-7 h-7 mx-auto opacity-60 text-amber-400" />}
+                                  <span className="text-xs block font-medium">
+                                    {logoReqType === 'gif' ? 'GIF फ़ाइल चुनें (अधिकतम 15MB)' : 'लोगो फ़ाइल चुनें (PNG, JPG, WebP)'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
 
-                                {logoReqType !== 'gif' && rawUploadedLogoUrl && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowCropEditor(true)}
-                                    className="py-1.5 px-3 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer"
-                                    title="क्रॉप व पारदर्शी PNG एडजस्ट करें"
-                                  >
-                                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                                    <span>क्रॉप व PNG</span>
-                                  </button>
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <label className={`flex-1 py-2 px-3 border text-xs font-bold rounded-xl cursor-pointer flex items-center justify-center gap-2 transition ${
+                                logoReqType === 'gif'
+                                  ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/40 text-red-300'
+                                  : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
+                              }`}>
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>{newRequestedLogoUrl ? (logoReqType === 'gif' ? 'GIF बदलें' : 'लोगो बदलें') : (logoReqType === 'gif' ? '📁 नया GIF चुनें' : '📁 नया लोगो चुनें')}</span>
+                                <input
+                                  type="file"
+                                  accept={logoReqType === 'gif' ? 'image/gif,.gif' : 'image/png,image/jpeg,image/webp,image/*'}
+                                  onChange={handleNewRequestedLogoUpload}
+                                  className="hidden"
+                                />
+                              </label>
+
+                              {logoReqType !== 'gif' && rawUploadedLogoUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCropEditor(true)}
+                                  className="py-2 px-3.5 bg-purple-950/80 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                                  title="क्रॉप व पारदर्शी PNG एडजस्ट करें"
+                                >
+                                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                                  <span>क्रॉप व PNG एडजस्ट करें</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Request Status Info if active */}
@@ -2968,11 +3010,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         disabled={isSubmittingLogoReq || !newRequestedLogoUrl || !logoReqReason.trim()}
                         onClick={async () => {
                           if (!newRequestedLogoUrl) {
-                            alert(logoReqType === 'gif' ? 'कृपया नया GIF अपलोड करें।' : 'कृपया नया लोगो अपलोड करें।');
+                            showAppWarning(logoReqType === 'gif' ? 'कृपया नया GIF अपलोड करें।' : 'कृपया नया लोगो अपलोड करें।', 'फ़ाइल अनिवार्य');
                             return;
                           }
                           if (!logoReqReason.trim()) {
-                            alert('कृपया कारण दर्ज करें।');
+                            showAppWarning('कृपया अनुरोध का कारण दर्ज करें।', 'कारण अनिवार्य');
                             return;
                           }
                           try {
@@ -2998,14 +3040,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             }
                             setIsLogoReqModalOpen(false);
                             setShowCropEditor(false);
-                            alert(
+                            showAppSuccess(
                               logoReqType === 'gif'
-                                ? '✅ आपका GIF बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया GIF स्वतः सक्रिय हो जाएगा। तब तक आपका वर्तमान GIF चालू रहेगा।'
-                                : '✅ आपका नया लोगो बदलने का अनुरोध (Submit Request) सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा और अनुमोदन के बाद यह स्वतः लागू हो जाएगा। तब तक वर्तमान लोगो सक्रिय रहेगा।'
+                                ? 'आपका GIF बदलने का अनुरोध एडमिन को सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा के बाद स्वीकृत होते ही आपका नया GIF स्वतः सक्रिय हो जाएगा।'
+                                : 'आपका नया लोगो बदलने का अनुरोध सफलतापूर्वक भेज दिया गया है। एडमिन द्वारा समीक्षा और अनुमोदन के बाद यह स्वतः लागू हो जाएगा।',
+                              'अनुरोध प्रेषित'
                             );
                           } catch (err: any) {
                             console.error('Logo request error:', err);
-                            alert(`अनुरोध सबमिट करने में विफल: ${err.message || 'नेटवर्क समस्या'}`);
+                            showAppError(`अनुरोध सबमिट करने में विफल: ${err.message || 'नेटवर्क समस्या'}`, 'त्रुटि');
                           } finally {
                             setIsSubmittingLogoReq(false);
                           }
@@ -3013,7 +3056,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         className="px-5 py-2.5 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 hover:from-amber-300 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition active:scale-95"
                       >
                         <Check className="w-4 h-4 text-slate-950 stroke-[3]" />
-                        <span>{isSubmittingLogoReq ? 'Submitting...' : 'Submit Request'}</span>
+                        <span>Submit Request</span>
                       </button>
                     </div>
                   </div>
