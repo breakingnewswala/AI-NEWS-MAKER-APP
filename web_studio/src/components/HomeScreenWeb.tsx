@@ -722,8 +722,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       approvedCaptionShort: decodeHtmlEntities(post.approvedCaptionShort || (post as any).captionShort || ''),
       approvedPhotos: initialPhotos,
       approvedPhotoLayout: post.approvedPhotoLayout || (initialPhotos.length >= 2 ? 'two_vertical' : 'single'),
-      editorialApproved: post.editorialApproved !== undefined ? post.editorialApproved : Boolean((post as any).isPrePublished || (post as any).isApproved),
-      isPrePublished: Boolean((post as any).isPrePublished || (post as any).isApproved),
+      editorialApproved: post.editorialApproved !== undefined ? post.editorialApproved : Boolean((post as any).isApproved),
+      isPrePublished: Boolean((post as any).isPrePublished),
       sourceUrl: post.sourceUrl || '',
     };
 
@@ -1500,7 +1500,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     if (Array.isArray(posts) && posts.length > 0) {
       const serverIds = new Set<string>();
       posts.forEach((p) => {
-        if (p && p.id && (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true)) {
+        if (p && p.id && (p.status === 'APPROVED' || p.status === 'published' || (p as any).approvalStatus === 'APPROVED' || (p as any).publicationStatus === 'PUBLISHED' || p.isApproved === true)) {
           serverIds.add(p.id);
         }
       });
@@ -3179,7 +3179,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </span>
 
                         {/* Pre-Published Approved Editorial Badge (Admin-only per Part 2.2) */}
-                        {canModerate && Boolean((post as any).isPrePublished || (post as any).isApproved) && (
+                        {canModerate && Boolean((post as any).isPrePublished) && (
                           <span className="px-2 py-0.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/70 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
                             <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
                             <span>प्री-पब्लिश</span>

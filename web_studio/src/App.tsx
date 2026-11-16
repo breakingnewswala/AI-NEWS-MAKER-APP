@@ -696,32 +696,27 @@ export default function App() {
       case 'studio':
       case 'generator':
         return {
-          title: 'फोटो न्यूज़ स्टूडियो — AI News Maker',
+          title: 'Studio',
           description: 'एआई फोटो फ्रेम जनरेटर — 4:5 व 9:16 पोर्ट्रेट फ्रेम, कस्टमाइज़ेबल हेडलाइन, लोगो और स्मार्ट लोकेशन बैज।',
           canonical: `${base}/studio`,
         };
       case 'videos':
         return {
-          title: 'वीडियो न्यूज़ स्टूडियो व रील्स — AI News Maker',
+          title: 'Video & Reels',
           description: 'एआई वीडियो न्यूज़ स्टूडियो — प्रोफेशनल वीडियो हेडलाइंस, लोअर-थर्ड्स, ब्रेकिंग न्यूज़ वीडियो रील्स और ऑडियो मिक्सर।',
           canonical: `${base}/videos`,
         };
       case 'newsroom':
       case 'epaper':
         return {
-          title: 'लाइव डिजिटल न्यूज़ रूम — AI News Maker',
+          title: 'Newsroom',
           description: 'लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।',
           canonical: `${base}/newsroom`,
         };
       case 'admin':
-        return {
-          title: 'मास्टर एडमिन कंट्रोल रूम — AI News Maker',
-          description: 'मास्टर एडमिन कंट्रोल पैनल — एपीआई की पूल, एआई फ्रेम जनरेटर प्रो, सेंट्रल एसेट लाइब्रेरी व सिस्टम सेटिंग्स।',
-          canonical: `${base}/admin`,
-        };
       case 'profile':
         return {
-          title: 'प्रोफ़ाइल एवं पैकेज प्लांस — AI News Maker',
+          title: 'Profile',
           description: 'एआई न्यूज़ मेकर सब्सक्रिप्शन प्लांस, कॉइन्स वॉलेट और रिपोर्टर प्रोफ़ाइल सेटिंग्स।',
           canonical: `${base}/profile`,
         };
@@ -758,7 +753,7 @@ export default function App() {
       case 'home':
       default:
         return {
-          title: 'AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो',
+          title: 'AI News Maker',
           description: 'भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।',
           canonical: `${base}/`,
         };

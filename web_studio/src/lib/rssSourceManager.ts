@@ -376,7 +376,7 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   // 2b. Authoritative Server Confirmation:
   // If the server confirms this post ID is approved and it carries approved status:
   if (authoritativeSet && authoritativeSet.has(post.id)) {
-    if (status === 'APPROVED' || approvalStatus === 'APPROVED' || (post as any).isApproved === true) {
+    if (status === 'APPROVED' || status === 'PUBLISHED' || approvalStatus === 'APPROVED' || (post as any).isApproved === true) {
       return true;
     }
   }
@@ -385,8 +385,10 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   if (
     status === 'PENDING_APPROVAL' ||
     status === 'PENDING' ||
+    status === 'PENDING_REVIEW' ||
     approvalStatus === 'PENDING_APPROVAL' ||
-    approvalStatus === 'PENDING'
+    approvalStatus === 'PENDING' ||
+    approvalStatus === 'PENDING_REVIEW'
   ) {
     return false;
   }
@@ -394,6 +396,7 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
   // 4. Must have approved & published status flags
   const isServerApproved =
     status === 'APPROVED' ||
+    status === 'PUBLISHED' ||
     approvalStatus === 'APPROVED' ||
     (post as any).isApproved === true;
 
@@ -472,11 +475,14 @@ export async function approveRssPost(postId: string, postData?: any): Promise<bo
 
     const updated = cached.map((p) => (p.id === postId ? {
       ...p,
-      status: 'APPROVED' as const,
+      status: 'published' as const,
       approvalStatus: 'APPROVED' as const,
       publicationStatus: 'PUBLISHED' as const,
       isApproved: true,
       isPublished: true,
+      isPrePublished: false,
+      approvedAt: Date.now(),
+      publishedAt: Date.now(),
     } : p));
     localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
 
@@ -631,7 +637,7 @@ export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
         const finalApproved = isExplicitApproved && isExplicitPublished;
         return {
           ...p,
-          status: finalApproved ? ('APPROVED' as const) : isRejected ? ('REJECTED' as const) : ('PENDING_APPROVAL' as const),
+          status: finalApproved ? ('published' as const) : isRejected ? ('REJECTED' as const) : ('pending_review' as const),
           isApproved: finalApproved,
           isPrePublished: false,
           isPublished: finalApproved,
@@ -709,7 +715,7 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
               const isApproved = !isRejected && (p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED' || p.isApproved === true || Boolean(memoryServerApprovedIds && memoryServerApprovedIds.has(p.id)));
               return {
                 ...p,
-                status: isApproved ? 'APPROVED' : isRejected ? 'REJECTED' : 'PENDING_APPROVAL',
+                status: isApproved ? ('published' as const) : isRejected ? ('REJECTED' as const) : ('pending_review' as const),
                 isApproved,
                 isPrePublished: false,
                 isPublished: isApproved,

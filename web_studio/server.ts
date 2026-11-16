@@ -2524,6 +2524,131 @@ function saveDeletedNewsId(id: string): void {
   }
 }
 
+export interface NewsDeletionTombstone {
+  id: string;
+  canonicalUrl: string;
+  rawUrl?: string;
+  guid?: string;
+  titleFingerprint: string;
+  sourceFeedId?: string;
+  deletedAt: number;
+  deletedBy: string;
+  reason?: string;
+}
+
+export function normalizeCanonicalUrl(rawUrl: string): string {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  try {
+    const trimmed = rawUrl.trim();
+    const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    const trackingParams = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+      'ref', 'fbclid', 'gclid', 'msclkid', 'source', 'platform', '_ga', 'mc_cid', 'mc_eid',
+      'ved', 'usqp', 'ei'
+    ];
+    trackingParams.forEach((param) => parsed.searchParams.delete(param));
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    const pathname = parsed.pathname.replace(/\/+$/, '');
+    const search = parsed.searchParams.toString();
+    const queryPart = search ? `?${search}` : '';
+    return `${host}${pathname}${queryPart}`.toLowerCase();
+  } catch {
+    return rawUrl.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+  }
+}
+
+export function generateTitleFingerprint(title: string): string {
+  if (!title || typeof title !== 'string') return '';
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+}
+
+export function loadDeletedNewsTombstones(): NewsDeletionTombstone[] {
+  try {
+    const locations = resolveAllDatabaseLocations("deleted_news_tombstones.json");
+    for (const loc of locations) {
+      if (fs.existsSync(loc)) {
+        const raw = fs.readFileSync(loc, "utf-8");
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) return list;
+      }
+    }
+  } catch (err: any) {
+    console.error("Error reading deleted_news_tombstones.json:", err.message);
+  }
+  return [];
+}
+
+export function saveDeletedNewsTombstone(tombstone: NewsDeletionTombstone): void {
+  try {
+    const tombstones = loadDeletedNewsTombstones();
+    const existingIndex = tombstones.findIndex(
+      (t) => (t.id && tombstone.id && t.id === tombstone.id) ||
+             (t.canonicalUrl && tombstone.canonicalUrl && t.canonicalUrl === tombstone.canonicalUrl)
+    );
+    if (existingIndex >= 0) {
+      tombstones[existingIndex] = { ...tombstones[existingIndex], ...tombstone };
+    } else {
+      tombstones.push(tombstone);
+    }
+    const jsonStr = JSON.stringify(tombstones, null, 2);
+    const locations = resolveAllDatabaseLocations("deleted_news_tombstones.json");
+    for (const loc of locations) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
+    if (tombstone.id) {
+      saveDeletedNewsId(tombstone.id);
+    }
+    if (centralDb && (centralDb as any).useFirestore && (centralDb as any).writeDoc) {
+      (centralDb as any).writeDoc("system_config", "deleted_news_tombstones", {
+        tombstones: tombstones.slice(-500),
+        updatedAt: Date.now(),
+      }).catch(() => {});
+    }
+  } catch (err: any) {
+    console.error("Error saving deleted news tombstone:", err.message);
+  }
+}
+
+export function isArticleDeletedByTombstone(
+  article: { id?: string; sourceUrl?: string; url?: string; link?: string; title?: string; guid?: string },
+  tombstones?: NewsDeletionTombstone[]
+): boolean {
+  if (!article) return false;
+  const list = tombstones || loadDeletedNewsTombstones();
+  if (!Array.isArray(list) || list.length === 0) return false;
+
+  const rawUrl = article.sourceUrl || article.url || article.link || '';
+  const normUrl = normalizeCanonicalUrl(rawUrl);
+  const fingerprint = generateTitleFingerprint(article.title || '');
+  const id = article.id ? String(article.id) : '';
+  const guid = article.guid ? String(article.guid) : '';
+
+  for (const t of list) {
+    if (id && t.id && t.id === id) return true;
+    if (guid && t.guid && t.guid === guid) return true;
+    if (guid && t.id && t.id === guid) return true;
+    if (normUrl && t.canonicalUrl && (t.canonicalUrl === normUrl || normUrl.includes(t.canonicalUrl) || t.canonicalUrl.includes(normUrl))) {
+      return true;
+    }
+    if (fingerprint && t.titleFingerprint && fingerprint.length >= 15 && t.titleFingerprint.length >= 15) {
+      if (fingerprint === t.titleFingerprint || fingerprint.startsWith(t.titleFingerprint) || t.titleFingerprint.startsWith(fingerprint)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function loadNewsDatabase(): StoredNewsPost[] {
   let diskPosts: StoredNewsPost[] = [];
   try {
@@ -2945,6 +3070,7 @@ export function isServerApprovedAndPublished(p: any, editorialDb?: Record<string
     status === "REJECTED" || approvalStatus === "REJECTED" ||
     status === "PENDING" || approvalStatus === "PENDING" ||
     status === "PENDING_APPROVAL" || approvalStatus === "PENDING_APPROVAL" ||
+    status === "PENDING_REVIEW" || approvalStatus === "PENDING_REVIEW" ||
     status === "DRAFT" || publicationStatus === "DRAFT" || visibility === "draft" ||
     p.isApproved === false || p.isPublished === false
   ) {
@@ -2954,9 +3080,14 @@ export function isServerApprovedAndPublished(p: any, editorialDb?: Record<string
   // 2. Must be explicitly approved
   const isApproved =
     status === "APPROVED" ||
+    status === "PUBLISHED" ||
     approvalStatus === "APPROVED" ||
     p.isApproved === true ||
-    Boolean(editorialDb && editorialDb[p.id] && String(editorialDb[p.id].status).trim().toUpperCase() === "APPROVED");
+    Boolean(editorialDb && editorialDb[p.id] && (
+      String(editorialDb[p.id].status).trim().toUpperCase() === "APPROVED" ||
+      String(editorialDb[p.id].status).trim().toLowerCase() === "published" ||
+      editorialDb[p.id].isApproved === true
+    ));
 
   // 3. Must be explicitly published
   const isPublished =
@@ -3497,13 +3628,17 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
           sourceUrl: postData.sourceUrl !== undefined ? postData.sourceUrl : p.sourceUrl,
           additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : (p.additionalPhotos || []),
           approvedPhotos: Array.isArray(postData.approvedPhotos) ? postData.approvedPhotos : (p.approvedPhotos || p.additionalPhotos || []),
-          status: "APPROVED" as const,
+          status: "published" as const,
           approvalStatus: "APPROVED" as const,
           publicationStatus: "PUBLISHED" as const,
           isApproved: true,
           isPublished: true,
-          isPrePublished: true,
+          isPrePublished: false,
           editorialApproved: postData.editorialApproved !== undefined ? postData.editorialApproved : true,
+          approvedAt: Date.now(),
+          approvedBy: ((req as any).user?.email || "admin").toString(),
+          publishedAt: Date.now(),
+          publishedBy: ((req as any).user?.email || "admin").toString(),
           breaking: postData.breaking !== undefined ? postData.breaking : p.breaking,
           isExclusive: postData.isExclusive !== undefined ? postData.isExclusive : p.isExclusive,
           isBonus: postData.isBonus !== undefined ? Boolean(postData.isBonus) : Boolean(p.isBonus === true),
@@ -3535,14 +3670,16 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         captionShort: postData.captionShort || postData.approvedCaptionShort || "",
         sourceUrl: postData.sourceUrl !== undefined ? postData.sourceUrl : (edDb[id]?.sourceUrl || ""),
         additionalPhotos: Array.isArray(postData.additionalPhotos) ? postData.additionalPhotos : (edDb[id]?.additionalPhotos || []),
-        status: "APPROVED",
+        status: "published",
         approvalStatus: "APPROVED",
         publicationStatus: "PUBLISHED",
         isApproved: true,
         isPublished: true,
-        isPrePublished: postData.isPrePublished !== undefined ? Boolean(postData.isPrePublished) : true,
+        isPrePublished: false,
         approvedAt: Date.now(),
         approvedBy: ((req as any).user?.email || "admin").toString(),
+        publishedAt: Date.now(),
+        publishedBy: ((req as any).user?.email || "admin").toString(),
       };
       saveApprovedEditorialDatabase(edDb);
     } catch (e) {
@@ -3570,13 +3707,17 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
         location: postData.location || postData.district || "",
         district: postData.district || postData.location || "",
         timestamp: Date.now(),
-        status: "APPROVED",
+        status: "published",
         approvalStatus: "APPROVED",
         publicationStatus: "PUBLISHED",
         isApproved: true,
         isPublished: true,
-        isPrePublished: true,
+        isPrePublished: false,
         editorialApproved: true,
+        approvedAt: Date.now(),
+        approvedBy: ((req as any).user?.email || "admin").toString(),
+        publishedAt: Date.now(),
+        publishedBy: ((req as any).user?.email || "admin").toString(),
         isBonus: explicitBonus,
         rewardCoins: explicitBonus ? Number(postData.rewardCoins || 100) : 0,
       } as any;
@@ -3587,6 +3728,7 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     broadcastNewsPublishedNotification(id, approvedTitle, postData.location || postData.district, postData.category);
     const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "APPROVE_NEWS", id);
+    console.log(`[RSS Editorial Approved] Article ${id} approved & published by ${adminEmail}`);
     return res.json({ success: true, message: "खबर स्वीकृत हो गई", id, posts: existing });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
@@ -3602,9 +3744,23 @@ app.post("/api/admin/bulk-approve-news", requireAdminMiddleware, (req, res) => {
     }
     const approvedSet = new Set(approvedIds);
     let existing = loadNewsDatabase();
+    const adminEmail = ((req as any).user?.email || "admin").toString();
     existing = existing.map(p => {
       if (approvedSet.has(p.id)) {
-        return { ...p, status: "APPROVED" as const, timestamp: Date.now() };
+        return {
+          ...p,
+          status: "published" as const,
+          approvalStatus: "APPROVED" as const,
+          publicationStatus: "PUBLISHED" as const,
+          isApproved: true,
+          isPublished: true,
+          isPrePublished: false,
+          approvedAt: Date.now(),
+          approvedBy: adminEmail,
+          publishedAt: Date.now(),
+          publishedBy: adminEmail,
+          timestamp: Date.now(),
+        };
       }
       return p;
     });
@@ -3613,14 +3769,26 @@ app.post("/api/admin/bulk-approve-news", requireAdminMiddleware, (req, res) => {
       const existingIds = new Set(existing.map(p => p.id));
       for (const p of posts) {
         if (approvedSet.has(p.id) && !existingIds.has(p.id)) {
-          existing.unshift({ ...p, status: "APPROVED", timestamp: Date.now() });
+          existing.unshift({
+            ...p,
+            status: "published",
+            approvalStatus: "APPROVED",
+            publicationStatus: "PUBLISHED",
+            isApproved: true,
+            isPublished: true,
+            isPrePublished: false,
+            approvedAt: Date.now(),
+            approvedBy: adminEmail,
+            publishedAt: Date.now(),
+            publishedBy: adminEmail,
+            timestamp: Date.now(),
+          });
           existingIds.add(p.id);
         }
       }
     }
 
     saveNewsDatabase(existing);
-    const adminEmail = ((req as any).user?.email || "admin").toString();
     logAdminAudit(adminEmail, "BULK_APPROVE_NEWS", `${approvedIds.length} items`);
     return res.json({ success: true, approvedIds: Array.from(approvedSet) });
   } catch (err: any) {
@@ -3701,13 +3869,20 @@ app.post("/api/editorial/approved/:id", (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body || {};
-    const isPrePublished = body.isPrePublished !== undefined ? Boolean(body.isPrePublished) : true;
+    // Pre-published status is STRICTLY authorized only by Master Admin; regular admin cannot grant pre-published
+    const callerIsMaster = Boolean(isAuthorizedMasterAdmin(req));
+    const isPrePublished = callerIsMaster && Boolean(body.isPrePublished === true);
+    if (body.isPrePublished === true && !callerIsMaster) {
+      console.warn(`[Editorial Security] Non-master-admin user attempted to pre-publish article ${id}. Demoting to published.`);
+    }
     const db = loadApprovedEditorialDatabase();
     const existing = db[id] || {};
 
     const passedPhotos = Array.isArray(body.additionalPhotos)
       ? body.additionalPhotos
       : (Array.isArray(body.approvedPhotos) ? body.approvedPhotos : null);
+
+    const adminUser = ((req as any).user?.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
 
     const updated = {
       ...existing,
@@ -3741,11 +3916,13 @@ app.post("/api/editorial/approved/:id", (req, res) => {
       coinPrice: Number(body.coinCost ?? existing.coinCost ?? body.coinPrice ?? 0),
       restrictedPlans: Array.isArray(body.restrictedPlans) ? body.restrictedPlans : (existing.restrictedPlans || []),
       approvedAt: Date.now(),
-      approvedBy: (req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString(),
+      approvedBy: adminUser,
+      publishedAt: Date.now(),
+      publishedBy: adminUser,
       ingestionStatus: existing.ingestionStatus || "PARSED",
       approvalStatus: "APPROVED" as const,
       publicationStatus: "PUBLISHED" as const,
-      status: "APPROVED",
+      status: isPrePublished ? "pre_published" : "published",
       isApproved: true,
       isPrePublished,
       isPublished: true,
@@ -3756,7 +3933,6 @@ app.post("/api/editorial/approved/:id", (req, res) => {
     saveApprovedEditorialDatabase(db);
 
     // Record Approval Audit Trail (Part 1.F)
-    const adminUser = (req.headers["x-user-email"] || req.headers["x-admin-email"] || (req as any).user?.email || "admin").toString();
     const adminRole = (req as any).user?.role || "admin";
     recordApprovalAudit({
       adminUserId: adminUser,
@@ -3779,12 +3955,16 @@ app.post("/api/editorial/approved/:id", (req, res) => {
           return {
             ...p,
             ingestionStatus: p.ingestionStatus || "PARSED",
+            status: isPrePublished ? "pre_published" : "published",
             approvalStatus: "APPROVED",
             publicationStatus: "PUBLISHED",
-            status: "APPROVED",
             isApproved: true,
             isPrePublished,
             isPublished: true,
+            approvedAt: Date.now(),
+            approvedBy: adminUser,
+            publishedAt: Date.now(),
+            publishedBy: adminUser,
             visibility: "public",
             headlineOptions: updated.headlines,
             approvedHeadlines: updated.headlines,
@@ -3970,9 +4150,29 @@ app.delete("/api/news-posts/:id", (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
+    const target = existing.find((p) => p.id === id);
     existing = existing.filter((p) => p.id !== id);
     saveNewsDatabase(existing);
     saveDeletedNewsId(id);
+
+    const adminEmail = ((req as any).user?.email || req.headers["x-user-email"] || req.headers["x-admin-email"] || "admin").toString();
+    const canonicalUrl = normalizeCanonicalUrl(target?.sourceUrl || (target as any)?.url || (target as any)?.link || "");
+    const titleFingerprint = generateTitleFingerprint(target?.title || "");
+
+    saveDeletedNewsTombstone({
+      id,
+      canonicalUrl,
+      rawUrl: target?.sourceUrl || (target as any)?.url || "",
+      guid: (target as any)?.guid || (target as any)?.rssGuid || id,
+      titleFingerprint,
+      sourceFeedId: target?.sourceId || (target as any)?.sourceFeedUrl || "",
+      deletedAt: Date.now(),
+      deletedBy: adminEmail,
+      reason: "Admin deleted news story",
+    });
+
+    console.log(`[RSS Article Deleted] Registered permanent tombstone: ${id} | URL: ${canonicalUrl} | Title: ${target?.title || id}`);
+
     if (centralDb && centralDb.isInitialized) {
       centralDb.deleteNewsPost(id).catch(() => {});
     }
@@ -9975,6 +10175,13 @@ async function parseRssItemsFromXml(
         return null;
       }
 
+      const guidMatch = itemXml.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
+      const itemGuid = guidMatch ? (guidMatch[1] || "").trim() : "";
+      if (isArticleDeletedByTombstone({ url: link, sourceUrl: link, title: rawTitle, guid: itemGuid })) {
+        console.log(`[RSS Ingestion Skipped Tombstone] Discarding deleted article: "${rawTitle.slice(0, 40)}" (${link})`);
+        return null;
+      }
+
       // Skip expensive AI rewriting & remote image scraping for already-known/duplicate items
       if (knownFilter) {
         const normLink = (link || "").trim().toLowerCase();
@@ -10045,9 +10252,9 @@ async function parseRssItemsFromXml(
         fullContent: editorial.summary ? `${editorial.title}\n\n${editorial.summary}\n\nस्रोतः ${source.name} (${link})` : editorial.title,
         location: editorial.location || "",
         ingestionStatus: "PARSED",
-        approvalStatus: "pending",
+        approvalStatus: "pending_review",
         publicationStatus: "draft",
-        status: "pending",
+        status: "pending_review",
         isApproved: false,
         isPrePublished: false,
         isPublished: false,
@@ -10839,8 +11046,13 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
 
   try {
     const sources = loadRssSourcesDatabase();
-    // Strict authorization whitelist: Only active authorized sources
-    const activeSources = sources.filter((s) => s.isActive);
+    const deletedSourceIds = loadDeletedRssSourceIds();
+    // Strict authorization whitelist: Only active authorized sources (not deleted, isActive !== false)
+    const activeSources = sources.filter((s) => s && s.isActive && !deletedSourceIds.has(s.id));
+    const inactiveSources = sources.filter((s) => !s.isActive || deletedSourceIds.has(s.id));
+    for (const inact of inactiveSources) {
+      console.log(`[RSS Ingestion Skipped Inactive] Source "${inact.name}" (${inact.url}) is disabled/inactive, skipping.`);
+    }
     if (activeSources.length === 0) {
       isRssSyncRunning = false;
       const res: RssSyncResult = {
@@ -11037,17 +11249,18 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
 
       const trulyNew: StoredNewsPost[] = [];
       for (const p of fetchedPosts) {
-        if (deletedNewsIds.has(p.id)) {
+        if (deletedNewsIds.has(p.id) || isArticleDeletedByTombstone(p)) {
+          console.log(`[RSS Ingestion Skipped Tombstone] Discarding deleted article: "${p.title.slice(0, 40)}" (${p.sourceUrl || p.id})`);
           skippedDuplicatesCount++;
           continue;
         }
 
-        // Strict News Publication State Machine (Part 20 & 22):
-        // Newly imported RSS feed items land in the Admin Editorial Approval Queue (PENDING)
+        // Strict News Publication State Machine:
+        // Newly imported RSS feed items arrive in pending_review status (NEVER published or pre-published)
         p.ingestionStatus = "IMPORTED";
-        p.approvalStatus = "pending";
+        p.approvalStatus = "pending_review";
         p.publicationStatus = "draft";
-        p.status = "pending";
+        p.status = "pending_review";
         p.isApproved = false;
         p.isPrePublished = false;
         p.isPublished = false;
@@ -11065,6 +11278,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
           existingTitles.add(titleKey);
           trulyNew.push(p);
           newArticlesCount++;
+          console.log(`[RSS Ingestion New Pending] Imported to review queue: ${p.id} - "${p.title.slice(0, 40)}"`);
         } else {
           skippedDuplicatesCount++;
           // Preserve editorial edits/custom thumbnails/status for existing record

@@ -41,6 +41,7 @@ import {
   FileText,
   Camera,
   AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   DynamicFrameTemplate,

@@ -41,6 +41,7 @@ import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
 import { AdminAssetLibrariesManager } from './AdminAssetLibrariesManager';
 import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
+import { ErrorBoundary } from './ErrorBoundary';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import {
   fetchDynamicFramesFromApi,
@@ -2062,24 +2063,26 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
 
       {/* Master Admin Dynamic Frame Generator Wizard Modal */}
       {isDynamicFrameModalOpen && (
-        <DynamicFrameGeneratorModal
-          isOpen={isDynamicFrameModalOpen}
-          initialMode={selectedGeneratorMode}
-          onClose={() => {
-            setIsDynamicFrameModalOpen(false);
-            setSelectedEditFrame(null);
-          }}
-          initialFrame={selectedEditFrame}
-          currentUser={currentUser}
-          onFramePublished={(newFrame) => {
-            setIsDynamicFrameModalOpen(false);
-            setSelectedEditFrame(null);
-            refreshDynamicFrames();
-            window.dispatchEvent(new CustomEvent('template_plans_updated'));
-            window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
-            showToast(`✅ नया AI फ्रेम "${newFrame.name}" सफलतापूर्वक पब्लिश किया गया!`);
-          }}
-        />
+        <ErrorBoundary fallbackTitle="फ़ोटो फ़्रेम जनरेटर में समस्या आई">
+          <DynamicFrameGeneratorModal
+            isOpen={isDynamicFrameModalOpen}
+            initialMode={selectedGeneratorMode}
+            onClose={() => {
+              setIsDynamicFrameModalOpen(false);
+              setSelectedEditFrame(null);
+            }}
+            initialFrame={selectedEditFrame}
+            currentUser={currentUser}
+            onFramePublished={(newFrame) => {
+              setIsDynamicFrameModalOpen(false);
+              setSelectedEditFrame(null);
+              refreshDynamicFrames();
+              window.dispatchEvent(new CustomEvent('template_plans_updated'));
+              window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+              showToast(`✅ नया AI फ्रेम "${newFrame.name}" सफलतापूर्वक पब्लिश किया गया!`);
+            }}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );

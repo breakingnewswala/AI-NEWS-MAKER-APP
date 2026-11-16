@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 170" width="100%" height="100%">
+  <!-- देश की बड़ी बात (BIG STORY) - Tiranga Saffron, Royal Blue & White -->
+  <defs>
+    <linearGradient id="saffronGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF9933"/>
+      <stop offset="50%" stop-color="#FF6700"/>
+      <stop offset="100%" stop-color="#D95000"/>
+    </linearGradient>
+    <linearGradient id="primeBlueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E40AF"/>
+      <stop offset="50%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#172554"/>
+    </linearGradient>
+    <filter id="bigStoryShadow" x="-10%" y="-20%" width="120%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@800;900&amp;display=swap');
+    .ribbon-text-upright {
+      font-family: 'Baloo 2', 'Noto Sans Devanagari', -apple-system, sans-serif;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+  </style>
+
+  <!-- Top Accent Lines -->
+  <rect x="180" y="10" width="600" height="6" rx="3" fill="#FF9933"/>
+  <rect x="270" y="20" width="420" height="4" rx="2" fill="#FFFFFF"/>
+
+  <g filter="url(#bigStoryShadow)">
+    <polygon points="142,34 818,34 788,144 112,144" fill="#000000" opacity="0.25"/>
+
+    <!-- Left Plate: 'देश' (Saffron Plate) -->
+    <polygon points="148,36 370,36 340,142 118,142" fill="url(#saffronGrad)" stroke="#FFFFFF" stroke-width="3.5"/>
+    
+    <!-- Right Plate: 'की बड़ी बात' (Deep Prime Blue Plate) -->
+    <polygon points="378,36 812,36 782,142 348,142" fill="url(#primeBlueGrad)" stroke="#FF9933" stroke-width="3.5"/>
+
+    <!-- Left White Star Accent -->
+    <polygon points="158,44 178,44 158,134 138,134" fill="#FFFFFF" opacity="0.9"/>
+    <!-- Right Green Trim Accent -->
+    <polygon points="798,44 804,44 776,134 770,134" fill="#16A34A" opacity="0.9"/>
+
+    <!-- Text: 'देश' - Upright White -->
+    <text
+      x="250"
+      y="90"
+      fill="#FFFFFF"
+      class="ribbon-text-upright"
+      font-size="70"
+    >देश</text>
+
+    <!-- Text: 'की बड़ी बात' - Upright White with Warm Gold Glow -->
+    <text
+      x="575"
+      y="90"
+      fill="#FFFFFF"
+      class="ribbon-text-upright"
+      font-size="64"
+    >की बड़ी बात</text>
+  </g>
+
+  <!-- Bottom Accent Lines -->
+  <rect x="270" y="152" width="420" height="4" rx="2" fill="#FFFFFF"/>
+  <rect x="210" y="160" width="540" height="6" rx="3" fill="#138808"/>
+</svg>

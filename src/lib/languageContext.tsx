@@ -14,14 +14,14 @@ interface LanguageContextType {
 // Comprehensive dictionary for complete app translation
 export const TRANSLATIONS: Record<string, { hi: string; en: string }> = {
   // Navigation Tabs
-  nav_home: { hi: 'होम (ताज़ा समाचार)', en: 'Home (Live News)' },
-  nav_videos: { hi: 'वीडियो फ़ीड', en: 'Video Feed' },
-  nav_studio: { hi: 'फोटो न्यूज़ स्टूडियो', en: 'PHOTO NEWS STUDIO' },
+  nav_home: { hi: 'होम', en: 'Home' },
+  nav_videos: { hi: 'वीडियो एंड रील्स', en: 'Video & Reels' },
+  nav_studio: { hi: 'स्टूडियो', en: 'Studio' },
   nav_video_studio: { hi: 'वीडियो न्यूज़ स्टूडियो', en: 'VIDEO NEWS STUDIO' },
   studio_photo: { hi: 'फोटो न्यूज़ स्टूडियो', en: 'PHOTO NEWS STUDIO' },
   studio_video: { hi: 'वीडियो न्यूज़ स्टूडियो', en: 'VIDEO NEWS STUDIO' },
-  nav_epaper: { hi: 'ई-पेपर अखबार', en: 'E-Paper Newspaper' },
-  nav_profile: { hi: 'प्रोफाइल व सेटिंग्स', en: 'Profile & Settings' },
+  nav_epaper: { hi: 'न्यूज़ रूम', en: 'Newsroom' },
+  nav_profile: { hi: 'प्रोफाइल', en: 'Profile' },
 
   // Editor Steps
   step_1: { hi: 'फ्रेम्स', en: 'Frames' },

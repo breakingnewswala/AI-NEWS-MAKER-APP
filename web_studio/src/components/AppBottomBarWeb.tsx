@@ -96,16 +96,16 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
           <span className="text-[10px] sm:text-[11px] font-bold mt-1">न्यूज़ रूम</span>
         </button>
 
-        {/* Tab 5: Control Room (कंट्रोल रूम - Part 9) */}
+        {/* Tab 5: Profile (प्रोफाइल) */}
         <button
           type="button"
-          onClick={() => onSelectTab(isAdmin ? 'admin' : 'profile')}
+          onClick={() => onSelectTab('profile')}
           className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer min-h-[48px] ${
             isControlPanel ? 'text-amber-400 scale-105' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Sliders className={`w-5 h-5 ${isControlPanel ? 'stroke-[2.5]' : 'stroke-2'}`} />
-          <span className="text-[10px] sm:text-[11px] font-bold mt-1">कंट्रोल रूम</span>
+          <User className={`w-5 h-5 ${isControlPanel ? 'stroke-[2.5]' : 'stroke-2'}`} />
+          <span className="text-[10px] sm:text-[11px] font-bold mt-1">प्रोफाइल</span>
         </button>
       </div>
     </div>

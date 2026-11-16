@@ -81,6 +81,7 @@ import {
   normalizeDynamicFrame,
 } from '../lib/dynamicFramesManager';
 import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
+import { ErrorBoundary } from './ErrorBoundary';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
 import {
@@ -6064,15 +6065,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       )}
 
       {editingTestFrame && (
-        <DynamicFrameGeneratorModal
-          isOpen={true}
-          initialFrame={editingTestFrame}
-          onClose={() => setEditingTestFrame(null)}
-          onSaveSuccess={() => {
-            setEditingTestFrame(null);
-            window.dispatchEvent(new Event('template_plans_updated'));
-          }}
-        />
+        <ErrorBoundary fallbackTitle="फ़ोटो फ़्रेम जनरेटर में समस्या आई">
+          <DynamicFrameGeneratorModal
+            isOpen={true}
+            initialFrame={editingTestFrame}
+            onClose={() => setEditingTestFrame(null)}
+            onSaveSuccess={() => {
+              setEditingTestFrame(null);
+              window.dispatchEvent(new Event('template_plans_updated'));
+            }}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );

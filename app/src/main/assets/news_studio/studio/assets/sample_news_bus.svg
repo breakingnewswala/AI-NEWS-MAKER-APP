@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="864" viewBox="0 0 1080 864">
+  <defs>
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="60%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="roadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1c1917"/>
+      <stop offset="100%" stop-color="#0c0a09"/>
+    </linearGradient>
+    <linearGradient id="busBody" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#dc2626"/>
+      <stop offset="50%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#b91c1c"/>
+    </linearGradient>
+    <linearGradient id="windowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Sky & Ambience -->
+  <rect width="1080" height="864" fill="url(#skyGrad)"/>
+  
+  <!-- Distant Mountains/Hills -->
+  <path d="M0 500 Q 250 420 500 480 T 1080 460 L 1080 600 L 0 600 Z" fill="#1e293b" opacity="0.6"/>
+  <path d="M0 530 Q 350 460 700 520 T 1080 500 L 1080 600 L 0 600 Z" fill="#0f172a" opacity="0.8"/>
+
+  <!-- Highway Road -->
+  <polygon points="0,600 1080,600 1080,864 0,864" fill="url(#roadGrad)"/>
+  <!-- Road Yellow Line Divider -->
+  <line x1="540" y1="620" x2="540" y2="864" stroke="#facc15" stroke-width="14" stroke-dasharray="40 30"/>
+  <line x1="60" y1="600" x2="0" y2="864" stroke="#ffffff" stroke-width="8" opacity="0.4"/>
+  <line x1="1020" y1="600" x2="1080" y2="864" stroke="#ffffff" stroke-width="8" opacity="0.4"/>
+
+  <!-- Highway Accident / Emergency Vehicle (Bus Scene) -->
+  <g transform="translate(180, 360)">
+    <!-- Shadow -->
+    <ellipse cx="360" cy="270" rx="380" ry="25" fill="#000000" opacity="0.6"/>
+    
+    <!-- Bus Body tilted slightly -->
+    <g transform="rotate(-7, 360, 200)">
+      <!-- Main Bus Chassis -->
+      <rect x="60" y="60" width="620" height="170" rx="20" fill="url(#busBody)"/>
+      <rect x="60" y="190" width="620" height="35" rx="8" fill="#18181b"/>
+      
+      <!-- Windshield -->
+      <path d="M80 75 L 180 75 L 180 150 L 75 150 Z" fill="url(#windowGrad)" opacity="0.9"/>
+      
+      <!-- Passenger Windows -->
+      <rect x="195" y="75" width="70" height="75" rx="6" fill="url(#windowGrad)" opacity="0.85"/>
+      <rect x="280" y="75" width="70" height="75" rx="6" fill="url(#windowGrad)" opacity="0.85"/>
+      <rect x="365" y="75" width="70" height="75" rx="6" fill="url(#windowGrad)" opacity="0.85"/>
+      <rect x="450" y="75" width="70" height="75" rx="6" fill="url(#windowGrad)" opacity="0.85"/>
+      <rect x="535" y="75" width="70" height="75" rx="6" fill="url(#windowGrad)" opacity="0.85"/>
+      <rect x="620" y="75" width="45" height="75" rx="6" fill="url(#windowGrad)" opacity="0.85"/>
+      
+      <!-- Headlights -->
+      <circle cx="75" cy="180" r="14" fill="#fef08a"/>
+      <circle cx="75" cy="180" r="8" fill="#ffffff"/>
+
+      <!-- Police/Emergency Siren Lights -->
+      <rect x="260" y="44" width="30" height="16" rx="4" fill="#ef4444"/>
+      <rect x="300" y="44" width="30" height="16" rx="4" fill="#3b82f6"/>
+      <circle cx="275" cy="40" r="28" fill="#ef4444" opacity="0.3"/>
+      <circle cx="315" cy="40" r="28" fill="#3b82f6" opacity="0.3"/>
+
+      <!-- Wheels -->
+      <circle cx="190" cy="225" r="38" fill="#18181b"/>
+      <circle cx="190" cy="225" r="20" fill="#71717a"/>
+      <circle cx="560" cy="225" r="38" fill="#18181b"/>
+      <circle cx="560" cy="225" r="20" fill="#71717a"/>
+    </g>
+  </g>
+
+  <!-- Dramatic Lighting / Vignette -->
+  <radialGradient id="flash" cx="30%" cy="40%" r="50%">
+    <stop offset="0%" stop-color="#ffffff" stop-opacity="0.1"/>
+    <stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>
+  </radialGradient>
+  <rect width="1080" height="864" fill="url(#flash)"/>
+</svg>

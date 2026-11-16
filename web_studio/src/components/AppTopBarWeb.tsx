@@ -203,13 +203,12 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   }, [isAdminUser, adminSystemMode, testPlan, currentTier]);
 
   const tabLabels: Record<string, string> = {
-    home: isHindi ? 'होम (ताज़ा समाचार)' : 'Home (Live News)',
-    videos: isHindi ? 'वीडियो एंड रील्स' : 'Videos & Reels',
-    studio: isHindi ? 'फोटो न्यूज़ स्टूडियो' : 'PHOTO NEWS STUDIO',
-    epaper: isHindi ? 'दैनिक ई-पेपर' : 'E-Paper',
-    profile: isAdminUser
-      ? (isHindi ? 'कंट्रोल रूम' : 'Control Room')
-      : (isHindi ? 'मेरी प्रोफाइल' : 'My Profile'),
+    home: isHindi ? 'होम' : 'Home',
+    videos: isHindi ? 'वीडियो एंड रील्स' : 'Video & Reels',
+    studio: isHindi ? 'स्टूडियो' : 'Studio',
+    epaper: isHindi ? 'न्यूज़ रूम' : 'Newsroom',
+    newsroom: isHindi ? 'न्यूज़ रूम' : 'Newsroom',
+    profile: isHindi ? 'प्रोफाइल' : 'Profile',
   };
 
   const unreadCount = notificationsList.filter((n) => n.unread).length;
@@ -337,14 +336,14 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 📰 न्यूज़ रूम
               </button>
               <button
-                onClick={() => onNavigateToTab(isAdminUser ? 'admin' : 'profile')}
+                onClick={() => onNavigateToTab('profile')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isControlPanel
                     ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/20'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
                 }`}
               >
-                {isAdminUser ? '⚙️ कंट्रोल रूम' : '👤 प्रोफाइल'}
+                👤 प्रोफाइल
               </button>
               {!currentUser && (
                 <button
