@@ -885,6 +885,13 @@ export function getDistrictsForState(stateName: string): string[] {
 }
 
 /**
+ * Returns all districts for a given Indian State or Union Territory (Engineering alias).
+ */
+export function getDistrictsByState(stateName: string): string[] {
+  return getDistrictsForState(stateName);
+}
+
+/**
  * Infers the Indian State/UT from a district name if already known.
  */
 export function inferStateFromDistrict(districtName: string): string | null {

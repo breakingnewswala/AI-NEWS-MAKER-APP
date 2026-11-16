@@ -351,7 +351,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   type="button"
                   onClick={() => {
                     if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('open_login_modal'));
+                      window.dispatchEvent(new CustomEvent('open_auth_welcome_screen'));
                     }
                   }}
                   className="px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 hover:from-amber-400 hover:to-yellow-400 shadow-md flex items-center gap-1.5 shrink-0"

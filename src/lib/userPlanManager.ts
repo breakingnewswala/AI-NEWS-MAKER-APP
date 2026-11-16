@@ -689,6 +689,8 @@ export interface PlanUserRecord {
   role?: 'superadmin' | 'admin' | 'reporter' | 'user';
   mobile?: string;
   mobileNumber?: string;
+  accountType?: 'channel' | 'reporter';
+  defaultLocation?: string;
   district?: string;
   channelName?: string;
   channelNameHi?: string;
@@ -1467,6 +1469,8 @@ export function registerOrUpdateUser(userData: {
   channelLogoType?: 'png' | 'gif';
   mobile?: string;
   mobileNumber?: string;
+  accountType?: 'channel' | 'reporter';
+  defaultLocation?: string;
   websiteUrl?: string;
   district?: string;
   state?: string;
@@ -1506,6 +1510,9 @@ export function registerOrUpdateUser(userData: {
         channelName: effectiveChannelName || users[idx].channelName,
         channelLogoUrl: userData.channelLogoUrl !== undefined ? userData.channelLogoUrl : users[idx].channelLogoUrl,
         mobile: effectiveMobile || users[idx].mobile,
+        accountType: userData.accountType || users[idx].accountType,
+        defaultLocation: userData.defaultLocation || users[idx].defaultLocation,
+        district: userData.district || users[idx].district,
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : users[idx].isProfileLocked,
       };
       users[idx] = updatedRecord;
@@ -1521,6 +1528,9 @@ export function registerOrUpdateUser(userData: {
         channelName: effectiveChannelName,
         channelLogoUrl: userData.channelLogoUrl || '',
         mobile: effectiveMobile,
+        accountType: userData.accountType || 'channel',
+        defaultLocation: userData.defaultLocation || (userData.district ? `${userData.district}${userData.state ? `, ${userData.state}` : ''}` : ''),
+        district: userData.district || '',
         isProfileLocked: userData.isLocked !== undefined ? userData.isLocked : true,
         activatedAt: Date.now(),
         expiresAt: Date.now() + (isSuper ? 3650 : 7) * 24 * 60 * 60 * 1000,
@@ -1542,6 +1552,8 @@ export function registerOrUpdateUser(userData: {
       channelLogoGifUrl: userData.channelLogoGifUrl || (userData.channelLogoType === 'gif' ? userData.channelLogoUrl : ''),
       channelLogoType: userData.channelLogoType || 'png',
       websiteUrl: userData.websiteUrl || '',
+      accountType: updatedRecord.accountType || 'channel',
+      defaultLocation: updatedRecord.defaultLocation || '',
       district: userData.district || '',
       state: userData.state || '',
       socialIcons: userData.socialIcons,

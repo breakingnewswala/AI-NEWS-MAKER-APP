@@ -1202,6 +1202,20 @@ export default function App() {
     setShowSoundNoticeBanner(false);
   };
 
+  // Authentication checking state - guarantees clean branded loading screen while verifying session
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+      if (explicitLogout === 'true') return false;
+      const saved = localStorage.getItem('reporter_auth_session');
+      if (saved) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
   // Authentication session - loads from localStorage, Android native bridge, or defaults to Master Admin (breakingnewswala.com@gmail.com)
   const [currentUser, setCurrentUser] = useState<ReporterUser | null>(() => {
     try {
@@ -1274,6 +1288,78 @@ export default function App() {
       }
     } catch {}
   };
+
+  // Enterprise Firebase Auth listener for background session re-validation
+  useEffect(() => {
+    let isMounted = true;
+    const explicitLogout = localStorage.getItem('user_explicitly_logged_out');
+    if (explicitLogout === 'true') {
+      setIsAuthChecking(false);
+      return;
+    }
+
+    import('./lib/firebaseConfig').then(({ auth }) => {
+      import('firebase/auth').then(({ onAuthStateChanged }) => {
+        const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+          if (!isMounted) return;
+          if (fbUser) {
+            const explicitOut = localStorage.getItem('user_explicitly_logged_out');
+            if (explicitOut === 'true') {
+              setIsAuthChecking(false);
+              return;
+            }
+            try {
+              const idToken = await fbUser.getIdToken();
+              const res = await fetch(getApiUrl('/api/auth/login'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idToken, email: fbUser.email, uid: fbUser.uid }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.user && isMounted) {
+                  const verifiedUser = data.user;
+                  setCurrentUser(verifiedUser);
+                  localStorage.setItem('reporter_auth_session', JSON.stringify(verifiedUser));
+                  if (data.token) {
+                    localStorage.setItem('auth_token', data.token);
+                  }
+                  if (data.isProfileComplete) {
+                    setIsOnboardingCompleted(true);
+                    localStorage.setItem('is_onboarding_completed', 'true');
+                    if (verifiedUser.email) {
+                      localStorage.setItem(`onboarding_completed_${verifiedUser.email.toLowerCase().trim()}`, 'true');
+                    }
+                  } else {
+                    setIsOnboardingCompleted(false);
+                    localStorage.removeItem('is_onboarding_completed');
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[Firebase Auth state check error]', e);
+            }
+          }
+          if (isMounted) setIsAuthChecking(false);
+        });
+
+        return () => {
+          unsubscribe();
+        };
+      });
+    }).catch(() => {
+      if (isMounted) setIsAuthChecking(false);
+    });
+
+    const fallbackTimeout = setTimeout(() => {
+      if (isMounted) setIsAuthChecking(false);
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(fallbackTimeout);
+    };
+  }, []);
 
   useEffect(() => {
     fetchLiveNews();
@@ -1652,6 +1738,7 @@ export default function App() {
           channelNameHi: detail?.channelNameHi || prev.channelNameHi,
           channelNameEn: detail?.channelNameEn || prev.channelNameEn,
           customLogoUrl: primaryPngLogo || prev.customLogoUrl,
+      location: profile.district || profile.defaultLocation || profile.location || prev.location,
           customHeaderPng: detail?.customHeaderPng !== undefined ? detail.customHeaderPng : prev.customHeaderPng,
           customFooterPng: detail?.customFooterPng !== undefined ? detail.customFooterPng : prev.customFooterPng,
           channelLogoType: 'png',
@@ -1739,6 +1826,7 @@ export default function App() {
       channelNameHi: profile.channelNameHi,
       channelNameEn: profile.channelNameEn,
       customLogoUrl: primaryPngLogo || prev.customLogoUrl,
+      location: profile.district || profile.defaultLocation || profile.location || prev.location,
       customHeaderPng: (profile as any).customHeaderPng !== undefined ? (profile as any).customHeaderPng : prev.customHeaderPng,
       customFooterPng: (profile as any).customFooterPng !== undefined ? (profile as any).customFooterPng : prev.customFooterPng,
       channelLogoType: 'png',
@@ -1783,6 +1871,12 @@ export default function App() {
     localStorage.removeItem('is_onboarding_completed');
     localStorage.removeItem('ai_news_user');
     localStorage.removeItem('user_profile_data');
+    clearAuthTokens();
+    import('./lib/firebaseConfig').then(({ auth }) => {
+      import('firebase/auth').then(({ signOut }) => {
+        signOut(auth).catch(() => {});
+      });
+    }).catch(() => {});
     setCurrentUser(null);
     setIsOnboardingCompleted(false);
     setIsUserMenuOpen(false);
@@ -3040,7 +3134,9 @@ export default function App() {
       !rawUrl.includes('127.0.0.1')
     );
     const effectiveLink = hasExternalSource ? rawUrl : '';
-    const effectiveLoc = post.district || post.location || '';
+    const userProf = getSavedChannelProfile();
+    const fallbackDistrict = userProf?.district || userProf?.defaultLocation || userProf?.location || '';
+    const effectiveLoc = post.district || post.location || fallbackDistrict || '';
 
     setStudioMode('graphic');
 
@@ -3580,14 +3676,36 @@ export default function App() {
     currentTab === 'delete-account' ||
     currentTab === 'support';
 
-  // Studio tabs are accessible so users can freely create graphics & videos on Desktop, Mobile, and Tablet
-  const isStudioTab = currentTab === 'studio' || currentTab === 'generator';
+  // 1. Clean Branded Loading Screen while checking auth status (Mandatory: eliminate flash of Home Screen)
+  if (isAuthChecking && !isPublicLegalPage) {
+    return (
+      <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
+          <div className="relative">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center shadow-2xl shadow-amber-500/20 animate-pulse">
+              <Sparkles className="w-8 h-8 text-slate-950" />
+            </div>
+            <div className="absolute -inset-1 rounded-2xl bg-amber-400/20 blur-md -z-10 animate-ping" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-xl font-black text-white tracking-wide">AI NEWS MAKER</h2>
+            <p className="text-xs text-amber-400/80 mt-1 font-medium">प्रमाणीकरण जांच की जा रही है...</p>
+          </div>
+          <div className="w-32 h-1 bg-slate-800 rounded-full overflow-hidden mt-2">
+            <div className="w-full h-full bg-gradient-to-r from-amber-500 to-yellow-300 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  const isMasterAdminUser = Boolean(currentUser && isUserAdmin(currentUser));
+  // 2. Mandatory Authentication & Route Protection:
+  // Unauthenticated users or users with incomplete onboarding MUST be gated by AuthWelcomeScreen
+  const isUserAuthenticated = Boolean(currentUser && (currentUser.email || currentUser.userId || currentUser.username));
+  const isSuperOrAdmin = isUserAuthenticated && isUserAdmin(currentUser);
+  const isAllowedInApp = isUserAuthenticated && (isSuperOrAdmin || isOnboardingCompleted);
 
-  // Primary Screen with Google Login Steps is enforced for unauthenticated visitors unless on legal pages, studio or admin
-  // Primary Screen with Google Login Steps is ONLY displayed when explicitly triggered by user action (Rule A, B, E)
-  if (!isPublicLegalPage && !isStudioTab && !isMasterAdminUser && showAuthWelcomeScreen) {
+  if (!isPublicLegalPage && (!isAllowedInApp || showAuthWelcomeScreen)) {
     return (
       <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (
@@ -3624,14 +3742,17 @@ export default function App() {
               if (profileStr) {
                 const parsed = JSON.parse(profileStr);
                 const isAdminAcc = Boolean(user.email && (user.email.toLowerCase() === 'admin.ainewsmaker@gmail.com' || user.email.toLowerCase() === 'breakingnewswala.com@gmail.com'));
-                const hasValidChannelName = Boolean(
-                  parsed?.channelNameHi &&
-                  parsed.channelNameHi.trim() &&
-                  parsed.channelNameHi.trim() !== 'सेटअप अधूरा (Incomplete)' &&
-                  (isAdminAcc || (parsed.channelNameHi.trim() !== 'एआई न्यूज़ मेकर' && parsed.channelNameHi.trim().toLowerCase() !== 'ai news maker'))
-                );
+                const isReporterAcc = parsed?.accountType === 'reporter';
+                const hasValidName = isReporterAcc
+                  ? Boolean(parsed?.fullName || user.name || parsed?.channelNameHi)
+                  : Boolean(
+                      parsed?.channelNameHi &&
+                      parsed.channelNameHi.trim() &&
+                      parsed.channelNameHi.trim() !== 'सेटअप अधूरा (Incomplete)' &&
+                      (isAdminAcc || (parsed.channelNameHi.trim() !== 'एआई न्यूज़ मेकर' && parsed.channelNameHi.trim().toLowerCase() !== 'ai news maker'))
+                    );
                 const logoCandidate = (parsed?.channelLogoUrl || parsed?.channelLogoPngUrl || parsed?.channelLogoGifUrl || '').trim();
-                const hasValidLogo = Boolean(
+                const hasValidLogo = isReporterAcc ? true : Boolean(
                   logoCandidate &&
                   (isAdminAcc || logoCandidate !== '/assets/ai_news_maker_logo.png') &&
                   !logoCandidate.includes('googleusercontent.com')
@@ -3641,7 +3762,7 @@ export default function App() {
                   rawPhone.length === 10 &&
                   (parsed?.whatsappVerified === true || getUserSubscription().isMobileLocked === true)
                 );
-                if (hasValidChannelName && hasValidLogo && parsed?.username && isPhoneVerified) {
+                if (hasValidName && hasValidLogo && parsed?.username && isPhoneVerified) {
                   localStorage.setItem('user_channel_profile', JSON.stringify(parsed));
                   isVerifiedAndComplete = true;
                 }
@@ -3653,11 +3774,14 @@ export default function App() {
               setIsOnboardingCompleted(false);
               localStorage.removeItem('is_onboarding_completed');
               setShowAuthWelcomeScreen(true);
-              showToast('⚠️ आगे बढ़ने के लिए कृपया चैनल नाम, लोगो और WhatsApp OTP सत्यापन पूरा करें।');
+              showToast('⚠️ आगे बढ़ने के लिए कृपया प्रोफ़ाइल विवरण और WhatsApp OTP सत्यापन पूरा करें।');
               return;
             }
             setIsOnboardingCompleted(true);
             localStorage.setItem('is_onboarding_completed', 'true');
+            if (user.email) {
+              localStorage.setItem(`onboarding_completed_${user.email.toLowerCase().trim()}`, 'true');
+            }
             navigateToTab('home');
             showToast(`स्वागत है, ${user.name || 'यूज़र'}!`);
           }}
@@ -3679,8 +3803,22 @@ export default function App() {
             } else {
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
+              if (userToSet?.email) {
+                localStorage.setItem(`onboarding_completed_${userToSet.email.toLowerCase().trim()}`, 'true');
+              }
+              if (profile.district) {
+                setCard((prev) => ({
+                  ...prev,
+                  location: profile.district,
+                }));
+              }
               navigateToTab('home');
-              showToast('✅ लॉगिन व चैनल सेटअप सफल! दैनिक लाइव न्यूज़ फ़ीड में आपका स्वागत है');
+              showToast('✅ लॉगिन व प्रोफ़ाइल सेटअप सफल! दैनिक लाइव न्यूज़ फ़ीड में आपका स्वागत है');
+            }
+          }}
+          onClose={() => {
+            if (isAllowedInApp) {
+              setShowAuthWelcomeScreen(false);
             }
           }}
         />

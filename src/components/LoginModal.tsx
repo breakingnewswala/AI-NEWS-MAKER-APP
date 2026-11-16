@@ -5,6 +5,12 @@ import { getApiUrl, setAuthToken, isTokenExpired } from '../lib/apiConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 import {
+  getAllIndianStates,
+  getDistrictsForState,
+  getDistrictsByState,
+  inferStateFromDistrict,
+} from '../data/indianStatesDistricts';
+import {
   Lock,
   User,
   Eye,
@@ -43,6 +49,8 @@ export interface ReporterUser {
   role: 'reporter' | 'admin' | 'superadmin' | 'bureau' | 'user';
   state?: string;
   district?: string;
+  defaultLocation?: string;
+  accountType?: 'channel' | 'reporter';
   email?: string;
   channelName?: string;
   channelLogoUrl?: string;

@@ -127,6 +127,7 @@ export const DEFAULT_SOCIAL_LINKS = {
 };
 
 export const DEFAULT_PROFILE: ChannelProfile = {
+  accountType: 'channel',
   fullName: '',
   channelNameHi: '',
   channelNameEn: '',
@@ -140,6 +141,7 @@ export const DEFAULT_PROFILE: ChannelProfile = {
   whatsappDisplayNumber: '',
   showMobileNumber: true,
   websiteUrl: '',
+  defaultLocation: '',
 };
 
 interface ProfileScreenWebProps {
@@ -1871,11 +1873,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         linkedin: Boolean(channelProfile.socialIcons.linkedin),
       } : DEFAULT_SOCIAL_ICONS;
 
+      const defaultLoc = finalDistrict ? `${finalDistrict}${reporterState ? `, ${reporterState}` : ''}` : (channelProfile.defaultLocation || finalDistrict);
       const updatedProfile = {
         ...channelProfile,
+        accountType: channelProfile.accountType || 'channel',
         state: reporterState || channelProfile.state || '',
         district: finalDistrict,
         location: finalDistrict,
+        defaultLocation: defaultLoc,
         whatsappNumber: finalPhone,
         whatsappDisplayNumber: finalWhatsappDisplay,
         mobileNumber: finalPhone || channelProfile.mobileNumber,
@@ -1940,6 +1945,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         username: channelProfile.username,
         district: finalDistrict,
         state: reporterState,
+        accountType: channelProfile.accountType || 'channel',
+        defaultLocation: defaultLoc,
         isLocked: !isAdmin,
       });
 
@@ -1947,6 +1954,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       try {
         const serverPayload = {
           ...updatedProfile,
+          accountType: channelProfile.accountType || 'channel',
+          defaultLocation: defaultLoc,
           userId: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
           uid: effectiveUser?.userId || currentUser?.userId || currentUser?.uid || cleanEmail,
           email: cleanEmail,
@@ -2032,6 +2041,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           new CustomEvent('channel_profile_updated', {
             detail: {
               ...updatedProfile,
+              accountType: channelProfile.accountType || 'channel',
+              defaultLocation: defaultLoc,
               channelLogoUrl: primaryPngLogo,
               channelLogoPngUrl: primaryPngLogo,
               channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
@@ -3181,14 +3192,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     onChange={(e) => {
                       const newState = e.target.value;
                       setReporterState(newState);
-                      const availDistricts = getDistrictsForState(newState);
-                      const firstDist = availDistricts[0] || '';
-                      setReporterDistrict(firstDist);
+                      setReporterDistrict('');
                       setChannelProfile((p) => ({
                         ...p,
                         state: newState,
-                        district: firstDist,
-                        location: firstDist,
+                        district: '',
+                        location: '',
+                        defaultLocation: '',
                       }));
                     }}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"

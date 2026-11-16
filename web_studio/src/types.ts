@@ -450,7 +450,9 @@ export interface ChannelProfile {
   fullName?: string;
   district?: string;
   location?: string;
+  defaultLocation?: string;
   state?: string;
+  accountType?: 'channel' | 'reporter';
   address?: string;
   pincode?: string;
   customHeaderPng?: string;

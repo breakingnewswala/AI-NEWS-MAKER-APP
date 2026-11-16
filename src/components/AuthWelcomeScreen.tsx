@@ -60,6 +60,12 @@ import { getApiUrl, ensureAuthToken, setAuthToken, getAuthToken, isTokenExpired 
 import { safeLocalStorageSet, safeLocalStorageGet, safeLocalStorageRemove, compressImageBase64 } from '../lib/storageUtils';
 import { GoogleAuthProvider, signInWithPopup, signInWithCredential } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
+import {
+  getAllIndianStates,
+  getDistrictsForState,
+  getDistrictsByState,
+  inferStateFromDistrict,
+} from '../data/indianStatesDistricts';
 
 function decodeGoogleJwt(token: string): { email?: string; name?: string; picture?: string } | null {
   try {
@@ -434,6 +440,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   const savedProfileStr = typeof window !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
   const initialProfile: Partial<ChannelProfile> = (savedProfileStr && savedProfileStr !== 'null') ? (JSON.parse(savedProfileStr) || {}) : {};
   const subscription = getUserSubscription();
+
+  const [accountType, setAccountType] = useState<'channel' | 'reporter'>(() => {
+    const existing = initialProfile?.accountType || (currentUser as any)?.accountType;
+    return existing === 'reporter' ? 'reporter' : 'channel';
+  });
 
   const [detailFullName, setDetailFullName] = useState<string>(
     currentUser?.name || initialProfile.fullName || ''
@@ -827,13 +838,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     const checkStrictCompletedProfile = (prof: any) => {
       if (!prof) return false;
-      const chName = (prof.channelNameHi || prof.channelName || '').trim();
+      const isReporter = prof.accountType === 'reporter';
+      const fullName = (prof.fullName || prof.name || '').trim();
+      const chName = (prof.channelNameHi || prof.channelName || fullName || '').trim();
       const chLogo = (prof.channelLogoUrl || prof.channelLogoPngUrl || '').trim();
       const mob = String(prof.whatsappNumber || prof.mobileNumber || prof.mobile || '').replace(/\D/g, '').slice(-10);
       const isWaVerified =
         prof.whatsappVerified === true ||
         Boolean(prof.whatsappVerifiedAt) ||
         prof.isProfileComplete === true;
+      const hasLocation = Boolean(prof.district || prof.state || prof.location || prof.defaultLocation);
+
+      if (isReporter) {
+        return Boolean(fullName || chName) && hasLocation && mob.length === 10 && isWaVerified;
+      }
+
       return (
         !isInvalidChannelPlaceholder(chName) &&
         !isInvalidLogoPlaceholder(chLogo) &&
@@ -877,11 +896,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               ? 'AI News Maker'
               : generateSafeUsernameFromName(name || serverProfile?.fullName || parsedProfile?.fullName, serverProfile?.channelNameEn)));
 
+      const effectiveDist = (serverProfile?.district && serverProfile.district.trim() !== 'सेंट्रल डेस्क / भोपाल')
+        ? serverProfile.district.trim()
+        : (parsedProfile?.district || knownProfile?.district || (isBreakingNewsWala ? 'भोपाल' : (isAiNewsAdmin ? 'हेडक्वार्टर सेंट्रल डेस्क' : 'डिजिटल डेस्क')));
+      const effectiveState = (serverProfile?.state || parsedProfile?.state || inferStateFromDistrict(effectiveDist) || '').trim();
+      const effectiveDefaultLoc = (serverProfile?.defaultLocation || parsedProfile?.defaultLocation || `${effectiveDist}${effectiveState ? `, ${effectiveState}` : ''}`).trim();
+      const effectiveAccType: 'channel' | 'reporter' = (serverProfile?.accountType || parsedProfile?.accountType || 'channel') === 'reporter' ? 'reporter' : 'channel';
+
       const finalProfile: ChannelProfile = {
         fullName: serverProfile?.fullName || (isBreakingNewsWala ? 'मुख्य संपादक' : (isAiNewsAdmin ? 'सुपर एडमिन (Super Admin)' : (name || (isAdmin ? 'एडमिन' : 'संपादक')))),
-        district: (serverProfile?.district && serverProfile.district.trim() !== 'सेंट्रल डेस्क / भोपाल')
-          ? serverProfile.district.trim()
-          : (parsedProfile?.district || knownProfile?.district || (isBreakingNewsWala ? 'भोपाल' : (isAiNewsAdmin ? 'हेडक्वार्टर सेंट्रल डेस्क' : 'डिजिटल डेस्क'))),
+        district: effectiveDist,
+        state: effectiveState,
+        location: effectiveDefaultLoc,
+        defaultLocation: effectiveDefaultLoc,
+        accountType: effectiveAccType,
         channelNameHi: serverProfile?.channelNameHi || (isBreakingNewsWala ? 'ब्रेकिंग न्यूज़ वाला' : (isAiNewsAdmin ? 'एआई न्यूज़ मेकर' : (parsedProfile?.channelNameHi || knownProfile?.channelNameHi || 'एआई न्यूज़ मेकर'))),
         channelNameEn: serverProfile?.channelNameEn || (isBreakingNewsWala ? 'BREAKING NEWS WALA' : (isAiNewsAdmin ? 'AI News Maker' : (parsedProfile?.channelNameEn || knownProfile?.channelNameEn || 'AI News Maker'))),
         channelLogoUrl: existingLogo || (isBreakingNewsWala ? '/assets/breaking_news_wala_logo.png' : (isAiNewsAdmin ? '/assets/ai_news_maker_logo.png' : '')),
@@ -915,6 +943,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         name: finalProfile.fullName || name || 'यूज़र',
         role: isSuper ? 'superadmin' : (isAdmin ? 'admin' : (serverProfile?.role || 'user')),
         district: finalProfile.district || 'डिजिटल डेस्क',
+        state: finalProfile.state,
+        defaultLocation: finalProfile.defaultLocation,
+        accountType: finalProfile.accountType,
         email: cleanEmail,
         avatarUrl: picture, // Avatar photo only, NEVER channel logo
       };
@@ -1007,6 +1038,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
           }),
         }).catch(() => {});
       } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('channel_profile_updated', { detail: finalProfile }));
+      }
 
       onLoginSuccess(googleUser);
       onCompleteDetails(finalProfile, googleUser);
@@ -1345,42 +1380,70 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     if (isSubmitting) return;
     setStep2ErrorMsg('');
 
+    const isReporterAcc = accountType === 'reporter';
     const finalUser = (username || '').replace(/^@+/, '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     const finalWeb = websiteUrl.trim();
-    const finalHi = detailChannelNameHi.trim();
+    const finalHi = isReporterAcc
+      ? (detailChannelNameHi.trim() || detailFullName.trim() || 'डिजिटल रिपोर्टर')
+      : detailChannelNameHi.trim();
+    const finalEn = isReporterAcc
+      ? (detailChannelNameEn.trim() || detailFullName.trim() || 'Digital Reporter')
+      : detailChannelNameEn.trim();
 
-    // Check account uniqueness & restricted channels list
-    const uniqCheck = checkAccountUniqueness({
-      username: finalUser,
-      websiteUrl: finalWeb,
-      channelName: finalHi,
-      currentEmail: currentUser?.email,
-    });
-    if (!uniqCheck.valid) {
-      setStep2ErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+    // Check account uniqueness & restricted channels list for channel mode
+    if (!isReporterAcc) {
+      const uniqCheck = checkAccountUniqueness({
+        username: finalUser,
+        websiteUrl: finalWeb,
+        channelName: finalHi,
+        currentEmail: currentUser?.email,
+      });
+      if (!uniqCheck.valid) {
+        setStep2ErrorMsg(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!');
+        return;
+      }
+    }
+
+    // Required fields based on account type
+    if (!detailFullName || !detailFullName.trim()) {
+      setStep2ErrorMsg('⚠️ कृपया अपना पूरा नाम दर्ज करें।');
       return;
     }
 
-    // Check Channel Name Hi (Mandatory)
-    if (!detailChannelNameHi || !detailChannelNameHi.trim() || detailChannelNameHi.trim() === 'सेटअप अधूरा (Incomplete)' || detailChannelNameHi.trim() === 'एआई न्यूज़ मेकर') {
-      setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का वास्तविक नाम (हिन्दी में) दर्ज करें।');
+    if (!reportingState || !reportingState.trim()) {
+      setStep2ErrorMsg('⚠️ कृपया अपना राज्य / केंद्र शासित प्रदेश (State) चुनें।');
       return;
     }
 
-    // Check Channel Name En (Mandatory)
-    if (!detailChannelNameEn || !detailChannelNameEn.trim() || detailChannelNameEn.trim() === 'AI News Maker') {
-      setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का नाम (English में) दर्ज करें।');
+    if (!reportingDistrict || !reportingDistrict.trim()) {
+      setStep2ErrorMsg('⚠️ कृपया अपना ज़िला / ब्यूरो क्षेत्र (District) चुनें।');
       return;
     }
 
-    // Check Channel Logo (Mandatory)
-    if (!detailChannelLogoUrl || !detailChannelLogoUrl.trim()) {
-      setStep2ErrorMsg('⚠️ चैनल लोगो अपलोड करना अनिवार्य है। कृपया "लोगो चुनें" पर क्लिक करके अपने चैनल का लोगो अपलोड करें।');
-      return;
+    if (!isReporterAcc) {
+      // Check Channel Name Hi (Mandatory for Channel)
+      if (!detailChannelNameHi || !detailChannelNameHi.trim() || detailChannelNameHi.trim() === 'सेटअप अधूरा (Incomplete)' || detailChannelNameHi.trim() === 'एआई न्यूज़ मेकर') {
+        setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का वास्तविक नाम (हिन्दी में) दर्ज करें।');
+        return;
+      }
+
+      // Check Channel Name En (Mandatory for Channel)
+      if (!detailChannelNameEn || !detailChannelNameEn.trim() || detailChannelNameEn.trim() === 'AI News Maker') {
+        setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का नाम (English में) दर्ज करें।');
+        return;
+      }
+
+      // Check Channel Logo (Mandatory for Channel)
+      if (!detailChannelLogoUrl || !detailChannelLogoUrl.trim()) {
+        setStep2ErrorMsg('⚠️ चैनल लोगो अपलोड करना अनिवार्य है। कृपया "लोगो चुनें" पर क्लिक करके अपने चैनल का लोगो अपलोड करें।');
+        return;
+      }
     }
 
     // Check Username (Mandatory)
-    if (!username || !username.trim()) {
+    const fallbackUsername = (username || '').trim() || (detailFullName || '').toLowerCase().replace(/[^a-z0-9]/g, '') || (currentUser?.email ? currentUser.email.split('@')[0] : 'reporter');
+    const cleanSavedUsername = fallbackUsername.replace(/^@+/, '').trim();
+    if (!cleanSavedUsername) {
       setStep2ErrorMsg('⚠️ यूज़रनेम दर्ज करना अनिवार्य है (उदा. yourchannel)।');
       return;
     }
@@ -1424,8 +1487,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       const finalContact = graphicContactNumber.trim() || primaryMobileNumber.trim();
       const finalWhatsapp = graphicContactNumber.trim() || primaryMobileNumber.trim();
 
-      const cleanSavedUsername = (username || '').replace(/^@+/, '').trim();
-
       // Compress channel logo if base64 to prevent localStorage QuotaExceededError
       let processedLogo = detailChannelLogoUrl || "";
       if (processedLogo && processedLogo.startsWith('data:image/')) {
@@ -1449,12 +1510,18 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         }
       }
 
+      const finalLogo = isReporterAcc
+        ? (processedLogo || detailChannelLogoUrl || currentUser?.avatarUrl || tempRegisteredUser?.avatarUrl || '')
+        : (processedLogo || "");
+
+      const defaultLocation = `${reportingDistrict}${reportingState ? `, ${reportingState}` : ''}`;
+
       const finalProfile: ChannelProfile = {
         fullName: detailFullName.trim() || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
-        channelNameHi: detailChannelNameHi.trim(),
-        channelNameEn: detailChannelNameEn.trim(),
-        channelLogoUrl: processedLogo || "",
-        channelLogoPngUrl: processedLogo || "",
+        channelNameHi: finalHi,
+        channelNameEn: finalEn,
+        channelLogoUrl: finalLogo,
+        channelLogoPngUrl: finalLogo,
         channelLogoGifUrl: detailChannelLogoGifUrl || undefined,
         channelLogoType: detailChannelLogoType,
         socialIcons,
@@ -1467,19 +1534,28 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         whatsappVerificationMethod: 'whatsapp_otp',
         showMobileNumber,
         websiteUrl: websiteUrl.trim(),
+        state: reportingState,
+        district: reportingDistrict,
+        location: defaultLocation,
+        defaultLocation: defaultLocation,
+        accountType: accountType,
         whatsappMarketingConsent: Boolean(whatsappMarketingConsent),
         whatsappMarketingConsentAt: whatsappMarketingConsent ? new Date().toISOString() : null,
         whatsappMarketingConsentSource: 'signup_step2',
         whatsappMarketingConsentPhone: cleanDigits,
         whatsappMarketingConsentUserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         isLocked: !isAdm,
+        isProfileComplete: true,
       };
 
       const updatedUser: ReporterUser = {
         username: finalProfile.username,
         name: finalProfile.fullName || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
-        role: isSuper ? "superadmin" : (isAdm ? "admin" : "user"),
+        role: isSuper ? "superadmin" : (isAdm ? "admin" : (isReporterAcc ? "reporter" : "user")),
         district: reportingDistrict || currentUser?.district || "सेंट्रल डेस्क",
+        state: reportingState,
+        defaultLocation: defaultLocation,
+        accountType: accountType,
         email: activeEmail || "user@ainewsmaker.online",
         avatarUrl: currentUser?.avatarUrl || tempRegisteredUser?.avatarUrl,
         mobile: cleanDigits,
@@ -1508,7 +1584,11 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             username: finalProfile.username,
             fullName: finalProfile.fullName,
             role: updatedUser.role,
+            state: reportingState,
             district: updatedUser.district,
+            location: defaultLocation,
+            defaultLocation: defaultLocation,
+            accountType: accountType,
             channelName: finalProfile.channelNameHi,
             channelNameHi: finalProfile.channelNameHi,
             channelNameEn: finalProfile.channelNameEn,
@@ -1573,6 +1653,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         isLocked: !isAdm,
         profileIncomplete: false,
       });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('channel_profile_updated', { detail: finalProfile }));
+      }
 
       try {
         onCompleteDetails(finalProfile, updatedUser);
@@ -2016,6 +2100,66 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               onSubmit={handleCompleteSetupSubmit}
               className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-5"
             >
+              {/* ACCOUNT TYPE SELECTION: CHANNEL vs REPORTER */}
+              <div className="p-3.5 bg-slate-950/90 border border-amber-500/40 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>खाता प्रकार चुनें (Select Account Type) *</span>
+                  </label>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
+                    {accountType === 'channel' ? '📺 चैनल मोड' : '🎙️ रिपोर्टर मोड'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('channel')}
+                    className={`p-3 rounded-xl border-2 flex items-start gap-3 transition-all text-left cursor-pointer ${
+                      accountType === 'channel'
+                        ? 'bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/20 text-white shadow-lg'
+                        : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600 text-slate-300'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg shrink-0 ${accountType === 'channel' ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>
+                      <Tv className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
+                        <span>चैनल के रूप में</span>
+                        <span className="text-[10px] text-amber-300 font-bold">(As a Channel)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                        न्यूज़ चैनल, वेब पोर्टल या यूट्यूब चैनल ब्रांडिंग व लोगो
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('reporter')}
+                    className={`p-3 rounded-xl border-2 flex items-start gap-3 transition-all text-left cursor-pointer ${
+                      accountType === 'reporter'
+                        ? 'bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/20 text-white shadow-lg'
+                        : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600 text-slate-300'
+                    }`}
+                  >
+                    <div className={`p-2 rounded-lg shrink-0 ${accountType === 'reporter' ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>
+                      <User className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
+                        <span>पत्रकार / रिपोर्टर के रूप में</span>
+                        <span className="text-[10px] text-amber-300 font-bold">(As a Reporter)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                        व्यक्तिगत पत्रकारिता, ज़िला संवाददाता व फ़ील्ड रिपोर्टिंग
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               {/* SECTION A: REPORTER PROFILE WITH LOCKED PRIMARY MOBILE NUMBER */}
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
                 <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -2065,9 +2209,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         onChange={(e) => {
                           const newState = e.target.value;
                           setReportingState(newState);
-                          const availDistricts = getDistrictsForState(newState);
-                          const firstDist = availDistricts[0] || '';
-                          setReportingDistrict(firstDist);
+                          setReportingDistrict('');
                         }}
                         className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
                       >
@@ -2272,65 +2414,78 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
               </div>
 
-              {/* SECTION B: CHANNEL BRANDING (HINDI & ENGLISH) */}
+              {/* SECTION B: CHANNEL BRANDING / REPORTER AFFILIATION */}
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
-                <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Tv className="w-4 h-4" />
-                  <span>B. चैनल नाम (हिन्दी व अंग्रेज़ी)</span>
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Tv className="w-4 h-4" />
+                    <span>
+                      {accountType === 'channel'
+                        ? 'B. चैनल नाम (हिन्दी व अंग्रेज़ी) *'
+                        : 'B. न्यूज़ संस्था / चैनल संबद्धता (वैकल्पिक)'}
+                    </span>
+                  </h3>
+                  {accountType === 'reporter' && (
+                    <span className="text-[10px] text-slate-400 font-bold bg-slate-800 px-2 py-0.5 rounded-full">
+                      वैकल्पिक (Optional)
+                    </span>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      4. चैनल नाम (हिन्दी में) *
+                      {accountType === 'channel' ? '4. चैनल नाम (हिन्दी में) *' : '4. न्यूज़ संस्था / चैनल (हिन्दी में - वैकल्पिक)'}
                     </label>
                     <input
                       type="text"
-                      required
+                      required={accountType === 'channel'}
                       value={detailChannelNameHi}
                       onChange={(e) => setDetailChannelNameHi(e.target.value)}
-                      placeholder="यहाँ अपने चैनल का नाम हिन्दी में लिखें (उदा. सच तक न्यूज़)"
+                      placeholder={accountType === 'channel' ? 'यहाँ अपने चैनल का नाम हिन्दी में लिखें (उदा. सच तक न्यूज़)' : 'यदि किसी न्यूज़ चैनल से जुड़े हैं (वैकल्पिक)'}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      5. चैनल नाम (English में) *
+                      {accountType === 'channel' ? '5. चैनल नाम (English में) *' : '5. न्यूज़ संस्था / चैनल (English में - वैकल्पिक)'}
                     </label>
                     <input
                       type="text"
-                      required
+                      required={accountType === 'channel'}
                       value={detailChannelNameEn}
                       onChange={(e) => setDetailChannelNameEn(e.target.value)}
-                      placeholder="यहाँ अपने चैनल का नाम English में लिखें (उदा. Sach Tak News)"
+                      placeholder={accountType === 'channel' ? 'यहाँ अपने चैनल का नाम English में लिखें (उदा. Sach Tak News)' : 'चैनल / संस्था का नाम English में (वैकल्पिक)'}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                     />
                   </div>
                 </div>
 
                 {/* Quick Presets */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                  <span className="text-[11px] text-slate-400 font-medium">त्वरित प्रीसेट्स:</span>
-                  {[
-                    { hi: 'एआई न्यूज़ मेकर', en: 'AI News Maker' },
-                    { hi: 'ब्रेकिंग न्यूज़', en: 'Breaking News' },
-                    { hi: 'लाइव 24', en: 'Live 24' },
-                    { hi: 'सच तक न्यूज़', en: 'Sach Tak News' },
-                  ].map((preset) => (
-                    <button
-                      key={preset.en}
-                      type="button"
-                      onClick={() => {
-                        setDetailChannelNameHi(preset.hi);
-                        setDetailChannelNameEn(preset.en);
-                      }}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[11px] text-slate-300 hover:text-white transition cursor-pointer"
-                    >
-                      {preset.hi}
-                    </button>
-                  ))}
-                </div>
+                {accountType === 'channel' && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <span className="text-[11px] text-slate-400 font-medium">त्वरित प्रीसेट्स:</span>
+                    {[
+                      { hi: 'एआई न्यूज़ मेकर', en: 'AI News Maker' },
+                      { hi: 'ब्रेकिंग न्यूज़', en: 'Breaking News' },
+                      { hi: 'लाइव 24', en: 'Live 24' },
+                      { hi: 'सच तक न्यूज़', en: 'Sach Tak News' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.en}
+                        type="button"
+                        onClick={() => {
+                          setDetailChannelNameHi(preset.hi);
+                          setDetailChannelNameEn(preset.en);
+                        }}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[11px] text-slate-300 hover:text-white transition cursor-pointer"
+                      >
+                        {preset.hi}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* SECTION C: CHANNEL LOGO (PNG/JPEG & OPTIONAL ANIMATED GIF) */}
@@ -2338,18 +2493,26 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                     <ImageIcon className="w-4 h-4" />
-                    <span>C. चैनल लोगो (PNG / JPEG व वैकल्पिक एनीमेटेड GIF)</span>
+                    <span>
+                      {accountType === 'channel'
+                        ? 'C. चैनल लोगो (PNG / JPEG अनिवार्य) *'
+                        : 'C. प्रोफ़ाइल फोटो / लोगो (वैकल्पिक)'}
+                    </span>
                   </h3>
-                  <span className="text-[10px] text-slate-400 font-bold">PNG / GIF / JPEG</span>
+                  <span className="text-[10px] text-slate-400 font-bold">
+                    {accountType === 'channel' ? 'PNG / GIF अनिवार्य' : 'वैकल्पिक (Optional)'}
+                  </span>
                 </div>
 
                 {/* 1. Main PNG / Full Size Logo */}
                 <div className="p-3 bg-slate-900/60 rounded-xl border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-200">
-                      1. मुख्य लोगो (PNG / JPEG) *
+                      {accountType === 'channel' ? '1. मुख्य लोगो (PNG / JPEG) *' : '1. प्रोफ़ाइल फोटो या लोगो (वैकल्पिक)'}
                     </span>
-                    <span className="text-[10px] text-amber-400 font-medium">कार्ड व हेडर पर प्रयुक्त</span>
+                    <span className="text-[10px] text-amber-400 font-medium">
+                      {accountType === 'channel' ? 'कार्ड व हेडर पर प्रयुक्त (अनिवार्य)' : 'कार्ड व हेडर पर प्रयुक्त (वैकल्पिक)'}
+                    </span>
                   </div>
 
                   <div className="flex flex-col sm:flex-row items-center gap-4">

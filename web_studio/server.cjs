@@ -21980,9 +21980,15 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const safeRole = isMasterCaller && profile.role ? profile.role : existing.role || (isMasterAdminEmail ? "superadmin" : isSubAdminEmail ? "admin" : "reporter");
     const safeTier = isMasterCaller && profile.tier ? profile.tier : existing.tier || (isMasterAdminEmail ? "ultra" : isSubAdminEmail ? "ultra" : matchedMasterUser?.tier || "basic");
     const safeIsBlocked = isMasterCaller ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
-    const finalChannelHi = (profile.channelNameHi || profile.channelName || existing.channelNameHi || existing.channelName || "").toString().trim();
+    const finalAccountType = profile.accountType || existing.accountType || "channel";
+    const isReporter = finalAccountType === "reporter";
+    const finalChannelHi = (profile.channelNameHi || profile.channelName || existing.channelNameHi || existing.channelName || (isReporter ? profile.fullName || profile.name || existing.fullName || existing.name : "") || "").toString().trim();
+    const hasRequiredLogo = isReporter ? true : Boolean(profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl);
+    const hasRequiredStateDistrict = Boolean(
+      (profile.state || existing.state) && (profile.district || profile.location || existing.district || existing.location)
+    );
     const isProfileComplete = Boolean(
-      (profile.isProfileComplete !== void 0 ? profile.isProfileComplete : existing.isProfileComplete) && finalChannelHi && finalChannelHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && (profile.channelLogoUrl || profile.channelLogoPngUrl || existing.channelLogoUrl || existing.channelLogoPngUrl)
+      (profile.isProfileComplete !== void 0 ? profile.isProfileComplete : existing.isProfileComplete) && finalChannelHi && finalChannelHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && hasRequiredLogo && hasRequiredStateDistrict
     );
     const oldPhone = (existing.mobileNumber || existing.whatsappNumber || "").toString().replace(/\D/g, "").slice(-10);
     const newPhone = (finalMobile || profile.whatsappNumber || "").toString().replace(/\D/g, "").slice(-10);
@@ -22020,6 +22026,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const updated = {
       ...existing,
       ...profile,
+      accountType: finalAccountType,
+      defaultLocation: profile.defaultLocation !== void 0 && profile.defaultLocation !== null && String(profile.defaultLocation).trim() !== "" ? String(profile.defaultLocation).trim() : profile.district ? `${profile.district}${profile.state ? `, ${profile.state}` : ""}` : existing.defaultLocation || "",
       userId: profile.userId || profile.uid || existing.userId || cleanId,
       uid: profile.uid || profile.userId || existing.uid || cleanId,
       username: finalUsername || "",
@@ -24227,12 +24235,18 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           });
         }
         const isDeletedTombstoned = isUserTombstoned(verifiedEmail) || isUserTombstoned(verifiedUid);
+        const existingAccountType = existing?.accountType || profileData?.accountType || "channel";
+        const isReporter = existingAccountType === "reporter";
         const existingLogo = String(existing?.channelLogoUrl || existing?.channelLogoPngUrl || "").trim();
         const hasRealLogo = Boolean(existingLogo && !existingLogo.includes("ai_news_maker_logo.png"));
+        const hasEffectiveLogo = isReporter ? true : hasRealLogo;
         const existingPhoneDigits = String(existing?.phoneNumber || existing?.mobile || existing?.whatsappNumber || "").replace(/\D/g, "").slice(-10);
         const isWhatsappVerified = Boolean(existing?.whatsappVerified === true || existing?.isMobileVerified === true || existing?.phoneVerified === true);
+        const hasEffectiveChannelName = Boolean(
+          existing?.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)"
+        ) || Boolean(isReporter && (existing?.fullName || existing?.name || profileData?.name || profileData?.fullName));
         const isProfileComplete = Boolean(
-          !isDeletedTombstoned && (isSuper || isSubAdmin || existing && existing.isProfileComplete && existing.channelNameHi && existing.channelNameHi !== "\u0938\u0947\u091F\u0905\u092A \u0905\u0927\u0942\u0930\u093E (Incomplete)" && hasRealLogo && existingPhoneDigits.length === 10 && isWhatsappVerified)
+          !isDeletedTombstoned && (isSuper || isSubAdmin || existing && existing.isProfileComplete && hasEffectiveChannelName && hasEffectiveLogo && (existingPhoneDigits.length === 10 || isWhatsappVerified))
         );
         let safeUsername;
         if (isSuper) {
@@ -24267,7 +24281,11 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
           mobileNumber: isSuper || isSubAdmin ? "9669802408" : existing?.mobileNumber || existing?.mobile || profileData?.mobile || "",
           whatsappNumber: existing?.whatsappNumber || (isSuper || isSubAdmin ? "9669802408" : profileData?.whatsappNumber || ""),
           whatsappDisplayNumber: existing?.whatsappDisplayNumber || profileData?.whatsappDisplayNumber || (isSuper || isSubAdmin ? "9669802408" : ""),
-          district: existing?.district && existing.district.trim() ? existing.district.trim() : isSuper ? "\u092D\u094B\u092A\u093E\u0932" : isSubAdmin ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : "",
+          accountType: existingAccountType,
+          state: existing?.state && existing.state.trim() ? existing.state.trim() : profileData?.state || "",
+          district: existing?.district && existing.district.trim() ? existing.district.trim() : isSuper ? "\u092D\u094B\u092A\u093E\u0932" : isSubAdmin ? "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" : profileData?.district || "",
+          location: existing?.location && existing.location.trim() ? existing.location.trim() : existing?.district || profileData?.district || "",
+          defaultLocation: existing?.defaultLocation || profileData?.defaultLocation || (existing?.district ? `${existing.district}${existing.state ? `, ${existing.state}` : ""}` : ""),
           websiteUrl: isSuper ? "breakingnewswala.com" : isSubAdmin ? "ainewsmaker.online" : isProfileComplete ? existing?.websiteUrl || "" : profileData?.websiteUrl || "",
           socialIcons: existing?.socialIcons || profileData?.socialIcons || { youtube: true, facebook: true, instagram: true, twitter: true, x: true, linkedin: true },
           isProfileLocked: isSuper || isSubAdmin ? false : Boolean(isProfileComplete && existing?.isProfileLocked),
