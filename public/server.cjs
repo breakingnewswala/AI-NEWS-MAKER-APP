@@ -6471,12 +6471,14 @@ var require_migrate_json_to_firestore = __commonJS({
 // server.ts
 var server_exports = {};
 __export(server_exports, {
+  BLOCKED_MEDIA_BRANDS: () => BLOCKED_MEDIA_BRANDS,
   BYLINE_REGEX: () => BYLINE_REGEX,
   DISTRICT_STATE_LIST: () => DISTRICT_STATE_LIST,
   GEMINI_NEWS_RESPONSE_SCHEMA: () => GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS: () => HEADLINE_5_TIER_MAX_LIMITS,
   HEADLINE_5_TIER_RANGES: () => HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT: () => HEADLINE_MAX_CHARACTER_LIMIT,
+  HEADLINE_TARGETS: () => HEADLINE_TARGETS,
   HEADLINE_TIER_RANGES: () => HEADLINE_TIER_RANGES,
   PROTECTED_BUILTIN_ASSET_IDS: () => PROTECTED_BUILTIN_ASSET_IDS,
   STANDARD_HINDI_CATEGORIES: () => STANDARD_HINDI_CATEGORIES,
@@ -6488,10 +6490,13 @@ __export(server_exports, {
   calculateHeadlineSimilarity: () => calculateHeadlineSimilarity,
   calculateHeadlineSimilarityInternal: () => calculateHeadlineSimilarityInternal,
   checkDefaultGeminiHealth: () => checkDefaultGeminiHealth,
+  checkHeadlineSimilarity: () => checkHeadlineSimilarity,
+  cleanCandidateClause: () => cleanCandidateClause,
   cleanCaptionParagraphs: () => cleanCaptionParagraphs,
   cleanCategoryField: () => cleanCategoryField,
   cleanHeadlineText: () => cleanHeadlineText,
   cleanLocationField: () => cleanLocationField,
+  countCharacters: () => countCharacters,
   countHeadlineGraphemes: () => countHeadlineGraphemes,
   countHeadlineVisibleCharacters: () => countHeadlineVisibleCharacters,
   createLocalNewsFallback: () => createLocalNewsFallback,
@@ -6499,6 +6504,7 @@ __export(server_exports, {
   enrichHeadlineWithContext: () => enrichHeadlineWithContext,
   ensureHashtagHierarchy: () => ensureHashtagHierarchy,
   extractFactsFromUrlString: () => extractFactsFromUrlString,
+  extractPublisherFromDomain: () => extractPublisherFromDomain,
   fetchAndProcessNewsUrl: () => fetchAndProcessNewsUrl,
   fitHeadlineNaturally: () => fitHeadlineNaturally,
   fitHeadlineToRange: () => fitHeadlineToRange,
@@ -6515,6 +6521,8 @@ __export(server_exports, {
   getAiFeaturesConfig: () => getAiFeaturesConfig,
   getHeadlineRegenCoinCost: () => getHeadlineRegenCoinCost,
   getUserFirstHashtag: () => getUserFirstHashtag,
+  hasBlockedMediaBrand: () => hasBlockedMediaBrand,
+  hasInvalidHeadlineEnding: () => hasInvalidHeadlineEnding,
   identifyInputType: () => identifyInputType,
   isArticleDeletedByTombstone: () => isArticleDeletedByTombstone,
   isAuthTokenExpired: () => isAuthTokenExpired,
@@ -6527,8 +6535,10 @@ __export(server_exports, {
   logAuthDiagnostic: () => logAuthDiagnostic,
   matchDistrictAlias: () => matchDistrictAlias,
   normalizeCanonicalUrl: () => normalizeCanonicalUrl,
+  normalizeText: () => normalizeText,
   parseArticleHtml: () => parseArticleHtml,
   preserveHeadlineStateOnRegeneration: () => preserveHeadlineStateOnRegeneration,
+  regenerateHeadlineOptionFromFacts: () => regenerateHeadlineOptionFromFacts,
   requireAdminMiddleware: () => requireAdminMiddleware,
   requireAuthMiddleware: () => requireAuthMiddleware,
   requireMasterAdminMiddleware: () => requireMasterAdminMiddleware,
@@ -6542,8 +6552,11 @@ __export(server_exports, {
   scrapeNewsFromUrl: () => scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks: () => stripAllUrlsAndHyperlinks,
   stripNewspaperBylines: () => stripNewspaperBylines,
+  validateGeneralHeadline: () => validateGeneralHeadline,
+  validateHeadline: () => validateHeadline,
   validateHeadlineOption: () => validateHeadlineOption,
-  validateHeadlines5Tier: () => validateHeadlines5Tier
+  validateHeadlines5Tier: () => validateHeadlines5Tier,
+  validateHeadlinesBatch: () => validateHeadlinesBatch
 });
 module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
@@ -12175,6 +12188,406 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
 var import_app = require("firebase-admin/app");
 var import_auth = require("firebase-admin/auth");
 var import_google_auth_library = require("google-auth-library");
+
+// src/lib/headlineValidator.ts
+var HEADLINE_TARGETS = [
+  { min: 80, max: 110 },
+  { min: 100, max: 130 },
+  { min: 125, max: 150 },
+  { min: 130, max: 160 },
+  { min: 150, max: 200 }
+];
+var BLOCKED_MEDIA_BRANDS = [
+  "\u0928\u0908 \u0926\u0941\u0928\u093F\u092F\u093E",
+  "\u0928\u0908\u0926\u0941\u0928\u093F\u092F\u093E",
+  "Nai Duniya",
+  "Nai Dunia",
+  "\u0926\u0948\u0928\u093F\u0915 \u092D\u093E\u0938\u094D\u0915\u0930",
+  "\u0926\u0948\u0928\u093F\u0915 \u091C\u093E\u0917\u0930\u0923",
+  "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E",
+  "\u0928\u0935\u092D\u093E\u0930\u0924 \u091F\u093E\u0907\u092E\u094D\u0938",
+  "\u0939\u093F\u0902\u0926\u0941\u0938\u094D\u0924\u093E\u0928",
+  "\u092A\u094D\u0930\u092D\u093E\u0924 \u0916\u092C\u0930",
+  "\u0939\u0930\u093F\u092D\u0942\u092E\u093F",
+  "\u0906\u091C \u0924\u0915",
+  "ABP News",
+  "\u090F\u092C\u0940\u092A\u0940 \u0928\u094D\u092F\u0942\u091C\u093C",
+  "News18",
+  "\u0928\u094D\u092F\u0942\u091C\u093C18",
+  "Zee News",
+  "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C",
+  "NDTV",
+  "\u090F\u0928\u0921\u0940\u091F\u0940\u0935\u0940",
+  "India TV",
+  "\u0907\u0902\u0921\u093F\u092F\u093E \u091F\u0940\u0935\u0940",
+  "TV9",
+  "\u091F\u0940\u0935\u09409",
+  "Times Now",
+  "\u091F\u093E\u0907\u092E\u094D\u0938 \u0928\u093E\u0909",
+  "Republic Bharat",
+  "\u0930\u093F\u092A\u092C\u094D\u0932\u093F\u0915 \u092D\u093E\u0930\u0924",
+  "News Nation",
+  "\u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u0936\u0928",
+  "MP Tak",
+  "\u090F\u092E\u092A\u0940 \u0924\u0915",
+  "Bansal News",
+  "\u092C\u0902\u0938\u0932 \u0928\u094D\u092F\u0942\u091C\u093C",
+  "BBC News",
+  "\u092C\u0940\u092C\u0940\u0938\u0940 \u0928\u094D\u092F\u0942\u091C\u093C",
+  "\u092C\u0940\u092C\u0940\u0938\u0940",
+  "\u092A\u0924\u094D\u0930\u093F\u0915\u093E",
+  "Patrika",
+  "\u091C\u0928\u0938\u0924\u094D\u0924\u093E",
+  "Jansatta",
+  "\u0935\u0928\u0907\u0902\u0921\u093F\u092F\u093E",
+  "OneIndia"
+];
+function normalizeText(value) {
+  if (!value || typeof value !== "string") return "";
+  return value.normalize("NFKC").toLocaleLowerCase("hi").replace(/[^\p{L}\p{N}]+/gu, "");
+}
+function countCharacters(value) {
+  if (!value || typeof value !== "string") return 0;
+  const normalized = value.normalize("NFC").trim();
+  if (!normalized) return 0;
+  try {
+    const segmenter = new Intl.Segmenter("hi", {
+      granularity: "grapheme"
+    });
+    return Array.from(segmenter.segment(normalized)).length;
+  } catch {
+    return Array.from(normalized).length;
+  }
+}
+function hasBlockedMediaBrand(headline, sourcePublisherNames = []) {
+  if (!headline || typeof headline !== "string") return false;
+  const normalizedHeadline = normalizeText(headline);
+  if (!normalizedHeadline) return false;
+  const blockedBrands = [
+    ...BLOCKED_MEDIA_BRANDS,
+    ...Array.isArray(sourcePublisherNames) ? sourcePublisherNames : []
+  ];
+  return blockedBrands.some((brand) => {
+    if (!brand || typeof brand !== "string") return false;
+    const normalizedBrand = normalizeText(brand);
+    return normalizedBrand.length > 0 && normalizedHeadline.includes(normalizedBrand);
+  });
+}
+function hasInvalidHeadlineEnding(headline) {
+  if (!headline || typeof headline !== "string") return false;
+  const text = headline.trim();
+  if (!text) return false;
+  if (/[.!?।॥…,:;—–-]+$/u.test(text)) {
+    return true;
+  }
+  if (/(?:^|\s)(?:जिसमें|जिसके|जिससे|जिसका|जिसकी|तथा|एवं|और|कि|लेकिन|मगर|किंतु|परंतु)\s*$/u.test(text)) {
+    return true;
+  }
+  const sentenceEnding = /(?:^|\s)(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया)\s*$/u;
+  return sentenceEnding.test(text);
+}
+function validateHeadline(headline, optionIndex, sourcePublisherNames = []) {
+  const errors = [];
+  const text = (headline || "").normalize("NFC").replace(/\s+/g, " ").trim();
+  const target = HEADLINE_TARGETS[optionIndex];
+  if (!text) {
+    errors.push("Headline is empty");
+  }
+  if (target === void 0) {
+    errors.push("Invalid headline option index");
+  }
+  if (hasBlockedMediaBrand(text, sourcePublisherNames)) {
+    errors.push("News publisher or media brand found in headline");
+  }
+  if (hasInvalidHeadlineEnding(text)) {
+    errors.push("Invalid sentence-style ending or trailing punctuation");
+  }
+  if (/[।.!?…]$/u.test(text)) {
+    errors.push("Headline must not end with full stop or danda");
+  }
+  const characterCount = countCharacters(text);
+  const wordCount = text.split(/\s+/u).filter(Boolean).length;
+  if (target && characterCount > target.max) {
+    errors.push("Maximum character limit exceeded");
+  }
+  const belowPreferredMinimum = Boolean(target && characterCount < target.min);
+  return {
+    valid: errors.length === 0,
+    errors,
+    characterCount,
+    wordCount,
+    belowPreferredMinimum,
+    tier: target !== void 0 ? optionIndex + 1 : void 0,
+    minTarget: target?.min,
+    maxTarget: target?.max
+  };
+}
+function validateGeneralHeadline(headline, sourcePublisherNames = [], maxChars = 200) {
+  const errors = [];
+  const text = (headline || "").normalize("NFC").replace(/\s+/g, " ").trim();
+  if (!text) {
+    errors.push("Headline is empty");
+  }
+  if (hasBlockedMediaBrand(text, sourcePublisherNames)) {
+    errors.push("News publisher or media brand found in headline");
+  }
+  if (hasInvalidHeadlineEnding(text)) {
+    errors.push("Invalid sentence-style ending or trailing punctuation");
+  }
+  if (/[।.!?…]$/u.test(text)) {
+    errors.push("Headline must not end with full stop or danda");
+  }
+  const characterCount = countCharacters(text);
+  const wordCount = text.split(/\s+/u).filter(Boolean).length;
+  if (characterCount > maxChars) {
+    errors.push(`Maximum character limit exceeded (${characterCount} > ${maxChars})`);
+  }
+  return {
+    valid: errors.length === 0,
+    errors,
+    characterCount,
+    wordCount,
+    belowPreferredMinimum: characterCount < 20
+  };
+}
+function checkHeadlineSimilarity(h1, h2) {
+  if (!h1 || !h2) return 0;
+  const stopWords = /* @__PURE__ */ new Set([
+    "\u0914\u0930",
+    "\u092A\u0930",
+    "\u092E\u0947\u0902",
+    "\u0938\u0947",
+    "\u0915\u094B",
+    "\u0915\u093E",
+    "\u0915\u0940",
+    "\u0915\u0947",
+    "\u0928\u0947",
+    "\u092F\u0939",
+    "\u0935\u0939",
+    "\u0915\u093F",
+    "\u092D\u0940",
+    "\u0932\u093F\u090F",
+    "\u0928\u090F",
+    "\u0928\u092F\u093E",
+    "\u092C\u0921\u093C\u093E",
+    "\u092C\u0921\u093C\u0940",
+    "\u0939\u0941\u090F",
+    "\u0939\u0941\u0906",
+    "\u0939\u0948",
+    "\u0939\u0948\u0902",
+    "\u0925\u093E",
+    "\u0925\u0940",
+    "\u0925\u0947"
+  ]);
+  const words1 = new Set(
+    normalizeText(h1).split(/\s+/).filter((w) => w.length >= 2 && !stopWords.has(w))
+  );
+  const words2 = new Set(
+    normalizeText(h2).split(/\s+/).filter((w) => w.length >= 2 && !stopWords.has(w))
+  );
+  if (normalizeText(h1) === normalizeText(h2) && normalizeText(h1).length > 0) {
+    return 1;
+  }
+  if (words1.size === 0 || words2.size === 0) return 0;
+  let common = 0;
+  for (const w of words1) {
+    if (words2.has(w)) common++;
+  }
+  return 2 * common / (words1.size + words2.size);
+}
+function validateHeadlinesBatch(headlines, sourcePublisherNames = []) {
+  const safe = Array.isArray(headlines) ? headlines.slice(0, 5) : [];
+  const results = [];
+  const duplicates = [];
+  const duplicatePairs = [];
+  for (let i = 0; i < 5; i++) {
+    const text = safe[i] || "";
+    const res = validateHeadline(text, i, sourcePublisherNames);
+    results.push(res);
+  }
+  for (let i = 0; i < safe.length; i++) {
+    for (let j = i + 1; j < safe.length; j++) {
+      const hA = safe[i] || "";
+      const hB = safe[j] || "";
+      if (!hA || !hB) continue;
+      const normA = normalizeText(hA);
+      const normB = normalizeText(hB);
+      const sim = checkHeadlineSimilarity(hA, hB);
+      if (normA === normB || sim >= 0.85) {
+        if (!duplicates.includes(j)) duplicates.push(j);
+        duplicatePairs.push([i, j]);
+        const dupMsg = "\u0938\u092E\u093E\u0928 \u092F\u093E \u0921\u0941\u092A\u094D\u0932\u0940\u0915\u0947\u091F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A (Duplicate or substantially similar headline option)";
+        if (!results[j].errors.includes(dupMsg)) {
+          results[j].errors.push(dupMsg);
+          results[j].valid = false;
+        }
+      }
+    }
+  }
+  const allValid = results.every((r) => r.valid) && duplicates.length === 0 && safe.length === 5;
+  return {
+    valid: allValid,
+    results,
+    duplicates,
+    duplicatePairs
+  };
+}
+function cleanCandidateClause(clause) {
+  if (!clause || typeof clause !== "string") return "";
+  let text = clause.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").replace(/\s+/g, " ").trim();
+  const sentenceEndingRegex = /(?:\s+(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया))$/u;
+  const danglingRegex = /(?:\s+(?:और|तथा|एवं|व|या|अथवा|कि|जो|का|की|के|में|पर|से|को|ने|तक|हेतु|लिए|हो|हुए|कर|गया|गई|गए|भी|तो|ही|हुई|जारी|चलते|लेकर|कहा\s+कि|बताया\s+कि))$/u;
+  let prev = "";
+  while (text !== prev) {
+    prev = text;
+    text = text.replace(sentenceEndingRegex, "").trim();
+    text = text.replace(danglingRegex, "").trim();
+    text = text.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
+  }
+  return text.replace(/मध्यप्रदेश/g, "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936").replace(/उत्तरप्रदेश/g, "\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936").trim();
+}
+function regenerateHeadlineOptionFromFacts(optionIndex, factsList, baseTitle, location = "", existingHeadlines = [], sourcePublisherNames = []) {
+  const target = HEADLINE_TARGETS[optionIndex] || { min: 80, max: 200 };
+  const loc = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? location.split(/[\/,]/)[0].trim() : "";
+  const cleanFacts = [];
+  for (const rawFact of factsList) {
+    if (!rawFact || typeof rawFact !== "string") continue;
+    const cleaned = cleanCandidateClause(rawFact);
+    if (cleaned.length < 15) continue;
+    if (hasBlockedMediaBrand(cleaned, sourcePublisherNames)) continue;
+    if (hasInvalidHeadlineEnding(cleaned)) continue;
+    if (!cleanFacts.includes(cleaned)) {
+      cleanFacts.push(cleaned);
+    }
+  }
+  let cleanBase = cleanCandidateClause(baseTitle || "");
+  if (hasBlockedMediaBrand(cleanBase, sourcePublisherNames)) {
+    cleanBase = cleanFacts[0] || "\u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0938\u092E\u093E\u091A\u093E\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E";
+  }
+  if (hasInvalidHeadlineEnding(cleanBase)) {
+    cleanBase = cleanCandidateClause(cleanBase);
+  }
+  const candidates = [];
+  if (cleanBase) candidates.push(cleanBase);
+  if (loc && cleanBase && !cleanBase.includes(loc)) {
+    candidates.push(`${loc}: ${cleanBase}`);
+    candidates.push(`${loc} \u092E\u0947\u0902 ${cleanBase}`);
+  }
+  for (const f of cleanFacts) {
+    if (f !== cleanBase) {
+      candidates.push(f);
+      if (loc && !f.includes(loc)) {
+        candidates.push(`${loc}: ${f}`);
+      }
+      if (cleanBase && !cleanBase.includes(f) && !f.includes(cleanBase)) {
+        candidates.push(`${cleanBase}, ${f}`);
+      }
+    }
+  }
+  for (let i = 0; i < cleanFacts.length; i++) {
+    let combined = cleanFacts[i];
+    for (let j = 0; j < cleanFacts.length; j++) {
+      if (i !== j) {
+        const next = `${combined}, ${cleanFacts[j]}`;
+        candidates.push(next);
+        if (loc && !next.includes(loc)) {
+          candidates.push(`${loc}: ${next}`);
+        }
+        for (let k = 0; k < cleanFacts.length; k++) {
+          if (k !== i && k !== j) {
+            const next3 = `${next}, ${cleanFacts[k]}`;
+            candidates.push(next3);
+            if (loc && !next3.includes(loc)) {
+              candidates.push(`${loc}: ${next3}`);
+            }
+          }
+        }
+      }
+    }
+  }
+  const validCandidates = [];
+  for (const cand of candidates) {
+    let candidate = cleanCandidateClause(cand);
+    let charLen = countCharacters(candidate);
+    if (charLen > target.max) {
+      const sliced = candidate.substring(0, target.max);
+      const lastSpace = sliced.lastIndexOf(" ");
+      if (lastSpace >= target.min) {
+        candidate = cleanCandidateClause(sliced.substring(0, lastSpace));
+        charLen = countCharacters(candidate);
+      } else {
+        continue;
+      }
+    }
+    if (hasBlockedMediaBrand(candidate, sourcePublisherNames)) continue;
+    if (hasInvalidHeadlineEnding(candidate)) continue;
+    const isDup = existingHeadlines.some((ex) => {
+      if (!ex) return false;
+      return normalizeText(ex) === normalizeText(candidate) || checkHeadlineSimilarity(ex, candidate) >= 0.85;
+    });
+    if (isDup) continue;
+    const ideal = (target.min + target.max) / 2;
+    const diff = charLen >= target.min ? Math.abs(charLen - ideal) : (target.min - charLen) * 3;
+    validCandidates.push({ text: candidate, len: charLen, diff });
+  }
+  validCandidates.sort((a, b) => a.diff - b.diff);
+  if (validCandidates.length > 0) {
+    return validCandidates[0].text;
+  }
+  let fallback = cleanBase;
+  if (loc && !fallback.includes(loc)) {
+    fallback = `${loc}: ${fallback}`;
+  }
+  fallback = cleanCandidateClause(fallback);
+  if (countCharacters(fallback) > target.max) {
+    const sliced = fallback.substring(0, target.max);
+    const lastSpace = sliced.lastIndexOf(" ");
+    if (lastSpace > 20) {
+      fallback = cleanCandidateClause(sliced.substring(0, lastSpace));
+    }
+  }
+  return fallback;
+}
+function extractPublisherFromDomain(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") return [];
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`);
+    const host = parsed.hostname.toLowerCase();
+    const domainMap = {
+      "naidunia.com": ["\u0928\u0908 \u0926\u0941\u0928\u093F\u092F\u093E", "\u0928\u0908\u0926\u0941\u0928\u093F\u092F\u093E", "Nai Dunia", "Nai Duniya"],
+      "bhaskar.com": ["\u0926\u0948\u0928\u093F\u0915 \u092D\u093E\u0938\u094D\u0915\u0930", "Dainik Bhaskar", "\u092D\u093E\u0938\u094D\u0915\u0930", "Bhaskar"],
+      "jagran.com": ["\u0926\u0948\u0928\u093F\u0915 \u091C\u093E\u0917\u0930\u0923", "Dainik Jagran", "\u091C\u093E\u0917\u0930\u0923", "Jagran"],
+      "amarujala.com": ["\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E", "Amar Ujala"],
+      "livehindustan.com": ["\u0939\u093F\u0902\u0926\u0941\u0938\u094D\u0924\u093E\u0928", "Hindustan", "Live Hindustan"],
+      "hindustantimes.com": ["\u0939\u093F\u0902\u0926\u0941\u0938\u094D\u0924\u093E\u0928 \u091F\u093E\u0907\u092E\u094D\u0938", "Hindustan Times"],
+      "navbharattimes.indiatimes.com": ["\u0928\u0935\u092D\u093E\u0930\u0924 \u091F\u093E\u0907\u092E\u094D\u0938", "Navbharat Times", "NBT"],
+      "aajtak.in": ["\u0906\u091C \u0924\u0915", "Aaj Tak"],
+      "ndtv.in": ["NDTV", "\u090F\u0928\u0921\u0940\u091F\u0940\u0935\u0940", "NDTV India"],
+      "ndtv.com": ["NDTV", "\u090F\u0928\u0921\u0940\u091F\u0940\u0935\u0940", "NDTV India"],
+      "zeenews.india.com": ["Zee News", "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C"],
+      "news18.com": ["News18", "\u0928\u094D\u092F\u0942\u091C\u093C18"],
+      "abplive.com": ["ABP News", "\u090F\u092C\u0940\u092A\u0940 \u0928\u094D\u092F\u0942\u091C\u093C"],
+      "tv9hindi.com": ["TV9", "\u091F\u0940\u0935\u09409", "TV9 Bharatvarsh"],
+      "bbc.com": ["BBC News", "BBC Hindi", "\u092C\u0940\u092C\u0940\u0938\u0940"],
+      "patrika.com": ["\u092A\u0924\u094D\u0930\u093F\u0915\u093E", "Patrika"],
+      "haribhoomi.com": ["\u0939\u0930\u093F\u092D\u0942\u092E\u093F", "Haribhoomi"],
+      "prabhatkhabar.com": ["\u092A\u094D\u0930\u092D\u093E\u0924 \u0916\u092C\u0930", "Prabhat Khabar"],
+      "bansalnews.com": ["\u092C\u0902\u0938\u0932 \u0928\u094D\u092F\u0942\u091C\u093C", "Bansal News"],
+      "mptak.in": ["MP Tak", "\u090F\u092E\u092A\u0940 \u0924\u0915"],
+      "republicbharat.com": ["Republic Bharat", "\u0930\u093F\u092A\u092C\u094D\u0932\u093F\u0915 \u092D\u093E\u0930\u0924"],
+      "jansatta.com": ["\u091C\u0928\u0938\u0924\u094D\u0924\u093E", "Jansatta"],
+      "oneindia.com": ["\u0935\u0928\u0907\u0902\u0921\u093F\u092F\u093E", "OneIndia"]
+    };
+    for (const [key, aliases] of Object.entries(domainMap)) {
+      if (host.includes(key)) {
+        return aliases;
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
 
 // src/lib/speakerUtils.ts
 var hindiGraphemeSegmenter = null;
@@ -28758,6 +29171,20 @@ function parseArticleHtml(html, pageUrl) {
   const hasGenuineArticleText = !isPlaceholderOrErrorPage && (bodyContent && bodyContent.length >= 120 || rawDesc && rawDesc.length >= 60 && rawTitle && rawTitle.length >= 15);
   const extractionStatus = !isBlockedOrPaywalled && hasGenuineArticleText ? "success" : "failed";
   const inaccessibleReason = isBlockedOrPaywalled ? "Page is protected by anti-bot, CAPTCHA, or paywall" : !hasGenuineArticleText ? "Article body could not be extracted from webpage" : void 0;
+  const ogSiteMatch = html.match(/<meta[^>]*property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
+  const metaPublisherMatch = html.match(/<meta[^>]*name=["']publisher["'][^>]*content=["']([^"']+)["']/i) || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']publisher["']/i) || html.match(/<meta[^>]*name=["']application-name["'][^>]*content=["']([^"']+)["']/i);
+  let extractedPublisher = "";
+  if (ogSiteMatch && ogSiteMatch[1]) {
+    extractedPublisher = cleanHtmlEntities(ogSiteMatch[1].trim());
+  } else if (metaPublisherMatch && metaPublisherMatch[1]) {
+    extractedPublisher = cleanHtmlEntities(metaPublisherMatch[1].trim());
+  }
+  const domainPublishers = extractPublisherFromDomain(pageUrl);
+  const sourcePublisherNames = [];
+  if (extractedPublisher) sourcePublisherNames.push(extractedPublisher);
+  for (const dp of domainPublishers) {
+    if (!sourcePublisherNames.includes(dp)) sourcePublisherNames.push(dp);
+  }
   if (isPlaceholderOrErrorPage) {
     rawTitle = "";
     rawDesc = "";
@@ -28768,6 +29195,8 @@ function parseArticleHtml(html, pageUrl) {
     description: rawDesc,
     content: bodyContent,
     author: extractedAuthor || void 0,
+    publisherName: extractedPublisher || (domainPublishers[0] || void 0),
+    sourcePublisherNames,
     images: foundImages,
     canonicalUrl,
     publishedDate,
@@ -29158,6 +29587,8 @@ async function fetchAndProcessNewsUrl(rawUrl) {
                   description: deepArticle.description || itemDesc,
                   content: deepArticle.content || itemContent || itemDesc,
                   author: deepArticle.author,
+                  publisherName: deepArticle.publisherName,
+                  sourcePublisherNames: deepArticle.sourcePublisherNames || [],
                   images: deepArticle.images.length > 0 ? deepArticle.images : rssImages,
                   sourceUrl: itemLink,
                   canonicalUrl: deepArticle.canonicalUrl,
@@ -29175,11 +29606,17 @@ async function fetchAndProcessNewsUrl(rawUrl) {
       const authorMatch = itemStr.match(/<(?:dc:creator|author)[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/(?:dc:creator|author)>/i);
       const itemAuthor = cleanHtmlEntities((authorMatch ? authorMatch[1] || authorMatch[2] || "" : "").replace(/<[^>]+>/g, "").trim()) || void 0;
       const hasRssFacts = itemContent && itemContent.length >= 60 || itemDesc && itemDesc.length >= 40 && itemTitle && itemTitle.length >= 10;
+      const channelTitleMatch = rawBody.match(/<channel[\s\S]*?<title[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
+      const rssChannelTitle = cleanHtmlEntities((channelTitleMatch ? channelTitleMatch[1] || channelTitleMatch[2] || "" : "").replace(/<[^>]+>/g, "").trim());
+      const rssDomainPublishers = extractPublisherFromDomain(finalRedirectedUrl);
+      const rssPublisherNames = Array.from(new Set([rssChannelTitle, ...rssDomainPublishers].filter(Boolean)));
       return {
         title: itemTitle,
         description: itemDesc,
         content: itemContent || itemDesc,
         author: itemAuthor,
+        publisherName: rssChannelTitle || (rssDomainPublishers[0] || void 0),
+        sourcePublisherNames: rssPublisherNames,
         images: rssImages,
         sourceUrl: itemLink || finalRedirectedUrl,
         isRss: true,
@@ -29201,6 +29638,8 @@ async function fetchAndProcessNewsUrl(rawUrl) {
     description: article.description,
     content: article.content,
     author: article.author,
+    publisherName: article.publisherName,
+    sourcePublisherNames: article.sourcePublisherNames || [],
     images: article.images,
     sourceUrl: finalRedirectedUrl,
     canonicalUrl: article.canonicalUrl,
@@ -30513,47 +30952,27 @@ function sanitizeHeadlineForLengthCounting(text) {
   return s;
 }
 function countHeadlineGraphemes(text) {
-  const s = sanitizeHeadlineForLengthCounting(text);
-  if (!s) return 0;
-  if (hindiGraphemeSegmenter2) {
-    return Array.from(hindiGraphemeSegmenter2.segment(s)).length;
-  }
-  return Array.from(s).length;
+  return countCharacters(text);
 }
 function countHeadlineVisibleCharacters(text, options) {
   if (options?.mode === "codeunit") {
     const s = sanitizeHeadlineForLengthCounting(text);
     return s.length;
   }
-  return countHeadlineGraphemes(text);
+  return countCharacters(text);
 }
-function validateHeadlines5Tier(headlines) {
+function validateHeadlines5Tier(headlines, sourcePublisherNames = []) {
+  const batch = validateHeadlinesBatch(headlines, sourcePublisherNames);
   const safe = Array.isArray(headlines) ? headlines.slice(0, 5) : [];
   const results = [];
   const invalidTiers = [];
   for (let i = 0; i < 5; i++) {
     const tier = HEADLINE_5_TIER_RANGES[i];
     const text = safe[i] || "";
-    const charCount = countHeadlineVisibleCharacters(text);
-    const trimmed = text.replace(/\[\/?(?:yellow|highlight)\]/gi, "").trim();
-    let valid = true;
-    let reason;
-    if (!text || charCount < tier.min) {
-      valid = false;
-      reason = `\u0935\u093F\u0915\u0932\u094D\u092A ${i + 1} \u0915\u0940 \u0935\u0930\u094D\u0923 \u0938\u0902\u0916\u094D\u092F\u093E (${charCount}) \u0928\u094D\u092F\u0942\u0928\u0924\u092E \u0938\u0940\u092E\u093E (${tier.min}) \u0938\u0947 \u0915\u092E \u0939\u0948\u0964`;
-    } else if (charCount > tier.max) {
-      valid = false;
-      reason = `\u0935\u093F\u0915\u0932\u094D\u092A ${i + 1} \u0915\u0940 \u0935\u0930\u094D\u0923 \u0938\u0902\u0916\u094D\u092F\u093E (${charCount}) \u0905\u0927\u093F\u0915\u0924\u092E \u0938\u0940\u092E\u093E (${tier.max}) \u0938\u0947 \u0905\u0927\u093F\u0915 \u0939\u0948\u0964`;
-    } else if (/[।\.]$/.test(trimmed)) {
-      valid = false;
-      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (. \u092F\u093E \u0964) \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964";
-    } else if (/\.\.\.$/.test(trimmed)) {
-      valid = false;
-      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0907\u0932\u093F\u092A\u094D\u0938\u093F\u0938 (...) \u0935\u0930\u094D\u091C\u093F\u0924 \u0939\u0948\u0964";
-    } else if (/(?:\s+(?:ने|के|का|को|में|पर|से|कि|और|या|एवं|व|कहा\s+कि))$/u.test(trimmed)) {
-      valid = false;
-      reason = "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0905\u0902\u0924 \u0905\u0930\u094D\u0925\u092A\u0942\u0930\u094D\u0923 \u0935\u093E\u0915\u094D\u092F \u092A\u0930 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F, \u0915\u093F\u0938\u0940 \u0905\u0927\u0942\u0930\u0947 \u092A\u0930\u0938\u0930\u094D\u0917 \u092A\u0930 \u0928\u0939\u0940\u0902\u0964";
-    }
+    const res = batch.results[i];
+    const charCount = res?.characterCount ?? countCharacters(text);
+    const valid = res ? res.valid : false;
+    let reason = res?.errors?.length ? res.errors.join("; ") : void 0;
     if (!valid) invalidTiers.push(i + 1);
     results.push({
       tier: i + 1,
@@ -30566,7 +30985,7 @@ function validateHeadlines5Tier(headlines) {
     });
   }
   return {
-    valid: invalidTiers.length === 0 && results.length === 5,
+    valid: batch.valid,
     results,
     invalidTiers
   };
@@ -30992,6 +31411,8 @@ ${extracted.author ? `Author: ${extracted.author}
       description: extracted.description,
       content: extracted.content ? extracted.content.slice(0, 6e3) : "",
       author: extracted.author,
+      publisherName: extracted.publisherName,
+      sourcePublisherNames: extracted.sourcePublisherNames || [],
       imageUrl: extracted.images?.[0],
       linkUrl: extracted.sourceUrl,
       images: extracted.images,
@@ -31040,6 +31461,8 @@ app.post("/api/scrape-news-article", async (req, res) => {
       description: meta?.description || "",
       content: meta?.content || meta?.description || "",
       author: meta?.author || "",
+      publisherName: meta?.publisherName || "",
+      sourcePublisherNames: meta?.sourcePublisherNames || [],
       photos: meta?.images || [],
       sourceUrl: rawUrl,
       extractionStatus: scraped.extractionStatus
@@ -31509,13 +31932,27 @@ ${rawLink}` : rawLink;
         if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|domain|विषय:)/u.test(s)) return false;
         return true;
       });
+      const domainPublishers = extractPublisherFromDomain(rawLink || linkUrl || "");
+      const effectiveSourcePublisherNames = Array.from(
+        new Set([
+          ...Array.isArray(req.body.sourcePublisherNames) ? req.body.sourcePublisherNames : [],
+          ...extractedArticleMeta?.sourcePublisherNames || [],
+          ...extractedArticleMeta?.publisherName ? [extractedArticleMeta.publisherName] : [],
+          ...req.body.sourceChannel ? [req.body.sourceChannel] : [],
+          ...req.body.channelNameHi ? [req.body.channelNameHi] : [],
+          ...req.body.channelNameEn ? [req.body.channelNameEn] : [],
+          ...domainPublishers
+        ].filter(Boolean))
+      );
       const cleanOptions = [];
       const addOptionIfValid = (candidate) => {
         let s = sanitizePressNoteFlattery(cleanHeadlineText(String(candidate || ""))).replace(/[।\.\,\!\?\:\-]+$/g, "").trim();
         if (!s || s.length < 15) return;
+        if (hasBlockedMediaBrand(s, effectiveSourcePublisherNames)) return;
+        if (hasInvalidHeadlineEnding(s)) return;
         if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|विषय:)/u.test(s)) return;
         if (cleanOptions.includes(s)) return;
-        const isDuplicate = cleanOptions.some((existing) => calculateHeadlineSimilarityInternal(existing, s) >= 0.88);
+        const isDuplicate = cleanOptions.some((existing) => normalizeText(existing) === normalizeText(s) || checkHeadlineSimilarity(existing, s) >= 0.85);
         if (!isDuplicate) {
           cleanOptions.push(s);
         }
@@ -31543,19 +31980,17 @@ ${rawLink}` : rawLink;
         cleanOptions,
         factSentences,
         primarySourceHeadline || parsedData.headline || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
-        parsedData.location
+        parsedData.location,
+        effectiveSourcePublisherNames
       );
       if (Array.isArray(parsedData.headlineOptions)) {
         parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
       }
-      if (parsedData.headlineOptions.length > 0) {
-        parsedData.headline = parsedData.headlineOptions[0];
-      }
-      let validationReport = validateHeadlines5Tier(parsedData.headlineOptions);
+      let validationReport = validateHeadlinesBatch(parsedData.headlineOptions, effectiveSourcePublisherNames);
       if (!validationReport.valid && actualProvider !== "local" && actualProvider !== "local-fallback" && parsedData.headlineOptions.length > 0) {
         try {
-          const retryPrompt = `\u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u092E\u0947\u0902 \u0938\u0947 \u0915\u0941\u091B \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u092A\u0928\u0940 \u0905\u0927\u093F\u0915\u0924\u092E \u0935\u0930\u094D\u0923-\u0938\u0940\u092E\u093E (200 \u0905\u0915\u094D\u0937\u0930) \u0915\u093E \u092A\u093E\u0932\u0928 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902:
-${validationReport.results.map((r) => `\u0935\u093F\u0915\u0932\u094D\u092A ${r.tier} (${r.min}-${r.max} \u0905\u0915\u094D\u0937\u0930, \u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${r.charCount} \u0905\u0915\u094D\u0937\u0930): "${r.text}" ${r.valid ? "[\u092E\u093E\u0928\u094D\u092F]" : `[\u0924\u094D\u0930\u0941\u091F\u093F: ${r.reason}]`}`).join("\n")}
+          const retryPrompt = `\u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u092E\u0947\u0902 \u0938\u0947 \u0915\u0941\u091B \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u092A\u0928\u0940 \u0905\u0927\u093F\u0915\u0924\u092E \u0938\u0940\u092E\u093E \u092F\u093E \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u092F\u092E\u094B\u0902 \u0915\u093E \u092A\u093E\u0932\u0928 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0930\u0939\u0947 \u0939\u0948\u0902:
+${validationReport.results.map((r, idx) => `\u0935\u093F\u0915\u0932\u094D\u092A ${idx + 1} (\u0932\u0915\u094D\u0937\u094D\u092F: ${HEADLINE_TARGETS[idx]?.min}-${HEADLINE_TARGETS[idx]?.max} \u0905\u0915\u094D\u0937\u0930, \u0935\u0930\u094D\u0924\u092E\u093E\u0928: ${r.characterCount} \u0905\u0915\u094D\u0937\u0930): "${parsedData.headlineOptions[idx]}" ${r.valid ? "[\u092E\u093E\u0928\u094D\u092F]" : `[\u0924\u094D\u0930\u0941\u091F\u093F: ${r.errors.join(", ")}]`}`).join("\n")}
 
 \u092E\u0942\u0932 \u0938\u092E\u093E\u091A\u093E\u0930 \u0924\u0925\u094D\u092F:
 """
@@ -31564,7 +31999,7 @@ ${factSentences.slice(0, 5).join("\n")}
 """
 
 \u0915\u0943\u092A\u092F\u093E \u0909\u092A\u0930\u094B\u0915\u094D\u0924 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u0915\u094B \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0930 \u0920\u0940\u0915 5 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u0915\u093E \u0935\u0948\u0927 JSON Object \u0932\u094C\u091F\u093E\u090F\u0902\u0964
-\u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u0927\u093F\u0915\u0924\u092E 200 \u0905\u0915\u094D\u0937\u0930 \u0915\u0940 \u0938\u0940\u092E\u093E (\u0935\u093F\u0915\u0932\u094D\u092A 1: 80-110, \u0935\u093F\u0915\u0932\u094D\u092A 2: 100-130, \u0935\u093F\u0915\u0932\u094D\u092A 3: 125-150, \u0935\u093F\u0915\u0932\u094D\u092A 4: 130-160, \u0935\u093F\u0915\u0932\u094D\u092A 5: 150-200 \u0905\u0915\u094D\u0937\u0930) \u0915\u0947 \u092D\u0940\u0924\u0930 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0915\u0943\u0924\u094D\u0930\u093F\u092E \u0935\u093E\u0915\u094D\u092F \u0915\u0947 \u0914\u0930 \u092C\u093F\u0928\u093E \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947:
+\u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u0927\u093F\u0915\u0924\u092E 200 \u0905\u0915\u094D\u0937\u0930 \u0915\u0940 \u0938\u0940\u092E\u093E (\u0935\u093F\u0915\u0932\u094D\u092A 1: 80-110, \u0935\u093F\u0915\u0932\u094D\u092A 2: 100-130, \u0935\u093F\u0915\u0932\u094D\u092A 3: 125-150, \u0935\u093F\u0915\u0932\u094D\u092A 4: 130-160, \u0935\u093F\u0915\u0932\u094D\u092A 5: 150-200 \u0905\u0915\u094D\u0937\u0930) \u0915\u0947 \u092D\u0940\u0924\u0930 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0915\u0943\u0924\u094D\u0930\u093F\u092E \u0935\u093E\u0915\u094D\u092F \u0915\u0947, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092E\u0940\u0921\u093F\u092F\u093E/\u091A\u0948\u0928\u0932 \u0928\u093E\u092E \u0915\u0947 \u0914\u0930 \u092C\u093F\u0928\u093E \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947:
 {"headlineOptions": ["\u0935\u093F\u0915\u0932\u094D\u092A 1 (80-110)", "\u0935\u093F\u0915\u0932\u094D\u092A 2 (100-130)", "\u0935\u093F\u0915\u0932\u094D\u092A 3 (125-150)", "\u0935\u093F\u0915\u0932\u094D\u092A 4 (130-160)", "\u0935\u093F\u0915\u0932\u094D\u092A 5 (150-200)"]}`;
           const retryAiResult = await executeGeminiWithKeyPool(async (ai) => {
             const resp = await generateWithFallbackAndRetry(
@@ -31594,14 +32029,12 @@ ${factSentences.slice(0, 5).join("\n")}
               retryAiResult.headlineOptions,
               factSentences,
               primarySourceHeadline || parsedData.headline || "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930",
-              parsedData.location
+              parsedData.location,
+              effectiveSourcePublisherNames
             );
-            const reValidation = validateHeadlines5Tier(reFitted);
-            if (reValidation.valid || reValidation.invalidTiers.length < validationReport.invalidTiers.length) {
+            const reValidation = validateHeadlinesBatch(reFitted, effectiveSourcePublisherNames);
+            if (reValidation.valid) {
               parsedData.headlineOptions = reFitted;
-              if (parsedData.headlineOptions[0]) {
-                parsedData.headline = parsedData.headlineOptions[0];
-              }
               validationReport = reValidation;
             }
           }
@@ -31609,6 +32042,29 @@ ${factSentences.slice(0, 5).join("\n")}
           console.warn("[News AI] Bounded retry for headline bounds notice:", retryErr?.message?.slice(0, 80));
         }
       }
+      if (!validationReport.valid) {
+        for (let i = 0; i < 5; i++) {
+          const optRes = validationReport.results[i];
+          const isDup = validationReport.duplicates.includes(i);
+          if (!optRes || !optRes.valid || isDup) {
+            const existing = parsedData.headlineOptions.filter((_h, idx) => idx !== i);
+            parsedData.headlineOptions[i] = regenerateHeadlineOptionFromFacts(
+              i,
+              factSentences,
+              primarySourceHeadline || parsedData.headline || "",
+              parsedData.location,
+              existing,
+              effectiveSourcePublisherNames
+            );
+          }
+        }
+        validationReport = validateHeadlinesBatch(parsedData.headlineOptions, effectiveSourcePublisherNames);
+      }
+      if (parsedData.headlineOptions.length > 0) {
+        parsedData.headline = parsedData.headlineOptions[0];
+      }
+      parsedData.sourcePublisherNames = effectiveSourcePublisherNames;
+      parsedData.publisherName = effectiveSourcePublisherNames[0];
       parsedData.canonicalContext = {
         sourceUrl: rawLink || linkUrl || "",
         title: primarySourceHeadline || parsedData.headline,
@@ -32025,6 +32481,12 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     let sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
     let sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
     let candidateSourceUrl = String(canonicalContext.sourceUrl || req.body.sourceUrl || "").trim();
+    const effectiveSourcePublisherNames = Array.from(/* @__PURE__ */ new Set([
+      ...Array.isArray(req.body.sourcePublisherNames) ? req.body.sourcePublisherNames : [],
+      ...Array.isArray(canonicalContext.sourcePublisherNames) ? canonicalContext.sourcePublisherNames : [],
+      String(req.body.publisherName || canonicalContext.publisherName || "").trim(),
+      ...extractPublisherFromDomain(candidateSourceUrl) ? [extractPublisherFromDomain(candidateSourceUrl)] : []
+    ])).filter(Boolean);
     if (!sourceText || sourceText.trim().length < 50) {
       const targetNewsId = draftId || req.body.newsId || canonicalContext.newsId || canonicalContext.sourceNewsId || "";
       try {
@@ -32078,13 +32540,15 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       let s = formatAsJournalisticHeadline(cleanHeadlineText(String(candidate || ""))).replace(/[।\\.\\,\\!\\?\\:\\-]+$/g, "").trim();
       if (!s || s.length < 15) return;
       if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|विषय:)/u.test(s)) return;
+      if (hasBlockedMediaBrand(s, effectiveSourcePublisherNames)) return;
+      if (hasInvalidHeadlineEnding(s)) return;
       if (cleanOptions.includes(s)) return;
       for (const excl of excludeTitles) {
-        if (s === excl || calculateHeadlineSimilarityInternal(s, excl) >= 0.9) {
+        if (s === excl || calculateHeadlineSimilarityInternal(s, excl) >= 0.85 || checkHeadlineSimilarity(s, excl) >= 0.85) {
           return;
         }
       }
-      const isDup = cleanOptions.some((existing) => calculateHeadlineSimilarityInternal(existing, s) >= 0.9);
+      const isDup = cleanOptions.some((existing) => calculateHeadlineSimilarityInternal(existing, s) >= 0.85 || checkHeadlineSimilarity(existing, s) >= 0.85);
       if (!isDup) {
         cleanOptions.push(s);
       }
@@ -32238,12 +32702,37 @@ JSON Output Schema:
         error: "AI \u0938\u0947\u0935\u093E \u092B\u093F\u0932\u0939\u093E\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 API Pool \u0915\u0940 \u0938\u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 Keys \u0915\u0940 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948 \u092F\u093E \u0935\u0947 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964"
       });
     }
-    const finalOptions = fitHeadlinesTo5TierRanges(
+    const fittedOptions = fitHeadlinesTo5TierRanges(
       cleanOptions,
       articleSentences,
       sourceTitle || cleanOptions[0] || "",
-      sourceLoc
+      sourceLoc,
+      effectiveSourcePublisherNames
     );
+    let validatedRegenBatch = validateHeadlinesBatch(fittedOptions, effectiveSourcePublisherNames);
+    const verifiedRegenHeadlines = [...validatedRegenBatch.sanitizedHeadlines];
+    const verifiedFactSentences = articleSentences.length > 0 ? articleSentences : [sourceTitle, sourceText].filter(Boolean);
+    for (let i = 0; i < HEADLINE_TARGETS.length; i++) {
+      const res2 = validatedRegenBatch.results[i];
+      let needsRegen = !res2.valid;
+      if (!needsRegen && rawPrev.some((prevH) => checkHeadlineSimilarity(verifiedRegenHeadlines[i], String(prevH)) >= 0.85)) {
+        needsRegen = true;
+      }
+      if (needsRegen) {
+        const regenerated = regenerateHeadlineOptionFromFacts(
+          verifiedFactSentences,
+          sourceLoc,
+          i,
+          sourceTitle,
+          effectiveSourcePublisherNames
+        );
+        if (regenerated) {
+          verifiedRegenHeadlines[i] = regenerated;
+        }
+      }
+    }
+    validatedRegenBatch = validateHeadlinesBatch(verifiedRegenHeadlines, effectiveSourcePublisherNames);
+    const finalOptions = validatedRegenBatch.sanitizedHeadlines;
     let coinsDeducted = 0;
     let remainingCoins = currentBalance;
     if (draftId && lockId && centralDb) {
@@ -32318,15 +32807,20 @@ JSON Output Schema:
       draftId: draftId || void 0,
       regenerationUsed: isNowMaxed,
       wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : void 0,
+      sourcePublisherNames: effectiveSourcePublisherNames,
+      headlineValidation: validatedRegenBatch,
       canonicalContext: {
         ...canonicalContext,
         draftId: draftId || void 0,
+        sourcePublisherNames: effectiveSourcePublisherNames,
+        headlineValidation: validatedRegenBatch,
         lastRegeneratedAt: (/* @__PURE__ */ new Date()).toISOString()
       },
       diagnostics: {
         count: finalOptions.length,
         totalCount: totalHeadlineOptions.length,
-        graduatedWordCounts: finalOptions.map((h) => h.split(/\s+/).length)
+        graduatedWordCounts: finalOptions.map((h) => h.split(/\s+/).length),
+        validation: validatedRegenBatch.summary
       }
     };
     if (draftId && resolveInFlight) {
@@ -36890,12 +37384,14 @@ if (process.env.NO_SERVER_START !== "true") {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  BLOCKED_MEDIA_BRANDS,
   BYLINE_REGEX,
   DISTRICT_STATE_LIST,
   GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS,
   HEADLINE_5_TIER_RANGES,
   HEADLINE_MAX_CHARACTER_LIMIT,
+  HEADLINE_TARGETS,
   HEADLINE_TIER_RANGES,
   PROTECTED_BUILTIN_ASSET_IDS,
   STANDARD_HINDI_CATEGORIES,
@@ -36907,10 +37403,13 @@ if (process.env.NO_SERVER_START !== "true") {
   calculateHeadlineSimilarity,
   calculateHeadlineSimilarityInternal,
   checkDefaultGeminiHealth,
+  checkHeadlineSimilarity,
+  cleanCandidateClause,
   cleanCaptionParagraphs,
   cleanCategoryField,
   cleanHeadlineText,
   cleanLocationField,
+  countCharacters,
   countHeadlineGraphemes,
   countHeadlineVisibleCharacters,
   createLocalNewsFallback,
@@ -36918,6 +37417,7 @@ if (process.env.NO_SERVER_START !== "true") {
   enrichHeadlineWithContext,
   ensureHashtagHierarchy,
   extractFactsFromUrlString,
+  extractPublisherFromDomain,
   fetchAndProcessNewsUrl,
   fitHeadlineNaturally,
   fitHeadlineToRange,
@@ -36934,6 +37434,8 @@ if (process.env.NO_SERVER_START !== "true") {
   getAiFeaturesConfig,
   getHeadlineRegenCoinCost,
   getUserFirstHashtag,
+  hasBlockedMediaBrand,
+  hasInvalidHeadlineEnding,
   identifyInputType,
   isArticleDeletedByTombstone,
   isAuthTokenExpired,
@@ -36946,8 +37448,10 @@ if (process.env.NO_SERVER_START !== "true") {
   logAuthDiagnostic,
   matchDistrictAlias,
   normalizeCanonicalUrl,
+  normalizeText,
   parseArticleHtml,
   preserveHeadlineStateOnRegeneration,
+  regenerateHeadlineOptionFromFacts,
   requireAdminMiddleware,
   requireAuthMiddleware,
   requireMasterAdminMiddleware,
@@ -36961,6 +37465,9 @@ if (process.env.NO_SERVER_START !== "true") {
   scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks,
   stripNewspaperBylines,
+  validateGeneralHeadline,
+  validateHeadline,
   validateHeadlineOption,
-  validateHeadlines5Tier
+  validateHeadlines5Tier,
+  validateHeadlinesBatch
 });

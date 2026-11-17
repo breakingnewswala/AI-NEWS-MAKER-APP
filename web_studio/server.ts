@@ -27,6 +27,21 @@ import {
   cleanCategoryField,
   preserveHeadlineStateOnRegeneration,
 } from "./src/lib/speakerUtils";
+import {
+  HEADLINE_TARGETS,
+  BLOCKED_MEDIA_BRANDS,
+  normalizeText,
+  countCharacters,
+  hasBlockedMediaBrand,
+  hasInvalidHeadlineEnding,
+  validateHeadline,
+  validateGeneralHeadline,
+  checkHeadlineSimilarity,
+  validateHeadlinesBatch,
+  regenerateHeadlineOptionFromFacts,
+  extractPublisherFromDomain,
+  cleanCandidateClause,
+} from "./src/lib/headlineValidator";
 
 export {
   buildHashtags,
@@ -36,6 +51,19 @@ export {
   cleanLocationField,
   cleanCategoryField,
   preserveHeadlineStateOnRegeneration,
+  HEADLINE_TARGETS,
+  BLOCKED_MEDIA_BRANDS,
+  normalizeText,
+  countCharacters,
+  hasBlockedMediaBrand,
+  hasInvalidHeadlineEnding,
+  validateHeadline,
+  validateGeneralHeadline,
+  checkHeadlineSimilarity,
+  validateHeadlinesBatch,
+  regenerateHeadlineOptionFromFacts,
+  extractPublisherFromDomain,
+  cleanCandidateClause,
 };
 
 const safeFilename = typeof __filename !== 'undefined' ? __filename : process.cwd();
@@ -19970,6 +19998,8 @@ interface ArticleExtractedMetadata {
   description?: string;
   content?: string;
   author?: string;
+  publisherName?: string;
+  sourcePublisherNames?: string[];
   imageUrl?: string;
   linkUrl?: string;
   canonicalUrl?: string;
@@ -19984,6 +20014,8 @@ interface ExtractedArticleResult {
   description: string;
   content: string;
   author?: string;
+  publisherName?: string;
+  sourcePublisherNames?: string[];
   images: string[];
   sourceUrl: string;
   canonicalUrl?: string;
@@ -20034,6 +20066,8 @@ export function parseArticleHtml(html: string, pageUrl: string): {
   description: string;
   content: string;
   author?: string;
+  publisherName?: string;
+  sourcePublisherNames?: string[];
   images: string[];
   canonicalUrl?: string;
   publishedDate?: string;
@@ -20327,6 +20361,29 @@ export function parseArticleHtml(html: string, pageUrl: string): {
     ? "Page is protected by anti-bot, CAPTCHA, or paywall"
     : (!hasGenuineArticleText ? "Article body could not be extracted from webpage" : undefined);
 
+  // Publisher extraction from og:site_name, meta publisher, application-name, or domain
+  const ogSiteMatch =
+    html.match(/<meta[^>]*property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
+  const metaPublisherMatch =
+    html.match(/<meta[^>]*name=["']publisher["'][^>]*content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']publisher["']/i) ||
+    html.match(/<meta[^>]*name=["']application-name["'][^>]*content=["']([^"']+)["']/i);
+
+  let extractedPublisher = "";
+  if (ogSiteMatch && ogSiteMatch[1]) {
+    extractedPublisher = cleanHtmlEntities(ogSiteMatch[1].trim());
+  } else if (metaPublisherMatch && metaPublisherMatch[1]) {
+    extractedPublisher = cleanHtmlEntities(metaPublisherMatch[1].trim());
+  }
+
+  const domainPublishers = extractPublisherFromDomain(pageUrl);
+  const sourcePublisherNames: string[] = [];
+  if (extractedPublisher) sourcePublisherNames.push(extractedPublisher);
+  for (const dp of domainPublishers) {
+    if (!sourcePublisherNames.includes(dp)) sourcePublisherNames.push(dp);
+  }
+
   if (isPlaceholderOrErrorPage) {
     rawTitle = "";
     rawDesc = "";
@@ -20338,6 +20395,8 @@ export function parseArticleHtml(html: string, pageUrl: string): {
     description: rawDesc,
     content: bodyContent,
     author: extractedAuthor || undefined,
+    publisherName: extractedPublisher || (domainPublishers[0] || undefined),
+    sourcePublisherNames,
     images: foundImages,
     canonicalUrl,
     publishedDate,
@@ -20829,6 +20888,8 @@ export async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedA
                   description: deepArticle.description || itemDesc,
                   content: deepArticle.content || itemContent || itemDesc,
                   author: deepArticle.author,
+                  publisherName: deepArticle.publisherName,
+                  sourcePublisherNames: deepArticle.sourcePublisherNames || [],
                   images: deepArticle.images.length > 0 ? deepArticle.images : rssImages,
                   sourceUrl: itemLink,
                   canonicalUrl: deepArticle.canonicalUrl,
@@ -20848,11 +20909,18 @@ export async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedA
       const itemAuthor = cleanHtmlEntities((authorMatch ? (authorMatch[1] || authorMatch[2] || "") : "").replace(/<[^>]+>/g, "").trim()) || undefined;
 
       const hasRssFacts = (itemContent && itemContent.length >= 60) || (itemDesc && itemDesc.length >= 40 && itemTitle && itemTitle.length >= 10);
+      const channelTitleMatch = rawBody.match(/<channel[\s\S]*?<title[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/title>/i);
+      const rssChannelTitle = cleanHtmlEntities((channelTitleMatch ? (channelTitleMatch[1] || channelTitleMatch[2] || "") : "").replace(/<[^>]+>/g, "").trim());
+      const rssDomainPublishers = extractPublisherFromDomain(finalRedirectedUrl);
+      const rssPublisherNames = Array.from(new Set([rssChannelTitle, ...rssDomainPublishers].filter(Boolean)));
+
       return {
         title: itemTitle,
         description: itemDesc,
         content: itemContent || itemDesc,
         author: itemAuthor,
+        publisherName: rssChannelTitle || (rssDomainPublishers[0] || undefined),
+        sourcePublisherNames: rssPublisherNames,
         images: rssImages,
         sourceUrl: itemLink || finalRedirectedUrl,
         isRss: true,
@@ -20879,6 +20947,8 @@ export async function fetchAndProcessNewsUrl(rawUrl: string): Promise<ExtractedA
     description: article.description,
     content: article.content,
     author: article.author,
+    publisherName: article.publisherName,
+    sourcePublisherNames: article.sourcePublisherNames || [],
     images: article.images,
     sourceUrl: finalRedirectedUrl,
     canonicalUrl: article.canonicalUrl,
@@ -22773,12 +22843,7 @@ export function sanitizeHeadlineForLengthCounting(text: string): string {
  * accurately combining consonants, virama, matras, anusvara, and nukta.
  */
 export function countHeadlineGraphemes(text: string): number {
-  const s = sanitizeHeadlineForLengthCounting(text);
-  if (!s) return 0;
-  if (hindiGraphemeSegmenter) {
-    return Array.from(hindiGraphemeSegmenter.segment(s)).length;
-  }
-  return Array.from(s).length;
+  return countCharacters(text);
 }
 
 /**
@@ -22792,19 +22857,17 @@ export function countHeadlineVisibleCharacters(
     const s = sanitizeHeadlineForLengthCounting(text);
     return s.length;
   }
-  return countHeadlineGraphemes(text);
+  return countCharacters(text);
 }
 
 /**
- * Validates a full set of 5 headline options against the mandatory editorial tiers:
- * Tier 1: 80–110 characters
- * Tier 2: 100–130 characters
- * Tier 3: 125–150 characters
- * Tier 4: 130–160 characters
- * Tier 5: 150–200 characters
- * Mandatory: No full stop (. or ।) at ending, no ellipsis (...), no dangling endings.
+ * Validates a full set of 5 headline options against the mandatory editorial tiers,
+ * blocked media brands, sentence endings, and duplicate checks.
  */
-export function validateHeadlines5Tier(headlines: string[]): {
+export function validateHeadlines5Tier(
+  headlines: string[],
+  sourcePublisherNames: string[] = []
+): {
   valid: boolean;
   results: Array<{
     tier: number;
@@ -22817,34 +22880,18 @@ export function validateHeadlines5Tier(headlines: string[]): {
   }>;
   invalidTiers: number[];
 } {
+  const batch = validateHeadlinesBatch(headlines, sourcePublisherNames);
   const safe = Array.isArray(headlines) ? headlines.slice(0, 5) : [];
   const results = [];
-  const invalidTiers = [];
+  const invalidTiers: number[] = [];
 
   for (let i = 0; i < 5; i++) {
     const tier = HEADLINE_5_TIER_RANGES[i];
     const text = safe[i] || '';
-    const charCount = countHeadlineVisibleCharacters(text);
-    const trimmed = text.replace(/\[\/?(?:yellow|highlight)\]/gi, '').trim();
-    let valid = true;
-    let reason: string | undefined;
-
-    if (!text || charCount < tier.min) {
-      valid = false;
-      reason = `विकल्प ${i + 1} की वर्ण संख्या (${charCount}) न्यूनतम सीमा (${tier.min}) से कम है।`;
-    } else if (charCount > tier.max) {
-      valid = false;
-      reason = `विकल्प ${i + 1} की वर्ण संख्या (${charCount}) अधिकतम सीमा (${tier.max}) से अधिक है।`;
-    } else if (/[।\.]$/.test(trimmed)) {
-      valid = false;
-      reason = 'हेडलाइन के अंत में पूर्णविराम (. या ।) नहीं होना चाहिए।';
-    } else if (/\.\.\.$/.test(trimmed)) {
-      valid = false;
-      reason = 'हेडलाइन के अंत में इलिप्सिस (...) वर्जित है।';
-    } else if (/(?:\s+(?:ने|के|का|को|में|पर|से|कि|और|या|एवं|व|कहा\s+कि))$/u.test(trimmed)) {
-      valid = false;
-      reason = 'हेडलाइन का अंत अर्थपूर्ण वाक्य पर होना चाहिए, किसी अधूरे परसर्ग पर नहीं।';
-    }
+    const res = batch.results[i];
+    const charCount = res?.characterCount ?? countCharacters(text);
+    const valid = res ? res.valid : false;
+    let reason = res?.errors?.length ? res.errors.join('; ') : undefined;
 
     if (!valid) invalidTiers.push(i + 1);
 
@@ -22860,7 +22907,7 @@ export function validateHeadlines5Tier(headlines: string[]): {
   }
 
   return {
-    valid: invalidTiers.length === 0 && results.length === 5,
+    valid: batch.valid,
     results,
     invalidTiers,
   };
@@ -23382,6 +23429,8 @@ ${extracted.author ? `Author: ${extracted.author}\n` : ""}Content: ${extracted.c
       description: extracted.description,
       content: extracted.content ? extracted.content.slice(0, 6000) : "",
       author: extracted.author,
+      publisherName: extracted.publisherName,
+      sourcePublisherNames: extracted.sourcePublisherNames || [],
       imageUrl: extracted.images?.[0],
       linkUrl: extracted.sourceUrl,
       images: extracted.images,
@@ -23436,6 +23485,8 @@ app.post("/api/scrape-news-article", async (req, res) => {
       description: meta?.description || "",
       content: meta?.content || meta?.description || "",
       author: meta?.author || "",
+      publisherName: meta?.publisherName || "",
+      sourcePublisherNames: meta?.sourcePublisherNames || [],
       photos: meta?.images || [],
       sourceUrl: rawUrl,
       extractionStatus: scraped.extractionStatus,
@@ -24004,6 +24055,20 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           return true;
         });
 
+      // Derive effective source publisher names
+      const domainPublishers = extractPublisherFromDomain(rawLink || linkUrl || "");
+      const effectiveSourcePublisherNames = Array.from(
+        new Set([
+          ...(Array.isArray(req.body.sourcePublisherNames) ? req.body.sourcePublisherNames : []),
+          ...(extractedArticleMeta?.sourcePublisherNames || []),
+          ...(extractedArticleMeta?.publisherName ? [extractedArticleMeta.publisherName] : []),
+          ...(req.body.sourceChannel ? [req.body.sourceChannel] : []),
+          ...(req.body.channelNameHi ? [req.body.channelNameHi] : []),
+          ...(req.body.channelNameEn ? [req.body.channelNameEn] : []),
+          ...domainPublishers,
+        ].filter(Boolean))
+      );
+
       // Guarantee exactly 5 distinct, balanced headline options:
       // Option 1: Breaking / High-Impact Style
       // Option 2: Factual / Comprehensive Style
@@ -24016,9 +24081,11 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
           .replace(/[।\.\,\!\?\:\-]+$/g, "")
           .trim();
         if (!s || s.length < 15) return;
+        if (hasBlockedMediaBrand(s, effectiveSourcePublisherNames)) return;
+        if (hasInvalidHeadlineEnding(s)) return;
         if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|विषय:)/u.test(s)) return;
         if (cleanOptions.includes(s)) return;
-        const isDuplicate = cleanOptions.some(existing => calculateHeadlineSimilarityInternal(existing, s) >= 0.88);
+        const isDuplicate = cleanOptions.some(existing => normalizeText(existing) === normalizeText(s) || checkHeadlineSimilarity(existing, s) >= 0.85);
         if (!isDuplicate) {
           cleanOptions.push(s);
         }
@@ -24049,23 +24116,21 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         cleanOptions,
         factSentences,
         primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
-        parsedData.location
+        parsedData.location,
+        effectiveSourcePublisherNames
       );
       if (Array.isArray(parsedData.headlineOptions)) {
         parsedData.headlineOptions = parsedData.headlineOptions.slice(0, 5);
       }
-      if (parsedData.headlineOptions.length > 0) {
-        parsedData.headline = parsedData.headlineOptions[0];
-      }
 
-      // Validate all 5 headline options against 5-tier mandatory character bounds
-      let validationReport = validateHeadlines5Tier(parsedData.headlineOptions);
+      // Validate all 5 headline options against 5-tier mandatory bounds and editorial rules
+      let validationReport = validateHeadlinesBatch(parsedData.headlineOptions, effectiveSourcePublisherNames);
 
-      // Bounded retry if any tier exceeds 200 chars and we used Gemini/OpenAI
+      // Bounded retry if any tier violates rules and we used Gemini/OpenAI
       if (!validationReport.valid && actualProvider !== "local" && actualProvider !== "local-fallback" && parsedData.headlineOptions.length > 0) {
         try {
-          const retryPrompt = `निम्नलिखित समाचार हेडलाइंस में से कुछ विकल्प अपनी अधिकतम वर्ण-सीमा (200 अक्षर) का पालन नहीं कर रहे हैं:
-${validationReport.results.map((r: any) => `विकल्प ${r.tier} (${r.min}-${r.max} अक्षर, वर्तमान: ${r.charCount} अक्षर): "${r.text}" ${r.valid ? '[मान्य]' : `[त्रुटि: ${r.reason}]`}`).join('\n')}
+          const retryPrompt = `निम्नलिखित समाचार हेडलाइंस में से कुछ विकल्प अपनी अधिकतम सीमा या संपादकीय नियमों का पालन नहीं कर रहे हैं:
+${validationReport.results.map((r: any, idx: number) => `विकल्प ${idx + 1} (लक्ष्य: ${HEADLINE_TARGETS[idx]?.min}-${HEADLINE_TARGETS[idx]?.max} अक्षर, वर्तमान: ${r.characterCount} अक्षर): "${parsedData.headlineOptions[idx]}" ${r.valid ? '[मान्य]' : `[त्रुटि: ${r.errors.join(', ')}]`}`).join('\n')}
 
 मूल समाचार तथ्य:
 """
@@ -24073,7 +24138,7 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
 """
 
 कृपया उपरोक्त 5 हेडलाइन विकल्पों को संशोधित कर ठीक 5 विकल्पों का वैध JSON Object लौटाएं।
-प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 अक्षर) के भीतर होना चाहिए, बिना किसी कृत्रिम वाक्य के और बिना पूर्णविराम के:
+प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा (विकल्प 1: 80-110, विकल्प 2: 100-130, विकल्प 3: 125-150, विकल्प 4: 130-160, विकल्प 5: 150-200 अक्षर) के भीतर होना चाहिए, बिना किसी कृत्रिम वाक्य के, बिना किसी मीडिया/चैनल नाम के और बिना पूर्णविराम के:
 {"headlineOptions": ["विकल्प 1 (80-110)", "विकल्प 2 (100-130)", "विकल्प 3 (125-150)", "विकल्प 4 (130-160)", "विकल्प 5 (150-200)"]}`;
 
           const retryAiResult = await executeGeminiWithKeyPool(async (ai) => {
@@ -24105,14 +24170,12 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
               retryAiResult.headlineOptions,
               factSentences,
               primarySourceHeadline || parsedData.headline || "मुख्य समाचार",
-              parsedData.location
+              parsedData.location,
+              effectiveSourcePublisherNames
             );
-            const reValidation = validateHeadlines5Tier(reFitted);
-            if (reValidation.valid || reValidation.invalidTiers.length < validationReport.invalidTiers.length) {
+            const reValidation = validateHeadlinesBatch(reFitted, effectiveSourcePublisherNames);
+            if (reValidation.valid) {
               parsedData.headlineOptions = reFitted;
-              if (parsedData.headlineOptions[0]) {
-                parsedData.headline = parsedData.headlineOptions[0];
-              }
               validationReport = reValidation;
             }
           }
@@ -24120,6 +24183,32 @@ ${(primarySourceHeadline || parsedData.headline || "")}\n${factSentences.slice(0
           console.warn("[News AI] Bounded retry for headline bounds notice:", retryErr?.message?.slice(0, 80));
         }
       }
+
+      // Mandatory Fact-Sheet Regeneration for any remaining invalid or duplicate options
+      if (!validationReport.valid) {
+        for (let i = 0; i < 5; i++) {
+          const optRes = validationReport.results[i];
+          const isDup = validationReport.duplicates.includes(i);
+          if (!optRes || !optRes.valid || isDup) {
+            const existing = parsedData.headlineOptions.filter((_h: string, idx: number) => idx !== i);
+            parsedData.headlineOptions[i] = regenerateHeadlineOptionFromFacts(
+              i,
+              factSentences,
+              primarySourceHeadline || parsedData.headline || "",
+              parsedData.location,
+              existing,
+              effectiveSourcePublisherNames
+            );
+          }
+        }
+        validationReport = validateHeadlinesBatch(parsedData.headlineOptions, effectiveSourcePublisherNames);
+      }
+
+      if (parsedData.headlineOptions.length > 0) {
+        parsedData.headline = parsedData.headlineOptions[0];
+      }
+      parsedData.sourcePublisherNames = effectiveSourcePublisherNames;
+      parsedData.publisherName = effectiveSourcePublisherNames[0];
 
       parsedData.canonicalContext = {
         sourceUrl: rawLink || linkUrl || "",
@@ -24616,6 +24705,13 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     let sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
     let candidateSourceUrl = String(canonicalContext.sourceUrl || req.body.sourceUrl || "").trim();
 
+    const effectiveSourcePublisherNames: string[] = Array.from(new Set([
+      ...(Array.isArray(req.body.sourcePublisherNames) ? req.body.sourcePublisherNames : []),
+      ...(Array.isArray(canonicalContext.sourcePublisherNames) ? canonicalContext.sourcePublisherNames : []),
+      String(req.body.publisherName || canonicalContext.publisherName || "").trim(),
+      ...(extractPublisherFromDomain(candidateSourceUrl) ? [extractPublisherFromDomain(candidateSourceUrl)] : []),
+    ])).filter(Boolean);
+
     // Enhanced context retrieval fallback for pre-published and normal news
     if (!sourceText || sourceText.trim().length < 50) {
       const targetNewsId = draftId || req.body.newsId || canonicalContext.newsId || canonicalContext.sourceNewsId || "";
@@ -24681,14 +24777,16 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       let s = formatAsJournalisticHeadline(cleanHeadlineText(String(candidate || ""))).replace(/[।\\.\\,\\!\\?\\:\\-]+$/g, "").trim();
       if (!s || s.length < 15) return;
       if (/(?:वेबसाइट|प्रकाशित|से संबंधित|मुख्य संदर्भ|विषय:)/u.test(s)) return;
+      if (hasBlockedMediaBrand(s, effectiveSourcePublisherNames)) return;
+      if (hasInvalidHeadlineEnding(s)) return;
       if (cleanOptions.includes(s)) return;
       // Strict exclusion of all previous headlines
       for (const excl of excludeTitles) {
-        if (s === excl || calculateHeadlineSimilarityInternal(s, excl) >= 0.90) {
+        if (s === excl || calculateHeadlineSimilarityInternal(s, excl) >= 0.85 || checkHeadlineSimilarity(s, excl) >= 0.85) {
           return;
         }
       }
-      const isDup = cleanOptions.some(existing => calculateHeadlineSimilarityInternal(existing, s) >= 0.90);
+      const isDup = cleanOptions.some(existing => calculateHeadlineSimilarityInternal(existing, s) >= 0.85 || checkHeadlineSimilarity(existing, s) >= 0.85);
       if (!isDup) {
         cleanOptions.push(s);
       }
@@ -24850,12 +24948,46 @@ JSON Output Schema:
       });
     }
 
-    const finalOptions = fitHeadlinesTo5TierRanges(
+    const fittedOptions = fitHeadlinesTo5TierRanges(
       cleanOptions,
       articleSentences,
       sourceTitle || cleanOptions[0] || "",
-      sourceLoc
+      sourceLoc,
+      effectiveSourcePublisherNames
     );
+
+    // Validate each headline against target ranges, blocked brands, invalid endings & duplicates
+    let validatedRegenBatch = validateHeadlinesBatch(fittedOptions, effectiveSourcePublisherNames);
+    const verifiedRegenHeadlines = [...validatedRegenBatch.sanitizedHeadlines];
+
+    // For any tier that failed validation or is a duplicate against previous or current batch, regenerate from verified facts
+    const verifiedFactSentences = articleSentences.length > 0
+      ? articleSentences
+      : [sourceTitle, sourceText].filter(Boolean);
+
+    for (let i = 0; i < HEADLINE_TARGETS.length; i++) {
+      const res = validatedRegenBatch.results[i];
+      let needsRegen = !res.valid;
+      if (!needsRegen && rawPrev.some((prevH: string) => checkHeadlineSimilarity(verifiedRegenHeadlines[i], String(prevH)) >= 0.85)) {
+        needsRegen = true;
+      }
+
+      if (needsRegen) {
+        const regenerated = regenerateHeadlineOptionFromFacts(
+          verifiedFactSentences,
+          sourceLoc,
+          i,
+          sourceTitle,
+          effectiveSourcePublisherNames
+        );
+        if (regenerated) {
+          verifiedRegenHeadlines[i] = regenerated;
+        }
+      }
+    }
+
+    validatedRegenBatch = validateHeadlinesBatch(verifiedRegenHeadlines, effectiveSourcePublisherNames);
+    const finalOptions = validatedRegenBatch.sanitizedHeadlines;
 
     // Atomic coin billing upon successful generation per Part 8 and Phase 3.0B-S distributed lock
     let coinsDeducted = 0;
@@ -24938,15 +25070,20 @@ JSON Output Schema:
       draftId: draftId || undefined,
       regenerationUsed: isNowMaxed,
       wallet: walletKey && rDb.wallets[walletKey] ? rDb.wallets[walletKey] : undefined,
+      sourcePublisherNames: effectiveSourcePublisherNames,
+      headlineValidation: validatedRegenBatch,
       canonicalContext: {
         ...canonicalContext,
         draftId: draftId || undefined,
+        sourcePublisherNames: effectiveSourcePublisherNames,
+        headlineValidation: validatedRegenBatch,
         lastRegeneratedAt: new Date().toISOString(),
       },
       diagnostics: {
         count: finalOptions.length,
         totalCount: totalHeadlineOptions.length,
         graduatedWordCounts: finalOptions.map((h: string) => h.split(/\s+/).length),
+        validation: validatedRegenBatch.summary,
       }
     };
 

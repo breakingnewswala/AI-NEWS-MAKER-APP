@@ -1,12 +1,15 @@
 // Client-side resilient news scraper for URL/Link processing in AI News Tools
 // Works seamlessly in static deployments (GitHub Pages, Firebase Hosting, Vercel)
 // and handles news sites via multi-tier edge reader and CORS proxy fallbacks.
+import { extractPublisherFromDomain } from './headlineValidator';
 
 export interface ScrapedNewsArticle {
   title: string;
   description: string;
   content: string;
   author?: string;
+  publisherName?: string;
+  sourcePublisherNames?: string[];
   images: string[];
   sourceUrl: string;
   location?: string;
@@ -113,12 +116,15 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
         const hasHindiInTitle = title && /[\u0900-\u097F]/.test(title);
         const hasHindiInBody = cleanedBody.length >= 60 && /[\u0900-\u097F]/.test(cleanedBody);
 
+        const domainPublishers = extractPublisherFromDomain(sourceUrl);
         if (hasHindiInTitle || hasHindiInBody) {
           return {
             title: title || 'ताज़ा समाचार घटनाक्रम',
             description,
             content: cleanedBody.slice(0, 6000),
             author,
+            publisherName: domainPublishers[0],
+            sourcePublisherNames: domainPublishers,
             images: images.slice(0, 6),
             sourceUrl,
           };
@@ -206,12 +212,21 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
         const hasHindiInTitle = title && /[\u0900-\u097F]/.test(title);
         const hasHindiInBody = content.length >= 60 && /[\u0900-\u097F]/.test(content);
 
+        const domainPublishers = extractPublisherFromDomain(normalized);
+        const metaPublisher =
+          doc.querySelector('meta[property="og:site_name"]')?.getAttribute('content') ||
+          doc.querySelector('meta[name="publisher"]')?.getAttribute('content') ||
+          '';
+        const sourcePublisherNames = Array.from(new Set([metaPublisher, ...domainPublishers].filter(Boolean)));
+
         if (hasHindiInTitle || hasHindiInBody) {
           return {
             title: title || 'ताज़ा समाचार',
             description: description.slice(0, 320),
             content: content || description,
             author: metaAuthor ? metaAuthor.trim() : undefined,
+            publisherName: metaPublisher || domainPublishers[0],
+            sourcePublisherNames,
             images: images.slice(0, 6),
             sourceUrl: normalized,
           };

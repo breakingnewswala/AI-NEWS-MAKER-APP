@@ -14,6 +14,14 @@ import {
   BYLINE_REGEX,
   stripNewspaperBylines,
 } from './speakerUtils';
+import {
+  countCharacters,
+  hasBlockedMediaBrand,
+  hasInvalidHeadlineEnding,
+  validateHeadline,
+  validateHeadlinesBatch,
+  extractPublisherFromDomain,
+} from './headlineValidator';
 import { TemplateConfig, getGraphicTemplateConfig } from './graphicTemplatesRegistry';
 
 export type HeadlineTemplateMeta = Partial<TemplateConfig> | {
@@ -241,8 +249,18 @@ export function processNewsLocally(
   // 5. Build EXACTLY 5 Distinct Journalistic Headlines (Strict 5 Tiered Maximum Limits)
   const rawBaseTitle = cleanHeadlineText(stripNewspaperBylines(extractedTitle)) || (extractedDesc ? cleanHeadlineText(stripNewspaperBylines(extractedDesc).slice(0, 70)) : 'महत्वपूर्ण समाचार');
 
+  const domainPublishers = extractPublisherFromDomain(targetUrl || '');
+  const sourcePublisherNames = Array.from(new Set([...domainPublishers].filter(Boolean)));
+
   const rawOptions = generate5JournalisticHeadlines(rawBaseTitle, allSentences, detectedLocation);
-  const headlineOptions = fitHeadlinesTo5TierRanges(rawOptions, allSentences, rawBaseTitle, detectedLocation);
+  const headlineOptions = fitHeadlinesTo5TierRanges(
+    rawOptions,
+    allSentences,
+    rawBaseTitle,
+    detectedLocation,
+    sourcePublisherNames
+  );
+  const headlineValidation = validateHeadlinesBatch(headlineOptions, sourcePublisherNames);
   const headline = headlineOptions[0] || 'मुख्य समाचार';
 
   // Pick highlight words: numbers, quoted words or entities
@@ -316,6 +334,9 @@ export function processNewsLocally(
     isAiGeneratedPhoto: false,
     speakerName: '',
     speakerTitle: '',
+    sourcePublisherNames,
+    publisherName: sourcePublisherNames[0],
+    headlineValidation,
     isLocalFallback: true,
   };
 }

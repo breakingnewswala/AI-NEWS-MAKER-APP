@@ -124,6 +124,9 @@ export interface NewsCardData {
   headlineOptions?: string[];
   regenerationUsed?: boolean;
   regeneratedHeadlines?: string[];
+  sourcePublisherNames?: string[];
+  publisherName?: string;
+  headlineValidation?: any;
   originalHeadline?: string;
   subHeadline?: string;
   customScript?: string;
@@ -398,6 +401,9 @@ export interface AIAnalysisResult {
   hasPerson?: boolean;
   description?: string;
   isAiGeneratedPhoto?: boolean;
+  sourcePublisherNames?: string[];
+  publisherName?: string;
+  headlineValidation?: any;
   pickedImages?: {
     main?: string;
     second?: string;

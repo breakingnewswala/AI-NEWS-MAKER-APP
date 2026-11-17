@@ -109,6 +109,10 @@ import {
   setActiveHeaderPng,
 } from '../lib/headerUtils';
 import {
+  countCharacters,
+  validateGeneralHeadline,
+} from '../lib/headlineValidator';
+import {
   extractLeaderFromHeadline,
   getEffectiveSpeaker,
   stripAllUrlsAndHyperlinks,
@@ -2481,19 +2485,25 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <label className="text-xs text-neutral-400 font-medium">
               हेडलाइन लिखें:
             </label>
-            <VoiceInputButton
-              onTranscript={(transcript) => {
-                const current = card.headline ? `${card.headline} ${transcript}` : transcript;
-                onChange({
-                  headline: current,
-                  formattedHeadline: current,
-                });
-              }}
-              title="बोलकर हेडलाइन लिखें (Voice Typing)"
-            />
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-yellow-400 font-mono bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
+                {countCharacters((card.headline || '').replace(/\r?\n/g, ' '))} / 200 अक्षर
+              </span>
+              <VoiceInputButton
+                onTranscript={(transcript) => {
+                  const current = card.headline ? `${card.headline} ${transcript}` : transcript;
+                  onChange({
+                    headline: current,
+                    formattedHeadline: current,
+                  });
+                }}
+                title="बोलकर हेडलाइन लिखें (Voice Typing)"
+              />
+            </div>
           </div>
           <textarea
             rows={3}
+            maxLength={200}
             value={card.headline}
             onChange={(e) => {
               const newHeadline = e.target.value;
@@ -2505,6 +2515,30 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             placeholder="यहाँ अपनी मुख्य खबर की हेडलाइन दर्ज करें (उदा. कृपया स्टेप 5 में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...)"
             className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-3 text-base text-white font-['Baloo_2'] focus:border-yellow-400 focus:outline-none leading-relaxed"
           />
+          {/* Live Editorial Validation Warning Banner */}
+          {(() => {
+            const currentHeadline = (card.headline || '').replace(/\r?\n/g, ' ').trim();
+            if (!currentHeadline) return null;
+            const pubList = [
+              ...(card.sourcePublisherNames || []),
+              card.publisherName || ''
+            ].filter(Boolean);
+            const valRes = validateGeneralHeadline(currentHeadline, pubList, 200);
+            if (valRes.valid) return null;
+            return (
+              <div className="mt-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-start gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <span className="font-bold text-amber-200">संपादकीय गुणवत्ता चेतावनी (Editorial Warning):</span>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-neutral-300">
+                    {valRes.errors.map((err, errIdx) => (
+                      <li key={errIdx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            );
+          })()}
           <p className="text-[10px] text-neutral-400 mt-1">
             💡 <b>सुझाव:</b> हेडलाइन को 3 लाइनों में करने के लिए कीबोर्ड पर <b>Enter</b> दबाकर लाइन तोड़ सकते हैं, या ऊपर <b>'3 लाइनों में बांटें'</b> बटन पर क्लिक करें। माइक बटन से बोलकर भी टाइप कर सकते हैं।
           </p>

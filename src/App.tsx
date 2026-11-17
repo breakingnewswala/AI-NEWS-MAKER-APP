@@ -31,6 +31,7 @@ import { UpdateNotificationBanner } from './components/UpdateNotificationBanner'
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
 import { validateCardBeforeDownload } from './lib/canonicalLayoutEngine';
+import { validateGeneralHeadline } from './lib/headlineValidator';
 import {
   extractLeaderFromHeadline,
   generate5BalancedHeadlineOptions,
@@ -2824,6 +2825,22 @@ export default function App() {
       showToast('⚠️ आपका 7-दिन का फ्री ट्रायल समाप्त हो चुका है। कार्ड डाउनलोड करने के लिए कृपया मेंबरशिप प्लान चुनें।');
       setCurrentTab('profile');
       return;
+    }
+
+    // Validate headline quality and editorial compliance
+    const currentHeadline = (card.headline || '').replace(/\r?\n/g, ' ').trim();
+    if (currentHeadline) {
+      const pubList = [
+        ...(card.sourcePublisherNames || []),
+        card.publisherName || ''
+      ].filter(Boolean);
+      const valRes = validateGeneralHeadline(currentHeadline, pubList, 200);
+      if (!valRes.valid) {
+        const warningMsg = `⚠️ संपादकीय चेतावनी:\n${valRes.errors.join('\n')}\n\nक्या आप फिर भी यह ग्राफिक डाउनलोड करना चाहते हैं?`;
+        if (typeof window !== 'undefined' && window.confirm && !window.confirm(warningMsg)) {
+          return;
+        }
+      }
     }
     // Verify entitlement with server (pre-flight check, checkOnly: true)
     let preflightToken = '';

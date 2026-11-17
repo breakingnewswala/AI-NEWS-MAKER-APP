@@ -1,5 +1,36 @@
 // Helper utilities to detect and extract leader names and designations from Hindi news headlines
 import type { NewsCardData } from '../types';
+import {
+  HEADLINE_TARGETS,
+  BLOCKED_MEDIA_BRANDS,
+  normalizeText,
+  countCharacters,
+  hasBlockedMediaBrand,
+  hasInvalidHeadlineEnding,
+  validateHeadline,
+  validateGeneralHeadline,
+  checkHeadlineSimilarity,
+  validateHeadlinesBatch,
+  regenerateHeadlineOptionFromFacts,
+  extractPublisherFromDomain,
+  cleanCandidateClause,
+} from './headlineValidator';
+
+export {
+  HEADLINE_TARGETS,
+  BLOCKED_MEDIA_BRANDS,
+  normalizeText,
+  countCharacters,
+  hasBlockedMediaBrand,
+  hasInvalidHeadlineEnding,
+  validateHeadline,
+  validateGeneralHeadline,
+  checkHeadlineSimilarity,
+  validateHeadlinesBatch,
+  regenerateHeadlineOptionFromFacts,
+  extractPublisherFromDomain,
+  cleanCandidateClause,
+};
 
 /**
  * Canonical Headline Text Normalizer:
@@ -1085,12 +1116,7 @@ export function sanitizeHeadlineForLengthCounting(text: string): string {
  * accurately combining consonants, virama, matras, anusvara, and nukta.
  */
 export function countHeadlineGraphemes(text: string): number {
-  const s = sanitizeHeadlineForLengthCounting(text);
-  if (!s) return 0;
-  if (hindiGraphemeSegmenter) {
-    return Array.from(hindiGraphemeSegmenter.segment(s)).length;
-  }
-  return Array.from(s).length;
+  return countCharacters(text);
 }
 
 /**
@@ -1107,13 +1133,17 @@ export function countHeadlineVisibleCharacters(
     const s = sanitizeHeadlineForLengthCounting(text);
     return s.length;
   }
-  return countHeadlineGraphemes(text);
+  return countCharacters(text);
 }
 
 /**
- * Validates a full set of 5 headline options against mandatory graduated character limits.
+ * Validates a full set of 5 headline options against mandatory graduated character limits,
+ * blocked media brands, sentence endings, and duplicates.
  */
-export function validateHeadlines5Tier(headlines: string[]): {
+export function validateHeadlines5Tier(
+  headlines: string[],
+  sourcePublisherNames: string[] = []
+): {
   valid: boolean;
   results: Array<{
     tier: number;
@@ -1126,37 +1156,18 @@ export function validateHeadlines5Tier(headlines: string[]): {
   }>;
   invalidTiers: number[];
 } {
+  const batch = validateHeadlinesBatch(headlines, sourcePublisherNames);
   const safe = Array.isArray(headlines) ? headlines.slice(0, 5) : [];
   const results = [];
-  const invalidTiers = [];
+  const invalidTiers: number[] = [];
 
   for (let i = 0; i < 5; i++) {
     const tier = HEADLINE_5_TIER_RANGES[i];
     const text = safe[i] || '';
-    const charCount = countHeadlineVisibleCharacters(text);
-    const trimmed = text.replace(/\[\/?(?:yellow|highlight)\]/gi, '').trim();
-    let valid = true;
-    let reason: string | undefined;
-
-    if (!text) {
-      valid = false;
-      reason = 'हेडलाइन खाली है।';
-    } else if (charCount < tier.min) {
-      valid = false;
-      reason = `वर्ण संख्या (${charCount}) न्यूनतम सीमा (${tier.min}) से कम है।`;
-    } else if (charCount > tier.max) {
-      valid = false;
-      reason = `वर्ण संख्या (${charCount}) अधिकतम सीमा (${tier.max}) से अधिक है।`;
-    } else if (/[।\.]$/.test(trimmed)) {
-      valid = false;
-      reason = 'हेडलाइन के अंत में पूर्णविराम (. या ।) नहीं होना चाहिए।';
-    } else {
-      const danglingCheck = /(?:\s+(?:ने|के|की|का|को|में|पर|से|कि|और|या|एवं|व|तक|भी|तो|ही|हुए|गया|गई|हुई|जारी|कहा\s+कि|बताया\s+कि|लेकर|चलते))$/u;
-      if (danglingCheck.test(trimmed)) {
-        valid = false;
-        reason = 'हेडलाइन का अंत अधूरा है (अधूरे विभक्ति, संयोजक या क्रिया पर समाप्त)।';
-      }
-    }
+    const res = batch.results[i];
+    const charCount = res?.characterCount ?? countCharacters(text);
+    const valid = res ? res.valid : false;
+    let reason = res?.errors?.length ? res.errors.join('; ') : undefined;
 
     if (!valid) invalidTiers.push(i + 1);
 
@@ -1172,7 +1183,7 @@ export function validateHeadlines5Tier(headlines: string[]): {
   }
 
   return {
-    valid: invalidTiers.length === 0 && results.length === 5,
+    valid: batch.valid,
     results,
     invalidTiers,
   };
@@ -1652,7 +1663,8 @@ export function fitHeadlinesTo5TierRanges(
   headlines: string[],
   contextOrBase: any = '',
   baseOrContext: any = '',
-  location: string = ''
+  location: string = '',
+  sourcePublisherNames: string[] = []
 ): string[] {
   const safeHeadlines: string[] = [];
   const rawArray = Array.isArray(headlines) ? headlines : [headlines];
@@ -1660,7 +1672,9 @@ export function fitHeadlinesTo5TierRanges(
     if (typeof h !== 'string') continue;
     const clean = sanitizeHeadlineClean(h);
     if (!clean) continue;
-    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarity(existing, clean) >= 0.88);
+    if (hasBlockedMediaBrand(clean, sourcePublisherNames)) continue;
+    if (hasInvalidHeadlineEnding(clean)) continue;
+    const isDup = safeHeadlines.some((existing) => existing === clean || checkHeadlineSimilarity(existing, clean) >= 0.85);
     if (!isDup) {
       safeHeadlines.push(clean);
     }
@@ -1680,72 +1694,53 @@ export function fitHeadlinesTo5TierRanges(
   const factsList = rawSources
     .flatMap((f: string) => f.split(/[।\n\.\r]+/))
     .map((s: string) => sanitizeHeadlineClean(s))
-    .filter((s: string) => s.length >= 12);
+    .filter((s: string) => s.length >= 12 && !hasBlockedMediaBrand(s, sourcePublisherNames) && !hasInvalidHeadlineEnding(s));
 
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5 && baseText) {
     const supp = generate5BalancedHeadlineOptions(baseText, factsList, location);
     for (const cand of supp) {
       if (workingHeadlines.length >= 5) break;
-      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.95);
+      if (hasBlockedMediaBrand(cand, sourcePublisherNames) || hasInvalidHeadlineEnding(cand)) continue;
+      const isDup = workingHeadlines.some((existing) => existing === cand || checkHeadlineSimilarity(existing, cand) >= 0.85);
       if (!isDup) {
         workingHeadlines.push(cand);
       }
     }
   }
 
-  // Sort workingHeadlines by visible character count ascending so Option 1..5 progress naturally from shortest to longest
-  workingHeadlines.sort((a, b) => countHeadlineVisibleCharacters(a) - countHeadlineVisibleCharacters(b));
+  workingHeadlines.sort((a, b) => countCharacters(a) - countCharacters(b));
 
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `विकल्प ${i + 1}` };
-    const cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || '';
-    if (!cand) continue;
+    let cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || '';
 
-    // Fit candidate to this specific tier range
-    let fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factsList);
-    fitted = stripDanglingHeadlineEndings(fitted);
+    // Check if cand is duplicate of an existing item in result
+    let isDup = !cand || result.includes(cand) || result.some((ex) => checkHeadlineSimilarity(ex, cand) >= 0.85);
+    let val = validateHeadline(cand, i, sourcePublisherNames);
 
-    // If duplicate of an earlier option or too similar, try alternate candidates from workingHeadlines or expand uniquely
-    if (result.includes(fitted) || result.some((ex) => calculateHeadlineSimilarity(ex, fitted) >= 0.88)) {
+    if (isDup || !val.valid) {
+      let foundAlt = false;
       for (const alt of workingHeadlines) {
-        if (!alt || alt === cand) continue;
-        const testFit = stripDanglingHeadlineEndings(fitSingleHeadlineToTier(alt, tier.max, tier.min, factsList));
-        if (
-          !result.includes(testFit) &&
-          !result.some((ex) => calculateHeadlineSimilarity(ex, testFit) >= 0.88) &&
-          countHeadlineVisibleCharacters(testFit) >= tier.min &&
-          countHeadlineVisibleCharacters(testFit) <= tier.max
-        ) {
-          fitted = testFit;
+        if (!alt || result.includes(alt) || result.some((ex) => checkHeadlineSimilarity(ex, alt) >= 0.85)) continue;
+        const testVal = validateHeadline(alt, i, sourcePublisherNames);
+        if (testVal.valid) {
+          cand = alt;
+          val = testVal;
+          foundAlt = true;
           break;
         }
       }
+
+      if (!foundAlt || isDup || !val.valid) {
+        cand = regenerateHeadlineOptionFromFacts(i, factsList, baseText, location, result, sourcePublisherNames);
+      }
     }
 
-    // Active diversification fallback if duplicate, outside character bounds, or too similar to existing options
-    const isDupOrSimilar = result.includes(fitted) ||
-      result.some((ex) => calculateHeadlineSimilarity(ex, fitted) >= 0.88);
-    const isOutOfBounds = countHeadlineVisibleCharacters(fitted) < tier.min ||
-      countHeadlineVisibleCharacters(fitted) > tier.max;
-    const isLongBaseNeedingFraming = countHeadlineVisibleCharacters(baseText) > 130 &&
-      workingHeadlines.length <= 1 &&
-      (i === 0 || i === 1 || i === 3 || i === 4);
-
-    if (isDupOrSimilar || isOutOfBounds || isLongBaseNeedingFraming) {
-      fitted = diversifyHeadlineToTier(cand || baseText, i, tier, location, result);
-    }
-
-    // Strict editorial normalization: state spaces and trailing punctuation
-    fitted = stripDanglingHeadlineEndings(fitted)
-      .replace(/मध्यप्रदेश/g, 'मध्य प्रदेश')
-      .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश')
-      .trim();
-    fitted = stripDanglingHeadlineEndings(fitted);
-
-    result.push(fitted);
+    // Clean formatting and state spaces
+    cand = cleanCandidateClause(cand);
+    result.push(cand);
   }
 
   return result.slice(0, 5);

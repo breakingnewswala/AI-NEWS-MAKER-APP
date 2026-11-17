@@ -24,6 +24,13 @@ import { formatHeadlineWithKeywords } from './NewsCommandModal';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
+import {
+  countCharacters,
+  validateHeadline,
+  validateGeneralHeadline,
+  HEADLINE_TARGETS,
+  BLOCKED_MEDIA_BRANDS,
+} from '../lib/headlineValidator';
 import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges, formatCaptionVariants, countHeadlineVisibleCharacters, preserveHeadlineStateOnRegeneration } from '../lib/speakerUtils';
 import { getRegenCoinCostForPlan, FIVE_HEADLINE_TIERS } from '../lib/aiCoreRules';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
@@ -916,6 +923,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           headline_line_count: targetMaxLines,
           headline_max_lines: targetMaxLines,
           headline_area: tplConfig.headline_area,
+          publisherName: extraData?.publisherName || (card as any).publisherName || autoFillNews?.publisherName || undefined,
+          sourcePublisherNames: extraData?.sourcePublisherNames || (card as any).sourcePublisherNames || autoFillNews?.sourcePublisherNames || undefined,
         }),
         signal: controller.signal,
       });
@@ -989,7 +998,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
         .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const finalOpts = fitHeadlinesTo5TierRanges(opts, factSentences, baseTitle, sourceLoc);
+      const effectivePubNames = res.sourcePublisherNames || extraData?.sourcePublisherNames || (card as any).sourcePublisherNames || autoFillNews?.sourcePublisherNames || [];
+      const finalOpts = fitHeadlinesTo5TierRanges(opts, factSentences, baseTitle, sourceLoc, effectivePubNames);
       setHeadlineOptions(finalOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main || !!extraData?.imageUrl);
@@ -1051,6 +1061,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         headline: finalHeadline,
         formattedHeadline: res.formattedHeadline || finalHeadline,
         headlineOptions: finalOpts,
+        sourcePublisherNames: effectivePubNames,
+        publisherName: res.publisherName || extraData?.publisherName || (card as any).publisherName,
+        headlineValidation: res.headlineValidation,
         regenerationUsed: false,
         regeneratedHeadlines: undefined,
         highlightWords: res.highlightWords || [],
@@ -1236,6 +1249,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           headline_line_count: targetMaxLines,
           headline_max_lines: targetMaxLines,
           headline_area: tplConfig.headline_area,
+          publisherName: (card as any).publisherName || undefined,
+          sourcePublisherNames: (card as any).sourcePublisherNames || undefined,
         }),
         signal: controller.signal,
       });
@@ -1305,7 +1320,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
         .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      const finalOpts = fitHeadlinesTo5TierRanges(rawOpts, factSentences, baseTitle, sourceLoc);
+      const effectivePubNames = res.sourcePublisherNames || (card as any).sourcePublisherNames || [];
+      const finalOpts = fitHeadlinesTo5TierRanges(rawOpts, factSentences, baseTitle, sourceLoc, effectivePubNames);
       setHeadlineOptions(finalOpts);
       setSelectedHeadlineIndex(0);
       setUseWebsitePhoto(!!res.pickedImages?.main);
@@ -1332,6 +1348,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         headline: finalHeadline,
         formattedHeadline: topFormatted || res.formattedHeadline || finalHeadline,
         headlineOptions: finalOpts,
+        sourcePublisherNames: effectivePubNames,
+        publisherName: res.publisherName || (card as any).publisherName,
+        headlineValidation: res.headlineValidation,
         regenerationUsed: false,
         regeneratedHeadlines: undefined,
         highlightWords: topHighlights.length > 0 ? topHighlights : (res.highlightWords || []),
@@ -1498,6 +1517,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         userId: currentUser?.userId || currentUser?.uid || 'reporter-admin-01',
         aiProvider,
         customPrompt,
+        sourcePublisherNames: [
+          ...(Array.isArray(card.sourcePublisherNames) ? card.sourcePublisherNames : []),
+          ...(Array.isArray(result?.sourcePublisherNames) ? result.sourcePublisherNames : []),
+          ...(Array.isArray(activeCtx.sourcePublisherNames) ? activeCtx.sourcePublisherNames : []),
+        ].filter(Boolean),
+        publisherName: card.publisherName || result?.publisherName || activeCtx.publisherName || undefined,
       };
 
       let data: any = null;
@@ -1569,11 +1594,19 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           )
       );
 
+      const effectiveSourcePublisherNames = [
+        ...(Array.isArray(data?.sourcePublisherNames) ? data.sourcePublisherNames : []),
+        ...(Array.isArray(result?.sourcePublisherNames) ? result.sourcePublisherNames : []),
+        ...(Array.isArray(card.sourcePublisherNames) ? card.sourcePublisherNames : []),
+        data?.publisherName || result?.publisherName || card.publisherName || '',
+      ].filter(Boolean);
+
       const fittedNew = fitHeadlinesTo5TierRanges(
         uniqueRawNew.length > 0 ? uniqueRawNew : rawNew,
         articleSentences,
         sourceTitle,
-        sourceLoc
+        sourceLoc,
+        effectiveSourcePublisherNames
       ).slice(0, missingCount);
 
       if (fittedNew.length > 0) {
@@ -1596,6 +1629,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               headlineOptions: preservedState.combinedHeadlines,
               regenerationUsed: preservedState.isMaxReached,
               regeneratedHeadlines: fittedNew,
+              sourcePublisherNames: effectiveSourcePublisherNames,
+              headlineValidation: data?.headlineValidation || result?.headlineValidation,
               canonicalContext: (data && data.canonicalContext) || activeCtx,
             }
           : null;
@@ -1607,6 +1642,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           headline: preservedState.preservedHeadline,
           formattedHeadline: preservedState.preservedFormattedHeadline,
           headlineOptions: preservedState.combinedHeadlines,
+          sourcePublisherNames: effectiveSourcePublisherNames,
+          publisherName: data?.publisherName || result?.publisherName || card.publisherName,
+          headlineValidation: data?.headlineValidation || result?.headlineValidation,
           regenerationUsed: preservedState.isMaxReached,
           regeneratedHeadlines: fittedNew,
         });
@@ -2220,7 +2258,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   const displayText = isSelected && result?.headline ? result.headline : opt;
                   const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                   const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
-                  const charCount = countHeadlineVisibleCharacters(cleanDisplay);
+                  const charCount = countCharacters(cleanDisplay);
                   const tierRule = FIVE_HEADLINE_TIERS[idx % 5];
                   const isCompliant = charCount >= tierRule.min && charCount <= tierRule.max;
                   const isRegeneratedOption = idx >= 5;
@@ -2290,7 +2328,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       .filter(Boolean).length} शब्द
                   </span>
                   <span className="text-neutral-600">|</span>
-                  <span>{countHeadlineVisibleCharacters(result.headline || '')} / 200 अक्षर</span>
+                  <span>{countCharacters((result.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, ''))} / 200 अक्षर</span>
                 </span>
               </div>
               <VoiceInputButton
@@ -2327,6 +2365,31 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               }}
               className="w-full bg-neutral-950 border border-neutral-700 rounded p-2 text-white font-extrabold text-xs sm:text-sm font-['Noto_Sans_Devanagari'] focus:border-yellow-400 focus:outline-none leading-relaxed"
             />
+            {/* Live Editorial Validation Warning Banner */}
+            {(() => {
+              const currentHeadline = (result.headline || '').replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
+              if (!currentHeadline) return null;
+              const pubList = [
+                ...(result.sourcePublisherNames || []),
+                ...(card.sourcePublisherNames || []),
+                result.publisherName || card.publisherName || ''
+              ].filter(Boolean);
+              const valRes = validateGeneralHeadline(currentHeadline, pubList, 200);
+              if (valRes.valid) return null;
+              return (
+                <div className="mt-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-start gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-1">
+                    <span className="font-bold text-amber-200">संपादकीय गुणवत्ता चेतावनी (Editorial Warning):</span>
+                    <ul className="list-disc list-inside space-y-0.5 text-[11px] text-neutral-300">
+                      {valRes.errors.map((err, errIdx) => (
+                        <li key={errIdx}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
 
