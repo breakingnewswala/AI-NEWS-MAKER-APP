@@ -444,21 +444,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   }, [currentUser?.email]);
 
-  // Priority 1: Reconcile orphaned/stale favorite IDs that no longer exist in published news
-  useEffect(() => {
-    if (!combinedPosts || combinedPosts.length === 0 || !userFavorites || userFavorites.size === 0) return;
-    const existingIds = new Set(combinedPosts.map((p) => p.id));
-    const validIds = Array.from(userFavorites).filter((id) => existingIds.has(id));
-    if (validIds.length !== userFavorites.size) {
-      setUserFavorites(new Set(validIds));
-      try {
-        const cleanEmail = (currentUser?.email || '').toLowerCase().trim();
-        const key = cleanEmail ? `ai_news_user_favorites_${cleanEmail}` : 'ai_news_user_favorites_anonymous';
-        localStorage.setItem(key, JSON.stringify(validIds));
-      } catch {}
-    }
-  }, [combinedPosts, currentUser?.email]);
-
   // Periodic checker for Due Reminders
   useEffect(() => {
     const checkDueReminders = () => {
@@ -1838,6 +1823,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   }, [combinedPosts, userFavorites, canModerate, approvedRssIds]);
 
   const favoriteCount = validFavoritePosts.length;
+
+  // Priority 1: Reconcile orphaned/stale favorite IDs that no longer exist in published news
+  useEffect(() => {
+    if (!combinedPosts || combinedPosts.length === 0 || !userFavorites || userFavorites.size === 0) return;
+    const existingIds = new Set(combinedPosts.map((p) => p.id));
+    const validIds = Array.from(userFavorites).filter((id) => existingIds.has(id));
+    if (validIds.length !== userFavorites.size) {
+      setUserFavorites(new Set(validIds));
+      try {
+        const cleanEmail = (currentUser?.email || '').toLowerCase().trim();
+        const key = cleanEmail ? `ai_news_user_favorites_${cleanEmail}` : 'ai_news_user_favorites_anonymous';
+        localStorage.setItem(key, JSON.stringify(validIds));
+      } catch {}
+    }
+  }, [combinedPosts, userFavorites, currentUser?.email]);
 
   // Filter posts from combined feed (Admin Date, Channel, Pending News, Published News, Bonus News & Dynamic Category Filters)
   const filteredPosts = useMemo(() => {

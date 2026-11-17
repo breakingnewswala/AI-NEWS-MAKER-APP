@@ -109,10 +109,17 @@ runTest('HomeScreenWeb: Favorites integrity, News thumbnail fallback, PWA instal
   const homePath = path.join(process.cwd(), 'src', 'components', 'HomeScreenWeb.tsx');
   const homeCode = fs.readFileSync(homePath, 'utf8');
 
-  // Priority 1: Favorites Count
+  // Priority 1: Favorites Count & TDZ Safety
   assert(homeCode.includes('const favoriteCount = validFavoritePosts.length;'), 'favoriteCount must be derived from validFavoritePosts.length');
   assert(homeCode.includes('{favoriteCount > 0 && ('), 'Favorites pill & button must render favoriteCount');
   assert(homeCode.includes('localStorage.setItem(key, JSON.stringify(validIds))'), 'HomeScreenWeb must reconcile orphaned favorite IDs');
+
+  const combinedPostsIdx = homeCode.indexOf('const combinedPosts = useMemo(');
+  const favoriteReconcileIdx = homeCode.indexOf('// Priority 1: Reconcile orphaned/stale favorite IDs');
+  assert(combinedPostsIdx !== -1, 'combinedPosts declaration must exist');
+  assert(favoriteReconcileIdx !== -1, 'Favorite reconciliation effect must exist');
+  assert(combinedPostsIdx < favoriteReconcileIdx, 'TDZ PREVENTION: combinedPosts must be declared before Favorite Reconciliation effect');
+  assert(homeCode.includes('[combinedPosts, userFavorites, currentUser?.email]'), 'Favorite reconciliation effect must include [combinedPosts, userFavorites, currentUser?.email] in dependency array');
 
   // Priority 2: News Thumbnail Fallback
   assert(homeCode.includes('/assets/sample_news_bus.svg'), 'Thumbnail onError must fall back to /assets/sample_news_bus.svg');
@@ -169,6 +176,13 @@ runTest('web_studio Parity: All modified files must be 100% identical to src/', 
     const webContent = fs.readFileSync(webPath, 'utf8');
     assert.strictEqual(rootContent, webContent, `File ${f} must have 100% identical content in web_studio`);
   });
+});
+
+// 9. Full Temporal Dead Zone (TDZ) AST Audit across all critical components
+runTest('Temporal Dead Zone (TDZ) AST Audit: Zero hook dependency ordering violations', () => {
+  const { execSync } = require('child_process');
+  const result = execSync('node tests/ast_tdz_checker.cjs', { encoding: 'utf8' });
+  assert(result.includes('Total issues found: 0'), 'ast_tdz_checker must report 0 issues');
 });
 
 console.log(`\n========================================`);
