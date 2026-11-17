@@ -530,18 +530,40 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           }
         } catch {}
         if (response.status === 401) {
-          clearAuthTokens();
           const isAdminEndpoint = urlStr.includes('/api/admin') || urlStr.includes('/api/master-admin');
           if (isAdminEndpoint) {
+            // Check if active session user actually has admin privileges
+            let isUserAnAdmin = false;
             try {
-              const now = Date.now();
-              if (now - lastAdminAuthEventDispatched > 8000) {
-                lastAdminAuthEventDispatched = now;
-                window.dispatchEvent(new CustomEvent('ai_news_admin_auth_required', { detail: { url: urlStr } }));
+              const raw = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+              if (raw) {
+                const u = JSON.parse(raw);
+                isUserAnAdmin = Boolean(
+                  u.role === 'admin' ||
+                  u.role === 'superadmin' ||
+                  u.email === 'breakingnewswala.com@gmail.com' ||
+                  u.isAdmin
+                );
               }
             } catch {}
+
+            if (isUserAnAdmin) {
+              clearAuthTokens();
+              try {
+                const now = Date.now();
+                if (now - lastAdminAuthEventDispatched > 8000) {
+                  lastAdminAuthEventDispatched = now;
+                  window.dispatchEvent(new CustomEvent('ai_news_admin_auth_required', { detail: { url: urlStr } }));
+                }
+              } catch {}
+            } else {
+              // Non-admin tried to hit an admin endpoint or background admin check ran.
+              // DO NOT clear user's session tokens! DO NOT toast admin auth required!
+              console.warn('[AUTH] Admin endpoint 401 ignored for regular user:', urlStr);
+            }
           } else {
             // For normal reporter/user endpoints, notify session status without triggering false admin auth errors
+            clearAuthTokens();
             try {
               window.dispatchEvent(new CustomEvent('ai_news_session_expired', { detail: { url: urlStr } }));
             } catch {}

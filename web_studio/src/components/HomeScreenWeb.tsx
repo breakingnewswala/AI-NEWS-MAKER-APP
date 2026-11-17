@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Sparkles,
   Flame,
@@ -373,7 +374,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // User Favorites & Reminders (Components 6 & 7)
   const [userFavorites, setUserFavorites] = useState<Set<string>>(() => new Set(getUserFavoritesLocal(currentUser?.email)));
   const [activeReminders, setActiveReminders] = useState<UserReminderItem[]>(() => getUserRemindersLocal(currentUser?.email));
-  const [activeReminderMenuPostId, setActiveReminderMenuPostId] = useState<string | null>(null);
+  const [activeReminderPortal, setActiveReminderPortal] = useState<{ post: NewsFeedPost; x: number; y: number } | null>(null);
+
+  // Overdue / Due Reminders Queue & Centered Modal Dialog
+  const [dueReminderQueue, setDueReminderQueue] = useState<UserReminderItem[]>([]);
+  const [currentDueReminder, setCurrentDueReminder] = useState<UserReminderItem | null>(null);
 
   // News Detail Popup Modal (Phase 15) - Declared at top of state hooks to prevent TDZ
   const [detailModalPost, setDetailModalPost] = useState<NewsFeedPost | null>(null);
@@ -403,11 +408,52 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         })
         .catch(() => {});
     }
-
-    const handleOutsideClick = () => setActiveReminderMenuPostId(null);
-    window.addEventListener('click', handleOutsideClick);
-    return () => window.removeEventListener('click', handleOutsideClick);
   }, [currentUser?.email]);
+
+  // Periodic checker for Due Reminders
+  useEffect(() => {
+    const checkDueReminders = () => {
+      const reminders = getUserRemindersLocal(currentUser?.email);
+      const now = Date.now();
+      const due = reminders.filter((r) => r.status === 'pending' && r.dueAt <= now);
+      if (due.length > 0) {
+        setDueReminderQueue((prev) => {
+          const existingIds = new Set([
+            ...prev.map((i) => i.id),
+            ...(currentDueReminder ? [currentDueReminder.id] : []),
+          ]);
+          const newItems = due.filter((d) => !existingIds.has(d.id));
+          return newItems.length > 0 ? [...prev, ...newItems] : prev;
+        });
+      }
+    };
+
+    checkDueReminders();
+    const interval = setInterval(checkDueReminders, 5000);
+    return () => clearInterval(interval);
+  }, [currentUser?.email, currentDueReminder]);
+
+  // Sequential queue processor for Due Reminders
+  useEffect(() => {
+    if (!currentDueReminder && dueReminderQueue.length > 0) {
+      setCurrentDueReminder(dueReminderQueue[0]);
+      setDueReminderQueue((prev) => prev.slice(1));
+    }
+  }, [currentDueReminder, dueReminderQueue]);
+
+  // Click outside / scroll listener to close reminder portal
+  useEffect(() => {
+    if (!activeReminderPortal) return;
+    const handleClose = () => setActiveReminderPortal(null);
+    window.addEventListener('click', handleClose);
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [activeReminderPortal]);
 
   const handleSaveLocalAlertPrefs = async (newPrefs: any) => {
     setLocalAlertPrefs(newPrefs);
@@ -431,19 +477,18 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const handleSetReminder = async (post: NewsFeedPost, minutes: number) => {
     await scheduleNewsReminder(post.id, post.title, minutes, currentUser?.email);
     setActiveReminders(getUserRemindersLocal(currentUser?.email));
-    setActiveReminderMenuPostId(null);
+    setActiveReminderPortal(null);
   };
 
   const handleCancelReminder = async (postId: string) => {
     await cancelNewsReminder(postId, currentUser?.email);
     setActiveReminders(getUserRemindersLocal(currentUser?.email));
-    setActiveReminderMenuPostId(null);
+    setActiveReminderPortal(null);
   };
 
   const renderCardActions = (post: NewsFeedPost) => {
     const isFav = userFavorites.has(post.id);
     const hasReminder = activeReminders.some((r) => r.newsId === post.id);
-    const isMenuOpen = activeReminderMenuPostId === post.id;
 
     return (
       <div className="relative flex items-center gap-1.5 z-20" onClick={(e) => e.stopPropagation()}>
@@ -464,55 +509,37 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-white text-white' : ''}`} />
         </button>
 
-        {/* Reminder Clock Button */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveReminderMenuPostId(isMenuOpen ? null : post.id);
-            }}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-              hasReminder
-                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                : 'bg-black/60 hover:bg-black/85 text-white/90 hover:text-amber-400 border border-white/20'
-            }`}
-            title={hasReminder ? 'रिमाइंडर सक्रिय है' : 'रिमाइंडर सेट करें'}
-          >
-            <Clock className={`w-3.5 h-3.5 ${hasReminder ? 'text-slate-950 font-bold' : ''}`} />
-          </button>
-
-          {isMenuOpen && (
-            <div
-              className="absolute right-0 top-8 w-44 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 animate-in fade-in zoom-in-95"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-[10px] font-bold text-amber-400 px-2 py-1 border-b border-slate-800">
-                रिमाइंडर समय चुनें
-              </div>
-              {[5, 10, 20, 30].map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => handleSetReminder(post, m)}
-                  className="w-full text-left px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors cursor-pointer"
-                >
-                  <span>{m} मिनट बाद</span>
-                  <span className="text-[10px] text-amber-400">⏰</span>
-                </button>
-              ))}
-              {hasReminder && (
-                <button
-                  type="button"
-                  onClick={() => handleCancelReminder(post.id)}
-                  className="w-full text-left px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 rounded-lg border-t border-slate-800 mt-1 cursor-pointer"
-                >
-                  रिमाइंडर हटाएं
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Reminder Clock Button (Triggers Non-Clipped Portal) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (activeReminderPortal?.post.id === post.id) {
+              setActiveReminderPortal(null);
+              return;
+            }
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            const menuWidth = 180;
+            let left = rect.right - menuWidth;
+            if (left < 10) left = 10;
+            if (left + menuWidth > window.innerWidth - 10) {
+              left = window.innerWidth - menuWidth - 10;
+            }
+            let top = rect.bottom + 6;
+            if (top + 220 > window.innerHeight) {
+              top = Math.max(10, rect.top - 220);
+            }
+            setActiveReminderPortal({ post, x: left, y: top });
+          }}
+          className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+            hasReminder
+              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+              : 'bg-black/60 hover:bg-black/85 text-white/90 hover:text-amber-400 border border-white/20'
+          }`}
+          title={hasReminder ? 'रिमाइंडर सक्रिय है' : 'रिमाइंडर सेट करें'}
+        >
+          <Clock className={`w-3.5 h-3.5 ${hasReminder ? 'text-slate-950 font-bold' : ''}`} />
+        </button>
       </div>
     );
   };
@@ -2925,6 +2952,27 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       रीसेट (सभी)
                     </button>
                   )}
+                  {/* Dedicated Favorite News Filter Button (Priority 3) */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory(selectedCategory === 'favorites' ? 'all' : 'favorites')}
+                    className={`px-3 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 cursor-pointer transition active:scale-95 ${
+                      selectedCategory === 'favorites'
+                        ? 'bg-rose-600 text-white border-rose-500 shadow-md ring-2 ring-rose-500/40'
+                        : 'bg-slate-800 hover:bg-slate-700 text-rose-300 border-rose-500/30 hover:border-rose-500/50'
+                    }`}
+                    title="सहेजी गई पसंदीदा खबरें देखें"
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${selectedCategory === 'favorites' ? 'fill-white text-white' : 'text-rose-400'}`} />
+                    <span>पसंदीदा खबरें</span>
+                    {userFavorites.size > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
+                        selectedCategory === 'favorites' ? 'bg-white text-rose-600' : 'bg-rose-500/20 text-rose-300'
+                      }`}>
+                        {userFavorites.size}
+                      </span>
+                    )}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsCategoryModalOpen(true)}
@@ -5646,6 +5694,135 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           }}
         />
       )}
+
+      {/* Portal-based Non-Clipped News Card Reminder Dropdown (Priority 2) */}
+      {activeReminderPortal && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed w-44 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 z-[99999] space-y-1 animate-in fade-in zoom-in-95 font-sans"
+          style={{ top: activeReminderPortal.y, left: activeReminderPortal.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="text-[10px] font-bold text-amber-400 px-2 py-1 border-b border-slate-800 flex items-center justify-between">
+            <span>रिमाइंडर समय चुनें</span>
+            <Clock className="w-3 h-3 text-amber-400" />
+          </div>
+          {[5, 10, 20, 30].map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                handleSetReminder(activeReminderPortal.post, m);
+              }}
+              className="w-full text-left px-2 py-1.5 text-xs text-slate-200 hover:bg-slate-800 hover:text-white rounded-lg flex items-center justify-between transition-colors cursor-pointer"
+            >
+              <span>{m} मिनट बाद</span>
+              <span className="text-[10px] text-amber-400">⏰</span>
+            </button>
+          ))}
+          {activeReminders.some((r) => r.newsId === activeReminderPortal.post.id) && (
+            <button
+              type="button"
+              onClick={() => {
+                handleCancelReminder(activeReminderPortal.post.id);
+              }}
+              className="w-full text-left px-2 py-1 text-xs text-red-400 hover:bg-red-950/40 rounded-lg border-t border-slate-800 mt-1 cursor-pointer flex items-center gap-1"
+            >
+              <span>रिमाइंडर हटाएं</span>
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
+
+      {/* Due News Reminder Centered Modal Dialog (Priority 2) */}
+      {currentDueReminder && (() => {
+        const matchingPost = combinedPosts.find((p) => p.id === currentDueReminder.newsId);
+        const headline = currentDueReminder.newsTitle || matchingPost?.title || 'ताज़ा खबर';
+        const thumbnail = matchingPost?.imageUrl || matchingPost?.manualThumbnailUrl || matchingPost?.thumbnail || matchingPost?.image || '/assets/placeholder_news_search_16x9.jpg';
+
+        const dismissDueReminder = () => {
+          cancelNewsReminder(currentDueReminder.newsId, currentUser?.email);
+          setActiveReminders(getUserRemindersLocal(currentUser?.email));
+          setCurrentDueReminder(null);
+        };
+
+        const viewDueNews = () => {
+          const postToOpen = matchingPost || ({
+            id: currentDueReminder.newsId,
+            title: currentDueReminder.newsTitle,
+            category: 'ताज़ा समाचार',
+            publishedTime: 'हाल ही में',
+            thumbnail,
+          } as NewsFeedPost);
+          dismissDueReminder();
+          setDetailModalPost(postToOpen);
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+            onClick={dismissDueReminder}
+          >
+            <div
+              className="bg-slate-900 border border-amber-500/50 rounded-2xl max-w-md w-full p-5 shadow-2xl text-left space-y-4 animate-in zoom-in-95"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                  <Clock className="w-4 h-4" />
+                  <span>⏰ न्यूज़ ग्राफिक रिमाइंडर</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={dismissDueReminder}
+                  className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  title="खारिज करें"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex gap-3 items-center">
+                <img
+                  src={thumbnail}
+                  alt=""
+                  className="w-20 h-16 object-cover rounded-xl border border-slate-700 bg-slate-950 shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/assets/placeholder_news_search_16x9.jpg';
+                  }}
+                />
+                <div className="min-w-0">
+                  <p className="text-xs text-amber-300 font-semibold mb-1">
+                    आपने इस खबर के लिए रिमाइंडर सेट किया था:
+                  </p>
+                  <h4 className="text-sm font-bold text-white line-clamp-2 leading-snug">
+                    {headline}
+                  </h4>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={dismissDueReminder}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer transition border border-slate-700"
+                >
+                  खारिज करें
+                </button>
+                <button
+                  type="button"
+                  onClick={viewDueNews}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs shadow-md flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>खबर देखें</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Local Alerts Preferences Modal (Requirement 9) */}
       {isLocalAlertModalOpen && (

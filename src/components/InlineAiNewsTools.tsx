@@ -451,6 +451,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setResult(null);
       setHeadlineOptions([]);
       setSelectedHeadlineIndex(0);
+      setCanonicalContext(null);
       setGeneratedAiImageUrl(null);
       setError(null);
       setAiPhotoPrompt('');

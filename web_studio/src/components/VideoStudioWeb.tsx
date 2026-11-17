@@ -664,6 +664,65 @@ function drawAuthoritativeDynamicVideoFrame(
 }
 
 /**
+ * Fast synchronous inspector for recorded MP4 boxes to verify presence of a genuine video stream.
+ * Prevents audio-only corrupted export files (Priority 0).
+ */
+function validateMp4HasVideoStream(buffer: ArrayBuffer): boolean {
+  try {
+    const dv = new DataView(buffer);
+    const u8 = new Uint8Array(buffer);
+    let p = 0;
+    while (p < buffer.byteLength - 8) {
+      const sz = dv.getUint32(p);
+      if (sz < 8) break;
+      let type = '';
+      for (let j = 0; j < 4; j++) type += String.fromCharCode(u8[p + 4 + j]);
+      if (type === 'moov') {
+        let q = p + 8;
+        while (q < p + sz - 8) {
+          const s = dv.getUint32(q);
+          if (s < 8) break;
+          let t = '';
+          for (let j = 0; j < 4; j++) t += String.fromCharCode(u8[q + 4 + j]);
+          if (t === 'trak') {
+            let k = q + 8;
+            while (k < q + s - 8) {
+              const subS = dv.getUint32(k);
+              if (subS < 8) break;
+              let subT = '';
+              for (let j = 0; j < 4; j++) subT += String.fromCharCode(u8[k + 4 + j]);
+              if (subT === 'mdia') {
+                let m = k + 8;
+                while (m < k + subS - 8) {
+                  const mS = dv.getUint32(m);
+                  if (mS < 8) break;
+                  let mT = '';
+                  for (let j = 0; j < 4; j++) mT += String.fromCharCode(u8[m + 4 + j]);
+                  if (mT === 'hdlr') {
+                    let handler = '';
+                    for (let j = 0; j < 4; j++) handler += String.fromCharCode(u8[m + 16 + j]);
+                    if (handler === 'vide') {
+                      return true;
+                    }
+                  }
+                  m += mS;
+                }
+              }
+              k += subS;
+            }
+          }
+          q += s;
+        }
+      }
+      p += sz;
+    }
+    return false;
+  } catch {
+    return true; // Fallback gracefully if parser error
+  }
+}
+
+/**
  * Shared Canvas Composition Function
  * Renders the EXACT same layout for Frame 1, Frame 2, and Classic Frame
  * ensuring 100% parity between Live Canvas and Exported Video.
@@ -2657,8 +2716,18 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
+      canvas.style.position = 'fixed';
+      canvas.style.left = '-9999px';
+      canvas.style.top = '0px';
+      canvas.style.opacity = '0';
+      canvas.style.pointerEvents = 'none';
+      canvas.style.zIndex = '-9999';
+      document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d', { alpha: false });
-      if (!ctx) throw new Error('कैनवास संदर्भ उपलब्ध नहीं है');
+      if (!ctx) {
+        if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+        throw new Error('कैनवास संदर्भ उपलब्ध नहीं है');
+      }
 
       // Preload logo image (Master Admin template logo overrides user profile logo fallback)
       const dynamicVConf = activeDynamicFrame?.rawDynamicFrame?.videoConfig;
@@ -2824,12 +2893,21 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         console.warn('Audio mixing setup fallback:', err);
       }
 
-      let mimeType = 'video/mp4;codecs=avc1,mp4a.40.2';
-      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/mp4';
-      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp9,opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp8,opus';
-      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
-      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+      let mimeType = '';
+      const preferredMimes = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+      ];
+      for (const m of preferredMimes) {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) {
+          mimeType = m;
+          break;
+        }
+      }
 
       const recorderOptions: MediaRecorderOptions = {
         ...(mimeType ? { mimeType } : {}),
@@ -2948,14 +3026,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       let maxReportedPct = 20;
       let hasEnded = false;
 
-      // Deterministic Loop with Safe Watchdog (exports full video duration)
+      // Deterministic Loop with Safe Watchdog and Hybrid Animation/Timer (exports full video duration)
       await new Promise<void>((resolve) => {
         let animId: number;
+        let backupIntervalId: any;
 
         const stopAndFinish = () => {
           if (hasEnded) return;
           hasEnded = true;
           cancelAnimationFrame(animId);
+          if (backupIntervalId) clearInterval(backupIntervalId);
+          try {
+            if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+          } catch {}
           try {
             if (recorder.state === 'recording') {
               recorder.stop();
@@ -3016,6 +3099,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             showTicker,
           });
 
+          // Priority 0: Ensure canvas video track explicitly pumps rendered frames into MediaRecorder
+          try {
+            const vTrack = canvasStream.getVideoTracks()[0];
+            if (vTrack && (vTrack as any).requestFrame) {
+              (vTrack as any).requestFrame();
+            }
+          } catch {}
+
           const now = Date.now();
           const wallElapsed = Math.max(0, (now - exportStartWallTime) / 1000);
 
@@ -3058,6 +3149,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         };
 
         animId = requestAnimationFrame(renderFrame);
+        backupIntervalId = setInterval(() => {
+          renderFrame();
+        }, 33);
       });
 
       // Cancellation check before finalizing
@@ -3089,11 +3183,20 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       // Fix WebM duration header so Mobile Chrome & Android players display exact duration
       const finalBlob = await injectWebmDuration(rawBlob, totalDuration * 1000);
 
+      // Validate video stream existence before download (Priority 0)
+      const isMp4 = finalBlob.type.includes('mp4') || finalBlob.type.includes('avc1');
+      if (isMp4) {
+        const ab = await finalBlob.arrayBuffer();
+        const hasVideo = validateMp4HasVideoStream(ab);
+        if (!hasVideo) {
+          throw new Error('वीडियो रेंडरिंग सत्यापन विफल: MP4 में वीडियो स्ट्रीम अनुपस्थित पाई गई। कृपया पुनः प्रयास करें।');
+        }
+      }
+
       setVideoExportProgress(100);
       setVideoExportStatus('सफलतापूर्वक डाउनलोड!');
       setIsProjectCompleted(true);
 
-      const isMp4 = finalBlob.type.includes('mp4');
       const ext = isMp4 ? 'mp4' : 'webm';
       const filename = generateVideoDownloadFileName(ext);
       const downloadUrl = URL.createObjectURL(finalBlob);
@@ -3140,6 +3243,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     } catch (err: any) {
       console.error('Video download error:', err);
       try {
+        if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      } catch {}
+      try {
         handleDownloadSnapshot();
         showToast('⚠️ वीडियो रिकॉर्डिंग में समस्या, उच्च-गुणवत्ता फ्रेम स्नैपशॉट डाउनलोड किया गया');
       } catch {
@@ -3147,6 +3253,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         showToast('❌ वीडियो डाउनलोड में समस्या आई');
       }
     } finally {
+      try {
+        if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      } catch {}
       try {
         video.loop = originalLoop;
       } catch {}
@@ -4907,27 +5016,31 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               {/* ============================================================ */}
               {((isFromVideoReels && quickStep === 2) || (!isFromVideoReels && quickStep === 3)) && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Type className="w-4 h-4 text-amber-400" />
                       {isFromVideoReels ? '2. आपकी हेडलाइंस (News Headlines)' : '3. मुख्य हेडलाइन (Main News Headline)'}
                     </span>
+                    <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
+                      आवश्यक (Required)
+                    </span>
+                  </div>
 
-                  {/* Headline choices in Two-Column Grid (Part 8.F) */}
-                  <div className="space-y-2 p-3 bg-slate-950/90 border border-amber-500/30 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>आपकी हेडलाइंस (उपलब्ध विकल्प)</span>
+                  {/* Priority 1: Clean Vertical Single-Column Layout for Headline Selection */}
+                  <div className="space-y-2.5 p-3 sm:p-4 bg-slate-950/90 border border-amber-500/30 rounded-xl">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                      <span className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span>उपलब्ध हेडलाइंस चुनें</span>
                       </span>
-                      <span className="text-[10px] text-slate-400 font-semibold">
-                        (1-क्लिक में चुनें)
+                      <span className="text-[11px] text-slate-400 font-semibold">
+                        (किसी एक पर क्लिक करके चुनें)
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                    <div className="flex flex-col gap-2.5">
                       {((headlineVariants && headlineVariants.filter(Boolean).length > 0)
-                        ? headlineVariants.filter(Boolean)
+                        ? headlineVariants.filter(Boolean).slice(0, 4)
                         : [
                             headline || initialVideo?.title || 'देश की बड़ी खबर: घटनाक्रम पर सीधी नजर',
                             'विशेष रिपोर्ट: मुख्य बिंदुओं का पूरा विश्लेषण',
@@ -4941,36 +5054,58 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             key={hIdx}
                             type="button"
                             onClick={() => {
-                              setHeadline(hVariant.trim());
-                              showToast(`हेडलाइन #${hIdx + 1} चुनी गई`);
+                              const cleanH = hVariant.trim();
+                              setHeadline(cleanH);
+                              showToast(`हेडलाइन ${hIdx + 1} चुनी गई`);
                             }}
-                            className={`text-left p-2.5 rounded-xl border transition flex flex-col justify-between min-h-[72px] sm:min-h-[80px] cursor-pointer ${
+                            className={`w-full text-left p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${
                               isSelected
-                                ? 'bg-amber-400/20 text-white border-amber-400 ring-2 ring-amber-400/60 shadow-md font-black'
+                                ? 'bg-amber-400/15 text-white border-amber-400 ring-2 ring-amber-400/50 shadow-md font-black'
                                 : 'bg-slate-900/90 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-800'
                             }`}
                           >
-                            <div className="flex items-center justify-between w-full mb-1">
-                              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-amber-400 font-mono font-bold shrink-0">
-                                #{hIdx + 1}
+                            {/* Radio Circle & Number Indicator */}
+                            <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                              <div
+                                className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${
+                                  isSelected
+                                    ? 'border-amber-400 bg-amber-400'
+                                    : 'border-slate-600 bg-transparent'
+                                }`}
+                              >
+                                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                              </div>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 ${
+                                  isSelected
+                                    ? 'bg-amber-400 text-slate-950 font-black'
+                                    : 'bg-slate-800 text-amber-400 font-mono'
+                                }`}
+                              >
+                                {hIdx + 1}
                               </span>
-                              {isSelected && (
-                                <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-0.5">
-                                  <Check className="w-3 h-3" /> चयनित
-                                </span>
-                              )}
                             </div>
-                            <p className="text-xs font-bold leading-snug line-clamp-3 text-slate-100 break-words">
-                              {hVariant.trim()}
-                            </p>
+
+                            {/* Headline Text */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <span className="text-[11px] font-bold text-amber-400/90">
+                                  हेडलाइन {hIdx + 1}
+                                </span>
+                                {isSelected && (
+                                  <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-0.5">
+                                    <Check className="w-3 h-3" /> चयनित
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs sm:text-sm font-bold leading-relaxed text-slate-100 break-words whitespace-normal">
+                                {hVariant.trim()}
+                              </p>
+                            </div>
                           </button>
                         );
                       })}
                     </div>
-                  </div>
-                    <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
-                      आवश्यक (Required)
-                    </span>
                   </div>
 
                   {/* Headline Input (Genuinely blank by default) */}

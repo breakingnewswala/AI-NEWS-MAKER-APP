@@ -26,6 +26,7 @@ import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
 import { NewsDetailModal } from './components/NewsDetailModal';
 import { AppNotificationModal } from './components/AppNotificationModal';
+import { showAppSuccess } from './lib/notificationService';
 import { getApiUrl, getApiBaseUrl, ensureAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
@@ -2014,6 +2015,8 @@ export default function App() {
     let lastAdminAuthToastTime = 0;
     const handleAdminAuthRequired = () => {
       // Strict Rule C & D: Background API 401s must NEVER automatically open the Login Modal
+      // Only show to actual admins; normal users must never be shown admin warning
+      if (currentUser && !isUserAdmin(currentUser)) return;
       const now = Date.now();
       if (now - lastAdminAuthToastTime > 10000) {
         lastAdminAuthToastTime = now;
@@ -2526,6 +2529,11 @@ export default function App() {
       localStorage.removeItem('selected_raw_news_id');
       localStorage.removeItem('ai_tools_generated_headlines');
       localStorage.removeItem('studio_autofill_news_item');
+      localStorage.removeItem('ai_news_persisted_session');
+      localStorage.removeItem('ai_news_canonical_context');
+      localStorage.removeItem('ai_news_active_options');
+      sessionStorage.removeItem('ai_news_persisted_session');
+      sessionStorage.removeItem('ai_news_canonical_context');
     } catch (e) {
       // ignore
     }
@@ -2537,7 +2545,8 @@ export default function App() {
     window.dispatchEvent(new CustomEvent('ai_news_studio_reset_preview'));
 
     setActiveStep(1);
-    showToast('🔄 ग्राफ़िक स्टूडियो सफलतापूर्वक रीसेट हो गया!');
+    showToast('फोटो न्यूज़ स्टूडियो सफलतापूर्वक रीसेट हो गया है।');
+    showAppSuccess('फोटो न्यूज़ स्टूडियो सफलतापूर्वक रीसेट हो गया है।', 'फोटो न्यूज़ स्टूडियो');
   };
 
   const handleResetCard = () => resetPhotoNewsStudioWorkspace();
@@ -3973,8 +3982,14 @@ export default function App() {
     <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-neutral-950 px-4 py-2.5 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
-          <Sparkles className="w-4 h-4 text-neutral-950" />
+        <div
+          className={`fixed left-1/2 -translate-x-1/2 z-[100] text-neutral-950 px-5 py-3 rounded-2xl sm:rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2.5 border border-amber-300 animate-in fade-in ${
+            toastMessage.includes('रीसेट')
+              ? 'top-1/2 -translate-y-1/2 bg-amber-400 text-slate-950 text-sm sm:text-base px-6 py-4 shadow-amber-950/60 ring-4 ring-amber-400/30 zoom-in-95'
+              : 'top-16 slide-in-from-top-4 bg-amber-400'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-neutral-950 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
