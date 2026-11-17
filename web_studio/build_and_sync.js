@@ -398,6 +398,28 @@ ${itemsXml}
     console.warn(' ⚠️ Could not synchronize SEO files:', seoErr.message);
   }
 
+  // 7c. Synchronize .well-known / Digital Asset Links (assetlinks.json)
+  try {
+    const wellKnownSrc = path.resolve(rootDir, 'public', '.well-known');
+    if (fs.existsSync(wellKnownSrc)) {
+      targets.forEach((target) => {
+        try {
+          const targetDir = path.join(target, '.well-known');
+          if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+          fs.cpSync(wellKnownSrc, targetDir, { recursive: true });
+        } catch {}
+      });
+      try {
+        const studioDistDir = path.join(distDir, '.well-known');
+        if (!fs.existsSync(studioDistDir)) fs.mkdirSync(studioDistDir, { recursive: true });
+        fs.cpSync(wellKnownSrc, studioDistDir, { recursive: true });
+      } catch {}
+      console.log(' ✅ Synchronized .well-known/assetlinks.json across all bundles');
+    }
+  } catch (wkErr) {
+    console.warn(' ⚠️ Could not synchronize .well-known directory:', wkErr.message);
+  }
+
   // 8. SECURITY PURGE: Guarantee no sensitive vault, key, or credential files exist in any distribution or public directory
   console.log('\n🔒 Step 8: Executing security purge of sensitive files in public and distribution directories...');
   const purgeDirectories = [

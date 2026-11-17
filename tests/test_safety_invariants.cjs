@@ -155,9 +155,31 @@ if (!gradle.includes('applicationId = "com.aistudio.ainewsmaker.hzwptx"')) {
   throw new Error('FAILED: Android applicationId in app/build.gradle.kts has been altered!');
 }
 
+// 7. Android Digital Asset Links (Credential Sharing & Deep Links) Check
+const assetLinksPath = 'public/.well-known/assetlinks.json';
+const webAssetLinksPath = 'web_studio/public/.well-known/assetlinks.json';
+if (!fs.existsSync(assetLinksPath)) {
+  throw new Error(`FAILED: Missing ${assetLinksPath}`);
+}
+if (!fs.existsSync(webAssetLinksPath)) {
+  throw new Error(`FAILED: Missing ${webAssetLinksPath}`);
+}
+const assetLinks = JSON.parse(fs.readFileSync(assetLinksPath, 'utf8'));
+if (!Array.isArray(assetLinks) || assetLinks.length === 0) {
+  throw new Error('FAILED: assetlinks.json must be a non-empty array');
+}
+const entry = assetLinks[0];
+if (!entry.target || entry.target.package_name !== 'com.aistudio.ainewsmaker.hzwptx') {
+  throw new Error('FAILED: assetlinks.json target package_name must be com.aistudio.ainewsmaker.hzwptx');
+}
+if (!entry.relation.includes('delegate_permission/common.handle_all_urls') || !entry.relation.includes('delegate_permission/common.get_login_creds')) {
+  throw new Error('FAILED: assetlinks.json relation must include handle_all_urls and get_login_creds');
+}
+
 console.log('✅ Safety Invariants verified:');
 console.log('   - Production frame intact (published & APPROVED, 0 tombstones, 0 test frames)');
 console.log('   - All 7 protected built-in assets present, enabled, and absent from tombstones');
 console.log('   - Root and Web Studio asset libraries & tombstones in 100% parity');
 console.log('   - News fallback snapshots intact across Web Studio, public/, and Android assets');
 console.log('   - Android applicationId preserved as com.aistudio.ainewsmaker.hzwptx');
+console.log('   - Android Digital Asset Links (assetlinks.json) verified for credential sharing & deep links');

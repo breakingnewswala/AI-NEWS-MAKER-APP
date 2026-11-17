@@ -20664,6 +20664,42 @@ app.get(["/sitemap-news.xml", "/news-sitemap.xml"], (_req, res) => {
     res.status(500).send("Error generating Google News sitemap");
   }
 });
+var ANDROID_ASSETLINKS_PAYLOAD = [
+  {
+    relation: [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    target: {
+      namespace: "android_app",
+      package_name: "com.aistudio.ainewsmaker.hzwptx",
+      sha256_cert_fingerprints: [
+        "72:F3:36:36:B5:DB:67:21:82:F1:F7:F9:62:72:C6:CF:D5:8D:3E:A4:78:A1:DD:20:4D:55:CA:9D:1F:4D:F5:F3",
+        "00:A1:A2:E6:3E:C9:98:EF:9A:E3:7C:84:9C:F6:B5:84:87:9D:18:05:45:C8:6F:99:FD:7F:90:2D:F3:84:4B:57",
+        "58:97:B6:34:E2:F2:44:CA:EC:E1:7E:D3:41:DD:02:AE:96:AF:59:B1:B4:D4:75:01:71:B6:65:5B:46:7B:47:E5"
+      ]
+    }
+  }
+];
+app.get(["/.well-known/assetlinks.json", "/assetlinks.json"], (_req, res) => {
+  res.header("Content-Type", "application/json; charset=utf-8");
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Cache-Control", "public, max-age=86400");
+  const possiblePaths = [
+    import_path2.default.join(process.cwd(), "public", ".well-known", "assetlinks.json"),
+    import_path2.default.join(process.cwd(), "dist", ".well-known", "assetlinks.json"),
+    import_path2.default.join(process.cwd(), "web_studio", "public", ".well-known", "assetlinks.json")
+  ];
+  for (const p of possiblePaths) {
+    if (import_fs2.default.existsSync(p)) {
+      try {
+        return res.sendFile(p);
+      } catch {
+      }
+    }
+  }
+  return res.json(ANDROID_ASSETLINKS_PAYLOAD);
+});
 app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
   const filePath = import_path2.default.join(process.cwd(), "public", "llms.txt");
   if (import_fs2.default.existsSync(filePath)) {

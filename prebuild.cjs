@@ -22,6 +22,12 @@ try {
       fs.copyFileSync(srcFile, destFile);
     }
   }
+  const rootWellKnown = path.join(rootDir, 'public', '.well-known');
+  const studioWellKnown = path.join(webStudioDir, 'public', '.well-known');
+  if (fs.existsSync(rootWellKnown)) {
+    if (!fs.existsSync(studioWellKnown)) fs.mkdirSync(studioWellKnown, { recursive: true });
+    fs.cpSync(rootWellKnown, studioWellKnown, { recursive: true, force: true });
+  }
   console.log('🔄 prebuild: Synchronized root src/, server.ts, and whatsapp_integration.ts into web_studio/');
 } catch (syncErr) {
   console.warn('⚠️ prebuild source sync warning:', syncErr.message);
