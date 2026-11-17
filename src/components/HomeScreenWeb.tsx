@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { cleanNewsDescription } from '../lib/newsDescriptionCleaner';
 import {
   Sparkles,
   Flame,
@@ -1322,7 +1323,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         category: 'breaking',
         categoryName: 'रॉ न्यूज़',
         publishedTime: 'अभी-अभी',
-        imageUrl: rawImageUrl || 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80',
+        imageUrl: rawImageUrl || '',
         additionalPhotos: rawAdditionalImageUrl ? [rawAdditionalImageUrl] : [],
         breaking: true,
         isExclusive: true,
@@ -1727,15 +1728,39 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     });
   };
 
-  // Thumbnail resolver supporting Source, Default, and Manual
+  const isValidNewsThumbnail = (url: string | null | undefined): boolean => {
+    if (!url || typeof url !== 'string') return false;
+    const clean = url.trim().toLowerCase();
+    if (!clean.startsWith('http://') && !clean.startsWith('https://') && !clean.startsWith('/assets/')) return false;
+    if (
+      clean.includes('photo-1585829365295-ab7cd400c167') ||
+      clean.includes('placeholder_news_search_16x9') ||
+      clean.includes('typewriter') ||
+      clean.includes('olympia')
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  // Thumbnail resolver supporting Source, Default, and Manual (rejecting stock typewriter image)
   const getPostThumbnail = (post: NewsFeedPost) => {
-    if (post.imageSource === 'manual' && post.manualThumbnailUrl) {
-      return post.manualThumbnailUrl;
+    if (post.imageSource === 'manual' && isValidNewsThumbnail(post.manualThumbnailUrl)) {
+      return post.manualThumbnailUrl!;
     }
-    if (post.imageSource === 'default' || defaultThumbnailIds.has(post.id)) {
-      return '/assets/placeholder_news_search_16x9.jpg';
+    if (isValidNewsThumbnail(post.imageUrl)) {
+      return post.imageUrl!;
     }
-    return post.imageUrl || '/assets/placeholder_news_search_16x9.jpg';
+    if (isValidNewsThumbnail(post.thumbnail)) {
+      return post.thumbnail!;
+    }
+    if (isValidNewsThumbnail(post.image)) {
+      return post.image!;
+    }
+    if (Array.isArray(post.additionalPhotos) && isValidNewsThumbnail(post.additionalPhotos[0])) {
+      return post.additionalPhotos[0];
+    }
+    return '/assets/sample_news_bus.svg';
   };
 
   // Derive visiblePosts for non-admin readers (unapproved RSS items excluded; web links bypass directly)
@@ -1861,9 +1886,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     ? visiblePosts.filter((p) => p.breaking)
     : visiblePosts.slice(0, 6);
 
-  // Identify highlights (Strict: Only Admin-Selected Approved & Published News on Notification Board)
+  // Identify highlights (Mode A: Pinned, Mode B: Highlighted Board, with active Web Feed presence)
   const highlightPosts = useMemo(() => {
-    if (!adminNotificationBoardIds || adminNotificationBoardIds.size === 0) return [];
     const deletedIds = getDeletedIds();
     const serverVerifiedIds = new Set((Array.isArray(localPosts) ? localPosts : []).map((p) => p.id));
     const isStrictlyApproved = (p: any): boolean => {
@@ -1891,9 +1915,22 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       const isPublished = publicationStatus === 'PUBLISHED' || status === 'PUBLISHED' || p.isPublished === true || status === 'APPROVED';
       return Boolean(isApproved && isPublished);
     };
+
     const unremovedFiltered = filteredPosts.filter((p) => !removedHighlightIds.has(p.id));
-    const adminSelectedApproved = unremovedFiltered.filter((p) => adminNotificationBoardIds.has(p.id) && isStrictlyApproved(p));
-    return adminSelectedApproved.slice(0, 9);
+    const pinnedPosts = unremovedFiltered.filter((p) => (p.isPinned || (p as any).pinned) && isStrictlyApproved(p));
+    const boardPosts = unremovedFiltered.filter((p) => (adminNotificationBoardIds.has(p.id) || p.isHighlighted) && isStrictlyApproved(p));
+
+    // Combine Mode A (Pinned) and Mode B (Highlighted Board)
+    const combinedHighlight = Array.from(new Set([...pinnedPosts, ...boardPosts]));
+    if (combinedHighlight.length > 0) {
+      return combinedHighlight.slice(0, 9);
+    }
+    // Active Home Feed Presence: Fallback to top approved breaking news
+    const fallbackTop = unremovedFiltered.filter((p) => isStrictlyApproved(p) && p.breaking);
+    if (fallbackTop.length > 0) {
+      return fallbackTop.slice(0, 6);
+    }
+    return unremovedFiltered.filter((p) => isStrictlyApproved(p)).slice(0, 3);
   }, [filteredPosts, removedHighlightIds, adminNotificationBoardIds, localPosts, approvedRssIds]);
 
   // 1. Ticker State: Single News visible, auto-changes every 4 seconds
@@ -3215,6 +3252,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         alt={post.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/assets/sample_news_bus.svg';
+                        }}
                       />
                       <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
                         {isPaid && (
@@ -3325,7 +3365,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             : 'line-clamp-3'
                         }`}
                       >
-                        {decodeHtmlEntities(post.summary)}
+                        {cleanNewsDescription(post.summary)}
                       </p>
 
                       {/* Additional Photos Mini Preview */}

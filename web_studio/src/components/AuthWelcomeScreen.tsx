@@ -458,6 +458,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const rawDist = (currentUser?.district || initialProfile.district || '').trim();
     return inferStateFromDistrict(rawDist) || 'मध्य प्रदेश';
   });
+  const [detailCityName, setDetailCityName] = useState<string>(
+    currentUser?.city || (initialProfile as any)?.city || ''
+  );
+  const [reporterDesignation, setReporterDesignation] = useState<string>(
+    currentUser?.designation || (initialProfile as any)?.designation || ''
+  );
 
   // Permanent Primary Mobile Number
   const [primaryMobileNumber, setPrimaryMobileNumber] = useState<string>(
@@ -623,6 +629,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       const draftObj = {
         fullName: detailFullName,
         district: reportingDistrict,
+        city: detailCityName,
+        designation: reporterDesignation,
         channelNameHi: detailChannelNameHi,
         channelNameEn: detailChannelNameEn,
         username,
@@ -642,6 +650,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   }, [
     detailFullName,
     reportingDistrict,
+    detailCityName,
+    reporterDesignation,
     detailChannelNameHi,
     detailChannelNameEn,
     username,
@@ -663,6 +673,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     if (currentUser) {
       if (!detailFullName && currentUser.name) setDetailFullName(currentUser.name);
       if (currentUser.district && !reportingDistrict) setReportingDistrict(currentUser.district);
+      if ((currentUser as any).city && !detailCityName) setDetailCityName((currentUser as any).city);
+      if ((currentUser as any).designation && !reporterDesignation) setReporterDesignation((currentUser as any).designation);
     }
   }, [currentUser]);
 
@@ -1416,7 +1428,17 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     }
 
     if (!reportingDistrict || !reportingDistrict.trim()) {
-      setStep2ErrorMsg('⚠️ कृपया अपना ज़िला / ब्यूरो क्षेत्र (District) चुनें।');
+      setStep2ErrorMsg('⚠️ कृपया अपना ज़िला / ब्यूरो क्षेत्र चुनें।');
+      return;
+    }
+
+    if (!detailCityName || !detailCityName.trim()) {
+      setStep2ErrorMsg('⚠️ कृपया अपने शहर का नाम लिखें।');
+      return;
+    }
+
+    if (isReporterAcc && (!reporterDesignation || !reporterDesignation.trim())) {
+      setStep2ErrorMsg('⚠️ कृपया अपना पद / पत्रकारिता परिचय दर्ज करें।');
       return;
     }
 
@@ -1536,6 +1558,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         websiteUrl: websiteUrl.trim(),
         state: reportingState,
         district: reportingDistrict,
+        city: detailCityName.trim(),
+        designation: reporterDesignation.trim(),
         location: defaultLocation,
         defaultLocation: defaultLocation,
         accountType: accountType,
@@ -1553,6 +1577,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         name: finalProfile.fullName || currentUser?.name || tempRegisteredUser?.name || "संवाददाता",
         role: isSuper ? "superadmin" : (isAdm ? "admin" : (isReporterAcc ? "reporter" : "user")),
         district: reportingDistrict || currentUser?.district || "सेंट्रल डेस्क",
+        city: detailCityName.trim(),
+        designation: reporterDesignation.trim(),
         state: reportingState,
         defaultLocation: defaultLocation,
         accountType: accountType,
@@ -1586,6 +1612,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             role: updatedUser.role,
             state: reportingState,
             district: updatedUser.district,
+            city: detailCityName.trim(),
+            designation: reporterDesignation.trim(),
             location: defaultLocation,
             defaultLocation: defaultLocation,
             accountType: accountType,
@@ -2105,7 +2133,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>खाता प्रकार चुनें (Select Account Type) *</span>
+                    <span>खाता प्रकार चुनें *</span>
                   </label>
                   <span className="text-[10px] text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
                     {accountType === 'channel' ? '📺 चैनल मोड' : '🎙️ रिपोर्टर मोड'}
@@ -2126,11 +2154,10 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     </div>
                     <div>
                       <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
-                        <span>चैनल के रूप में</span>
-                        <span className="text-[10px] text-amber-300 font-bold">(As a Channel)</span>
+                        <span>समाचार चैनल के रूप में</span>
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                        न्यूज़ चैनल, वेब पोर्टल या यूट्यूब चैनल ब्रांडिंग व लोगो
+                        अपने न्यूज़ चैनल, डिजिटल पोर्टल या मीडिया संस्थान की पहचान के साथ खाता बनाएँ।
                       </p>
                     </div>
                   </button>
@@ -2150,10 +2177,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     <div>
                       <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
                         <span>पत्रकार / रिपोर्टर के रूप में</span>
-                        <span className="text-[10px] text-amber-300 font-bold">(As a Reporter)</span>
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                        व्यक्तिगत पत्रकारिता, ज़िला संवाददाता व फ़ील्ड रिपोर्टिंग
+                        अपनी व्यक्तिगत पत्रकार पहचान के साथ समाचार एवं रिपोर्टिंग संबंधी कार्यों के लिए खाता बनाएँ।
                       </p>
                     </div>
                   </button>
@@ -2164,7 +2190,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
                 <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                   <User className="w-4 h-4" />
-                  <span>A. पत्रकार / संपादक विवरण व प्राइमरी नंबर</span>
+                  <span>A. पत्रकार / संपादक विवरण व संपर्क नंबर</span>
                 </h3>
 
                 {/* Google Authenticated Primary Email (Read-Only) */}
@@ -2172,7 +2198,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <div className="flex items-center gap-2 min-w-0">
                     <Mail className="w-4 h-4 text-blue-400 shrink-0" />
                     <div className="min-w-0">
-                      <span className="text-[10px] text-slate-400 block">Google Primary Email (सत्यापित ईमेल):</span>
+                      <span className="text-[10px] text-slate-400 block">सत्यापित ईमेल (Google Primary Email):</span>
                       <span className="text-xs font-mono font-bold text-white truncate block">
                         {(currentUser?.email || tempRegisteredUser?.email || '').toLowerCase() || 'authenticated@gmail.com'}
                       </span>
@@ -2184,47 +2210,69 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      1. पूरा नाम (Full Name) *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={detailFullName}
-                      onChange={(e) => setDetailFullName(e.target.value)}
-                      placeholder="यहाँ पत्रकार / संपादक का नाम दर्ज करें"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
-                    />
-                  </div>
-
-                  <div className="space-y-3">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">
-                        2. राज्य / केंद्र शासित प्रदेश (State / UT) *
+                        1. पूरा नाम *
                       </label>
-                      <select
-                        value={reportingState}
-                        onChange={(e) => {
-                          const newState = e.target.value;
-                          setReportingState(newState);
-                          setReportingDistrict('');
-                        }}
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
-                      >
-                        <option value="">-- राज्य चुनें --</option>
-                        {getAllIndianStates().map((st) => (
-                          <option key={st} value={st}>
-                            {st}
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        type="text"
+                        required
+                        value={detailFullName}
+                        onChange={(e) => setDetailFullName(e.target.value)}
+                        placeholder="यहाँ पत्रकार / संपादक का नाम दर्ज करें"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
+                      />
                     </div>
 
+                    {accountType === 'reporter' ? (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          पद / पत्रकारिता परिचय *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={reporterDesignation}
+                          onChange={(e) => setReporterDesignation(e.target.value)}
+                          placeholder="उदा. ब्यूरो चीफ, विशेष संवाददाता, स्वतंत्र पत्रकार"
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
+                        />
+                      </div>
+                    ) : (
+                      <div className="hidden sm:block" />
+                    )}
+                  </div>
+
+                  {/* Module 2: Row 1 Full Width State / UT */}
+                  <div className="w-full">
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      2. राज्य / केंद्र शासित प्रदेश *
+                    </label>
+                    <select
+                      value={reportingState}
+                      onChange={(e) => {
+                        const newState = e.target.value;
+                        setReportingState(newState);
+                        setReportingDistrict('');
+                      }}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                    >
+                      <option value="">-- राज्य चुनें --</option>
+                      {getAllIndianStates().map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Module 2: Row 2 Equal Columns: Left = District, Right = Manual City */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">
-                        3. ज़िला / ब्यूरो क्षेत्र (District / City) *
+                        3. ज़िला / ब्यूरो क्षेत्र *
                       </label>
                       <select
                         value={reportingDistrict}
@@ -2247,6 +2295,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                           </>
                         )}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        शहर का नाम स्वयं लिखें *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={detailCityName}
+                        onChange={(e) => setDetailCityName(e.target.value)}
+                        placeholder="अपने शहर का नाम लिखें"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
+                      />
                     </div>
                   </div>
                 </div>
@@ -2292,7 +2354,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         <div className="flex items-center justify-between mb-1">
                           <label className="block text-xs font-bold text-slate-300 flex items-center gap-1">
                             <Lock className="w-3.5 h-3.5 text-amber-400" />
-                            <span>3. WhatsApp Number (Primary Number) *</span>
+                            <span>3. WhatsApp नंबर (प्राइमरी नंबर) *</span>
                           </label>
                           <span className="text-[10px] text-amber-400 font-bold">
                             🔒 OTP सत्यापन अनिवार्य
@@ -2427,7 +2489,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </h3>
                   {accountType === 'reporter' && (
                     <span className="text-[10px] text-slate-400 font-bold bg-slate-800 px-2 py-0.5 rounded-full">
-                      वैकल्पिक (Optional)
+                      वैकल्पिक
                     </span>
                   )}
                 </div>
@@ -2500,7 +2562,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     </span>
                   </h3>
                   <span className="text-[10px] text-slate-400 font-bold">
-                    {accountType === 'channel' ? 'PNG / GIF अनिवार्य' : 'वैकल्पिक (Optional)'}
+                    {accountType === 'channel' ? 'PNG / GIF अनिवार्य' : 'वैकल्पिक'}
                   </span>
                 </div>
 

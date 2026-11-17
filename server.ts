@@ -1892,7 +1892,7 @@ function getCategoryFallbackImage(category: string = 'general'): string {
   if (cat.includes('tech') || cat.includes('तकनीक')) return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80';
   if (cat.includes('business') || cat.includes('व्यापार')) return 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80';
   if (cat.includes('weather') || cat.includes('मौसम')) return 'https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80';
-  return 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80';
+  return '/assets/sample_news_bus.svg';
 }
 
 // Check availability of AI Providers (Gemini & OpenAI)
@@ -10078,6 +10078,16 @@ function isValidNewsImage(url: string): boolean {
   if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
   // Exclude unwanted file extensions
   if (clean.endsWith(".ico") || clean.endsWith(".svg") || clean.endsWith(".gif")) return false;
+  // Exclude stock typewriter and generic newspaper placeholder images
+  if (
+    clean.includes("photo-1585829365295-ab7cd400c167") ||
+    clean.includes("placeholder_news_search_16x9") ||
+    clean.includes("typewriter") ||
+    clean.includes("olympia") ||
+    clean.includes("photo-1504711434969-e33886168f5c")
+  ) {
+    return false;
+  }
   // Exclude logos, favicons, ads, trackers, placeholders, social icons, widgets
   const invalidKeywords = [
     "logo", "favicon", "avatar", "icon", "advertisement", "ad_", "_ad", "/ads/",
@@ -10192,8 +10202,75 @@ async function extractBestNewsImage(
     }
   }
 
-  // Reliable category fallback image
-  return getCategoryFallbackImage(fallbackCategory);
+  // If no authentic substantive image is found, return empty to prevent stock photo pollution
+  return "";
+}
+
+const SERVER_KNOWN_PUBLICATION_PREFIXES = [
+  'नईदुनिया', 'नई दुनिया', 'दैनिक भास्कर', 'अमर उजाला', 'नवभारत टाइम्स', 'नवभारत',
+  'हिंदुस्तान', 'प्रभात खबर', 'हरिभूमि', 'आज तक', 'एबीपी न्यूज़', 'एबीपी', 'News18',
+  'न्यूज़18', 'Zee News', 'ज़ी न्यूज़', 'NDTV', 'एनडीटीवी', 'India TV', 'इंडिया टीवी',
+  'TV9', 'टीवी9', 'Times Now', 'टाइम्स नाउ', 'Republic Bharat', 'रिपब्लिक भारत',
+  'News Nation', 'न्यूज़ नेशन', 'MP Tak', 'एमपी तक', 'Bansal News', 'बंसल न्यूज़',
+  'BBC News', 'बीबीसी', 'पत्रिका', 'Patrika', 'Jagran', 'जागरण', 'Dainik Bhaskar',
+  'Nai Dunia', 'Nai Duniya', 'भाषा', 'वार्ता', 'पीटीआई', 'PTI', 'UNI', 'IANS',
+];
+
+function cleanNewsDescription(rawText: string, maxParagraphs: number = 2): string {
+  if (!rawText || typeof rawText !== 'string') return '';
+  let text = rawText.replace(/<[^>]+>/g, ' ');
+  text = decodeHtmlEntities(text);
+  text = text.replace(/[\r\t]+/g, ' ').replace(/\u00A0/g, ' ').replace(/ +/g, ' ').trim();
+
+  const brandRegexPart = SERVER_KNOWN_PUBLICATION_PREFIXES.map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const patternA = new RegExp(
+    `^(?:[\\p{L}\\s.'"-]{2,30},\\s*)?(?:${brandRegexPart})\\s*,?\\s*(?:[\\p{L}\\s.'"-]{2,30})?[\\s]*[।:–—-][\\s]*`,
+    'u'
+  );
+  text = text.replace(patternA, '');
+  const patternB = /^(?:विशेष संवाददाता|संवाददाता|ब्यूरो चीफ|प्रतिनिधि|एजेंसी|वार्ताकार|डेस्क)[\s,]+(?:[\p{L}\\s.'"-]{2,30})?[।:–—-]\s*/u;
+  text = text.replace(patternB, '');
+  const patternC = /^(?:नई दिल्ली|भोपाल|इंदौर|ग्वालियर|जबलपुर|उज्जैन|खरगोन|रायपुर|जयपुर|लखनऊ|पटना|मुंबई|चंडीगढ़)[\s]*[।:–—-][\s]*/u;
+  text = text.replace(patternC, '');
+  const patternD = new RegExp(`^(?:${brandRegexPart})[\\s]*[।:–—-][\\s]*`, 'u');
+  text = text.replace(patternD, '');
+
+  const trailingBoilerplate = [
+    /यह खबर भी पढ़ें[\s\S]*$/i,
+    /यह भी पढ़ें[\s\S]*$/i,
+    /Follow us on[\s\S]*$/i,
+    /गूगल न्यूज़ पर फॉलो करें[\s\S]*$/i,
+    /डाउनलोड करें अमर उजाला ऐप[\s\S]*$/i,
+    /दैनिक भास्कर ऐप डाउनलोड करें[\s\S]*$/i,
+    /स्रोत:[\s\S]*$/i,
+  ];
+  for (const bPattern of trailingBoilerplate) {
+    text = text.replace(bPattern, '').trim();
+  }
+
+  const rawParagraphs = text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  let paragraphs: string[] = [];
+  if (rawParagraphs.length > 1) {
+    paragraphs = rawParagraphs.slice(0, maxParagraphs);
+  } else if (text.length > 350) {
+    const sentences = text.split(/([।!?]\s+)/);
+    let p1 = '';
+    let p2 = '';
+    let currentLen = 0;
+    const targetMid = Math.floor(text.length / 2);
+    for (let i = 0; i < sentences.length; i++) {
+      if (currentLen < targetMid || !p1) {
+        p1 += sentences[i];
+        currentLen += sentences[i].length;
+      } else {
+        p2 += sentences[i];
+      }
+    }
+    paragraphs = [p1.trim(), p2.trim()].filter(Boolean).slice(0, maxParagraphs);
+  } else {
+    paragraphs = [text.trim()];
+  }
+  return paragraphs.join('\n\n').trim();
 }
 
 // Clean and craft professional factual Hindi headline adhering strictly to user guidelines:
@@ -10507,7 +10584,7 @@ async function parseRssItemsFromXml(
         sourceChannelId: (source as any).channelId || source.name,
         sourceCategoryId: source.category,
         title: editorial.title,
-        summary: editorial.summary,
+        summary: cleanNewsDescription(editorial.summary || rawDesc),
         sourceUrl: link, // PRESERVE original article URL
 
         category: catKey,
@@ -12572,7 +12649,25 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
         match.whatsappVerifiedAt = reg.verifiedAt || match.whatsappVerifiedAt || Date.now();
       }
     }
-    return res.json({ success: true, profile: sanitizeObjectStrings(match) });
+    // Module 2 Privacy Requirement:
+    // city is strictly private data! Only return city if caller is Master Admin or the profile owner.
+    const safeProfile = { ...match };
+    const caller = (req as any).user || getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || '').toLowerCase().trim();
+    const callerUid = (caller?.userId || caller?.uid || '').toLowerCase().trim();
+    const profileEmail = (match.email || '').toLowerCase().trim();
+    const profileUid = (match.userId || match.uid || '').toLowerCase().trim();
+    const isOwner = Boolean(
+      (callerEmail && profileEmail && callerEmail === profileEmail) ||
+      (callerUid && profileUid && callerUid === profileUid)
+    );
+    const isMaster = isAuthorizedMasterAdmin(req) || isMasterAdminEmail(callerEmail);
+
+    if (!isOwner && !isMaster) {
+      delete (safeProfile as any).city;
+    }
+
+    return res.json({ success: true, profile: sanitizeObjectStrings(safeProfile) });
   }
   return res.json({ success: true, profile: null });
 });

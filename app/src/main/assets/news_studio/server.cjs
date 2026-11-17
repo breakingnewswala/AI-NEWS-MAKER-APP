@@ -14397,7 +14397,7 @@ function getCategoryFallbackImage(category = "general") {
   if (cat.includes("tech") || cat.includes("\u0924\u0915\u0928\u0940\u0915")) return "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80";
   if (cat.includes("business") || cat.includes("\u0935\u094D\u092F\u093E\u092A\u093E\u0930")) return "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80";
   if (cat.includes("weather") || cat.includes("\u092E\u094C\u0938\u092E")) return "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80";
-  return "https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80";
+  return "/assets/sample_news_bus.svg";
 }
 app.get("/api/ai-providers-status", (req, res) => {
   const geminiKey = process.env.GEMINI_API_KEY;
@@ -21057,6 +21057,9 @@ function isValidNewsImage(url) {
   if (clean.length < 8) return false;
   if (!clean.startsWith("http://") && !clean.startsWith("https://")) return false;
   if (clean.endsWith(".ico") || clean.endsWith(".svg") || clean.endsWith(".gif")) return false;
+  if (clean.includes("photo-1585829365295-ab7cd400c167") || clean.includes("placeholder_news_search_16x9") || clean.includes("typewriter") || clean.includes("olympia") || clean.includes("photo-1504711434969-e33886168f5c")) {
+    return false;
+  }
   const invalidKeywords = [
     "logo",
     "favicon",
@@ -21165,7 +21168,109 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
     } catch {
     }
   }
-  return getCategoryFallbackImage(fallbackCategory);
+  return "";
+}
+var SERVER_KNOWN_PUBLICATION_PREFIXES = [
+  "\u0928\u0908\u0926\u0941\u0928\u093F\u092F\u093E",
+  "\u0928\u0908 \u0926\u0941\u0928\u093F\u092F\u093E",
+  "\u0926\u0948\u0928\u093F\u0915 \u092D\u093E\u0938\u094D\u0915\u0930",
+  "\u0905\u092E\u0930 \u0909\u091C\u093E\u0932\u093E",
+  "\u0928\u0935\u092D\u093E\u0930\u0924 \u091F\u093E\u0907\u092E\u094D\u0938",
+  "\u0928\u0935\u092D\u093E\u0930\u0924",
+  "\u0939\u093F\u0902\u0926\u0941\u0938\u094D\u0924\u093E\u0928",
+  "\u092A\u094D\u0930\u092D\u093E\u0924 \u0916\u092C\u0930",
+  "\u0939\u0930\u093F\u092D\u0942\u092E\u093F",
+  "\u0906\u091C \u0924\u0915",
+  "\u090F\u092C\u0940\u092A\u0940 \u0928\u094D\u092F\u0942\u091C\u093C",
+  "\u090F\u092C\u0940\u092A\u0940",
+  "News18",
+  "\u0928\u094D\u092F\u0942\u091C\u093C18",
+  "Zee News",
+  "\u091C\u093C\u0940 \u0928\u094D\u092F\u0942\u091C\u093C",
+  "NDTV",
+  "\u090F\u0928\u0921\u0940\u091F\u0940\u0935\u0940",
+  "India TV",
+  "\u0907\u0902\u0921\u093F\u092F\u093E \u091F\u0940\u0935\u0940",
+  "TV9",
+  "\u091F\u0940\u0935\u09409",
+  "Times Now",
+  "\u091F\u093E\u0907\u092E\u094D\u0938 \u0928\u093E\u0909",
+  "Republic Bharat",
+  "\u0930\u093F\u092A\u092C\u094D\u0932\u093F\u0915 \u092D\u093E\u0930\u0924",
+  "News Nation",
+  "\u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u0936\u0928",
+  "MP Tak",
+  "\u090F\u092E\u092A\u0940 \u0924\u0915",
+  "Bansal News",
+  "\u092C\u0902\u0938\u0932 \u0928\u094D\u092F\u0942\u091C\u093C",
+  "BBC News",
+  "\u092C\u0940\u092C\u0940\u0938\u0940",
+  "\u092A\u0924\u094D\u0930\u093F\u0915\u093E",
+  "Patrika",
+  "Jagran",
+  "\u091C\u093E\u0917\u0930\u0923",
+  "Dainik Bhaskar",
+  "Nai Dunia",
+  "Nai Duniya",
+  "\u092D\u093E\u0937\u093E",
+  "\u0935\u093E\u0930\u094D\u0924\u093E",
+  "\u092A\u0940\u091F\u0940\u0906\u0908",
+  "PTI",
+  "UNI",
+  "IANS"
+];
+function cleanNewsDescription(rawText, maxParagraphs = 2) {
+  if (!rawText || typeof rawText !== "string") return "";
+  let text = rawText.replace(/<[^>]+>/g, " ");
+  text = decodeHtmlEntities(text);
+  text = text.replace(/[\r\t]+/g, " ").replace(/\u00A0/g, " ").replace(/ +/g, " ").trim();
+  const brandRegexPart = SERVER_KNOWN_PUBLICATION_PREFIXES.map((b) => b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const patternA = new RegExp(
+    `^(?:[\\p{L}\\s.'"-]{2,30},\\s*)?(?:${brandRegexPart})\\s*,?\\s*(?:[\\p{L}\\s.'"-]{2,30})?[\\s]*[\u0964:\u2013\u2014-][\\s]*`,
+    "u"
+  );
+  text = text.replace(patternA, "");
+  const patternB = /^(?:विशेष संवाददाता|संवाददाता|ब्यूरो चीफ|प्रतिनिधि|एजेंसी|वार्ताकार|डेस्क)[\s,]+(?:[\p{L}\\s.'"-]{2,30})?[।:–—-]\s*/u;
+  text = text.replace(patternB, "");
+  const patternC = /^(?:नई दिल्ली|भोपाल|इंदौर|ग्वालियर|जबलपुर|उज्जैन|खरगोन|रायपुर|जयपुर|लखनऊ|पटना|मुंबई|चंडीगढ़)[\s]*[।:–—-][\s]*/u;
+  text = text.replace(patternC, "");
+  const patternD = new RegExp(`^(?:${brandRegexPart})[\\s]*[\u0964:\u2013\u2014-][\\s]*`, "u");
+  text = text.replace(patternD, "");
+  const trailingBoilerplate = [
+    /यह खबर भी पढ़ें[\s\S]*$/i,
+    /यह भी पढ़ें[\s\S]*$/i,
+    /Follow us on[\s\S]*$/i,
+    /गूगल न्यूज़ पर फॉलो करें[\s\S]*$/i,
+    /डाउनलोड करें अमर उजाला ऐप[\s\S]*$/i,
+    /दैनिक भास्कर ऐप डाउनलोड करें[\s\S]*$/i,
+    /स्रोत:[\s\S]*$/i
+  ];
+  for (const bPattern of trailingBoilerplate) {
+    text = text.replace(bPattern, "").trim();
+  }
+  const rawParagraphs = text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  let paragraphs = [];
+  if (rawParagraphs.length > 1) {
+    paragraphs = rawParagraphs.slice(0, maxParagraphs);
+  } else if (text.length > 350) {
+    const sentences = text.split(/([।!?]\s+)/);
+    let p1 = "";
+    let p2 = "";
+    let currentLen = 0;
+    const targetMid = Math.floor(text.length / 2);
+    for (let i = 0; i < sentences.length; i++) {
+      if (currentLen < targetMid || !p1) {
+        p1 += sentences[i];
+        currentLen += sentences[i].length;
+      } else {
+        p2 += sentences[i];
+      }
+    }
+    paragraphs = [p1.trim(), p2.trim()].filter(Boolean).slice(0, maxParagraphs);
+  } else {
+    paragraphs = [text.trim()];
+  }
+  return paragraphs.join("\n\n").trim();
 }
 function cleanAndCraftHindiHeadline(rawHeadline, articleText) {
   let title = rawHeadline || "";
@@ -21402,7 +21507,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX
         sourceChannelId: source.channelId || source.name,
         sourceCategoryId: source.category,
         title: editorial.title,
-        summary: editorial.summary,
+        summary: cleanNewsDescription(editorial.summary || rawDesc),
         sourceUrl: link,
         // PRESERVE original article URL
         category: catKey,
@@ -23080,7 +23185,20 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
         match.whatsappVerifiedAt = reg.verifiedAt || match.whatsappVerifiedAt || Date.now();
       }
     }
-    return res.json({ success: true, profile: sanitizeObjectStrings(match) });
+    const safeProfile = { ...match };
+    const caller = req.user || getAuthenticatedUser(req);
+    const callerEmail = (caller?.email || "").toLowerCase().trim();
+    const callerUid = (caller?.userId || caller?.uid || "").toLowerCase().trim();
+    const profileEmail = (match.email || "").toLowerCase().trim();
+    const profileUid = (match.userId || match.uid || "").toLowerCase().trim();
+    const isOwner = Boolean(
+      callerEmail && profileEmail && callerEmail === profileEmail || callerUid && profileUid && callerUid === profileUid
+    );
+    const isMaster = isAuthorizedMasterAdmin(req) || isMasterAdminEmail(callerEmail);
+    if (!isOwner && !isMaster) {
+      delete safeProfile.city;
+    }
+    return res.json({ success: true, profile: sanitizeObjectStrings(safeProfile) });
   }
   return res.json({ success: true, profile: null });
 });
@@ -23094,7 +23212,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
     const authUser = await resolveAuthenticatedUser(req, res);
-    const isMasterAdminEmail = profile.email && profile.email.toLowerCase() === "breakingnewswala.com@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69";
+    const isMasterAdminEmail2 = profile.email && profile.email.toLowerCase() === "breakingnewswala.com@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69";
     const isSubAdminEmail = profile.email && profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "user-1791697518060";
     const isAdmin = isAuthorizedAdmin(req) || authUser && (authUser.role === "superadmin" || authUser.role === "admin") || isAuthorizedMasterAdmin(req);
     if (!isAdmin && !authUser) {
@@ -23119,10 +23237,10 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       delete profile.logoApprovedAt;
       delete profile.logoApprovedBy;
     }
-    if ((cleanId === "admin" || isMasterAdminEmail || isSubAdminEmail) && !isAdmin) {
+    if ((cleanId === "admin" || isMasterAdminEmail2 || isSubAdminEmail) && !isAdmin) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
-    const existing = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : isSubAdminEmail ? allProfiles["admin.ainewsmaker@gmail.com"] || allProfiles["user-1791697518060"] : null) || {};
+    const existing = allProfiles[cleanId] || (isMasterAdminEmail2 ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : isSubAdminEmail ? allProfiles["admin.ainewsmaker@gmail.com"] || allProfiles["user-1791697518060"] : null) || {};
     if (isSubAdminEmail) {
       existing.role = "admin";
     }
@@ -23145,7 +23263,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         const thisEmail = (profile.email || cleanId).toLowerCase().trim();
         const thisUserId = (profile.userId || profile.uid || cleanId).toLowerCase().trim();
         const otherUserId = (p.userId || p.uid || k).toLowerCase().trim();
-        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isMasterAdminEmail && (otherEmail === "breakingnewswala.com@gmail.com" || otherEmail === "admin.ainewsmaker@gmail.com" || otherUserId === "usr_627265616b69" || otherUserId === "user-1791697518060" || k === "admin") || isSubAdminEmail && (otherEmail === "admin.ainewsmaker@gmail.com" || otherEmail === "breakingnewswala.com@gmail.com" || otherUserId === "user-1791697518060" || otherUserId === "usr_627265616b69" || k === "admin") || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
+        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isMasterAdminEmail2 && (otherEmail === "breakingnewswala.com@gmail.com" || otherEmail === "admin.ainewsmaker@gmail.com" || otherUserId === "usr_627265616b69" || otherUserId === "user-1791697518060" || k === "admin") || isSubAdminEmail && (otherEmail === "admin.ainewsmaker@gmail.com" || otherEmail === "breakingnewswala.com@gmail.com" || otherUserId === "user-1791697518060" || otherUserId === "usr_627265616b69" || k === "admin") || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
         if (!isSameUser) {
           const otherUname = (p.username || "").toLowerCase().trim().replace(/^@/, "");
           if (otherUname && otherUname === normUsername) {
@@ -23155,7 +23273,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     }
     const normMobile = (finalMobile || "").toString().replace(/\D/g, "").slice(-10);
-    if (normMobile.length === 10 && !isMasterAdminEmail && !isSubAdminEmail) {
+    if (normMobile.length === 10 && !isMasterAdminEmail2 && !isSubAdminEmail) {
       for (const [k, p] of Object.entries(allProfiles)) {
         const otherEmail = (p.email || k).toLowerCase().trim();
         const thisEmail = (profile.email || cleanId).toLowerCase().trim();
@@ -23176,8 +23294,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const matchedMasterUser = masterUsers.find(
       (u) => u.email && u.email.toLowerCase().trim() === cleanUserEmail || u.userId && u.userId.toLowerCase().trim() === cleanId
     );
-    const safeRole = isMasterCaller && profile.role ? profile.role : existing.role || (isMasterAdminEmail ? "superadmin" : isSubAdminEmail ? "admin" : "reporter");
-    const safeTier = isMasterCaller && profile.tier ? profile.tier : existing.tier || (isMasterAdminEmail ? "ultra" : isSubAdminEmail ? "ultra" : matchedMasterUser?.tier || "basic");
+    const safeRole = isMasterCaller && profile.role ? profile.role : existing.role || (isMasterAdminEmail2 ? "superadmin" : isSubAdminEmail ? "admin" : "reporter");
+    const safeTier = isMasterCaller && profile.tier ? profile.tier : existing.tier || (isMasterAdminEmail2 ? "ultra" : isSubAdminEmail ? "ultra" : matchedMasterUser?.tier || "basic");
     const safeIsBlocked = isMasterCaller ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
     const finalAccountType = profile.accountType || existing.accountType || "channel";
     const isReporter = finalAccountType === "reporter";
@@ -23218,7 +23336,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
     const safeIsLocked = isAdmin ? profile.isLocked !== void 0 ? Boolean(profile.isLocked) : Boolean(existing.isLocked) : isProfileComplete ? true : false;
     const effectiveTier = (safeTier || existing.tier || "basic").toLowerCase();
-    const isProOrVipUser = effectiveTier === "pro" || effectiveTier === "professional" || effectiveTier === "vip" || effectiveTier === "ultra" || isMasterAdminEmail || isSubAdminEmail;
+    const isProOrVipUser = effectiveTier === "pro" || effectiveTier === "professional" || effectiveTier === "vip" || effectiveTier === "ultra" || isMasterAdminEmail2 || isSubAdminEmail;
     if (profile.customFooterPng && !isProOrVipUser) {
       return res.status(403).json({ error: "\u0915\u0938\u094D\u091F\u092E \u092B\u0942\u091F\u0930 \u0938\u0941\u0935\u093F\u0927\u093E \u0915\u0947\u0935\u0932 Pro \u0914\u0930 VIP Desk \u092A\u094D\u0932\u093E\u0928 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964" });
     }
@@ -23234,10 +23352,10 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       role: safeRole,
       tier: safeTier,
       isBlocked: safeIsBlocked,
-      isLocked: isMasterAdminEmail || isSubAdminEmail ? false : safeIsLocked,
-      isProfileLocked: isMasterAdminEmail || isSubAdminEmail ? false : safeIsLocked,
-      isProfileComplete: isMasterAdminEmail || isSubAdminEmail ? true : isProfileComplete,
-      profileStatus: isMasterAdminEmail || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
+      isLocked: isMasterAdminEmail2 || isSubAdminEmail ? false : safeIsLocked,
+      isProfileLocked: isMasterAdminEmail2 || isSubAdminEmail ? false : safeIsLocked,
+      isProfileComplete: isMasterAdminEmail2 || isSubAdminEmail ? true : isProfileComplete,
+      profileStatus: isMasterAdminEmail2 || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
       email: profile.email || existing.email || "",
       state: profile.state !== void 0 && profile.state !== null && String(profile.state).trim() !== "" ? String(profile.state).trim() : existing.state || "",
       district: profile.district !== void 0 && profile.district !== null && String(profile.district).trim() !== "" ? String(profile.district).trim() : existing.district || "",
@@ -23250,8 +23368,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         return raw;
       })(),
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoUrl || existing.channelLogoUrl || "",
-      channelLogoPngUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || "",
+      channelLogoUrl: isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoUrl || existing.channelLogoUrl || "",
+      channelLogoPngUrl: isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || "",
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || existing.mobileNumber || "",
@@ -23263,7 +23381,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       whatsappMarketingConsentSource: profile.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: profile.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: profile.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      activeLogoUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
+      activeLogoUrl: isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
       logoApprovalStatus: existing.logoApprovalStatus || "none",
       approvedLogoRequestId: existing.approvedLogoRequestId,
       logoApprovedAt: existing.logoApprovedAt,
@@ -23296,7 +23414,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
     const canonicalKey = updated.email ? updated.email.toLowerCase().trim() : cleanId;
     allProfiles[canonicalKey] = updated;
-    if (isMasterAdminEmail) {
+    if (isMasterAdminEmail2) {
       allProfiles["breakingnewswala.com@gmail.com"] = updated;
       allProfiles["usr_627265616b69"] = { ...updated, userId: "usr_627265616b69", uid: "usr_627265616b69" };
       try {

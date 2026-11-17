@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, X, MapPin, Clock, Heart, Loader2 } from 'lucide-react';
 import { NewsFeedPost } from '../data/newsFeedData';
+import { cleanNewsDescription, decodeHtmlEntities } from '../lib/newsDescriptionCleaner';
 
 export interface NewsDetailModalProps {
   post: NewsFeedPost | null;
@@ -41,29 +42,38 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
+function isValidThumbnailUrl(url: string | null | undefined): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.trim().toLowerCase();
+  if (!clean.startsWith('http://') && !clean.startsWith('https://') && !clean.startsWith('/assets/')) return false;
+  if (
+    clean.includes('photo-1585829365295-ab7cd400c167') ||
+    clean.includes('placeholder_news_search_16x9') ||
+    clean.includes('typewriter') ||
+    clean.includes('olympia')
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function getPostThumbnail(post: NewsFeedPost): string {
-  if (post.imageUrl && typeof post.imageUrl === 'string' && post.imageUrl.trim()) {
-    return post.imageUrl.trim();
+  const candidates = [
+    post.imageUrl,
+    post.manualThumbnailUrl,
+    post.thumbnail,
+    post.image,
+    (post as any).mediaUrl,
+    Array.isArray((post as any).approvedPhotos) ? (post as any).approvedPhotos[0] : null,
+    Array.isArray(post.additionalPhotos) ? post.additionalPhotos[0] : null,
+  ];
+
+  for (const c of candidates) {
+    if (isValidThumbnailUrl(c)) {
+      return (c as string).trim();
+    }
   }
-  if (post.manualThumbnailUrl && typeof post.manualThumbnailUrl === 'string' && post.manualThumbnailUrl.trim()) {
-    return post.manualThumbnailUrl.trim();
-  }
-  if (post.thumbnail && typeof post.thumbnail === 'string' && post.thumbnail.trim()) {
-    return post.thumbnail.trim();
-  }
-  if (post.image && typeof post.image === 'string' && post.image.trim()) {
-    return post.image.trim();
-  }
-  if ((post as any).mediaUrl && typeof (post as any).mediaUrl === 'string' && (post as any).mediaUrl.trim()) {
-    return (post as any).mediaUrl.trim();
-  }
-  if (Array.isArray((post as any).approvedPhotos) && (post as any).approvedPhotos.length > 0 && (post as any).approvedPhotos[0]) {
-    return (post as any).approvedPhotos[0];
-  }
-  if (Array.isArray(post.additionalPhotos) && post.additionalPhotos.length > 0 && post.additionalPhotos[0]) {
-    return post.additionalPhotos[0];
-  }
-  return '/assets/placeholder_news_search_16x9.jpg';
+  return '';
 }
 
 export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
@@ -174,17 +184,19 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Main Image */}
-        <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md">
-          <img
-            src={thumbnailUrl}
-            alt={headline}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = '/assets/placeholder_news_search_16x9.jpg';
-            }}
-          />
-        </div>
+        {/* Main Image (Rendered only when genuine news photo exists; rejects typewriter stock photo) */}
+        {thumbnailUrl ? (
+          <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md">
+            <img
+              src={thumbnailUrl}
+              alt={headline}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+          </div>
+        ) : null}
 
         {/* Headline - Preserving complete text, wrapping, line-height */}
         <h2 className="text-lg sm:text-2xl font-black text-white leading-relaxed break-words">
@@ -199,10 +211,11 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
               <span>विस्तृत समाचार लेख लोड हो रहा है...</span>
             </div>
           ) : (
-            scrapedData?.content ||
-            scrapedData?.description ||
-            cleanDescription ||
-            'इस समाचार के लिए कोई विस्तृत विवरण उपलब्ध नहीं है।'
+            cleanNewsDescription(
+              scrapedData?.content ||
+              scrapedData?.description ||
+              rawDescription
+            ) || 'इस समाचार के लिए कोई विस्तृत विवरण उपलब्ध नहीं है।'
           )}
         </div>
 

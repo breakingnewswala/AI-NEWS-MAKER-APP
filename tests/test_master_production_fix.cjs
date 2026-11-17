@@ -137,9 +137,9 @@ const newsDetailTsx = fs.readFileSync(path.join(__dirname, '../src/components/Ne
 assert(
   newsDetailTsx.includes('post.imageUrl') &&
   newsDetailTsx.includes('post.manualThumbnailUrl') &&
-  newsDetailTsx.includes('/assets/placeholder_news_search_16x9.jpg') &&
-  !newsDetailTsx.includes('unsplash.com'),
-  'NewsDetailModal.tsx must check imageUrl/manualThumbnailUrl and fallback to placeholder_news_search_16x9.jpg (never Unsplash)'
+  !newsDetailTsx.includes('images.unsplash.com') &&
+  newsDetailTsx.includes('isValidThumbnailUrl'),
+  'NewsDetailModal.tsx must check imageUrl/manualThumbnailUrl and reject Unsplash stock typewriter'
 );
 assert(
   !newsDetailTsx.includes('अतिरिक्त तस्वीरें:'),

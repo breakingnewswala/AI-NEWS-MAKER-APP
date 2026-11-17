@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -16,6 +17,7 @@ import android.util.Base64
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -514,6 +516,12 @@ fun BreakingNewsStudioWebView(
                     }
 
                     webChromeClient = object : WebChromeClient() {
+                        override fun onPermissionRequest(request: PermissionRequest?) {
+                            (context as? Activity)?.runOnUiThread {
+                                request?.grant(request.resources)
+                            }
+                        }
+
                         override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                             android.util.Log.d(
                                 "BreakingNewsStudio",

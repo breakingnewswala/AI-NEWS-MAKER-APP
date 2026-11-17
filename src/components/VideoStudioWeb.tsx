@@ -623,8 +623,9 @@ function drawAuthoritativeDynamicVideoFrame(
   ctx.fillText(footerText, fx + fw / 2, fy + fh / 2);
   ctx.restore();
 
-  // 9. Watermark
-  if (vConf.watermarkTextEnabled || vConf.watermarkLogoEnabled || opts.showWatermark) {
+  // 9. Watermark (Strict Mutual Exclusion: none vs text vs image)
+  const shouldShowWm = opts.showWatermark !== false && (opts.showWatermark || vConf.watermarkTextEnabled || vConf.watermarkLogoEnabled);
+  if (shouldShowWm) {
     const wmRect = vConf.watermarkRect || { x: 35, y: 48, width: 30, height: 6 };
     const wx = Math.round((wmRect.x / 100) * width);
     const wy = Math.round((wmRect.y / 100) * height);
@@ -632,24 +633,19 @@ function drawAuthoritativeDynamicVideoFrame(
     const wh = Math.round((wmRect.height / 100) * height);
 
     ctx.save();
-    ctx.globalAlpha = Math.max(0.1, Math.min(0.9, opts.watermarkOpacity || 0.4));
-    if (vConf.watermarkLogoEnabled && vConf.watermarkLogoUrl) {
-      const wmImg = getCachedImage(vConf.watermarkLogoUrl);
-      if (wmImg) {
+    ctx.globalAlpha = Math.max(0.1, Math.min(0.95, opts.watermarkOpacity || 0.4));
+    
+    // Check if image watermark is selected
+    const isImageWm = opts.watermarkType === 'image' || (!opts.watermarkType && vConf.watermarkLogoEnabled);
+    if (isImageWm) {
+      const wmImg = opts.watermarkImageImg || (vConf.watermarkLogoUrl ? getCachedImage(vConf.watermarkLogoUrl) : null);
+      if (wmImg && (wmImg.complete || (wmImg as any).naturalWidth > 0)) {
         ctx.drawImage(wmImg, wx, wy, ww, wh);
-      } else {
-        const wmText = vConf.watermarkText || opts.watermarkCustomText || opts.watermarkText || 'AI NEWS MAKER';
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = 'rgba(0,0,0,0.9)';
-        ctx.shadowBlur = 6;
-        const wmScale = width / 720;
-        ctx.font = `900 ${Math.round(18 * wmScale)}px "Noto Sans Devanagari", Arial, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(wmText, wx + ww / 2, wy + wh / 2);
       }
+      // Strict mutual exclusion: when image watermark is selected, NEVER draw text watermark!
     } else {
-      const wmText = vConf.watermarkText || opts.watermarkCustomText || opts.watermarkText || 'AI NEWS MAKER';
+      // Text watermark
+      const wmText = opts.watermarkCustomText || opts.watermarkText || vConf.watermarkText || 'AI NEWS MAKER';
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur = 6;
@@ -1316,22 +1312,25 @@ function drawVideoCompositionToCanvas(
     }
   }
 
-  // Central / Overlay Watermark (Text or Image per Part 8.H)
+  // Central / Overlay Watermark (Strict Mutual Exclusion: text vs image)
   if (opts.showWatermark) {
-    if (opts.watermarkType === 'image' && opts.watermarkImageImg && opts.watermarkImageImg.complete && opts.watermarkImageImg.naturalWidth > 0) {
-      try {
-        ctx.save();
-        ctx.globalAlpha = Math.max(0.1, Math.min(0.95, opts.watermarkOpacity || 0.4));
-        const img = opts.watermarkImageImg;
-        const maxW = Math.round(width * 0.28);
-        const imgAspect = img.naturalWidth / img.naturalHeight;
-        const dw = maxW;
-        const dh = dw / imgAspect;
-        const dx = width - dw - 24;
-        const dy = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
-        ctx.drawImage(img, dx, dy, dw, dh);
-        ctx.restore();
-      } catch {}
+    if (opts.watermarkType === 'image') {
+      const img = opts.watermarkImageImg;
+      if (img && img.complete && img.naturalWidth > 0) {
+        try {
+          ctx.save();
+          ctx.globalAlpha = Math.max(0.1, Math.min(0.95, opts.watermarkOpacity || 0.4));
+          const maxW = Math.round(width * 0.28);
+          const imgAspect = (img.naturalWidth / img.naturalHeight) || 1;
+          const dw = maxW;
+          const dh = dw / imgAspect;
+          const dx = width - dw - 24;
+          const dy = Math.round((height / 2) + ((opts.watermarkOffsetY || 0) * (height / 1080)));
+          ctx.drawImage(img, dx, dy, dw, dh);
+          ctx.restore();
+        } catch {}
+      }
+      // Strict mutual exclusion: when watermarkType is 'image', DO NOT fall through to text watermark!
     } else {
       const wmText = opts.watermarkCustomText || opts.watermarkText;
       if (wmText) {
@@ -2573,7 +2572,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         logoScale,
         showWatermark,
         watermarkOpacity,
+        watermarkOffsetY,
         watermarkText: watermarkText || profile?.channelNameHi || 'AI NEWS MAKER',
+        watermarkType,
+        watermarkCustomText: watermarkCustomText || watermarkText || profile?.channelNameHi || '',
         socialPosition,
       });
 
@@ -3993,8 +3995,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         </div>
                       )}
 
-                      {/* Watermark */}
-                      {(vConf.watermarkTextEnabled || vConf.watermarkLogoEnabled || showWatermark) && (
+                      {/* Watermark in dynamic frame (Only if dynamic frame template specifies it and central watermark is off) */}
+                      {!showWatermark && (vConf.watermarkTextEnabled || vConf.watermarkLogoEnabled) && (
                         <div
                           className="absolute z-10 pointer-events-none flex items-center justify-center font-bold text-white/80 text-[10px]"
                           style={{
@@ -4191,15 +4193,25 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 </>
               )}
 
-              {/* Live Watermark Overlay (Part 11) */}
+              {/* Live Watermark Overlay (Strict Mutual Exclusion: text vs image) */}
               {showWatermark && (
                 <div
                   className="absolute inset-0 pointer-events-none z-30 flex items-center justify-center select-none"
-                  style={{ opacity: watermarkOpacity }}
+                  style={{ opacity: watermarkOpacity, transform: `translateY(${watermarkOffsetY}px)` }}
                 >
-                  <span className="text-white text-sm sm:text-lg font-black uppercase tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]">
-                    {watermarkText || profile?.channelNameHi || 'AI NEWS MAKER'}
-                  </span>
+                  {watermarkType === 'image' ? (
+                    watermarkImage ? (
+                      <img
+                        src={watermarkImage}
+                        alt="Watermark"
+                        className="max-w-[40%] max-h-[25%] object-contain drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]"
+                      />
+                    ) : null
+                  ) : (
+                    <span className="text-white text-sm sm:text-lg font-black uppercase tracking-widest drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]">
+                      {watermarkCustomText || watermarkText || profile?.channelNameHi || 'AI NEWS MAKER'}
+                    </span>
+                  )}
                 </div>
               )}
             </div>

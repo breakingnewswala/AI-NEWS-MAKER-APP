@@ -2532,13 +2532,19 @@ export default function App() {
       localStorage.removeItem('ai_news_persisted_session');
       localStorage.removeItem('ai_news_canonical_context');
       localStorage.removeItem('ai_news_active_options');
+      localStorage.removeItem('photo_studio_last_article_id');
+      localStorage.removeItem('active_selected_headline');
+      localStorage.removeItem('ai_tools_selected_headline_option');
+      localStorage.removeItem('persisted_news_headline');
       sessionStorage.removeItem('ai_news_persisted_session');
       sessionStorage.removeItem('ai_news_canonical_context');
+      sessionStorage.clear();
     } catch (e) {
       // ignore
     }
 
     setAutoFillNews(null);
+    setAiResetKey((k) => k + 1);
 
     // Dispatch studio reset events so InlineAiNewsTools clears its internal state, options 1-5, result & URL
     window.dispatchEvent(new CustomEvent('ai_news_studio_reset'));
@@ -4685,15 +4691,15 @@ export default function App() {
                         <span className="truncate">ड्राफ्ट</span>
                       </button>
 
-                      {/* 4. रिफ्रेश */}
+                      {/* 4. रीसेट */}
                       <button
                         type="button"
-                        onClick={handleRefreshPreview}
-                        title="प्रीव्यू रिफ्रेश करें"
+                        onClick={handleResetCard}
+                        title="फोटो न्यूज़ स्टूडियो रीसेट करें"
                         className="py-1.5 sm:py-2 px-1 sm:px-2 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center gap-1 active:scale-95 cursor-pointer transition-all"
                       >
-                        <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
-                        <span className="truncate">रिफ्रेश</span>
+                        <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="truncate">रीसेट</span>
                       </button>
                     </div>
                   </div>
@@ -4926,15 +4932,15 @@ export default function App() {
                               <span className="whitespace-nowrap">ड्राफ्ट</span>
                             </button>
 
-                            {/* 4. रिफ्रेश */}
+                            {/* 4. रीसेट */}
                             <button
                               type="button"
-                              onClick={handleRefreshPreview}
+                              onClick={handleResetCard}
                               className="flex-1 min-w-[70px] py-2 sm:py-2.5 px-2 sm:px-2.5 bg-neutral-800 hover:bg-neutral-700 text-sky-300 font-semibold text-[11px] sm:text-xs rounded-xl border border-neutral-700 shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 whitespace-nowrap"
-                              title="प्रीव्यू रिफ्रेश करें"
+                              title="फोटो न्यूज़ स्टूडियो रीसेट करें"
                             >
-                              <RefreshCw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-                              <span className="whitespace-nowrap">रिफ्रेश</span>
+                              <RotateCcw className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+                              <span className="whitespace-nowrap">रीसेट</span>
                             </button>
                           </div>
 

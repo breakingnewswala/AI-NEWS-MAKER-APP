@@ -68,14 +68,18 @@ fun HomeScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showQuickLinkDialog by remember { mutableStateOf(false) }
 
-    val filteredPosts = remember(posts, selectedCategory, searchQuery) {
+    val favoritePostIds by NewsRepository.favoritePostIds.collectAsStateWithLifecycle()
+    var showOnlyFavorites by remember { mutableStateOf(false) }
+
+    val filteredPosts = remember(posts, selectedCategory, searchQuery, showOnlyFavorites, favoritePostIds) {
         posts.filter { post ->
+            val matchFav = !showOnlyFavorites || favoritePostIds.contains(post.id)
             val matchCat = selectedCategory == NewsCategory.ALL || post.category == selectedCategory
             val matchQuery = searchQuery.isBlank() ||
                     post.title.contains(searchQuery, ignoreCase = true) ||
                     post.summary.contains(searchQuery, ignoreCase = true) ||
                     post.sourceChannel.contains(searchQuery, ignoreCase = true)
-            matchCat && matchQuery
+            matchFav && matchCat && matchQuery
         }
     }
 
@@ -216,9 +220,21 @@ fun HomeScreen(
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             items(filteredPosts, key = { it.id }) { post ->
+                val isFav = favoritePostIds.contains(post.id)
                 NewsPostCard(
                     post = post,
                     isAdmin = isAdmin,
+                    isFavorite = isFav,
+                    onToggleFavorite = { NewsRepository.toggleFavorite(post.id) },
+                    onSetReminder = { mins ->
+                        NewsRepository.setReminder(post.id, mins) { success ->
+                            Toast.makeText(
+                                context,
+                                if (success) "⏰ $mins मिनट बाद का रिमाइंडर सेट हो गया!" else "रिमाइंडर सेट नहीं हो सका",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
                     onMakeNews = { onMakeNewsClicked(post) },
                     onDelete = { NewsRepository.deletePost(post.id) },
                     onShare = {
@@ -251,10 +267,15 @@ fun HomeScreen(
 private fun NewsPostCard(
     post: NewsPost,
     isAdmin: Boolean,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onSetReminder: (Int) -> Unit,
     onMakeNews: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit
 ) {
+    var showReminderMenu by remember { mutableStateOf(false) }
+
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Slate800),
@@ -378,6 +399,51 @@ private fun NewsPostCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Favorite Icon Button
+                    IconButton(onClick = onToggleFavorite) {
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = if (isFavorite) "पसंदीदा से हटाएं" else "पसंदीदा में जोड़ें",
+                            tint = if (isFavorite) Red600 else Color.LightGray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Reminder Icon Button with Menu
+                    Box {
+                        IconButton(onClick = { showReminderMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = "रिमाइंडर सेट करें",
+                                tint = Color.LightGray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showReminderMenu,
+                            onDismissRequest = { showReminderMenu = false },
+                            modifier = Modifier.background(Slate800)
+                        ) {
+                            Text(
+                                text = "⏰ रिमाइंडर समय चुनें",
+                                color = Amber400,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                            listOf(5, 10, 20, 30).forEach { mins ->
+                                DropdownMenuItem(
+                                    text = { Text("$mins मिनट बाद", color = Color.White, fontSize = 12.sp) },
+                                    onClick = {
+                                        showReminderMenu = false
+                                        onSetReminder(mins)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     IconButton(onClick = onShare) {
                         Icon(
                             imageVector = Icons.Default.Share,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2, ExternalLink, RefreshCw, X, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Loader2, X, AlertCircle } from 'lucide-react';
 
 interface VoiceInputButtonProps {
   onTranscript: (spokenText: string) => void;
@@ -21,7 +21,6 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
   const [isCheckingPermission, setIsCheckingPermission] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [permissionBlocked, setPermissionBlocked] = useState(false);
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
@@ -46,68 +45,33 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
     setIsCheckingPermission(false);
   };
 
-  const startListening = async () => {
+  const startListening = () => {
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setErrorMessage('आपका ब्राउज़र वॉइस टाइपिंग सपोर्ट नहीं करता (कृपया Google Chrome या Microsoft Edge का उपयोग करें)');
-      setPermissionBlocked(false);
-      setTimeout(() => setErrorMessage(null), 5000);
+      setErrorMessage('ब्राउज़र वॉइस टाइपिंग सपोर्ट नहीं करता (कृपया Chrome या Edge का उपयोग करें)');
+      setTimeout(() => setErrorMessage(null), 4000);
       return;
     }
 
     setErrorMessage(null);
-    setPermissionBlocked(false);
     setIsCheckingPermission(true);
 
-    // Step 1: Explicitly request microphone permission via getUserMedia
-    // In Chrome/Edge, SpeechRecognition alone often fails with 'not-allowed' in iframes or unprompted contexts,
-    // whereas getUserMedia triggers the native "Allow microphone access" browser popup.
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // Immediately release tracks so speech recognition has clean exclusive access to microphone
-        stream.getTracks().forEach((track) => track.stop());
-      } catch (mediaErr: any) {
-        console.warn('getUserMedia audio permission check failed:', mediaErr);
-        setIsCheckingPermission(false);
-        setIsListening(false);
-
-        const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
-        if (mediaErr.name === 'NotAllowedError' || mediaErr.name === 'PermissionDeniedError') {
-          setPermissionBlocked(true);
-          setErrorMessage(
-            isInIframe
-              ? 'माइक्रोफ़ोन अनुमति ब्लॉक है। प्रीव्यू आईफ्रेम (iFrame) में ब्राउज़र सुरक्षा के कारण माइक सीधे ब्लॉक हो सकता है। कृपया नीचे दिए बटन से ऐप को नए टैब में खोलें या एड्रेस बार (🔒) में अनुमति दें।'
-              : 'माइक्रोफ़ोन अनुमति ब्लॉक है। कृपया ब्राउज़र के एड्रेस बार में लॉक (🔒) आइकॉन पर क्लिक करके माइक को "Allow" (अनुमति) दें और पुनः प्रयास करें।'
-          );
-          return;
-        } else if (mediaErr.name === 'NotFoundError' || mediaErr.name === 'DevicesNotFoundError') {
-          setErrorMessage('कोई माइक्रोफ़ोन डिवाइस नहीं मिला। कृपया माइक कनेक्ट करें।');
-          setTimeout(() => setErrorMessage(null), 5000);
-          return;
-        }
-      }
-    }
-
-    setIsCheckingPermission(false);
-
-    // Step 2: Initialize and start SpeechRecognition
     try {
       stopListening();
 
       const recognition = new SpeechRecognition();
       recognitionRef.current = recognition;
-      recognition.lang = language;
+      recognition.lang = language || 'hi-IN';
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
         setIsListening(true);
+        setIsCheckingPermission(false);
         setErrorMessage(null);
-        setPermissionBlocked(false);
       };
 
       recognition.onresult = (event: any) => {
@@ -128,41 +92,35 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
       };
 
       recognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
+        console.warn('Speech recognition notice:', event.error);
         setIsListening(false);
+        setIsCheckingPermission(false);
 
         if (event.error === 'not-allowed') {
-          const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
-          setPermissionBlocked(true);
-          setErrorMessage(
-            isInIframe
-              ? 'माइक्रोफ़ोन अनुमति ब्लॉक है। प्रीव्यू आईफ्रेम (iFrame) में ब्राउज़र सुरक्षा के कारण माइक ब्लॉक हो सकता है। कृपया ऐप को नए टैब में खोलें या एड्रेस बार (🔒) में माइक की अनुमति दें।'
-              : 'माइक्रोफ़ोन अनुमति ब्लॉक है। कृपया ब्राउज़र एड्रेस बार में लॉक (🔒) आइकॉन पर क्लिक करके माइक को "Allow" (अनुमति) दें।'
-          );
+          setErrorMessage('माइक अनुमति आवश्यक: ब्राउज़र बार में 🔒 पर क्लिक करके माइक को Allow करें।');
+          setTimeout(() => setErrorMessage(null), 5000);
         } else if (event.error === 'no-speech') {
-          // No speech detected, keep listening or allow graceful retry
+          // Normal timeout when silence; keep quiet
         } else if (event.error === 'audio-capture') {
-          setErrorMessage('माइक्रोफ़ोन ऑडियो कैप्चर नहीं हो पा रहा है। कृपया सुनिश्चित करें कि माइक किसी अन्य ऐप में उपयोग में नहीं है।');
-          setTimeout(() => setErrorMessage(null), 5000);
+          setErrorMessage('माइक उपलब्ध नहीं है। कृपया चेक करें कि माइक कनेक्ट है।');
+          setTimeout(() => setErrorMessage(null), 4000);
         } else if (event.error === 'network') {
-          setErrorMessage('गूगल स्पीच नेटवर्क से संपर्क नहीं हो पाया। कृपया इंटरनेट कनेक्शन जांचें।');
-          setTimeout(() => setErrorMessage(null), 5000);
-        } else {
-          setErrorMessage(`वॉइस इनपुट एरर: ${event.error}`);
+          setErrorMessage('नेटवर्क समस्या: कृपया इंटरनेट जांचें।');
           setTimeout(() => setErrorMessage(null), 4000);
         }
       };
 
       recognition.onend = () => {
         setIsListening(false);
+        setIsCheckingPermission(false);
       };
 
       recognition.start();
     } catch (err: any) {
-      console.error('Error starting speech recognition:', err);
+      console.warn('Speech recognition start failed:', err);
       setIsListening(false);
       setIsCheckingPermission(false);
-      setErrorMessage('माइक्रोफ़ोन शुरू करने में समस्या हुई। कृपया पुनः प्रयास करें।');
+      setErrorMessage('माइक चालू नहीं हो सका। कृपया पुनः प्रयास करें।');
       setTimeout(() => setErrorMessage(null), 4000);
     }
   };
@@ -174,25 +132,6 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
       startListening();
     }
   };
-
-  const openInNewTab = () => {
-    try {
-      window.open(window.location.href, '_blank');
-    } catch (e) {
-      // fallback
-    }
-  };
-
-  if (!isSupported) {
-    return (
-      <span
-        title="वॉइस इनपुट के लिए Google Chrome या Microsoft Edge का उपयोग करें"
-        className="text-[10px] text-neutral-500 inline-flex items-center gap-1 opacity-60 cursor-not-allowed"
-      >
-        <MicOff className="w-3.5 h-3.5" />
-      </span>
-    );
-  }
 
   const isSmall = size === 'sm';
 
@@ -215,7 +154,7 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
           isListening
             ? 'सुन रहा हूँ... बोलिए (रोकने के लिए क्लिक करें)'
             : isCheckingPermission
-            ? 'माइक अनुमति जांची जा रही है...'
+            ? 'माइक शुरू हो रहा है...'
             : 'माइक से बोलकर लिखें (Hindi Voice Input)'
         }
       >
@@ -223,12 +162,12 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
           <>
             <span className="w-2 h-2 rounded-full bg-white animate-ping" />
             <Mic className="w-3.5 h-3.5" />
-            <span>{buttonText || 'सुन रहा हूँ... बोलिए'}</span>
+            <span>{buttonText || 'सुन रहा हूँ...'}</span>
           </>
         ) : isCheckingPermission ? (
           <>
             <Loader2 className="w-3.5 h-3.5 animate-spin text-yellow-400" />
-            <span>माइक शुरू हो रहा है...</span>
+            <span>माइक चालू हो रहा है...</span>
           </>
         ) : (
           <>
@@ -238,62 +177,20 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
         )}
       </button>
 
-      {/* Error & Guidance Popover */}
+      {/* Non-blocking Toast / Notification Banner */}
       {errorMessage && (
-        <div className="absolute top-full mt-2 left-0 sm:left-auto sm:right-0 z-50 bg-neutral-950/95 backdrop-blur-md border border-red-500/80 text-white p-3 rounded-xl shadow-2xl min-w-[280px] max-w-sm animate-in fade-in slide-in-from-top-1 text-xs space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-1.5 text-red-400 font-bold">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-              <span>{permissionBlocked ? 'माइक्रोफ़ोन अनुमति आवश्यक' : 'वॉइस इनपुट सूचना'}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setErrorMessage(null);
-                setPermissionBlocked(false);
-              }}
-              className="text-neutral-400 hover:text-white p-0.5 rounded cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <p className="text-[11px] text-neutral-300 leading-relaxed">
-            {errorMessage}
-          </p>
-
-          {permissionBlocked && (
-            <div className="pt-1 flex flex-col gap-1.5">
-              <button
-                type="button"
-                onClick={openInNewTab}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer shadow-sm transition-all"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>ऐप को नए टैब में खोलें (Open in New Tab)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMessage(null);
-                  setPermissionBlocked(false);
-                  startListening();
-                }}
-                className="w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-yellow-300 border border-neutral-700 text-[11px] font-medium cursor-pointer transition-all"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>पुनः प्रयास करें (Try Again)</span>
-              </button>
-
-              <div className="text-[10px] text-neutral-400 bg-neutral-900/90 p-1.5 rounded-md border border-neutral-800 leading-tight">
-                💡 <strong className="text-neutral-300">त्वरित समाधान:</strong> ब्राउज़र के सबसे ऊपर एड्रेस बार में 🔒 या ट्यूनिंग आइकॉन पर क्लिक करें ➔ <span className="text-emerald-300 font-bold">Microphone</span> को <strong>Allow</strong> करें।
-              </div>
-            </div>
-          )}
+        <div className="absolute top-full mt-1.5 right-0 z-50 bg-neutral-900/95 backdrop-blur border border-amber-500/50 text-white px-2.5 py-1.5 rounded-lg shadow-xl text-[11px] flex items-center gap-2 max-w-xs animate-in fade-in">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="flex-1 text-neutral-200">{errorMessage}</span>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-neutral-400 hover:text-white p-0.5"
+          >
+            <X className="w-3 h-3" />
+          </button>
         </div>
       )}
     </div>
   );
 };
-

@@ -192,6 +192,60 @@ object NewsRepository {
     private val _posts = MutableStateFlow<List<NewsPost>>(initialPosts)
     val posts: StateFlow<List<NewsPost>> = _posts.asStateFlow()
 
+    private val _favoritePostIds = MutableStateFlow<Set<String>>(emptySet())
+    val favoritePostIds: StateFlow<Set<String>> = _favoritePostIds.asStateFlow()
+
+    fun toggleFavorite(postId: String) {
+        val current = _favoritePostIds.value
+        _favoritePostIds.value = if (current.contains(postId)) {
+            current - postId
+        } else {
+            current + postId
+        }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val isFav = _favoritePostIds.value.contains(postId)
+                val token = AuthManager.currentUser.value?.token ?: ""
+                val url = java.net.URL("${AuthManager.DEFAULT_CLOUD_SERVER_URL}/api/user-favorites")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                if (token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.doOutput = true
+                val body = JSONObject().apply {
+                    put("postId", postId)
+                    put("favorite", isFav)
+                }.toString()
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                conn.responseCode
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun setReminder(postId: String, delayMinutes: Int, onComplete: ((Boolean) -> Unit)? = null) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val token = AuthManager.currentUser.value?.token ?: ""
+                val url = java.net.URL("${AuthManager.DEFAULT_CLOUD_SERVER_URL}/api/reminders")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.setRequestProperty("Content-Type", "application/json")
+                if (token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer $token")
+                conn.doOutput = true
+                val body = JSONObject().apply {
+                    put("postId", postId)
+                    put("delayMinutes", delayMinutes)
+                    put("scheduledTime", System.currentTimeMillis() + (delayMinutes * 60 * 1000L))
+                }.toString()
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                val success = conn.responseCode in 200..299
+                scope.launch(Dispatchers.Main) { onComplete?.invoke(success) }
+            } catch (_: Exception) {
+                scope.launch(Dispatchers.Main) { onComplete?.invoke(false) }
+            }
+        }
+    }
+
     fun addSavedChannel(name: String) {
         val clean = name.trim()
         if (clean.isNotBlank() && !_savedChannels.value.contains(clean)) {
