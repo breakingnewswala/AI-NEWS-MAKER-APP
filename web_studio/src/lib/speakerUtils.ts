@@ -14,6 +14,7 @@ import {
   regenerateHeadlineOptionFromFacts,
   extractPublisherFromDomain,
   cleanCandidateClause,
+  removeRedundantClauses,
 } from './headlineValidator';
 
 export {
@@ -30,6 +31,7 @@ export {
   regenerateHeadlineOptionFromFacts,
   extractPublisherFromDomain,
   cleanCandidateClause,
+  removeRedundantClauses,
 };
 
 /**
@@ -1714,7 +1716,19 @@ export function fitHeadlinesTo5TierRanges(
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
+    const tier = HEADLINE_TARGETS[i] || { min: 80, max: 200 };
     let cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || '';
+    cand = removeRedundantClauses(cleanCandidateClause(cand));
+
+    // Truncate cleanly at word boundary if it exceeds tier.max or 200
+    const charLen = countCharacters(cand);
+    if (charLen > tier.max) {
+      const sliced = cand.substring(0, tier.max);
+      const lastSpace = sliced.lastIndexOf(' ');
+      if (lastSpace >= Math.min(tier.min, 45)) {
+        cand = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
+      }
+    }
 
     // Check if cand is duplicate of an existing item in result
     let isDup = !cand || result.includes(cand) || result.some((ex) => checkHeadlineSimilarity(ex, cand) >= 0.85);
@@ -1723,10 +1737,11 @@ export function fitHeadlinesTo5TierRanges(
     if (isDup || !val.valid) {
       let foundAlt = false;
       for (const alt of workingHeadlines) {
-        if (!alt || result.includes(alt) || result.some((ex) => checkHeadlineSimilarity(ex, alt) >= 0.85)) continue;
-        const testVal = validateHeadline(alt, i, sourcePublisherNames);
+        const cleanedAlt = removeRedundantClauses(cleanCandidateClause(alt));
+        if (!cleanedAlt || result.includes(cleanedAlt) || result.some((ex) => checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85)) continue;
+        const testVal = validateHeadline(cleanedAlt, i, sourcePublisherNames);
         if (testVal.valid) {
-          cand = alt;
+          cand = cleanedAlt;
           val = testVal;
           foundAlt = true;
           break;
@@ -1735,11 +1750,12 @@ export function fitHeadlinesTo5TierRanges(
 
       if (!foundAlt || isDup || !val.valid) {
         cand = regenerateHeadlineOptionFromFacts(i, factsList, baseText, location, result, sourcePublisherNames);
+        cand = removeRedundantClauses(cleanCandidateClause(cand));
       }
     }
 
     // Clean formatting and state spaces
-    cand = cleanCandidateClause(cand);
+    cand = removeRedundantClauses(cleanCandidateClause(cand));
     result.push(cand);
   }
 

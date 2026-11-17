@@ -269,6 +269,39 @@ runTest("Android applicationId preserved as com.aistudio.ainewsmaker.hzwptx", ()
   }
 });
 
+// TC 13: validateHeadlinesBatch returns sanitizedHeadlines as iterable array and summary
+runTest("validateHeadlinesBatch returns sanitizedHeadlines as iterable array and summary", () => {
+  const sampleBatch = [
+    "इंदौर में खाद्य पदार्थों की जांच के लिए प्रयोगशाला को मिली मंजूरी, स्थानीय स्तर पर होगी टेस्टिंग",
+    "इंदौर में अब 24 घंटे में होगी खाद्य पदार्थों के सैंपलों की जांच, लैब को मिली स्वीकृति",
+    "त्योहारों से पहले मिलावटखोरों पर कसेगा शिकंजा, खाद्य सुरक्षा प्रशासन को मिलेगी त्वरित जांच रिपोर्ट",
+    "इंदौर में खाद्य सामग्री के नमूनों की जांच के लिए अब भोपाल या दिल्ली भेजने की मजबूरी खत्म",
+    "मिलावटी खाद्य पदार्थों पर तत्काल कार्रवाई के लिए इंदौर को मिली बड़ी सौगात, आधुनिक लैब को मंजूरी"
+  ];
+  const batchRes = validator.validateHeadlinesBatch(sampleBatch);
+  assert.ok(Array.isArray(batchRes.sanitizedHeadlines), "sanitizedHeadlines must be an array");
+  assert.strictEqual(batchRes.sanitizedHeadlines.length, 5, "sanitizedHeadlines must have 5 items");
+  assert.doesNotThrow(() => {
+    const spread = [...batchRes.sanitizedHeadlines];
+    assert.strictEqual(spread.length, 5);
+  }, "sanitizedHeadlines must be iterable via spread operator");
+  assert.ok(batchRes.summary, "summary must be defined on batch result");
+  assert.strictEqual(typeof batchRes.summary.valid, "boolean", "summary.valid must be boolean");
+});
+
+// TC 14: removeRedundantClauses removes internal echoing clauses and weak starters
+runTest("removeRedundantClauses removes internal echoing clauses and weak starters", () => {
+  const sampleRepetitive = "इंदौर में खाद्य पदार्थों की जांच के लिए प्रयोगशाला को मिली मंजूरी, स्थानीय स्तर पर होगी टेस्टिंग, अब इंदौर में ही हो सकेगी खाद्य पदार्थों की जांच";
+  const cleaned = validator.removeRedundantClauses(sampleRepetitive);
+  assert.ok(!cleaned.includes("अब इंदौर में ही हो सकेगी खाद्य पदार्थों की जांच"), "Redundant trailing echoing clause must be removed");
+  assert.ok(cleaned.includes("इंदौर में खाद्य पदार्थों की जांच के लिए प्रयोगशाला को मिली मंजूरी"), "Primary clause must be preserved");
+
+  const weakStarter = "इस नई व्यवस्था के लागू होने से शहर में खाद्य सामग्री के नमूनों के परीक्षण की राह आसान, नियमों का उल्लंघन करने वालों पर तुरंत कार्रवाई संभव";
+  const cleanedWeak = validator.removeRedundantClauses(weakStarter);
+  assert.ok(!cleanedWeak.startsWith("इस नई व्यवस्था के लागू होने से"), "Weak sentence starter must be stripped");
+  assert.ok(cleanedWeak.startsWith("शहर में खाद्य सामग्री"), "Cleaned headline must start directly with substantive event");
+});
+
 console.log("==================================================================");
 console.log(`Summary: ${passedCount} / ${totalCount} test cases passed.`);
 console.log("==================================================================");

@@ -278,6 +278,19 @@ export function validateGeneralHeadline(
 }
 
 /**
+ * Tokenizes text into lowercase Hindi words, preserving whitespace for splitting.
+ */
+export function tokenizeHindiWords(value: string): string[] {
+  if (!value || typeof value !== "string") return [];
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("hi")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
  * Calculates token similarity between two headlines using Jaccard index.
  */
 export function checkHeadlineSimilarity(h1: string, h2: string): number {
@@ -288,14 +301,10 @@ export function checkHeadlineSimilarity(h1: string, h2: string): number {
   ]);
 
   const words1 = new Set(
-    normalizeText(h1)
-      .split(/\s+/)
-      .filter((w) => w.length >= 2 && !stopWords.has(w))
+    tokenizeHindiWords(h1).filter((w) => w.length >= 2 && !stopWords.has(w))
   );
   const words2 = new Set(
-    normalizeText(h2)
-      .split(/\s+/)
-      .filter((w) => w.length >= 2 && !stopWords.has(w))
+    tokenizeHindiWords(h2).filter((w) => w.length >= 2 && !stopWords.has(w))
   );
 
   // If exact normalized string matches
@@ -314,6 +323,66 @@ export function checkHeadlineSimilarity(h1: string, h2: string): number {
 }
 
 /**
+ * Removes redundant echoing clauses within a single headline.
+ * Prevents headlines from repeating the same fact or subject across clauses.
+ * E.g., "इंदौर में खाद्य पदार्थों की जांच के लिए लैब को मंजूरी, स्थानीय स्तर पर होगी टेस्टिंग, अब इंदौर में ही हो सकेगी खाद्य पदार्थों की जांच"
+ * -> "इंदौर में खाद्य पदार्थों की जांच के लिए लैब को मंजूरी, स्थानीय स्तर पर होगी टेस्टिंग"
+ */
+export function removeRedundantClauses(headline: string): string {
+  if (!headline || typeof headline !== "string") return "";
+  let text = headline.replace(/\s+/g, " ").trim();
+  if (!text) return "";
+
+  // Strip weak sentence starters like "इस नई व्यवस्था के लागू होने से...", "इससे...", "जिससे..."
+  text = text.replace(/^(?:इस\s+(?:नई\s+)?व्यवस्था\s+के\s+लागू\s+होने\s+से|इसके\s+लागू\s+होने\s+से|इसके\s+बाद|इस\s+दौरान)\s*[,:]?\s*/u, "").trim();
+  text = text.replace(/^(?:इससे|जिससे)\s+(?:बाजार\s+में|शहर\s+में|नागरिकों\s+को|आम\s+लोगों\s+को)?/u, (match, p1) => (p1 ? `${p1} ` : "")).trim();
+
+  // Split by common clause separators: comma, colon
+  const clauses = text.split(/[,:]\s+/).map((c) => c.trim()).filter(Boolean);
+  if (clauses.length <= 1) {
+    return cleanCandidateClause(text);
+  }
+
+  const stopWords = new Set([
+    "और", "पर", "में", "से", "को", "का", "की", "के", "ने", "यह", "वह", "कि",
+    "भी", "लिए", "नए", "नया", "हुए", "हुआ", "है", "हैं", "था", "थी", "थे",
+    "गया", "गई", "गए", "कर", "अब", "ही", "तो", "हो"
+  ]);
+
+  const keptClauses: string[] = [];
+  for (let i = 0; i < clauses.length; i++) {
+    const clause = clauses[i];
+    const normClause = normalizeText(clause);
+    if (!normClause) continue;
+
+    // Check if this clause is largely redundant with any clause already kept
+    const isRedundant = keptClauses.some((existing) => {
+      const normExisting = normalizeText(existing);
+      if (normExisting === normClause) return true;
+      if (checkHeadlineSimilarity(existing, clause) >= 0.35) return true;
+
+      // Check word token overlap (e.g. 50% shared content words)
+      const wordsA = tokenizeHindiWords(existing).filter((w) => w.length >= 2 && !stopWords.has(w));
+      const wordsB = tokenizeHindiWords(clause).filter((w) => w.length >= 2 && !stopWords.has(w));
+      if (wordsA.length === 0 || wordsB.length === 0) return false;
+
+      let shared = 0;
+      for (const w of wordsB) {
+        if (wordsA.includes(w)) shared++;
+      }
+      return shared / Math.min(wordsA.length, wordsB.length) >= 0.50;
+    });
+
+    if (!isRedundant) {
+      keptClauses.push(clause);
+    }
+  }
+
+  const result = keptClauses.join(", ");
+  return cleanCandidateClause(result) || cleanCandidateClause(text);
+}
+
+/**
  * Validates a batch of 5 headline options against their individual target tiers
  * and ensures no duplicates or near-duplicates (similarity >= 0.85).
  */
@@ -325,23 +394,34 @@ export function validateHeadlinesBatch(
   results: HeadlineValidationResult[];
   duplicates: number[];
   duplicatePairs: [number, number][];
+  sanitizedHeadlines: string[];
+  summary: {
+    valid: boolean;
+    totalErrors: number;
+    errorMessages: string[];
+  };
 } {
   const safe = Array.isArray(headlines) ? headlines.slice(0, 5) : [];
   const results: HeadlineValidationResult[] = [];
   const duplicates: number[] = [];
   const duplicatePairs: [number, number][] = [];
+  const sanitizedHeadlines: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const text = safe[i] || "";
-    const res = validateHeadline(text, i, sourcePublisherNames);
+    const raw = safe[i] || "";
+    let cleaned = typeof raw === "string" ? cleanCandidateClause(raw) : "";
+    cleaned = removeRedundantClauses(cleaned);
+    sanitizedHeadlines.push(cleaned);
+
+    const res = validateHeadline(cleaned, i, sourcePublisherNames);
     results.push(res);
   }
 
   // Duplicate and similarity check across options
-  for (let i = 0; i < safe.length; i++) {
-    for (let j = i + 1; j < safe.length; j++) {
-      const hA = safe[i] || "";
-      const hB = safe[j] || "";
+  for (let i = 0; i < sanitizedHeadlines.length; i++) {
+    for (let j = i + 1; j < sanitizedHeadlines.length; j++) {
+      const hA = sanitizedHeadlines[i] || "";
+      const hB = sanitizedHeadlines[j] || "";
       if (!hA || !hB) continue;
 
       const normA = normalizeText(hA);
@@ -360,13 +440,22 @@ export function validateHeadlinesBatch(
     }
   }
 
-  const allValid = results.every((r) => r.valid) && duplicates.length === 0 && safe.length === 5;
+  const allValid =
+    results.every((r) => r.valid) &&
+    duplicates.length === 0 &&
+    sanitizedHeadlines.filter(Boolean).length === 5;
 
   return {
     valid: allValid,
     results,
     duplicates,
     duplicatePairs,
+    sanitizedHeadlines,
+    summary: {
+      valid: allValid,
+      totalErrors: results.reduce((acc, r) => acc + r.errors.length, 0),
+      errorMessages: results.flatMap((r) => r.errors),
+    },
   };
 }
 
@@ -405,15 +494,41 @@ export function cleanCandidateClause(clause: string): string {
 /**
  * Regenerates an invalid, duplicate, or rejected headline option from the verified fact sheet.
  * Never simply deletes a publisher's name from a broken sentence; constructs a complete grammatical headline.
+ * Accepts both signatures:
+ *   (optionIndex, factsList, baseTitle, location, existingHeadlines, sourcePublisherNames)
+ *   (factsList, location, optionIndex, baseTitle, existingHeadlines, sourcePublisherNames)
  */
 export function regenerateHeadlineOptionFromFacts(
-  optionIndex: number,
-  factsList: string[],
-  baseTitle: string,
-  location: string = "",
-  existingHeadlines: string[] = [],
-  sourcePublisherNames: string[] = []
+  arg1: number | string[],
+  arg2: string[] | string,
+  arg3: string | number,
+  arg4?: string | any[],
+  arg5?: any[] | string[],
+  arg6?: string[]
 ): string {
+  let optionIndex = 0;
+  let factsList: string[] = [];
+  let baseTitle = "";
+  let location = "";
+  let existingHeadlines: string[] = [];
+  let sourcePublisherNames: string[] = [];
+
+  if (typeof arg1 === "number") {
+    optionIndex = arg1;
+    factsList = Array.isArray(arg2) ? arg2 : [];
+    baseTitle = typeof arg3 === "string" ? arg3 : "";
+    location = typeof arg4 === "string" ? arg4 : "";
+    existingHeadlines = Array.isArray(arg5) ? arg5 : [];
+    sourcePublisherNames = Array.isArray(arg6) ? arg6 : [];
+  } else if (Array.isArray(arg1)) {
+    factsList = arg1;
+    location = typeof arg2 === "string" ? arg2 : "";
+    optionIndex = typeof arg3 === "number" ? arg3 : 0;
+    baseTitle = typeof arg4 === "string" ? arg4 : "";
+    existingHeadlines = Array.isArray(arg5) ? arg5 : [];
+    sourcePublisherNames = Array.isArray(arg6) ? arg6 : [];
+  }
+
   const target = HEADLINE_TARGETS[optionIndex] || { min: 80, max: 200 };
   const loc = (location && location !== "विशेष कवरेज") ? location.split(/[\/,]/)[0].trim() : "";
 
@@ -421,7 +536,8 @@ export function regenerateHeadlineOptionFromFacts(
   const cleanFacts: string[] = [];
   for (const rawFact of factsList) {
     if (!rawFact || typeof rawFact !== "string") continue;
-    const cleaned = cleanCandidateClause(rawFact);
+    let cleaned = cleanCandidateClause(rawFact);
+    cleaned = removeRedundantClauses(cleaned);
     if (cleaned.length < 15) continue;
     if (hasBlockedMediaBrand(cleaned, sourcePublisherNames)) continue;
     if (hasInvalidHeadlineEnding(cleaned)) continue;
@@ -431,13 +547,11 @@ export function regenerateHeadlineOptionFromFacts(
   }
 
   // 2. Check base title
-  let cleanBase = cleanCandidateClause(baseTitle || "");
+  let cleanBase = removeRedundantClauses(cleanCandidateClause(baseTitle || ""));
   if (hasBlockedMediaBrand(cleanBase, sourcePublisherNames)) {
-    // If baseTitle has publisher name, DO NOT just delete the word; replace with cleanest primary fact
     cleanBase = cleanFacts[0] || "महत्वपूर्ण समाचार घटनाक्रम";
   }
 
-  // If cleanBase still has invalid ending, strip it cleanly
   if (hasInvalidHeadlineEnding(cleanBase)) {
     cleanBase = cleanCandidateClause(cleanBase);
   }
@@ -461,29 +575,23 @@ export function regenerateHeadlineOptionFromFacts(
       if (loc && !f.includes(loc)) {
         candidates.push(`${loc}: ${f}`);
       }
-      if (cleanBase && !cleanBase.includes(f) && !f.includes(cleanBase)) {
+      if (cleanBase && checkHeadlineSimilarity(cleanBase, f) < 0.35) {
         candidates.push(`${cleanBase}, ${f}`);
       }
     }
   }
 
-  // Angle 4: Combinations of verified facts to reach higher tier targets
+  // Angle 4: Combinations of verified facts without echoing/repetitive overlap
   for (let i = 0; i < cleanFacts.length; i++) {
-    let combined = cleanFacts[i];
+    const fA = cleanFacts[i];
     for (let j = 0; j < cleanFacts.length; j++) {
       if (i !== j) {
-        const next = `${combined}, ${cleanFacts[j]}`;
-        candidates.push(next);
-        if (loc && !next.includes(loc)) {
-          candidates.push(`${loc}: ${next}`);
-        }
-        for (let k = 0; k < cleanFacts.length; k++) {
-          if (k !== i && k !== j) {
-            const next3 = `${next}, ${cleanFacts[k]}`;
-            candidates.push(next3);
-            if (loc && !next3.includes(loc)) {
-              candidates.push(`${loc}: ${next3}`);
-            }
+        const fB = cleanFacts[j];
+        if (checkHeadlineSimilarity(fA, fB) < 0.35) {
+          const next = `${fA}, ${fB}`;
+          candidates.push(next);
+          if (loc && !next.includes(loc)) {
+            candidates.push(`${loc}: ${next}`);
           }
         }
       }
@@ -494,14 +602,14 @@ export function regenerateHeadlineOptionFromFacts(
   const validCandidates: { text: string; len: number; diff: number }[] = [];
 
   for (const cand of candidates) {
-    let candidate = cleanCandidateClause(cand);
+    let candidate = removeRedundantClauses(cleanCandidateClause(cand));
     let charLen = countCharacters(candidate);
 
     if (charLen > target.max) {
       const sliced = candidate.substring(0, target.max);
       const lastSpace = sliced.lastIndexOf(" ");
       if (lastSpace >= target.min) {
-        candidate = cleanCandidateClause(sliced.substring(0, lastSpace));
+        candidate = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
         charLen = countCharacters(candidate);
       } else {
         continue;

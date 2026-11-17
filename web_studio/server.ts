@@ -41,6 +41,7 @@ import {
   regenerateHeadlineOptionFromFacts,
   extractPublisherFromDomain,
   cleanCandidateClause,
+  removeRedundantClauses,
 } from "./src/lib/headlineValidator";
 
 export {
@@ -64,6 +65,7 @@ export {
   regenerateHeadlineOptionFromFacts,
   extractPublisherFromDomain,
   cleanCandidateClause,
+  removeRedundantClauses,
 };
 
 const safeFilename = typeof __filename !== 'undefined' ? __filename : process.cwd();
@@ -23149,15 +23151,19 @@ export function fitHeadlinesTo5TierRanges(
   headlines: string[],
   contextOrBase: any = '',
   baseOrContext: any = '',
-  location: string = ''
+  location: string = '',
+  sourcePublisherNames: string[] = []
 ): string[] {
   const safeHeadlines: string[] = [];
   const rawArray = Array.isArray(headlines) ? headlines : [headlines];
   for (const h of rawArray) {
     if (typeof h !== 'string') continue;
-    const clean = sanitizeHeadlineClean(h);
+    let clean = cleanCandidateClause(h);
+    clean = removeRedundantClauses(clean);
     if (!clean) continue;
-    const isDup = safeHeadlines.some((existing) => existing === clean || calculateHeadlineSimilarity(existing, clean) >= 0.88);
+    if (hasBlockedMediaBrand(clean, sourcePublisherNames)) continue;
+    if (hasInvalidHeadlineEnding(clean)) continue;
+    const isDup = safeHeadlines.some((existing) => existing === clean || checkHeadlineSimilarity(existing, clean) >= 0.85);
     if (!isDup) {
       safeHeadlines.push(clean);
     }
@@ -23176,31 +23182,68 @@ export function fitHeadlinesTo5TierRanges(
 
   const factsList = rawSources
     .flatMap((f: string) => f.split(/[।\n\.\r]+/))
-    .map((s: string) => sanitizeHeadlineClean(s))
-    .filter((s: string) => s.length >= 12);
+    .map((s: string) => cleanCandidateClause(s))
+    .filter((s: string) => s.length >= 12 && !hasBlockedMediaBrand(s, sourcePublisherNames) && !hasInvalidHeadlineEnding(s));
 
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5 && baseText) {
     const supp = generate5BalancedHeadlineOptions(baseText, factsList, location);
-    for (const cand of supp) {
+    for (const rawCand of supp) {
       if (workingHeadlines.length >= 5) break;
-      const isDup = workingHeadlines.some((existing) => existing === cand || calculateHeadlineSimilarity(existing, cand) >= 0.88);
+      const cand = removeRedundantClauses(cleanCandidateClause(rawCand));
+      if (!cand) continue;
+      if (hasBlockedMediaBrand(cand, sourcePublisherNames) || hasInvalidHeadlineEnding(cand)) continue;
+      const isDup = workingHeadlines.some((existing) => existing === cand || checkHeadlineSimilarity(existing, cand) >= 0.85);
       if (!isDup) {
         workingHeadlines.push(cand);
       }
     }
   }
 
-  // Sort by visible character count ascending so Option 1..5 naturally scale
-  workingHeadlines.sort((a, b) => countHeadlineVisibleCharacters(a) - countHeadlineVisibleCharacters(b));
+  workingHeadlines.sort((a, b) => countCharacters(a) - countCharacters(b));
 
   const result: string[] = [];
 
   for (let i = 0; i < 5; i++) {
-    const tier = HEADLINE_5_TIER_RANGES[i] || { min: 80, max: 200, label: `विकल्प ${i + 1}` };
-    const cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || 'ताज़ा समाचार: महत्वपूर्ण घटनाक्रम और प्रशासनिक अपडेट';
-    const fitted = fitSingleHeadlineToTier(cand, tier.max, tier.min, factsList, i);
-    result.push(fitted);
+    const tier = HEADLINE_TARGETS[i] || { min: 80, max: 200 };
+    let cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || 'ताज़ा समाचार: महत्वपूर्ण घटनाक्रम और प्रशासनिक अपडेट';
+    cand = removeRedundantClauses(cleanCandidateClause(cand));
+
+    // Truncate cleanly at word boundary if it exceeds tier.max or 200
+    const charLen = countCharacters(cand);
+    if (charLen > tier.max) {
+      const sliced = cand.substring(0, tier.max);
+      const lastSpace = sliced.lastIndexOf(' ');
+      if (lastSpace >= Math.min(tier.min, 45)) {
+        cand = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
+      }
+    }
+
+    // Check if duplicate of an existing item in result or invalid
+    const isDup = !cand || result.includes(cand) || result.some((ex) => checkHeadlineSimilarity(ex, cand) >= 0.85);
+    let val = validateHeadline(cand, i, sourcePublisherNames);
+
+    if (isDup || !val.valid) {
+      let foundAlt = false;
+      for (const alt of workingHeadlines) {
+        const cleanedAlt = removeRedundantClauses(cleanCandidateClause(alt));
+        if (!cleanedAlt || result.includes(cleanedAlt) || result.some((ex) => checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85)) continue;
+        const testVal = validateHeadline(cleanedAlt, i, sourcePublisherNames);
+        if (testVal.valid) {
+          cand = cleanedAlt;
+          val = testVal;
+          foundAlt = true;
+          break;
+        }
+      }
+
+      if (!foundAlt || isDup || !val.valid) {
+        cand = regenerateHeadlineOptionFromFacts(i, factsList, baseText, location, result, sourcePublisherNames);
+        cand = removeRedundantClauses(cleanCandidateClause(cand));
+      }
+    }
+
+    result.push(cand);
   }
 
   return result.slice(0, 5);
@@ -23374,6 +23417,9 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
 1. प्रत्येक हेडलाइन को एक नया, स्वतंत्र, पूर्ण और अर्थपूर्ण हिंदी वाक्य होना चाहिए (DO NOT COPY-PASTE OR SLICE ARTICLE BODY SENTENCES):
    - आलेख के किसी वाक्य को बीच से काटकर या दो असंबद्ध वाक्यों को जोड़कर हेडलाइन कभी न बनाएं।
    - प्रत्येक हेडलाइन का आरंभ, मध्य और अंत व्याकरण की दृष्टि से पूर्ण होना चाहिए। कोई भी हेडलाइन अधूरे वाक्यांश (जैसे 'से 5', 'कोर्ट ने कहा', 'सुप्रीम कोर्ट ने गुरुवार', 'एपीके फाइल लिंक') पर समाप्त नहीं होनी चाहिए।
+   - हेडलाइन की शुरुआत कभी भी 'इस नई व्यवस्था के लागू होने से', 'इसके लागू होने से', 'इससे', 'जिससे', 'इसके बाद' जैसे कमजोर सर्वनामों या निष्क्रिय वाक्यांशों से न करें; सीधे मुख्य घटना, कर्ता या आधिकारिक कार्रवाई से शुरुआत करें।
+   - कड़ा नियम - आंतरिक पुनरावृत्ति (Internal Repetition/Echoing) पूर्णतः वर्जित: किसी भी हेडलाइन के भीतर एक ही तथ्य, शब्द या वाक्यांश को दोबारा न दोहराएं (जैसे यदि शुरू में 'जांच' या 'प्रयोगशाला को मंजूरी' आ चुका है, तो उसी हेडलाइन के अंत में 'अब इंदौर में ही हो सकेगी खाद्य पदार्थों की जांच' जैसा दोहराव बिल्कुल न लिखें)।
+   - कॉमा (,) का अत्यधिक उपयोग न करें: दो या तीन असंबद्ध वाक्यों को केवल कॉमा लगाकर एक लंबा बेतुका वाक्य न बनाएं। प्रत्येक हेडलाइन एक धाराप्रवाह, स्पष्ट, प्रभावशाली और संपूर्ण एकल समाचार वाक्य होनी चाहिए।
    - हेडलाइन में कभी भी 'प्रतीकात्मक चित्र', 'फाइल फोटो', 'नई दिल्ली3 घंटे पहले', '2 घंटे पहले', या '; 5 सवाल' जैसे वेब-स्क्रैपिंग अवशेष न आने दें।
    - URL को कभी भी हेडलाइन के रूप में उपयोग न करें।
    - निम्नलिखित कृत्रिम या मनगढ़ंत वाक्य स्वतः जोड़ना पूर्णतः प्रतिबंधित है (जब तक कि मूल खबर में वास्तव में वह तथ्य न हो):
@@ -23385,8 +23431,8 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
      * "इस घटना के बाद प्रशासन अलर्ट"
      * "मामले को लेकर विभागीय स्तर पर समीक्षा"
      * "विशेष डेस्क" / "विशेष डैश" (स्थान या हेडलाइन में कभी न लगाएं)
-2. 5 अनुमोदित संपादकीय शैलियाँ और अधिकतम 200 अक्षर की सीमा:
-   सभी 5 विकल्प केवल और केवल उसी मूल खबर/घटना पर आधारित होने चाहिए, किंतु उनकी संपादकीय प्रस्तुति निम्न 5 शैलियों के अनुसार अलग होगी:
+2. 5 अनुमोदित संपादकीय शैलियाँ और अधिकतम 200 अक्षर की सीमा (PROFESSIONAL NEWS STYLE):
+   सभी 5 विकल्प केवल और केवल उसी मूल खबर/घटना पर आधारित होने चाहिए, किंतु उनकी संपादकीय प्रस्तुति निम्न 5 शैलियों के अनुसार अलग होगी (सक्रिय वाच्य, पत्रकारिता प्रभाव):
    - विकल्प 1: 80 से 110 अक्षर (मुख्य घटना का सीधा, स्पष्ट, निष्पक्ष और तेज़ समाचार शीर्षक)
    - विकल्प 2: 100 से 130 अक्षर (मुख्य घटना के साथ प्रमुख तथ्य, संख्या, आंकड़ा या मुख्य निर्णय)
    - विकल्प 3: 125 से 150 अक्षर (घटना के प्रभाव, परिणाम, असर या कार्रवाई को स्पष्ट करने वाला शीर्षक)
@@ -24836,6 +24882,10 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     const regenInstruction = `You are the Chief Hindi News Editor for AI NEWS MAKER (BREAKING NEWS WALA Editorial Standard).
 Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME primary news event in pure Hindi Devanagari script:
 - All 5 options must be based strictly on the same central event and verified facts from the source news.
+- JOURNALISTIC STYLE: Pure Hindi news headline style with active voice (जैसे प्रमुख डिजिटल हिंदी न्यूज़ पोर्टल के मुख्य पृष्ठ के शीर्षक).
+- NEVER start with weak phrases like 'इस नई व्यवस्था के लागू होने से', 'इसके लागू होने से', 'इससे', 'जिससे', 'इसके बाद'. Start directly with the core event, actor, or action.
+- STRICT NO REPETITION: Never repeat facts, words, or clauses within the same headline (e.g., do NOT repeat 'खाद्य पदार्थों की जांच' or 'मंजूरी' twice in one headline).
+- NO RUN-ON COMMA SPLICING: Do not merely concatenate 3 sentence fragments with commas. Craft a single cohesive sentence.
 - STRICT RULE: Never add generic administrative or filler statements ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'पूरे मामले को लेकर कार्रवाई की जा रही है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'इस घटना के बाद प्रशासन अलर्ट', 'मामले को लेकर विभागीय स्तर पर समीक्षा', 'विशेष डेस्क', 'विशेष डैश') merely to increase headline length.
 - MANDATORY 5-TIER CHARACTER LIMITS (Absolute Maximum: 200 characters):
   * Option 1 (विकल्प 1): 80–110 characters
@@ -24848,11 +24898,11 @@ Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME pr
 - Pure Devanagari Hindi only (no Roman English characters).
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
-    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित हेडलाइन विकल्प तैयार करें।
-प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
+    const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित, प्रभावशाली पत्रकारिता हेडलाइन विकल्प तैयार करें।
+प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, सक्रिय वाच्य में, बिना किसी आंतरिक पुनरावृत्ति के, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
 शीर्षक संदर्भ: ${sourceTitle}
 समाचार सामग्री/तथ्य: ${sourceText.slice(0, 3000)}
-${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\\n` : ""}
+${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
 ${excludeTitles.length > 0 ? `पिछले 5 विकल्प (इन्हें बिल्कुल न दोहराएं, नए कोण बनाएं):\n${excludeTitles.map((t: string, idx: number) => `${idx + 1}. ${t}`).join('\n')}\n` : ""}
 JSON Output Schema:
 {
@@ -24999,7 +25049,9 @@ JSON Output Schema:
 
     // Validate each headline against target ranges, blocked brands, invalid endings & duplicates
     let validatedRegenBatch = validateHeadlinesBatch(fittedOptions, effectiveSourcePublisherNames);
-    const verifiedRegenHeadlines = [...validatedRegenBatch.sanitizedHeadlines];
+    const verifiedRegenHeadlines = Array.isArray(validatedRegenBatch?.sanitizedHeadlines)
+      ? [...validatedRegenBatch.sanitizedHeadlines]
+      : [...fittedOptions];
 
     // For any tier that failed validation or is a duplicate against previous or current batch, regenerate from verified facts
     const verifiedFactSentences = articleSentences.length > 0
@@ -25007,28 +25059,32 @@ JSON Output Schema:
       : [sourceTitle, sourceText].filter(Boolean);
 
     for (let i = 0; i < HEADLINE_TARGETS.length; i++) {
-      const res = validatedRegenBatch.results[i];
-      let needsRegen = !res.valid;
+      const res = validatedRegenBatch?.results ? validatedRegenBatch.results[i] : null;
+      let needsRegen = !res || !res.valid;
       if (!needsRegen && rawPrev.some((prevH: string) => checkHeadlineSimilarity(verifiedRegenHeadlines[i], String(prevH)) >= 0.85)) {
         needsRegen = true;
       }
 
       if (needsRegen) {
+        const existing = verifiedRegenHeadlines.filter((_h: string, idx: number) => idx !== i);
         const regenerated = regenerateHeadlineOptionFromFacts(
-          verifiedFactSentences,
-          sourceLoc,
           i,
-          sourceTitle,
+          verifiedFactSentences,
+          sourceTitle || cleanOptions[0] || "",
+          sourceLoc,
+          existing,
           effectiveSourcePublisherNames
         );
         if (regenerated) {
-          verifiedRegenHeadlines[i] = regenerated;
+          verifiedRegenHeadlines[i] = removeRedundantClauses(cleanCandidateClause(regenerated));
         }
       }
     }
 
     validatedRegenBatch = validateHeadlinesBatch(verifiedRegenHeadlines, effectiveSourcePublisherNames);
-    const finalOptions = validatedRegenBatch.sanitizedHeadlines;
+    const finalOptions = Array.isArray(validatedRegenBatch?.sanitizedHeadlines) && validatedRegenBatch.sanitizedHeadlines.length === 5
+      ? validatedRegenBatch.sanitizedHeadlines
+      : verifiedRegenHeadlines;
 
     // Atomic coin billing upon successful generation per Part 8 and Phase 3.0B-S distributed lock
     let coinsDeducted = 0;
@@ -25124,7 +25180,7 @@ JSON Output Schema:
         count: finalOptions.length,
         totalCount: totalHeadlineOptions.length,
         graduatedWordCounts: finalOptions.map((h: string) => h.split(/\s+/).length),
-        validation: validatedRegenBatch.summary,
+        validation: validatedRegenBatch?.summary || { valid: validatedRegenBatch?.valid ?? true, totalErrors: 0, errorMessages: [] },
       }
     };
 
