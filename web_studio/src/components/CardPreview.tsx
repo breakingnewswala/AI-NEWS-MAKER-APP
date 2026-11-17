@@ -10,7 +10,7 @@ import { getEffectiveSpeaker, cleanHeadlineText } from '../lib/speakerUtils';
 import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
-import { getDynamicFrameById, normalizeDynamicFrame } from '../lib/dynamicFramesManager';
+import { getDynamicFrameById, normalizeDynamicFrame, getAssetLibraryItemById } from '../lib/dynamicFramesManager';
 import { formatCleanLocationText, calculateDynamicLocationMetrics } from '../lib/locationUtils';
 import {
   computeCanonicalHeadlineLayout,
@@ -679,9 +679,17 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
-      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Bug Group E: Render over header photos) */}
-      {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true) && (
-        <div className="absolute inset-0 pointer-events-none z-11 overflow-hidden flex flex-col justify-around select-none">
+      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Priority 8: Strictly clipped to Photo Slot only, mutual exclusion with Image Watermark) */}
+      {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && card.watermarkMode !== 'image' && !card.watermarkImage && (
+        <div
+          className="absolute pointer-events-none z-11 overflow-hidden flex flex-col justify-around select-none"
+          style={{
+            left: `${df.photoSlots?.[0]?.rect?.x ?? 0}%`,
+            top: `${df.photoSlots?.[0]?.rect?.y ?? 0}%`,
+            width: `${df.photoSlots?.[0]?.rect?.width ?? 100}%`,
+            height: `${df.photoSlots?.[0]?.rect?.height ?? 58}%`,
+          }}
+        >
           <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
             {[...Array(6)].map((_, rIdx) => (
               <div key={rIdx} className="flex whitespace-nowrap gap-12 sm:gap-16 shrink-0 font-black tracking-widest">
@@ -3475,7 +3483,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               {/* Dynamic Location Badge */}
               {df.headerConfig?.showLocation && card.location && card.showLocation !== false && (() => {
                 const cleanLoc = formatCleanLocationText(card.location);
-                const badgeAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
+                let badgeAsset = card.customLocationBadgeUrl || df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
+                if (!badgeAsset) {
+                  const badgeId = card.selectedLocationBadgeId || df.headerConfig.locationBadgeAssetId || df.locationBadgeAssetId;
+                  if (badgeId) {
+                    const item = getAssetLibraryItemById(badgeId);
+                    if (item && item.url) badgeAsset = item.url;
+                  }
+                }
                 const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || df.headerConfig.locationTextColor || '#FFFFFF';
                 const dynamicLoc = calculateDynamicLocationMetrics({
                   locationText: cleanLoc,
@@ -3690,7 +3705,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   df.fullStoryCalloutConfig?.calloutVisibilityPolicy !== 'disabled' &&
                   card.showCallout !== false)) && (
                 (() => {
-                  const calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
+                  let calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
+                  if (!calloutUrl) {
+                    const calloutId = card.selectedCalloutId || df.fullStoryCalloutConfig?.calloutAssetId || df.calloutAssetId;
+                    if (calloutId) {
+                      const item = getAssetLibraryItemById(calloutId);
+                      if (item && item.url) calloutUrl = item.url;
+                    }
+                  }
                   const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
                   if (!calloutUrl && !effectiveCalloutText) return null;
 
@@ -3796,8 +3818,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 className="absolute bottom-0 inset-x-0 pointer-events-auto"
                 style={{
                   height: `${(df.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
-                  width: `${df.footerConfig?.footerWidthPct || 100}%`,
-                  left: `${(100 - (df.footerConfig?.footerWidthPct || 100)) / 2}%`,
+                  width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 92}%`,
+                  left: `${(100 - (card.footerWidthPct || df.footerConfig?.footerWidthPct || 92)) / 2}%`,
                 }}
               >
                 <FooterGraphic

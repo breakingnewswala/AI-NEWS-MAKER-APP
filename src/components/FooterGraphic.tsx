@@ -128,10 +128,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
     (footerConfig?.elements ? footerConfig.elements.showPhone !== false : showMobileNumber !== false) && cleanPhone
   );
 
-  // Format phone display
-  const displayPhone = cleanPhone
+  // Format phone display (Priority 10: Formatted spacing for Indian mobile numbers)
+  const rawDisplayPhone = cleanPhone
     ? (cleanPhone.startsWith('+') ? cleanPhone : `+91 ${cleanPhone}`)
     : '';
+  const displayPhone = rawDisplayPhone.replace(/^(\+91\s*)(\d{5})(\d{5})$/, '$1$2 $3');
 
   // If user has not provided handle, website, or phone, display authentic default placeholder from template
   if (!displayHandle && !isWebsiteActive && !isWhatsappActive) {

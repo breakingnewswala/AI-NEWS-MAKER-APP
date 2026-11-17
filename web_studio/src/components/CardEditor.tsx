@@ -488,15 +488,33 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       updates.footerTextColor = dfFooterText;
     }
 
-    // Bug F: Story Callout default state from Master Admin
+    // Priority 6 & 7: Story Callout and Location Badge default state from Master Admin
+    const defaultCalloutId = activeDf.calloutAssetId || activeDf.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_live_update';
+    if (!card.selectedCalloutId && defaultCalloutId) {
+      updates.selectedCalloutId = defaultCalloutId;
+    }
+    const defaultCalloutAsset = activeDf.fullStoryCalloutConfig?.manualCalloutAsset || (activeDf.fullStoryCalloutConfig as any)?.calloutAssetUrl || activeDf.calloutAssetUrl;
+    if (!card.customCalloutAssetUrl && defaultCalloutAsset) {
+      updates.customCalloutAssetUrl = defaultCalloutAsset;
+    }
     if (activeDf.fullStoryCalloutConfig?.enabled) {
       updates.showCallout = true;
-      if (activeDf.fullStoryCalloutConfig.manualCalloutAsset || (activeDf.fullStoryCalloutConfig as any).calloutAssetUrl) {
-        updates.customCalloutAssetUrl = activeDf.fullStoryCalloutConfig.manualCalloutAsset || (activeDf.fullStoryCalloutConfig as any).calloutAssetUrl;
-      }
-      if (activeDf.fullStoryCalloutConfig.text) {
+      if (activeDf.fullStoryCalloutConfig.text && (!card.calloutTag || card.calloutTag === 'पूरी खबर विवरण नीचे पढ़ें' || card.calloutTag === 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें')) {
         updates.calloutTag = activeDf.fullStoryCalloutConfig.text;
       }
+    }
+
+    const defaultLocationBadgeId = activeDf.locationBadgeAssetId || activeDf.headerConfig?.locationBadgeAssetId || 'loc_style_vintage_stamp';
+    if (!card.selectedLocationBadgeId && defaultLocationBadgeId) {
+      updates.selectedLocationBadgeId = defaultLocationBadgeId;
+    }
+    const defaultLocationAsset = activeDf.headerConfig?.manualLocationAsset || (activeDf.headerConfig as any)?.locationBadgeAssetUrl || (activeDf.headerConfig as any)?.locationBadgeUrl;
+    if (!card.customLocationBadgeUrl && defaultLocationAsset) {
+      updates.customLocationBadgeUrl = defaultLocationAsset;
+    }
+
+    if (activeDf.footerConfig?.footerWidthPct && !card.footerWidthPct) {
+      updates.footerWidthPct = activeDf.footerConfig.footerWidthPct;
     }
 
     // Bug J: Built-in custom footer auto-selection
@@ -517,7 +535,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   }, [card.frameDesign, libraryFooters]);
 
   React.useEffect(() => {
-    fetch(`/api/admin/asset-libraries?type=custom_footer`, {
+    fetch(`/api/asset-libraries?type=custom_footer`, {
       headers: {
         ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {})
       }
@@ -531,7 +549,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       })
       .catch(() => {});
 
-    fetch(`/api/admin/asset-libraries?type=callout_png`, {
+    fetch(`/api/asset-libraries?type=callout_png`, {
       headers: {
         ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {})
       }
@@ -1838,24 +1856,30 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                             main: frameSamplePhoto,
                           };
                         }
-                        // Bug F & Section 8/12: Authoritative Callout settings
+                        // Priorities 6 & 7: Authoritative Master Admin Callout & Location Badge settings
+                        const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_live_update';
+                        updates.selectedCalloutId = calloutId;
+                        const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
+                        if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
                         if (match?.fullStoryCalloutConfig?.enabled) {
                           updates.showCallout = true;
-                          updates.customCalloutAssetUrl = match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl || match.calloutAssetUrl || undefined;
                           if (match.fullStoryCalloutConfig.text) {
                             updates.calloutTag = match.fullStoryCalloutConfig.text;
                           }
                         } else if (match?.calloutAssetUrl) {
                           updates.showCallout = true;
-                          updates.customCalloutAssetUrl = match.calloutAssetUrl;
                           if ((match as any).calloutTag) {
                             updates.calloutTag = (match as any).calloutTag;
                           }
-                        } else {
-                          // Do not force legacy callout if admin has not configured one
-                          updates.showCallout = false;
-                          updates.customCalloutAssetUrl = undefined;
-                          updates.calloutTag = '';
+                        }
+
+                        const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_vintage_stamp';
+                        updates.selectedLocationBadgeId = locBadgeId;
+                        const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
+                        if (locAsset) updates.customLocationBadgeUrl = locAsset;
+
+                        if (match?.footerConfig?.footerWidthPct) {
+                          updates.footerWidthPct = match.footerConfig.footerWidthPct;
                         }
                         // Bug C & D: Inherit frame-specific footer defaults and respect banned colors
                         const dfFooterBg = match?.footerConfig?.footerBgColor || (match?.footerConfig as any)?.primaryFooterBg || (match?.footerConfig as any)?.primaryFooterColor;
@@ -2110,22 +2134,30 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                             main: frameSamplePhoto,
                           };
                         }
+                        // Priorities 6 & 7: Authoritative Master Admin Callout & Location Badge settings
+                        const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_live_update';
+                        updates.selectedCalloutId = calloutId;
+                        const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
+                        if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
                         if (match?.fullStoryCalloutConfig?.enabled) {
                           updates.showCallout = true;
-                          updates.customCalloutAssetUrl = match.fullStoryCalloutConfig.manualCalloutAsset || (match.fullStoryCalloutConfig as any).calloutAssetUrl || match.calloutAssetUrl || undefined;
                           if (match.fullStoryCalloutConfig.text) {
                             updates.calloutTag = match.fullStoryCalloutConfig.text;
                           }
                         } else if (match?.calloutAssetUrl) {
                           updates.showCallout = true;
-                          updates.customCalloutAssetUrl = match.calloutAssetUrl;
                           if ((match as any).calloutTag) {
                             updates.calloutTag = (match as any).calloutTag;
                           }
-                        } else {
-                          updates.showCallout = false;
-                          updates.customCalloutAssetUrl = undefined;
-                          updates.calloutTag = '';
+                        }
+
+                        const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_vintage_stamp';
+                        updates.selectedLocationBadgeId = locBadgeId;
+                        const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
+                        if (locAsset) updates.customLocationBadgeUrl = locAsset;
+
+                        if (match?.footerConfig?.footerWidthPct) {
+                          updates.footerWidthPct = match.footerConfig.footerWidthPct;
                         }
                         onChange(updates);
                       }}

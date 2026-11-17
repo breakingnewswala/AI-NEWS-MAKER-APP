@@ -186,13 +186,13 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
 
         {/* Main Image (Rendered only when genuine news photo exists; rejects typewriter stock photo) */}
         {thumbnailUrl ? (
-          <div className="w-full aspect-video rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md">
+          <div className="w-full aspect-video rounded-xl overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-800 shadow-md">
             <img
               src={thumbnailUrl}
               alt={headline}
               className="w-full h-full object-cover"
               onError={(e) => {
-                (e.target as HTMLElement).style.display = 'none';
+                (e.target as HTMLImageElement).src = '/assets/sample_news_bus.svg';
               }}
             />
           </div>

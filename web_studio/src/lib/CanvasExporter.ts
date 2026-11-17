@@ -22,7 +22,7 @@ import {
 } from './HeaderDesigns';
 import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 import { getApiUrl } from './apiConfig';
-import { getDynamicFrameById, normalizeDynamicFrame } from './dynamicFramesManager';
+import { getDynamicFrameById, normalizeDynamicFrame, getAssetLibraryItemById } from './dynamicFramesManager';
 import { formatCleanLocationText } from './locationUtils';
 import { DynamicFrame } from '../types/dynamicFrame';
 
@@ -1797,6 +1797,56 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
+  // LAYER 1.5: DEDICATED TEXT WATERMARK (Priority 8: Strictly clipped to Photo Slots, drawn underneath PNG Artwork)
+  const isImageWatermarkActive = Boolean(card.watermarkMode === 'image' || (card.watermarkType === 'image' && card.watermarkImage));
+  const isTextWatermarkActive = (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && !isImageWatermarkActive;
+
+  if (isTextWatermarkActive) {
+    ctx.save();
+    // Clip strictly to photo slot bounds so watermark NEVER bleeds onto headline, footer or frame borders
+    ctx.beginPath();
+    if (df.photoSlots && df.photoSlots.length > 0) {
+      df.photoSlots.forEach(slot => {
+        const sx = (slot.rect.x / 100) * width;
+        const sy = (slot.rect.y / 100) * height;
+        const sw = (slot.rect.width / 100) * width;
+        const sh = (slot.rect.height / 100) * height;
+        ctx.rect(sx, sy, sw, sh);
+      });
+    } else {
+      ctx.rect(0, 0, width, height * 0.58);
+    }
+    ctx.clip();
+
+    const textContent = (card.textWatermarkContent || card.channelNameEn || card.brandName || card.watermarkText || 'BREAKING NEWS WALA').trim();
+    const textOpacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.18;
+    const textColor = card.textWatermarkColor || 'white';
+    ctx.globalAlpha = Math.max(0.05, Math.min(0.65, textOpacity));
+
+    const colorHex = textColor === 'black' ? '#000000' : textColor === 'red' ? '#DC2626' : '#FFFFFF';
+    ctx.fillStyle = colorHex;
+    ctx.font = '900 24px "Arial", "Noto Sans Devanagari", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    ctx.save();
+    ctx.translate(width / 2, height * 0.28);
+    const wmRotDeg = card.watermarkRotation ?? -20;
+    ctx.rotate((wmRotDeg * Math.PI) / 180);
+    const textMetrics = ctx.measureText(textContent.toUpperCase());
+    const measuredW = textMetrics ? textMetrics.width : (textContent.length * 16);
+    const stepX = Math.max(340, Math.round(measuredW + 120));
+    const stepY = 110;
+    for (let row = -5; row <= 5; row++) {
+      const offsetX = (row % 2) * (stepX / 2);
+      for (let col = -3; col <= 3; col++) {
+        ctx.fillText(textContent.toUpperCase(), col * stepX + offsetX, row * stepY);
+      }
+    }
+    ctx.restore();
+    ctx.restore();
+  }
+
   // LAYER 2: PANEL B ORIGINAL PNG ARTWORK OVERLAY (Preserving transparency & natural curves)
   const bgArtworkUrl = df.primaryBackgroundAsset;
   if (bgArtworkUrl) {
@@ -1857,7 +1907,16 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const bw = (locRect.width / 100) * width;
     const bh = (locRect.height / 100) * height;
 
-    const locAsset = df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
+    let locAsset = card.customLocationBadgeUrl || df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
+    if (!locAsset) {
+      const badgeId = card.selectedLocationBadgeId || df.headerConfig.locationBadgeAssetId || df.locationBadgeAssetId;
+      if (badgeId) {
+        const item = getAssetLibraryItemById(badgeId);
+        if (item && item.url) {
+          locAsset = item.url;
+        }
+      }
+    }
     if (locAsset) {
       try {
         const badgeImg = await loadImage(locAsset);
@@ -1990,7 +2049,16 @@ async function drawAuthoritativeDynamicFrameCanvas(
       card.showCallout !== false)
   );
   if (isCalloutEnabled) {
-    const calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
+    let calloutAsset = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
+    if (!calloutAsset) {
+      const calloutId = card.selectedCalloutId || df.fullStoryCalloutConfig?.calloutAssetId || df.calloutAssetId;
+      if (calloutId) {
+        const item = getAssetLibraryItemById(calloutId);
+        if (item && item.url) {
+          calloutAsset = item.url;
+        }
+      }
+    }
     const calloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
 
     // If neither custom asset nor callout text is configured, do not force-draw any fallback callout
@@ -2111,38 +2179,6 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.restore();
   }
 
-  // 5.6 DEDICATED TEXT WATERMARK (Works independently from photo disclaimer)
-  if (card.showTextWatermark === true || card.showSuperBreakingWatermark === true) {
-    ctx.save();
-    const textContent = (card.textWatermarkContent || card.channelNameEn || card.brandName || card.watermarkText || 'BREAKING NEWS WALA').trim();
-    const textOpacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.20;
-    const textColor = card.textWatermarkColor || 'white';
-    ctx.globalAlpha = Math.max(0.05, Math.min(0.9, textOpacity));
-
-    const colorHex = textColor === 'black' ? '#000000' : textColor === 'red' ? '#DC2626' : '#FFFFFF';
-    ctx.fillStyle = colorHex;
-    ctx.font = '900 24px "Arial", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    ctx.save();
-    ctx.translate(width / 2, height * 0.40);
-    const wmRotDeg = card.watermarkRotation ?? -20;
-    ctx.rotate((wmRotDeg * Math.PI) / 180);
-    const textMetrics = ctx.measureText(textContent.toUpperCase());
-    const measuredW = textMetrics ? textMetrics.width : (textContent.length * 16);
-    const stepX = Math.max(340, Math.round(measuredW + 120));
-    const stepY = 110;
-    for (let row = -4; row <= 4; row++) {
-      const offsetX = (row % 2) * (stepX / 2);
-      for (let col = -3; col <= 3; col++) {
-        ctx.fillText(textContent.toUpperCase(), col * stepX + offsetX, row * stepY);
-      }
-    }
-    ctx.restore();
-    ctx.restore();
-  }
-
   // 6. PRIMARY HEADLINE TEXT (Respecting #000000 Black Text & Max 4 Lines with Font Autoscaling)
   const textSlot = df.textSlots[0] || { rect: { x: 7, y: 63, width: 86, height: 27 }, textColor: '#FFFFFF', fontFamily: 'Baloo 2', backgroundColor: 'transparent' };
   const hx = (textSlot.rect.x / 100) * width;
@@ -2158,14 +2194,6 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.save();
     ctx.fillStyle = textSlot.backgroundColor;
     ctx.fillRect(hx, hy, hw, hh);
-    ctx.restore();
-  } else if (isBlack && isColorDark(df.primaryBackgroundHex || '#0B1329') && rawHeadline && rawHeadline.trim().length > 0) {
-    // High-contrast text slot backdrop to guarantee black text readability over dark background
-    ctx.save();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.beginPath();
-    ctx.roundRect(hx, hy, hw, hh, 8);
-    ctx.fill();
     ctx.restore();
   }
 
@@ -7071,12 +7099,15 @@ export async function drawThemeFooterBar(
     : (isLightBg ? '#0F172A' : '#FFFFFF');
   const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
 
-  // Top subtle border line
+  // Top subtle border line (Centered with frame-proportional width)
+  const footerWidthPct = (customFooterConfig?.footerWidthPct ?? 92);
+  const borderW = Math.round((footerWidthPct / 100) * width);
+  const borderX = Math.round((width - borderW) / 2);
   ctx.strokeStyle = isLightBg ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.18)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(0, barY);
-  ctx.lineTo(width, barY);
+  ctx.moveTo(borderX, barY);
+  ctx.lineTo(borderX + borderW, barY);
   ctx.stroke();
 
   const iconY = barY + barH / 2;
@@ -7095,14 +7126,15 @@ export async function drawThemeFooterBar(
     .replace(/\/$/, '');
   const cleanWebsite = showWebsite !== false ? rawWebsite : '';
 
-  // Clean phone number (only if provided and enabled)
+  // Clean phone number (only if provided and enabled) - Priority 10: Cleanly formatted with spacing
   const shouldShowPhone = showMobileNumber !== false && Boolean(whatsappNumber && whatsappNumber.trim());
   const cleanPhone = shouldShowPhone
     ? whatsappNumber.replace(/^\/+/, '').trim()
     : '';
-  const displayPhone = cleanPhone
+  const rawDisplayPhone = cleanPhone
     ? (cleanPhone.startsWith('+') ? cleanPhone : `+91 ${cleanPhone}`)
     : '';
+  const displayPhone = rawDisplayPhone.replace(/^(\+91\s*)(\d{5})(\d{5})$/, '$1$2 $3');
 
   // Active social icons: Facebook & Instagram are MANDATORY (always locked/included)
   const icons: string[] = [];

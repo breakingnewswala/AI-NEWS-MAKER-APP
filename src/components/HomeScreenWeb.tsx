@@ -377,6 +377,39 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [activeReminders, setActiveReminders] = useState<UserReminderItem[]>(() => getUserRemindersLocal(currentUser?.email));
   const [activeReminderPortal, setActiveReminderPortal] = useState<{ post: NewsFeedPost; x: number; y: number } | null>(null);
 
+  // Priority 3: PWA Install Prompt state (One-time, dismissible, hidden if installed or native APK)
+  const [isPwaDismissed, setIsPwaDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem('ai_news_pwa_install_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const isAppInstalled = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+      const isAndroidApk = Boolean((window as any).AndroidBridge || window.location.hostname === 'appassets.androidplatform.net');
+      const isPersistedInstalled = localStorage.getItem('ai_news_pwa_installed') === 'true';
+      return isStandalone || isAndroidApk || isPersistedInstalled;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleAppInstalled = () => {
+      try {
+        localStorage.setItem('ai_news_pwa_installed', 'true');
+        setIsPwaDismissed(true);
+      } catch {}
+    };
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => window.removeEventListener('appinstalled', handleAppInstalled);
+  }, []);
+
   // Overdue / Due Reminders Queue & Centered Modal Dialog
   const [dueReminderQueue, setDueReminderQueue] = useState<UserReminderItem[]>([]);
   const [currentDueReminder, setCurrentDueReminder] = useState<UserReminderItem | null>(null);
@@ -410,6 +443,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         .catch(() => {});
     }
   }, [currentUser?.email]);
+
+  // Priority 1: Reconcile orphaned/stale favorite IDs that no longer exist in published news
+  useEffect(() => {
+    if (!combinedPosts || combinedPosts.length === 0 || !userFavorites || userFavorites.size === 0) return;
+    const existingIds = new Set(combinedPosts.map((p) => p.id));
+    const validIds = Array.from(userFavorites).filter((id) => existingIds.has(id));
+    if (validIds.length !== userFavorites.size) {
+      setUserFavorites(new Set(validIds));
+      try {
+        const cleanEmail = (currentUser?.email || '').toLowerCase().trim();
+        const key = cleanEmail ? `ai_news_user_favorites_${cleanEmail}` : 'ai_news_user_favorites_anonymous';
+        localStorage.setItem(key, JSON.stringify(validIds));
+      } catch {}
+    }
+  }, [combinedPosts, currentUser?.email]);
 
   // Periodic checker for Due Reminders
   useEffect(() => {
@@ -1781,6 +1829,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     return combinedPosts.filter((p) => p.isBonus && (canModerate || isRssPostApproved(p, approvedRssIds))).length;
   }, [combinedPosts, canModerate, approvedRssIds]);
 
+  // Priority 1: Authoritative favorites resolution: Only count & show eligible valid stories for current user
+  const validFavoritePosts = useMemo(() => {
+    if (!userFavorites || userFavorites.size === 0) return [];
+    return combinedPosts.filter(
+      (p) => userFavorites.has(p.id) && (canModerate || isRssPostApproved(p, approvedRssIds))
+    );
+  }, [combinedPosts, userFavorites, canModerate, approvedRssIds]);
+
+  const favoriteCount = validFavoritePosts.length;
+
   // Filter posts from combined feed (Admin Date, Channel, Pending News, Published News, Bonus News & Dynamic Category Filters)
   const filteredPosts = useMemo(() => {
     const baseFiltered = combinedPosts.filter((p) => {
@@ -2334,6 +2392,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             >
               <span>❤️</span>
               <span>पसंदीदा</span>
+              {favoriteCount > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold leading-none ${
+                  selectedCategory === 'favorites' ? 'bg-white text-red-600' : 'bg-red-500/20 text-red-400'
+                }`}>
+                  {favoriteCount}
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -2375,39 +2440,57 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           </div>
         </div>
 
-        {/* Mobile App Download Box (Part 3: Horizontal Box, Left text only, Right touch-friendly button) */}
-        <div className="w-full bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 hover:border-amber-400/60 rounded-2xl px-3.5 py-3 shadow-md flex items-center justify-between gap-3 text-left transition-all my-1.5">
-          {/* Left Side: Strictly Text Only (No icon, No logo per Part 3) */}
-          <div className="min-w-0 flex-1">
-            <h4 className="text-xs sm:text-sm font-black text-amber-400 tracking-wide uppercase truncate">
-              AI NEWS MAKER
-            </h4>
-            <p className="text-[11px] sm:text-xs font-medium text-slate-300 mt-0.5 line-clamp-1">
-              अपना न्यूज़ स्टूडियो मोबाइल पर इंस्टॉल करें
-            </p>
-          </div>
+        {/* Mobile App Download Box (Priority 3: One-time, dismissible, hidden if installed or native APK) */}
+        {!isAppInstalled && !isPwaDismissed && (
+          <div className="w-full bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 hover:border-amber-400/60 rounded-2xl px-3.5 py-3 shadow-md flex items-center justify-between gap-3 text-left transition-all my-1.5">
+            {/* Left Side: Strictly Text Only */}
+            <div className="min-w-0 flex-1">
+              <h4 className="text-xs sm:text-sm font-black text-amber-400 tracking-wide uppercase truncate">
+                AI NEWS MAKER
+              </h4>
+              <p className="text-[11px] sm:text-xs font-medium text-slate-300 mt-0.5 line-clamp-1">
+                अपना न्यूज़ स्टूडियो मोबाइल पर इंस्टॉल करें
+              </p>
+            </div>
 
-          {/* Right Side: Clear Touch-Friendly Install Button */}
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== 'undefined') {
-                const pwaPrompt = (window as any).deferredPwaPrompt;
-                if (pwaPrompt && typeof pwaPrompt.prompt === 'function') {
-                  pwaPrompt.prompt();
-                  pwaPrompt.userChoice?.then(() => {
-                    (window as any).deferredPwaPrompt = null;
-                  });
-                  return;
-                }
-                window.dispatchEvent(new CustomEvent('open_install_pwa_modal'));
-              }
-            }}
-            className="shrink-0 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center justify-center whitespace-nowrap min-h-[38px]"
-          >
-            इंस्टॉल करें
-          </button>
-        </div>
+            {/* Right Side: Install Button and Close Button */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    const pwaPrompt = (window as any).deferredPwaPrompt;
+                    if (pwaPrompt && typeof pwaPrompt.prompt === 'function') {
+                      pwaPrompt.prompt();
+                      pwaPrompt.userChoice?.then(() => {
+                        (window as any).deferredPwaPrompt = null;
+                      });
+                      return;
+                    }
+                    window.dispatchEvent(new CustomEvent('open_install_pwa_modal'));
+                  }
+                }}
+                className="shrink-0 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center justify-center whitespace-nowrap min-h-[38px]"
+              >
+                इंस्टॉल करें
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('ai_news_pwa_install_dismissed', 'true');
+                    setIsPwaDismissed(true);
+                  } catch {}
+                }}
+                className="w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60 flex items-center justify-center text-sm font-bold transition-all cursor-pointer"
+                title="बंद करें"
+                aria-label="बंद करें"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 1. Live Breaking News Ticker (Centered Box, 1 news at a time, auto-changes every 4 seconds) */}
         {breakingPosts.length > 0 && currentTickerPost && (
@@ -2618,7 +2701,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     {/* Media Image Banner: Perfect 16:9 Aspect Ratio thumbnail, no vertical stretching */}
                     <div
                       onClick={() => setDetailModalPost(post)}
-                      className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-950 mb-2.5 cursor-pointer group/img shadow-inner border border-slate-800/80"
+                      className="relative w-full aspect-video rounded-lg overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 mb-2.5 cursor-pointer group/img shadow-inner border border-slate-800/80"
                       title="क्लिक करके पूरा विवरण देखें"
                     >
                       <img
@@ -2626,6 +2709,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         alt={post.title}
                         className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
                         loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/assets/sample_news_bus.svg';
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
 
@@ -3002,11 +3088,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   >
                     <Heart className={`w-3.5 h-3.5 ${selectedCategory === 'favorites' ? 'fill-white text-white' : 'text-rose-400'}`} />
                     <span>पसंदीदा खबरें</span>
-                    {userFavorites.size > 0 && (
+                    {favoriteCount > 0 && (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold leading-none ${
                         selectedCategory === 'favorites' ? 'bg-white text-rose-600' : 'bg-rose-500/20 text-rose-300'
                       }`}>
-                        {userFavorites.size}
+                        {favoriteCount}
                       </span>
                     )}
                   </button>
@@ -3244,7 +3330,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   <div>
                     <div
                       onClick={() => setDetailModalPost(post)}
-                      className="relative w-full aspect-video rounded-t-xl overflow-hidden bg-slate-950 cursor-pointer"
+                      className="relative w-full aspect-video rounded-t-xl overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 cursor-pointer"
                       title="क्लिक करके पूरा विवरण देखें"
                     >
                       <img

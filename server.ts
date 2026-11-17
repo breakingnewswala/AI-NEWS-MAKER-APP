@@ -14643,7 +14643,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, 
 // ADMIN REUSABLE ASSET LIBRARIES API (Location Badges, Callouts, Suvichar BGs)
 // --------------------------------------------------------------------------
 
-app.get("/api/admin/asset-libraries", async (req, res) => {
+app.get(["/api/asset-libraries", "/api/admin/asset-libraries"], async (req, res) => {
   try {
     const { type, category } = req.query as any;
     const deletedTombstones = await getDurableAssetTombstones();

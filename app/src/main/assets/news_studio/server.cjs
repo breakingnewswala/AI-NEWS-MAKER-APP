@@ -24863,7 +24863,7 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, 
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/admin/asset-libraries", async (req, res) => {
+app.get(["/api/asset-libraries", "/api/admin/asset-libraries"], async (req, res) => {
   try {
     const { type, category } = req.query;
     const deletedTombstones = await getDurableAssetTombstones();

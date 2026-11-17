@@ -2014,9 +2014,9 @@ export default function App() {
 
     let lastAdminAuthToastTime = 0;
     const handleAdminAuthRequired = () => {
-      // Strict Rule C & D: Background API 401s must NEVER automatically open the Login Modal
-      // Only show to actual admins; normal users must never be shown admin warning
+      // Priority 5: Strictly ignore if user is unauthenticated or not an admin
       if (currentUser && !isUserAdmin(currentUser)) return;
+      if (!currentUser) return;
       const now = Date.now();
       if (now - lastAdminAuthToastTime > 10000) {
         lastAdminAuthToastTime = now;
@@ -2029,11 +2029,16 @@ export default function App() {
       console.log('[AUTH] Routine session check/renewal handled silently.');
     };
 
+    const handleHideBrandedLoader = () => {
+      setBrandedLoader((prev) => (prev.isOpen ? { ...prev, isOpen: false } : prev));
+    };
+
     window.addEventListener('ai_news_user_plan_updated', handleSubUpdate);
     window.addEventListener('user_account_blocked', handleBlocked);
     window.addEventListener('user_trial_expired', handleExpired);
     window.addEventListener('ai_news_session_expired', handleSessionExpired);
     window.addEventListener('ai_news_admin_auth_required', handleAdminAuthRequired);
+    window.addEventListener('ai_news_hide_branded_loader', handleHideBrandedLoader);
     window.addEventListener('open_login_modal', handleOpenAdminLogin);
     window.addEventListener('open_admin_login', handleOpenAdminLogin);
 
@@ -2043,6 +2048,7 @@ export default function App() {
       window.removeEventListener('user_trial_expired', handleExpired);
       window.removeEventListener('ai_news_session_expired', handleSessionExpired);
       window.removeEventListener('ai_news_admin_auth_required', handleAdminAuthRequired);
+      window.removeEventListener('ai_news_hide_branded_loader', handleHideBrandedLoader);
       window.removeEventListener('open_login_modal', handleOpenAdminLogin);
       window.removeEventListener('open_admin_login', handleOpenAdminLogin);
     };
@@ -3103,47 +3109,7 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = async (post: NewsFeedPost) => {
-    // Part 12: Enforce and consume 1 daily graphic generation unit when initiating "खबर से ग्राफिक बनाएँ"
-    const isCurrentBonus = Boolean(post.isBonus === true || (post as any).bonusNews === true);
-    if (currentUser?.email && !isUserAdmin(currentUser) && !isCurrentBonus) {
-      try {
-        const requestId = `req_gfx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        const quotaRes = await fetch(getApiUrl('/api/user/consume-graphic-creation-quota'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: currentUser.email,
-            userId: currentUser.userId || currentUser.email,
-            requestId,
-            postId: post.id,
-            newsId: post.id,
-          }),
-        });
-        const quotaData = await quotaRes.json().catch(() => ({}));
-        if (quotaRes.status === 403 || quotaData.exhausted) {
-          showToast(
-            quotaData.error ||
-              'आज की ग्राफिक निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या अपना प्लान अपग्रेड करें।'
-          );
-          return;
-        }
-        if (quotaData && typeof quotaData.remainingToday === 'number') {
-          window.dispatchEvent(
-            new CustomEvent('ai_news_download_status_updated', {
-              detail: {
-                limit: quotaData.limit,
-                usedToday: quotaData.usedToday,
-                remainingToday: quotaData.remainingToday,
-                unlimited: Boolean(quotaData.unlimited),
-              },
-            })
-          );
-        }
-      } catch (qErr) {
-        console.warn('Daily graphic quota check notice:', qErr);
-      }
-    }
-
+    // Priority 4: Prevent accidental credit/quota consumption upon simple navigation. Quota is consumed on export.
     try {
       fetch(getApiUrl('/api/analytics/track'), {
         method: 'POST',
@@ -3459,8 +3425,14 @@ export default function App() {
         subtitles: [
           'खबर के तथ्यों, संदर्भ और प्रमुख बिंदुओं का विश्लेषण करके ग्राफिक के लिए सामग्री व्यवस्थित की जा रही है।',
         ],
+        durationSeconds: 2.5,
         error: null,
       });
+
+      // Priority 4: 8-second watchdog timer to ensure loader never gets stuck in an infinite state
+      setTimeout(() => {
+        setBrandedLoader((prev) => (prev.isOpen && prev.mode === 'graphic_preparation' ? { ...prev, isOpen: false } : prev));
+      }, 8000);
 
       const baseTitle = cleanHeadlineText(post.title || 'ताज़ा समाचार');
 

@@ -724,6 +724,17 @@ export function getDefaultAssetLibrariesFallback(type?: string): AssetLibraryIte
       updatedAt: 1794132101671,
     },
     {
+      id: "loc_style_vintage_stamp",
+      name: "Vintage Stamp (विंटेज स्टैम्प)",
+      category: "breaking",
+      type: "location_badge",
+      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='4' y='5' width='352' height='62' rx='6' fill='%23450A0A' stroke='%23FBBF24' stroke-width='2' stroke-dasharray='6 3'/><rect x='10' y='11' width='340' height='50' rx='4' fill='none' stroke='%23FBBF24' stroke-width='1'/><circle cx='38' cy='36' r='16' fill='%23FBBF24'/><circle cx='38' cy='36' r='12' fill='none' stroke='%23450A0A' stroke-width='2'/><circle cx='38' cy='36' r='4' fill='%23450A0A'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FBBF24' stroke-width='1.5'/></svg>",
+      enabled: true,
+      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
+      createdAt: 1794350000000,
+      updatedAt: 1794350000000,
+    },
+    {
       id: "callout_bully_forward_story",
       name: "आगे पढ़ें बुलेटिन स्टोरी (Bully Forward)",
       category: "general",
@@ -942,6 +953,12 @@ export function getDefaultAssetLibrariesFallback(type?: string): AssetLibraryIte
   return defaults.filter((item) => item.type === type);
 }
 
+export function getAssetLibraryItemById(id?: string): AssetLibraryItem | undefined {
+  if (!id) return undefined;
+  const items = getDefaultAssetLibrariesFallback();
+  return items.find((item) => item.id === id);
+}
+
 export async function fetchAssetLibraries(type?: string): Promise<AssetLibraryItem[]> {
   try {
     const baseUrl = getApiBaseUrl();
@@ -951,18 +968,13 @@ export async function fetchAssetLibraries(type?: string): Promise<AssetLibraryIt
       token = await ensureAuthToken().catch(() => '');
       if (!token || isTokenExpired(token)) token = await ensureAuthToken(true).catch(() => '');
     }
-    const headers: Record<string, string> = {
-      ...getAdminAuthHeaders(),
-    };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    let res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
-    if (res.status === 401 || res.status === 403) {
-      const freshToken = await ensureAuthToken(true).catch(() => '');
-      if (freshToken) {
-        headers['Authorization'] = `Bearer ${freshToken}`;
-        res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
-      }
+    let res = await fetch(`${baseUrl}/api/asset-libraries${qs}`, { headers });
+    if (!res.ok && res.status !== 404) {
+      // Fallback check to admin endpoint only if authorized
+      res = await fetch(`${baseUrl}/api/admin/asset-libraries${qs}`, { headers });
     }
     if (res.ok) {
       const data = await res.json();
