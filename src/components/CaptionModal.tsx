@@ -4,108 +4,14 @@ import { NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl } from '../lib/apiConfig';
 import { isUserActionAllowed } from '../lib/userPlanManager';
-import { cleanCaptionParagraphs, stripAllUrlsAndHyperlinks } from '../lib/speakerUtils';
+import { cleanCaptionParagraphs, stripAllUrlsAndHyperlinks, buildHashtags, getUserFirstHashtag } from '../lib/speakerUtils';
+
+export { buildHashtags, getUserFirstHashtag };
 
 interface CaptionModalProps {
   isOpen: boolean;
   onClose: () => void;
   card: NewsCardData;
-}
-
-// Helper to extract user's username for the first hashtag (#<username>)
-export function getUserFirstHashtag(card?: NewsCardData): string {
-  let uName = '';
-
-  try {
-    const session = typeof localStorage !== 'undefined' ? localStorage.getItem('reporter_auth_session') : null;
-    if (session) {
-      const parsed = JSON.parse(session);
-      if (parsed.username) uName = parsed.username;
-    }
-  } catch {}
-
-  if (!uName) {
-    try {
-      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.username) uName = parsed.username;
-      }
-    } catch {}
-  }
-
-  if (!uName && card?.socialHandle) {
-    uName = card.socialHandle.replace(/^[/@]+/, '');
-  }
-  if (!uName && typeof localStorage !== 'undefined') {
-    uName = localStorage.getItem('app_user_username') || '';
-  }
-
-  const clean = uName ? uName.replace(/[\s\-_.,/\\|~`!@#$%^&*()+=[\]{}'":;?<>]+/g, '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '') : '';
-  return clean ? `#${clean}` : '';
-}
-
-// Build hashtags for caption: username first, 4-6 middle tags, #AINewsMaker strictly last
-export function buildHashtags(location?: string, existingTagsString?: string, card?: NewsCardData): string {
-  const firstTag = getUserFirstHashtag(card);
-
-  const loc = (location || '')
-    .split(/[\/,]/)[0]
-    .trim()
-    .replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
-  const locationTag = loc && loc.toLowerCase() !== 'location' && loc !== 'स्थान' && loc.toLowerCase() !== 'news' ? `#${loc}News` : '#HindiNews';
-
-  let tagList: string[] = [];
-
-  if (existingTagsString && existingTagsString.trim()) {
-    const extracted = existingTagsString.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [];
-    tagList = extracted;
-  }
-
-  // Filter out any legacy, redundant or placeholder tags
-  tagList = tagList.filter((t) => {
-    const lower = t.toLowerCase();
-    return (
-      lower !== '#breakingnewswala' &&
-      lower !== '#bnwtv' &&
-      lower !== '#ब्रेकिंगन्यूजवाला' &&
-      lower !== '#ainewsmaker' &&
-      lower !== '#ai_news_maker' &&
-      (!firstTag || lower !== firstTag.toLowerCase())
-    );
-  });
-
-  // If few existing tags, seed standard news tags
-  if (tagList.length < 2) {
-    tagList = [
-      '#BreakingNews',
-      locationTag,
-      '#HindiNews',
-      '#LatestUpdate',
-      '#NewsUpdate',
-    ];
-  }
-
-  // Deduplicate while preserving order
-  const seen = new Set<string>();
-  const uniqueMidTags: string[] = [];
-  for (const t of tagList) {
-    const lower = t.toLowerCase();
-    if (!seen.has(lower) && (!firstTag || lower !== firstTag.toLowerCase()) && lower !== '#ainewsmaker' && lower !== '#ai_news_maker') {
-      seen.add(lower);
-      uniqueMidTags.push(t);
-    }
-  }
-
-  const middleSlice = uniqueMidTags.slice(0, 6);
-  const orderedTags: string[] = [];
-  if (firstTag && firstTag.toLowerCase() !== '#ainewsmaker' && firstTag.toLowerCase() !== '#ai_news_maker') {
-    orderedTags.push(firstTag);
-  }
-  orderedTags.push(...middleSlice);
-  orderedTags.push('#AINewsMaker');
-
-  return orderedTags.join(' ');
 }
 
 export const CaptionModal: React.FC<CaptionModalProps> = ({
@@ -144,13 +50,13 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
       }
 
       newsStory = rawSummary || cleanHeadline || 'मुख्य समाचार';
-      const tagsToUse = buildHashtags(card.location, existingTags, card);
+      const tagsToUse = buildHashtags(card.location, existingTags, card, firstUserTag.replace(/^#/, ''));
       const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
       const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
       setCaptionText(cleaned);
     } else {
       newsStory = cleanHeadline || 'मुख्य समाचार';
-      const tagsToUse = buildHashtags(card.location, undefined, card);
+      const tagsToUse = buildHashtags(card.location, undefined, card, firstUserTag.replace(/^#/, ''));
       const combined = tagsToUse ? `${newsStory}\n\n${tagsToUse}` : newsStory;
       const cleaned = cleanCaptionParagraphs(combined, 'detailed', firstUserTag.replace(/^#/, ''), card.location, cleanHeadline);
       setCaptionText(cleaned);
@@ -298,7 +204,7 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
                     : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                📰 विस्तृत
+                विस्तृत
               </button>
               <button
                 type="button"
@@ -312,7 +218,7 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
                     : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                📌 बुलेट पॉइंट्स
+                बुलेट पॉइंट्स
               </button>
               <button
                 type="button"
@@ -326,7 +232,7 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
                     : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                ⚡ संक्षिप्त
+                संक्षिप्त
               </button>
             </div>
           </div>
@@ -356,6 +262,13 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
           <div className="flex items-center justify-between text-xs text-neutral-400">
             <span className="flex items-center gap-1.5 font-bold text-neutral-200">
               <span>कैप्शन विवरण (संपादित करें):</span>
+              <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                captionText.length > 2000
+                  ? 'bg-red-950 text-red-300 border-red-800 font-bold'
+                  : 'bg-neutral-950 text-amber-300 border-neutral-800'
+              }`}>
+                {captionText.length} / 2000 अक्षर
+              </span>
               <VoiceInputButton
                 onTranscript={(transcript) => {
                   setCaptionText((prev) => (prev ? `${prev}\n\n${transcript}` : transcript));
@@ -395,6 +308,15 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
             className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 text-xs sm:text-sm text-neutral-200 focus:border-green-500 focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed resize-none shadow-inner"
             placeholder="सोशल मीडिया कैप्शन यहाँ लिखें..."
           />
+
+          <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
+            <span>अधिकतम सीमा: 2,000 अक्षर</span>
+            <span className={`font-mono font-bold ${
+              captionText.length > 2000 ? 'text-red-400' : 'text-neutral-400'
+            }`}>
+              {captionText.length} / 2000 अक्षर
+            </span>
+          </div>
 
           <div className="flex items-center gap-3 pt-1">
             <button

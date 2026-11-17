@@ -3,9 +3,102 @@ import { RefreshCw, X, Link as LinkIcon, Send, Sparkles, Check, AlertCircle, Loa
 import { AIAnalysisResult } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
-import { cleanHeadlineText, cleanLocationField, generate5BalancedHeadlineOptions, fitHeadlinesTo5TierRanges, countHeadlineVisibleCharacters, HEADLINE_5_TIER_RANGES, HEADLINE_MAX_CHARACTER_LIMIT } from '../lib/speakerUtils';
+import { cleanHeadlineText, cleanLocationField, generate5BalancedHeadlineOptions, fitHeadlinesTo5TierRanges, countHeadlineVisibleCharacters, HEADLINE_5_TIER_RANGES, HEADLINE_MAX_CHARACTER_LIMIT, preserveHeadlineStateOnRegeneration } from '../lib/speakerUtils';
 import { scrapeNewsUrlClient } from '../lib/clientScraper';
 import { processNewsLocally } from '../lib/clientAiProcessor';
+
+export function formatHeadlineWithKeywords(
+  headline: string,
+  existingHighlights?: string[]
+): { formattedHeadline: string; highlightWords: string[] } {
+  if (!headline) return { formattedHeadline: '', highlightWords: [] };
+
+  const rawHeadline = headline.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
+  if (!rawHeadline) return { formattedHeadline: '', highlightWords: [] };
+
+  const stopwords = new Set([
+    'के', 'की', 'का', 'में', 'पर', 'से', 'को', 'ने', 'है', 'हैं', 'और', 'या', 'भी', 'तो', 'ही', 'था', 'थे', 'थी',
+    'इस', 'उस', 'यह', 'वह', 'इन', 'उन', 'द्वारा', 'लिए', 'गया', 'गई', 'गए', 'हुए', 'हुई', 'हुआ', 'रहा', 'रही', 'रहे',
+    'कर', 'किया', 'हो', 'बड़ा', 'बड़ी', 'बड़े', 'अपडेट'
+  ]);
+
+  const words = rawHeadline.split(/\s+/).filter(Boolean);
+  const selectedWords: string[] = [];
+
+  // 1. Prefer existingHighlights if they appear in this headline
+  if (Array.isArray(existingHighlights) && existingHighlights.length > 0) {
+    for (const h of existingHighlights) {
+      if (!h || typeof h !== 'string') continue;
+      const cleanH = h.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '');
+      if (!cleanH) continue;
+      if (rawHeadline.includes(cleanH)) {
+        if (!selectedWords.includes(cleanH)) {
+          selectedWords.push(cleanH);
+          if (selectedWords.length >= 4) break;
+        }
+      }
+    }
+  }
+
+  // 2. If fewer than 2 words, pick significant words from headline
+  if (selectedWords.length < 2) {
+    for (const w of words) {
+      const cleanW = w.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim();
+      if (!cleanW) continue;
+      if (selectedWords.includes(cleanW)) continue;
+      // High-priority: numbers or words with length >= 4 not in stopwords
+      if (/\d+/.test(cleanW) || (cleanW.length >= 4 && !stopwords.has(cleanW))) {
+        selectedWords.push(cleanW);
+        if (selectedWords.length >= 4) break;
+      }
+    }
+  }
+
+  // 3. Fallback: if still fewer than 2 words, pick non-stopwords with length >= 3
+  if (selectedWords.length < 2) {
+    for (const w of words) {
+      const cleanW = w.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim();
+      if (!cleanW || stopwords.has(cleanW)) continue;
+      if (!selectedWords.includes(cleanW)) {
+        selectedWords.push(cleanW);
+        if (selectedWords.length >= 2) break;
+      }
+    }
+  }
+
+  const finalHighlights = selectedWords.slice(0, 4);
+
+  if (finalHighlights.length === 0) {
+    return { formattedHeadline: rawHeadline, highlightWords: [] };
+  }
+
+  const cleanHighlights = finalHighlights
+    .map((h) => h.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase())
+    .filter(Boolean);
+
+  let highlightedCount = 0;
+  const lines = rawHeadline.split(/\r?\n/);
+  const formattedHeadline = lines
+    .map((line) => {
+      const tokens = line.split(/\s+/).filter(Boolean);
+      return tokens
+        .map((tok) => {
+          const cleanTok = tok.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim().toLowerCase();
+          const isMatch = cleanHighlights.some(
+            (h) => h === cleanTok || h.split(/\s+/).some((part) => part === cleanTok)
+          );
+          if (isMatch && highlightedCount < 4) {
+            highlightedCount++;
+            return `[yellow]${tok}[/yellow]`;
+          }
+          return tok;
+        })
+        .join(' ');
+    })
+    .join('\n');
+
+  return { formattedHeadline, highlightWords: finalHighlights };
+}
 
 interface NewsCommandModalProps {
   isOpen: boolean;
@@ -190,8 +283,21 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           if (opts.length < 5 && !opts.includes(h)) opts.push(h);
         });
       }
-      setHeadlineOptions(opts.slice(0, 5));
+      const initial5 = opts.slice(0, 5);
+      setHeadlineOptions(initial5);
       setSelectedHeadlineIndex(0);
+      const initialHeadline = initial5[0] || data.data.headline || '';
+      const { formattedHeadline, highlightWords } = formatHeadlineWithKeywords(
+        initialHeadline,
+        data.data.highlightWords
+      );
+      setResult({
+        ...data.data,
+        headline: initialHeadline.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim(),
+        formattedHeadline,
+        highlightWords,
+        headlineOptions: initial5,
+      });
       setAiPhotoVariation(0);
 
       if (data.data.suggestedImagePrompt) {
@@ -217,11 +323,17 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
 
   const handleSelectHeadline = (hl: string, idx: number) => {
     setSelectedHeadlineIndex(idx);
+    const cleanHl = hl.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
+    const { formattedHeadline, highlightWords } = formatHeadlineWithKeywords(
+      cleanHl,
+      result?.highlightWords
+    );
     if (result) {
       setResult({
         ...result,
-        headline: hl,
-        formattedHeadline: hl,
+        headline: cleanHl,
+        formattedHeadline,
+        highlightWords,
       });
     }
   };
@@ -278,19 +390,25 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
       }
 
       if (newOpts.length > 0) {
-        const combined = [...headlineOptions, ...newOpts].slice(0, 10);
-        setHeadlineOptions(combined);
-        setSelectedHeadlineIndex(headlineOptions.length);
-        setResult((prev) =>
-          prev
-            ? {
-                ...prev,
-                headline: newOpts[0],
-                formattedHeadline: newOpts[0],
-                headlineOptions: combined,
-              }
-            : null
-        );
+        const preservedState = preserveHeadlineStateOnRegeneration({
+          existingHeadlines: headlineOptions,
+          newHeadlines: newOpts,
+          selectedHeadline: result?.headline,
+          selectedFormattedHeadline: result?.formattedHeadline,
+          selectedIndex: selectedHeadlineIndex,
+        });
+
+        setHeadlineOptions(preservedState.combinedHeadlines);
+        setSelectedHeadlineIndex(preservedState.preservedIndex);
+        setResult((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            headline: preservedState.preservedHeadline,
+            formattedHeadline: preservedState.preservedFormattedHeadline,
+            headlineOptions: preservedState.combinedHeadlines,
+          };
+        });
       } else {
         setError('नए हेडलाइन विकल्प नहीं बन सके');
       }
@@ -620,36 +738,43 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
           {/* Result Output */}
           {result && (
             <div className="p-4 rounded-xl bg-neutral-950 border border-yellow-500/40 space-y-3 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-yellow-400 flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> 5 संतुलित हेडलाइन विकल्प (5 Balanced Headline Options):
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-bold text-yellow-400 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-green-400" />
+                  <span>{headlineOptions.length >= 10 ? '10 / 10 विकल्प उपलब्ध' : `${Math.min(headlineOptions.length, 10)} / 10 विकल्प उपलब्ध`}</span>
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800">
-                  {result.location}
-                </span>
+                {Boolean(result.location?.trim()) && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
+                    {result.location.trim()}
+                  </span>
+                )}
               </div>
 
               {/* 5 Balanced Headline Options Selector */}
               {headlineOptions.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-[11px] text-neutral-400 font-semibold flex items-center justify-between">
+                  <div className="text-[11px] text-neutral-400 font-semibold flex items-center justify-between flex-wrap gap-2">
                     <span>पसंदीदा हेडलाइन विकल्प चुनें (क्लिक करें):</span>
                     <button
                       type="button"
                       onClick={handleRegenerateHeadlines}
-                      disabled={isRegeneratingHeadlines}
-                      className="text-yellow-400 hover:text-yellow-300 text-[11px] font-bold flex items-center gap-1 bg-yellow-400/10 px-2 py-0.5 rounded border border-yellow-400/30 cursor-pointer disabled:opacity-50"
-                      title="पसंद न आने पर 5 बिल्कुल नए हेडलाइन विकल्प बनाएं"
+                      disabled={isRegeneratingHeadlines || headlineOptions.length >= 10}
+                      className={`text-[11px] font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${
+                        headlineOptions.length >= 10
+                          ? 'bg-neutral-800 text-neutral-500 border-neutral-700/60 opacity-60 cursor-not-allowed'
+                          : 'text-yellow-400 hover:text-yellow-300 bg-yellow-400/10 hover:bg-yellow-400/20 border-yellow-400/30 cursor-pointer disabled:opacity-50'
+                      }`}
+                      title={headlineOptions.length >= 10 ? 'अधिकतम 10 हेडलाइन्स तैयार हैं' : 'पाँच नई हेडलाइन बनाएं'}
                     >
                       {isRegeneratingHeadlines ? (
                         <>
                           <Loader2 className="w-3 h-3 animate-spin" />
-                          <span>नए 5 विकल्प बन रहे हैं...</span>
+                          <span>नई हेडलाइन्स बन रही हैं...</span>
                         </>
                       ) : (
                         <>
                           <RotateCcw className="w-3 h-3" />
-                          <span>🔄 5 नए विकल्प बनाएं</span>
+                          <span>पाँच नई हेडलाइन बनाएं</span>
                         </>
                       )}
                     </button>
@@ -660,7 +785,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                       const isSelected = result.headline === opt;
                       const cleanOpt = opt.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                       const wordCount = cleanOpt.split(/\s+/).filter(Boolean).length;
-                      const charLen = countHeadlineVisibleCharacters(opt);
+                      const charLen = countHeadlineVisibleCharacters(cleanOpt);
                       const tier = HEADLINE_5_TIER_RANGES[idx % 5] || { min: 80, max: 200, label: '' };
                       const isCompliant = charLen >= tier.min && charLen <= tier.max;
                       return (
@@ -682,7 +807,7 @@ export const NewsCommandModal: React.FC<NewsCommandModalProps> = ({
                                 <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
                                 <span className="text-neutral-600">•</span>
                                 <span className={isCompliant ? "text-emerald-400 font-bold" : "text-amber-400 font-bold"}>
-                                  {charLen} अक्षर ({tier.min}-{tier.max})
+                                  {charLen} अक्षर (लक्ष्य: {tier.min}–{tier.max})
                                 </span>
                               </span>
                             </div>

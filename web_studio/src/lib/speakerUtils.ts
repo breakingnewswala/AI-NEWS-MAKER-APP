@@ -1,4 +1,5 @@
 // Helper utilities to detect and extract leader names and designations from Hindi news headlines
+import type { NewsCardData } from '../types';
 
 /**
  * Canonical Headline Text Normalizer:
@@ -245,7 +246,7 @@ export function cleanHeadlineText(text: any): string {
   cleaned = cleaned.replace(/\uE002/g, '[/yellow]');
 
   // 10. Strip leading and trailing punctuation repeatedly (. or । or ! or ? or , or - or : or ; or quotes)
-  cleaned = cleaned.replace(/^[\s:\-–—,;।. "“'‘]+/g, '').replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, '').trim();
+  cleaned = cleaned.replace(/^[\s:–—,;।. "“'‘-]+/u, '').replace(/[।.,!?:–—;\s"”'’-]+$/u, '').trim();
 
   // 11. Clean spaces around highlight tags and punctuation
   cleaned = cleaned
@@ -278,7 +279,7 @@ export function cleanHeadlineText(text: any): string {
     .replace(/उत्तरप्रदेश/g, 'उत्तर प्रदेश');
 
   // 16. Strict punctuation strip: No headline may end with a full stop (. or ।) or punctuation or quotes
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, '').trim();
+  cleaned = cleaned.replace(/[।.,!?:–—;\s"”'’-]+$/u, '').trim();
 
   return cleaned;
 }
@@ -842,11 +843,11 @@ export function calculateHeadlineSimilarity(h1: string, h2: string): number {
 export function sanitizeFlattery(text: string): string {
   if (!text || typeof text !== 'string') return text || '';
   return text
-    .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम पूज्य|पूज्य)\s+/gu, " ")
-    .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
-    .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
-    .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "")
-    .replace(/[ \t]{2,}/g, " ")
+    .replace(/(^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री|परम\s+पूज्य|पूज्य)\s+/gu, '$1')
+    .replace(/(^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, '$1')
+    .replace(/(^|[^\p{L}\p{M}])महोदय(?=[,\s.!?।\n]|$)\s*/gu, '$1')
+    .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, '')
+    .replace(/[ \t]{2,}/g, ' ')
     .trim();
 }
 
@@ -1102,11 +1103,11 @@ export function countHeadlineVisibleCharacters(
   text: string,
   options?: { mode?: 'codeunit' | 'grapheme' }
 ): number {
-  if (options?.mode === 'grapheme') {
-    return countHeadlineGraphemes(text);
+  if (options?.mode === 'codeunit') {
+    const s = sanitizeHeadlineForLengthCounting(text);
+    return s.length;
   }
-  const s = sanitizeHeadlineForLengthCounting(text);
-  return s.length;
+  return countHeadlineGraphemes(text);
 }
 
 /**
@@ -1187,7 +1188,7 @@ export function stripNewspaperBylines(text: string): string {
 export function sanitizeHeadlineClean(text: string): string {
   if (!text) return "";
   let res = stripNewspaperBylines(sanitizePressNoteFlattery(cleanHeadlineText(text), true))
-    .replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "")
+    .replace(/[।.,!?:–—;\s-]+$/u, "")
     .trim();
 
   // Remove any leading/inline image caption or relative time artifacts
@@ -1216,12 +1217,12 @@ export function sanitizeHeadlineClean(text: string): string {
     prevLen = res.length;
     res = res.replace(danglingPostpositions, "").trim();
   }
-  return res.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  return res.replace(/[।.,!?:–—;\s-]+$/u, "").trim();
 }
 
 export function fixHeadlineEnding(text: string): string {
   if (!text) return "";
-  let res = text.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
+  let res = text.replace(/[।.,!?:–—;\s-]+$/u, "").trim();
   res = res.replace(/(?:की\s+)?(?:दे\s+रहा|दे\s+रहे|दे\s+रही)$/u, "की धमकी");
   res = res.replace(/\s+(?:कर\s+रहा|कर\s+रहे|कर\s+रही)$/u, " की कार्रवाई");
   res = res.replace(/\s+(?:हो\s+रहा|हो\s+रहे|हो\s+रही)$/u, " की स्थिति");
@@ -1919,193 +1920,371 @@ export function ensureHashtagHierarchy(
   let finalBodyText = '';
 
   if (mode === 'bullet') {
+    // Bullet mode: opening hook of 1–2 lines, up to 10 bullet points starting with "•", and closing lines of 1–2 lines
     const rawLines = rawBody
       .split(/\n+/)
-      .map((l) => l.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
-      .filter((l) => l.length > 8 && /[\u0900-\u097F]/.test(l));
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && /[\u0900-\u097F]/.test(l));
 
-    let bulletLines = rawLines;
-    if (bulletLines.length < 3) {
-      const sents = rawBody
-        .split(/[।\.\n]+/)
-        .map((s) => s.replace(/^[•\-\*\d\.\)\s]+/, '').trim())
-        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
-      bulletLines = sents.slice(0, 5);
+    let openingLines: string[] = [];
+    let bulletItems: string[] = [];
+    let closingLines: string[] = [];
+
+    let seenFirstBullet = false;
+    for (const line of rawLines) {
+      const isBullet = /^[•\-\*\d\.\)\s]+/.test(line);
+      if (isBullet) {
+        seenFirstBullet = true;
+        const text = line.replace(/^[•\-\*\d\.\)\s]+/, '').trim();
+        if (text.length > 5) {
+          bulletItems.push(`• ${text.replace(/[।\.\s]+$/, '')}।`);
+        }
+      } else if (!seenFirstBullet) {
+        openingLines.push(line);
+      } else {
+        closingLines.push(line);
+      }
     }
-    finalBodyText = bulletLines.slice(0, 5).map((l) => `• ${l.replace(/[।\.\s]+$/, '')}।`).join('\n');
+
+    if (bulletItems.length === 0) {
+      const sentences = rawBody
+        .split(/[।\n]+|\.\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 10 && /[\u0900-\u097F]/.test(s));
+
+      if (sentences.length >= 3) {
+        openingLines = [sentences[0] + '।'];
+        bulletItems = sentences.slice(1, Math.min(sentences.length - 1, 11)).map((s) => `• ${s.replace(/[।\.\s]+$/, '')}।`);
+        closingLines = sentences.length > 2 ? [sentences[sentences.length - 1] + '।'] : [];
+      } else {
+        openingLines = sentences[0] ? [sentences[0] + '।'] : ['समाचार के मुख्य बिंदु:'];
+        bulletItems = sentences.slice(1).map((s) => `• ${s.replace(/[।\.\s]+$/, '')}।`);
+        if (bulletItems.length === 0) {
+          bulletItems = [`• ${headlineToStrip ? headlineToStrip.replace(/[।\.\s]+$/, '') : 'घटनाक्रम की मुख्य जानकारी'}।`];
+        }
+      }
+    }
+
+    const hookText = openingLines.slice(0, 2).join(' ').trim();
+    const finalHook = hookText ? (hookText.endsWith('।') ? hookText : `${hookText}।`) : 'घटनाक्रम से जुड़े मुख्य बिंदु:';
+    const finalBullets = bulletItems.slice(0, 10);
+    let finalClosing = closingLines.slice(0, 2).join(' ').trim();
+    if (!finalClosing && location) {
+      finalClosing = `${location} में मामले को लेकर आगे की आवश्यक जांच व प्रशासनिक कार्रवाई जारी है।`;
+    }
+
+    finalBodyText = `${finalHook}\n\n${finalBullets.join('\n')}${finalClosing ? `\n\n${finalClosing}` : ''}`;
   } else if (mode === 'short') {
-    // Concise Caption: ~2 concise sentences (approx 1-2 short paragraphs)
+    // Short mode: exactly 2 paragraphs, 60–90 words
     const rawParagraphs = rawBody
       .split(/\n{2,}|\n(?=[^\s•])/g)
       .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
-      .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
+      .filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
 
-    let cleanParas: string[] = [];
+    let p1 = '';
+    let p2 = '';
+
     if (rawParagraphs.length >= 2) {
-      cleanParas = [rawParagraphs[0], rawParagraphs.slice(1).join(' ')];
+      p1 = rawParagraphs[0];
+      p2 = rawParagraphs[1];
     } else {
       const sentences = rawBody
-        .split(/[।\n]+/)
+        .split(/[।\n]+|\.\s+/)
         .map((s) => s.trim())
-        .filter((s) => s.length > 5);
-      if (sentences.length >= 2) {
-        cleanParas = [
-          sentences.slice(0, Math.ceil(sentences.length / 2)).join('। ') + '।',
-          sentences.slice(Math.ceil(sentences.length / 2)).join('। ') + '।',
-        ];
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+
+      if (sentences.length >= 4) {
+        const mid = Math.ceil(sentences.length / 2);
+        p1 = sentences.slice(0, mid).join('। ') + '।';
+        p2 = sentences.slice(mid).join('। ') + '।';
+      } else if (sentences.length >= 2) {
+        p1 = sentences[0] + '।';
+        p2 = sentences.slice(1).join('। ') + '।';
       } else {
-        cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
+        p1 = sentences[0] ? sentences[0] + '।' : (headlineToStrip || 'ताज़ा समाचार का मुख्य विवरण।');
+        p2 = `${location ? `${location} में` : ''} संबंधित प्रशासन व विभाग द्वारा मामले में आवश्यक कार्रवाई की जा रही है।`;
       }
     }
-    finalBodyText = cleanParas.slice(0, 2).join('\n\n').trim();
+
+    // Word count target: 60-90 words
+    const wordsCount = (p1 + ' ' + p2).split(/\s+/).filter(Boolean).length;
+    if (wordsCount > 95) {
+      const p2Sents = p2.split(/[।\n]+/).map((s) => s.trim()).filter(Boolean);
+      if (p2Sents.length > 1) {
+        let trimmedP2 = '';
+        for (const s of p2Sents) {
+          const cand = (p1 + ' ' + (trimmedP2 ? `${trimmedP2}। ${s}।` : `${s}।`)).split(/\s+/).filter(Boolean).length;
+          if (cand <= 90 || !trimmedP2) {
+            trimmedP2 = trimmedP2 ? `${trimmedP2}। ${s}` : s;
+          } else {
+            break;
+          }
+        }
+        if (trimmedP2) p2 = trimmedP2 + '।';
+      }
+    }
+    finalBodyText = `${p1}\n\n${p2}`.trim();
   } else {
-    // Mode 'detailed': Exactly 3 substantive paragraphs
+    // Detailed mode: exactly 3 paragraphs covering incident, background/causes, and official response/next steps
     const rawParagraphs = rawBody
       .split(/\n{2,}|\n(?=[^\s•])/g)
       .map((p) => p.replace(/[ \t]{2,}/g, ' ').trim())
-      .filter((p) => p.length > 0 && /[\u0900-\u097F]/.test(p));
+      .filter((p) => p.length > 10 && /[\u0900-\u097F]/.test(p));
 
-    let cleanParas: string[] = [];
-    if (rawParagraphs.length >= 3) {
-      cleanParas = [rawParagraphs[0], rawParagraphs[1], rawParagraphs.slice(2).join(' ')];
+    let p1 = '';
+    let p2 = '';
+    let p3 = '';
+
+    if (rawParagraphs.length === 3) {
+      p1 = rawParagraphs[0];
+      p2 = rawParagraphs[1];
+      p3 = rawParagraphs[2];
+    } else if (rawParagraphs.length > 3) {
+      p1 = rawParagraphs[0];
+      p2 = rawParagraphs[1];
+      p3 = rawParagraphs.slice(2).join(' ');
     } else if (rawParagraphs.length === 2) {
-      const secondPartSentences = rawParagraphs[1]
-        .split(/[।\n]+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 5);
-      if (secondPartSentences.length >= 2) {
-        cleanParas = [
-          rawParagraphs[0],
-          secondPartSentences.slice(0, Math.ceil(secondPartSentences.length / 2)).join('। ') + '।',
-          secondPartSentences.slice(Math.ceil(secondPartSentences.length / 2)).join('। ') + '।',
-        ];
+      p1 = rawParagraphs[0];
+      const sents = rawParagraphs[1].split(/[।\n]+/).map((s) => s.trim()).filter(Boolean);
+      if (sents.length >= 2) {
+        const mid = Math.ceil(sents.length / 2);
+        p2 = sents.slice(0, mid).join('। ') + '।';
+        p3 = sents.slice(mid).join('। ') + '।';
       } else {
-        cleanParas = [rawParagraphs[0], rawParagraphs[1]];
+        p2 = rawParagraphs[1];
+        p3 = `${location ? `${location} से जुड़े इस` : 'इस'} मामले में संबंधित अधिकारियों द्वारा जांच व आगे की आवश्यक प्रक्रिया जारी है।`;
       }
     } else {
       const sentences = rawBody
-        .split(/[।\n]+/)
+        .split(/[।\n]+|\.\s+/)
         .map((s) => s.trim())
-        .filter((s) => s.length > 5);
+        .filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
+
       if (sentences.length >= 6) {
-        const p1 = sentences.slice(0, 2).join('। ') + '।';
-        const p2 = sentences.slice(2, 4).join('। ') + '।';
-        const p3 = sentences.slice(4).join('। ') + '।';
-        cleanParas = [p1, p2, p3];
-      } else if (sentences.length >= 4) {
-        const p1 = sentences.slice(0, 2).join('। ') + '।';
-        const p2 = sentences.slice(2, 3).join('। ') + '।';
-        const p3 = sentences.slice(3).join('। ') + '।';
-        cleanParas = [p1, p2, p3];
+        const chunk = Math.ceil(sentences.length / 3);
+        p1 = sentences.slice(0, chunk).join('। ') + '।';
+        p2 = sentences.slice(chunk, chunk * 2).join('। ') + '।';
+        p3 = sentences.slice(chunk * 2).join('। ') + '।';
       } else if (sentences.length >= 3) {
-        const p1 = sentences[0] + '।';
-        const p2 = sentences[1] + '।';
-        const p3 = sentences.slice(2).join('। ') + '।';
-        cleanParas = [p1, p2, p3];
+        p1 = sentences[0] + '।';
+        p2 = sentences[1] + '।';
+        p3 = sentences.slice(2).join('। ') + '।';
       } else if (sentences.length === 2) {
-        cleanParas = [sentences[0] + '।', sentences[1] + '।'];
+        p1 = sentences[0] + '।';
+        p2 = sentences[1] + '।';
+        p3 = `${location ? `${location} क्षेत्र से जुड़े इस` : 'इस'} पूरे घटनाक्रम पर संबंधित प्रशासन व पुलिस द्वारा आवश्यक कदम उठाए जा रहे हैं।`;
       } else {
-        cleanParas = rawParagraphs.length > 0 ? rawParagraphs : [rawBody];
+        p1 = sentences[0] ? sentences[0] + '।' : (headlineToStrip || 'ताज़ा समाचार की मुख्य जानकारी।');
+        p2 = `${location ? `${location} में` : ''} सामने आए इस मामले को लेकर स्थानीय स्तर पर चर्चाएं तेज हैं और स्थिति का जायजा लिया जा रहा है।`;
+        p3 = 'मामले में आगे की आवश्यक कार्रवाई और जांच जारी है, जिससे जुड़ी विस्तृत जानकारी जल्द साझा की जाएगी।';
       }
     }
-    finalBodyText = cleanParas.join('\n\n').trim();
+    finalBodyText = `${p1}\n\n${p2}\n\n${p3}`.trim();
   }
 
-  // 3. Extract and construct hashtags
-  const rawTags = (summaryText.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [])
-    .filter((t, i, arr) => arr.indexOf(t) === i);
+  // 3. Centralized hashtag hierarchy
+  const existingTagsString = summaryText.includes('#') ? summaryText.slice(summaryText.indexOf('#')) : '';
+  const hashtagBlock = buildHashtags(location, existingTagsString, undefined, username);
 
-  const cleanUser = (username || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '').trim();
+  // 4. Enforce 2,000-character editor limit
+  const MAX_CAPTION_LIMIT = 2000;
+  let fullCaption = `${finalBodyText}\n\n${hashtagBlock}`.trim();
+  if (fullCaption.length > MAX_CAPTION_LIMIT) {
+    const maxBodyLen = MAX_CAPTION_LIMIT - hashtagBlock.length - 2;
+    if (finalBodyText.length > maxBodyLen && maxBodyLen > 50) {
+      let trimmed = finalBodyText.slice(0, maxBodyLen);
+      const lastBoundary = Math.max(
+        trimmed.lastIndexOf('।'),
+        trimmed.lastIndexOf('\n'),
+        trimmed.lastIndexOf('.')
+      );
+      if (lastBoundary > maxBodyLen * 0.7) {
+        trimmed = trimmed.slice(0, lastBoundary + 1);
+      }
+      finalBodyText = trimmed.trim();
+    }
+    fullCaption = `${finalBodyText}\n\n${hashtagBlock}`.trim();
+  }
+
+  return fullCaption;
+}
+
+/**
+ * Helper to extract user's username for the first hashtag (#<username>)
+ * Defaults strictly to #AINewsMakerUser if no valid username is found.
+ */
+export function getUserFirstHashtag(card?: NewsCardData, username?: string): string {
+  let uName = (username || '').trim();
+
+  if (!uName && typeof localStorage !== 'undefined') {
+    try {
+      const session = localStorage.getItem('reporter_auth_session');
+      if (session) {
+        const parsed = JSON.parse(session);
+        if (parsed.username) uName = parsed.username;
+      }
+    } catch {}
+
+    if (!uName) {
+      try {
+        const saved = localStorage.getItem('user_channel_profile');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.username) uName = parsed.username;
+        }
+      } catch {}
+    }
+
+    if (!uName) {
+      uName = localStorage.getItem('app_user_username') || '';
+    }
+  }
+
+  if (!uName && card?.socialHandle) {
+    uName = card.socialHandle.replace(/^[/@]+/, '');
+  }
+
+  const clean = uName
+    ? uName
+        .replace(/^[@#]+/, '')
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '')
+    : '';
+
   const isGeneric = [
-    'user', 'username', 'reporter', 'admin', 'superadmin', 'null', 'undefined',
-    'ainewsmaker', 'ai_news_maker', 'breakingnewswala', 'bnwtv', 'breaking_news_wala'
-  ].includes(cleanUser.toLowerCase());
-  const userTag = cleanUser && !isGeneric ? `#${cleanUser}` : '';
+    'user',
+    'username',
+    'reporter',
+    'admin',
+    'superadmin',
+    'null',
+    'undefined',
+    'ainewsmaker',
+    'ai_news_maker',
+    'breakingnewswala',
+    'bnwtv',
+    'breaking_news_wala',
+    'ainewsmakeruser',
+  ].includes(clean.toLowerCase());
 
-  let locTag = '';
-  if (location && location !== 'विशेष कवरेज') {
-    const primaryCity = location.split(/[\/,]/)[0].trim().replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
-    if (primaryCity && primaryCity.toLowerCase() !== 'location' && primaryCity !== 'स्थान') {
-      locTag = `#${primaryCity}News`;
+  if (clean && !isGeneric) {
+    return `#${clean}`;
+  }
+  return '#AINewsMakerUser';
+}
+
+/**
+ * Centralized buildHashtags:
+ * Strict positional lock of 6-8 total hashtags:
+ * 1st tag: Logged-in user's profile username #{{USERNAME}} (or explicitly configured fallback #AINewsMakerUser)
+ * Middle tags: 4-6 contextual hashtags (topic, location, category, state)
+ * Last tag: Mandatory strictly #AINewsMaker
+ * Strict legacy tag removal: Completely filters out #breakingnewswala, #BNWTV, #AI_NEWS_MAKER, #ब्रेकिंगन्यूजवाला, and any tag starting with @
+ */
+export function buildHashtags(
+  location?: string,
+  existingTagsString?: string,
+  card?: NewsCardData,
+  username?: string
+): string {
+  const firstTag = getUserFirstHashtag(card, username);
+
+  let rawTags: string[] = [];
+  if (existingTagsString && typeof existingTagsString === 'string') {
+    const matched = existingTagsString.match(/#[a-zA-Z0-9_\u0900-\u097F]+/g) || [];
+    rawTags = matched;
+  }
+
+  const legacyOrProhibited = new Set([
+    '#breakingnewswala',
+    '#bnwtv',
+    '#breaking_news_wala',
+    '#ब्रेकिंगन्यूजवाला',
+    '#ainewsmaker',
+    '#ai_news_maker',
+    '#ainewsmakeruser',
+  ]);
+
+  const middleTags: string[] = [];
+  const seenMiddle = new Set<string>();
+
+  const addMiddleTag = (tag: string) => {
+    if (!tag) return;
+    const cleanTag = tag.trim();
+    if (!cleanTag.startsWith('#')) return;
+    if (cleanTag.includes('@') || cleanTag.startsWith('@')) return;
+    const lower = cleanTag.toLowerCase();
+    if (legacyOrProhibited.has(lower)) return;
+    if (lower === firstTag.toLowerCase()) return;
+    if (lower.startsWith('#http') || lower.startsWith('#www') || lower.startsWith('#url')) return;
+    if (!seenMiddle.has(lower)) {
+      seenMiddle.add(lower);
+      middleTags.push(cleanTag);
+    }
+  };
+
+  if (location && typeof location === 'string') {
+    const locParts = location.split(/[\/,]/).map((p) => p.trim()).filter(Boolean);
+    const city = locParts[0]?.replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
+    if (
+      city &&
+      city.toLowerCase() !== 'location' &&
+      city !== 'स्थान' &&
+      city.toLowerCase() !== 'news' &&
+      city !== 'विशेष कवरेज'
+    ) {
+      addMiddleTag(`#${city}News`);
+    }
+    if (locParts.length > 1) {
+      const statePart = locParts[1]?.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
+      if (statePart && statePart.length >= 2) {
+        addMiddleTag(`#${statePart}`);
+      }
     }
   }
 
-  const filteredMiddleTags: string[] = [];
+  if (card?.category && typeof card.category === 'string') {
+    const cleanCat = card.category.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\u0900-\u097F]/g, '');
+    if (cleanCat && cleanCat !== 'अन्य' && cleanCat !== 'ताज़ा_समाचार') {
+      addMiddleTag(`#${cleanCat}`);
+    }
+  }
+
   for (const t of rawTags) {
-    const lower = t.toLowerCase();
-    if (
-      (userTag && lower === userTag.toLowerCase()) ||
-      lower === '#ainewsmaker' ||
-      lower === '#ai_news_maker' ||
-      lower === '#breakingnewswala' ||
-      lower === '#bnwtv' ||
-      lower === '#breaking_news_wala' ||
-      lower === '#ब्रेकिंगन्यूजवाला' ||
-      lower.startsWith('#http') ||
-      lower.startsWith('#www') ||
-      lower.startsWith('#url') ||
-      t.includes('-') ||
-      t.length > 25 ||
-      (t.match(/_/g) || []).length >= 2
-    ) {
-      continue;
-    }
-    filteredMiddleTags.push(t);
+    addMiddleTag(t);
   }
 
-  if (locTag && !filteredMiddleTags.some((t) => t.toLowerCase() === locTag.toLowerCase())) {
-    filteredMiddleTags.unshift(locTag);
+  const contextualHindiPool = [
+    '#HindiNews',
+    '#NewsUpdate',
+    '#BreakingNews',
+    '#LatestNews',
+    '#Samachar',
+    '#NationalNews',
+    '#DeshVidesh',
+    '#Khabar',
+  ];
+
+  for (const seed of contextualHindiPool) {
+    if (middleTags.length >= 6) break;
+    addMiddleTag(seed);
   }
 
-  const defaultSeeds = ['#BreakingNews', '#HindiNews', '#LatestUpdate', '#NewsUpdate'];
-  for (const seed of defaultSeeds) {
-    if (filteredMiddleTags.length >= 5) break;
-    if (!filteredMiddleTags.some((t) => t.toLowerCase() === seed.toLowerCase())) {
-      filteredMiddleTags.push(seed);
+  let selectedMiddle = middleTags.slice(0, 6);
+  if (selectedMiddle.length < 4) {
+    for (const seed of contextualHindiPool) {
+      if (selectedMiddle.length >= 4) break;
+      const lower = seed.toLowerCase();
+      if (!seenMiddle.has(lower) && lower !== firstTag.toLowerCase()) {
+        seenMiddle.add(lower);
+        selectedMiddle.push(seed);
+      }
     }
   }
 
-  const middleSlice = filteredMiddleTags.slice(0, 6);
-  const cleanFinalTags: string[] = [];
-  if (
-    userTag &&
-    userTag.toLowerCase() !== '#ainewsmaker' &&
-    userTag.toLowerCase() !== '#ai_news_maker' &&
-    userTag.toLowerCase() !== '#breakingnewswala' &&
-    userTag.toLowerCase() !== '#bnwtv' &&
-    userTag.toLowerCase() !== '#breaking_news_wala' &&
-    userTag.toLowerCase() !== '#ब्रेकिंगन्यूजवाला'
-  ) {
-    cleanFinalTags.push(userTag);
-  }
-  for (const t of middleSlice) {
-    const lower = t.toLowerCase();
-    if (
-      lower !== '#ainewsmaker' &&
-      lower !== '#ai_news_maker' &&
-      lower !== '#breakingnewswala' &&
-      lower !== '#bnwtv' &&
-      lower !== '#breaking_news_wala' &&
-      lower !== '#ब्रेकिंगन्यूजवाला'
-    ) {
-      cleanFinalTags.push(t);
-    }
-  }
-
-  const seen = new Set<string>();
-  const orderedTags: string[] = [];
-  for (const t of cleanFinalTags) {
-    const lower = t.toLowerCase();
-    if (!seen.has(lower)) {
-      seen.add(lower);
-      orderedTags.push(t);
-    }
-  }
-
-  // BRAND MANDATE: #AINewsMaker is strictly and permanently the LAST hashtag in all captions
-  orderedTags.push('#AINewsMaker');
-
-  return `${finalBodyText}\n\n${orderedTags.join(' ')}`.trim();
+  const finalTags = [firstTag, ...selectedMiddle, '#AINewsMaker'];
+  return finalTags.join(' ');
 }
 
 /**
@@ -2192,22 +2371,61 @@ export function cleanLocationField(loc: string): string {
   return formatDistrictWithState(cleaned);
 }
 
+export const STANDARD_HINDI_CATEGORIES = [
+  'राजनीति',
+  'प्रशासन',
+  'अपराध',
+  'दुर्घटना',
+  'विकास',
+  'शिक्षा',
+  'स्वास्थ्य',
+  'जनआंदोलन',
+  'रोजगार',
+  'कृषि',
+  'मौसम',
+  'व्यापार',
+  'खेल',
+  'अन्य',
+] as const;
+
+export type StandardHindiCategory = typeof STANDARD_HINDI_CATEGORIES[number];
+
 /**
- * Sanitizes Category field to ensure ONLY valid news category is kept without city names.
+ * Sanitizes Category field to ensure ONLY valid standard Hindi category is kept.
+ * Maps input to strictly one of the 14 standard categories:
+ * राजनीति, प्रशासन, अपराध, दुर्घटना, विकास, शिक्षा, स्वास्थ्य, जनआंदोलन, रोजगार, कृषि, मौसम, व्यापार, खेल, अन्य
+ * Defaults to 'अन्य' if unconfirmed or unmatched.
  */
 export function cleanCategoryField(cat: string): string {
-  if (!cat) return 'ताज़ा समाचार';
-  let cleaned = cat
+  if (!cat) return 'अन्य';
+  let cleaned = String(cat)
     .replace(/^(श्रेणी\s*[:\-–—]?|category\s*[:\-–—]?)/i, '')
     .trim();
 
-  // If contains slashes, take the first valid category part
+  // If contains slashes, check individual parts
   const parts = cleaned.split(/[\/\-–—]+/).map((p) => p.trim()).filter(Boolean);
-  const matched = parts.find((p) => CATEGORY_KEYWORDS.some((ck) => ck.toLowerCase() === p.toLowerCase()));
-  if (matched) return matched;
 
-  cleaned = cleaned.replace(/[।\.\,\!\?\:\-–—\s]+$/g, '').trim();
-  return cleaned || 'ताज़ा समाचार';
+  for (const p of [cleaned, ...parts]) {
+    const direct = STANDARD_HINDI_CATEGORIES.find((sc) => sc === p || sc.toLowerCase() === p.toLowerCase());
+    if (direct) return direct;
+  }
+
+  const lower = cleaned.toLowerCase();
+  if (/राजनीति|सियासत|चुनाव|राजनीतिक|नेता|विधायक|सांसद|politics|political|bjp|congress|party/i.test(lower)) return 'राजनीति';
+  if (/प्रशासन|शासन|कलेक्टर|डीएम|नगर\s*निगम|पुलिस\s*प्रशासन|सरकार|आयोग|governance|administration/i.test(lower)) return 'प्रशासन';
+  if (/अपराध|क्राइम|हत्या|मर्डर|लूट|चोरी|दुष्कर्म|गिरफ्तार|ठगी|धोखाधड़ी|पुलिस|एफआईआर|crime|police/i.test(lower)) return 'अपराध';
+  if (/दुर्घटना|हादसा|एक्सीडेंट|टक्कर|मौत|अग्निकांड|आग|घायल|accident|crash/i.test(lower)) return 'दुर्घटना';
+  if (/विकास|निर्माण|योजना|परियोजना|शिलान्यास|लोकार्पण|स्मार्ट\s*सिटी|सड़क|ब्रिज|development|infrastructure/i.test(lower)) return 'विकास';
+  if (/शिक्षा|स्कूल|कॉलेज|विश्वविद्यालय|छात्र|छात्रा|परीक्षा|रिजल्ट|शिक्षक|education|exam|student/i.test(lower)) return 'शिक्षा';
+  if (/स्वास्थ्य|अस्पताल|डॉक्टर|मरीज|इलाज|दवा|बीमारी|चिकित्सा|स्वास्थ्य\s*विभाग|health|hospital|medical/i.test(lower)) return 'स्वास्थ्य';
+  if (/जनआंदोलन|आंदोलन|प्रदर्शन|धरना|हड़ताल|चक्काजाम|विरोध|मांग|रैली|protest|strike/i.test(lower)) return 'जनआंदोलन';
+  if (/रोजगार|नौकरी|भर्ती|रिक्ति|वेतन|पेंशन|नियुक्ति|जॉब|employment|job|recruitment/i.test(lower)) return 'रोजगार';
+  if (/कृषि|किसान|खेती|फसल|खाद|बीज|मंडी|एमएसपी|agriculture|farmer|crop/i.test(lower)) return 'कृषि';
+  if (/मौसम|बारिश|मानसून|गर्मी|सर्दी|ठंड|तापमान|कोहरा|तूफान|आंधी|weather|rain|monsoon/i.test(lower)) return 'मौसम';
+  if (/व्यापार|कारोबार|बिजनेस|बाजार|शेयर|सोना|चांदी|मार्केट|उद्योग|जीएसटी|अर्थव्यवस्था|business|market|economy/i.test(lower)) return 'व्यापार';
+  if (/खेल|क्रिकेट|मैच|टूर्नामेंट|खिलाड़ी|जीत|पदक|ओलंपिक|sports|cricket/i.test(lower)) return 'खेल';
+
+  return 'अन्य';
 }
 
 export interface DetectedSpeaker {
@@ -2394,3 +2612,153 @@ export function getEffectiveSpeaker(
 
   return { name: '', title: trimmedTitle };
 }
+
+export function formatHeadlineWithKeywords(
+  headline: string,
+  existingHighlights?: string[]
+): { formattedHeadline: string; highlightWords: string[] } {
+  if (!headline) return { formattedHeadline: '', highlightWords: [] };
+
+  const rawHeadline = headline.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
+  if (!rawHeadline) return { formattedHeadline: '', highlightWords: [] };
+
+  const stopwords = new Set([
+    'के', 'की', 'का', 'में', 'पर', 'से', 'को', 'ने', 'है', 'हैं', 'और', 'या', 'भी', 'तो', 'ही', 'था', 'थे', 'थी',
+    'इस', 'उस', 'यह', 'वह', 'इन', 'उन', 'द्वारा', 'लिए', 'गया', 'गई', 'गए', 'हुए', 'हुई', 'हुआ', 'रहा', 'रही', 'रहे',
+    'कर', 'किया', 'हो', 'बड़ा', 'बड़ी', 'बड़े', 'अपडेट'
+  ]);
+
+  const words = rawHeadline.split(/\s+/).filter(Boolean);
+  const selectedWords: string[] = [];
+
+  // 1. Prefer existingHighlights if they appear in this headline
+  if (Array.isArray(existingHighlights) && existingHighlights.length > 0) {
+    for (const h of existingHighlights) {
+      if (!h || typeof h !== 'string') continue;
+      const cleanH = h.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '');
+      if (!cleanH) continue;
+      if (rawHeadline.includes(cleanH)) {
+        if (!selectedWords.includes(cleanH)) {
+          selectedWords.push(cleanH);
+          if (selectedWords.length >= 4) break;
+        }
+      }
+    }
+  }
+
+  // 2. If fewer than 2 words, pick significant words from headline
+  if (selectedWords.length < 2) {
+    for (const w of words) {
+      const cleanW = w.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim();
+      if (!cleanW) continue;
+      if (selectedWords.includes(cleanW)) continue;
+      if (/\d+/.test(cleanW) || (cleanW.length >= 4 && !stopwords.has(cleanW))) {
+        selectedWords.push(cleanW);
+        if (selectedWords.length >= 4) break;
+      }
+    }
+  }
+
+  // 3. Fallback: if still fewer than 2 words, pick non-stopwords with length >= 3
+  if (selectedWords.length < 2) {
+    for (const w of words) {
+      const cleanW = w.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim();
+      if (!cleanW || stopwords.has(cleanW)) continue;
+      if (!selectedWords.includes(cleanW)) {
+        selectedWords.push(cleanW);
+        if (selectedWords.length >= 2) break;
+      }
+    }
+  }
+
+  const finalHighlights = selectedWords.slice(0, 4);
+
+  if (finalHighlights.length === 0) {
+    return { formattedHeadline: rawHeadline, highlightWords: [] };
+  }
+
+  const cleanHighlights = finalHighlights
+    .map((h) => h.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase())
+    .filter(Boolean);
+
+  let highlightedCount = 0;
+  const lines = rawHeadline.split(/\r?\n/);
+  const formattedHeadline = lines
+    .map((line) => {
+      const tokens = line.split(/\s+/).filter(Boolean);
+      return tokens
+        .map((tok) => {
+          const cleanTok = tok.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim().toLowerCase();
+          const isMatch = cleanHighlights.some(
+            (h) => h === cleanTok || h.split(/\s+/).some((part) => part === cleanTok)
+          );
+          if (isMatch && highlightedCount < 4) {
+            highlightedCount++;
+            return `[yellow]${tok}[/yellow]`;
+          }
+          return tok;
+        })
+        .join(' ');
+    })
+    .join('\n');
+
+  return { formattedHeadline, highlightWords: finalHighlights };
+}
+
+export interface PreservedRegenerationState {
+  combinedHeadlines: string[];
+  preservedHeadline: string;
+  preservedFormattedHeadline: string;
+  preservedIndex: number;
+  isMaxReached: boolean;
+}
+
+/**
+ * Requirement R2: Preserves previously selected primary headline and formatted headline
+ * across headline regeneration, while combining options up to max limit (10).
+ */
+export function preserveHeadlineStateOnRegeneration(params: {
+  existingHeadlines: string[];
+  newHeadlines: string[];
+  selectedHeadline?: string;
+  selectedFormattedHeadline?: string;
+  selectedIndex?: number;
+  maxLimit?: number;
+}): PreservedRegenerationState {
+  const max = params.maxLimit || 10;
+  const existing = Array.isArray(params.existingHeadlines) ? params.existingHeadlines.filter(Boolean) : [];
+  const rawNew = Array.isArray(params.newHeadlines) ? params.newHeadlines.filter(Boolean) : [];
+
+  const combined: string[] = [...existing];
+  for (const h of rawNew) {
+    if (combined.length >= max) break;
+    if (!combined.includes(h)) {
+      combined.push(h);
+    }
+  }
+
+  const chosenIndex = typeof params.selectedIndex === 'number' && params.selectedIndex >= 0 && params.selectedIndex < existing.length
+    ? params.selectedIndex
+    : 0;
+
+  const preservedHeadline = (params.selectedHeadline && params.selectedHeadline.trim())
+    ? params.selectedHeadline.trim()
+    : (combined[chosenIndex] || rawNew[0] || '');
+
+  let preservedFormattedHeadline = params.selectedFormattedHeadline && params.selectedFormattedHeadline.trim()
+    ? params.selectedFormattedHeadline.trim()
+    : '';
+
+  if (!preservedFormattedHeadline && preservedHeadline) {
+    preservedFormattedHeadline = formatHeadlineWithKeywords(preservedHeadline).formattedHeadline;
+  }
+
+  return {
+    combinedHeadlines: combined,
+    preservedHeadline,
+    preservedFormattedHeadline,
+    preservedIndex: chosenIndex,
+    isMaxReached: combined.length >= max,
+  };
+}
+

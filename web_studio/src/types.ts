@@ -411,6 +411,7 @@ export interface AIAnalysisResult {
   extractedArticlePhotos?: string[];
   isLocalFallback?: boolean;
   quotaNotice?: string;
+  inputType?: "news_url" | "raw_script" | "press_release" | "voice_command";
 }
 
 export interface VideoDraftData {

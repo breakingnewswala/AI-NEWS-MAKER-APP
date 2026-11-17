@@ -88,8 +88,8 @@ export function saveDraft(
   
   const title = extraMeta?.title || cardData.headline || 'अनाम न्यूज़ ड्राफ्ट';
   const headline = cardData.headline || 'ताज़ा समाचार हेडलाइन';
-  const category = cardData.category || 'ताज़ा';
-  const location = cardData.location || 'मध्य प्रदेश';
+  const category = cardData.category || 'अन्य';
+  const location = cardData.location || '';
   const summary = cardData.summary || '';
   const anchorScript = extraMeta?.anchorScript || '';
   const tags = extraMeta?.tags || ['#BreakingNews', '#HindiNews', '#AINewsMaker'];

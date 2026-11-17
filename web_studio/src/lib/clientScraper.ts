@@ -6,6 +6,7 @@ export interface ScrapedNewsArticle {
   title: string;
   description: string;
   content: string;
+  author?: string;
   images: string[];
   sourceUrl: string;
   location?: string;
@@ -60,6 +61,10 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
         const uMatch = text.match(/^URL Source:\s*(.+)$/m);
         const sourceUrl = uMatch ? uMatch[1].trim() : normalized;
 
+        // Extract Author
+        const aMatch = text.match(/^Author:\s*(.+)$/m);
+        const author = aMatch ? aMatch[1].trim() : undefined;
+
         // Extract Markdown Content
         let rawContent = '';
         const cMatch = text.match(/Markdown Content:\s*([\s\S]+)$/i);
@@ -112,7 +117,8 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
           return {
             title: title || 'ताज़ा समाचार घटनाक्रम',
             description,
-            content: cleanedBody.slice(0, 3500),
+            content: cleanedBody.slice(0, 6000),
+            author,
             images: images.slice(0, 6),
             sourceUrl,
           };
@@ -149,6 +155,12 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
           doc.querySelector('meta[property="og:description"]')?.getAttribute('content') ||
           doc.querySelector('meta[name="description"]')?.getAttribute('content') ||
           doc.querySelector('meta[name="twitter:description"]')?.getAttribute('content') ||
+          '';
+
+        const metaAuthor =
+          doc.querySelector('meta[name="author"]')?.getAttribute('content') ||
+          doc.querySelector('meta[property="article:author"]')?.getAttribute('content') ||
+          doc.querySelector('meta[name="twitter:creator"]')?.getAttribute('content') ||
           '';
 
         const images: string[] = [];
@@ -188,7 +200,7 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
           }
         });
 
-        const content = pList.join('\n\n').slice(0, 3500);
+        const content = pList.join('\n\n').slice(0, 6000);
         const description = metaDesc.trim() || pList[0] || '';
 
         const hasHindiInTitle = title && /[\u0900-\u097F]/.test(title);
@@ -199,6 +211,7 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
             title: title || 'ताज़ा समाचार',
             description: description.slice(0, 320),
             content: content || description,
+            author: metaAuthor ? metaAuthor.trim() : undefined,
             images: images.slice(0, 6),
             sourceUrl: normalized,
           };

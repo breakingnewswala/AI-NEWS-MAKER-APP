@@ -20,10 +20,11 @@ import {
 } from 'lucide-react';
 import { AIAnalysisResult, NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
+import { formatHeadlineWithKeywords } from './NewsCommandModal';
 import { getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { getTemplateHeadlineConfig } from '../lib/graphicTemplatesRegistry';
-import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges, formatCaptionVariants, countHeadlineVisibleCharacters } from '../lib/speakerUtils';
+import { cleanHeadlineText, cleanLocationField, cleanCategoryField, generate5JournalisticHeadlines, generate5BalancedHeadlineOptions, generate4BalancedHeadlineOptions, calculateHeadlineSimilarity, cleanCaptionParagraphs, validateHeadlineOption, enrichHeadlineWithContext, fitHeadlinesTo5TierRanges, formatCaptionVariants, countHeadlineVisibleCharacters, preserveHeadlineStateOnRegeneration } from '../lib/speakerUtils';
 import { getRegenCoinCostForPlan, FIVE_HEADLINE_TIERS } from '../lib/aiCoreRules';
 import { isUserAdmin, isUserSuperAdmin } from '../lib/userPlanManager';
 import { ReporterUser } from './LoginModal';
@@ -1322,13 +1323,18 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         effectiveLink
       );
 
+      const { formattedHeadline: topFormatted, highlightWords: topHighlights } = formatHeadlineWithKeywords(
+        finalHeadline,
+        res.highlightWords
+      );
+
       onChange({
         headline: finalHeadline,
-        formattedHeadline: res.formattedHeadline || finalHeadline,
+        formattedHeadline: topFormatted || res.formattedHeadline || finalHeadline,
         headlineOptions: finalOpts,
         regenerationUsed: false,
         regeneratedHeadlines: undefined,
-        highlightWords: res.highlightWords || [],
+        highlightWords: topHighlights.length > 0 ? topHighlights : (res.highlightWords || []),
         location: finalLoc,
         summary: effectiveCaption,
         images: {
@@ -1390,16 +1396,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
   const handleSelectHeadline = (opt: string, index: number) => {
     setSelectedHeadlineIndex(index);
     const cleanOpt = cleanHeadlineText(opt);
-    let formatted = cleanOpt;
-    const highlightWords = result?.highlightWords || [];
-    if (highlightWords.length > 0) {
-      for (const hw of highlightWords) {
-        if (formatted.includes(hw)) {
-          formatted = formatted.replace(new RegExp(`(${hw})`, 'g'), '[yellow]$1[/yellow]');
-          break;
-        }
-      }
-    }
+    const { formattedHeadline: formatted, highlightWords: newHighlights } = formatHeadlineWithKeywords(
+      cleanOpt,
+      result?.highlightWords
+    );
     const updatedCaption = formatCaptionByStyle(
       captionStyle,
       cleanOpt,
@@ -1413,12 +1413,14 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         ...result,
         headline: cleanOpt,
         formattedHeadline: formatted,
+        highlightWords: newHighlights,
         summary: updatedCaption,
       });
     }
     onChange({
       headline: cleanOpt,
       formattedHeadline: formatted,
+      highlightWords: newHighlights,
       summary: updatedCaption,
     });
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1575,25 +1577,24 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       ).slice(0, missingCount);
 
       if (fittedNew.length > 0) {
-        const combined10 = [...existingHeadlines];
-        for (const h of fittedNew) {
-          if (combined10.length >= MAX_HEADLINES_PER_ARTICLE) break;
-          if (!combined10.includes(h)) {
-            combined10.push(h);
-          }
-        }
-        const reachedMax = combined10.length >= MAX_HEADLINES_PER_ARTICLE;
-        const firstNewIdx = Math.min(existingHeadlines.length, combined10.length - 1);
-        setHeadlineOptions(combined10);
-        setSelectedHeadlineIndex(firstNewIdx);
-        const topH = combined10[firstNewIdx] || fittedNew[0];
+        const preservedState = preserveHeadlineStateOnRegeneration({
+          existingHeadlines,
+          newHeadlines: fittedNew,
+          selectedHeadline: card.headline || (result && result.headline),
+          selectedFormattedHeadline: card.formattedHeadline || (result && result.formattedHeadline),
+          selectedIndex: selectedHeadlineIndex,
+        });
+
+        setHeadlineOptions(preservedState.combinedHeadlines);
+        setSelectedHeadlineIndex(preservedState.preservedIndex);
+
         const updatedResult: AIAnalysisResult | null = result
           ? {
               ...result,
-              headline: topH,
-              formattedHeadline: topH,
-              headlineOptions: combined10,
-              regenerationUsed: reachedMax,
+              headline: preservedState.preservedHeadline,
+              formattedHeadline: preservedState.preservedFormattedHeadline,
+              headlineOptions: preservedState.combinedHeadlines,
+              regenerationUsed: preservedState.isMaxReached,
               regeneratedHeadlines: fittedNew,
               canonicalContext: (data && data.canonicalContext) || activeCtx,
             }
@@ -1603,10 +1604,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           setActiveGeneratedProvider(data.actualProvider);
         }
         onChange({
-          headline: topH,
-          formattedHeadline: topH,
-          headlineOptions: combined10,
-          regenerationUsed: reachedMax,
+          headline: preservedState.preservedHeadline,
+          formattedHeadline: preservedState.preservedFormattedHeadline,
+          headlineOptions: preservedState.combinedHeadlines,
+          regenerationUsed: preservedState.isMaxReached,
           regeneratedHeadlines: fittedNew,
         });
 
@@ -1614,8 +1615,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           new CustomEvent('ai_tools_state_synced', {
             detail: {
               result: updatedResult,
-              headlineOptions: combined10,
-              selectedHeadlineIndex: firstNewIdx,
+              headlineOptions: preservedState.combinedHeadlines,
+              selectedHeadlineIndex: preservedState.preservedIndex,
               canonicalContext: (data && data.canonicalContext) || activeCtx,
               activeGeneratedProvider: (data && data.actualProvider) || activeGeneratedProvider || aiProvider,
               error: null,
@@ -2153,9 +2154,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
               <div className="flex items-center justify-between pb-2 border-b border-neutral-800 gap-2 flex-wrap">
                 <span className="text-xs font-black text-yellow-400 flex items-center gap-1.5">
                   <Check className="w-4 h-4 text-green-400" />
-                  <span>
-                    तैयार AI हेडलाइन्स ({headlineOptions.length} / {MAX_HEADLINES_PER_ARTICLE} विकल्प उपलब्ध)
-                  </span>
+                  <span>{`${Math.min(headlineOptions.length, 10)} / 10 विकल्प उपलब्ध`}</span>
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
@@ -2167,20 +2166,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                         ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-not-allowed opacity-80'
                         : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black'
                     }`}
-                    title={isMaxHeadlinesReached ? 'अधिकतम 10 हेडलाइन्स उपलब्ध हैं' : `उसी खबर के लिए 5 नई हेडलाइन बनाएं (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
+                    title={isMaxHeadlinesReached ? 'अधिकतम 10 हेडलाइन्स तैयार हैं' : 'पाँच नई हेडलाइन बनाएं'}
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isRegenerating ? 'animate-spin' : ''}`} />
                     <span>
                       {isRegenerating
                         ? 'नई हेडलाइन्स बन रही हैं...'
-                        : isMaxHeadlinesReached
-                        ? '✓ अधिकतम 10 हेडलाइन्स तैयार'
-                        : `🔄 पाँच नई हेडलाइन बनाएँ (${regenCost === 0 ? 'Free' : `${regenCost} कॉइन्स`})`}
+                        : 'पाँच नई हेडलाइन बनाएं'}
                     </span>
                   </button>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
-                    📍 {result.location || card.location || 'मध्य प्रदेश'}
-                  </span>
+                  {Boolean((result?.location || card.location)?.trim()) && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-800 font-bold">
+                      📍 {(result?.location || card.location)?.trim()}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -2221,8 +2220,9 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   const displayText = isSelected && result?.headline ? result.headline : opt;
                   const cleanDisplay = displayText.replace(/\[\/?(?:yellow|highlight)\]/g, '').trim();
                   const wordCount = cleanDisplay.split(/\s+/).filter(Boolean).length;
-                  const charCount = cleanDisplay.length;
+                  const charCount = countHeadlineVisibleCharacters(cleanDisplay);
                   const tierRule = FIVE_HEADLINE_TIERS[idx % 5];
+                  const isCompliant = charCount >= tierRule.min && charCount <= tierRule.max;
                   const isRegeneratedOption = idx >= 5;
 
                   return (
@@ -2247,15 +2247,15 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                             className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
-                            {`विकल्प ${idx + 1}${tierRule.angle ? ` · ${tierRule.angle}` : ''}`}
+                            {`विकल्प ${idx + 1}`}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-neutral-400 font-mono bg-neutral-950/80 px-2 py-0.5 rounded border border-neutral-800 flex items-center gap-1">
                             <span className="text-amber-300 font-bold">{wordCount} शब्द</span>
                             <span className="text-neutral-600">•</span>
-                            <span className={charCount > tierRule.max ? 'text-amber-400' : 'text-emerald-400 font-bold'}>
-                              {charCount} अक्षर (लक्ष्य: {tierRule.min}-{tierRule.max})
+                            <span className={isCompliant ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                              {charCount} अक्षर (लक्ष्य: {tierRule.min}–{tierRule.max})
                             </span>
                           </span>
                           {isSelected && (

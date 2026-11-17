@@ -5907,7 +5907,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
                 }`}
               >
-                <span>📄</span>
                 <span>विस्तृत</span>
                 {step7CaptionStyle === 'detailed' && <Check className="w-3 h-3 text-red-600 font-black" />}
               </button>
@@ -5924,7 +5923,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
                 }`}
               >
-                <span>📌</span>
                 <span>बुलेट पॉइंट्स</span>
                 {step7CaptionStyle === 'bullet' && <Check className="w-3 h-3 text-red-600 font-black" />}
               </button>
@@ -5941,7 +5939,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     : 'border-neutral-800 bg-neutral-950/80 text-neutral-300 hover:border-neutral-700'
                 }`}
               >
-                <span>⚡</span>
                 <span>संक्षिप्त</span>
                 {step7CaptionStyle === 'short' && <Check className="w-3 h-3 text-red-600 font-black" />}
               </button>
