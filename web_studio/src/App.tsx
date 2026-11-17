@@ -2728,10 +2728,52 @@ export default function App() {
   };
 
   const handleUpdateCard = (updates: Partial<NewsCardData>) => {
-    setCard((prev) => ({
-      ...prev,
-      ...updates,
-    }));
+    setCard((prev) => {
+      // 1. Defensively merge images to NEVER accidentally wipe out existing photos
+      let mergedImages = prev.images;
+      if (updates.images) {
+        mergedImages = {
+          ...prev.images,
+          ...updates.images,
+          // Preserve main photo if updates passed empty/falsy main photo but previous had one
+          main: updates.images.main || prev.images?.main || (prev as any).photoUrl || '',
+          second: updates.images.second !== undefined ? updates.images.second : prev.images?.second,
+          third: updates.images.third !== undefined ? updates.images.third : prev.images?.third,
+          fourth: updates.images.fourth !== undefined ? updates.images.fourth : prev.images?.fourth,
+        };
+      }
+
+      // 2. Defensively preserve permanent channel logo and branding
+      const savedProf = getSavedChannelProfile();
+      const fallbackLogo =
+        savedProf?.channelLogoPngUrl ||
+        (savedProf?.channelLogoUrl?.endsWith('.gif') ? '' : savedProf?.channelLogoUrl) ||
+        '/assets/breaking_news_wala_logo.png';
+
+      const nextLogo =
+        updates.customLogoUrl ||
+        prev.customLogoUrl ||
+        prev.channelLogoPngUrl ||
+        prev.channelLogoUrl ||
+        fallbackLogo;
+
+      // 3. Defensively preserve dynamic frame and location badge config
+      const nextCustomDynamicFrame =
+        updates.customDynamicFrame !== undefined
+          ? updates.customDynamicFrame
+          : prev.customDynamicFrame;
+
+      const nextFrameDesign = updates.frameDesign || prev.frameDesign || 'graphic_001';
+
+      return {
+        ...prev,
+        ...updates,
+        frameDesign: nextFrameDesign,
+        customDynamicFrame: nextCustomDynamicFrame,
+        customLogoUrl: nextLogo,
+        images: mergedImages,
+      };
+    });
   };
 
   // Apply AI result from link or command

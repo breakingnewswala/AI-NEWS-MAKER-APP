@@ -1134,13 +1134,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         if (fallback5.length > 0) {
           setHeadlineOptions(fallback5);
           setSelectedHeadlineIndex(0);
-          setCard((prev) => ({
-            ...prev,
+          onChange({
             headline: fallback5[0],
             formattedHeadline: fallback5[0],
             headlineOptions: fallback5,
-            summary: prev.summary || candidateSummary,
-          }));
+            summary: card.summary || candidateSummary,
+          });
         }
       }
 
@@ -1442,6 +1441,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       formattedHeadline: formatted,
       highlightWords: newHighlights,
       summary: updatedCaption,
+      images: card.images,
+      customLogoUrl: card.customLogoUrl,
+      customDynamicFrame: card.customDynamicFrame,
+      frameDesign: card.frameDesign,
     });
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(updatedCaption).catch(() => {});
@@ -2265,7 +2268,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                   const isRegeneratedOption = idx >= 5;
 
                   return (
-                    <label
+                    <div
                       key={idx}
                       onClick={() => handleSelectHeadline(opt, idx)}
                       className={`p-2.5 rounded-xl border text-xs sm:text-sm font-bold font-['Noto_Sans_Devanagari'] cursor-pointer transition-all flex flex-col gap-1.5 ${
@@ -2282,7 +2285,10 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                             type="radio"
                             name="headline_selection_radio"
                             checked={isSelected}
-                            onChange={() => handleSelectHeadline(opt, idx)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleSelectHeadline(opt, idx);
+                            }}
                             className="w-4 h-4 accent-yellow-400 cursor-pointer shrink-0"
                           />
                           <span className="text-[11px] font-black text-yellow-400 tracking-wide">
@@ -2308,7 +2314,7 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
                       <div className="leading-snug text-neutral-200 pl-6">
                         {displayText}
                       </div>
-                    </label>
+                    </div>
                   );
                 })}
               </div>

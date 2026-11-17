@@ -989,10 +989,11 @@ var require_server_firestore_adapter2 = __commonJS({
             method: "PATCH",
             headers: {
               Authorization: `Bearer ${token}`,
+              "x-goog-user-project": PROJECT_ID,
               "Content-Type": "application/json",
               "Content-Length": Buffer.byteLength(payload)
             },
-            timeout: 4e3
+            timeout: 1e4
           },
           (res) => {
             const chunks = [];
@@ -1027,9 +1028,10 @@ var require_server_firestore_adapter2 = __commonJS({
             path: docPath,
             method: "GET",
             headers: {
-              Authorization: `Bearer ${token}`
+              Authorization: `Bearer ${token}`,
+              "x-goog-user-project": PROJECT_ID
             },
-            timeout: 4e3
+            timeout: 1e4
           },
           (res) => {
             const chunks = [];
@@ -1169,9 +1171,10 @@ var require_server_firestore_adapter2 = __commonJS({
             path: docPath,
             method: "DELETE",
             headers: {
-              Authorization: `Bearer ${token}`
+              Authorization: `Bearer ${token}`,
+              "x-goog-user-project": PROJECT_ID
             },
-            timeout: 4e3
+            timeout: 1e4
           },
           (res) => {
             const chunks = [];
@@ -1205,9 +1208,10 @@ var require_server_firestore_adapter2 = __commonJS({
             path: docPath,
             method: "GET",
             headers: {
-              Authorization: `Bearer ${token}`
+              Authorization: `Bearer ${token}`,
+              "x-goog-user-project": PROJECT_ID
             },
-            timeout: 5e3
+            timeout: 1e4
           },
           (res) => {
             const chunks = [];
@@ -1221,7 +1225,7 @@ var require_server_firestore_adapter2 = __commonJS({
                     const data = fromFirestoreDoc(doc);
                     const parts = (doc.name || "").split("/");
                     const id = parts[parts.length - 1];
-                    return { id, ...data };
+                    return { ...data, id, firestoreDocId: id };
                   });
                   resolve({ success: true, documents, statusCode: res.statusCode });
                 } catch (e) {

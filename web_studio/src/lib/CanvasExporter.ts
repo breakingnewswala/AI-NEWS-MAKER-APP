@@ -503,7 +503,16 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
 
   // Load custom logo image if provided, falling back to channel logo or default logo
   let customLogoImg: HTMLImageElement | undefined;
-  const effectiveLogoUrl = card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png';
+  const effectiveLogoUrl =
+    card.testLogoUrl ||
+    card.customLogoPngUrl ||
+    card.customLogoUrl ||
+    card.channelLogoPngUrl ||
+    card.channelLogoUrl ||
+    card.activeLogoUrl ||
+    (card as any).channelLogo ||
+    (card as any).logoUrl ||
+    '/assets/breaking_news_wala_logo.png';
   if (effectiveLogoUrl) {
     try {
       customLogoImg = await loadImage(effectiveLogoUrl);
@@ -1768,7 +1777,11 @@ async function drawAuthoritativeDynamicFrameCanvas(
       if (!src) continue;
 
       try {
-        const pImg = await loadImage(src);
+        const isMainRequired = sIdx === 0 && Boolean(rawMainPhoto);
+        const pImg = await loadImage(src, isMainRequired ? { isMandatory: true, assetName: 'समाचार फोटो' } : undefined);
+        if (isMainRequired && (pImg.naturalWidth <= 1 || pImg.naturalHeight <= 1)) {
+          throw new Error('अनिवार्य समाचार फोटो लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फोटो पुनः चुनें।');
+        }
         const slotX = (slot.rect.x / 100) * width;
         const slotY = (slot.rect.y / 100) * height;
         const slotW = (slot.rect.width / 100) * width;
@@ -1878,7 +1891,16 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const ly = (lRect.y / 100) * height;
     const lw = (lRect.width / 100) * width;
     const lh = (lRect.height / 100) * height;
-    const resolvedLogoUrl = card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png';
+    const resolvedLogoUrl =
+      card.testLogoUrl ||
+      card.customLogoPngUrl ||
+      card.customLogoUrl ||
+      card.channelLogoPngUrl ||
+      card.channelLogoUrl ||
+      card.activeLogoUrl ||
+      (card as any).channelLogo ||
+      (card as any).logoUrl ||
+      '/assets/breaking_news_wala_logo.png';
     const logoToDraw = customLogoImg || (resolvedLogoUrl ? await loadImage(resolvedLogoUrl).catch(() => null) : null);
     if (logoToDraw) {
       ctx.save();
@@ -1917,89 +1939,101 @@ async function drawAuthoritativeDynamicFrameCanvas(
         }
       }
     }
+
+    let badgeDrawn = false;
     if (locAsset) {
       try {
-        const badgeImg = await loadImage(locAsset);
-        const nw = badgeImg.width || 400;
-        const nh = badgeImg.height || 100;
-        
-        // Smart 3-Slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
-        const leftSlicePct = df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct ?? 0.28;
-        const rightSlicePct = df.sliceConfig?.rightWidthPct ?? df.headerConfig?.sliceConfig?.rightWidthPct ?? 0.15;
-        const pinW = Math.round(nw * leftSlicePct);
-        const capW = Math.round(nw * rightSlicePct);
-        const midW = Math.max(1, nw - pinW - capW);
+        let safeLocAsset = locAsset;
+        if (locAsset.startsWith('data:image/svg+xml')) {
+          const svgContent = locAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
+          safeLocAsset = `data:image/svg+xml;utf8,${encodeURIComponent(decodeURIComponent(svgContent))}`;
+        }
+        const badgeImg = await loadImage(safeLocAsset);
+        if (badgeImg && badgeImg.naturalWidth > 1 && badgeImg.naturalHeight > 1) {
+          const nw = badgeImg.naturalWidth || badgeImg.width || 400;
+          const nh = badgeImg.naturalHeight || badgeImg.height || 100;
 
-        const leftDestW = (pinW / nh) * bh;
-        const rightDestW = (capW / nh) * bh;
+          // Smart 3-Slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
+          const leftSlicePct = df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct ?? 0.28;
+          const rightSlicePct = df.sliceConfig?.rightWidthPct ?? df.headerConfig?.sliceConfig?.rightWidthPct ?? 0.15;
+          const pinW = Math.round(nw * leftSlicePct);
+          const capW = Math.round(nw * rightSlicePct);
+          const midW = Math.max(1, nw - pinW - capW);
 
-        ctx.save();
-        const typo = df.headerConfig.typographyConfig;
-        let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
-        let locColor = typo?.color || typo?.textColor || df.headerConfig.locationTextColor || '#FFFFFF';
-        const cleanLocText = formatCleanLocationText(card.location || '');
-        ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
-        const measuredTextW = ctx.measureText(cleanLocText).width;
+          const leftDestW = (pinW / nh) * bh;
+          const rightDestW = (capW / nh) * bh;
 
-        // Dynamic horizontal expansion: adapt width to actual text length (compact for Bhopal, wider for Bhopal, MP)
-        const maxBw = width - bx - 20;
-        const minCenterW = 10;
-        const neededCenterW = Math.max(minCenterW, measuredTextW + 24);
-        const midDestW = Math.max(minCenterW, neededCenterW);
-        const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
-        const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
-
-        // Draw background color if selected by user or frame config
-        const bgCol = card.locationBgColor || df.headerConfig.locationBgColor;
-        if (bgCol) {
           ctx.save();
-          ctx.fillStyle = bgCol;
-          ctx.beginPath();
-          ctx.roundRect(bx, by, dynamicBw, bh, bh / 2);
-          ctx.fill();
-          ctx.restore();
-        }
-
-        ctx.drawImage(badgeImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
-        ctx.drawImage(badgeImg, pinW, 0, midW, nh, bx + leftDestW, by, finalCenterW, bh);
-        ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, bx + leftDestW + finalCenterW, by, rightDestW, bh);
-
-        const textReg = df.headerConfig.textRegion;
-        const tx = textReg ? bx + (textReg.x / 100) * dynamicBw : bx + leftDestW;
-        const ty = textReg ? by + (textReg.y / 100) * bh : by;
-        const tw = textReg ? (textReg.width / 100) * dynamicBw : finalCenterW;
-        const th = textReg ? (textReg.height / 100) * bh : bh;
-
-        ctx.fillStyle = locColor;
-        ctx.textBaseline = 'middle';
-        const align = typo?.align || 'center';
-        ctx.textAlign = align === 'left' ? 'left' : align === 'right' ? 'right' : 'center';
-
-        // Auto text shrink only if badge hits max right margin
-        let measuredW = ctx.measureText(cleanLocText).width;
-        while (measuredW > tw - 4 && fontSize > 10) {
-          fontSize -= 1;
+          const typo = df.headerConfig.typographyConfig;
+          let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
+          let locColor = card.locationTextColor || df.headerConfig.locationTextColor || typo?.color || '#FFFFFF';
+          const cleanLocText = formatCleanLocationText(card.location || '');
           ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
-          measuredW = ctx.measureText(cleanLocText).width;
-        }
+          const measuredTextW = ctx.measureText(cleanLocText).width;
 
-        const drawTx = align === 'left' ? tx + 4 : align === 'right' ? tx + tw - 4 : tx + tw / 2;
-        ctx.fillText(cleanLocText, drawTx, ty + th / 2);
-        ctx.restore();
+          // Dynamic horizontal expansion: adapt width to actual text length (compact for Bhopal, wider for Bhopal, MP)
+          const maxBw = width - bx - 20;
+          const minCenterW = 10;
+          const neededCenterW = Math.max(minCenterW, measuredTextW + 24);
+          const midDestW = Math.max(minCenterW, neededCenterW);
+          const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
+          const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
+
+          // Draw background color if selected by user or frame config
+          const bgCol = card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626';
+          if (bgCol) {
+            ctx.save();
+            ctx.fillStyle = bgCol;
+            ctx.beginPath();
+            ctx.roundRect(bx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'box' ? 6 : bh / 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
+          ctx.drawImage(badgeImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
+          ctx.drawImage(badgeImg, pinW, 0, midW, nh, bx + leftDestW, by, finalCenterW, bh);
+          ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, bx + leftDestW + finalCenterW, by, rightDestW, bh);
+
+          const textReg = df.headerConfig.textRegion;
+          const tx = textReg ? bx + (textReg.x / 100) * dynamicBw : bx + leftDestW;
+          const ty = textReg ? by + (textReg.y / 100) * bh : by;
+          const tw = textReg ? (textReg.width / 100) * dynamicBw : finalCenterW;
+          const th = textReg ? (textReg.height / 100) * bh : bh;
+
+          ctx.fillStyle = locColor;
+          ctx.textBaseline = 'middle';
+          const align = typo?.align || 'center';
+          ctx.textAlign = align === 'left' ? 'left' : align === 'right' ? 'right' : 'center';
+
+          // Auto text shrink only if badge hits max right margin
+          let measuredW = ctx.measureText(cleanLocText).width;
+          while (measuredW > tw - 4 && fontSize > 10) {
+            fontSize -= 1;
+            ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
+            measuredW = ctx.measureText(cleanLocText).width;
+          }
+
+          const drawTx = align === 'left' ? tx + 4 : align === 'right' ? tx + tw - 4 : tx + tw / 2;
+          ctx.fillText(cleanLocText, drawTx, ty + th / 2);
+          ctx.restore();
+          badgeDrawn = true;
+        }
       } catch (e) {
         console.warn('Location badge image load warning:', e);
       }
-    } else {
+    }
+
+    if (!badgeDrawn) {
       ctx.save();
       const cleanLocText = formatCleanLocationText(card.location || '');
-      const fontSize = Math.max(14, Math.min(32, Math.round(bh * 0.60)));
+      const fontSize = Math.max(14, Math.min(32, Math.round(bh * 0.58)));
       ctx.font = `800 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
       const measuredTextW = ctx.measureText(cleanLocText).width;
-      const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(measuredTextW + 52)));
+      const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(measuredTextW + 56)));
 
-      ctx.fillStyle = df.headerConfig.locationBgColor || '#1D4ED8';
+      ctx.fillStyle = card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626';
       ctx.beginPath();
-      ctx.roundRect(bx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'pill' ? bh / 2 : 6);
+      ctx.roundRect(bx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'box' ? 6 : bh / 2);
       ctx.fill();
 
       // Subtle stroke
@@ -2007,10 +2041,16 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      ctx.fillStyle = df.headerConfig.locationTextColor || '#FFFFFF';
+      const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
+      ctx.fillStyle = locColor;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(cleanLocText, bx + dynamicBw / 2, by + bh / 2 + 1);
+
+      if (df.headerConfig.locationShowIcon !== false) {
+        ctx.fillText(`📍 ${cleanLocText}`, bx + dynamicBw / 2, by + bh / 2 + 1);
+      } else {
+        ctx.fillText(cleanLocText, bx + dynamicBw / 2, by + bh / 2 + 1);
+      }
       ctx.restore();
     }
   }

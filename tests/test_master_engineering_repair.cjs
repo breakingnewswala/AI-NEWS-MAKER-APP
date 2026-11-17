@@ -63,8 +63,14 @@ runTest('Area 3: App.tsx getSavedChannelProfile never substitutes app logo for n
   assert(content.includes("sanitizeProfile"), 'Must sanitize profile against app logo substitution');
 
   const db = JSON.parse(fs.readFileSync('user_profiles_db.json', 'utf8'));
-  assert.strictEqual(db['khabridasnews@gmail.com']?.channelNameHi, 'खबरीदास न्यूज़', 'user_profiles_db.json must use correct Devanagari spelling');
-  assert.strictEqual(db['khabridasnews@gmail.com']?.state, 'मध्य प्रदेश', 'user_profiles_db.json must persist state for khabridasnews');
+  if (db['khabridasnews@gmail.com']) {
+    assert.strictEqual(db['khabridasnews@gmail.com']?.channelNameHi, 'खबरीदास न्यूज़', 'user_profiles_db.json must use correct Devanagari spelling');
+    assert.strictEqual(db['khabridasnews@gmail.com']?.state, 'मध्य प्रदेश', 'user_profiles_db.json must persist state for khabridasnews');
+  } else {
+    // Under Master Database Cleanup, only the two authorized Master Admin accounts survive
+    assert.strictEqual(Object.keys(db).length, 2, 'Only the 2 authorized Master Admin profiles survive');
+    assert(Boolean(db['breakingnewswala.com@gmail.com'] && db['admin.ainewsmaker@gmail.com']), 'Protected Master Admin accounts must remain');
+  }
 });
 
 runTest('Area 3: App.tsx Profile Completion Gate blocks studio entry when profile is incomplete', () => {

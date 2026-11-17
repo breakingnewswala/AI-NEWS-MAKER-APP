@@ -191,10 +191,11 @@ async function firestoreWriteDoc(collection, docId, data) {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${token}`,
+          'x-goog-user-project': PROJECT_ID,
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(payload),
         },
-        timeout: 4000,
+        timeout: 10000,
       },
       (res) => {
         const chunks = [];
@@ -233,8 +234,9 @@ async function firestoreReadDoc(collection, docId) {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
+          'x-goog-user-project': PROJECT_ID,
         },
-        timeout: 4000,
+        timeout: 10000,
       },
       (res) => {
         const chunks = [];
@@ -392,8 +394,9 @@ async function firestoreDeleteDoc(collection, docId) {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
+          'x-goog-user-project': PROJECT_ID,
         },
-        timeout: 4000,
+        timeout: 10000,
       },
       (res) => {
         const chunks = [];
@@ -431,8 +434,9 @@ async function firestoreListDocs(collection, pageSize = 100) {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
+          'x-goog-user-project': PROJECT_ID,
         },
-        timeout: 5000,
+        timeout: 10000,
       },
       (res) => {
         const chunks = [];
@@ -446,7 +450,7 @@ async function firestoreListDocs(collection, pageSize = 100) {
                 const data = fromFirestoreDoc(doc);
                 const parts = (doc.name || '').split('/');
                 const id = parts[parts.length - 1];
-                return { id, ...data };
+                return { ...data, id, firestoreDocId: id };
               });
               resolve({ success: true, documents, statusCode: res.statusCode });
             } catch (e) {

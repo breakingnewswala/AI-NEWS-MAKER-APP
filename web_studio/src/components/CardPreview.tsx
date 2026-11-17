@@ -3491,7 +3491,16 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     if (item && item.url) badgeAsset = item.url;
                   }
                 }
-                const locColor = df.headerConfig.typographyConfig?.color || df.headerConfig.typographyConfig?.textColor || df.headerConfig.locationTextColor || '#FFFFFF';
+                const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
+                const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626';
+                const locBorderRadius = df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
+
+                let safeBadgeUrl = badgeAsset;
+                if (badgeAsset && badgeAsset.startsWith('data:image/svg+xml')) {
+                  const svgContent = badgeAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
+                  safeBadgeUrl = `data:image/svg+xml;utf8,${encodeURIComponent(decodeURIComponent(svgContent))}`;
+                }
+
                 const dynamicLoc = calculateDynamicLocationMetrics({
                   locationText: cleanLoc,
                   locationRect: df.headerConfig.locationRect,
@@ -3501,17 +3510,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   hasBadgeAsset: Boolean(badgeAsset),
                 });
                 const locWidth = `${dynamicLoc.widthPct}%` || `${df.headerConfig.locationRect?.width ?? 28}%`;
+
                 return badgeAsset ? (
                   <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-3"
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-3 shadow-md"
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      // width: `${df.headerConfig.locationRect?.width ?? 28}%`
                       width: locWidth,
                       maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      backgroundImage: `url(${badgeAsset})`,
+                      backgroundColor: locBgColor,
+                      borderRadius: locBorderRadius,
+                      border: '1.5px solid rgba(255, 255, 255, 0.4)',
+                      backgroundImage: safeBadgeUrl ? `url("${safeBadgeUrl}")` : undefined,
                       backgroundSize: '100% 100%',
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
@@ -3519,6 +3531,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale * 1.1))}px`,
                     }}
                   >
+                    {df.headerConfig.locationShowIcon !== false && (
+                      <MapPin className="w-3.5 h-3.5 mr-1 inline shrink-0" style={{ color: locColor }} />
+                    )}
                     {df.headerConfig.textRegion ? (
                       <div
                         className="absolute flex items-center overflow-hidden"
@@ -3566,21 +3581,21 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   </div>
                 ) : (
                   <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2.5"
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2.5 shadow-md"
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      // width: `${df.headerConfig.locationRect?.width ?? 28}%`
                       width: locWidth,
                       maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      backgroundColor: df.headerConfig.locationBgColor || '#1D4ED8',
+                      backgroundColor: locBgColor,
                       color: locColor,
-                      borderRadius: df.headerConfig.locationStyle === 'pill' ? '9999px' : '6px',
+                      border: '1.5px solid rgba(255, 255, 255, 0.4)',
+                      borderRadius: locBorderRadius,
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                     }}
                   >
-                    {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3 h-3 mr-1 inline shrink-0" />}
+                    {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3.5 h-3.5 mr-1 inline shrink-0" style={{ color: locColor }} />}
                     <span className="truncate">{cleanLoc}</span>
                   </div>
                 );

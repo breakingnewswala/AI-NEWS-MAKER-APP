@@ -43,6 +43,7 @@ debug.keystore
 debug.keystore.base64
 *.log
 backups/
+.private_backups/
 
 # Local temporary uploads (Cloud Storage used for production media)
 uploads/
@@ -111,6 +112,7 @@ scripts/validate-*
 public/assets/aistudio/
 app/src/main/assets/news_studio/assets/aistudio/
 phase4_backups/
+.private_backups/
 *.bak
 
 reconciliation_pre_execution_report.json
