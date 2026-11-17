@@ -56,6 +56,7 @@ import {
   Check,
   Sparkles,
   RefreshCw,
+  RotateCcw,
   Share2,
   FileImage,
   Layers,
@@ -699,64 +700,74 @@ export default function App() {
       case 'studio':
       case 'generator':
         return {
-          title: 'Studio',
+          title: 'Studio / AI News Maker',
           description: 'एआई फोटो फ्रेम जनरेटर — 4:5 व 9:16 पोर्ट्रेट फ्रेम, कस्टमाइज़ेबल हेडलाइन, लोगो और स्मार्ट लोकेशन बैज।',
           canonical: `${base}/studio`,
         };
       case 'videos':
         return {
-          title: 'Video & Reels',
+          title: 'Video & Reels / AI News Maker',
           description: 'एआई वीडियो न्यूज़ स्टूडियो — प्रोफेशनल वीडियो हेडलाइंस, लोअर-थर्ड्स, ब्रेकिंग न्यूज़ वीडियो रील्स और ऑडियो मिक्सर।',
           canonical: `${base}/videos`,
         };
       case 'newsroom':
-      case 'epaper':
         return {
-          title: 'Newsroom',
+          title: 'Newsroom / AI News Maker',
           description: 'लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।',
           canonical: `${base}/newsroom`,
         };
+      case 'epaper':
+        return {
+          title: 'E-Paper / AI News Maker',
+          description: 'डिजिटल ई-पेपर न्यूज़ डेस्क — समाचार पत्र शैली में तैयार करें डिजिटल ई-पेपर पेज।',
+          canonical: `${base}/epaper`,
+        };
       case 'admin':
+        return {
+          title: 'Admin / AI News Maker',
+          description: 'मास्टर एडमिन कंट्रोल पैनल — टेम्प्लेट, फ्रेम मॉडरेशन और चैनल प्रबंधन।',
+          canonical: `${base}/admin`,
+        };
       case 'profile':
         return {
-          title: 'Profile',
+          title: 'Profile / AI News Maker',
           description: 'एआई न्यूज़ मेकर सब्सक्रिप्शन प्लांस, कॉइन्स वॉलेट और रिपोर्टर प्रोफ़ाइल सेटिंग्स।',
           canonical: `${base}/profile`,
         };
       case 'terms':
         return {
-          title: 'नियम एवं शर्तें (Terms & Conditions) — AI News Maker',
+          title: 'Terms & Conditions / AI News Maker',
           description: 'एआई न्यूज़ मेकर नियम और शर्तें — आधिकारिक सेवा दिशा-निर्देश और उपयोग नीति।',
           canonical: `${base}/terms`,
         };
       case 'privacy':
         return {
-          title: 'गोपनीयता नीति (Privacy Policy) — AI News Maker',
+          title: 'Privacy Policy / AI News Maker',
           description: 'एआई न्यूज़ मेकर गोपनीयता नीति — यूज़र डेटा सुरक्षा व गोपनीयता संरक्षण मानक।',
           canonical: `${base}/privacy`,
         };
       case 'refunds':
         return {
-          title: 'रिफंड एवं रद्दीकरण नीति (Refund Policy) — AI News Maker',
+          title: 'Refund Policy / AI News Maker',
           description: 'रिफंड व रद्दीकरण नीति — डिजिटल कॉइन्स व पैकेज खरीद रद्दीकरण दिशा-निर्देश।',
           canonical: `${base}/refunds`,
         };
       case 'support':
         return {
-          title: 'सहायता एवं संपर्क (Support) — AI News Maker',
+          title: 'Support / AI News Maker',
           description: 'ग्राहक सहायता व संपर्क — एआई न्यूज़ मेकर हेल्पडेस्क, व्हाट्सएप सपोर्ट +91 9669802408।',
           canonical: `${base}/support`,
         };
       case 'delete-account':
         return {
-          title: 'खाता हटाने का अनुरोध — AI News Maker',
+          title: 'Account Deletion / AI News Maker',
           description: 'खाता हटाने का अनुरोध — एआई न्यूज़ मेकर डेटा सुरक्षा व अकाउंट डिलीशन प्रक्रिया।',
           canonical: `${base}/delete-account`,
         };
       case 'home':
       default:
         return {
-          title: 'AI News Maker',
+          title: 'Home / AI News Maker',
           description: 'भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।',
           canonical: `${base}/`,
         };
@@ -839,7 +850,7 @@ export default function App() {
           {
             '@type': 'ListItem',
             position: 2,
-            name: meta.title.split('—')[0].trim(),
+            name: meta.title.split('/')[0].split('—')[0].trim(),
             item: meta.canonical,
           },
         ],

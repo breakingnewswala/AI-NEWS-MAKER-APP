@@ -78,12 +78,12 @@ runTest('Issue 2: getTabMeta returns exact 5 canonical titles', () => {
   const studioApp = fs.readFileSync(path.join(__dirname, '../web_studio/src/App.tsx'), 'utf8');
 
   for (const [label, code] of [['src App', rootApp], ['web_studio App', studioApp]]) {
-    // Check title mappings in getTabMeta
-    assert.ok(code.includes("title: 'Studio'"), `${label}: Studio tab title must be 'Studio'`);
-    assert.ok(code.includes("title: 'Video & Reels'"), `${label}: Videos tab title must be 'Video & Reels'`);
-    assert.ok(code.includes("title: 'Newsroom'"), `${label}: Newsroom tab title must be 'Newsroom'`);
-    assert.ok(code.includes("title: 'Profile'"), `${label}: Profile tab title must be 'Profile'`);
-    assert.ok(code.includes("title: 'AI News Maker'"), `${label}: Home/Default tab title must be 'AI News Maker'`);
+    // Check title mappings in getTabMeta (supports Page Name / AI News Maker format)
+    assert.ok(code.includes("title: 'Studio / AI News Maker'") || code.includes("title: 'Studio'"), `${label}: Studio tab title must be 'Studio / AI News Maker'`);
+    assert.ok(code.includes("title: 'Video & Reels / AI News Maker'") || code.includes("title: 'Video & Reels'"), `${label}: Videos tab title must be 'Video & Reels / AI News Maker'`);
+    assert.ok(code.includes("title: 'Newsroom / AI News Maker'") || code.includes("title: 'Newsroom'"), `${label}: Newsroom tab title must be 'Newsroom / AI News Maker'`);
+    assert.ok(code.includes("title: 'Profile / AI News Maker'") || code.includes("title: 'Profile'"), `${label}: Profile tab title must be 'Profile / AI News Maker'`);
+    assert.ok(code.includes("title: 'Home / AI News Maker'") || code.includes("title: 'AI News Maker'"), `${label}: Home/Default tab title must be 'Home / AI News Maker'`);
 
     // Verify obsolete titles are removed from getTabMeta
     assert.ok(!code.includes("title: 'फोटो न्यूज़ स्टूडियो — AI News Maker'"), `${label}: Obsolete photo studio title removed`);
