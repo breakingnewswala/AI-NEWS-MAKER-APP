@@ -79,7 +79,9 @@ const PORT = parseInt(process.env.PORT || "8080", 10);
 // Security Headers & Safe CORS Middleware
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.removeHeader("X-Frame-Options");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'self' https://*.ainewsmaker.online https://ainewsmaker.online;");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
@@ -3937,7 +3939,7 @@ app.get("/api/editorial/approved/:id", (req, res) => {
 });
 
 // 11. POST Save/Update Approved Editorial Content (Admin review & approval & pre-publish)
-app.post("/api/editorial/approved/:id", async (req, res) => {
+app.post("/api/editorial/approved/:id", requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body || {};
@@ -4206,7 +4208,7 @@ app.get("/api/admin/rss/approval-audit", requireAdminMiddleware, (_req, res) => 
 });
 
 // 12. PUT update existing post (Supports headline, description, photo editing while strictly preserving publishing state)
-app.put("/api/news-posts/:id", async (req, res) => {
+app.put("/api/news-posts/:id", requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body || {};
@@ -4271,7 +4273,7 @@ app.put("/api/news-posts/:id", async (req, res) => {
 });
 
 // 11. DELETE news post
-app.delete("/api/news-posts/:id", (req, res) => {
+app.delete("/api/news-posts/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
@@ -4313,7 +4315,7 @@ app.delete("/api/news-posts/:id", (req, res) => {
 });
 
 // 12. POST reset database with fresh articles
-app.post("/api/news-posts/reset", (_req, res) => {
+app.post("/api/news-posts/reset", requireAdminMiddleware, (_req, res) => {
   const fresh = getInitialRichNewsPosts();
   saveNewsDatabase(fresh);
   return res.json({ success: true, posts: fresh });
@@ -4356,26 +4358,61 @@ function saveDraftsDatabase(drafts: any[]): boolean {
   }
 }
 
-// 6. GET all saved drafts
-app.get("/api/drafts", (_req, res) => {
-  const drafts = loadDraftsDatabase();
-  return res.json({ success: true, drafts });
+// 6. GET all saved drafts (SEC-05: Enforce tenant isolation)
+app.get("/api/drafts", requireAuthMiddleware, (req, res) => {
+  const allDrafts = loadDraftsDatabase();
+  const authUser = (req as any).user;
+  const isAdmin = isAuthorizedAdmin(req);
+  const userEmail = (authUser?.email || "").toLowerCase().trim();
+  const userId = (authUser?.userId || "").toLowerCase().trim();
+
+  const userDrafts = isAdmin
+    ? allDrafts
+    : allDrafts.filter((d) => {
+        const dUser = (d.userId || "").toLowerCase().trim();
+        const dEmail = (d.userEmail || d.email || "").toLowerCase().trim();
+        return (userEmail && dEmail === userEmail) || (userId && dUser === userId) || (!dUser && !dEmail);
+      });
+
+  return res.json({ success: true, drafts: userDrafts });
 });
 
-// 7. POST add or update draft
-app.post("/api/drafts", (req, res) => {
+// 7. POST add or update draft (SEC-05: Enforce tenant isolation)
+app.post("/api/drafts", requireAuthMiddleware, (req, res) => {
   try {
     const draft = req.body;
     if (!draft || !draft.id) {
       return res.status(400).json({ error: "Invalid draft object" });
     }
+    const authUser = (req as any).user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    const userId = (authUser?.userId || "").toLowerCase().trim();
+
     const drafts = loadDraftsDatabase();
     const idx = drafts.findIndex((d) => d.id === draft.id);
     const now = Date.now();
     if (idx >= 0) {
-      drafts[idx] = { ...draft, updatedAt: now };
+      const existing = drafts[idx];
+      const existingUser = (existing.userId || "").toLowerCase().trim();
+      const existingEmail = (existing.userEmail || existing.email || "").toLowerCase().trim();
+      if (!isAdmin && existingUser && existingEmail && existingUser !== userId && existingEmail !== userEmail) {
+        return res.status(403).json({ error: "आप अन्य उपयोगकर्ता के ड्राफ्ट को संशोधित नहीं कर सकते हैं।" });
+      }
+      drafts[idx] = {
+        ...draft,
+        userId: existing.userId || userId,
+        userEmail: existing.userEmail || userEmail,
+        updatedAt: now,
+      };
     } else {
-      drafts.unshift({ ...draft, createdAt: draft.createdAt || now, updatedAt: now });
+      drafts.unshift({
+        ...draft,
+        userId: userId || userEmail,
+        userEmail: userEmail || userId,
+        createdAt: draft.createdAt || now,
+        updatedAt: now,
+      });
     }
     saveDraftsDatabase(drafts);
     return res.json({ success: true, draft });
@@ -4419,11 +4456,24 @@ app.post("/api/validate-callout-access", async (req, res) => {
   }
 });
 
-// 8. DELETE draft by ID
-app.delete("/api/drafts/:id", (req, res) => {
+// 8. DELETE draft by ID (SEC-05: Enforce tenant isolation)
+app.delete("/api/drafts/:id", requireAuthMiddleware, (req, res) => {
   try {
     const { id } = req.params;
+    const authUser = (req as any).user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    const userId = (authUser?.userId || "").toLowerCase().trim();
+
     let drafts = loadDraftsDatabase();
+    const target = drafts.find((d) => d.id === id);
+    if (target && !isAdmin) {
+      const targetUser = (target.userId || "").toLowerCase().trim();
+      const targetEmail = (target.userEmail || target.email || "").toLowerCase().trim();
+      if ((targetUser && targetUser !== userId) && (targetEmail && targetEmail !== userEmail)) {
+        return res.status(403).json({ error: "आप अन्य उपयोगकर्ता के ड्राफ्ट को हटा नहीं सकते हैं।" });
+      }
+    }
     drafts = drafts.filter((d) => d.id !== id);
     saveDraftsDatabase(drafts);
     return res.json({ success: true });
@@ -6258,7 +6308,7 @@ app.get(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (_
 });
 
 // POST /api/channels & /api/admin/channels & /api/restricted-channels
-app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (req, res) => {
+app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], requireAdminMiddleware, (req, res) => {
   try {
     const payload = req.body;
     const rawName = (payload.channelName || payload.name || "").trim();
@@ -6291,7 +6341,7 @@ app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (
 });
 
 // PUT /api/channels/:id & /api/admin/channels/:id & /api/restricted-channels/:id
-app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
+app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -6309,7 +6359,7 @@ app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channe
 });
 
 // PATCH /api/channels/:id/toggle & /api/admin/channels/:id/toggle
-app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, res) => {
+app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
@@ -6328,7 +6378,7 @@ app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, 
 });
 
 // DELETE /api/channels/:id & /api/admin/channels/:id & /api/restricted-channels/:id
-app.delete(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
+app.delete(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
@@ -6882,7 +6932,13 @@ function extractUserIdentifier(req: express.Request): string | undefined {
 
 function enforceUserAccessMiddleware(req: express.Request, res: express.Response, next: express.NextFunction) {
   const identifier = extractUserIdentifier(req);
-  if (!identifier) return next();
+  if (!identifier) {
+    return res.status(401).json({
+      success: false,
+      error: "इस सुविधा का उपयोग करने के लिए लॉगिन आवश्यक है।",
+      authRequired: true,
+    });
+  }
   const access = checkUserAccess(identifier);
   if (!access.allowed) {
     return res.status(access.status || 403).json({
@@ -8456,13 +8512,29 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
       return res.status(400).json({ error: "ईमेल या आईडी अनिवार्य है" });
     }
 
-    // Persist password credential if provided
+    // Persist password credential if provided (SEC-01: Protect existing accounts from unauthenticated password overwrite)
     if (profile.password && (profile.email || profile.username)) {
       try {
         const creds = loadCredentialsDatabase();
         const emailKey = (profile.email || "").toLowerCase().trim();
         const usernameKey = (profile.username || "").toLowerCase().trim();
         const targetKey = emailKey || usernameKey;
+
+        const authUser = await resolveAuthenticatedUser(req);
+        const isAdmin = isAuthorizedAdmin(req);
+        const authUserEmail = (authUser?.email || "").toLowerCase().trim();
+        const isSelf = Boolean(authUserEmail && (authUserEmail === emailKey || authUserEmail === usernameKey));
+
+        const existingCred = creds[targetKey] || (emailKey ? creds[emailKey] : null) || (usernameKey ? creds[usernameKey] : null);
+
+        // If credentials already exist, only the authenticated account owner or an authorized admin can overwrite password
+        if (existingCred && !isAdmin && !isSelf) {
+          return res.status(403).json({
+            error: "सुरक्षा प्रतिबंध: मौजूदा खाते का पासवर्ड बदलने के लिए लॉगिन या व्यवस्थापक प्रमाणीकरण आवश्यक है।",
+            forbidden: true,
+          });
+        }
+
         const { salt, hash } = hashPassword(String(profile.password));
         creds[targetKey] = {
           email: emailKey,
@@ -8706,7 +8778,7 @@ app.get("/api/notifications/vapid-key", (req, res) => {
 });
 
 // POST /api/notifications/broadcast - Broadcast in-app & web alert
-app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
+app.post(["/api/notifications/broadcast", "/api/notifications/alert"], requireAdminMiddleware, async (req, res) => {
   try {
     const { title, message, newsId, postId, category, imageUrl, linkTab, targetUserEmail } = req.body;
     if (!title) return res.status(400).json({ error: "शीर्षक आवश्यक है" });
@@ -8987,14 +9059,16 @@ app.post("/api/user-local-alerts-preferences", (req, res) => {
   }
 });
 
-// GET /api/reminders
-app.get("/api/reminders", (req, res) => {
+// GET /api/reminders (SEC-12: Guard reminders by user authentication)
+app.get("/api/reminders", requireAuthMiddleware, (req, res) => {
   try {
-    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const authUser = (req as any).user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
     const reminders = loadUserRemindersDatabase();
-    const userReminders = rawEmail
-      ? reminders.filter((r) => r.userEmail === rawEmail && r.status === 'pending')
-      : reminders.filter((r) => r.status === 'pending');
+    const userReminders = isAdmin
+      ? reminders.filter((r) => r.status === 'pending')
+      : reminders.filter((r) => r.userEmail === userEmail && r.status === 'pending');
     return res.json({ success: true, reminders: userReminders });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -10704,12 +10778,13 @@ function isPrivateOrInternalUrl(targetUrl: string): boolean {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return true;
     }
-    const hostname = parsed.hostname.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
     if (
       hostname === 'localhost' ||
       hostname === '127.0.0.1' ||
       hostname === '0.0.0.0' ||
       hostname === '::1' ||
+      hostname === '::' ||
       hostname === '169.254.169.254' ||
       hostname === 'metadata.google.internal' ||
       hostname.endsWith('.internal') ||
@@ -10717,11 +10792,20 @@ function isPrivateOrInternalUrl(targetUrl: string): boolean {
     ) {
       return true;
     }
+    // IPv6 loopback, link-local, ULA, or IPv4-mapped IPv6
+    if (
+      hostname.startsWith('fe80:') ||
+      hostname.startsWith('fc') ||
+      hostname.startsWith('fd') ||
+      hostname.startsWith('::ffff:')
+    ) {
+      return true;
+    }
     const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
     if (ipMatch) {
       const p1 = parseInt(ipMatch[1], 10);
       const p2 = parseInt(ipMatch[2], 10);
-      if (p1 === 10 || p1 === 127 || (p1 === 169 && p2 === 254) || (p1 === 192 && p2 === 168) || (p1 === 172 && p2 >= 16 && p2 <= 31)) {
+      if (p1 === 0 || p1 === 10 || p1 === 127 || (p1 === 169 && p2 === 254) || (p1 === 192 && p2 === 168) || (p1 === 172 && p2 >= 16 && p2 <= 31)) {
         return true;
       }
     }
@@ -11843,14 +11927,45 @@ function saveAccountDeletionRequests(records: AccountDeletionRecord[]): boolean 
 }
 
 // 6. POST: Public Account & Associated Data Deletion Web Request Form (Google Play Compliance)
-app.post("/api/account-deletion-requests", (req, res) => {
+app.post("/api/account-deletion-requests", async (req, res) => {
   try {
     const { email, mobile, channelName, reason } = req.body || {};
     const cleanEmail = (email || "").toString().trim().toLowerCase();
     const cleanMobile = (mobile || "").toString().trim();
     const cleanChannel = (channelName || "").toString().trim().toLowerCase();
 
-    // 1. Purge user from master users database
+    const authUser = await resolveAuthenticatedUser(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    const authUserEmail = (authUser?.email || "").toLowerCase().trim();
+    const isOwner = Boolean(authUserEmail && (authUserEmail === cleanEmail || (cleanChannel && authUserEmail.includes(cleanChannel))));
+
+    // If caller is neither the authenticated account owner nor an administrator, queue the request for verification instead of destructive immediate purge
+    if (!isAdmin && !isOwner) {
+      const requestId = `DEL-PENDING-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const record: AccountDeletionRecord = {
+        id: requestId,
+        email: cleanEmail || "unknown",
+        mobile: cleanMobile,
+        channelName: cleanChannel,
+        reason: reason || "User requested account & data deletion via public portal (Pending Verification)",
+        requestedAt: Date.now(),
+        status: "PENDING_VERIFICATION",
+        clearedPostsCount: 0,
+      };
+      const allRequests = loadAccountDeletionRequests();
+      allRequests.unshift(record);
+      saveAccountDeletionRequests(allRequests);
+
+      console.log(`[Account Deletion Form] Queued pending verification request for ${cleanEmail || cleanMobile || cleanChannel}. Request ID: ${requestId}`);
+      return res.json({
+        success: true,
+        requestId,
+        pendingVerification: true,
+        message: "खाता हटाने का अनुरोध सुरक्षित रूप से दर्ज कर लिया गया है। सुरक्षा सत्यापन के बाद संबंधित डेटा हटाया जाएगा।",
+      });
+    }
+
+    // 1. Purge user from master users database (Executed only for verified owner or admin)
     if (cleanEmail || cleanMobile) {
       let masterUsers = loadUsersMasterDatabase();
       const origUserCount = masterUsers.length;
@@ -11938,12 +12053,21 @@ app.post("/api/account-deletion-requests", (req, res) => {
 });
 
 // 7. DELETE / POST: In-app one-click account & all data deletion called by Android app
-app.all("/api/user-data/delete-account", (req, res) => {
+app.all("/api/user-data/delete-account", requireAuthMiddleware, (req, res) => {
   try {
     const { email, mobile, channelName } = req.body || {};
     const cleanEmail = (email || "").toString().trim().toLowerCase();
     const cleanMobile = (mobile || "").toString().trim();
     const cleanChannel = (channelName || "").toString().trim().toLowerCase();
+
+    const authUser = (req as any).user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const authUserEmail = (authUser?.email || "").toLowerCase().trim();
+    const isOwner = Boolean(authUserEmail && (authUserEmail === cleanEmail || (cleanChannel && authUserEmail.includes(cleanChannel))));
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: "सुरक्षा प्रतिबंध: आप केवल अपने स्वयं के खाते को ही हटा सकते हैं।" });
+    }
 
     // 1. Purge user from master users database
     if (cleanEmail || cleanMobile) {
@@ -12024,7 +12148,7 @@ app.all("/api/user-data/delete-account", (req, res) => {
 });
 
 // 8. GET all deletion requests (for audit/admin/compliance)
-app.get("/api/account-deletion-requests", (_req, res) => {
+app.get("/api/account-deletion-requests", requireAdminMiddleware, (_req, res) => {
   return res.json({ success: true, requests: loadAccountDeletionRequests() });
 });
 
@@ -15916,7 +16040,7 @@ app.post("/api/logo-change-requests", (req, res) => {
 });
 
 // 3. POST /api/logo-change-requests/:id/approve - Admin approves request
-app.post("/api/logo-change-requests/:id/approve", (req, res) => {
+app.post("/api/logo-change-requests/:id/approve", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const allRequests = loadLogoRequestsDatabase();
@@ -15978,7 +16102,7 @@ app.post("/api/logo-change-requests/:id/approve", (req, res) => {
 });
 
 // 4. POST /api/logo-change-requests/:id/reject - Admin rejects request
-app.post("/api/logo-change-requests/:id/reject", (req, res) => {
+app.post("/api/logo-change-requests/:id/reject", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const { adminNotes } = req.body || {};
@@ -17048,7 +17172,7 @@ app.get("/api/twilio/status", (_req, res) => {
   });
 });
 
-app.post("/api/twilio/send-sms", async (req, res) => {
+app.post("/api/twilio/send-sms", requireAdminMiddleware, async (req, res) => {
   try {
     const { to, message } = req.body;
     if (!to || !message) {
@@ -17096,7 +17220,7 @@ app.post("/api/twilio/send-sms", async (req, res) => {
   }
 });
 
-app.post("/api/twilio/send-whatsapp", async (req, res) => {
+app.post("/api/twilio/send-whatsapp", requireAdminMiddleware, async (req, res) => {
   try {
     const { to, message } = req.body;
     if (!to || !message) {
@@ -17287,6 +17411,10 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
       if (!mb.valid) {
         return res.status(415).send("Invalid image format or corrupted image payload.");
       }
+    } else {
+      // SEC-13: Sandbox SVG rendering to prevent stored/reflected script execution in host origin
+      res.setHeader("Content-Disposition", 'attachment; filename="image.svg"');
+      res.setHeader("Content-Security-Policy", "default-src 'none'");
     }
 
     res.setHeader("Content-Type", contentType);
@@ -26920,7 +27048,7 @@ app.get(["/api/categories", "/api/admin/categories"], (_req, res) => {
 });
 
 // POST /api/categories & /api/admin/categories
-app.post(["/api/categories", "/api/admin/categories"], (req, res) => {
+app.post(["/api/categories", "/api/admin/categories"], requireAdminMiddleware, (req, res) => {
   try {
     const { categories, name, nameHi, nameEn, id, icon, isActive } = req.body || {};
     let allCats = loadCategoriesDatabase();
@@ -26959,7 +27087,7 @@ app.post(["/api/categories", "/api/admin/categories"], (req, res) => {
 });
 
 // PUT /api/categories/:id & /api/admin/categories/:id
-app.put(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+app.put(["/api/categories/:id", "/api/admin/categories/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body || {};
@@ -26977,7 +27105,7 @@ app.put(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
 });
 
 // PATCH /api/categories/:id/toggle & /api/admin/categories/:id/toggle
-app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], (req, res) => {
+app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let allCats = loadCategoriesDatabase();
@@ -26995,7 +27123,7 @@ app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], (r
 });
 
 // DELETE /api/categories/:id & /api/admin/categories/:id
-app.delete(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+app.delete(["/api/categories/:id", "/api/admin/categories/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let allCats = loadCategoriesDatabase();
@@ -27606,7 +27734,8 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     const isGraphicPack = planId === 'GRAPHIC_PACK_20_7D' || planKey === 'GRAPHIC_PACK_20_7D';
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    let orderAmount = isGraphicPack ? 99 : (Number(amount) || targetPlan?.priceNum || 999);
+    // SEC-10: Price MUST strictly derive from authoritative server catalog, never trusted from client-supplied amount
+    let orderAmount = isGraphicPack ? 99 : (targetPlan?.priceNum || 999);
     const planName = isGraphicPack ? '₹99 में 20 अतिरिक्त ग्राफिक (7 दिन)' : (targetPlan?.nameHi || planKey || planId);
 
     let appliedCouponCode: string | null = null;
@@ -29016,23 +29145,31 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
       }
     }
 
-    // 0. Bonus video generation entitlement bypass (Part 8)
+    // 0. Bonus video generation entitlement verification (SEC-11: Verify against database)
     if (isBonus) {
-      return res.json({
-        allowed: true,
-        plan: "bonus",
-        planName: "BONUS EXPORT",
-        isBonus: true,
-        remainingToday: 99999,
-        unlimited: true,
-      });
+      const candidateId = String(newsId || postId || '').trim();
+      let verifiedBonus = false;
+      if (candidateId) {
+        const newsDb = loadNewsDatabase();
+        const article = newsDb.find((p) => p.id === candidateId);
+        verifiedBonus = Boolean(article?.isBonus);
+      }
+      if (verifiedBonus) {
+        return res.json({
+          allowed: true,
+          plan: "bonus",
+          planName: "BONUS EXPORT",
+          isBonus: true,
+          remainingToday: 99999,
+          unlimited: true,
+        });
+      }
     }
 
-    // 1. Privileged accounts (Super Admin & Admin) have unlimited VIP access
-    const allProfiles = loadProfilesDatabase();
-    const prof: any = allProfiles[cleanEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
-    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === 'admin' || prof.role === 'superadmin';
-    if (cleanEmail && isAdminAccount) {
+    // 1. Privileged accounts (Super Admin & Admin) have unlimited VIP access (SEC-11: Verify cryptographic session)
+    const verifiedAuthUser = await resolveAuthenticatedUser(req);
+    const verifiedIsAdmin = Boolean(verifiedAuthUser && isAuthorizedAdmin(req));
+    if (verifiedIsAdmin) {
       return res.json({
         allowed: true,
         plan: "admin",
@@ -29327,19 +29464,27 @@ app.post("/api/complete-download-export", async (req, res) => {
     }
 
     if (isBonus) {
-      return res.json({
-        success: true,
-        quotaDeducted: 0,
-        isBonus: true,
-        remainingToday: 99999,
-        unlimited: true,
-      });
+      const candidateId = String(newsId || postId || '').trim();
+      let verifiedBonus = false;
+      if (candidateId) {
+        const newsDb = loadNewsDatabase();
+        const article = newsDb.find((p) => p.id === candidateId);
+        verifiedBonus = Boolean(article?.isBonus);
+      }
+      if (verifiedBonus) {
+        return res.json({
+          success: true,
+          quotaDeducted: 0,
+          isBonus: true,
+          remainingToday: 99999,
+          unlimited: true,
+        });
+      }
     }
 
-    const allProfiles = loadProfilesDatabase();
-    const prof: any = allProfiles[cleanEmail] || Object.values(allProfiles).find((p: any) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
-    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === 'admin' || prof.role === 'superadmin';
-    if (cleanEmail && isAdminAccount) {
+    const verifiedAuthUserExport = await resolveAuthenticatedUser(req);
+    const verifiedIsAdminExport = Boolean(verifiedAuthUserExport && isAuthorizedAdmin(req));
+    if (verifiedIsAdminExport) {
       return res.json({
         success: true,
         quotaDeducted: 0,
@@ -29642,7 +29787,7 @@ app.post("/api/logo-requests", (req, res) => {
   }
 });
 
-app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/approve"], async (req, res) => {
+app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/approve"], requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const reqs = loadLogoRequestsDatabase();
@@ -29746,7 +29891,7 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
   }
 });
 
-app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject"], (req, res) => {
+app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const reqs = loadLogoRequestsDatabase();

@@ -2285,9 +2285,9 @@ var require_firestore_database_service = __commonJS({
           return this._loadLocalJson("news_database.json", []);
         }
       }
-      async saveNewsPost(postId, postData) {
-        if (!postId) return { success: false, error: "News post ID required" };
-        const cleanId = String(postId).trim();
+      async saveNewsPost(postId2, postData) {
+        if (!postId2) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId2).trim();
         const payload = {
           ...postData,
           id: cleanId,
@@ -2308,9 +2308,9 @@ var require_firestore_database_service = __commonJS({
           return { success: true };
         }
       }
-      async deleteNewsPost(postId) {
-        if (!postId) return { success: false, error: "News post ID required" };
-        const cleanId = String(postId).trim();
+      async deleteNewsPost(postId2) {
+        if (!postId2) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId2).trim();
         if (this.useFirestore) {
           this.cache.news.delete(cleanId);
           this.cacheTimestamps.set("news", Date.now());
@@ -4638,9 +4638,9 @@ var require_firestore_database_service2 = __commonJS({
           return this._loadLocalJson("news_database.json", []);
         }
       }
-      async saveNewsPost(postId, postData) {
-        if (!postId) return { success: false, error: "News post ID required" };
-        const cleanId = String(postId).trim();
+      async saveNewsPost(postId2, postData) {
+        if (!postId2) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId2).trim();
         const payload = {
           ...postData,
           id: cleanId,
@@ -4661,9 +4661,9 @@ var require_firestore_database_service2 = __commonJS({
           return { success: true };
         }
       }
-      async deleteNewsPost(postId) {
-        if (!postId) return { success: false, error: "News post ID required" };
-        const cleanId = String(postId).trim();
+      async deleteNewsPost(postId2) {
+        if (!postId2) return { success: false, error: "News post ID required" };
+        const cleanId = String(postId2).trim();
         if (this.useFirestore) {
           this.cache.news.delete(cleanId);
           this.cacheTimestamps.set("news", Date.now());
@@ -8418,8 +8418,8 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
     const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
     const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
     const maskedTo = maskWaId(to);
-    const { headline, summary = "", imageUrl = "", newsId = "", studioUrl = "", isBreaking = false, customMessage = "" } = options2;
-    const resolvedUrl = studioUrl || (newsId ? `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId)}` : "https://ainewsmaker.online/studio");
+    const { headline, summary = "", imageUrl = "", newsId: newsId2 = "", studioUrl = "", isBreaking = false, customMessage = "" } = options2;
+    const resolvedUrl = studioUrl || (newsId2 ? `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId2)}` : "https://ainewsmaker.online/studio");
     if (newsTemplate && token && phoneNumberId) {
       try {
         const templatePayload = {
@@ -8447,7 +8447,7 @@ function registerWhatsAppIntegration(app2, centralDb2, options) {
                 sub_type: "url",
                 index: "0",
                 parameters: [
-                  { type: "text", text: newsId ? `?newsId=${encodeURIComponent(newsId)}` : "" }
+                  { type: "text", text: newsId2 ? `?newsId=${encodeURIComponent(newsId2)}` : "" }
                 ]
               }
             ]
@@ -10441,7 +10441,7 @@ AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u09
         headline = "",
         summary = "",
         articleUrl = "",
-        newsId = "",
+        newsId: newsId2 = "",
         imageUrl = "",
         thumbnailUrl = "",
         customMessage = "",
@@ -10449,8 +10449,8 @@ AI News Maker \u092A\u0930\u093F\u0935\u093E\u0930 \u092E\u0947\u0902 \u0906\u09
       } = req.body;
       const resolvedImage = (imageUrl || thumbnailUrl || "").trim();
       let resolvedStudioUrl = (articleUrl || "").trim();
-      if (!resolvedStudioUrl && newsId) {
-        resolvedStudioUrl = `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId)}`;
+      if (!resolvedStudioUrl && newsId2) {
+        resolvedStudioUrl = `https://ainewsmaker.online/studio?newsId=${encodeURIComponent(newsId2)}`;
       }
       const now = Date.now();
       const campaignId = `camp_${now}_${Math.random().toString(36).slice(2, 7)}`;
@@ -10484,7 +10484,7 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
           headline,
           summary,
           imageUrl: resolvedImage,
-          newsId,
+          newsId: newsId2,
           studioUrl: resolvedStudioUrl,
           isBreaking,
           customMessage
@@ -10573,7 +10573,7 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
             headline,
             summary,
             imageUrl: resolvedImage,
-            newsId,
+            newsId: newsId2,
             studioUrl: resolvedStudioUrl,
             isBreaking,
             customMessage
@@ -12024,23 +12024,23 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
   });
   app2.get("/api/whatsapp/news/render-graphic", async (req, res) => {
     try {
-      const newsId = String(req.query.newsId || "").trim();
+      const newsId2 = String(req.query.newsId || "").trim();
       const phone = String(req.query.phone || req.query.waId || "").trim();
       const email = String(req.query.email || "").trim().toLowerCase();
       let targetPost = null;
-      if (newsId && options?.getNewsDatabase) {
+      if (newsId2 && options?.getNewsDatabase) {
         try {
           const allNews = options.getNewsDatabase();
           if (Array.isArray(allNews)) {
-            targetPost = allNews.find((p) => p && String(p.id) === newsId);
+            targetPost = allNews.find((p) => p && String(p.id) === newsId2);
           }
         } catch {
         }
       }
-      if (!targetPost && newsId && options?.getApprovedEditorialDatabase) {
+      if (!targetPost && newsId2 && options?.getApprovedEditorialDatabase) {
         try {
           const editorial = options.getApprovedEditorialDatabase();
-          if (editorial && editorial[newsId]) targetPost = editorial[newsId];
+          if (editorial && editorial[newsId2]) targetPost = editorial[newsId2];
         } catch {
         }
       }
@@ -12499,7 +12499,9 @@ app.set("trust proxy", true);
 var PORT = parseInt(process.env.PORT || "8080", 10);
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.removeHeader("X-Frame-Options");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'self' https://*.ainewsmaker.online https://ainewsmaker.online;");
+  res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
@@ -15390,7 +15392,7 @@ app.get("/api/editorial/approved/:id", (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/editorial/approved/:id", async (req, res) => {
+app.post("/api/editorial/approved/:id", requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body || {};
@@ -15629,7 +15631,7 @@ app.get("/api/admin/rss/approval-audit", requireAdminMiddleware, (_req, res) => 
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.put("/api/news-posts/:id", async (req, res) => {
+app.put("/api/news-posts/:id", requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body || {};
@@ -15685,7 +15687,7 @@ app.put("/api/news-posts/:id", async (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/news-posts/:id", (req, res) => {
+app.delete("/api/news-posts/:id", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let existing = loadNewsDatabase();
@@ -15724,7 +15726,7 @@ app.delete("/api/news-posts/:id", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/news-posts/reset", (_req, res) => {
+app.post("/api/news-posts/reset", requireAdminMiddleware, (_req, res) => {
   const fresh = getInitialRichNewsPosts();
   saveNewsDatabase(fresh);
   return res.json({ success: true, posts: fresh });
@@ -15763,23 +15765,53 @@ function saveDraftsDatabase(drafts) {
     return false;
   }
 }
-app.get("/api/drafts", (_req, res) => {
-  const drafts = loadDraftsDatabase();
-  return res.json({ success: true, drafts });
+app.get("/api/drafts", requireAuthMiddleware, (req, res) => {
+  const allDrafts = loadDraftsDatabase();
+  const authUser = req.user;
+  const isAdmin = isAuthorizedAdmin(req);
+  const userEmail = (authUser?.email || "").toLowerCase().trim();
+  const userId = (authUser?.userId || "").toLowerCase().trim();
+  const userDrafts = isAdmin ? allDrafts : allDrafts.filter((d) => {
+    const dUser = (d.userId || "").toLowerCase().trim();
+    const dEmail = (d.userEmail || d.email || "").toLowerCase().trim();
+    return userEmail && dEmail === userEmail || userId && dUser === userId || !dUser && !dEmail;
+  });
+  return res.json({ success: true, drafts: userDrafts });
 });
-app.post("/api/drafts", (req, res) => {
+app.post("/api/drafts", requireAuthMiddleware, (req, res) => {
   try {
     const draft = req.body;
     if (!draft || !draft.id) {
       return res.status(400).json({ error: "Invalid draft object" });
     }
+    const authUser = req.user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    const userId = (authUser?.userId || "").toLowerCase().trim();
     const drafts = loadDraftsDatabase();
     const idx = drafts.findIndex((d) => d.id === draft.id);
     const now = Date.now();
     if (idx >= 0) {
-      drafts[idx] = { ...draft, updatedAt: now };
+      const existing = drafts[idx];
+      const existingUser = (existing.userId || "").toLowerCase().trim();
+      const existingEmail = (existing.userEmail || existing.email || "").toLowerCase().trim();
+      if (!isAdmin && existingUser && existingEmail && existingUser !== userId && existingEmail !== userEmail) {
+        return res.status(403).json({ error: "\u0906\u092A \u0905\u0928\u094D\u092F \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u0947 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u094B \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      }
+      drafts[idx] = {
+        ...draft,
+        userId: existing.userId || userId,
+        userEmail: existing.userEmail || userEmail,
+        updatedAt: now
+      };
     } else {
-      drafts.unshift({ ...draft, createdAt: draft.createdAt || now, updatedAt: now });
+      drafts.unshift({
+        ...draft,
+        userId: userId || userEmail,
+        userEmail: userEmail || userId,
+        createdAt: draft.createdAt || now,
+        updatedAt: now
+      });
     }
     saveDraftsDatabase(drafts);
     return res.json({ success: true, draft });
@@ -15811,10 +15843,22 @@ app.post("/api/validate-callout-access", async (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete("/api/drafts/:id", (req, res) => {
+app.delete("/api/drafts/:id", requireAuthMiddleware, (req, res) => {
   try {
     const { id } = req.params;
+    const authUser = req.user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
+    const userId = (authUser?.userId || "").toLowerCase().trim();
     let drafts = loadDraftsDatabase();
+    const target = drafts.find((d) => d.id === id);
+    if (target && !isAdmin) {
+      const targetUser = (target.userId || "").toLowerCase().trim();
+      const targetEmail = (target.userEmail || target.email || "").toLowerCase().trim();
+      if (targetUser && targetUser !== userId && (targetEmail && targetEmail !== userEmail)) {
+        return res.status(403).json({ error: "\u0906\u092A \u0905\u0928\u094D\u092F \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0915\u0947 \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0915\u094B \u0939\u091F\u093E \u0928\u0939\u0940\u0902 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+      }
+    }
     drafts = drafts.filter((d) => d.id !== id);
     saveDraftsDatabase(drafts);
     return res.json({ success: true });
@@ -17325,7 +17369,7 @@ app.get(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (_
   const channels = loadChannelsDatabase();
   return res.json({ success: true, channels });
 });
-app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (req, res) => {
+app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], requireAdminMiddleware, (req, res) => {
   try {
     const payload = req.body;
     const rawName = (payload.channelName || payload.name || "").trim();
@@ -17354,7 +17398,7 @@ app.post(["/api/channels", "/api/admin/channels", "/api/restricted-channels"], (
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
+app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -17370,7 +17414,7 @@ app.put(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channe
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, res) => {
+app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
@@ -17387,7 +17431,7 @@ app.patch(["/api/channels/:id/toggle", "/api/admin/channels/:id/toggle"], (req, 
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], (req, res) => {
+app.delete(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-channels/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let channels = loadChannelsDatabase();
@@ -17622,10 +17666,10 @@ function saveNotificationsDatabase(notifs) {
   }
   return true;
 }
-function broadcastNewsPublishedNotification(newsId, title, location, category) {
+function broadcastNewsPublishedNotification(newsId2, title, location, category) {
   try {
     const notifs = loadNotificationsDatabase();
-    const notifId = `notif_news_${newsId}`;
+    const notifId = `notif_news_${newsId2}`;
     if (!notifs.some((n) => n.id === notifId)) {
       notifs.unshift({
         id: notifId,
@@ -17637,8 +17681,8 @@ function broadcastNewsPublishedNotification(newsId, title, location, category) {
         type: "news",
         targetUserEmail: "all",
         linkTab: "home",
-        newsId,
-        postId: newsId
+        newsId: newsId2,
+        postId: newsId2
       });
       if (notifs.length > 200) notifs.length = 200;
       saveNotificationsDatabase(notifs);
@@ -17667,7 +17711,7 @@ function broadcastNewsPublishedNotification(newsId, title, location, category) {
           matchType = `\u091F\u0949\u092A\u093F\u0915 \u0905\u0932\u0930\u094D\u091F`;
         }
         if (matchType) {
-          const userNotifId = `notif_local_${userEmail}_${newsId}`;
+          const userNotifId = `notif_local_${userEmail}_${newsId2}`;
           if (!notifs.some((n) => n.id === userNotifId)) {
             notifs.unshift({
               id: userNotifId,
@@ -17679,8 +17723,8 @@ function broadcastNewsPublishedNotification(newsId, title, location, category) {
               type: "local_alert",
               targetUserEmail: userEmail,
               linkTab: "home",
-              newsId,
-              postId: newsId
+              newsId: newsId2,
+              postId: newsId2
             });
           }
         }
@@ -17827,7 +17871,13 @@ function extractUserIdentifier(req) {
 }
 function enforceUserAccessMiddleware(req, res, next) {
   const identifier = extractUserIdentifier(req);
-  if (!identifier) return next();
+  if (!identifier) {
+    return res.status(401).json({
+      success: false,
+      error: "\u0907\u0938 \u0938\u0941\u0935\u093F\u0927\u093E \u0915\u093E \u0909\u092A\u092F\u094B\u0917 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0932\u0949\u0917\u093F\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964",
+      authRequired: true
+    });
+  }
   const access = checkUserAccess(identifier);
   if (!access.allowed) {
     return res.status(access.status || 403).json({
@@ -19166,6 +19216,17 @@ app.post(["/api/users/sync", "/api/admin/register-user"], async (req, res) => {
         const emailKey = (profile.email || "").toLowerCase().trim();
         const usernameKey = (profile.username || "").toLowerCase().trim();
         const targetKey = emailKey || usernameKey;
+        const authUser = await resolveAuthenticatedUser(req);
+        const isAdmin2 = isAuthorizedAdmin(req);
+        const authUserEmail = (authUser?.email || "").toLowerCase().trim();
+        const isSelf = Boolean(authUserEmail && (authUserEmail === emailKey || authUserEmail === usernameKey));
+        const existingCred = creds[targetKey] || (emailKey ? creds[emailKey] : null) || (usernameKey ? creds[usernameKey] : null);
+        if (existingCred && !isAdmin2 && !isSelf) {
+          return res.status(403).json({
+            error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927: \u092E\u094C\u091C\u0942\u0926\u093E \u0916\u093E\u0924\u0947 \u0915\u093E \u092A\u093E\u0938\u0935\u0930\u094D\u0921 \u092C\u0926\u0932\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0932\u0949\u0917\u093F\u0928 \u092F\u093E \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u092A\u094D\u0930\u092E\u093E\u0923\u0940\u0915\u0930\u0923 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964",
+            forbidden: true
+          });
+        }
         const { salt, hash } = hashPassword(String(profile.password));
         creds[targetKey] = {
           email: emailKey,
@@ -19378,9 +19439,9 @@ app.get("/api/notifications/vapid-key", (req, res) => {
   const vapidConfigured = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
   return res.json({ success: true, publicKey, vapidConfigured });
 });
-app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (req, res) => {
+app.post(["/api/notifications/broadcast", "/api/notifications/alert"], requireAdminMiddleware, async (req, res) => {
   try {
-    const { title, message, newsId, postId, category, imageUrl, linkTab, targetUserEmail } = req.body;
+    const { title, message, newsId: newsId2, postId: postId2, category, imageUrl, linkTab, targetUserEmail } = req.body;
     if (!title) return res.status(400).json({ error: "\u0936\u0940\u0930\u094D\u0937\u0915 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     const newNotif = {
       id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -19388,8 +19449,8 @@ app.post(["/api/notifications/broadcast", "/api/notifications/alert"], async (re
       message: message || "",
       time: (/* @__PURE__ */ new Date()).toLocaleTimeString("hi-IN", { hour: "2-digit", minute: "2-digit" }),
       unread: true,
-      newsId: newsId || postId,
-      postId: newsId || postId,
+      newsId: newsId2 || postId2,
+      postId: newsId2 || postId2,
       linkTab: linkTab || "home",
       targetUserEmail: targetUserEmail || "all",
       createdAt: Date.now()
@@ -19530,29 +19591,29 @@ app.get("/api/user-favorites", (req, res) => {
 app.post("/api/user-favorites", (req, res) => {
   try {
     const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const newsId = (req.body.newsId || "").toString().trim();
+    const newsId2 = (req.body.newsId || "").toString().trim();
     const action = req.body.action || "toggle";
     if (!rawEmail) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
-    if (!newsId) {
+    if (!newsId2) {
       return res.status(400).json({ error: "\u0928\u094D\u092F\u0942\u091C\u093C \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
     const db = loadUserFavoritesDatabase();
     const userFavs = new Set(db[rawEmail] || []);
     let isFavorite = false;
     if (action === "add") {
-      userFavs.add(newsId);
+      userFavs.add(newsId2);
       isFavorite = true;
     } else if (action === "remove") {
-      userFavs.delete(newsId);
+      userFavs.delete(newsId2);
       isFavorite = false;
     } else {
-      if (userFavs.has(newsId)) {
-        userFavs.delete(newsId);
+      if (userFavs.has(newsId2)) {
+        userFavs.delete(newsId2);
         isFavorite = false;
       } else {
-        userFavs.add(newsId);
+        userFavs.add(newsId2);
         isFavorite = true;
       }
     }
@@ -19560,7 +19621,7 @@ app.post("/api/user-favorites", (req, res) => {
     saveUserFavoritesDatabase(db);
     return res.json({
       success: true,
-      newsId,
+      newsId: newsId2,
       isFavorite,
       favorites: db[rawEmail]
     });
@@ -19621,11 +19682,13 @@ app.post("/api/user-local-alerts-preferences", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/reminders", (req, res) => {
+app.get("/api/reminders", requireAuthMiddleware, (req, res) => {
   try {
-    const rawEmail = (req.query.email || "").toString().toLowerCase().trim();
+    const authUser = req.user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const userEmail = (authUser?.email || "").toLowerCase().trim();
     const reminders = loadUserRemindersDatabase();
-    const userReminders = rawEmail ? reminders.filter((r) => r.userEmail === rawEmail && r.status === "pending") : reminders.filter((r) => r.status === "pending");
+    const userReminders = isAdmin ? reminders.filter((r) => r.status === "pending") : reminders.filter((r) => r.userEmail === userEmail && r.status === "pending");
     return res.json({ success: true, reminders: userReminders });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -19634,14 +19697,14 @@ app.get("/api/reminders", (req, res) => {
 app.post("/api/reminders", (req, res) => {
   try {
     const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const { newsId, newsTitle, minutes = 5, action = "create", id } = req.body || {};
+    const { newsId: newsId2, newsTitle, minutes = 5, action = "create", id } = req.body || {};
     if (!rawEmail) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
     let reminders = loadUserRemindersDatabase();
     if (action === "cancel") {
       reminders = reminders.map((r) => {
-        if (id && r.id === id || newsId && r.newsId === newsId && r.userEmail === rawEmail) {
+        if (id && r.id === id || newsId2 && r.newsId === newsId2 && r.userEmail === rawEmail) {
           return { ...r, status: "cancelled" };
         }
         return r;
@@ -19649,16 +19712,16 @@ app.post("/api/reminders", (req, res) => {
       saveUserRemindersDatabase(reminders);
       return res.json({ success: true, message: "\u0930\u093F\u092E\u093E\u0907\u0902\u0921\u0930 \u0930\u0926\u094D\u0926 \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E\u0964" });
     }
-    if (!newsId) {
+    if (!newsId2) {
       return res.status(400).json({ error: "\u0928\u094D\u092F\u0942\u091C\u093C \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
     const mins = [5, 10, 20, 30].includes(Number(minutes)) ? Number(minutes) : 5;
     const dueAt = Date.now() + mins * 60 * 1e3;
-    reminders = reminders.filter((r) => !(r.userEmail === rawEmail && r.newsId === newsId && r.status === "pending"));
+    reminders = reminders.filter((r) => !(r.userEmail === rawEmail && r.newsId === newsId2 && r.status === "pending"));
     const newReminder = {
       id: `rem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       userEmail: rawEmail,
-      newsId,
+      newsId: newsId2,
       newsTitle: String(newsTitle || "").trim() || "\u0938\u092E\u093E\u091A\u093E\u0930",
       minutes: mins,
       dueAt,
@@ -20782,9 +20845,9 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX
       const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
       const catKey = resolveCategoryKeyFromName(catName, link || source.url);
       const hashStr = Buffer.from(editorial.title.slice(0, 30) + link).toString("base64url").slice(0, 14);
-      const postId = `rss-${source.id}-${hashStr}`;
+      const postId2 = `rss-${source.id}-${hashStr}`;
       return {
-        id: postId,
+        id: postId2,
         sourceId: source.id,
         sourceFeedUrl: source.url,
         sourceChannel: source.name,
@@ -20912,9 +20975,9 @@ async function fetchAndParseWebLink(source) {
     const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
     const catKey = resolveCategoryKeyFromName(catName, source.url);
     const hashStr = Buffer.from(editorial.title.slice(0, 30) + source.url).toString("base64url").slice(0, 14);
-    const postId = `web-${source.id}-${hashStr}`;
+    const postId2 = `web-${source.id}-${hashStr}`;
     return [{
-      id: postId,
+      id: postId2,
       sourceId: source.id,
       sourceFeedUrl: source.url,
       sourceChannel: source.name,
@@ -21086,15 +21149,18 @@ function isPrivateOrInternalUrl(targetUrl) {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return true;
     }
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname === "::1" || hostname === "169.254.169.254" || hostname === "metadata.google.internal" || hostname.endsWith(".internal") || hostname.endsWith(".local")) {
+    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname === "::1" || hostname === "::" || hostname === "169.254.169.254" || hostname === "metadata.google.internal" || hostname.endsWith(".internal") || hostname.endsWith(".local")) {
+      return true;
+    }
+    if (hostname.startsWith("fe80:") || hostname.startsWith("fc") || hostname.startsWith("fd") || hostname.startsWith("::ffff:")) {
       return true;
     }
     const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
     if (ipMatch) {
       const p1 = parseInt(ipMatch[1], 10);
       const p2 = parseInt(ipMatch[2], 10);
-      if (p1 === 10 || p1 === 127 || p1 === 169 && p2 === 254 || p1 === 192 && p2 === 168 || p1 === 172 && p2 >= 16 && p2 <= 31) {
+      if (p1 === 0 || p1 === 10 || p1 === 127 || p1 === 169 && p2 === 254 || p1 === 192 && p2 === 168 || p1 === 172 && p2 >= 16 && p2 <= 31) {
         return true;
       }
     }
@@ -22005,12 +22071,39 @@ function saveAccountDeletionRequests(records) {
     return false;
   }
 }
-app.post("/api/account-deletion-requests", (req, res) => {
+app.post("/api/account-deletion-requests", async (req, res) => {
   try {
     const { email, mobile, channelName, reason } = req.body || {};
     const cleanEmail = (email || "").toString().trim().toLowerCase();
     const cleanMobile = (mobile || "").toString().trim();
     const cleanChannel = (channelName || "").toString().trim().toLowerCase();
+    const authUser = await resolveAuthenticatedUser(req);
+    const isAdmin = isAuthorizedAdmin(req);
+    const authUserEmail = (authUser?.email || "").toLowerCase().trim();
+    const isOwner = Boolean(authUserEmail && (authUserEmail === cleanEmail || cleanChannel && authUserEmail.includes(cleanChannel)));
+    if (!isAdmin && !isOwner) {
+      const requestId2 = `DEL-PENDING-${Date.now()}-${Math.floor(1e3 + Math.random() * 9e3)}`;
+      const record2 = {
+        id: requestId2,
+        email: cleanEmail || "unknown",
+        mobile: cleanMobile,
+        channelName: cleanChannel,
+        reason: reason || "User requested account & data deletion via public portal (Pending Verification)",
+        requestedAt: Date.now(),
+        status: "PENDING_VERIFICATION",
+        clearedPostsCount: 0
+      };
+      const allRequests2 = loadAccountDeletionRequests();
+      allRequests2.unshift(record2);
+      saveAccountDeletionRequests(allRequests2);
+      console.log(`[Account Deletion Form] Queued pending verification request for ${cleanEmail || cleanMobile || cleanChannel}. Request ID: ${requestId2}`);
+      return res.json({
+        success: true,
+        requestId: requestId2,
+        pendingVerification: true,
+        message: "\u0916\u093E\u0924\u093E \u0939\u091F\u093E\u0928\u0947 \u0915\u093E \u0905\u0928\u0941\u0930\u094B\u0927 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0930\u0942\u092A \u0938\u0947 \u0926\u0930\u094D\u091C \u0915\u0930 \u0932\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964 \u0938\u0941\u0930\u0915\u094D\u0937\u093E \u0938\u0924\u094D\u092F\u093E\u092A\u0928 \u0915\u0947 \u092C\u093E\u0926 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0921\u0947\u091F\u093E \u0939\u091F\u093E\u092F\u093E \u091C\u093E\u090F\u0917\u093E\u0964"
+      });
+    }
     if (cleanEmail || cleanMobile) {
       let masterUsers = loadUsersMasterDatabase();
       const origUserCount = masterUsers.length;
@@ -22088,12 +22181,19 @@ app.post("/api/account-deletion-requests", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.all("/api/user-data/delete-account", (req, res) => {
+app.all("/api/user-data/delete-account", requireAuthMiddleware, (req, res) => {
   try {
     const { email, mobile, channelName } = req.body || {};
     const cleanEmail = (email || "").toString().trim().toLowerCase();
     const cleanMobile = (mobile || "").toString().trim();
     const cleanChannel = (channelName || "").toString().trim().toLowerCase();
+    const authUser = req.user;
+    const isAdmin = isAuthorizedAdmin(req);
+    const authUserEmail = (authUser?.email || "").toLowerCase().trim();
+    const isOwner = Boolean(authUserEmail && (authUserEmail === cleanEmail || cleanChannel && authUserEmail.includes(cleanChannel)));
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ error: "\u0938\u0941\u0930\u0915\u094D\u0937\u093E \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927: \u0906\u092A \u0915\u0947\u0935\u0932 \u0905\u092A\u0928\u0947 \u0938\u094D\u0935\u092F\u0902 \u0915\u0947 \u0916\u093E\u0924\u0947 \u0915\u094B \u0939\u0940 \u0939\u091F\u093E \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
+    }
     if (cleanEmail || cleanMobile) {
       let masterUsers = loadUsersMasterDatabase();
       const origUserCount = masterUsers.length;
@@ -22164,7 +22264,7 @@ app.all("/api/user-data/delete-account", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.get("/api/account-deletion-requests", (_req, res) => {
+app.get("/api/account-deletion-requests", requireAdminMiddleware, (_req, res) => {
   return res.json({ success: true, requests: loadAccountDeletionRequests() });
 });
 app.use("/uploads", import_express.default.static(import_path2.default.join(process.cwd(), "public", "uploads")));
@@ -25391,7 +25491,7 @@ app.post("/api/logo-change-requests", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/logo-change-requests/:id/approve", (req, res) => {
+app.post("/api/logo-change-requests/:id/approve", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const allRequests = loadLogoRequestsDatabase();
@@ -25444,7 +25544,7 @@ app.post("/api/logo-change-requests/:id/approve", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/logo-change-requests/:id/reject", (req, res) => {
+app.post("/api/logo-change-requests/:id/reject", requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const { adminNotes } = req.body || {};
@@ -26348,7 +26448,7 @@ app.get("/api/twilio/status", (_req, res) => {
     whatsappFrom: twilioWhatsappFrom
   });
 });
-app.post("/api/twilio/send-sms", async (req, res) => {
+app.post("/api/twilio/send-sms", requireAdminMiddleware, async (req, res) => {
   try {
     const { to, message } = req.body;
     if (!to || !message) {
@@ -26391,7 +26491,7 @@ app.post("/api/twilio/send-sms", async (req, res) => {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/twilio/send-whatsapp", async (req, res) => {
+app.post("/api/twilio/send-whatsapp", requireAdminMiddleware, async (req, res) => {
   try {
     const { to, message } = req.body;
     if (!to || !message) {
@@ -26550,6 +26650,9 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
       if (!mb.valid) {
         return res.status(415).send("Invalid image format or corrupted image payload.");
       }
+    } else {
+      res.setHeader("Content-Disposition", 'attachment; filename="image.svg"');
+      res.setHeader("Content-Security-Policy", "default-src 'none'");
     }
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400");
@@ -33913,7 +34016,7 @@ app.get(["/api/categories", "/api/admin/categories"], (_req, res) => {
     categories: loadCategoriesDatabase()
   });
 });
-app.post(["/api/categories", "/api/admin/categories"], (req, res) => {
+app.post(["/api/categories", "/api/admin/categories"], requireAdminMiddleware, (req, res) => {
   try {
     const { categories, name, nameHi, nameEn, id, icon, isActive } = req.body || {};
     let allCats = loadCategoriesDatabase();
@@ -33946,7 +34049,7 @@ app.post(["/api/categories", "/api/admin/categories"], (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.put(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+app.put(["/api/categories/:id", "/api/admin/categories/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body || {};
@@ -33962,7 +34065,7 @@ app.put(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], (req, res) => {
+app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let allCats = loadCategoriesDatabase();
@@ -33978,7 +34081,7 @@ app.patch(["/api/categories/:id/toggle", "/api/admin/categories/:id/toggle"], (r
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.delete(["/api/categories/:id", "/api/admin/categories/:id"], (req, res) => {
+app.delete(["/api/categories/:id", "/api/admin/categories/:id"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     let allCats = loadCategoriesDatabase();
@@ -34541,7 +34644,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     const isGraphicPack = planId === "GRAPHIC_PACK_20_7D" || planKey === "GRAPHIC_PACK_20_7D";
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
-    let orderAmount = isGraphicPack ? 99 : Number(amount) || targetPlan?.priceNum || 999;
+    let orderAmount = isGraphicPack ? 99 : targetPlan?.priceNum || 999;
     const planName = isGraphicPack ? "\u20B999 \u092E\u0947\u0902 20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 (7 \u0926\u093F\u0928)" : targetPlan?.nameHi || planKey || planId;
     let appliedCouponCode = null;
     let discountAmount = 0;
@@ -35206,7 +35309,7 @@ function getDailyGraphicLimitForTier(tier = "basic") {
 }
 app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
   try {
-    const { email, userEmail, userId, requestId, postId, newsId, id } = req.body || {};
+    const { email, userEmail, userId, requestId, postId: postId2, newsId: newsId2, id } = req.body || {};
     const cleanEmail = (email || userEmail || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || "").toString().trim();
     const userKey = cleanEmail || cleanUserId;
@@ -35241,7 +35344,7 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
     if (!userEntry.processedRequestIds) userEntry.processedRequestIds = [];
     if (!userEntry.processedPostIds) userEntry.processedPostIds = [];
     const cleanReqId = (requestId || "").trim();
-    const cleanPostId = (postId || newsId || id || "").toString().trim();
+    const cleanPostId = (postId2 || newsId2 || id || "").toString().trim();
     if (cleanPostId && userEntry.processedPostIds.includes(cleanPostId)) {
       return res.json({
         success: true,
@@ -35363,7 +35466,7 @@ function getDailyVideoLimitForTier(tier = "basic") {
 }
 app.post("/api/user/consume-video-creation-quota", async (req, res) => {
   try {
-    const { email, userEmail, userId, requestId, videoId, newsId, id } = req.body || {};
+    const { email, userEmail, userId, requestId, videoId, newsId: newsId2, id } = req.body || {};
     const cleanEmail = (email || userEmail || "").toString().toLowerCase().trim();
     const cleanUserId = (userId || "").toString().trim();
     const userKey = cleanEmail || cleanUserId;
@@ -35400,7 +35503,7 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
     if (!userEntry.processedRequestIds) userEntry.processedRequestIds = [];
     if (!userEntry.processedVideoIds) userEntry.processedVideoIds = [];
     const cleanReqId = (requestId || "").trim();
-    const cleanVideoId = (videoId || newsId || id || "").toString().trim();
+    const cleanVideoId = (videoId || newsId2 || id || "").toString().trim();
     if (cleanVideoId && userEntry.processedVideoIds.includes(cleanVideoId)) {
       return res.json({
         success: true,
@@ -35700,19 +35803,27 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
       }
     }
     if (isBonus) {
-      return res.json({
-        allowed: true,
-        plan: "bonus",
-        planName: "BONUS EXPORT",
-        isBonus: true,
-        remainingToday: 99999,
-        unlimited: true
-      });
+      const candidateId = String(newsId || postId || "").trim();
+      let verifiedBonus = false;
+      if (candidateId) {
+        const newsDb = loadNewsDatabase();
+        const article = newsDb.find((p) => p.id === candidateId);
+        verifiedBonus = Boolean(article?.isBonus);
+      }
+      if (verifiedBonus) {
+        return res.json({
+          allowed: true,
+          plan: "bonus",
+          planName: "BONUS EXPORT",
+          isBonus: true,
+          remainingToday: 99999,
+          unlimited: true
+        });
+      }
     }
-    const allProfiles = loadProfilesDatabase();
-    const prof = allProfiles[cleanEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
-    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === "admin" || prof.role === "superadmin";
-    if (cleanEmail && isAdminAccount) {
+    const verifiedAuthUser = await resolveAuthenticatedUser(req);
+    const verifiedIsAdmin = Boolean(verifiedAuthUser && isAuthorizedAdmin(req));
+    if (verifiedIsAdmin) {
       return res.json({
         allowed: true,
         plan: "admin",
@@ -35959,18 +36070,26 @@ app.post("/api/complete-download-export", async (req, res) => {
       });
     }
     if (isBonus) {
-      return res.json({
-        success: true,
-        quotaDeducted: 0,
-        isBonus: true,
-        remainingToday: 99999,
-        unlimited: true
-      });
+      const candidateId = String(newsId || postId || "").trim();
+      let verifiedBonus = false;
+      if (candidateId) {
+        const newsDb = loadNewsDatabase();
+        const article = newsDb.find((p) => p.id === candidateId);
+        verifiedBonus = Boolean(article?.isBonus);
+      }
+      if (verifiedBonus) {
+        return res.json({
+          success: true,
+          quotaDeducted: 0,
+          isBonus: true,
+          remainingToday: 99999,
+          unlimited: true
+        });
+      }
     }
-    const allProfiles = loadProfilesDatabase();
-    const prof = allProfiles[cleanEmail] || Object.values(allProfiles).find((p) => p.email && p.email.toLowerCase().trim() === cleanEmail) || {};
-    const isAdminAccount = isProtectedAdminAccount(cleanEmail) || prof.role === "admin" || prof.role === "superadmin";
-    if (cleanEmail && isAdminAccount) {
+    const verifiedAuthUserExport = await resolveAuthenticatedUser(req);
+    const verifiedIsAdminExport = Boolean(verifiedAuthUserExport && isAuthorizedAdmin(req));
+    if (verifiedIsAdminExport) {
       return res.json({
         success: true,
         quotaDeducted: 0,
@@ -36241,7 +36360,7 @@ app.post("/api/logo-requests", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/approve"], async (req, res) => {
+app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/approve"], requireAdminMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const reqs = loadLogoRequestsDatabase();
@@ -36337,7 +36456,7 @@ app.post(["/api/logo-requests/:id/approve", "/api/logo-change-requests/:id/appro
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject"], (req, res) => {
+app.post(["/api/logo-requests/:id/reject", "/api/logo-change-requests/:id/reject"], requireAdminMiddleware, (req, res) => {
   try {
     const { id } = req.params;
     const reqs = loadLogoRequestsDatabase();
