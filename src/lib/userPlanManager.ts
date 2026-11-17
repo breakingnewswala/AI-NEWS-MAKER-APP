@@ -1309,6 +1309,111 @@ export interface CustomHeaderFooterAssignment {
   footerUrl?: string;
 }
 
+export interface UserFeatureEntitlementSummary {
+  userName: string;
+  userEmail: string;
+  accountType: 'Channel' | 'Reporter' | 'Admin' | 'Master Admin';
+  tier: UserPlanTier;
+  planName: PlanKeyName;
+  activeFeatures: string[];
+  specialPermissions: string[];
+  restrictedFeatures: string[];
+  footerEntitlement: string;
+  videoAccess: string;
+  studioAccess: string;
+  customFooterAccess: boolean;
+}
+
+export function getUserFeatureEntitlements(user: any): UserFeatureEntitlementSummary {
+  const email = (typeof user === 'string' ? user : user?.email || '').toLowerCase().trim();
+  const isMaster = isUserMasterAdmin(email);
+  const isAdmin = isUserAdmin(typeof user === 'object' && user ? user : { email });
+  const matchedUser = email ? getPlanUsers().find((u) => (u.email || '').toLowerCase().trim() === email) : null;
+  const sub = email ? getUserSubscription(email) : null;
+  const tier: UserPlanTier = (user?.tier || matchedUser?.tier || sub?.tier || 'basic').toLowerCase() as UserPlanTier;
+  const planName = PLAN_KEY_MAP[tier] || 'BASIC';
+
+  const userName = isMaster
+    ? 'मुख्य संपादक'
+    : (user?.name || user?.fullName || user?.username || matchedUser?.name || matchedUser?.fullName || email.split('@')[0] || 'यूज़र');
+
+  const accountType: 'Channel' | 'Reporter' | 'Admin' | 'Master Admin' = isMaster
+    ? 'Master Admin'
+    : isAdmin
+    ? 'Admin'
+    : (user?.channelName || matchedUser?.channelName)
+    ? 'Channel'
+    : 'Reporter';
+
+  const isProOrVip = isMaster || isAdmin || tier === 'professional' || tier === 'ultra';
+  const isVip = isMaster || isAdmin || tier === 'ultra';
+  const isAdvOrHigher = isProOrVip || tier === 'advanced';
+
+  const activeFeatures: string[] = [
+    'फोटो न्यूज़ स्टूडियो',
+    'सामान्य फुटर ब्रांडिंग',
+    '1 फोटो लेआउट',
+  ];
+  if (tier === 'basic' && !isAdmin && !isMaster) {
+    activeFeatures.push('केवल Hind फ़ॉन्ट');
+  }
+  if (isAdvOrHigher) {
+    activeFeatures.push('2-फोटो लेआउट', '5 प्रमुख देवनागरी फ़ॉन्ट्स', 'AI टूल्स');
+  }
+  if (isProOrVip) {
+    activeFeatures.push('वीडियो क्विक मोड', 'वीडियो स्टूडियो मोड', 'सभी फ़ॉन्ट कलेक्शन', 'सभी मल्टी-ग्रिड फोटो लेआउट्स');
+  }
+  if (isVip) {
+    activeFeatures.push('4K एक्सपोर्ट रेजोल्यूशन', 'कस्टम फ़ॉन्ट अपलोड (.ttf/.woff2)');
+  }
+
+  const specialPermissions: string[] = [];
+  if (isProOrVip) {
+    specialPermissions.push('कस्टम फुटर लाइब्रेरी', 'प्रो वीडियो फ्रेम', 'मास्टर ब्रांडिंग नियंत्रण');
+  }
+  if (isVip) {
+    specialPermissions.push('VIP DESK विशेष प्रीमियम फ्रेम्स', '24x7 वीआईपी सपोर्ट');
+  }
+  if (user?.assignedCustomActive || user?.customFooterUrl || user?.customFooterAssigned) {
+    specialPermissions.push('कस्टम असाइन्ड हेडर/फुटर');
+  }
+
+  const restrictedFeatures: string[] = [];
+  if (tier === 'basic' && !isAdmin && !isMaster) {
+    restrictedFeatures.push('कस्टम फुटर लाइब्रेरी', 'वीडियो स्टूडियो', 'मल्टी-फोटो ग्रिड', 'प्रीमियम फ़ॉन्ट्स');
+  } else if (tier === 'advanced' && !isAdmin && !isMaster) {
+    restrictedFeatures.push('कस्टम फुटर लाइब्रेरी', 'वीडियो स्टूडियो', 'कस्टम फ़ॉन्ट अपलोड');
+  } else if (tier === 'professional' && !isAdmin && !isMaster) {
+    restrictedFeatures.push('4K एक्सपोर्ट', 'कस्टम फ़ॉन्ट अपलोड');
+  }
+
+  return {
+    userName,
+    userEmail: email,
+    accountType,
+    tier,
+    planName,
+    activeFeatures,
+    specialPermissions,
+    restrictedFeatures,
+    footerEntitlement: isProOrVip ? 'स्टैंडर्ड ब्रांडिंग + कस्टम फुटर लाइब्रेरी' : 'केवल सामान्य फुटर ब्रांडिंग (डिफ़ॉल्ट)',
+    videoAccess: isProOrVip ? 'क्विक वीडियो मोड + स्टूडियो मोड (अनलिमिटेड)' : 'अनुपलब्ध (प्रो/वीआईपी आवश्यक)',
+    studioAccess: 'पूर्ण फोटो न्यूज़ स्टूडियो',
+    customFooterAccess: isProOrVip,
+  };
+}
+
+export function getAdminSelectedUserEmail(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('ai_news_admin_selected_user_email') || '';
+}
+
+export function setAdminSelectedUserEmail(email: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('ai_news_admin_selected_user_email', email);
+  window.dispatchEvent(new CustomEvent('admin_selected_user_changed', { detail: { email } }));
+}
+
 export function getAssignedCustomHeaderFooter(userEmail?: string): CustomHeaderFooterAssignment | null {
   if (typeof window === 'undefined') return null;
   try {

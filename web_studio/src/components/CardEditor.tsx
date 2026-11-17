@@ -1648,34 +1648,91 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       .join('\n');
   };
 
-  // Split current headline into individual words for quick chip toggling
-  const getHeadlineWords = () => {
-    return card.headline.split(/\s+/).filter(Boolean);
-  };
+  // Derive which token indices are highlighted from card.formattedHeadline and card.highlightWords
+  const getHeadlineTokensWithHighlights = () => {
+    const rawHeadline = (card.headline || '').replace(/\[\/?(?:yellow|highlight)\]/gi, '');
+    const words = rawHeadline.split(/\s+/).filter(Boolean);
+    const highlightedIndices = new Set<number>();
 
-  const toggleWordHighlight = (word: string) => {
-    const cleanWord = word.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim();
-    if (!cleanWord) return;
-
-    const exists = card.highlightWords?.some(
-      (hw) => hw.toLowerCase() === cleanWord.toLowerCase()
-    );
-
-    let newHighlights: string[];
-    if (exists) {
-      newHighlights = (card.highlightWords || []).filter(
-        (hw) => hw.toLowerCase() !== cleanWord.toLowerCase()
+    const formatted = card.formattedHeadline || '';
+    if (formatted.includes('[yellow]') || formatted.includes('[highlight]')) {
+      const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/gi;
+      let lastIndex = 0;
+      let wordCursor = 0;
+      let match;
+      while ((match = yellowRegex.exec(formatted)) !== null) {
+        const pre = formatted.substring(lastIndex, match.index);
+        const preWords = pre.split(/\s+/).filter(Boolean);
+        wordCursor += preWords.length;
+        const matchedWords = match[1].split(/\s+/).filter(Boolean);
+        for (let i = 0; i < matchedWords.length; i++) {
+          highlightedIndices.add(wordCursor + i);
+        }
+        wordCursor += matchedWords.length;
+        lastIndex = match.index + match[0].length;
+      }
+    } else if (card.highlightWords && card.highlightWords.length > 0) {
+      const cleanHws = card.highlightWords.map((h) =>
+        h.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase()
       );
-    } else {
-      newHighlights = [...(card.highlightWords || []), cleanWord];
+      words.forEach((w, idx) => {
+        const clean = w.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase();
+        if (cleanHws.includes(clean)) {
+          highlightedIndices.add(idx);
+        }
+      });
     }
 
-    const formatted = buildFormattedHeadline(card.headline, newHighlights);
+    return { words, highlightedIndices };
+  };
+
+  const toggleWordHighlightByIndex = (targetIdx: number) => {
+    const { words, highlightedIndices } = getHeadlineTokensWithHighlights();
+    if (targetIdx < 0 || targetIdx >= words.length) return;
+
+    if (highlightedIndices.has(targetIdx)) {
+      highlightedIndices.delete(targetIdx);
+    } else {
+      highlightedIndices.add(targetIdx);
+    }
+
+    // Reconstruct formattedHeadline preserving line breaks
+    const rawHeadline = (card.headline || '').replace(/\[\/?(?:yellow|highlight)\]/gi, '');
+    const lines = rawHeadline.split(/\r?\n/);
+    let currentIdx = 0;
+    const formattedLines = lines.map((line) => {
+      const lineTokens = line.split(/\s+/).filter(Boolean);
+      const wrapped = lineTokens.map((tok) => {
+        const isHl = highlightedIndices.has(currentIdx);
+        currentIdx++;
+        return isHl ? `[yellow]${tok}[/yellow]` : tok;
+      });
+      return wrapped.join(' ');
+    });
+
+    const newFormattedHeadline = formattedLines.join('\n');
+    const newHighlightWords = words.filter((_, idx) => highlightedIndices.has(idx));
 
     onChange({
-      highlightWords: newHighlights,
-      formattedHeadline: formatted,
+      highlightWords: newHighlightWords,
+      formattedHeadline: newFormattedHeadline,
     });
+  };
+
+  // Backward compatibility alias
+  const toggleWordHighlight = (word: string, optIdx?: number) => {
+    if (typeof optIdx === 'number') {
+      toggleWordHighlightByIndex(optIdx);
+    } else {
+      const { words } = getHeadlineTokensWithHighlights();
+      const cleanTarget = word.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim().toLowerCase();
+      const foundIdx = words.findIndex(
+        (w) => w.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim().toLowerCase() === cleanTarget
+      );
+      if (foundIdx !== -1) {
+        toggleWordHighlightByIndex(foundIdx);
+      }
+    }
   };
 
   return (
@@ -2737,6 +2794,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   disabled={!isAllowed}
                   onClick={() => {
                     if (isAllowed) {
+                      if (typeof document !== 'undefined' && document.fonts) {
+                        try {
+                          document.fonts.load(`900 48px "${f.id}"`).then(() => {
+                            window.dispatchEvent(new Event('resize'));
+                          }).catch(() => {});
+                        } catch {}
+                      }
                       onChange({ headlineFontFamily: f.id });
                     }
                   }}
@@ -2988,27 +3052,27 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
           {/* Clickable Word Chips from Headline */}
           <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 bg-neutral-900 rounded-lg border border-neutral-800">
-            {getHeadlineWords().map((word, wIdx) => {
-              const clean = word.replace(/[.,:;!?।\-"'“”‘’()]/g, '').trim();
-              const isSelected = (card.highlightWords || []).some(
-                (hw) => hw.toLowerCase() === clean.toLowerCase()
-              );
-              return (
-                <button
-                  key={`${word}-${wIdx}`}
-                  type="button"
-                  onClick={() => toggleWordHighlight(word)}
-                  className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-yellow-400 text-neutral-950 shadow-sm font-extrabold ring-1 ring-yellow-400'
-                      : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-                  }`}
-                  title={isSelected ? 'क्लिक करके हाइलाइट हटाएं' : 'क्लिक करके पीला रंग दें'}
-                >
-                  {word} {isSelected && '✓'}
-                </button>
-              );
-            })}
+            {(() => {
+              const { words, highlightedIndices } = getHeadlineTokensWithHighlights();
+              return words.map((word, wIdx) => {
+                const isSelected = highlightedIndices.has(wIdx);
+                return (
+                  <button
+                    key={`${word}-${wIdx}`}
+                    type="button"
+                    onClick={() => toggleWordHighlightByIndex(wIdx)}
+                    className={`px-2 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-yellow-400 text-neutral-950 shadow-sm font-extrabold ring-1 ring-yellow-400'
+                        : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                    }`}
+                    title={isSelected ? 'क्लिक करके हाइलाइट हटाएं' : 'क्लिक करके पीला रंग दें'}
+                  >
+                    {word} {isSelected && '✓'}
+                  </button>
+                );
+              });
+            })()}
           </div>
         </div>
 
@@ -4854,8 +4918,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       />
                     </label>
 
-                    {/* Central Custom Footer Library Selection */}
-                    {libraryFooters.length > 0 && (
+                    {/* Central Custom Footer Library Selection (Pro / VIP only) */}
+                    {canUseCustomHF && libraryFooters.length > 0 && (
                       <div className="pt-2 border-t border-neutral-800 space-y-1.5">
                         <span className="text-[10px] font-bold text-amber-300 block">
                           🏛️ सेंट्रल कस्टम फ़ुटर लाइब्रेरी से चुनें:

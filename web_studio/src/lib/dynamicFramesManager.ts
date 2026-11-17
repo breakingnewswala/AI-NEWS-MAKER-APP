@@ -119,11 +119,19 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
   };
 
   // 4. Full Story Callout Config
+  const rawLayersEarly: any[] = Array.isArray(raw.layers) ? raw.layers : [];
+  const calloutLayer = rawLayersEarly.find((l: any) => l.id === 'layer_callout' || l.type === 'callout');
   const rawC = raw.fullStoryCalloutConfig || {};
+  const calloutRect = rawC.rect
+    ? { ...rawC.rect, height: rawC.rect.height || 3.5 }
+    : (calloutLayer?.rect
+      ? { ...calloutLayer.rect, height: calloutLayer.rect.height || 3.5 }
+      : (isStory ? { x: 8, y: 85, width: 84, height: 3.5 } : { x: 8, y: 83, width: 84, height: 3.5 }));
+
   const fullStoryCalloutConfig: FullStoryCalloutConfig = {
-    enabled: Boolean(rawC.enabled),
+    enabled: Boolean(rawC.enabled ?? calloutLayer?.visible ?? (calloutLayer ? true : false)),
     text: rawC.text || '',
-    rect: rawC.rect ? { ...rawC.rect, height: Math.max(6.5, rawC.rect.height || 6.5) } : (isStory ? { x: 8, y: 88, width: 84, height: 6.5 } : { x: 8, y: 86, width: 84, height: 6.5 }),
+    rect: calloutRect,
     fontSize: typeof rawC.fontSize === 'number' ? rawC.fontSize : 22,
     bgColor: rawC.bgColor || 'rgba(0,0,0,0.7)',
     borderColor: rawC.borderColor || '#FFE600',
@@ -476,7 +484,7 @@ export function saveLocalDynamicFrames(frames: DynamicFrameTemplate[]) {
 }
 
 export async function fetchDynamicFramesFromApi(
-  filter?: DynamicAspectRatio | { aspectRatio?: DynamicAspectRatio; frameType?: string }
+  filter?: DynamicAspectRatio | { aspectRatio?: DynamicAspectRatio; frameType?: string; videoTargetMode?: 'quick_video' | 'studio_mode' | 'all' }
 ): Promise<DynamicFrameTemplate[]> {
   let filterRatio: DynamicAspectRatio | undefined = undefined;
   let q = '';
@@ -492,6 +500,9 @@ export async function fetchDynamicFramesFromApi(
     }
     if (filter.frameType) {
       params.append('frameType', filter.frameType);
+    }
+    if (filter.videoTargetMode && filter.videoTargetMode !== 'all') {
+      params.append('videoTargetMode', filter.videoTargetMode);
     }
     const qs = params.toString();
     if (qs) q = `?${qs}`;

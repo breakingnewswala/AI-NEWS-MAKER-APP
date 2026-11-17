@@ -643,6 +643,7 @@ export interface DynamicFrameTemplate {
 
   // Video-first frame configurations
   videoConfig?: VideoFrameConfig;
+  videoTargetMode?: 'quick_video' | 'studio_mode';
 
   // Typography configurations
   typographyConfig?: TypographyConfig;
@@ -682,4 +683,191 @@ export interface UserStoryPreference {
   updatedAt: number;
 }
 
+export type DynamicFramePhotoSlot = PhotoSlotConfig;
 export type DynamicFrame = DynamicFrameTemplate;
+
+/**
+ * Resolves effective photo slots for a dynamic frame based on card layout (single, split-v, double, double-h, grid-3, grid-4).
+ * Partitions the base photo slot into multiple sub-slots when multi-photo layouts are selected.
+ */
+export function resolveEffectivePhotoSlots(
+  baseSlots: PhotoSlotConfig[] | undefined,
+  layout?: string
+): PhotoSlotConfig[] {
+  if (!baseSlots || baseSlots.length === 0) {
+    const fallbackBase: PhotoSlotConfig = {
+      id: 'main',
+      name: 'Main Photo',
+      rect: { x: 0, y: 0, width: 100, height: 58 },
+      zIndex: 1,
+      visible: true,
+    };
+    baseSlots = [fallbackBase];
+  }
+
+  // If already defines multiple photo slots (e.g. custom multi-slot dynamic template), preserve them
+  if (baseSlots.length > 1) {
+    return baseSlots;
+  }
+
+  const base = baseSlots[0];
+  const bRect = base.rect || { x: 0, y: 0, width: 100, height: 58 };
+
+  // If single photo layout or undefined, return the single base slot
+  if (!layout || layout === 'single' || layout === 'full') {
+    return [{ ...base, id: 'main', name: 'Photo 1', rect: bRect }];
+  }
+
+  // 2-Photo: 35-65 Up & Down (split-v)
+  if (layout === 'split-v') {
+    const h1 = bRect.height * 0.38;
+    const gap = bRect.height * 0.015;
+    const h2 = bRect.height - h1 - gap;
+    return [
+      {
+        ...base,
+        id: 'main',
+        name: 'Photo 1 (Top)',
+        rect: { x: bRect.x, y: bRect.y, width: bRect.width, height: Math.round(h1 * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'second',
+        name: 'Photo 2 (Bottom)',
+        rect: { x: bRect.x, y: Math.round((bRect.y + h1 + gap) * 100) / 100, width: bRect.width, height: Math.round(h2 * 100) / 100 },
+      },
+    ];
+  }
+
+  // 2-Photo: 50-50 Up & Down (double)
+  if (layout === 'double') {
+    const halfH = (bRect.height - bRect.height * 0.015) / 2;
+    const gap = bRect.height * 0.015;
+    return [
+      {
+        ...base,
+        id: 'main',
+        name: 'Photo 1 (Top)',
+        rect: { x: bRect.x, y: bRect.y, width: bRect.width, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'second',
+        name: 'Photo 2 (Bottom)',
+        rect: { x: bRect.x, y: Math.round((bRect.y + halfH + gap) * 100) / 100, width: bRect.width, height: Math.round(halfH * 100) / 100 },
+      },
+    ];
+  }
+
+  // 2-Photo: 50-50 Left & Right (double-h or split-h)
+  if (layout === 'double-h' || layout === 'split-h') {
+    const halfW = (bRect.width - bRect.width * 0.015) / 2;
+    const gap = bRect.width * 0.015;
+    return [
+      {
+        ...base,
+        id: 'main',
+        name: 'Photo 1 (Left)',
+        rect: { x: bRect.x, y: bRect.y, width: Math.round(halfW * 100) / 100, height: bRect.height },
+      },
+      {
+        ...base,
+        id: 'second',
+        name: 'Photo 2 (Right)',
+        rect: { x: Math.round((bRect.x + halfW + gap) * 100) / 100, y: bRect.y, width: Math.round(halfW * 100) / 100, height: bRect.height },
+      },
+    ];
+  }
+
+  // 3-Photo: 2 Top, 1 Wide Bottom (grid-3)
+  if (layout === 'grid-3') {
+    const halfW = (bRect.width - bRect.width * 0.015) / 2;
+    const halfH = (bRect.height - bRect.height * 0.015) / 2;
+    const gapX = bRect.width * 0.015;
+    const gapY = bRect.height * 0.015;
+    return [
+      {
+        ...base,
+        id: 'main',
+        name: 'Photo 1 (Top Left)',
+        rect: { x: bRect.x, y: bRect.y, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'second',
+        name: 'Photo 2 (Top Right)',
+        rect: { x: Math.round((bRect.x + halfW + gapX) * 100) / 100, y: bRect.y, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'third',
+        name: 'Photo 3 (Bottom Wide)',
+        rect: { x: bRect.x, y: Math.round((bRect.y + halfH + gapY) * 100) / 100, width: bRect.width, height: Math.round(halfH * 100) / 100 },
+      },
+    ];
+  }
+
+  // 3-Photo: 1 Wide Top, 2 Bottom (grid-3-bottom)
+  if (layout === 'grid-3-bottom') {
+    const halfW = (bRect.width - bRect.width * 0.015) / 2;
+    const halfH = (bRect.height - bRect.height * 0.015) / 2;
+    const gapX = bRect.width * 0.015;
+    const gapY = bRect.height * 0.015;
+    return [
+      {
+        ...base,
+        id: 'main',
+        name: 'Photo 1 (Top Wide)',
+        rect: { x: bRect.x, y: bRect.y, width: bRect.width, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'second',
+        name: 'Photo 2 (Bottom Left)',
+        rect: { x: bRect.x, y: Math.round((bRect.y + halfH + gapY) * 100) / 100, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'third',
+        name: 'Photo 3 (Bottom Right)',
+        rect: { x: Math.round((bRect.x + halfW + gapX) * 100) / 100, y: Math.round((bRect.y + halfH + gapY) * 100) / 100, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+    ];
+  }
+
+  // 4-Photo: 2x2 Grid (grid-4)
+  if (layout === 'grid-4') {
+    const halfW = (bRect.width - bRect.width * 0.015) / 2;
+    const halfH = (bRect.height - bRect.height * 0.015) / 2;
+    const gapX = bRect.width * 0.015;
+    const gapY = bRect.height * 0.015;
+    return [
+      {
+        ...base,
+        id: 'main',
+        name: 'Photo 1 (Top Left)',
+        rect: { x: bRect.x, y: bRect.y, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'second',
+        name: 'Photo 2 (Top Right)',
+        rect: { x: Math.round((bRect.x + halfW + gapX) * 100) / 100, y: bRect.y, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'third',
+        name: 'Photo 3 (Bottom Left)',
+        rect: { x: bRect.x, y: Math.round((bRect.y + halfH + gapY) * 100) / 100, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+      {
+        ...base,
+        id: 'fourth',
+        name: 'Photo 4 (Bottom Right)',
+        rect: { x: Math.round((bRect.x + halfW + gapX) * 100) / 100, y: Math.round((bRect.y + halfH + gapY) * 100) / 100, width: Math.round(halfW * 100) / 100, height: Math.round(halfH * 100) / 100 },
+      },
+    ];
+  }
+
+  return [base];
+}

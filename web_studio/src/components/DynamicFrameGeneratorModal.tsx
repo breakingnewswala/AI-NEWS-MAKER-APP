@@ -42,6 +42,8 @@ import {
   Camera,
   AlertCircle,
   CheckCircle2,
+  Play,
+  Loader2,
 } from 'lucide-react';
 import {
   DynamicFrameTemplate,
@@ -420,6 +422,10 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   );
 
   // Video Pro Extended Configurations
+  const [videoTargetMode, setVideoTargetMode] = useState<'quick_video' | 'studio_mode'>(
+    initialFrame?.videoTargetMode || 'quick_video'
+  );
+  const [isExportingTestVideo, setIsExportingTestVideo] = useState<boolean>(false);
   const [videoDisplayMode, setVideoDisplayMode] = useState<'fit' | 'crop'>(
     initialFrame?.videoConfig?.displayMode || 'fit'
   );
@@ -2642,6 +2648,346 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     }
   };
 
+  // Step 7: Direct Test Video Download (actual playable video with frame overlay)
+  const handleDownloadTestVideo = async () => {
+    setIsExportingTestVideo(true);
+    setFeedbackMsg(null);
+    let offscreenCanvas: HTMLCanvasElement | null = null;
+    let tempVideo: HTMLVideoElement | null = null;
+    let animId: number | null = null;
+    let backupIntervalId: any = null;
+
+    try {
+      const w = selectedRatio === '4:3' ? 1440 : 1080;
+      const h = selectedRatio === '4:5' ? 1350 : selectedRatio === '9:16' ? 1920 : 1080;
+
+      offscreenCanvas = document.createElement('canvas');
+      offscreenCanvas.width = w;
+      offscreenCanvas.height = h;
+      offscreenCanvas.style.position = 'fixed';
+      offscreenCanvas.style.left = '0px';
+      offscreenCanvas.style.top = '0px';
+      offscreenCanvas.style.width = '1px';
+      offscreenCanvas.style.height = '1px';
+      offscreenCanvas.style.opacity = '0.01';
+      offscreenCanvas.style.pointerEvents = 'none';
+      offscreenCanvas.style.zIndex = '-1';
+      document.body.appendChild(offscreenCanvas);
+
+      const ctx = offscreenCanvas.getContext('2d');
+      if (!ctx) throw new Error('कैनवास संदर्भ उपलब्ध नहीं है');
+
+      tempVideo = document.createElement('video');
+      tempVideo.crossOrigin = 'anonymous';
+      tempVideo.muted = true;
+      tempVideo.playsInline = true;
+      tempVideo.loop = true;
+      tempVideo.src = sampleVideoPreview || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4';
+      await new Promise<void>((resolve) => {
+        tempVideo!.onloadeddata = () => resolve();
+        tempVideo!.onerror = () => resolve();
+        setTimeout(resolve, 3000);
+      });
+      try {
+        await tempVideo.play();
+      } catch {}
+
+      let frameOverlayImg: HTMLImageElement | null = null;
+      const framePngUrl = primaryBackgroundAsset || sampleImage;
+      if (framePngUrl) {
+        try {
+          frameOverlayImg = new Image();
+          frameOverlayImg.crossOrigin = 'anonymous';
+          frameOverlayImg.src = framePngUrl;
+          await new Promise<void>((resolve) => {
+            if (frameOverlayImg!.complete && frameOverlayImg!.naturalWidth > 0) return resolve();
+            frameOverlayImg!.onload = () => resolve();
+            frameOverlayImg!.onerror = () => resolve();
+            setTimeout(resolve, 2000);
+          });
+        } catch {}
+      }
+
+      let logoImg: HTMLImageElement | null = null;
+      const logoSrc = channelLogoUrl || customLogoAssetUrl || '/assets/breaking_news_wala_logo.png';
+      if (logoSrc) {
+        try {
+          logoImg = new Image();
+          logoImg.crossOrigin = 'anonymous';
+          logoImg.src = logoSrc;
+          await new Promise<void>((resolve) => {
+            if (logoImg!.complete && logoImg!.naturalWidth > 0) return resolve();
+            logoImg!.onload = () => resolve();
+            logoImg!.onerror = () => resolve();
+            setTimeout(resolve, 1500);
+          });
+        } catch {}
+      }
+
+      let calloutImg: HTMLImageElement | null = null;
+      const calloutSrc = manualCalloutAssetUrl || fullStoryCalloutConfig?.manualCalloutAsset;
+      if (calloutSrc) {
+        try {
+          calloutImg = new Image();
+          calloutImg.crossOrigin = 'anonymous';
+          calloutImg.src = calloutSrc;
+          await new Promise<void>((resolve) => {
+            if (calloutImg!.complete && calloutImg!.naturalWidth > 0) return resolve();
+            calloutImg!.onload = () => resolve();
+            calloutImg!.onerror = () => resolve();
+            setTimeout(resolve, 1500);
+          });
+        } catch {}
+      }
+
+      const captureStreamFn = offscreenCanvas.captureStream || (offscreenCanvas as any).mozCaptureStream;
+      if (!captureStreamFn || typeof MediaRecorder === 'undefined') {
+        throw new Error('ब्राउज़र में वीडियो रिकॉर्डिंग समर्थित नहीं है।');
+      }
+
+      const stream = captureStreamFn.call(offscreenCanvas, 30);
+      let mimeType = 'video/webm';
+      const preferredMimes = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+      ];
+      for (const m of preferredMimes) {
+        if (MediaRecorder.isTypeSupported(m)) {
+          mimeType = m;
+          break;
+        }
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6000000 });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+
+      const recordPromise = new Promise<Blob>((resolve, reject) => {
+        recorder.onstop = () => {
+          resolve(new Blob(chunks, { type: recorder.mimeType || mimeType }));
+        };
+        recorder.onerror = (e) => reject(e);
+      });
+
+      recorder.start(100);
+
+      const startTime = Date.now();
+      const durationMs = 3500;
+
+      await new Promise<void>((resolve) => {
+        const drawFrame = () => {
+          if (Date.now() - startTime >= durationMs) {
+            resolve();
+            return;
+          }
+
+          // 1. Background fill
+          ctx.fillStyle = primaryBackgroundHex || '#0B1329';
+          ctx.fillRect(0, 0, w, h);
+
+          // 2. Moving Video Clip in configured videoRect
+          const vx = (videoRect.x / 100) * w;
+          const vy = (videoRect.y / 100) * h;
+          const vw = (videoRect.width / 100) * w;
+          const vh = (videoRect.height / 100) * h;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(vx, vy, vw, vh);
+          ctx.clip();
+          if (tempVideo && tempVideo.readyState >= 2) {
+            ctx.drawImage(tempVideo, vx, vy, vw, vh);
+          } else {
+            ctx.fillStyle = '#1E293B';
+            ctx.fillRect(vx, vy, vw, vh);
+          }
+          ctx.restore();
+
+          // 3. Frame Overlay Artwork
+          if (frameOverlayImg && frameOverlayImg.complete && frameOverlayImg.naturalWidth > 0) {
+            ctx.drawImage(frameOverlayImg, 0, 0, w, h);
+          }
+
+          // 4. Channel Logo
+          if (headerConfig.showLogo !== false) {
+            const lRect = headerConfig.logoRect || { x: 5, y: 3.5, width: 22, height: 9 };
+            const lx = (lRect.x / 100) * w;
+            const ly = (lRect.y / 100) * h;
+            const lw = (lRect.width / 100) * w;
+            const lh = (lRect.height / 100) * h;
+            if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
+              ctx.drawImage(logoImg, lx, ly, lw, lh);
+            } else {
+              ctx.fillStyle = '#DC2626';
+              ctx.fillRect(lx, ly, lw, lh);
+              ctx.fillStyle = '#FFFFFF';
+              ctx.font = `bold ${Math.round(14 * (w / 1080))}px sans-serif`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('NEWS LOGO', lx + lw / 2, ly + lh / 2);
+            }
+          }
+
+          // 5. Location Badge
+          if (headerConfig.showLocation !== false) {
+            const locRect = headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 };
+            const lox = (locRect.x / 100) * w;
+            const loy = (locRect.y / 100) * h;
+            const low = (locRect.width / 100) * w;
+            const loh = (locRect.height / 100) * h;
+            ctx.fillStyle = headerConfig.locationBgColor || '#DC2626';
+            ctx.beginPath();
+            ctx.roundRect(lox, loy, low, loh, 8);
+            ctx.fill();
+            ctx.fillStyle = headerConfig.locationTextColor || '#FFFFFF';
+            ctx.font = `bold ${Math.round(14 * (w / 1080))}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('📍 भोपाल (म.प्र.)', lox + low / 2, loy + loh / 2);
+          }
+
+          // 6. Watermark
+          const showWm = generatorMode === 'video' ? (videoWatermarkTextEnabled || videoWatermarkLogoEnabled) : watermarkConfig.enabled;
+          if (showWm) {
+            const wmRect = (generatorMode === 'video' ? videoWatermarkRect : watermarkConfig.rect) || { x: 70, y: 3.5, width: 25, height: 3.5 };
+            const wx = (wmRect.x / 100) * w;
+            const wy = (wmRect.y / 100) * h;
+            const ww = (wmRect.width / 100) * w;
+            const wh = (wmRect.height / 100) * h;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.beginPath();
+            ctx.roundRect(wx, wy, ww, wh, 6);
+            ctx.fill();
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = `bold ${Math.round(12 * (w / 1080))}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(videoWatermarkText || watermarkConfig.label || 'AI NEWS MAKER', wx + ww / 2, wy + wh / 2);
+          }
+
+          // 7. Ribbons
+          if (generatorMode === 'video' && videoRibbonLayers.length > 0) {
+            for (const r of videoRibbonLayers.filter((rb) => rb.visible !== false)) {
+              const rx = (r.rect.x / 100) * w;
+              const ry = (r.rect.y / 100) * h;
+              const rw = (r.rect.width / 100) * w;
+              const rh = (r.rect.height / 100) * h;
+              ctx.fillStyle = r.backgroundColor || '#DC2626';
+              ctx.fillRect(rx, ry, rw, rh);
+              ctx.fillStyle = r.textColor || '#FFFFFF';
+              ctx.font = `bold ${Math.round(14 * (w / 1080))}px sans-serif`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(r.text || 'BREAKING NEWS', rx + rw / 2, ry + rh / 2);
+            }
+          }
+
+          // 8. Full Story Callout
+          if (fullStoryCalloutConfig.enabled) {
+            const cRect = fullStoryCalloutConfig.rect || { x: 10, y: 85, width: 80, height: 3.5 };
+            const cx = (cRect.x / 100) * w;
+            const cy = (cRect.y / 100) * h;
+            const cw = (cRect.width / 100) * w;
+            const ch = (cRect.height / 100) * h;
+            if (calloutImg && calloutImg.complete && calloutImg.naturalWidth > 0) {
+              ctx.drawImage(calloutImg, cx, cy, cw, ch);
+            } else {
+              ctx.fillStyle = fullStoryCalloutConfig.bgColor || '#DC2626';
+              ctx.beginPath();
+              ctx.roundRect(cx, cy, cw, ch, 8);
+              ctx.fill();
+              ctx.fillStyle = fullStoryCalloutConfig.textColor || '#FFFFFF';
+              ctx.font = `bold ${Math.round(14 * (w / 1080))}px sans-serif`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(dummyCalloutText || fullStoryCalloutConfig.text || '📢 पूरी खबर डिस्क्रिप्शन में', cx + cw / 2, cy + ch / 2);
+            }
+          }
+
+          // 9. Headline
+          const headlineText = dummyHeadlineText || 'AI NEWS MAKER - टेस्ट वीडियो फ्रेम प्रीव्यू';
+          const tSlot = textSlots[0] || { rect: { x: 7, y: 63, width: 86, height: 27 }, fontSize: 48 };
+          const hx = (tSlot.rect.x / 100) * w;
+          const hy = (tSlot.rect.y / 100) * h;
+          const hw = (tSlot.rect.width / 100) * w;
+          ctx.save();
+          ctx.font = `bold ${Math.round((tSlot.fontSize || 48) * (w / 1080))}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+          ctx.fillStyle = tSlot.textColor || '#FFFFFF';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillText(headlineText, hx + hw / 2, hy);
+          ctx.restore();
+
+          // 10. Footer Bar
+          const fRatio = footerConfig.footerHeightRatio || (selectedRatio === '4:5' ? 0.08 : 0.065);
+          const fh = Math.round(fRatio * h);
+          const fw = Math.round(((footerConfig.footerWidthPct || 100) / 100) * w);
+          const fx = Math.round((w - fw) / 2);
+          const fy = h - fh;
+          ctx.fillStyle = primaryFooterColor || '#B91C1C';
+          ctx.fillRect(fx, fy, fw, fh);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = `bold ${Math.round(20 * (w / 1080))}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('BREAKING NEWS WALA | AI NEWS MAKER', fx + fw / 2, fy + fh / 2);
+
+          try {
+            const vTrack = stream.getVideoTracks()[0];
+            if (vTrack && (vTrack as any).requestFrame) {
+              (vTrack as any).requestFrame();
+            }
+          } catch {}
+
+          animId = requestAnimationFrame(drawFrame);
+        };
+
+        animId = requestAnimationFrame(drawFrame);
+        backupIntervalId = setInterval(drawFrame, 33);
+      });
+
+      if (animId) cancelAnimationFrame(animId);
+      if (backupIntervalId) clearInterval(backupIntervalId);
+
+      if (recorder.state === 'recording') {
+        recorder.stop();
+      }
+
+      const videoBlob = await recordPromise;
+      if (!videoBlob || videoBlob.size < 1000) {
+        throw new Error('वीडियो रेंडरिंग विफल या शून्य आकार का वीडियो प्राप्त हुआ।');
+      }
+
+      const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      const url = URL.createObjectURL(videoBlob);
+      const link = document.createElement('a');
+      link.download = `test-video-frame-${frameName ? frameName.replace(/\s+/g, '_') : 'preview'}-${Date.now()}.${ext}`;
+      link.href = url;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      setFeedbackMsg({ type: 'success', text: `✅ टेस्ट वीडियो (${ext.toUpperCase()}) सफलतापूर्वक डाउनलोड हो गया!` });
+    } catch (err: any) {
+      console.error('Test video export error:', err);
+      setFeedbackMsg({ type: 'error', text: `वीडियो डाउनलोड त्रुटि: ${err.message || 'वीडियो निर्यात विफल'}` });
+    } finally {
+      if (animId) cancelAnimationFrame(animId);
+      if (backupIntervalId) clearInterval(backupIntervalId);
+      if (tempVideo) {
+        try { tempVideo.pause(); } catch {}
+      }
+      if (offscreenCanvas && offscreenCanvas.parentNode) {
+        try { offscreenCanvas.parentNode.removeChild(offscreenCanvas); } catch {}
+      }
+      setIsExportingTestVideo(false);
+    }
+  };
+
   // Step 8: Save & Publish Handler
   const handleSaveAndPublish = async () => {
     if (!frameName.trim()) {
@@ -2665,6 +3011,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       description: frameDescription.trim(),
       frameMode: isVideo ? 'video' : 'photo',
       frameType: isVideo ? 'video' : selectedRatio === '9:16' ? 'story' : 'graphic',
+      videoTargetMode: isVideo ? videoTargetMode : undefined,
       aspectRatio: selectedRatio,
       canvasWidth: selectedRatio === '4:3' ? 1440 : 1080,
       canvasHeight: selectedRatio === '4:5' ? 1350 : selectedRatio === '9:16' ? 1920 : 1080,
@@ -6739,27 +7086,49 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </button>
                     </div>
 
-                    {/* Format Toggle & Download Buttons (Part 7) */}
-                    <div className="flex items-center gap-1">
+                    {/* Format Toggle & Download Buttons (Part 7: Video mode downloads actual test video) */}
+                    {generatorMode === 'video' ? (
                       <button
                         type="button"
-                        onClick={() => handleDownloadTestPreview('jpg')}
-                        className="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-lg shadow flex items-center gap-1 cursor-pointer transition transform active:scale-95"
-                        title="JPG फॉर्मेट में टेस्ट प्रीव्यू डाउनलोड करें"
+                        onClick={handleDownloadTestVideo}
+                        disabled={isExportingTestVideo}
+                        className="px-3.5 py-1.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-lg shadow-lg flex items-center gap-1.5 cursor-pointer transition transform active:scale-95 disabled:opacity-50"
+                        title="टेस्ट वीडियो डाउनलोड करें (वास्तविक प्लेएबल वीडियो एक्सपोर्ट)"
                       >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>JPG</span>
+                        {isExportingTestVideo ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>वीडियो बन रहा है...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            <span>टेस्ट वीडियो डाउनलोड करें</span>
+                          </>
+                        )}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadTestPreview('png')}
-                        className="px-3 py-1.5 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs rounded-lg shadow flex items-center gap-1 cursor-pointer transition transform active:scale-95"
-                        title="उच्च गुणवत्ता PNG फॉर्मेट में डाउनलोड करें"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>PNG</span>
-                      </button>
-                    </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadTestPreview('jpg')}
+                          className="px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-lg shadow flex items-center gap-1 cursor-pointer transition transform active:scale-95"
+                          title="JPG फॉर्मेट में टेस्ट प्रीव्यू डाउनलोड करें"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>JPG</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadTestPreview('png')}
+                          className="px-3 py-1.5 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 font-black text-xs rounded-lg shadow flex items-center gap-1 cursor-pointer transition transform active:scale-95"
+                          title="उच्च गुणवत्ता PNG फॉर्मेट में डाउनलोड करें"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>PNG</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -7636,6 +8005,63 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   नोट: टाइपोग्राफी बदलने के लिए स्टेप 6 (टेक्स्ट व कोट) पर जाएँ।
                 </p>
               </div>
+
+              {/* Video Target Mode Selection (Quick Video vs Studio Mode) */}
+              {generatorMode === 'video' && (
+                <div className="p-4 bg-slate-950/80 border border-amber-500/40 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-amber-400" />
+                    <label className="text-xs font-black text-amber-300">
+                      फ्रेम किस मोड के लिए है? *
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setVideoTargetMode('quick_video')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        videoTargetMode === 'quick_video'
+                          ? 'bg-gradient-to-br from-amber-500/20 to-red-500/20 border-amber-400 text-white shadow-md'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="videoTargetMode"
+                        checked={videoTargetMode === 'quick_video'}
+                        onChange={() => setVideoTargetMode('quick_video')}
+                        className="mt-1 accent-amber-400 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-xs font-black text-white">⚡ Quick Video Mode Test Frame</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">क्विक वीडियो मोड के लिए समर्पित टेस्ट फ्रेम</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setVideoTargetMode('studio_mode')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                        videoTargetMode === 'studio_mode'
+                          ? 'bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border-purple-400 text-white shadow-md'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="videoTargetMode"
+                        checked={videoTargetMode === 'studio_mode'}
+                        onChange={() => setVideoTargetMode('studio_mode')}
+                        className="mt-1 accent-purple-400 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-xs font-black text-white">🎬 Studio Mode Test Frame</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">स्टूडियो मोड टाइमलाइन के लिए समर्पित टेस्ट फ्रेम</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Design Category Selection */}
               <div>

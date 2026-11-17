@@ -21,7 +21,6 @@ export const RefundCancellationPolicyPage: React.FC<RefundCancellationPolicyPage
   });
 
   useEffect(() => {
-    document.title = 'रिफंड एवं कैंसिलेशन नीति • AI News Maker';
     window.scrollTo(0, 0);
   }, []);
 

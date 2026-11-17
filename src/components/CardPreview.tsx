@@ -11,6 +11,7 @@ import { getFormattedHindiDate } from '../lib/dateUtils';
 import { shouldShowAppWatermark } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
 import { getDynamicFrameById, normalizeDynamicFrame, getAssetLibraryItemById } from '../lib/dynamicFramesManager';
+import { resolveEffectivePhotoSlots } from '../types/dynamicFrame';
 import { formatCleanLocationText, calculateDynamicLocationMetrics } from '../lib/locationUtils';
 import {
   computeCanonicalHeadlineLayout,
@@ -497,7 +498,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   style={{
                     color: token.isHighlight ? highlightColor : baseTextColor,
                     fontSize: `${effectiveFontSize}px`,
-                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontFamily: `"${card.headlineFontFamily || 'Baloo 2'}", "Baloo 2", sans-serif`,
                     fontWeight: 900,
                     textShadow: isIvory || isBlackText ? 'none' : (isLightTemplate ? 'none' : '0 2px 6px rgba(0,0,0,0.85)'),
                     marginRight: (tIdx < line.length - 1 && !isNextPunctuation)
@@ -601,10 +602,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
       {/* 0B. DYNAMIC FRAME PHOTO SLOTS (Layer 1: Bottom under PNG Artwork) */}
       {(() => {
-        if (!df || !df.photoSlots || df.photoSlots.length === 0) return null;
+        if (!df) return null;
+        const effectiveSlots = resolveEffectivePhotoSlots(df.photoSlots, card.layout);
+        if (!effectiveSlots || effectiveSlots.length === 0) return null;
         return (
           <div className="absolute inset-0 z-5 pointer-events-none overflow-hidden select-none">
-            {df.photoSlots.map((slot, sIdx) => {
+            {effectiveSlots.map((slot, sIdx) => {
               const defaultAsset = slot.defaultAssetUrl || (sIdx === 0
                 ? (df.id === 'df_testing_1_double'
                   ? 'https://images.unsplash.com/photo-1531415074868-036b107e7752?w=800&q=80'
@@ -1589,7 +1592,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 <h1
                   className="font-black leading-snug tracking-tight text-neutral-950 transition-all line-clamp-3"
                   style={{
-                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontFamily: `"${card.headlineFontFamily || 'Baloo 2'}", "Baloo 2", sans-serif`,
                     fontSize: `${effectivePreviewFontSize}px`,
                   }}
                 >
@@ -1704,7 +1707,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 <h1
                   className="font-black leading-snug tracking-tight text-white transition-all line-clamp-3 drop-shadow-[0_4px_14px_rgba(0,0,0,0.95)]"
                   style={{
-                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontFamily: `"${card.headlineFontFamily || 'Baloo 2'}", "Baloo 2", sans-serif`,
                     fontSize: `${effectivePreviewFontSize}px`,
                   }}
                 >
@@ -1787,7 +1790,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 <h1
                   className="font-black leading-[1.18] tracking-tight text-neutral-950 transition-all line-clamp-3"
                   style={{
-                    fontFamily: card.headlineFontFamily || 'Baloo 2',
+                    fontFamily: `"${card.headlineFontFamily || 'Baloo 2'}", "Baloo 2", sans-serif`,
                     fontSize: `${effectivePreviewFontSize}px`,
                   }}
                 >
@@ -3731,14 +3734,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
                   if (!calloutUrl && !effectiveCalloutText) return null;
 
+                  const calloutRawY = df.fullStoryCalloutConfig?.rect?.y ?? 85;
+                  const calloutRawH = df.fullStoryCalloutConfig?.rect?.height ?? 3.5;
+                  const footerH = df.footerConfig?.rect?.height ?? 8;
+                  const maxBottomY = 100 - footerH - 0.5;
+                  const calloutY = Math.min(calloutRawY, maxBottomY - calloutRawH);
+
                   return (calloutUrl && !calloutImgError) ? (
                     <div
                       className="absolute pointer-events-auto flex items-center justify-center"
                       style={{
                         left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
-                        top: `${df.fullStoryCalloutConfig?.rect?.y ?? 88}%`,
+                        top: `${calloutY}%`,
                         width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
-                        height: `${Math.max(6.5, df.fullStoryCalloutConfig?.rect?.height ?? 6.5)}%`,
+                        height: `${calloutRawH}%`,
                         transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
                         transformOrigin: 'center center',
                       }}
@@ -3755,9 +3764,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
                       style={{
                         left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
-                        top: `${df.fullStoryCalloutConfig?.rect?.y ?? 88}%`,
+                        top: `${calloutY}%`,
                         width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
-                        height: `${Math.max(6.5, df.fullStoryCalloutConfig?.rect?.height ?? 6.5)}%`,
+                        height: `${calloutRawH}%`,
                         backgroundColor: df.fullStoryCalloutConfig.bgColor || '#DC2626',
                         color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
                         borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',

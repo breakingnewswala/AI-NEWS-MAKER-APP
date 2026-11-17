@@ -24,7 +24,7 @@ import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 import { getApiUrl } from './apiConfig';
 import { getDynamicFrameById, normalizeDynamicFrame, getAssetLibraryItemById } from './dynamicFramesManager';
 import { formatCleanLocationText } from './locationUtils';
-import { DynamicFrame } from '../types/dynamicFrame';
+import { DynamicFrame, resolveEffectivePhotoSlots } from '../types/dynamicFrame';
 
 const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
 
@@ -1752,9 +1752,10 @@ async function drawAuthoritativeDynamicFrameCanvas(
   ctx.fillRect(0, 0, width, height);
 
   // LAYER 1: PHOTO SLOTS (Drawn at the bottom under PNG artwork)
-  if (df.photoSlots && df.photoSlots.length > 0) {
-    for (let sIdx = 0; sIdx < df.photoSlots.length; sIdx++) {
-      const slot = df.photoSlots[sIdx];
+  const effectivePhotoSlots = resolveEffectivePhotoSlots(df.photoSlots, card.layout);
+  if (effectivePhotoSlots && effectivePhotoSlots.length > 0) {
+    for (let sIdx = 0; sIdx < effectivePhotoSlots.length; sIdx++) {
+      const slot = effectivePhotoSlots[sIdx];
       const defaultAsset = slot.defaultAssetUrl || (sIdx === 0
         ? (df.id === 'df_testing_1_double'
           ? 'https://images.unsplash.com/photo-1531415074868-036b107e7752?w=800&q=80'
@@ -1818,8 +1819,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.save();
     // Clip strictly to photo slot bounds so watermark NEVER bleeds onto headline, footer or frame borders
     ctx.beginPath();
-    if (df.photoSlots && df.photoSlots.length > 0) {
-      df.photoSlots.forEach(slot => {
+    if (effectivePhotoSlots && effectivePhotoSlots.length > 0) {
+      effectivePhotoSlots.forEach(slot => {
         const sx = (slot.rect.x / 100) * width;
         const sy = (slot.rect.y / 100) * height;
         const sw = (slot.rect.width / 100) * width;
@@ -2103,8 +2104,12 @@ async function drawAuthoritativeDynamicFrameCanvas(
 
     // If neither custom asset nor callout text is configured, do not force-draw any fallback callout
     if (calloutAsset || calloutText) {
-      const cRectRaw = df.fullStoryCalloutConfig?.rect || { x: 10, y: 88, width: 80, height: 6.5 };
-      const cRect = { ...cRectRaw, height: Math.max(6.5, cRectRaw.height || 6.5) };
+      const cRectRaw = df.fullStoryCalloutConfig?.rect || { x: 10, y: 85, width: 80, height: 3.5 };
+      const calloutH = cRectRaw.height || 3.5;
+      const footerH = df.footerConfig?.rect?.height ?? 8;
+      const maxBottomY = 100 - footerH - 0.5;
+      const calloutY = Math.min(cRectRaw.y ?? 85, maxBottomY - calloutH);
+      const cRect = { ...cRectRaw, y: calloutY, height: calloutH };
       const cx = (cRect.x / 100) * width;
       const cy = (cRect.y / 100) * height;
       const cw = (cRect.width / 100) * width;
@@ -6677,16 +6682,18 @@ function getHeadlineLines(
   const parseTokensFromChunk = (chunk: string): WordToken[] => {
     const tokens: WordToken[] = [];
     const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/g;
+    const hasTags = /\[(?:yellow|highlight)\]/i.test(chunk);
     let lastIndex = 0;
     let match;
 
     const checkIsHl = (word: string): boolean => {
+      if (hasTags) return false;
       if (!highlightWords || highlightWords.length === 0) return false;
-      const cleanW = word.trim().toLowerCase();
+      const cleanW = word.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase();
       return highlightWords.some((hw) => {
         if (!hw) return false;
-        const cleanHw = hw.trim().toLowerCase();
-        return cleanW.includes(cleanHw) || cleanHw.includes(cleanW);
+        const cleanHw = hw.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase();
+        return cleanW === cleanHw;
       });
     };
 
@@ -6694,7 +6701,7 @@ function getHeadlineLines(
       if (match.index > lastIndex) {
         const regularChunk = chunk.substring(lastIndex, match.index);
         for (const w of regularChunk.split(/[ \t]+/)) {
-          if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: checkIsHl(w) });
+          if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: false });
         }
       }
       const highlightChunk = match[1];
@@ -6707,7 +6714,7 @@ function getHeadlineLines(
     if (lastIndex < chunk.length) {
       const tailChunk = chunk.substring(lastIndex);
       for (const w of tailChunk.split(/[ \t]+/)) {
-        if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: checkIsHl(w) });
+        if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: hasTags ? false : checkIsHl(w) });
       }
     }
 

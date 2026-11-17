@@ -694,84 +694,101 @@ export default function App() {
   const initialPageViewTrackedRef = useRef(false);
   const lastTrackedPathRef = useRef<string>(typeof window !== 'undefined' ? (window.location.pathname || '/') : '/');
 
+  const getChannelBrandingName = (): string => {
+    try {
+      const prof = getSavedChannelProfile();
+      const name = prof?.channelNameHi?.trim() || prof?.channelNameEn?.trim();
+      if (name) return name;
+    } catch {}
+    return 'AI News Maker';
+  };
+
   const getTabMeta = (tab: AppTab): { title: string; description: string; canonical: string } => {
     const base = 'https://www.ainewsmaker.online';
+    const channelName = getChannelBrandingName();
+
+    if (tab === 'home') {
+      return {
+        title: 'AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो', // title: 'AI News Maker'
+        description: 'भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।',
+        canonical: `${base}/`,
+      };
+    }
+
+    let pageName = 'Studio';
+    let description = '';
+    let canonical = `${base}/${tab}`;
+
     switch (tab) {
       case 'studio':
       case 'generator':
-        return {
-          title: 'Studio / AI News Maker',
-          description: 'एआई फोटो फ्रेम जनरेटर — 4:5 व 9:16 पोर्ट्रेट फ्रेम, कस्टमाइज़ेबल हेडलाइन, लोगो और स्मार्ट लोकेशन बैज।',
-          canonical: `${base}/studio`,
-        };
+        pageName = 'Studio'; // title: 'Studio'
+        description = 'एआई फोटो फ्रेम जनरेटर — 4:5 व 9:16 पोर्ट्रेट फ्रेम, कस्टमाइज़ेबल हेडलाइन, लोगो और स्मार्ट लोकेशन बैज।';
+        canonical = `${base}/studio`;
+        break;
       case 'videos':
-        return {
-          title: 'Video & Reels / AI News Maker',
-          description: 'एआई वीडियो न्यूज़ स्टूडियो — प्रोफेशनल वीडियो हेडलाइंस, लोअर-थर्ड्स, ब्रेकिंग न्यूज़ वीडियो रील्स और ऑडियो मिक्सर।',
-          canonical: `${base}/videos`,
-        };
+        pageName = 'Video & Reels'; // title: 'Video & Reels'
+        description = 'एआई वीडियो न्यूज़ स्टूडियो — प्रोफेशनल वीडियो हेडलाइंस, लोअर-थर्ड्स, ब्रेकिंग न्यूज़ वीडियो रील्स और ऑडियो मिक्सर।';
+        canonical = `${base}/videos`;
+        break;
       case 'newsroom':
-        return {
-          title: 'Newsroom / AI News Maker',
-          description: 'लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।',
-          canonical: `${base}/newsroom`,
-        };
+        pageName = 'Newsroom'; // title: 'Newsroom'
+        description = 'लाइव डिजिटल न्यूज़ रूम — प्रमाणित संपादकीय समाचार, ताज़ा सुर्खियाँ और मल्टी-सोर्स आरएसएस फ़ीड।';
+        canonical = `${base}/newsroom`;
+        break;
       case 'epaper':
-        return {
-          title: 'E-Paper / AI News Maker',
-          description: 'डिजिटल ई-पेपर न्यूज़ डेस्क — समाचार पत्र शैली में तैयार करें डिजिटल ई-पेपर पेज।',
-          canonical: `${base}/epaper`,
-        };
+        pageName = 'E-Paper';
+        description = 'डिजिटल ई-पेपर न्यूज़ डेस्क — समाचार पत्र शैली में तैयार करें डिजिटल ई-पेपर पेज।';
+        canonical = `${base}/epaper`;
+        break;
       case 'admin':
-        return {
-          title: 'Admin / AI News Maker',
-          description: 'मास्टर एडमिन कंट्रोल पैनल — टेम्प्लेट, फ्रेम मॉडरेशन और चैनल प्रबंधन।',
-          canonical: `${base}/admin`,
-        };
+        pageName = 'Admin';
+        description = 'मास्टर एडमिन कंट्रोल पैनल — टेम्प्लेट, फ्रेम मॉडरेशन और चैनल प्रबंधन।';
+        canonical = `${base}/admin`;
+        break;
       case 'profile':
-        return {
-          title: 'Profile / AI News Maker',
-          description: 'एआई न्यूज़ मेकर सब्सक्रिप्शन प्लांस, कॉइन्स वॉलेट और रिपोर्टर प्रोफ़ाइल सेटिंग्स।',
-          canonical: `${base}/profile`,
-        };
+        pageName = 'Profile'; // title: 'Profile'
+        description = 'एआई न्यूज़ मेकर सब्सक्रिप्शन प्लांस, कॉइन्स वॉलेट और रिपोर्टर प्रोफ़ाइल सेटिंग्स।';
+        canonical = `${base}/profile`;
+        break;
       case 'terms':
-        return {
-          title: 'Terms & Conditions / AI News Maker',
-          description: 'एआई न्यूज़ मेकर नियम और शर्तें — आधिकारिक सेवा दिशा-निर्देश और उपयोग नीति।',
-          canonical: `${base}/terms`,
-        };
+        pageName = 'Terms & Conditions';
+        description = 'एआई न्यूज़ मेकर नियम और शर्तें — आधिकारिक सेवा दिशा-निर्देश और उपयोग नीति।';
+        canonical = `${base}/terms`;
+        break;
       case 'privacy':
-        return {
-          title: 'Privacy Policy / AI News Maker',
-          description: 'एआई न्यूज़ मेकर गोपनीयता नीति — यूज़र डेटा सुरक्षा व गोपनीयता संरक्षण मानक।',
-          canonical: `${base}/privacy`,
-        };
+        pageName = 'Privacy Policy';
+        description = 'एआई न्यूज़ मेकर गोपनीयता नीति — यूज़र डेटा सुरक्षा व गोपनीयता संरक्षण मानक।';
+        canonical = `${base}/privacy`;
+        break;
       case 'refunds':
-        return {
-          title: 'Refund Policy / AI News Maker',
-          description: 'रिफंड व रद्दीकरण नीति — डिजिटल कॉइन्स व पैकेज खरीद रद्दीकरण दिशा-निर्देश।',
-          canonical: `${base}/refunds`,
-        };
+        pageName = 'Refund Policy';
+        description = 'रिफंड व रद्दीकरण नीति — डिजिटल कॉइन्स व पैकेज खरीद रद्दीकरण दिशा-निर्देश।';
+        canonical = `${base}/refunds`;
+        break;
       case 'support':
-        return {
-          title: 'Support / AI News Maker',
-          description: 'ग्राहक सहायता व संपर्क — एआई न्यूज़ मेकर हेल्पडेस्क, व्हाट्सएप सपोर्ट +91 9669802408।',
-          canonical: `${base}/support`,
-        };
+        pageName = 'Support';
+        description = 'ग्राहक सहायता व संपर्क — एआई न्यूज़ मेकर हेल्पडेस्क, व्हाट्सएप सपोर्ट +91 9669802408।';
+        canonical = `${base}/support`;
+        break;
       case 'delete-account':
-        return {
-          title: 'Account Deletion / AI News Maker',
-          description: 'खाता हटाने का अनुरोध — एआई न्यूज़ मेकर डेटा सुरक्षा व अकाउंट डिलीशन प्रक्रिया।',
-          canonical: `${base}/delete-account`,
-        };
-      case 'home':
+        pageName = 'Account Deletion';
+        description = 'खाता हटाने का अनुरोध — एआई न्यूज़ मेकर डेटा सुरक्षा व अकाउंट डिलीशन प्रक्रिया।';
+        canonical = `${base}/delete-account`;
+        break;
       default:
         return {
-          title: 'Home / AI News Maker',
+          title: 'AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो', // title: 'AI News Maker'
           description: 'भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।',
           canonical: `${base}/`,
         };
     }
+
+    return {
+      title: `${pageName} | ${channelName}`,
+      description,
+      canonical,
+    };
   };
 
   const applyPageMeta = (tab: AppTab) => {

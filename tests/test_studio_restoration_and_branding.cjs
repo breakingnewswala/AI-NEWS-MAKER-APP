@@ -60,34 +60,48 @@ runTest('Icon Audit: Zero missing lucide icon imports in any JSX component', () 
   assert(output.includes('All JSX icons across all components are properly imported'), 'All JSX icons must be valid');
 });
 
-// 3. Verify Browser Tab Title Branding (Page Name / AI News Maker)
-runTest('App.tsx: getTabMeta delivers exact "Page Name / AI News Maker" format', () => {
+// 3. Verify Browser Tab Title Branding (Home: AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो, Other: Page Name | Channel Name)
+runTest('App.tsx: getTabMeta delivers exact "AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो" & "Page Name | Channel Name" format', () => {
   const rootAppPath = path.join(process.cwd(), 'src', 'App.tsx');
   const content = fs.readFileSync(rootAppPath, 'utf8');
 
-  const expectedTitles = [
-    { tab: 'home', title: 'Home / AI News Maker' },
-    { tab: 'videos', title: 'Video & Reels / AI News Maker' },
-    { tab: 'studio', title: 'Studio / AI News Maker' },
-    { tab: 'newsroom', title: 'Newsroom / AI News Maker' },
-    { tab: 'epaper', title: 'E-Paper / AI News Maker' },
-    { tab: 'profile', title: 'Profile / AI News Maker' },
-    { tab: 'admin', title: 'Admin / AI News Maker' },
-    { tab: 'terms', title: 'Terms & Conditions / AI News Maker' },
-    { tab: 'privacy', title: 'Privacy Policy / AI News Maker' },
-    { tab: 'refunds', title: 'Refund Policy / AI News Maker' },
-    { tab: 'support', title: 'Support / AI News Maker' },
-    { tab: 'delete-account', title: 'Account Deletion / AI News Maker' }
+  // Verify Home Page branding
+  assert(
+    content.includes("title: 'AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो'"),
+    'Home Page tab title must be "AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो"'
+  );
+
+  // Verify central vertical separator | and dynamic channelName
+  assert(
+    content.includes('title: `${pageName} | ${channelName}`'),
+    'Other pages must use `${pageName} | ${channelName}`'
+  );
+
+  // Verify page names
+  const expectedPageNames = [
+    'Studio',
+    'Video & Reels',
+    'Newsroom',
+    'E-Paper',
+    'Admin',
+    'Profile',
+    'Terms & Conditions',
+    'Privacy Policy',
+    'Refund Policy',
+    'Support',
+    'Account Deletion'
   ];
 
-  expectedTitles.forEach(({ tab, title }) => {
+  expectedPageNames.forEach((pageName) => {
     assert(
-      content.includes(`title: '${title}'`),
-      `getTabMeta must define title: '${title}' for tab ${tab}`
+      content.includes(`pageName = '${pageName}';`),
+      `getTabMeta must define pageName: '${pageName}'`
     );
   });
 
-  // Ensure no duplicate branding
+  // Ensure no slash separator remains in getTabMeta titles
+  assert(!content.includes("'Studio / AI News Maker'"), 'No slash format in Studio');
+  assert(!content.includes("'Home / AI News Maker'"), 'No slash format in Home');
   assert(!content.includes('/ AI News Maker / AI News Maker'), 'No double suffix allowed');
 });
 

@@ -20,7 +20,6 @@ export const TermsPage: React.FC<TermsPageProps> = ({
     }
   });
   useEffect(() => {
-    document.title = 'AI News Maker';
     window.scrollTo(0, 0);
   }, []);
 

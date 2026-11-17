@@ -1735,6 +1735,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         isCustom: true,
         rawDynamicFrame: df,
         videoConfig: df.videoConfig,
+        videoTargetMode: df.videoTargetMode || 'quick_video',
         customLayers: df.layers,
       };
     });
@@ -1746,12 +1747,20 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
   // Compatible Frames List
   const compatibleFrames = useMemo(() => {
+    const currentMode: 'quick_video' | 'studio_mode' = isReadyToUseMode ? 'quick_video' : 'studio_mode';
+
     const builtin = getCompatibleFrames({
       aspectRatio: aspect,
       isOnly4_5,
       hasCoreCrop: Boolean(cropRegion),
+    }).filter((bf) => {
+      const mode = (bf as any).videoTargetMode || (bf.canvasRatio === '9:16' || bf.canvasRatio === '4:5' ? (isReadyToUseMode ? 'quick_video' : 'studio_mode') : 'studio_mode');
+      return mode === currentMode;
     });
+
     const dynamicMatching = dynamicConvertedVideoFrames.filter((df) => {
+      const mode = (df as any).videoTargetMode || 'quick_video';
+      if (mode !== currentMode) return false;
       if (aspect === '4:5') return df.canvasRatio === '4:5' || df.canvasRatio === '9:16';
       if (aspect === '9:16') return df.canvasRatio === '9:16';
       if (aspect === '1:1') return df.canvasRatio === '1:1';
@@ -1768,7 +1777,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       }
     }
     return combined;
-  }, [aspect, isOnly4_5, cropRegion, dynamicConvertedVideoFrames]);
+  }, [aspect, isOnly4_5, cropRegion, dynamicConvertedVideoFrames, isReadyToUseMode]);
 
   // Listen to profile updates (Prioritizes GIF logo, falls back to PNG)
   useEffect(() => {
@@ -2719,11 +2728,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       canvas.width = width;
       canvas.height = height;
       canvas.style.position = 'fixed';
-      canvas.style.left = '-9999px';
+      canvas.style.left = '0px';
       canvas.style.top = '0px';
-      canvas.style.opacity = '0';
+      canvas.style.width = '1px';
+      canvas.style.height = '1px';
+      canvas.style.opacity = '0.01';
       canvas.style.pointerEvents = 'none';
-      canvas.style.zIndex = '-9999';
+      canvas.style.zIndex = '-1';
       document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d', { alpha: false });
       if (!ctx) {
@@ -2820,6 +2831,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       }
 
       const canvasStream = captureStreamFn.call(canvas, 30); // 30 FPS stream
+      const vTracks = canvasStream.getVideoTracks();
+      if (!vTracks || vTracks.length === 0) {
+        if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
+        throw new Error('कैनवास वीडियो स्ट्रीम प्रारंभ नहीं हो सकी। कृपया पुनः प्रयास करें।');
+      }
       let combinedStream: MediaStream = canvasStream;
       let audioCtx: AudioContext | null = null;
 
@@ -3039,9 +3055,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           cancelAnimationFrame(animId);
           if (backupIntervalId) clearInterval(backupIntervalId);
           try {
-            if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
-          } catch {}
-          try {
             if (recorder.state === 'recording') {
               recorder.stop();
             }
@@ -3169,6 +3182,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setVideoExportStatus('अंतिम वीडियो फाइल प्रोसेस हो रही है...');
 
       const rawBlob = await recordingPromise;
+      try {
+        canvasStream.getTracks().forEach((t) => t.stop());
+        combinedStream.getTracks().forEach((t) => t.stop());
+      } catch {}
 
       if (cancelExportRef.current || activeExportIdRef.current !== currentExportId) {
         setIsExporting(false);

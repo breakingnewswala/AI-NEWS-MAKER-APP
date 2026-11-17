@@ -34,7 +34,6 @@ export const SupportContactPage: React.FC<SupportContactPageProps> = ({
   } | null>(null);
 
   useEffect(() => {
-    document.title = 'AI News Maker';
     window.scrollTo(0, 0);
     if (currentUser) {
       const userMobileNum = (currentUser as any)?.mobile || currentUser?.mobileNumber;

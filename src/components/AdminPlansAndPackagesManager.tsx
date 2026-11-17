@@ -92,6 +92,9 @@ import {
   adminDeleteUserRecord,
   assignCustomHeaderFooterToUser,
   PLAN_KEY_MAP,
+  getUserFeatureEntitlements,
+  getAdminSelectedUserEmail,
+  setAdminSelectedUserEmail,
   LogoChangeRequest,
   getLogoChangeRequests,
   fetchLogoChangeRequests,
@@ -158,6 +161,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [subTab, setSubTab] = useState<'profile' | 'upgrade' | 'plans' | 'templates' | 'music_library' | 'promocodes' | 'package_coupons' | 'users' | 'rewards' | 'rss' | 'web' | 'restricted' | 'api_keys' | 'notifications' | 'policies' | 'analytics' | ''>(() => {
     return '';
   });
+  const [selectedUserEmail, setSelectedUserEmailState] = useState<string>(() => getAdminSelectedUserEmail());
+  useEffect(() => {
+    const handleSelectedUserChanged = (e: any) => {
+      setSelectedUserEmailState(e?.detail?.email || getAdminSelectedUserEmail());
+    };
+    window.addEventListener('admin_selected_user_changed', handleSelectedUserChanged);
+    return () => window.removeEventListener('admin_selected_user_changed', handleSelectedUserChanged);
+  }, []);
   const [analyticsTab, setAnalyticsTab] = useState<'news' | 'video' | 'users'>('news');
   const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
@@ -1714,6 +1725,87 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   return (
     <div className="space-y-3.5">
+      {/* MASTER ADMIN: SELECTED USER FEATURE ENTITLEMENT SUMMARY (Module 9) */}
+      {selectedUserEmail && (() => {
+        const targetUser = planUsers.find((u) => (u.email || '').toLowerCase().trim() === selectedUserEmail.toLowerCase().trim()) || { email: selectedUserEmail, tier: 'basic' };
+        const ent = getUserFeatureEntitlements(targetUser);
+        return (
+          <div className="p-4 bg-slate-900 border border-amber-500/50 rounded-2xl shadow-xl space-y-3">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs sm:text-sm font-black text-amber-300">
+                  🎯 चयनित उपयोगकर्ता फीचर विवरण: {ent.userName} ({ent.userEmail})
+                </span>
+                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 font-bold">
+                  {ent.accountType}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminSelectedUserEmail('');
+                  setSelectedUserEmailState('');
+                }}
+                className="text-xs text-slate-400 hover:text-rose-300 cursor-pointer"
+                title="चयन हटाएं"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-emerald-400">इस उपयोगकर्ता के सक्रिय फीचर:</div>
+                <ul className="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                  {ent.activeFeatures.map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-amber-400">विशेष अनुमति:</div>
+                {ent.specialPermissions.length > 0 ? (
+                  <ul className="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                    {ent.specialPermissions.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[11px] text-slate-500 italic">कोई विशेष अनुमति नहीं</div>
+                )}
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-rose-400">सीमित / प्रतिबंधित:</div>
+                {ent.restrictedFeatures.length > 0 ? (
+                  <ul className="text-[11px] text-slate-400 space-y-0.5 list-disc list-inside">
+                    {ent.restrictedFeatures.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[11px] text-emerald-400">पूर्ण एक्सेस (कोई प्रतिबंध नहीं)</div>
+                )}
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5">
+                <div>
+                  <span className="text-[11px] font-bold text-amber-300">वर्तमान प्लान: </span>
+                  <span className="font-black text-white">{ent.planName}</span>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  <strong>फुटर अनुमति:</strong> {ent.footerEntitlement}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  <strong>वीडियो मोड:</strong> {ent.videoAccess}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
         {/* ========================================================================= */}
         {/* STEP 1: प्रोफाइल व चैनल विवरण (PROFILE & BRANDING)                        */}
         {/* ========================================================================= */}
@@ -3936,6 +4028,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <button
                           type="button"
                           onClick={() => {
+                            const newEmail = selectedUserEmail.toLowerCase() === (u.email || '').toLowerCase() ? '' : (u.email || '');
+                            setAdminSelectedUserEmail(newEmail);
+                            setSelectedUserEmailState(newEmail);
+                          }}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-lg cursor-pointer active:scale-95 transition border ${
+                            selectedUserEmail.toLowerCase() === (u.email || '').toLowerCase()
+                              ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}
+                        >
+                          {selectedUserEmail.toLowerCase() === (u.email || '').toLowerCase() ? '✓ चयनित' : 'फीचर अधिकार'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                             const nextTier = u.tier === 'basic' ? 'advanced' : u.tier === 'advanced' ? 'professional' : u.tier === 'professional' ? 'ultra' : 'basic';
                             adminUpdateUserRecord(u.email, { tier: nextTier });
                             adminUpdateCloudUser(u.userId, { tier: nextTier });
@@ -4143,6 +4250,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                       <option value="ultra">VIP DESK</option>
                                     </select>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newEmail = selectedUserEmail.toLowerCase() === (u.email || '').toLowerCase() ? '' : (u.email || '');
+                                      setAdminSelectedUserEmail(newEmail);
+                                      setSelectedUserEmailState(newEmail);
+                                    }}
+                                    className={`px-2 py-0.5 text-[9.5px] font-bold rounded border cursor-pointer transition ${
+                                      selectedUserEmail.toLowerCase() === (u.email || '').toLowerCase()
+                                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                                    }`}
+                                    title="इस उपयोगकर्ता के फीचर अधिकार देखें व सभी एडमिन टैब में सक्रिय रखें"
+                                  >
+                                    {selectedUserEmail.toLowerCase() === (u.email || '').toLowerCase() ? '✓ चयनित' : 'फीचर अधिकार'}
+                                  </button>
                                 </div>
 
                                 {/* Plan / Trial Validity underneath */}

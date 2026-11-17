@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Copy, Check, Share2, Sparkles, Loader2, Lock } from 'lucide-react';
 import { NewsCardData } from '../types';
 import { VoiceInputButton } from './VoiceInputButton';
 import { getApiUrl } from '../lib/apiConfig';
-import { isUserActionAllowed } from '../lib/userPlanManager';
+import { isUserActionAllowed, isUserMasterAdmin } from '../lib/userPlanManager';
 import { cleanCaptionParagraphs, stripAllUrlsAndHyperlinks, buildHashtags, getUserFirstHashtag } from '../lib/speakerUtils';
 
 export { buildHashtags, getUserFirstHashtag };
@@ -29,6 +29,21 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
   const firstUserTag = getUserFirstHashtag(card);
   const actionAllowance = isUserActionAllowed();
   const isActionLocked = !actionAllowance.allowed;
+
+  const isMaster = useMemo(() => {
+    try {
+      const stored =
+        localStorage.getItem('reporter_auth_session') ||
+        localStorage.getItem('ai_news_user') ||
+        localStorage.getItem('reporter_current_user') ||
+        localStorage.getItem('ai_news_reporter_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (isUserMasterAdmin(u)) return true;
+      }
+    } catch {}
+    return Boolean((window as any).isMasterAdminLoggedIn);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -132,9 +147,11 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-white text-base">
-                इंस्टाग्राम व फेसबुक पोस्ट कैप्शन
+                इस खबर के लिए सोशल मीडिया पोस्ट कैप्शन
               </h3>
-              <p className="text-[11px] text-neutral-400">सोशल मीडिया पोस्ट कैप्शन</p>
+              <p className="text-[11px] text-neutral-400">
+                इंस्टाग्राम, फेसबुक और अन्य सोशल मीडिया प्लेटफॉर्म के लिए
+              </p>
             </div>
           </div>
           <button
@@ -147,201 +164,256 @@ export const CaptionModal: React.FC<CaptionModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-4 sm:p-5 space-y-4">
-          {isActionLocked && (
-            <div className="bg-red-950/80 border border-red-700/80 rounded-xl p-3 text-red-200 text-xs flex items-center gap-2.5 shadow-md">
-              <Lock className="w-4 h-4 text-red-400 shrink-0" />
-              <span>
-                <strong>7-Day Free Trial समाप्त:</strong> कैप्शन कॉपी व AI जनरेशन की सुविधा निष्क्रिय है। कृपया प्रोफाइल में जाकर प्लान अपग्रेड करें।
-              </span>
+          {/* Normal User View: Read-only container with large Copy Button */}
+          {!isMaster ? (
+            <div className="space-y-4">
+              {isActionLocked && (
+                <div className="bg-red-950/80 border border-red-700/80 rounded-xl p-3 text-red-200 text-xs flex items-center gap-2.5 shadow-md">
+                  <Lock className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>
+                    <strong>7-Day Free Trial समाप्त:</strong> कैप्शन कॉपी की सुविधा निष्क्रिय है। कृपया प्रोफाइल में जाकर प्लान अपग्रेड करें।
+                  </span>
+                </div>
+              )}
+
+              <div className="p-4 bg-neutral-950 border border-neutral-800 rounded-2xl space-y-2.5 shadow-inner">
+                <div className="flex items-center justify-between border-b border-neutral-800/80 pb-2">
+                  <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                    <span>📝 तैयार पोस्ट कैप्शन</span>
+                  </span>
+                  <span className="text-[11px] font-mono text-neutral-500">
+                    {captionText.length} अक्षर
+                  </span>
+                </div>
+
+                <div className="text-xs sm:text-sm text-neutral-200 font-['Noto_Sans_Devanagari'] whitespace-pre-wrap leading-relaxed max-h-[50vh] overflow-y-auto select-text">
+                  {captionText}
+                </div>
+              </div>
+
+              {/* Single Prominent Copy Button */}
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={isActionLocked}
+                className={`w-full py-3.5 px-4 rounded-xl font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-green-950/40 ${
+                  isActionLocked
+                    ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 opacity-60 cursor-not-allowed'
+                    : copied
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-green-500 hover:bg-green-400 active:scale-[0.99] text-neutral-950'
+                }`}
+                title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'कैप्शन कॉपी करें'}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-5 h-5 stroke-[2.5]" />
+                    <span>कैप्शन सफलतापूर्वक कॉपी हो गया!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-5 h-5 stroke-[2.5]" />
+                    <span>कॉपी करें (एक क्लिक में कॉपी)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            /* Master Admin Controls View: Full Customization without Editor Mic Button */
+            <div className="space-y-4">
+              {isActionLocked && (
+                <div className="bg-red-950/80 border border-red-700/80 rounded-xl p-3 text-red-200 text-xs flex items-center gap-2.5 shadow-md">
+                  <Lock className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>
+                    <strong>7-Day Free Trial समाप्त:</strong> कैप्शन कॉपी व AI जनरेशन की सुविधा निष्क्रिय है। कृपया प्रोफाइल में जाकर प्लान अपग्रेड करें।
+                  </span>
+                </div>
+              )}
+
+              {/* AI Provider Switcher */}
+              <div className="flex items-center justify-between bg-neutral-950 p-2 rounded-xl border border-neutral-800">
+                <span className="text-xs font-bold text-neutral-300">
+                  AI इंजन (मास्टर एडमिन):
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('gemini')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                      aiProvider === 'gemini'
+                        ? 'bg-blue-600/30 text-blue-300 border border-blue-500/60 shadow-sm'
+                        : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white'
+                    }`}
+                  >
+                    ✨ Google Gemini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('openai')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                      aiProvider === 'openai'
+                        ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
+                        : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white'
+                    }`}
+                  >
+                    🤖 OpenAI ChatGPT
+                  </button>
+                </div>
+              </div>
+
+              {/* Style Selector Chips */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                  <span>कैप्शन स्टाइल चुनें (Caption Format):</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStyle('detailed_3_para');
+                      handleExpandWithAI('detailed_3_para');
+                    }}
+                    className={`p-2 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
+                      selectedStyle === 'detailed_3_para'
+                        ? 'bg-yellow-400 text-neutral-950 border-yellow-400 shadow-sm'
+                        : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
+                    }`}
+                  >
+                    विस्तृत
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStyle('bullet_points');
+                      handleExpandWithAI('bullet_points');
+                    }}
+                    className={`p-2 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
+                      selectedStyle === 'bullet_points'
+                        ? 'bg-yellow-400 text-neutral-950 border-yellow-400 shadow-sm'
+                        : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
+                    }`}
+                  >
+                    बुलेट पॉइंट्स
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStyle('short');
+                      handleExpandWithAI('short');
+                    }}
+                    className={`p-2 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
+                      selectedStyle === 'short'
+                        ? 'bg-yellow-400 text-neutral-950 border-yellow-400 shadow-sm'
+                        : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
+                    }`}
+                  >
+                    संक्षिप्त
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Instruction Box */}
+              <div className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-yellow-400/90 flex items-center gap-1">
+                    <span>कैप्शन में कोई बदलाव / विशेष निर्देश? (Optional):</span>
+                  </span>
+                  <VoiceInputButton
+                    onTranscript={(transcript) => {
+                      setCustomInstruction((prev) => (prev ? `${prev} ${transcript}` : transcript));
+                    }}
+                    title="बोलकर निर्देश बताएं"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={customInstruction}
+                  onChange={(e) => setCustomInstruction(e.target.value)}
+                  placeholder="उदा. पुलिस अधिकारी का बयान शामिल करें, सख्त लहजा रखें, आंकड़े जोड़ें..."
+                  className="w-full bg-neutral-900 border border-neutral-700/80 rounded px-2.5 py-1.5 text-xs text-white placeholder:text-neutral-500 focus:border-yellow-400 focus:outline-none font-['Noto_Sans_Devanagari']"
+                />
+              </div>
+
+              {/* Caption Header (without mic button beside editor) */}
+              <div className="flex items-center justify-between text-xs text-neutral-400">
+                <span className="flex items-center gap-1.5 font-bold text-neutral-200">
+                  <span>कैप्शन विवरण (संपादित करें):</span>
+                  <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                    captionText.length > 2000
+                      ? 'bg-red-950 text-red-300 border-red-800 font-bold'
+                      : 'bg-neutral-950 text-amber-300 border-neutral-800'
+                  }`}>
+                    {captionText.length} / 2000 अक्षर
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleExpandWithAI()}
+                  disabled={isExpanding || isActionLocked}
+                  className={`font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${
+                    isActionLocked
+                      ? 'bg-neutral-800 text-neutral-500 border-neutral-700/60 opacity-60 cursor-not-allowed'
+                      : 'text-yellow-400 hover:text-yellow-300 bg-yellow-400/10 hover:bg-yellow-400/20 border-yellow-400/30 cursor-pointer disabled:opacity-50'
+                  }`}
+                  title={isActionLocked ? 'ट्रायल समाप्त — AI कैप्शन लॉक' : 'AI से कैप्शन को फिर से तैयार या बड़ा करें'}
+                >
+                  {isExpanding ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>तैयार हो रहा है...</span>
+                    </>
+                  ) : (
+                    <>
+                      {isActionLocked ? <Lock className="w-3 h-3 text-neutral-400" /> : <Sparkles className="w-3 h-3 text-yellow-400" />}
+                      <span>🔄 AI से नया कैप्शन बनाएं / बड़ा करें</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <textarea
+                rows={9}
+                value={captionText}
+                onChange={(e) => setCaptionText(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 text-xs sm:text-sm text-neutral-200 focus:border-green-500 focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed resize-none shadow-inner"
+                placeholder="सोशल मीडिया कैप्शन यहाँ लिखें..."
+              />
+
+              <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
+                <span>अधिकतम सीमा: 2,000 अक्षर</span>
+                <span className={`font-mono font-bold ${
+                  captionText.length > 2000 ? 'text-red-400' : 'text-neutral-400'
+                }`}>
+                  {captionText.length} / 2000 अक्षर
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={handleCopy}
+                  disabled={isActionLocked}
+                  className={`flex-1 py-3 px-4 rounded-xl font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all ${
+                    isActionLocked
+                      ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 opacity-60 cursor-not-allowed'
+                      : 'bg-green-500 hover:bg-green-400 active:scale-[0.99] text-neutral-950 cursor-pointer shadow-lg shadow-green-950/40'
+                  }`}
+                  title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'इंस्टा/फेसबुक कैप्शन कॉपी करें'}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-5 h-5 stroke-[2.5]" />
+                      <span>कैप्शन कॉपी हो गया!</span>
+                    </>
+                  ) : (
+                    <>
+                      {isActionLocked ? <Lock className="w-5 h-5 text-neutral-400" /> : <Copy className="w-5 h-5 stroke-[2.5]" />}
+                      <span>{isActionLocked ? 'कैप्शन सुविधा लॉक (ट्रायल समाप्त)' : 'इंस्टा/फेसबुक कैप्शन कॉपी करें'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
-          {/* AI Provider Switcher */}
-          <div className="flex items-center justify-between bg-neutral-950 p-2 rounded-xl border border-neutral-800">
-            <span className="text-xs font-bold text-neutral-300">
-              AI इंजन:
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setAiProvider('gemini')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                  aiProvider === 'gemini'
-                    ? 'bg-blue-600/30 text-blue-300 border border-blue-500/60 shadow-sm'
-                    : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white'
-                }`}
-              >
-                ✨ Google Gemini
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiProvider('openai')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
-                  aiProvider === 'openai'
-                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/60 shadow-sm'
-                    : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white'
-                }`}
-              >
-                🤖 OpenAI ChatGPT
-              </button>
-            </div>
-          </div>
-
-          {/* Style Selector Chips */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
-              <span>कैप्शन स्टाइल चुनें (Caption Format):</span>
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStyle('detailed_3_para');
-                  handleExpandWithAI('detailed_3_para');
-                }}
-                className={`p-2 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
-                  selectedStyle === 'detailed_3_para'
-                    ? 'bg-yellow-400 text-neutral-950 border-yellow-400 shadow-sm'
-                    : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
-                }`}
-              >
-                विस्तृत
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStyle('bullet_points');
-                  handleExpandWithAI('bullet_points');
-                }}
-                className={`p-2 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
-                  selectedStyle === 'bullet_points'
-                    ? 'bg-yellow-400 text-neutral-950 border-yellow-400 shadow-sm'
-                    : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
-                }`}
-              >
-                बुलेट पॉइंट्स
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStyle('short');
-                  handleExpandWithAI('short');
-                }}
-                className={`p-2 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
-                  selectedStyle === 'short'
-                    ? 'bg-yellow-400 text-neutral-950 border-yellow-400 shadow-sm'
-                    : 'bg-neutral-950 text-neutral-300 border-neutral-800 hover:border-neutral-700'
-                }`}
-              >
-                संक्षिप्त
-              </button>
-            </div>
-          </div>
-
-          {/* Custom Instruction Box */}
-          <div className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-yellow-400/90 flex items-center gap-1">
-                <span>कैप्शन में कोई बदलाव / विशेष निर्देश? (Optional):</span>
-              </span>
-              <VoiceInputButton
-                onTranscript={(transcript) => {
-                  setCustomInstruction((prev) => (prev ? `${prev} ${transcript}` : transcript));
-                }}
-                title="बोलकर निर्देश बताएं"
-              />
-            </div>
-            <input
-              type="text"
-              value={customInstruction}
-              onChange={(e) => setCustomInstruction(e.target.value)}
-              placeholder="उदा. पुलिस अधिकारी का बयान शामिल करें, सख्त लहजा रखें, आंकड़े जोड़ें..."
-              className="w-full bg-neutral-900 border border-neutral-700/80 rounded px-2.5 py-1.5 text-xs text-white placeholder:text-neutral-500 focus:border-yellow-400 focus:outline-none font-['Noto_Sans_Devanagari']"
-            />
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-neutral-400">
-            <span className="flex items-center gap-1.5 font-bold text-neutral-200">
-              <span>कैप्शन विवरण (संपादित करें):</span>
-              <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
-                captionText.length > 2000
-                  ? 'bg-red-950 text-red-300 border-red-800 font-bold'
-                  : 'bg-neutral-950 text-amber-300 border-neutral-800'
-              }`}>
-                {captionText.length} / 2000 अक्षर
-              </span>
-              <VoiceInputButton
-                onTranscript={(transcript) => {
-                  setCaptionText((prev) => (prev ? `${prev}\n\n${transcript}` : transcript));
-                }}
-                title="बोलकर कैप्शन लिखें / जोड़ें"
-              />
-            </span>
-            <button
-              type="button"
-              onClick={() => handleExpandWithAI()}
-              disabled={isExpanding || isActionLocked}
-              className={`font-bold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all ${
-                isActionLocked
-                  ? 'bg-neutral-800 text-neutral-500 border-neutral-700/60 opacity-60 cursor-not-allowed'
-                  : 'text-yellow-400 hover:text-yellow-300 bg-yellow-400/10 hover:bg-yellow-400/20 border-yellow-400/30 cursor-pointer disabled:opacity-50'
-              }`}
-              title={isActionLocked ? 'ट्रायल समाप्त — AI कैप्शन लॉक' : 'AI से कैप्शन को फिर से तैयार या बड़ा करें'}
-            >
-              {isExpanding ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>तैयार हो रहा है...</span>
-                </>
-              ) : (
-                <>
-                  {isActionLocked ? <Lock className="w-3 h-3 text-neutral-400" /> : <Sparkles className="w-3 h-3 text-yellow-400" />}
-                  <span>🔄 AI से नया कैप्शन बनाएं / बड़ा करें</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <textarea
-            rows={9}
-            value={captionText}
-            onChange={(e) => setCaptionText(e.target.value)}
-            className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 text-xs sm:text-sm text-neutral-200 focus:border-green-500 focus:outline-none font-['Noto_Sans_Devanagari'] leading-relaxed resize-none shadow-inner"
-            placeholder="सोशल मीडिया कैप्शन यहाँ लिखें..."
-          />
-
-          <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
-            <span>अधिकतम सीमा: 2,000 अक्षर</span>
-            <span className={`font-mono font-bold ${
-              captionText.length > 2000 ? 'text-red-400' : 'text-neutral-400'
-            }`}>
-              {captionText.length} / 2000 अक्षर
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              onClick={handleCopy}
-              disabled={isActionLocked}
-              className={`flex-1 py-3 px-4 rounded-xl font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all ${
-                isActionLocked
-                  ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 opacity-60 cursor-not-allowed'
-                  : 'bg-green-500 hover:bg-green-400 active:scale-[0.99] text-neutral-950 cursor-pointer shadow-lg shadow-green-950/40'
-              }`}
-              title={isActionLocked ? 'ट्रायल समाप्त — कैप्शन लॉक' : 'इंस्टा/फेसबुक कैप्शन कॉपी करें'}
-            >
-              {copied ? (
-                <>
-                  <Check className="w-5 h-5 stroke-[2.5]" />
-                  <span>कैप्शन कॉपी हो गया!</span>
-                </>
-              ) : (
-                <>
-                  {isActionLocked ? <Lock className="w-5 h-5 text-neutral-400" /> : <Copy className="w-5 h-5 stroke-[2.5]" />}
-                  <span>{isActionLocked ? 'कैप्शन सुविधा लॉक (ट्रायल समाप्त)' : 'इंस्टा/फेसबुक कैप्शन कॉपी करें'}</span>
-                </>
-              )}
-            </button>
-          </div>
         </div>
       </div>
     </div>

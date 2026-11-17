@@ -366,17 +366,19 @@ export function parseHeadlineTokens(
 ): WordToken[] {
   if (!rawText) return [];
   const yellowRegex = /\[(?:yellow|highlight)\](.*?)\[\/(?:yellow|highlight)\]/gi;
+  const hasTags = /\[(?:yellow|highlight)\]/i.test(rawText);
   const tokens: WordToken[] = [];
   let lastIndex = 0;
   let match;
 
   const checkIsHl = (word: string): boolean => {
+    if (hasTags) return false;
     if (!highlightWords || highlightWords.length === 0) return false;
-    const cleanW = word.trim().toLowerCase();
+    const cleanW = word.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase();
     return highlightWords.some((hw) => {
       if (!hw) return false;
-      const cleanHw = hw.trim().toLowerCase();
-      return cleanW.includes(cleanHw) || cleanHw.includes(cleanW);
+      const cleanHw = hw.trim().replace(/[.,:;!?।\-"'“”‘’()]/g, '').toLowerCase();
+      return cleanW === cleanHw;
     });
   };
 
@@ -384,7 +386,7 @@ export function parseHeadlineTokens(
     if (match.index > lastIndex) {
       const regularChunk = rawText.substring(lastIndex, match.index);
       for (const w of regularChunk.split(/[ \t]+/)) {
-        if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: checkIsHl(w) });
+        if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: false });
       }
     }
     const highlightChunk = match[1];
@@ -397,7 +399,7 @@ export function parseHeadlineTokens(
   if (lastIndex < rawText.length) {
     const tailChunk = rawText.substring(lastIndex);
     for (const w of tailChunk.split(/[ \t]+/)) {
-      if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: checkIsHl(w) });
+      if (w && w.trim()) tokens.push({ text: w.trim(), isHighlight: hasTags ? false : checkIsHl(w) });
     }
   }
 

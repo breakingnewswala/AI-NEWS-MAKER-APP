@@ -14342,6 +14342,10 @@ app.get("/api/dynamic-frames", async (req, res) => {
     if (category && category !== "all") {
       filtered = filtered.filter((f) => f.designCategory === category);
     }
+    const { videoTargetMode } = req.query as any;
+    if (videoTargetMode && videoTargetMode !== 'all') {
+      filtered = filtered.filter((f) => (f.videoTargetMode || 'quick_video') === videoTargetMode);
+    }
 
     return res.json({ success: true, frames: filtered });
   } catch (err: any) {
@@ -26292,6 +26296,10 @@ app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) 
    - तीसरा पैराग्राफ: पुलिस/प्रशासन की कार्रवाई, वर्तमान स्थिति और आगे की प्रक्रिया।`;
     }
 
+    const callerIsMaster = Boolean(isAuthorizedMasterAdmin(req));
+    const safeCustomInstruction = callerIsMaster ? (customInstruction || "") : "";
+    const safeAiProvider = callerIsMaster ? (aiProvider || "gemini") : "gemini";
+
     const systemInstruction = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ मुख्य संपादक हैं।`;
     const prompt = `आप भारत के अग्रणी हिंदी डिजिटल न्यूज़ चैनल के वरिष्ठ मुख्य संपादक हैं।
 निम्नलिखित समाचार के लिए इंस्टाग्राम और फेसबुक पोस्ट का विस्तृत, प्रामाणिक और प्रभावशाली कैप्शन तैयार करें:
@@ -26300,7 +26308,7 @@ app.post("/api/generate-caption", enforceUserAccessMiddleware, async (req, res) 
 ${effectiveLocation ? `स्थान: "${effectiveLocation}"` : ""}
 श्रेणी: "${effectiveCategory}"
 ${effectiveSummary ? `मौजूदा संदर्भ/कच्चा विवरण: "${effectiveSummary}"` : ""}
-${customInstruction ? `यूज़र का विशेष निर्देश: "${customInstruction}"` : ""}
+${safeCustomInstruction ? `यूज़र का विशेष निर्देश: "${safeCustomInstruction}"` : ""}
 
 नियम (कड़ाई से पालन करें):
 ${modeGuidance}
@@ -26317,7 +26325,7 @@ ${modeGuidance}
 
     let caption = "";
 
-    if (aiProvider === "openai") {
+    if (safeAiProvider === "openai") {
       try {
         const openai = getOpenAIClient();
         const completion = await openai.chat.completions.create({

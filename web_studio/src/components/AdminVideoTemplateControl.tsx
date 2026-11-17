@@ -38,6 +38,7 @@ import {
   deleteDynamicFrameFromApi,
 } from '../lib/dynamicFramesManager';
 import { getApiUrl, getAuthToken } from '../lib/apiConfig';
+import { getUserFeatureEntitlements, getAdminSelectedUserEmail, setAdminSelectedUserEmail, isUserMasterAdmin } from '../lib/userPlanManager';
 
 interface AdminVideoTemplateControlProps {
   onOpenStudioWithVideoFrame?: (frameId: string) => void;
@@ -49,11 +50,32 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
   onEditFrame,
 }) => {
   const [activeCategoryTab, setActiveCategoryTab] = useState<'published' | 'test_frames'>('published');
+  const [testFrameModeFilter, setTestFrameModeFilter] = useState<'all' | 'quick_video' | 'studio_mode'>('all');
   const [selectedRatio, setSelectedRatio] = useState<'all' | '9:16' | '1:1' | '4:5' | '4:3'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [dynamicVideoFrames, setDynamicVideoFrames] = useState<DynamicFrameTemplate[]>([]);
   const [configs, setConfigs] = useState<Record<string, any>>({});
   const [successToast, setSuccessToast] = useState<{ id: string; msg: string } | null>(null);
+
+  const isMasterAdmin = useMemo(() => {
+    try {
+      const sess =
+        localStorage.getItem('reporter_auth_session') ||
+        localStorage.getItem('ai_news_user') ||
+        localStorage.getItem('reporter_current_user');
+      if (sess) {
+        const u = JSON.parse(sess);
+        if (isUserMasterAdmin(u)) return true;
+      }
+    } catch {}
+    return Boolean((window as any).isMasterAdminLoggedIn);
+  }, []);
+
+  useEffect(() => {
+    if (!isMasterAdmin && activeCategoryTab === 'test_frames') {
+      setActiveCategoryTab('published');
+    }
+  }, [isMasterAdmin, activeCategoryTab]);
   
   // Full Preview Modal State
   const [previewFrame, setPreviewFrame] = useState<{
@@ -181,6 +203,15 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
       });
   };
 
+  const [selectedUserEmail, setSelectedUserEmailState] = useState<string>(() => getAdminSelectedUserEmail());
+  useEffect(() => {
+    const handleSelectedUserChanged = (e: any) => {
+      setSelectedUserEmailState(e?.detail?.email || getAdminSelectedUserEmail());
+    };
+    window.addEventListener('admin_selected_user_changed', handleSelectedUserChanged);
+    return () => window.removeEventListener('admin_selected_user_changed', handleSelectedUserChanged);
+  }, []);
+
   useEffect(() => {
     refreshFrames();
     const handleUpdate = () => refreshFrames();
@@ -238,7 +269,9 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
         df.approvalStatus === 'IN_TESTING' ||
         df.designCategory === 'TEST_FRAMES' ||
         df.publicationStatus === 'draft' ||
-        df.id.startsWith('df_test_')
+        df.id.startsWith('df_test_') ||
+        df.name?.toUpperCase().startsWith('TEST') ||
+        df.id === 'df_1794938610435_g8pec'
       );
       const vRect = df.videoConfig?.videoRect || {
         x: 0,
@@ -260,6 +293,7 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
         coinPrice: cfg.coinPrice !== undefined ? cfg.coinPrice : 0,
         isActive: cfg.isActive !== undefined ? cfg.isActive : df.publicationStatus === 'published',
         videoRect: vRect,
+        videoTargetMode: df.videoTargetMode || 'quick_video',
         footerPosition: df.videoConfig?.footerPosition || 'bottom',
         locationBadgeUrl: df.videoConfig?.locationBadgeUrl,
         watermarkText: df.videoConfig?.watermarkTextEnabled ? df.videoConfig.watermarkText : undefined,
@@ -296,6 +330,7 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
             width: (vWin.right - vWin.left) * 100,
             height: (vWin.bottom - vWin.top) * 100,
           },
+          videoTargetMode: 'studio_mode' as const,
           footerPosition: (def.footer?.style === 'none' ? 'bottom' : 'bottom') as 'bottom' | 'top',
           locationBadgeUrl: undefined,
           watermarkText: 'AI NEWS MAKER',
@@ -312,17 +347,40 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
 
   const publishedFrames = useMemo(() => {
     return allVideoItems.filter(
-      (f) => !f.isTestFrame && f.approvalStatus !== 'PENDING_TEST' && f.approvalStatus !== 'REJECTED'
+      (f) => !f.isTestFrame &&
+             f.approvalStatus !== 'PENDING_TEST' &&
+             f.approvalStatus !== 'REJECTED' &&
+             !f.id.startsWith('df_test_') &&
+             !f.name.toUpperCase().startsWith('TEST') &&
+             f.id !== 'df_1794938610435_g8pec'
     );
   }, [allVideoItems]);
 
   const testVideoFrames = useMemo(() => {
     return allVideoItems.filter(
-      (f) => f.isTestFrame || f.approvalStatus === 'PENDING_TEST' || f.approvalStatus === 'REJECTED'
+      (f) => f.isTestFrame ||
+             f.approvalStatus === 'PENDING_TEST' ||
+             f.approvalStatus === 'REJECTED' ||
+             f.id.startsWith('df_test_') ||
+             f.name.toUpperCase().startsWith('TEST') ||
+             f.id === 'df_1794938610435_g8pec'
     );
   }, [allVideoItems]);
 
-  const currentCategoryFrames = activeCategoryTab === 'published' ? publishedFrames : testVideoFrames;
+  const quickVideoTestFrames = useMemo(() => {
+    return testVideoFrames.filter((f) => f.videoTargetMode === 'quick_video');
+  }, [testVideoFrames]);
+
+  const studioModeTestFrames = useMemo(() => {
+    return testVideoFrames.filter((f) => f.videoTargetMode === 'studio_mode');
+  }, [testVideoFrames]);
+
+  const currentCategoryFrames = useMemo(() => {
+    if (activeCategoryTab === 'published') return publishedFrames;
+    if (testFrameModeFilter === 'quick_video') return quickVideoTestFrames;
+    if (testFrameModeFilter === 'studio_mode') return studioModeTestFrames;
+    return testVideoFrames;
+  }, [activeCategoryTab, publishedFrames, testFrameModeFilter, quickVideoTestFrames, studioModeTestFrames, testVideoFrames]);
 
   // Filter video frames strictly by aspect ratio and search query
   const filteredFrames = useMemo(() => {
@@ -355,6 +413,87 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
         </div>
       )}
 
+      {/* MASTER ADMIN: SELECTED USER FEATURE ENTITLEMENT SUMMARY (Module 9) */}
+      {selectedUserEmail && (() => {
+        const ent = getUserFeatureEntitlements({ email: selectedUserEmail });
+        return (
+          <div className="p-4 bg-slate-900 border border-amber-500/50 rounded-2xl shadow-xl space-y-3">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs sm:text-sm font-black text-amber-300">
+                  🎯 चयनित उपयोगकर्ता फीचर विवरण: {ent.userName} ({ent.userEmail})
+                </span>
+                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 font-bold">
+                  {ent.accountType}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminSelectedUserEmail('');
+                  setSelectedUserEmailState('');
+                }}
+                className="text-xs text-slate-400 hover:text-rose-300 cursor-pointer"
+                title="चयन हटाएं"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-emerald-400">इस उपयोगकर्ता के सक्रिय फीचर:</div>
+                <ul className="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                  {ent.activeFeatures.map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-amber-400">विशेष अनुमति:</div>
+                {ent.specialPermissions.length > 0 ? (
+                  <ul className="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                    {ent.specialPermissions.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[11px] text-slate-500 italic">कोई विशेष अनुमति नहीं</div>
+                )}
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-rose-400">सीमित / प्रतिबंधित:</div>
+                {ent.restrictedFeatures.length > 0 ? (
+                  <ul className="text-[11px] text-slate-400 space-y-0.5 list-disc list-inside">
+                    {ent.restrictedFeatures.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[11px] text-emerald-400">पूर्ण एक्सेस (कोई प्रतिबंध नहीं)</div>
+                )}
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5">
+                <div>
+                  <span className="text-[11px] font-bold text-amber-300">वर्तमान प्लान: </span>
+                  <span className="font-black text-white">{ent.planName}</span>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  <strong>फुटर अनुमति:</strong> {ent.footerEntitlement}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  <strong>वीडियो मोड:</strong> {ent.videoAccess}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 0. Top Category Tabs: Published vs Test Frames */}
       <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
         <button
@@ -370,24 +509,87 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
           <span>📹 प्रकाशित वीडियो फ्रेम्स ({publishedFrames.length})</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveCategoryTab('test_frames')}
-          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black cursor-pointer transition flex items-center gap-2 ${
-            activeCategoryTab === 'test_frames'
-              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-950/50'
-              : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-amber-400" />
-          <span>🧪 टेस्ट वीडियो फ्रेम्स ({testVideoFrames.length})</span>
-          {testVideoFrames.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white ml-1">
-              {testVideoFrames.length} लंबित
-            </span>
-          )}
-        </button>
+        {isMasterAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('test_frames')}
+            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black cursor-pointer transition flex items-center gap-2 ${
+              activeCategoryTab === 'test_frames'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-950/50'
+                : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>🧪 टेस्ट वीडियो फ्रेम्स ({testVideoFrames.length})</span>
+            {testVideoFrames.length > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white ml-1">
+                {testVideoFrames.length} लंबित
+              </span>
+            )}
+          </button>
+        )}
       </div>
+
+      {/* Test Frames Mode Selector (Quick Video vs Studio Mode) */}
+      {isMasterAdmin && activeCategoryTab === 'test_frames' && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <button
+            type="button"
+            onClick={() => setTestFrameModeFilter(testFrameModeFilter === 'quick_video' ? 'all' : 'quick_video')}
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+              testFrameModeFilter === 'quick_video'
+                ? 'bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-red-500/10 border-amber-400 text-white shadow-xl ring-1 ring-amber-400/50'
+                : 'bg-slate-900/80 hover:bg-slate-900 border-slate-800 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="font-black text-sm text-white flex items-center gap-2">
+                  <span>⚡ Quick Video Test Frames</span>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-mono font-black bg-amber-500 text-slate-950">
+                    {quickVideoTestFrames.length}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">क्विक वीडियो मोड के लिए समर्पित टेस्ट फ्रेम</div>
+              </div>
+            </div>
+            <div className="text-xs font-bold text-amber-400">
+              {testFrameModeFilter === 'quick_video' ? '✓ चयनित' : 'देखें →'}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTestFrameModeFilter(testFrameModeFilter === 'studio_mode' ? 'all' : 'studio_mode')}
+            className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+              testFrameModeFilter === 'studio_mode'
+                ? 'bg-gradient-to-r from-purple-500/20 via-indigo-500/20 to-blue-500/10 border-purple-400 text-white shadow-xl ring-1 ring-purple-400/50'
+                : 'bg-slate-900/80 hover:bg-slate-900 border-slate-800 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
+                <Film className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="font-black text-sm text-white flex items-center gap-2">
+                  <span>🎬 Studio Mode Test Frames</span>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-mono font-black bg-purple-500 text-white">
+                    {studioModeTestFrames.length}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">स्टूडियो मोड टाइमलाइन के लिए समर्पित टेस्ट फ्रेम</div>
+              </div>
+            </div>
+            <div className="text-xs font-bold text-purple-400">
+              {testFrameModeFilter === 'studio_mode' ? '✓ चयनित' : 'देखें →'}
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Aspect Ratio Filter Tabs & Search Header */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl shadow-xl">

@@ -44,6 +44,7 @@ import { getEffectiveFrameOptions, FrameOption } from '../lib/HeaderDesigns';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import { fetchDynamicFramesFromApi, getLocalDynamicFrames, saveDynamicFrameToApi, deleteDynamicFrameFromApi } from '../lib/dynamicFramesManager';
 import { getAuthToken } from '../lib/apiConfig';
+import { getUserFeatureEntitlements, getAdminSelectedUserEmail, setAdminSelectedUserEmail } from '../lib/userPlanManager';
 
 export const CANONICAL_FRAME_CATEGORIES = [
   'TEST_FRAMES',
@@ -115,6 +116,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
   
   // Modals & Feedback
   const [previewFrame, setPreviewFrame] = useState<DynamicFrameTemplate | null>(null);
+  const [testingFrame, setTestingFrame] = useState<DynamicFrameTemplate | null>(null);
   const [successToast, setSuccessToast] = useState<{ id: string; msg: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempCustomName, setTempCustomName] = useState<string>('');
@@ -143,6 +145,15 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
         setDynamicFramesList(locals);
       });
   };
+
+  const [selectedUserEmail, setSelectedUserEmailState] = useState<string>(() => getAdminSelectedUserEmail());
+  useEffect(() => {
+    const handleSelectedUserChanged = (e: any) => {
+      setSelectedUserEmailState(e?.detail?.email || getAdminSelectedUserEmail());
+    };
+    window.addEventListener('admin_selected_user_changed', handleSelectedUserChanged);
+    return () => window.removeEventListener('admin_selected_user_changed', handleSelectedUserChanged);
+  }, []);
 
   useEffect(() => {
     refreshFrames();
@@ -364,6 +375,87 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
         </div>
       )}
 
+      {/* MASTER ADMIN: SELECTED USER FEATURE ENTITLEMENT SUMMARY (Module 9) */}
+      {selectedUserEmail && (() => {
+        const ent = getUserFeatureEntitlements({ email: selectedUserEmail });
+        return (
+          <div className="p-4 bg-slate-900 border border-amber-500/50 rounded-2xl shadow-xl space-y-3">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs sm:text-sm font-black text-amber-300">
+                  🎯 चयनित उपयोगकर्ता फीचर विवरण: {ent.userName} ({ent.userEmail})
+                </span>
+                <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300 font-bold">
+                  {ent.accountType}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminSelectedUserEmail('');
+                  setSelectedUserEmailState('');
+                }}
+                className="text-xs text-slate-400 hover:text-rose-300 cursor-pointer"
+                title="चयन हटाएं"
+              >
+                ✕ बंद करें
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-emerald-400">इस उपयोगकर्ता के सक्रिय फीचर:</div>
+                <ul className="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                  {ent.activeFeatures.map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-amber-400">विशेष अनुमति:</div>
+                {ent.specialPermissions.length > 0 ? (
+                  <ul className="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                    {ent.specialPermissions.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[11px] text-slate-500 italic">कोई विशेष अनुमति नहीं</div>
+                )}
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-[11px] font-bold text-rose-400">सीमित / प्रतिबंधित:</div>
+                {ent.restrictedFeatures.length > 0 ? (
+                  <ul className="text-[11px] text-slate-400 space-y-0.5 list-disc list-inside">
+                    {ent.restrictedFeatures.map((f, i) => (
+                      <li key={i}>{f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[11px] text-emerald-400">पूर्ण एक्सेस (कोई प्रतिबंध नहीं)</div>
+                )}
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5">
+                <div>
+                  <span className="text-[11px] font-bold text-amber-300">वर्तमान प्लान: </span>
+                  <span className="font-black text-white">{ent.planName}</span>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  <strong>फुटर अनुमति:</strong> {ent.footerEntitlement}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  <strong>वीडियो मोड:</strong> {ent.videoAccess}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Ratio Filters & Header Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3.5 rounded-2xl shadow-xl">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
@@ -531,7 +623,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
               <div>
                 {/* Header Badge Row */}
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-mono text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/20 truncate max-w-[150px]">
+                  <span className="font-mono text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/20 truncate max-w-[130px]">
                     {item.id}
                   </span>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -546,9 +638,26 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                     >
                       {isStory ? '9:16 स्टोरी' : item.aspectRatio === '1:1' ? '1:1 स्क्वायर' : '4:5 पोर्ट्रेट'}
                     </span>
-                    <span className="px-2 py-0.5 text-[9.5px] font-bold bg-slate-800 text-slate-300 rounded">
+                    <span className="px-1.5 py-0.5 text-[9.5px] font-bold bg-slate-800 text-slate-300 rounded">
                       v{item.version}
                     </span>
+                    {/* Top Active ON/OFF Toggle */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleActive(item.id);
+                      }}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition cursor-pointer ${
+                        item.isActive
+                          ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300'
+                          : 'bg-slate-900 border-slate-700 text-slate-500'
+                      }`}
+                      title={item.isActive ? 'फ्रेम सक्रिय है (क्लिक करके निष्क्रिय करें)' : 'फ्रेम निष्क्रिय है (क्लिक करके सक्रिय करें)'}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${item.isActive ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`} />
+                      <span>{item.isActive ? 'ON' : 'OFF'}</span>
+                    </button>
                   </div>
                 </div>
 
@@ -646,125 +755,131 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 </div>
               </div>
 
-              {/* Actions Row */}
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                {/* Active Status Dot Indicator (Phase 7.1 - No bulky text button) */}
+              {/* Actions Row: Preview, Edit, Test, Delete */}
+              <div className="flex items-center justify-between gap-1.5 pt-2.5 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => handleToggleActive(item.id)}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 transition cursor-pointer shrink-0"
-                  title={item.isActive ? 'फ्रेम सक्रिय है (क्लिक करके निष्क्रिय करें)' : 'फ्रेम निष्क्रिय है (क्लिक करके सक्रिय करें)'}
+                  onClick={() => {
+                    const dfToPreview = item.rawDynamicFrame || {
+                      id: item.id,
+                      name: item.name,
+                      aspectRatio: item.aspectRatio,
+                      canvasWidth: 1080,
+                      canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
+                      designCategory: item.category as any,
+                      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                      publicationStatus: 'published',
+                      createdBy: 'breakingnewswala.com@gmail.com',
+                      createdAt: Date.now(),
+                      updatedAt: Date.now(),
+                      version: item.version,
+                      sampleReferenceUrl: item.previewUrl,
+                      previewImageUrl: item.previewUrl,
+                      headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                      footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                      photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
+                      textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
+                      layers: [],
+                    };
+                    setPreviewFrame(dfToPreview);
+                  }}
+                  className="py-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                  title="प्रीव्यू देखें"
                 >
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full transition-all ${
-                      item.isActive
-                        ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                        : 'bg-slate-600'
-                    }`}
-                  />
-                  <span className="text-[10px] font-mono text-slate-400">
-                    {item.isActive ? 'Active' : 'Off'}
-                  </span>
+                  <Eye className="w-3.5 h-3.5 text-purple-400" />
+                  <span>प्रीव्यू</span>
                 </button>
 
-                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 flex-wrap justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dfToEdit = item.rawDynamicFrame || {
+                      id: item.id,
+                      name: item.name,
+                      aspectRatio: item.aspectRatio,
+                      canvasWidth: 1080,
+                      canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
+                      designCategory: item.category as any,
+                      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                      publicationStatus: 'published',
+                      createdBy: 'breakingnewswala.com@gmail.com',
+                      createdAt: Date.now(),
+                      updatedAt: Date.now(),
+                      version: item.version,
+                      sampleReferenceUrl: item.previewUrl,
+                      previewImageUrl: item.previewUrl,
+                      headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                      footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                      photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
+                      textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
+                      layers: [],
+                    };
+                    if (onEditFrame) onEditFrame(dfToEdit);
+                  }}
+                  className="py-1 px-2.5 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-purple-500/40 cursor-pointer"
+                  title="एडिट करें"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>एडिट</span>
+                </button>
+
+                {/* Test Action: opens canonical sample news card in test preview */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dfToTest = item.rawDynamicFrame || {
+                      id: item.id,
+                      name: item.name,
+                      aspectRatio: item.aspectRatio,
+                      canvasWidth: 1080,
+                      canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
+                      designCategory: item.category as any,
+                      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                      publicationStatus: 'published',
+                      createdBy: 'breakingnewswala.com@gmail.com',
+                      createdAt: Date.now(),
+                      updatedAt: Date.now(),
+                      version: item.version,
+                      sampleReferenceUrl: item.previewUrl,
+                      previewImageUrl: item.previewUrl,
+                      headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                      footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                      photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
+                      textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
+                      layers: [],
+                    };
+                    setTestingFrame(dfToTest);
+                  }}
+                  className="py-1 px-2.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-amber-500/40 cursor-pointer"
+                  title="सैंपल न्यूज़ के साथ टेस्ट करें"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>टेस्ट</span>
+                </button>
+
+                {/* Delete button with safety check modal */}
+                {item.id !== 'graphic_001' && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (item.rawDynamicFrame) {
-                        setPreviewFrame(item.rawDynamicFrame);
-                      } else {
-                        // Create virtual DynamicFrame for preview
-                        setPreviewFrame({
-                          id: item.id,
-                          name: item.name,
-                          aspectRatio: item.aspectRatio,
-                          canvasWidth: 1080,
-                          canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
-                          designCategory: item.category as any,
-                          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-                          publicationStatus: 'published',
-                          createdBy: 'breakingnewswala.com@gmail.com',
-                          createdAt: Date.now(),
-                          updatedAt: Date.now(),
-                          version: item.version,
-                          sampleReferenceUrl: item.previewUrl,
-                          previewImageUrl: item.previewUrl,
-                          headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
-                          footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
-                          photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
-                          textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
-                          layers: [],
-                        });
-                      }
-                    }}
-                    className="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                    title="प्रीव्यू देखें"
+                    onClick={() => setDeletingFrame({ id: item.id, name: item.name })}
+                    className="py-1 px-2.5 bg-rose-950/40 hover:bg-rose-900/70 text-rose-300 hover:text-rose-100 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-rose-500/30 cursor-pointer"
+                    title="फ्रेम डिलीट करें"
                   >
-                    <Eye className="w-3.5 h-3.5 text-purple-400" />
-                    <span>प्रीव्यू</span>
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>डिलीट</span>
                   </button>
+                )}
 
+                {onOpenStudioWithTemplate && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (onEditFrame && item.rawDynamicFrame) {
-                        onEditFrame(item.rawDynamicFrame);
-                      } else if (onEditFrame) {
-                        onEditFrame({
-                          id: item.id,
-                          name: item.name,
-                          aspectRatio: item.aspectRatio,
-                          canvasWidth: 1080,
-                          canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
-                          designCategory: item.category as any,
-                          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-                          publicationStatus: 'published',
-                          createdBy: 'breakingnewswala.com@gmail.com',
-                          createdAt: Date.now(),
-                          updatedAt: Date.now(),
-                          version: item.version,
-                          sampleReferenceUrl: item.previewUrl,
-                          previewImageUrl: item.previewUrl,
-                          headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
-                          footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
-                          photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
-                          textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
-                          layers: [],
-                        });
-                      }
-                    }}
-                    className="py-1 px-2 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-purple-500/40 cursor-pointer"
-                    title="एडिट करें"
+                    onClick={() => onOpenStudioWithTemplate(item.id)}
+                    className="py-1 px-2 bg-emerald-950/50 hover:bg-emerald-900/80 text-emerald-300 hover:text-white border border-emerald-600/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                    title="स्टूडियो में उपयोग करें"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>एडिट</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
                   </button>
-
-                  {/* Delete button with safety check */}
-                  {item.id !== 'graphic_001' && (
-                    <button
-                      type="button"
-                      onClick={() => setDeletingFrame({ id: item.id, name: item.name })}
-                      className="py-1 px-2 bg-rose-950/40 hover:bg-rose-900/70 text-rose-300 hover:text-rose-100 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-rose-500/30 cursor-pointer"
-                      title="फ्रेम डिलीट करें"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                    </button>
-                  )}
-
-                  {onOpenStudioWithTemplate && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenStudioWithTemplate(item.id)}
-                      className="py-1 px-2 bg-emerald-950/50 hover:bg-emerald-900/80 text-emerald-300 hover:text-white border border-emerald-600/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                      title="स्टूडियो में टेस्ट करें"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
-                      <span className="hidden sm:inline">टेस्ट</span>
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           );
@@ -981,6 +1096,185 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test Modal with Canonical News Sample */}
+      {testingFrame && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-4 sm:p-5 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-white">🧪 टेम्पलेट टेस्ट मोड (Canonical News)</h4>
+                  <div className="text-xs text-slate-400">
+                    <span className="font-bold text-amber-300">{testingFrame.name}</span>
+                    <span className="mx-1">•</span>
+                    <span className="font-mono text-purple-300">{testingFrame.aspectRatio}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTestingFrame(null)}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center space-y-4">
+              <div
+                className="relative rounded-2xl overflow-hidden border-2 border-amber-400/60 shadow-2xl bg-slate-950"
+                style={{
+                  width: testingFrame.aspectRatio === '4:5' ? '300px' : testingFrame.aspectRatio === '9:16' ? '240px' : '280px',
+                  height: testingFrame.aspectRatio === '4:5' ? '375px' : testingFrame.aspectRatio === '9:16' ? '426px' : '280px',
+                  backgroundColor: testingFrame.primaryBackgroundHex || '#0B1329',
+                }}
+              >
+                {/* Sample Photo */}
+                <img
+                  src="https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80"
+                  alt="Sample News"
+                  className="w-full h-full object-cover"
+                />
+
+                {/* Overlay Artwork */}
+                {(testingFrame.primaryBackgroundAsset || testingFrame.previewImageUrl || testingFrame.sampleReferenceUrl) && (
+                  <img
+                    src={testingFrame.primaryBackgroundAsset || testingFrame.previewImageUrl || testingFrame.sampleReferenceUrl}
+                    alt="Overlay Artwork"
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                  />
+                )}
+
+                {/* Channel Logo */}
+                {testingFrame.headerConfig?.showLogo !== false && (
+                  <div
+                    className="absolute bg-slate-900/90 border border-white/20 rounded px-1.5 py-0.5 text-[8px] font-black text-white z-20 flex items-center gap-1 shadow-md"
+                    style={{
+                      left: `${testingFrame.headerConfig?.logoRect?.x ?? 5}%`,
+                      top: `${testingFrame.headerConfig?.logoRect?.y ?? 3.5}%`,
+                    }}
+                  >
+                    <span>चैनल लोगो</span>
+                  </div>
+                )}
+
+                {/* Sample Location */}
+                {testingFrame.headerConfig?.showLocation !== false && (
+                  <div
+                    className="absolute bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-md flex items-center gap-1 z-20"
+                    style={{
+                      left: `${testingFrame.headerConfig?.locationRect?.x ?? 5}%`,
+                      top: `${testingFrame.headerConfig?.locationRect?.y ?? 13.5}%`,
+                    }}
+                  >
+                    <MapPin className="w-2.5 h-2.5" />
+                    <span>भोपाल (म.प्र.)</span>
+                  </div>
+                )}
+
+                {/* Watermark Badge */}
+                {testingFrame.watermarkConfig?.enabled !== false && (
+                  <div
+                    className="absolute bg-black/60 border border-white/20 text-white/90 text-[7px] font-bold px-1.5 py-0.5 rounded z-20 flex items-center gap-1 shadow"
+                    style={{
+                      left: `${testingFrame.watermarkConfig?.rect?.x ?? 70}%`,
+                      top: `${testingFrame.watermarkConfig?.rect?.y ?? 3.5}%`,
+                    }}
+                  >
+                    <span>AI NEWS MAKER</span>
+                  </div>
+                )}
+
+                {/* Sample Headline */}
+                <div
+                  className="absolute text-center px-3 z-20"
+                  style={{
+                    bottom: `${(testingFrame.footerConfig?.footerHeightRatio || 0.08) * 100 + 4}%`,
+                    left: '3%',
+                    right: '3%',
+                  }}
+                >
+                  <div
+                    className="font-black text-xs px-2 py-1.5 rounded-lg shadow-lg leading-snug drop-shadow-md"
+                    style={{
+                      color: testingFrame.textSlots?.[0]?.textColor || testingFrame.typographyConfig?.primaryHeadline?.fontColor || '#FFFFFF',
+                      fontFamily: `"${testingFrame.typographyConfig?.primaryFontFamily || testingFrame.textSlots?.[0]?.fontFamily || 'Noto Sans Devanagari'}", sans-serif`,
+                      backgroundColor:
+                        testingFrame.textSlots?.[0]?.backgroundColor === 'transparent' || !testingFrame.textSlots?.[0]?.backgroundColor
+                          ? 'rgba(0, 0, 0, 0.45)'
+                          : testingFrame.textSlots[0].backgroundColor,
+                      textAlign: (testingFrame.textSlots?.[0]?.alignment as any) || 'center',
+                    }}
+                  >
+                    विशेष जांच रिपोर्ट: मध्य प्रदेश में नए डिजिटल मीडिया स्टूडियो का शुभारंभ
+                  </div>
+                </div>
+
+                {/* Full Story Callout */}
+                {testingFrame.fullStoryCalloutConfig?.enabled && (
+                  <div
+                    className="absolute text-[8px] font-black bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-full shadow-lg z-20 flex items-center justify-center gap-1"
+                    style={{
+                      left: `${testingFrame.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                      top: `${testingFrame.fullStoryCalloutConfig.rect?.y ?? 85}%`,
+                      width: `${testingFrame.fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                      transform: 'translateX(0)',
+                    }}
+                  >
+                    <span>📢</span>
+                    <span>{testingFrame.fullStoryCalloutConfig.text || 'पूरी खबर डिस्क्रिप्शन में पढ़ें'}</span>
+                  </div>
+                )}
+
+                {/* Sample Footer */}
+                <div
+                  className="absolute bottom-0 inset-x-0 flex items-center justify-between px-3 text-[9px] font-bold z-20"
+                  style={{
+                    height: `${(testingFrame.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
+                    backgroundColor: testingFrame.primaryFooterColor || testingFrame.footerConfig?.footerBgColor || '#FFFFFF',
+                    color: testingFrame.footerConfig?.footerTextColor || '#000000',
+                  }}
+                >
+                  <span>@breakingnewswala</span>
+                  <span>+91 96698 02408</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-400 text-center max-w-md">
+                यह परीक्षण प्रीव्यू साबित करता है कि यह टेम्पलेट वास्तविक समाचार फोटो, हेडलाइन, लोकेशन और फुटर के साथ प्रोडक्शन-रेडी है।
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setTestingFrame(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                बंद करें
+              </button>
+              {onOpenStudioWithTemplate && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = testingFrame.id;
+                    setTestingFrame(null);
+                    onOpenStudioWithTemplate(id);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl transition flex items-center gap-1.5 shadow-md cursor-pointer"
+                >
+                  <span>स्टूडियो में खोलें</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
